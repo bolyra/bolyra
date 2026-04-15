@@ -21,7 +21,7 @@ This application is related to but distinct from the inventor's existing patent 
 
 ## ABSTRACT
 
-A computer-implemented system and method for privacy-preserving mutual authentication between a human user and an artificial intelligence (AI) agent, and for composable delegation of scoped permissions through chains of agents, using zero-knowledge proofs (ZKPs). The system maintains separate Merkle trees for human identity commitments and AI agent credential commitments on a blockchain-based registry. A mutual handshake protocol enables a human and an AI agent to independently generate zero-knowledge proofs — a Groth16 proof for human group membership and a PLONK proof for agent credential validity — that are batch-verified in a single on-chain transaction without either party learning anything beyond policy satisfaction. A delegation circuit enables privacy-preserving permission narrowing through multi-hop agent chains by chaining Poseidon hash commitments of permission bitmasks, where each delegation hop proves that the delegatee's scope is a strict subset of the delegator's scope without revealing the actual permission bits to any on-chain observer. A cumulative bit encoding scheme for hierarchical permissions ensures that higher-tier financial permissions cryptographically imply lower-tier permissions, with circuit constraints enforcing the invariant at delegation time.
+A computer-implemented system and method for privacy-preserving mutual authentication between a human user and an artificial intelligence (AI) agent, and for composable delegation of scoped permissions through chains of agents, using zero-knowledge proofs (ZKPs). The system maintains separate Merkle trees for human identity commitments and AI agent credential commitments on a blockchain-based registry. A mutual handshake protocol enables a human and an AI agent to independently generate zero-knowledge proofs — a Groth16 proof for human group membership and a PLONK proof for agent credential validity — that are verified in a single on-chain transaction with explicit session nonce equality enforcement across both proofs, without either party learning anything beyond policy satisfaction. A delegation circuit enables privacy-preserving permission narrowing through multi-hop agent chains by chaining identity-bound Poseidon hash commitments that bind both permission bitmasks and credential commitments together, where each delegation hop proves that the delegatee's scope is a bitwise subset of the delegator's scope without revealing the actual permission bits to any on-chain observer, and where delegation nullifiers, chain-linking verification, and maximum hop count enforcement prevent replay and impersonation attacks. A cumulative bit encoding scheme for hierarchical permissions ensures that higher-tier financial permissions cryptographically imply lower-tier permissions, with circuit constraints enforcing the invariant at delegation time.
 
 ---
 
@@ -47,7 +47,13 @@ The proliferation of artificial intelligence agents operating autonomously on be
 
 **Blockchain Analytics Without Privacy.** On-chain identity systems that rely on wallet history, token holdings, or transaction patterns expose all identity information publicly. These approaches are fundamentally incompatible with privacy-preserving identity.
 
-None of the existing approaches provide: (1) a unified protocol for both human and AI agent identity; (2) mutual authentication where both parties simultaneously prove claims without learning each other's identity; (3) privacy-preserving delegation chains where permissions narrow at each hop without revealing the actual permission structure; or (4) a mixed proving system architecture that optimizes for different trust assumptions on the human and agent sides.
+**Capability Delegation Systems Without Privacy.** UCAN (User Controlled Authorization Networks) and Biscuit provide capability attenuation chains where each delegation narrows permissions. However, these systems operate on cleartext tokens — every party in the chain and every verifier can read the full permission structure, delegation history, and party identities. There is no zero-knowledge layer; privacy is achieved only by not sharing the token, which fails when on-chain verification is required.
+
+**Privacy-Preserving Credentials Without Agent Support.** AnonCreds (Hyperledger) and BBS+ selective disclosure (W3C) enable holders to prove credential properties without revealing the full credential. However, these systems address single-holder credential presentation, not mutual authentication between heterogeneous entity types, and do not support composable delegation chains where permissions narrow at each hop.
+
+**Rate-Limiting Nullifiers.** The RLN (Rate-Limiting Nullifier) protocol uses per-epoch nullifiers to prevent spam in anonymous systems. While RLN shares the nullifier primitive with the present invention, it addresses message rate-limiting in a single homogeneous population, not mutual authentication or permission delegation across human and AI agent populations.
+
+None of the existing approaches provide: (1) a unified protocol for both human and AI agent identity; (2) mutual authentication where both parties simultaneously prove claims without learning each other's identity; (3) privacy-preserving delegation chains where permissions narrow at each hop without revealing the actual permission structure, with scope commitments bound to both permissions and delegator identity; or (4) a mixed proving system architecture that optimizes for different trust assumptions on the human and agent sides.
 
 ---
 
@@ -55,9 +61,9 @@ None of the existing approaches provide: (1) a unified protocol for both human a
 
 The present invention provides a system and method for privacy-preserving mutual authentication and composable delegation between human and AI agent identities. The system comprises:
 
-**First**, a mutual zero-knowledge proof handshake protocol in which a human user and an AI agent independently generate cryptographic proofs — the human proving group membership via a Groth16 SNARK and the agent proving credential validity via a PLONK SNARK — that are batch-verified in a single blockchain transaction. Neither party learns anything about the other beyond the fact that the counterparty satisfies the required policy.
+**First**, a mutual zero-knowledge proof handshake protocol in which a human user and an AI agent independently generate cryptographic proofs — the human proving group membership via a Groth16 SNARK and the agent proving credential validity via a PLONK SNARK — that are verified in a single blockchain transaction with explicit enforcement that both proofs embed the same session nonce (the on-chain verifier checks equality between each proof's public nonce signal and the transaction argument). Neither party learns anything about the other beyond the fact that the counterparty satisfies the required policy.
 
-**Second**, a privacy-preserving composable delegation chain mechanism in which scoped permissions are delegated from a human to a first AI agent, and optionally from the first AI agent to subsequent AI agents, using zero-knowledge proofs. At each delegation hop, a Poseidon hash commitment of the delegatee's permission bitmask is published as a public output, while the actual permission bits remain private. The next hop's circuit takes the previous commitment as a public input and proves that (a) the delegator's actual scope hashes to the previous commitment, (b) the delegatee's scope is a strict bitwise subset of the delegator's scope, and (c) the delegatee's expiry does not exceed the delegator's expiry — all without revealing any party's actual permission bits.
+**Second**, a privacy-preserving composable delegation chain mechanism in which scoped permissions are delegated from an agent to subsequent agents, using zero-knowledge proofs. At each delegation hop, an identity-bound Poseidon hash commitment of the delegatee's permission bitmask and credential commitment is published as a public output, while the actual permission bits remain private. The next hop's circuit takes the previous commitment as a public input and proves that (a) the Poseidon hash of the delegator's actual scope together with the delegator's credential commitment equals the previous commitment (binding scope to identity), (b) the delegatee's scope is a bitwise subset of the delegator's scope, and (c) the delegatee's expiry does not exceed the delegator's expiry — all without revealing any party's actual permission bits. On-chain verification enforces delegation nullifier uniqueness, chain-linking correctness, and a maximum hop count of three.
 
 **Third**, a cumulative bit encoding scheme for hierarchical permissions in which higher-tier permission bits cryptographically imply the presence of lower-tier bits (e.g., bit 4 for unlimited financial transactions implies bits 2 and 3 for lower-tier financial transactions). Circuit constraints enforce this invariant at delegation time, ensuring that delegation narrowing via bitwise AND correctly expresses tier downgrades without creating inconsistent permission states.
 
@@ -86,7 +92,7 @@ FIGURE 1: System Architecture
 |  | - Identity commit |          |    permissions,      |    |
 |  |   = Poseidon2(    |          |    expiry)           |    |
 |  |     Ax, Ay)       |          | - Credential commit  |    |
-|  | - Groth16 prover  |          |   = Poseidon4(...)   |    |
+|  | - Groth16 prover  |          |   = Poseidon5(...)   |    |
 |  |                   |          | - PLONK prover       |    |
 |  +--------+----------+          +----------+-----------+    |
 |           |                                |                |
@@ -155,7 +161,7 @@ PRIVATE INPUTS                PUBLIC INPUTS          PUBLIC OUTPUTS
           +-----------------------------------------------+
 ```
 
-**Step 2.1 — Key Derivation:** The circuit receives the human's EdDSA secret scalar as a private input. Using the BabyPbk (Baby Jubjub point multiplication) component from circomlib, the circuit derives the public key point (Ax, Ay) on the Baby Jubjub elliptic curve. A Num2Bits(251) range check constrains the secret to be within the Baby Jubjub subgroup order, preventing invalid-range attacks.
+**Step 2.1 — Key Derivation:** The circuit receives the human's EdDSA secret scalar as a private input. Using the BabyPbk (Baby Jubjub point multiplication) component from circomlib, the circuit derives the public key point (Ax, Ay) on the Baby Jubjub elliptic curve. A Num2Bits(251) range check provides a conservative upper bound on the secret, constraining it to be less than 2^251. This bound is strictly less than the Baby Jubjub subgroup order (l = 2736030358979909402780800718157159386076813972158567259200215660948447373041), so all valid secrets pass. The conservative bound avoids the ~500 extra constraints required for an exact multi-limb comparison against l.
 
 **Step 2.2 — Identity Commitment:** The identity commitment is computed as `Poseidon2(Ax, Ay)`, producing a field element that serves as the leaf value in the humanTree Merkle structure. This computation is compatible with the `@semaphore-protocol/identity` library's commitment scheme.
 
@@ -192,9 +198,10 @@ PRIVATE INPUTS                    PUBLIC INPUTS         PUBLIC OUTPUTS
    +-------+--------+                    |
            |                              |
    +-------v-----------+                 |
-   | Poseidon4(         |                |
+   | Poseidon5(         |                |
    |   modelHash,       |                |
    |   operatorAx,      |                |
+   |   operatorAy,      |                |
    |   bitmask,         |                |
    |   expiry)          |                |
    | = credentialCmt    |                |
@@ -227,13 +234,13 @@ PRIVATE INPUTS                    PUBLIC INPUTS         PUBLIC OUTPUTS
        +-> Poseidon2(credCmt, nonce)    |
            = nullifierHash  -----------+
                                         |
-           Poseidon1(bitmask)           |
+           Poseidon2(bitmask, credCmt)  |
            = scopeCommitment  ---------+
 ```
 
 **Step 3.1 — Range Checks:** Three Num2Bits(64) components decompose `permissionBitmask`, `expiryTimestamp`, and `currentTimestamp` into their binary representations, constraining each to be a valid 64-bit unsigned integer. This prevents field overflow attacks where a value exceeding 2^64 passes the circuit's arithmetic checks but overflows when processed by the Solidity verifier contract.
 
-**Step 3.2 — Credential Commitment:** The credential commitment is computed as `Poseidon4(modelHash, operatorPubkeyAx, permissionBitmask, expiryTimestamp)`. This four-field Poseidon hash produces a single field element that uniquely commits to the agent's credential properties. The credential commitment serves as the leaf in the agentTree Merkle structure.
+**Step 3.2 — Credential Commitment:** The credential commitment is computed as `Poseidon5(modelHash, operatorPubkeyAx, operatorPubkeyAy, permissionBitmask, expiryTimestamp)`. This five-field Poseidon hash produces a single field element that uniquely commits to the agent's credential properties, including both coordinates of the operator's EdDSA public key to fully bind the operator's identity. The credential commitment serves as the leaf in the agentTree Merkle structure.
 
 **Step 3.3 — Operator Signature Verification:** Using the `EdDSAPoseidonVerifier` component from circomlib, the circuit verifies that the operator's EdDSA signature (R8x, R8y, S) over the credential commitment is valid for the operator's public key (operatorPubkeyAx, operatorPubkeyAy). This proves that a recognized operator authorized the agent's credential — the operator signed an attestation of the agent's model, permissions, and expiry.
 
@@ -243,9 +250,9 @@ PRIVATE INPUTS                    PUBLIC INPUTS         PUBLIC OUTPUTS
 
 **Step 3.6 — Expiry Check:** A `LessThan(64)` comparator constrains `currentTimestamp < expiryTimestamp`, proving the credential has not expired. The `currentTimestamp` is a public input provided by the verifier or relayer.
 
-**Step 3.7 — Nullifier and Scope Commitment:** The nullifier is computed as `Poseidon2(credentialCommitment, sessionNonce)`, providing per-session replay protection. The scope commitment is computed as `Poseidon1(permissionBitmask)` and is output as a public signal. This scope commitment serves as the entry point for delegation chain linking (described in Section 5).
+**Step 3.7 — Nullifier and Scope Commitment:** The nullifier is computed as `Poseidon2(credentialCommitment, sessionNonce)`, providing per-session replay protection. The scope commitment is computed as `Poseidon2(permissionBitmask, credentialCommitment)` and is output as a public signal. By binding the permission bitmask to the credential commitment, the scope commitment becomes identity-bound: an actor with the same permission bits but a different credential cannot satisfy the chain-linking check in the Delegation circuit (Section 5). This prevents impersonation attacks in delegation chains.
 
-The compiled circuit has 20,631 R1CS constraints and generates proofs in approximately 16.3 seconds using PLONK.
+The compiled circuit has 20,832 R1CS constraints and generates proofs in approximately 16.3 seconds using PLONK.
 
 ### 4. Mutual Handshake Protocol
 
@@ -274,7 +281,8 @@ FIGURE 4: Mutual Handshake Protocol (400)
   |  4. Check: nonce not in usedNonces                       |
   |  5. Mark nonce as used                                   |
   |  6. Check: humanNullifier not revoked                    |
-  |  7. Check: agentNullifier not revoked                    |
+  |  7. Check: nonce in humanPubSignals == sessionNonce       |
+  |  8. Check: nonce in agentPubSignals == sessionNonce       |
   |  8. Check: humanMerkleRoot == humanTree.root()           |
   |  9. Check: agentMerkleRoot in rootHistory[30]            |
   | 10. Verify Groth16 proof via IGroth16Verifier            |
@@ -292,11 +300,12 @@ FIGURE 4: Mutual Handshake Protocol (400)
 **Step 4.4 — On-Chain Batch Verification:** A single transaction to the IdentityRegistry contract's `verifyHandshake()` function receives both proofs and the session nonce. The contract performs the following ordered checks:
 
 1. **Nonce freshness:** The session nonce must not appear in the `usedNonces` mapping. If fresh, it is immediately marked as used.
-2. **Revocation status:** The human's nullifier hash and the agent's nullifier hash are checked against their respective revocation mappings.
-3. **Human root validity:** The human proof's output Merkle root must match the current `humanTree` root.
-4. **Agent root validity:** The agent proof's output Merkle root must appear in the 30-entry `agentRootHistory` circular buffer, accommodating tree updates during proof generation.
-5. **Groth16 verification:** The human proof is verified by calling the deployed Groth16 verifier contract (generated by `snarkjs zkey export solidityverifier`). The proof is decomposed into elliptic curve points (pA, pB, pC) in the BN128 pairing format and verified against the five public signals (humanMerkleRoot, nullifierHash, nonceBinding, scope, sessionNonce).
-6. **PLONK verification:** The agent proof is verified by calling the deployed PLONK verifier contract. The 24-element proof array and six public signals (agentMerkleRoot, nullifierHash, scopeCommitment, requiredScopeMask, currentTimestamp, sessionNonce) are verified.
+2. **Nonce equality enforcement:** The contract verifies that the session nonce embedded in each proof's public signals matches the transaction argument: `humanPubSignals[4] == sessionNonce` and `agentPubSignals[5] == sessionNonce`. This prevents an attacker from submitting proofs generated for different sessions.
+3. **Revocation status:** The human's nullifier hash is checked against the `humanRevocations` mapping. Agent revocation is enforced at the Merkle tree level: a revoked agent's credential commitment is set to zero in the agentTree (via LeanIMT update), causing subsequent Merkle proofs against that credential to fail verification.
+4. **Human root validity:** The human proof's output Merkle root must match the current `humanTree` root.
+5. **Agent root validity:** The agent proof's output Merkle root must appear in the 30-entry `agentRootHistory` circular buffer, accommodating tree updates during proof generation.
+6. **Groth16 verification:** The human proof is verified by calling the deployed Groth16 verifier contract (generated by `snarkjs zkey export solidityverifier`). The proof is decomposed into elliptic curve points (pA, pB, pC) in the BN128 pairing format and verified against the five public signals (humanMerkleRoot, nullifierHash, nonceBinding, scope, sessionNonce).
+7. **PLONK verification:** The agent proof is verified by calling the deployed PLONK verifier contract. The 24-element proof array and six public signals (agentMerkleRoot, nullifierHash, scopeCommitment, requiredScopeMask, currentTimestamp, sessionNonce) are verified.
 
 If all checks pass, the contract emits a `HandshakeVerified` event indexed by both nullifier hashes and the session nonce. Total gas cost is approximately 570,000 gas on the target Layer 2 chain.
 
@@ -314,7 +323,7 @@ FIGURE 5: Delegation Chain with Scope Commitment Linking (500)
    prior hop)
 
   scopeCommitment_0              scopeCommitment_1             scopeCommitment_2
-  = Poseidon1(scope_A)           = Poseidon1(scope_B)          = Poseidon1(scope_C)
+  = Poseidon2(scope_A, credCmt_A)           = Poseidon2(scope_B, credCmt_B)          = Poseidon2(scope_C, credCmt_C)
   (PUBLIC OUTPUT)                (PUBLIC OUTPUT)               (PUBLIC OUTPUT)
          |                              |                             |
          |  CHAIN LINK                  |  CHAIN LINK                 |
@@ -334,7 +343,8 @@ FIGURE 5: Delegation Chain with Scope Commitment Linking (500)
   |  = scope_B        |         |  = scope_C        |
   |                   |         |                   |
   | PROVES:           |         | PROVES:           |
-  | 1. hash(scope_A)  |         | 1. hash(scope_B)  |
+  | 1. hash(scope_A,  |         | 1. hash(scope_B,  |
+  |    credCmt_A)     |         |    credCmt_B)     |
   |    == scopeCmt_0   |         |    == scopeCmt_1   |
   | 2. scope_B AND    |         | 2. scope_C AND    |
   |    NOT(scope_A)   |         |    NOT(scope_B)   |
@@ -350,15 +360,17 @@ FIGURE 5: Delegation Chain with Scope Commitment Linking (500)
   +-------------------+         +-------------------+
 ```
 
-**Step 5.1 — Scope Commitment Chain Linking:** The delegation chain is linked through Poseidon hash commitments. The AgentPolicy circuit (Section 3) outputs `scopeCommitment = Poseidon1(permissionBitmask)` as a public signal. The first delegation hop takes this `scopeCommitment` as its `previousScopeCommitment` public input. Inside the Delegation circuit, the delegator's actual scope (private input) is hashed using Poseidon and constrained to equal the `previousScopeCommitment`:
+**Step 5.1 — Identity-Bound Scope Commitment Chain Linking:** The delegation chain is linked through identity-bound Poseidon hash commitments. The AgentPolicy circuit (Section 3) outputs `scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment)` as a public signal. By including the credential commitment in the hash, the scope commitment is bound to a specific agent's identity, not just to a set of permission bits. This prevents impersonation: an actor with the same permission bits but a different credential cannot produce a matching scope commitment.
+
+The first delegation hop takes this `scopeCommitment` as its `previousScopeCommitment` public input. Inside the Delegation circuit, the delegator's actual scope and credential commitment (both private inputs) are hashed using Poseidon and constrained to equal the `previousScopeCommitment`:
 
 ```
-delegatorScopeHash.out === previousScopeCommitment;
+Poseidon2(delegatorScope, delegatorCredCommitment) === previousScopeCommitment;
 ```
 
-This constraint is the chain-linking mechanism. It proves that the delegator's private scope bits are consistent with what the previous hop publicly committed to, without revealing the actual bits.
+This constraint is the identity-bound chain-linking mechanism. It proves that the delegator's private scope bits AND identity are consistent with what the previous hop publicly committed to, without revealing either.
 
-The circuit then computes a new scope commitment for the delegatee: `newScopeCommitment = Poseidon1(delegateeScope)`, which becomes the public input for the next hop.
+The circuit then computes a new scope commitment for the delegatee: `newScopeCommitment = Poseidon2(delegateeScope, delegateeCredCommitment)`, which becomes the public input for the next hop. Each commitment in the chain binds both scope and identity.
 
 **Step 5.2 — Privacy-Preserving Subset Enforcement:** Both the delegator's scope and the delegatee's scope enter the circuit as private inputs. The circuit decomposes both into individual bits using `Num2Bits(64)` and enforces, for each bit position i:
 
@@ -370,11 +382,11 @@ This constraint ensures that every permission bit set in the delegatee's scope m
 
 **Step 5.3 — Expiry Narrowing:** A `LessEqThan(64)` comparator constrains `delegateeExpiry <= delegatorExpiry`, preventing a delegation from extending the time validity beyond what the delegator possesses.
 
-**Step 5.4 — Delegation Authorization:** The delegator signs a delegation token computed as `Poseidon4(previousScopeCommitment, delegateeCredCommitment, delegateeScope, delegateeExpiry)` using EdDSA over the Baby Jubjub curve. The circuit verifies this signature, proving that the delegator explicitly authorized this specific delegation to this specific delegatee with these specific narrowed permissions and expiry.
+**Step 5.4 — Delegation Authorization:** The delegator signs a delegation token computed as a four-input Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp, using EdDSA over the Baby Jubjub curve. The circuit verifies this signature, proving that the delegator explicitly authorized this specific delegation to this specific delegatee with these specific narrowed permissions and expiry.
 
 **Step 5.5 — Delegation Nullifier:** A delegation nullifier is computed as `Poseidon2(delegationTokenHash, sessionNonce)`, providing per-session replay protection for delegation proofs.
 
-The compiled Delegation circuit has 8,742 R1CS constraints and uses PLONK.
+The compiled Delegation circuit has 10,769 R1CS constraints and uses PLONK.
 
 ### 6. Cumulative Bit Encoding for Hierarchical Permissions
 
@@ -416,13 +428,19 @@ The IdentityRegistry contract 130 is implemented in Solidity 0.8.24 and deployed
 - `IPlonkVerifier`: Accepts a 24-element PLONK proof array and 6 public signals for AgentPolicy.
 - `IDelegationVerifier`: Accepts a 24-element PLONK proof array and 4 public signals for Delegation.
 
-**7.4 — Revocation:** The contract maintains separate revocation mappings for human identities (`humanRevocations`, keyed by nullifier hash) and agent credentials (`agentRevocations`, keyed by credential commitment). The contract owner can revoke either type, and revoked identities/credentials fail the `verifyHandshake` checks.
+**7.4 — Revocation:** The contract maintains a revocation mapping for human identities (`humanRevocations`, keyed by nullifier hash). Human revocation is checked during handshake verification. Agent revocation is handled at the Merkle tree level: the contract owner updates the agent's credential commitment to zero in the agentTree via LeanIMT's update function, which invalidates all subsequent Merkle proofs referencing that credential. This approach avoids the problem of using session-specific nullifiers as revocation keys.
 
 **7.5 — Batch Enrollment:** The contract supports batch enrollment of both human identities (`enrollHumanBatch`) and agent credentials (`enrollAgentBatch`) for gas-efficient initialization.
 
 ### 8. Delegation On-Chain Verification
 
-Delegation proofs are verified through the `verifyDelegation()` function, which processes a single delegation hop per call. For a multi-hop chain (e.g., Human -> Agent A -> Agent B -> Agent C), the verifier calls `verifyDelegation()` iteratively for each hop, checking that each hop's `previousScopeCommitment` public input matches the prior hop's `newScopeCommitment` public output (or, for the first hop, the `scopeCommitment` output of the initial AgentPolicy proof). The maximum chain depth of 3 is enforced at the application layer.
+Delegation proofs are verified through the `verifyDelegation()` function, which processes a single delegation hop per call. The function accepts the proof, public signals, session nonce, and an `expectedPreviousScopeCommitment` parameter. For each call, the contract performs:
+
+1. **Chain-linking verification:** The proof's `previousScopeCommitment` public signal must equal the `expectedPreviousScopeCommitment` argument, preventing chain breaks. For the first hop, this is the `scopeCommitment` output of the initial AgentPolicy proof; for subsequent hops, it is the prior call's `newScopeCommitment` output.
+2. **Nonce equality enforcement:** The proof's session nonce public signal must equal the function argument, binding the delegation to the same session as the handshake.
+3. **Delegation nullifier replay protection:** The proof's delegation nullifier is checked against `usedDelegationNullifiers` and stored if fresh, preventing delegation replay.
+4. **Hop count enforcement:** A `delegationHopCount` mapping tracks hops per session nonce. The function increments and checks against `MAX_DELEGATION_HOPS` (3), rejecting attempts to exceed the maximum chain depth.
+5. **Proof verification:** The delegation proof is verified via the deployed DelegationPlonkVerifier contract.
 
 ### 9. Cryptographic Primitives
 
@@ -441,19 +459,19 @@ Delegation proofs are verified through the `verifyDelegation()` function, which 
 What is claimed is:
 
 **Claim 1.** A computer-implemented method for privacy-preserving mutual authentication between a human user and an artificial intelligence agent, comprising:
-(a) maintaining, on a blockchain, a first Merkle tree storing human identity commitments and a second Merkle tree storing AI agent credential commitments;
-(b) receiving, from the human user, a first zero-knowledge proof generated using a first proving system, the first zero-knowledge proof proving that the human user's identity commitment is a leaf in the first Merkle tree without revealing the human user's identity;
-(c) receiving, from the AI agent, a second zero-knowledge proof generated using a second proving system different from the first proving system, the second zero-knowledge proof proving that the AI agent's credential commitment is a leaf in the second Merkle tree, that the AI agent's permission bitmask satisfies a required scope policy, and that the AI agent's credential has not expired, without revealing the AI agent's credential fields;
-(d) verifying both the first zero-knowledge proof and the second zero-knowledge proof in a single blockchain transaction, wherein both proofs are bound to a common session nonce for replay protection; and
-(e) emitting a verification event only if both proofs are valid, the session nonce is fresh, and neither the human user nor the AI agent has been revoked.
+(a) maintaining, on a blockchain, a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields;
+(b) receiving, from the human user, a first zero-knowledge proof generated using a Groth16 proving system, the first zero-knowledge proof proving Merkle membership of the human user's identity commitment in the first Merkle tree, computing a nullifier as a Poseidon hash of a scope identifier and a secret scalar, and computing a nonce binding as a Poseidon hash of the nullifier and a session nonce, without revealing the human user's identity;
+(c) receiving, from the AI agent, a second zero-knowledge proof generated using a PLONK proving system, the second zero-knowledge proof proving Merkle membership of the AI agent's credential commitment in the second Merkle tree, verifying an EdDSA signature of an operator over the credential commitment, performing Num2Bits(64) range checks on a permission bitmask and an expiry timestamp to prevent field overflow, enforcing bit-by-bit that the permission bitmask satisfies a required scope policy, verifying the credential has not expired via a LessThan(64) comparator, and outputting an identity-bound scope commitment computed as a Poseidon hash of the permission bitmask and the credential commitment, without revealing the AI agent's credential fields;
+(d) verifying both the first zero-knowledge proof and the second zero-knowledge proof in a single blockchain transaction, wherein the on-chain verifier enforces that the session nonce embedded in each proof's public signals equals the transaction's session nonce argument, and the session nonce is checked for freshness against a used-nonce mapping; and
+(e) emitting a verification event only if both proofs are valid, the session nonce is fresh and matches both proofs, and the human user's nullifier has not been revoked.
 
 **Claim 2.** The method of claim 1, wherein the first proving system is Groth16 and the second proving system is PLONK.
 
 **Claim 3.** The method of claim 2, wherein the first zero-knowledge proof reuses a Powers of Tau Phase 1 trusted setup ceremony from the Semaphore v4 protocol, and the second zero-knowledge proof uses a universal setup requiring no circuit-specific ceremony.
 
-**Claim 4.** The method of claim 1, wherein the human identity commitment is computed as a Poseidon hash of an EdDSA public key on the Baby Jubjub elliptic curve, and the AI agent credential commitment is computed as a Poseidon hash of a model identifier hash, an operator public key, a permission bitmask, and an expiry timestamp.
+**Claim 4.** The method of claim 1, wherein the AI agent credential commitment is computed as a five-input Poseidon hash of a model identifier hash, both coordinates of the operator's EdDSA public key on the Baby Jubjub elliptic curve, a permission bitmask, and an expiry timestamp.
 
-**Claim 5.** The method of claim 1, wherein the second zero-knowledge proof further outputs a scope commitment computed as a Poseidon hash of the AI agent's permission bitmask, wherein the scope commitment serves as an entry point for a delegation chain.
+**Claim 5.** The method of claim 1, wherein the identity-bound scope commitment output by the second zero-knowledge proof is computed as a two-input Poseidon hash of the AI agent's permission bitmask and the AI agent's credential commitment, binding permission scope to agent identity to prevent impersonation in delegation chains.
 
 **Claim 6.** The method of claim 1, wherein verifying the second zero-knowledge proof comprises checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, accommodating tree updates between proof generation and verification.
 
@@ -462,17 +480,18 @@ What is claimed is:
 **Claim 8.** The method of claim 1, wherein the first zero-knowledge proof further outputs a nonce binding value computed as a Poseidon hash of a nullifier hash and the session nonce, binding the proof to both the human user's identity and the specific session.
 
 **Claim 9.** A computer-implemented method for privacy-preserving delegation of scoped permissions through a chain of artificial intelligence agents using zero-knowledge proofs, comprising:
-(a) receiving a previous scope commitment, the previous scope commitment being a Poseidon hash of a delegator's permission bitmask published as a public output of a preceding proof in the chain;
-(b) receiving, as private inputs to a delegation zero-knowledge proof circuit, the delegator's actual permission bitmask and a delegatee's permission bitmask;
-(c) constraining, within the circuit, that the Poseidon hash of the delegator's actual permission bitmask equals the previous scope commitment, thereby linking the current delegation to the preceding proof without revealing the delegator's actual permissions;
-(d) constraining, within the circuit, that the delegatee's permission bitmask is a strict bitwise subset of the delegator's permission bitmask by enforcing, for each bit position i, that delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero;
-(e) outputting, as a public signal, a new scope commitment computed as a Poseidon hash of the delegatee's permission bitmask; and
-(f) verifying the delegation zero-knowledge proof on a blockchain.
+(a) receiving a previous scope commitment, the previous scope commitment being a Poseidon hash of a delegator's permission bitmask and the delegator's credential commitment, published as a public output of a preceding proof in the chain;
+(b) receiving, as private inputs to a delegation zero-knowledge proof circuit, the delegator's actual permission bitmask, the delegator's credential commitment, a delegatee's permission bitmask, and a delegatee's credential commitment;
+(c) constraining, within the circuit, that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals the previous scope commitment, thereby linking the current delegation to both the preceding proof's scope and the specific delegator's identity without revealing the delegator's actual permissions;
+(d) performing Num2Bits(64) range checks on both permission bitmasks and constraining, within the circuit, that the delegatee's permission bitmask is a bitwise subset of the delegator's permission bitmask by enforcing, for each bit position i, that delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero;
+(e) constraining, within the circuit, that the delegatee's expiry timestamp is less than or equal to the delegator's expiry timestamp using a LessEqThan(64) comparator;
+(f) verifying, within the circuit, an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp;
+(g) outputting, as a public signal, a new scope commitment computed as a two-input Poseidon hash of the delegatee's permission bitmask and the delegatee's credential commitment; and
+(h) verifying the delegation zero-knowledge proof on a blockchain, including storing a delegation nullifier for replay protection, verifying chain-linking correctness against an expected previous scope commitment, and enforcing a maximum delegation hop count.
 
-**Claim 10.** The method of claim 9, further comprising constraining, within the circuit, that the delegatee's expiry timestamp is less than or equal to the delegator's expiry timestamp, preventing temporal scope escalation.
+**Claim 10.** The method of claim 9, wherein the delegation nullifier is computed as a Poseidon hash of the delegation token hash and the session nonce, providing per-session replay protection that is independent of the handshake nullifiers.
 
-**Claim 11.** The method of claim 9, further comprising:
-constraining, within the circuit, that the delegator's EdDSA signature over a delegation token is valid, the delegation token comprising a Poseidon hash of the previous scope commitment, a delegatee credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp.
+**Claim 11.** The method of claim 9, wherein the maximum delegation hop count is three, and the blockchain verification function maintains a per-session counter incremented with each verified delegation hop.
 
 **Claim 12.** The method of claim 9, further comprising:
 enforcing a cumulative bit encoding invariant on the delegatee's permission bitmask, wherein a higher-tier permission bit implies the presence of all lower-tier permission bits in a defined hierarchy, the invariant being enforced by circuit constraints of the form: higherBit * (1 - lowerBit) === 0.
@@ -487,15 +506,15 @@ bit 2 represents financial transaction authority up to a first threshold lower t
 **Claim 15.** A system for unified human and artificial intelligence agent identity management with privacy-preserving mutual authentication and composable delegation, the system comprising:
 a blockchain-based identity registry contract maintaining:
 a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;
-a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields including a model identifier hash, an operator public key, a permission bitmask, and an expiry timestamp;
+a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;
 a root history circular buffer storing the last N roots of the second Merkle tree;
 a nonce mapping for replay protection; and
 revocation mappings for both human identities and agent credentials;
 a first verifier contract configured to verify Groth16 zero-knowledge proofs for human identity;
 a second verifier contract configured to verify PLONK zero-knowledge proofs for AI agent credentials;
 a third verifier contract configured to verify PLONK zero-knowledge proofs for delegation;
-a handshake verification function that receives a Groth16 proof and a PLONK proof bound to a common session nonce, verifies both proofs in a single transaction through the first and second verifier contracts respectively, checks nonce freshness and revocation status, and emits a verification event upon success; and
-a delegation verification function that receives a delegation proof for a single hop, verifies the proof through the third verifier contract, and emits a delegation event with the new scope commitment for chain linking.
+a handshake verification function that receives a Groth16 proof and a PLONK proof bound to a common session nonce, enforces that the session nonce embedded in each proof's public signals equals the transaction argument, verifies both proofs in a single transaction through the first and second verifier contracts respectively, checks nonce freshness and human revocation status, and emits a verification event upon success; and
+a delegation verification function that receives a delegation proof for a single hop, verifies chain-linking correctness against an expected previous scope commitment, enforces session nonce equality, stores a delegation nullifier for replay protection, increments and checks a per-session hop counter against a maximum, verifies the proof through the third verifier contract, and emits a delegation event with the new scope commitment.
 
 **Claim 16.** The system of claim 15, further comprising:
 a human identity circuit compiled in Circom 2.1.6 with a Merkle tree depth of 20, the circuit configured to:
@@ -508,19 +527,20 @@ compute a nonce binding as a Poseidon hash of the nullifier and a session nonce.
 **Claim 17.** The system of claim 15, further comprising:
 an agent credential circuit compiled in Circom 2.1.6 with a Merkle tree depth of 20, the circuit configured to:
 perform Num2Bits(64) range checks on the permission bitmask, expiry timestamp, and current timestamp to prevent field overflow;
-compute a credential commitment as a four-input Poseidon hash;
-verify an EdDSA signature of an operator over the credential commitment;
+compute a credential commitment as a five-input Poseidon hash including both coordinates of the operator's EdDSA public key;
+verify an EdDSA signature of the operator over the credential commitment;
 prove Merkle membership of the credential commitment in the second Merkle tree;
 enforce bit-by-bit permission scope satisfaction against a required scope mask; and
-output a scope commitment as a one-input Poseidon hash of the permission bitmask for delegation chain entry.
+output an identity-bound scope commitment as a two-input Poseidon hash of the permission bitmask and the credential commitment for delegation chain entry.
 
 **Claim 18.** The system of claim 15, further comprising:
 a delegation circuit compiled in Circom 2.1.6, the circuit configured to:
-receive as a public input a previous scope commitment and as private inputs a delegator scope and a delegatee scope;
-constrain that the Poseidon hash of the delegator scope equals the previous scope commitment;
+receive as a public input a previous scope commitment and as private inputs a delegator scope, a delegator credential commitment, a delegatee scope, and a delegatee credential commitment;
+constrain that the two-input Poseidon hash of the delegator scope and delegator credential commitment equals the previous scope commitment, providing identity-bound chain linking;
 constrain bit-by-bit that the delegatee scope is a subset of the delegator scope;
-enforce a cumulative bit encoding invariant on the delegatee scope; and
-output a new scope commitment as a Poseidon hash of the delegatee scope.
+enforce a cumulative bit encoding invariant on the delegatee scope;
+verify an EdDSA signature of the delegator over a delegation token; and
+output a new identity-bound scope commitment as a two-input Poseidon hash of the delegatee scope and delegatee credential commitment.
 
 **Claim 19.** A non-transitory computer-readable medium storing instructions that, when executed by a processor, cause the processor to perform the method of claim 1.
 
@@ -594,15 +614,16 @@ These should be filed as CIPs before public disclosure.
 
 The inventor has working implementations of all disclosed circuits and contracts:
 - `circuits/src/HumanUniqueness.circom` — 16,409 constraints, Groth16
-- `circuits/src/AgentPolicy.circom` — 20,631 constraints, PLONK
-- `circuits/src/Delegation.circom` — 8,742 constraints, PLONK
-- `contracts/contracts/IdentityRegistry.sol` — LeanIMT trees, handshake + delegation verification
-- 33 passing tests with real proof generation and on-chain verification at 570k gas
+- `circuits/src/AgentPolicy.circom` — 20,832 constraints, PLONK
+- `circuits/src/Delegation.circom` — 10,769 constraints, PLONK
+- `contracts/contracts/IdentityRegistry.sol` — LeanIMT trees, handshake + delegation verification with nonce equality enforcement, delegation nullifier replay protection, chain-linking verification, and hop count enforcement
+- 39 passing tests with real proof generation and on-chain verification at ~570k gas
 
 ---
 
 **END OF PROVISIONAL PATENT APPLICATION — IDENTITYOS-PROV-001**
 
 *Prepared: April 14, 2026*
+*Revised: April 15, 2026 (Codex review findings incorporated)*
 *Inventor: Viswanadha Pratap Kondoju*
 *Status: DRAFT — Requires attorney review before filing*
