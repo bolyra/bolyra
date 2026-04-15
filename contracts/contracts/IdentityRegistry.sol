@@ -3,6 +3,22 @@ pragma solidity ^0.8.24;
 
 import {InternalLeanIMT, LeanIMTData} from "@zk-kit/lean-imt.sol/InternalLeanIMT.sol";
 
+interface IGroth16Verifier {
+    function verifyProof(
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[5] calldata _pubSignals
+    ) external view returns (bool);
+}
+
+interface IPlonkVerifier {
+    function verifyProof(
+        uint256[24] calldata _proof,
+        uint256[6] calldata _pubSignals
+    ) external view returns (bool);
+}
+
 /// @title IdentityRegistry
 /// @notice On-chain registry for IdentityOS: manages human identities and AI agent
 ///         credentials, verifies mutual handshake proofs, and tracks delegation chains.
@@ -41,6 +57,10 @@ contract IdentityRegistry {
 
     address public owner;
 
+    // Proof verifiers (deployed separately, addresses set in constructor)
+    IGroth16Verifier public immutable humanVerifier;
+    IPlonkVerifier public immutable agentVerifier;
+
     // Human identity tree (LeanIMT, Semaphore v4 compatible)
     LeanIMTData internal humanTree;
 
@@ -63,8 +83,10 @@ contract IdentityRegistry {
 
     // ============ CONSTRUCTOR ============
 
-    constructor() {
+    constructor(address _humanVerifier, address _agentVerifier) {
         owner = msg.sender;
+        humanVerifier = IGroth16Verifier(_humanVerifier);
+        agentVerifier = IPlonkVerifier(_agentVerifier);
     }
 
     modifier onlyOwner() {
@@ -223,27 +245,36 @@ contract IdentityRegistry {
         agentRootHistoryIndex = (agentRootHistoryIndex + 1) % ROOT_HISTORY_SIZE;
     }
 
-    /// @dev Verify a Groth16 proof for the human circuit.
-    ///      PLACEHOLDER: Returns true for any well-formed proof.
-    ///      Replace with auto-generated verifier before testnet deployment.
+    /// @dev Verify a Groth16 proof for the human circuit via the deployed verifier.
     function _verifyHumanProof(
-        uint256[8] calldata /* proof */,
-        uint256[] calldata /* pubSignals */
-    ) internal pure returns (bool) {
-        // TODO: Replace with actual Groth16 verifier
-        // Generated via: snarkjs zkey export solidityverifier HumanUniqueness_final.zkey HumanVerifier.sol
-        return true;
+        uint256[8] calldata proof,
+        uint256[] calldata pubSignals
+    ) internal view returns (bool) {
+        // Groth16 proof format: [pA[0], pA[1], pB[0][0], pB[0][1], pB[1][0], pB[1][1], pC[0], pC[1]]
+        uint[2] memory pA = [proof[0], proof[1]];
+        uint[2][2] memory pB = [[proof[2], proof[3]], [proof[4], proof[5]]];
+        uint[2] memory pC = [proof[6], proof[7]];
+
+        // HumanUniqueness public signals: [humanMerkleRoot, nullifierHash, nonceBinding, scope, sessionNonce]
+        uint[5] memory signals;
+        for (uint i = 0; i < 5; i++) {
+            signals[i] = pubSignals[i];
+        }
+
+        return humanVerifier.verifyProof(pA, pB, pC, signals);
     }
 
-    /// @dev Verify a PLONK proof for the agent circuit.
-    ///      PLACEHOLDER: Returns true for any well-formed proof.
-    ///      Replace with auto-generated verifier before testnet deployment.
+    /// @dev Verify a PLONK proof for the agent circuit via the deployed verifier.
     function _verifyAgentProof(
-        uint256[24] calldata /* proof */,
-        uint256[] calldata /* pubSignals */
-    ) internal pure returns (bool) {
-        // TODO: Replace with actual PLONK verifier
-        // Generated via: snarkjs plonk export solidityverifier AgentPolicy_final.zkey AgentVerifier.sol
-        return true;
+        uint256[24] calldata proof,
+        uint256[] calldata pubSignals
+    ) internal view returns (bool) {
+        // AgentPolicy public signals: [agentMerkleRoot, nullifierHash, scopeCommitment, requiredScope, currentTimestamp, sessionNonce]
+        uint256[6] memory signals;
+        for (uint i = 0; i < 6; i++) {
+            signals[i] = pubSignals[i];
+        }
+
+        return agentVerifier.verifyProof(proof, signals);
     }
 }
