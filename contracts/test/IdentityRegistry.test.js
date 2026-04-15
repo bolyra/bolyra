@@ -20,12 +20,12 @@ describe("IdentityRegistry", function () {
     await groth16Verifier.waitForDeployment();
 
     // Deploy PLONK verifier (AgentPolicy)
-    const PlonkVerifier = await ethers.getContractFactory("PlonkVerifier");
+    const PlonkVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:PlonkVerifier");
     const plonkVerifier = await PlonkVerifier.deploy();
     await plonkVerifier.waitForDeployment();
 
     // Deploy Delegation PLONK verifier
-    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
+    const DelegationVerifier = await ethers.getContractFactory("contracts/DelegationVerifier.sol:PlonkVerifier");
     const delegationVerifier = await DelegationVerifier.deploy();
     await delegationVerifier.waitForDeployment();
 
@@ -200,6 +200,87 @@ describe("IdentityRegistry", function () {
       // This test validates that the event exists in the contract ABI.
       const filter = registry.filters.HandshakeVerified();
       expect(filter).to.not.be.undefined;
+    });
+
+    it("should reject handshake with nonce mismatch in human pubSignals (Fix #1)", async function () {
+      await registry.enrollHuman(100n);
+      await registry.enrollAgent(200n);
+
+      const humanRoot = await registry.humanTreeRoot();
+      const agentRoot = await registry.agentTreeRoot();
+      const nonce = 45n;
+
+      const humanProof = new Array(8).fill(0n);
+      // humanPubSignals[4] = wrong nonce (999)
+      const humanPubSignals = [humanRoot, 1n, 2n, 3n, 999n];
+      const agentProof = new Array(24).fill(0n);
+      const agentPubSignals = [agentRoot, 4n, 5n, 6n, 7n, nonce];
+
+      await expect(
+        registry.verifyHandshake(
+          humanProof, humanPubSignals,
+          agentProof, agentPubSignals,
+          nonce
+        )
+      ).to.be.revertedWithCustomError(registry, "NonceMismatch");
+    });
+
+    it("should reject handshake with nonce mismatch in agent pubSignals (Fix #1)", async function () {
+      await registry.enrollHuman(100n);
+      await registry.enrollAgent(200n);
+
+      const humanRoot = await registry.humanTreeRoot();
+      const agentRoot = await registry.agentTreeRoot();
+      const nonce = 46n;
+
+      const humanProof = new Array(8).fill(0n);
+      const humanPubSignals = [humanRoot, 1n, 2n, 3n, nonce];
+      const agentProof = new Array(24).fill(0n);
+      // agentPubSignals[5] = wrong nonce (888)
+      const agentPubSignals = [agentRoot, 4n, 5n, 6n, 7n, 888n];
+
+      await expect(
+        registry.verifyHandshake(
+          humanProof, humanPubSignals,
+          agentProof, agentPubSignals,
+          nonce
+        )
+      ).to.be.revertedWithCustomError(registry, "NonceMismatch");
+    });
+  });
+
+  describe("Delegation verification (Fix #5)", function () {
+    it("should reject delegation with scope chain mismatch", async function () {
+      const proof = new Array(24).fill(0n);
+      const pubSignals = [111n, 42n, 222n, 333n]; // previousScopeCommitment=111
+      const sessionNonce = 42n;
+      const expectedPrevious = 999n; // doesn't match 111
+
+      await expect(
+        registry.verifyDelegation(proof, pubSignals, sessionNonce, expectedPrevious)
+      ).to.be.revertedWithCustomError(registry, "ScopeChainMismatch");
+    });
+
+    it("should reject delegation with nonce mismatch", async function () {
+      const proof = new Array(24).fill(0n);
+      const pubSignals = [111n, 42n, 222n, 333n]; // sessionNonce in proof = 42
+      const sessionNonce = 99n; // doesn't match
+      const expectedPrevious = 111n;
+
+      await expect(
+        registry.verifyDelegation(proof, pubSignals, sessionNonce, expectedPrevious)
+      ).to.be.revertedWithCustomError(registry, "NonceMismatch");
+    });
+
+    it("should track delegation hop count", async function () {
+      // Verify the hop count state variable is accessible
+      const count = await registry.delegationHopCount(12345n);
+      expect(count).to.equal(0n);
+    });
+
+    it("should expose usedDelegationNullifiers mapping", async function () {
+      const used = await registry.usedDelegationNullifiers(99999n);
+      expect(used).to.be.false;
     });
   });
 });

@@ -8,18 +8,18 @@ include "../node_modules/circomlib/circuits/comparators.circom";
 // Delegation: Proves a valid scope-narrowing delegation from delegator to delegatee.
 //
 // Privacy model (from eng review, outside voice finding #6):
-//   Scope bits are PRIVATE. Only hash(scope) is PUBLIC.
-//   Each hop publishes scopeCommitment = Poseidon(scope) as a public output.
+//   Scope bits are PRIVATE. Only hash(scope, credentialCommitment) is PUBLIC.
+//   Each hop publishes scopeCommitment = Poseidon(scope, credCommitment) as a public output.
 //   The next hop takes the previous scopeCommitment as a public input and
-//   proves its scope is a strict subset — without revealing either party's bits.
+//   proves its scope is a subset — without revealing either party's bits.
 //
 // How subset proof works without revealing bits:
 //   The circuit takes BOTH scopes as private inputs (delegator + delegatee).
 //   It verifies:
-//     a) hash(delegatorScope) == previousScopeCommitment (links to prior hop)
+//     a) hash(delegatorScope, delegatorCredCommitment) == previousScopeCommitment (identity-bound chain link)
 //     b) delegateeScope & ~delegatorScope == 0 (subset check)
-//     c) hash(delegateeScope) is output as the new scopeCommitment
-//   The delegator's actual bits never leave the circuit.
+//     c) hash(delegateeScope, delegateeCredCommitment) is output as the new scopeCommitment
+//   The delegator's actual bits and identity never leave the circuit.
 //
 // Cumulative bit encoding invariant (from eng review):
 //   bit 4 (unlimited financial) MUST have bits 2+3 set
@@ -53,6 +53,9 @@ template Delegation() {
     signal input sigR8x;
     signal input sigR8y;
     signal input sigS;
+
+    // Delegator's credential commitment (binds scope to delegator's identity)
+    signal input delegatorCredCommitment;
 
     // Delegatee's credential commitment (identifies WHO is receiving)
     signal input delegateeCredCommitment;
@@ -90,12 +93,15 @@ template Delegation() {
     delegatorExpiryRange.in <== delegatorExpiry;
 
     // ============ STEP 2: Verify delegator scope commitment matches previous hop ============
+    // Identity-bound: Poseidon(delegatorScope, delegatorCredCommitment) must match
+    // the previous hop's output. This prevents impersonation by actors with the same scope.
 
-    component delegatorScopeHash = Poseidon(1);
+    component delegatorScopeHash = Poseidon(2);
     delegatorScopeHash.inputs[0] <== delegatorScope;
+    delegatorScopeHash.inputs[1] <== delegatorCredCommitment;
 
     // This is the critical chain-linking constraint:
-    // The delegator's actual scope must hash to what the previous hop published.
+    // The delegator's actual scope + identity must hash to what the previous hop published.
     delegatorScopeHash.out === previousScopeCommitment;
 
     // ============ STEP 3: Scope subset check ============
@@ -159,9 +165,10 @@ template Delegation() {
 
     // ============ STEP 7: Outputs ============
 
-    // New scope commitment for the chain
-    component delegateeScopeHash = Poseidon(1);
+    // New scope commitment for the chain (identity-bound)
+    component delegateeScopeHash = Poseidon(2);
     delegateeScopeHash.inputs[0] <== delegateeScope;
+    delegateeScopeHash.inputs[1] <== delegateeCredCommitment;
     newScopeCommitment <== delegateeScopeHash.out;
 
     // Delegation nullifier: unique per delegation per session

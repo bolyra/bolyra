@@ -33,6 +33,7 @@ describe("Delegation Circuit", function () {
     delegateeScope,
     delegatorExpiry,
     delegateeExpiry,
+    delegatorCredCommitment = 99999n,
     delegateeCredCommitment = 12345n,
     sessionNonce = 42n,
     delegatorPrivKey = Buffer.from(
@@ -41,8 +42,9 @@ describe("Delegation Circuit", function () {
   }) {
     const delegatorPubKey = eddsa.prv2pub(delegatorPrivKey);
 
-    // Previous scope commitment = Poseidon(delegatorScope)
-    const previousScopeCommitment = F.toObject(poseidon([delegatorScope]));
+    // Previous scope commitment = Poseidon(delegatorScope, delegatorCredCommitment)
+    // Identity-bound: scope + credential commitment (Fix #3)
+    const previousScopeCommitment = F.toObject(poseidon([delegatorScope, delegatorCredCommitment]));
 
     // Delegation token = Poseidon4(prevScopeCommit, delegateeCredCommit, delegateeScope, delegateeExpiry)
     const tokenFe = poseidon([
@@ -65,6 +67,7 @@ describe("Delegation Circuit", function () {
       sigR8x: F.toObject(sig.R8[0]).toString(),
       sigR8y: F.toObject(sig.R8[1]).toString(),
       sigS: sig.S.toString(),
+      delegatorCredCommitment: delegatorCredCommitment.toString(),
       delegateeCredCommitment: delegateeCredCommitment.toString(),
       previousScopeCommitment: previousScopeCommitment.toString(),
       sessionNonce: sessionNonce.toString(),
@@ -82,8 +85,8 @@ describe("Delegation Circuit", function () {
     const witness = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(witness);
 
-    // Output: newScopeCommitment = Poseidon(delegateeScope)
-    const expectedNewCommitment = F.toObject(poseidon([0b00000011n]));
+    // Output: newScopeCommitment = Poseidon(delegateeScope, delegateeCredCommitment)
+    const expectedNewCommitment = F.toObject(poseidon([0b00000011n, 12345n]));
     expect(witness[1].toString()).to.equal(expectedNewCommitment.toString());
     console.log("  New scope commitment:", witness[1].toString().slice(0, 20) + "...");
     console.log("  Delegation nullifier:", witness[2].toString().slice(0, 20) + "...");
@@ -91,11 +94,14 @@ describe("Delegation Circuit", function () {
 
   it("should chain two delegations (scope commitment linking)", async function () {
     // Hop 1: delegator (0xFF) → agent A (0x0F)
+    // delegateeCredCommitment for agent A = 54321
+    const agentACredCommitment = 54321n;
     const hop1 = createDelegation({
       delegatorScope: 0b11111111n,
       delegateeScope: 0b00001111n,
       delegatorExpiry: 1000000n,
       delegateeExpiry: 800000n,
+      delegateeCredCommitment: agentACredCommitment,
     });
     const witness1 = await circuit.calculateWitness(hop1, true);
     await circuit.checkConstraints(witness1);
@@ -103,6 +109,7 @@ describe("Delegation Circuit", function () {
 
     // Hop 2: agent A (0x0F) → agent B (0x03)
     // previousScopeCommitment must be hop1's output
+    // agent A is now the delegator, so delegatorCredCommitment = agentACredCommitment
     const hop2PrivKey = Buffer.from(
       "0102030405060708090001020304050607080900010203040506070809000102", "hex"
     );
@@ -111,18 +118,18 @@ describe("Delegation Circuit", function () {
       delegateeScope: 0b00000011n,       // agent B's scope (narrower)
       delegatorExpiry: 800000n,
       delegateeExpiry: 600000n,
+      delegatorCredCommitment: agentACredCommitment,  // agent A's cred (now delegator)
       delegatorPrivKey: hop2PrivKey,
     });
 
-    // Override previousScopeCommitment to match hop1's output
-    hop2.previousScopeCommitment = hop1ScopeCommitment.toString();
-
-    // This should fail because the previousScopeCommitment was computed from
-    // hop2's delegatorScope, which must match. Let's verify the linking works.
-    // Actually, hop2's delegatorScope IS 0x0F, and previousScopeCommitment
-    // should be Poseidon(0x0F) which IS what hop1 output. So this should pass.
-    const expectedLink = F.toObject(poseidon([0b00001111n]));
+    // Verify the identity-bound chain link:
+    // hop1 output = Poseidon(0x0F, agentACredCommitment)
+    // hop2 input previousScopeCommitment should match
+    const expectedLink = F.toObject(poseidon([0b00001111n, agentACredCommitment]));
     expect(hop1ScopeCommitment.toString()).to.equal(expectedLink.toString());
+
+    // Override previousScopeCommitment to match hop1's output (should already match)
+    hop2.previousScopeCommitment = hop1ScopeCommitment.toString();
 
     const witness2 = await circuit.calculateWitness(hop2, true);
     await circuit.checkConstraints(witness2);

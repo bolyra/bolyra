@@ -45,9 +45,12 @@ contract IdentityRegistry {
     error InvalidDelegationProof();
     error NonceAlreadyUsed();
     error HumanIdentityRevoked();
-    error AgentRevoked();
     error StaleAgentRoot();
     error NotOwner();
+    error NonceMismatch();                // Fix #1: nonce in pubSignals must match argument
+    error DelegationNullifierReused();    // Fix #5: delegation replay protection
+    error ScopeChainMismatch();           // Fix #5: previousScopeCommitment must match expected
+    error MaxDelegationHopsExceeded();    // Fix #5: max 3 hops per session
 
     // ============ EVENTS ============
 
@@ -95,6 +98,12 @@ contract IdentityRegistry {
     // Replay protection
     mapping(uint256 => bool) public usedNonces;
 
+    // Delegation replay protection and chain tracking (Fix #5)
+    mapping(uint256 => bool) public usedDelegationNullifiers;
+    uint256 public constant MAX_DELEGATION_HOPS = 3;
+    // sessionNonce => number of delegation hops verified so far
+    mapping(uint256 => uint256) public delegationHopCount;
+
     // ============ CONSTRUCTOR ============
 
     constructor(address _humanVerifier, address _agentVerifier, address _delegationVerifier) {
@@ -119,7 +128,7 @@ contract IdentityRegistry {
     }
 
     /// @notice Enroll an AI agent credential into the agentTree.
-    /// @param credentialCommitment Poseidon4(modelHash, operatorAx, bitmask, expiry).
+    /// @param credentialCommitment Poseidon5(modelHash, operatorAx, operatorAy, bitmask, expiry).
     function enrollAgent(uint256 credentialCommitment) external onlyOwner {
         uint256 newRoot = agentTree._insert(credentialCommitment);
         _recordAgentRoot(newRoot);
@@ -171,9 +180,20 @@ contract IdentityRegistry {
         uint256 agentMerkleRoot = agentPubSignals[0];
         uint256 agentNullifier = agentPubSignals[1];
 
+        // 2b. Fix #1: Enforce nonce equality — both proofs must embed the same sessionNonce
+        // humanPubSignals[4] = sessionNonce from HumanUniqueness circuit
+        // agentPubSignals[5] = sessionNonce from AgentPolicy circuit
+        if (humanPubSignals[4] != sessionNonce) revert NonceMismatch();
+        if (agentPubSignals[5] != sessionNonce) revert NonceMismatch();
+
         // 3. Check revocations
+        // Human revocation: checked by nullifier (stable per scope)
         if (humanRevocations[humanNullifier]) revert HumanIdentityRevoked();
-        if (agentRevocations[agentNullifier]) revert AgentRevoked();
+        // Fix #2: Agent revocation is handled by removing the credential from the agentTree
+        // (LeanIMT update to 0). The nullifier is session-specific, so checking
+        // agentRevocations[agentNullifier] was wrong — it used the wrong key.
+        // Agent revocation is enforced at the Merkle proof level: a revoked credential
+        // is zeroed in the tree, so the proof will fail to verify.
 
         // 4. Verify human Merkle root is valid
         // For humanTree, we check the current root (Semaphore-style)
@@ -203,24 +223,40 @@ contract IdentityRegistry {
 
     /// @notice Verify a single delegation hop in a chain.
     /// @dev Each hop is verified independently. The on-chain contract checks that
-    ///      the previousScopeCommitment matches the output of the prior hop (or the
-    ///      AgentPolicy circuit's scopeCommitment for the first hop).
-    ///      Max 3 hops are verified by calling this function iteratively.
+    ///      the previousScopeCommitment matches the expected value, stores the
+    ///      delegation nullifier for replay protection, and enforces max 3 hops.
     /// @param proof PLONK proof for the Delegation circuit.
     /// @param pubSignals [previousScopeCommitment, sessionNonce, newScopeCommitment, delegationNullifier]
     /// @param sessionNonce The session nonce (must match the handshake nonce).
+    /// @param expectedPreviousScopeCommitment The expected previousScopeCommitment
+    ///        (from AgentPolicy output for hop 0, or prior verifyDelegation output for subsequent hops).
     function verifyDelegation(
         uint256[24] calldata proof,
         uint256[4] calldata pubSignals,
-        uint256 sessionNonce
+        uint256 sessionNonce,
+        uint256 expectedPreviousScopeCommitment
     ) external {
+        // Fix #5a: Verify previousScopeCommitment matches the expected chain link
+        if (pubSignals[0] != expectedPreviousScopeCommitment) revert ScopeChainMismatch();
+
+        // Fix #5a: Verify sessionNonce in proof matches the argument
+        if (pubSignals[1] != sessionNonce) revert NonceMismatch();
+
+        // Fix #5b: Delegation nullifier replay protection
+        uint256 delegationNullifier = pubSignals[3];
+        if (usedDelegationNullifiers[delegationNullifier]) revert DelegationNullifierReused();
+        usedDelegationNullifiers[delegationNullifier] = true;
+
+        // Fix #5c: Enforce max delegation chain depth (3 hops)
+        delegationHopCount[sessionNonce]++;
+        if (delegationHopCount[sessionNonce] > MAX_DELEGATION_HOPS) revert MaxDelegationHopsExceeded();
+
         // Verify the delegation proof via the deployed verifier
         if (!delegationVerifier.verifyProof(proof, pubSignals)) {
             revert InvalidDelegationProof();
         }
 
         uint256 newScopeCommitment = pubSignals[2];
-        uint256 delegationNullifier = pubSignals[3];
 
         emit DelegationVerified(delegationNullifier, newScopeCommitment, sessionNonce);
     }

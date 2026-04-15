@@ -53,7 +53,7 @@ template AgentPolicy(MAX_DEPTH) {
 
     signal output agentMerkleRoot;        // computed Merkle root (verified on-chain)
     signal output nullifierHash;          // unique per agent per nonce (replay detection)
-    signal output scopeCommitment;        // hash(permissionBitmask) for delegation chain linking
+    signal output scopeCommitment;        // hash(permissionBitmask, credentialCommitment) for identity-bound delegation chain linking
 
     // ============ STEP 1: Range checks on uint64 fields ============
     // Prevents field overflow attacks where values > 2^64 pass circuit
@@ -69,14 +69,16 @@ template AgentPolicy(MAX_DEPTH) {
     timestampRange.in <== currentTimestamp;
 
     // ============ STEP 2: Credential commitment ============
-    // credentialCommitment = Poseidon4(modelHash, operatorPubkeyAx, permissionBitmask, expiryTimestamp)
+    // credentialCommitment = Poseidon5(modelHash, operatorPubkeyAx, operatorPubkeyAy, permissionBitmask, expiryTimestamp)
     // This is the leaf value stored in agentTree.
+    // Both Ax and Ay are included to fully bind the operator's public key.
 
-    component credentialHash = Poseidon(4);
+    component credentialHash = Poseidon(5);
     credentialHash.inputs[0] <== modelHash;
     credentialHash.inputs[1] <== operatorPubkeyAx;
-    credentialHash.inputs[2] <== permissionBitmask;
-    credentialHash.inputs[3] <== expiryTimestamp;
+    credentialHash.inputs[2] <== operatorPubkeyAy;
+    credentialHash.inputs[3] <== permissionBitmask;
+    credentialHash.inputs[4] <== expiryTimestamp;
 
     signal credentialCommitment;
     credentialCommitment <== credentialHash.out;
@@ -145,12 +147,14 @@ template AgentPolicy(MAX_DEPTH) {
     nullifierHash <== nullifier.out;
 
     // ============ STEP 8: Scope commitment for delegation chain ============
-    // scopeCommitment = Poseidon1(permissionBitmask)
-    // Published as public output. Next hop in delegation chain takes this
-    // as public input to verify scope narrowing without revealing actual bits.
+    // scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment)
+    // Published as public output. Binding scope to the credential's identity
+    // prevents impersonation: an actor with the same scope bits but a different
+    // credential cannot satisfy the chain-linking check in Delegation.circom.
 
-    component scopeHash = Poseidon(1);
+    component scopeHash = Poseidon(2);
     scopeHash.inputs[0] <== permissionBitmask;
+    scopeHash.inputs[1] <== credentialCommitment;
     scopeCommitment <== scopeHash.out;
 }
 

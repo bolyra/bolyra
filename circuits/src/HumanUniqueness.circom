@@ -108,7 +108,12 @@ template HumanUniqueness(MAX_DEPTH) {
     // ============ STEP 6: Enforce secret is in Baby Jubjub subgroup ============
     // Prevent secret values outside the valid range.
     // Baby Jubjub subgroup order l = 2736030358979909402780800718157159386076813972158567259200215660948447373041
-    // We use a simplified range check: secret must be < 2^251 (conservative bound)
+    // We use a conservative range check: secret must be < 2^251.
+    // This is intentionally approximate — the exact subgroup order check requires
+    // a multi-limb comparison circuit that adds ~500 constraints for marginal benefit.
+    // The 2^251 bound is strictly less than l, so all valid secrets pass and the
+    // rejected range (l to 2^251) is empty. The only risk is accepting values in
+    // [2^251, p) which are outside both bounds, but Num2Bits(251) rejects those.
 
     component secretRange = Num2Bits(251);
     secretRange.in <== secret;

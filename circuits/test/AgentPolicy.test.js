@@ -45,10 +45,11 @@ describe("AgentPolicy Circuit", function () {
     );
     const pubKey = eddsa.prv2pub(privateKey);
 
-    // Compute credential commitment = Poseidon4(modelHash, Ax, bitmask, expiry)
+    // Compute credential commitment = Poseidon5(modelHash, Ax, Ay, bitmask, expiry)
     const credentialCommitment = poseidon([
       modelHash,
       F.toObject(pubKey[0]),
+      F.toObject(pubKey[1]),
       permissionBitmask,
       expiryTimestamp,
     ]);

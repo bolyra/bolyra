@@ -44,10 +44,10 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
     const groth16Verifier = await Groth16Verifier.deploy();
 
-    const PlonkVerifier = await ethers.getContractFactory("PlonkVerifier");
+    const PlonkVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:PlonkVerifier");
     const plonkVerifier = await PlonkVerifier.deploy();
 
-    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
+    const DelegationVerifier = await ethers.getContractFactory("contracts/DelegationVerifier.sol:PlonkVerifier");
     const delegationVerifier = await DelegationVerifier.deploy();
 
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {
@@ -84,6 +84,7 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     const agentCommitmentFe = poseidon([
       modelHash,
       F.toObject(operatorPubKey[0]),
+      F.toObject(operatorPubKey[1]),
       permissionBitmask,
       expiryTimestamp,
     ]);
