@@ -19,6 +19,13 @@ interface IPlonkVerifier {
     ) external view returns (bool);
 }
 
+interface IDelegationVerifier {
+    function verifyProof(
+        uint256[24] calldata _proof,
+        uint256[4] calldata _pubSignals
+    ) external view returns (bool);
+}
+
 /// @title IdentityRegistry
 /// @notice On-chain registry for IdentityOS: manages human identities and AI agent
 ///         credentials, verifies mutual handshake proofs, and tracks delegation chains.
@@ -35,6 +42,7 @@ contract IdentityRegistry {
 
     error InvalidHumanProof();
     error InvalidAgentProof();
+    error InvalidDelegationProof();
     error NonceAlreadyUsed();
     error HumanIdentityRevoked();
     error AgentRevoked();
@@ -50,6 +58,11 @@ contract IdentityRegistry {
         uint256 indexed agentNullifier,
         uint256 sessionNonce
     );
+    event DelegationVerified(
+        uint256 indexed delegationNullifier,
+        uint256 newScopeCommitment,
+        uint256 sessionNonce
+    );
     event IdentityRevoked(uint256 indexed nullifier);
     event AgentCredentialRevoked(uint256 indexed credentialCommitment);
 
@@ -60,6 +73,7 @@ contract IdentityRegistry {
     // Proof verifiers (deployed separately, addresses set in constructor)
     IGroth16Verifier public immutable humanVerifier;
     IPlonkVerifier public immutable agentVerifier;
+    IDelegationVerifier public immutable delegationVerifier;
 
     // Human identity tree (LeanIMT, Semaphore v4 compatible)
     LeanIMTData internal humanTree;
@@ -83,10 +97,11 @@ contract IdentityRegistry {
 
     // ============ CONSTRUCTOR ============
 
-    constructor(address _humanVerifier, address _agentVerifier) {
+    constructor(address _humanVerifier, address _agentVerifier, address _delegationVerifier) {
         owner = msg.sender;
         humanVerifier = IGroth16Verifier(_humanVerifier);
         agentVerifier = IPlonkVerifier(_agentVerifier);
+        delegationVerifier = IDelegationVerifier(_delegationVerifier);
     }
 
     modifier onlyOwner() {
@@ -182,6 +197,32 @@ contract IdentityRegistry {
         if (!_verifyAgentProof(agentProof, agentPubSignals)) revert InvalidAgentProof();
 
         emit HandshakeVerified(humanNullifier, agentNullifier, sessionNonce);
+    }
+
+    // ============ DELEGATION VERIFICATION ============
+
+    /// @notice Verify a single delegation hop in a chain.
+    /// @dev Each hop is verified independently. The on-chain contract checks that
+    ///      the previousScopeCommitment matches the output of the prior hop (or the
+    ///      AgentPolicy circuit's scopeCommitment for the first hop).
+    ///      Max 3 hops are verified by calling this function iteratively.
+    /// @param proof PLONK proof for the Delegation circuit.
+    /// @param pubSignals [previousScopeCommitment, sessionNonce, newScopeCommitment, delegationNullifier]
+    /// @param sessionNonce The session nonce (must match the handshake nonce).
+    function verifyDelegation(
+        uint256[24] calldata proof,
+        uint256[4] calldata pubSignals,
+        uint256 sessionNonce
+    ) external {
+        // Verify the delegation proof via the deployed verifier
+        if (!delegationVerifier.verifyProof(proof, pubSignals)) {
+            revert InvalidDelegationProof();
+        }
+
+        uint256 newScopeCommitment = pubSignals[2];
+        uint256 delegationNullifier = pubSignals[3];
+
+        emit DelegationVerified(delegationNullifier, newScopeCommitment, sessionNonce);
     }
 
     // ============ REVOCATION ============

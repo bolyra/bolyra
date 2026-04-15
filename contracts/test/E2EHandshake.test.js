@@ -47,12 +47,16 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     const PlonkVerifier = await ethers.getContractFactory("PlonkVerifier");
     const plonkVerifier = await PlonkVerifier.deploy();
 
+    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
+    const delegationVerifier = await DelegationVerifier.deploy();
+
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {
       libraries: { PoseidonT3: await poseidonT3.getAddress() },
     });
     registry = await IdentityRegistry.deploy(
       await groth16Verifier.getAddress(),
-      await plonkVerifier.getAddress()
+      await plonkVerifier.getAddress(),
+      await delegationVerifier.getAddress()
     );
   });
 

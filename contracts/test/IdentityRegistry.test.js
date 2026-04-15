@@ -24,6 +24,11 @@ describe("IdentityRegistry", function () {
     const plonkVerifier = await PlonkVerifier.deploy();
     await plonkVerifier.waitForDeployment();
 
+    // Deploy Delegation PLONK verifier
+    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
+    const delegationVerifier = await DelegationVerifier.deploy();
+    await delegationVerifier.waitForDeployment();
+
     // Link PoseidonT3 and deploy IdentityRegistry with verifier addresses
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {
       libraries: {
@@ -32,7 +37,8 @@ describe("IdentityRegistry", function () {
     });
     registry = await IdentityRegistry.deploy(
       await groth16Verifier.getAddress(),
-      await plonkVerifier.getAddress()
+      await plonkVerifier.getAddress(),
+      await delegationVerifier.getAddress()
     );
     await registry.waitForDeployment();
   });
