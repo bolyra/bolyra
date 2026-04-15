@@ -1,0 +1,16 @@
+{
+  "name": "identityos",
+  "version": "0.1.0",
+  "description": "Unified ZKP identity protocol for humans and AI agents",
+  "private": true,
+  "scripts": {
+    "test:circuits:fast": "cd circuits && npx mocha --recursive test/**/*.test.js --timeout 60000",
+    "test:circuits:slow": "cd circuits && FULL_PROOF=1 npx mocha --recursive test/**/*.test.js --timeout 120000",
+    "test:contracts": "cd contracts && npx hardhat test",
+    "test": "npm run test:circuits:fast && npm run test:contracts",
+    "compile:circuits": "cd circuits && node scripts/compile.js",
+    "compile:contracts": "cd contracts && npx hardhat compile"
+  },
+  "author": "ZKProva Inc.",
+  "license": "MIT"
+}
