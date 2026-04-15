@@ -491,17 +491,17 @@ What is claimed is:
 
 **Claim 10.** The method of claim 9, wherein the delegation nullifier is computed as a Poseidon hash of the delegation token hash and the session nonce, providing per-session replay protection that is independent of the handshake nullifiers.
 
-**Claim 11.** The method of claim 9, wherein the maximum delegation hop count is three, and the blockchain verification function maintains a per-session counter incremented with each verified delegation hop.
+**Claim 11.** The method of claim 9, wherein the maximum delegation hop count is a predetermined value stored on the blockchain, and the blockchain verification function maintains a per-session counter incremented with each verified delegation hop, reverting if the counter exceeds the predetermined maximum.
 
 **Claim 12.** The method of claim 9, further comprising:
 enforcing a cumulative bit encoding invariant on the delegatee's permission bitmask, wherein a higher-tier permission bit implies the presence of all lower-tier permission bits in a defined hierarchy, the invariant being enforced by circuit constraints of the form: higherBit * (1 - lowerBit) === 0.
 
-**Claim 13.** The method of claim 12, wherein the cumulative bit encoding invariant encodes a financial transaction permission hierarchy in which:
-bit 4 representing unlimited financial transaction authority implies bits 3 and 2;
-bit 3 representing financial transaction authority up to a second threshold implies bit 2; and
-bit 2 represents financial transaction authority up to a first threshold lower than the second threshold.
+**Claim 13.** The method of claim 12, wherein the cumulative bit encoding invariant encodes a tiered permission hierarchy in which:
+a third permission bit representing authority at a third tier implies a second permission bit and a first permission bit;
+the second permission bit representing authority at a second tier implies the first permission bit; and
+the first permission bit represents authority at a first tier, wherein the tiers represent increasing levels of operational scope.
 
-**Claim 14.** The method of claim 9, wherein the chain of artificial intelligence agents comprises a maximum of three delegation hops, each hop being verified by a separate call to a delegation verification function on the blockchain, with chain linking enforced by matching each hop's previous scope commitment public input to the preceding hop's new scope commitment public output.
+**Claim 14.** The method of claim 9, wherein the chain of artificial intelligence agents comprises a configurable maximum number of delegation hops enforced on-chain, each hop being verified by a separate call to a delegation verification function on the blockchain, with chain linking enforced by matching each hop's previous scope commitment public input to the preceding hop's new scope commitment public output.
 
 **Claim 15.** A system for unified human and artificial intelligence agent identity management with privacy-preserving mutual authentication and composable delegation, the system comprising:
 a blockchain-based identity registry contract maintaining:
