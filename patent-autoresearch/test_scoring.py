@@ -15,8 +15,8 @@ from scoring import (
     MAX_PER_DIMENSION,
     MAX_TOTAL,
     _parse_judge_response,
-    _extract_json_object,
 )
+from _shared import extract_json_object
 
 
 def test_dimensions_constant():
@@ -206,27 +206,27 @@ def test_parse_judge_response_missing_points_key_raises_value_error():
 
 
 # ---------------------------------------------------------------------------
-# _extract_json_object edge cases
+# extract_json_object edge cases
 # ---------------------------------------------------------------------------
 
-def test_extract_json_object_handles_markdown_fence():
+def testextract_json_object_handles_markdown_fence():
     raw = '''Sure, here is the scoring:
 ```json
 {"alice_101": {"points": 15, "evidence": "has {nested} braces in string", "critique": "ok"}}
 ```
 
 Hope that helps!'''
-    obj = _extract_json_object(raw)
+    obj = extract_json_object(raw)
     assert obj["alice_101"]["points"] == 15
     assert "{nested}" in obj["alice_101"]["evidence"]
 
 
-def test_extract_json_object_raises_on_no_json():
+def testextract_json_object_raises_on_no_json():
     with pytest.raises(ValueError, match="no JSON"):
-        _extract_json_object("This response has no JSON at all.")
+        extract_json_object("This response has no JSON at all.")
 
 
-def test_extract_json_object_raises_on_truncated():
+def testextract_json_object_raises_on_truncated():
     # Unbalanced JSON
     with pytest.raises(ValueError, match="unbalanced"):
-        _extract_json_object('{"alice_101": {"points": 15}')
+        extract_json_object('{"alice_101": {"points": 15}')

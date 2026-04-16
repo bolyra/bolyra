@@ -9,10 +9,11 @@ Uses Claude CLI as judge, per feedback_claude_max preference. No API keys, no SD
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from _shared import call_claude_cli, extract_json_array
 
 
 SEVERITY_HIGH_THRESHOLD: int = 22  # total >= 22 → high
@@ -51,63 +52,6 @@ def _load_rubric() -> str:
     return _RUBRIC_CACHE
 
 
-def _call_claude_judge(prompt: str, model: str = "sonnet", timeout: int = 240) -> str:
-    """Invoke Claude CLI. Uses the user's Claude MAX login (no API keys).
-
-    Tier 1 uses sonnet (cheaper + fast) by default since the judgments are
-    short. Tier 2 scoring (scoring.py) uses opus for the heavier judgment.
-    """
-    try:
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--model", model],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Claude CLI timed out after {timeout}s") from e
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Claude CLI failed (exit {result.returncode}): {result.stderr[:500]}"
-        )
-    return result.stdout
-
-
-def _extract_json_array(raw: str) -> list[Any]:
-    """Find the first top-level JSON array in raw text.
-
-    Handles prose preamble/postamble and markdown fences. Balances brackets
-    with awareness of strings (including escaped quotes) to avoid confusion
-    with `[` inside string values.
-    """
-    start = raw.find("[")
-    if start == -1:
-        raise ValueError("no JSON array found in response")
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(raw)):
-        ch = raw[i]
-        if escape:
-            escape = False
-            continue
-        if ch == "\\" and in_string:
-            escape = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                return json.loads(raw[start : i + 1])
-    raise ValueError("unbalanced JSON array in response")
-
-
 def _parse_judge_response(raw: str) -> list[AttackScore]:
     """Parse a Claude judge response into AttackScore entries.
 
@@ -115,7 +59,7 @@ def _parse_judge_response(raw: str) -> list[AttackScore]:
       - each entry has id + all three axes
       - all axis values in [0, MAX_PER_AXIS]
     """
-    data = _extract_json_array(raw)
+    data = extract_json_array(raw)
     scores: list[AttackScore] = []
     for entry in data:
         if "id" not in entry:
@@ -171,5 +115,12 @@ def rank_attacks(
         '[{"id": "...", "severity": N, "specificity": N, "remediability": N}, ...]\n'
         "Each N must be an integer in [0, 10]. Include every attack from the input."
     )
-    raw = _call_claude_judge(prompt, model=model, timeout=timeout)
-    return _parse_judge_response(raw)
+    raw = call_claude_cli(prompt, model=model, timeout=timeout)
+    scores = _parse_judge_response(raw)
+    if len(scores) != len(attacks):
+        raise RuntimeError(
+            f"judge returned {len(scores)} scores for {len(attacks)} attacks; "
+            f"expected one score per attack. Input ids: {[a.get('id') for a in attacks]}; "
+            f"returned ids: {[s.attack_id for s in scores]}"
+        )
+    return scores

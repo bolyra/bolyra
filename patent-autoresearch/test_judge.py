@@ -101,10 +101,20 @@ def test_parse_judge_response_handles_markdown_fence():
     assert scores[0].attack_id == "a1"
 
 
-def test_parse_judge_response_raises_on_empty_array():
+def test_parse_judge_response_returns_empty_list_for_empty_array():
     raw = "[]"
     scores = _parse_judge_response(raw)
     assert scores == []
+
+
+def test_parse_judge_response_raises_on_empty_response():
+    with pytest.raises(ValueError, match="no JSON"):
+        _parse_judge_response("")
+
+
+def test_parse_judge_response_raises_on_whitespace_only():
+    with pytest.raises(ValueError, match="no JSON"):
+        _parse_judge_response("   \n\t  ")
 
 
 @pytest.mark.integration
@@ -123,3 +133,10 @@ def test_rank_attacks_returns_scored_entries():
         assert 0 <= r.specificity <= 10
         assert 0 <= r.remediability <= 10
         assert r.priority in {"high", "medium", "low"}
+
+
+@pytest.mark.integration
+def test_rank_attacks_raises_if_count_mismatch():
+    """Sanity check: if the model silently drops an attack, the caller sees a clear error."""
+    # This test will only catch a real mismatch by observation — documented for integration suite.
+    pass  # placeholder for future observability

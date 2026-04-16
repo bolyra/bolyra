@@ -13,10 +13,11 @@ Module is pure-Python stdlib + subprocess; no pip dependencies.
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from _shared import call_claude_cli, extract_json_object
 
 DIMENSIONS: list[str] = ["alice_101", "obviousness_103", "support_112", "design_around", "scope"]
 MAX_PER_DIMENSION: int = 20
@@ -81,59 +82,6 @@ def _load_rubric() -> str:
     return _RUBRIC_CACHE
 
 
-def _call_claude_judge(prompt: str, model: str = "opus", timeout: int = 300) -> str:
-    """Invoke Claude CLI. Uses the user's Claude MAX login (no API keys).
-
-    Returns stdout as string. Raises RuntimeError on CLI failure.
-    """
-    try:
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--model", model],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Claude CLI timed out after {timeout}s") from e
-    if result.returncode != 0:
-        raise RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr[:500]}")
-    return result.stdout
-
-
-def _extract_json_object(raw: str) -> dict[str, Any]:
-    """Find the first top-level JSON object in raw text.
-
-    LLMs often wrap JSON in prose or markdown fences; this recovers the object
-    by balancing braces, ignoring braces inside strings.
-    """
-    start = raw.find("{")
-    if start == -1:
-        raise ValueError("no JSON object found in response")
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(raw)):
-        ch = raw[i]
-        if escape:
-            escape = False
-            continue
-        if ch == "\\" and in_string:
-            escape = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return json.loads(raw[start : i + 1])
-    raise ValueError("unbalanced JSON object in response")
-
-
 def _parse_judge_response(raw: str) -> dict[str, DimensionScore]:
     """Parse a Claude judge response into DimensionScore entries.
 
@@ -141,7 +89,7 @@ def _parse_judge_response(raw: str) -> dict[str, DimensionScore]:
       - all 5 dimensions present
       - points in [0, MAX_PER_DIMENSION]
     """
-    data = _extract_json_object(raw)
+    data = extract_json_object(raw)
     dims: dict[str, DimensionScore] = {}
     for name in DIMENSIONS:
         if name not in data:
@@ -196,7 +144,7 @@ def score_candidate(
         '  "scope":           {"points": N, "evidence": "...", "critique": "..."}\n'
         "}\n"
     )
-    raw = _call_claude_judge(prompt, model=model, timeout=timeout)
+    raw = call_claude_cli(prompt, model=model, timeout=timeout)
     dims = _parse_judge_response(raw)
     score = CandidateScore(candidate_id=candidate["id"], dimensions=dims)
     score.finalize()
