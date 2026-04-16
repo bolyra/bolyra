@@ -13,7 +13,6 @@ Module is pure-Python stdlib + subprocess; no pip dependencies.
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,7 +46,17 @@ class CandidateScore:
     verdict: str = "reject"
 
     def finalize(self) -> None:
-        """Compute total and verdict from dimensions. Called after dimensions are populated."""
+        """Compute total and verdict from dimensions.
+
+        Verdict rules (per tier2_claim_rubric.md §Verdicts):
+            reject:   any dim <= 4 OR total < 60
+            apply:    total >= 80 AND no dim <= 8
+            consider: total >= 60 otherwise (including total >= 80 with any dim in [5, 8])
+
+        The "total >= 80 with dim <= 8" edge case is intentionally downgraded to
+        consider rather than reject — conservative interpretation of the rubric
+        per code-quality review feedback.
+        """
         self.total = sum(d.points for d in self.dimensions.values())
         # Apply the verdict rules from the rubric.
         any_too_low = any(d.points <= REJECT_IF_ANY_DIM_LE for d in self.dimensions.values())
@@ -62,9 +71,14 @@ class CandidateScore:
             self.verdict = "reject"
 
 
+_RUBRIC_CACHE: str | None = None
+
 def _load_rubric() -> str:
-    rubric_path = Path(__file__).parent / "rubrics" / "tier2_claim_rubric.md"
-    return rubric_path.read_text()
+    global _RUBRIC_CACHE
+    if _RUBRIC_CACHE is None:
+        rubric_path = Path(__file__).parent / "rubrics" / "tier2_claim_rubric.md"
+        _RUBRIC_CACHE = rubric_path.read_text()
+    return _RUBRIC_CACHE
 
 
 def _call_claude_judge(prompt: str, model: str = "opus", timeout: int = 300) -> str:
@@ -72,12 +86,15 @@ def _call_claude_judge(prompt: str, model: str = "opus", timeout: int = 300) -> 
 
     Returns stdout as string. Raises RuntimeError on CLI failure.
     """
-    result = subprocess.run(
-        ["claude", "-p", prompt, "--model", model],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--model", model],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Claude CLI timed out after {timeout}s") from e
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr[:500]}")
     return result.stdout
@@ -130,6 +147,8 @@ def _parse_judge_response(raw: str) -> dict[str, DimensionScore]:
         if name not in data:
             raise KeyError(f"missing dimension in judge response: {name}")
         d = data[name]
+        if "points" not in d:
+            raise ValueError(f"dimension {name} missing 'points' key in judge response")
         points = int(d["points"])
         if not (0 <= points <= MAX_PER_DIMENSION):
             raise ValueError(f"dimension {name} points={points} out of range [0, {MAX_PER_DIMENSION}]")

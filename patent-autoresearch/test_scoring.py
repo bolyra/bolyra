@@ -15,6 +15,7 @@ from scoring import (
     MAX_PER_DIMENSION,
     MAX_TOTAL,
     _parse_judge_response,
+    _extract_json_object,
 )
 
 
@@ -144,3 +145,88 @@ def test_score_candidate_returns_evidence():
     for dim_score in score.dimensions.values():
         assert dim_score.evidence, "each dimension must have evidence"
         assert dim_score.critique, "each dimension must have critique"
+
+
+# ---------------------------------------------------------------------------
+# Verdict boundary tests
+# ---------------------------------------------------------------------------
+
+def test_verdict_downgrades_to_consider_when_any_dim_at_apply_floor():
+    # Total is 80 (meets apply threshold) but one dim is exactly 8 (at the floor).
+    # Per rubric, apply requires NO dim <= 8, so this must downgrade to consider.
+    dims = {d: DimensionScore(d, 18, evidence="x", critique="x") for d in DIMENSIONS}
+    dims["scope"] = DimensionScore("scope", 8, evidence="x", critique="x")
+    cs = CandidateScore(candidate_id="boundary_8", dimensions=dims)
+    cs.finalize()
+    assert cs.total == 18 * 4 + 8  # 80
+    assert cs.verdict == "consider"
+
+
+def test_verdict_apply_when_lowest_dim_is_9():
+    # dim=9 everywhere, total=45, should still be reject (total < 60)
+    dims9 = {d: DimensionScore(d, 9, evidence="x", critique="x") for d in DIMENSIONS}
+    cs9 = CandidateScore(candidate_id="all_9s", dimensions=dims9)
+    cs9.finalize()
+    assert cs9.total == 45
+    assert cs9.verdict == "reject"
+
+    # Crank to total=81 with min dim=9 — should apply
+    dims_mixed = {d: DimensionScore(d, 18, evidence="x", critique="x") for d in DIMENSIONS}
+    dims_mixed["scope"] = DimensionScore("scope", 9, evidence="x", critique="x")
+    cs_apply = CandidateScore(candidate_id="min_9_total_81", dimensions=dims_mixed)
+    cs_apply.finalize()
+    assert cs_apply.total == 18 * 4 + 9  # 81
+    assert cs_apply.verdict == "apply"
+
+
+def test_verdict_consider_upper_boundary():
+    # total=79 should be consider, not apply
+    dims = {d: DimensionScore(d, 15, evidence="x", critique="x") for d in DIMENSIONS}
+    dims["scope"] = DimensionScore("scope", 19, evidence="x", critique="x")
+    cs = CandidateScore(candidate_id="t79", dimensions=dims)
+    cs.finalize()
+    assert cs.total == 15 * 4 + 19  # 79
+    assert cs.verdict == "consider"
+
+
+# ---------------------------------------------------------------------------
+# Missing "points" key
+# ---------------------------------------------------------------------------
+
+def test_parse_judge_response_missing_points_key_raises_value_error():
+    raw = '''{
+        "alice_101": {"evidence": "x", "critique": "x"},
+        "obviousness_103": {"points": 10, "evidence": "x", "critique": "x"},
+        "support_112": {"points": 10, "evidence": "x", "critique": "x"},
+        "design_around": {"points": 10, "evidence": "x", "critique": "x"},
+        "scope": {"points": 10, "evidence": "x", "critique": "x"}
+    }'''
+    with pytest.raises(ValueError, match="missing 'points' key"):
+        _parse_judge_response(raw)
+
+
+# ---------------------------------------------------------------------------
+# _extract_json_object edge cases
+# ---------------------------------------------------------------------------
+
+def test_extract_json_object_handles_markdown_fence():
+    raw = '''Sure, here is the scoring:
+```json
+{"alice_101": {"points": 15, "evidence": "has {nested} braces in string", "critique": "ok"}}
+```
+
+Hope that helps!'''
+    obj = _extract_json_object(raw)
+    assert obj["alice_101"]["points"] == 15
+    assert "{nested}" in obj["alice_101"]["evidence"]
+
+
+def test_extract_json_object_raises_on_no_json():
+    with pytest.raises(ValueError, match="no JSON"):
+        _extract_json_object("This response has no JSON at all.")
+
+
+def test_extract_json_object_raises_on_truncated():
+    # Unbalanced JSON
+    with pytest.raises(ValueError, match="unbalanced"):
+        _extract_json_object('{"alice_101": {"points": 15}')
