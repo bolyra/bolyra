@@ -176,33 +176,39 @@ def run_tier1(
     if scorable_attacks:
         try:
             attack_scores = rank_attacks(scorable_attacks, context_patent_text=patent_text)
-            if not attack_scores:
-                # Judge returned no scores (e.g. mocked out). Fall back to zero scores.
-                scored = [
-                    {**a, "severity": 0, "specificity": 0, "remediability": 0, "total": 0, "priority": "low"}
-                    for a in all_attacks
-                ]
-            else:
-                # Build positional mapping for scorable attacks (preserves order, handles duplicate IDs)
-                scorable_idx = 0
-                for a in all_attacks:
-                    if a.get("category") == "meta":
-                        # Meta-stub — include with zero scores
-                        scored.append({
-                            **a,
-                            "severity": 0,
-                            "specificity": 0,
-                            "remediability": 0,
-                            "total": 0,
-                            "priority": "low",
-                        })
-                    else:
-                        s = attack_scores[scorable_idx]
-                        scorable_idx += 1
-                        scored.append({**a, **asdict(s), "attack_id": s.attack_id})
+            # Key by attack_id, not position. The LLM may reorder the array;
+            # rank_attacks only guarantees count match, not order preservation.
+            score_by_id = {s.attack_id: s for s in attack_scores}
+            for a in all_attacks:
+                if a.get("category") == "meta":
+                    # Meta stub: not scored, include with zero scores
+                    scored.append({
+                        **a,
+                        "severity": 0,
+                        "specificity": 0,
+                        "remediability": 0,
+                        "total": 0,
+                        "priority": "low",
+                    })
+                    continue
+                s = score_by_id.get(a["id"])
+                if s is None:
+                    # Judge returned fewer scores than expected for this id.
+                    # rank_attacks' count-match guard should have caught total-mismatch,
+                    # but a per-id drop is still possible if duplicate ids exist
+                    # upstream. Fall back to zero for this entry.
+                    scored.append({
+                        **a,
+                        "severity": 0,
+                        "specificity": 0,
+                        "remediability": 0,
+                        "total": 0,
+                        "priority": "low",
+                    })
+                else:
+                    scored.append({**a, **asdict(s)})
         except RuntimeError as e:
             # Judge failed (timeout, count mismatch). Fall back to no-scoring.
-            # Write the scored file with zero scores so downstream doesn't break.
             scored = [
                 {**a, "severity": 0, "specificity": 0, "remediability": 0, "total": 0, "priority": "low"}
                 for a in all_attacks
