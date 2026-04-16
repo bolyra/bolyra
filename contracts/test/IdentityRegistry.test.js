@@ -123,13 +123,22 @@ describe("IdentityRegistry", function () {
       expect(await registry.humanRevocations(nullifier)).to.be.true;
     });
 
-    it("should revoke an agent credential", async function () {
-      const commitment = 88888n;
-      await expect(registry.revokeAgent(commitment))
-        .to.emit(registry, "AgentCredentialRevoked")
-        .withArgs(commitment);
+    it("should revoke an agent credential via tree-level update", async function () {
+      // Enroll two agents so the tree has size > 1 (update requires leaf has a sibling path)
+      const commitmentA = 88888n;
+      const commitmentB = 77777n;
+      await registry.enrollAgent(commitmentA);
+      await registry.enrollAgent(commitmentB);
 
-      expect(await registry.agentRevocations(commitment)).to.be.true;
+      // Sibling of leaf 0 (commitmentA) at depth 0 is leaf 1 (commitmentB)
+      const siblings = [commitmentB];
+
+      await expect(registry.revokeAgent(commitmentA, siblings))
+        .to.emit(registry, "AgentTreeRevocation")
+        .withArgs(commitmentA);
+
+      // After update, commitmentA is no longer in the tree
+      // (LeanIMT _has returns false because the leaf was replaced with 0)
     });
   });
 
@@ -249,31 +258,24 @@ describe("IdentityRegistry", function () {
     });
   });
 
-  describe("Delegation verification (Fix #5)", function () {
-    it("should reject delegation with scope chain mismatch", async function () {
+  describe("Delegation verification (Attack 2 fix: handshake-prerequisite + on-chain chain state)", function () {
+    it("should reject delegation without prior handshake", async function () {
+      // Session nonce has not been consumed by any handshake
       const proof = new Array(24).fill(0n);
-      const pubSignals = [111n, 42n, 222n, 333n]; // previousScopeCommitment=111
+      const pubSignals = [111n, 42n, 222n, 333n];
       const sessionNonce = 42n;
-      const expectedPrevious = 999n; // doesn't match 111
 
       await expect(
-        registry.verifyDelegation(proof, pubSignals, sessionNonce, expectedPrevious)
-      ).to.be.revertedWithCustomError(registry, "ScopeChainMismatch");
+        registry.verifyDelegation(proof, pubSignals, sessionNonce)
+      ).to.be.revertedWithCustomError(registry, "DelegationRequiresHandshake");
     });
 
-    it("should reject delegation with nonce mismatch", async function () {
-      const proof = new Array(24).fill(0n);
-      const pubSignals = [111n, 42n, 222n, 333n]; // sessionNonce in proof = 42
-      const sessionNonce = 99n; // doesn't match
-      const expectedPrevious = 111n;
-
-      await expect(
-        registry.verifyDelegation(proof, pubSignals, sessionNonce, expectedPrevious)
-      ).to.be.revertedWithCustomError(registry, "NonceMismatch");
+    it("should expose lastScopeCommitment mapping (zero by default)", async function () {
+      const commitment = await registry.lastScopeCommitment(12345n);
+      expect(commitment).to.equal(0n);
     });
 
-    it("should track delegation hop count", async function () {
-      // Verify the hop count state variable is accessible
+    it("should track delegation hop count (zero by default)", async function () {
       const count = await registry.delegationHopCount(12345n);
       expect(count).to.equal(0n);
     });

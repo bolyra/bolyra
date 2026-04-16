@@ -459,10 +459,10 @@ Delegation proofs are verified through the `verifyDelegation()` function, which 
 What is claimed is:
 
 **Claim 1.** A computer-implemented method for privacy-preserving mutual authentication between a human user and an artificial intelligence agent, comprising:
-(a) maintaining, on a blockchain, a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields;
+(a) maintaining, on a blockchain, a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields including an agent's permission bitmask;
 (b) receiving, from the human user, a first zero-knowledge proof generated using a Groth16 proving system, the first zero-knowledge proof proving Merkle membership of the human user's identity commitment in the first Merkle tree, computing a nullifier as a Poseidon hash of a scope identifier and a secret scalar, and computing a nonce binding as a Poseidon hash of the nullifier and a session nonce, without revealing the human user's identity;
-(c) receiving, from the AI agent, a second zero-knowledge proof generated using a PLONK proving system, the second zero-knowledge proof proving Merkle membership of the AI agent's credential commitment in the second Merkle tree, verifying an EdDSA signature of an operator over the credential commitment, performing Num2Bits(64) range checks on a permission bitmask and an expiry timestamp to prevent field overflow, enforcing bit-by-bit that the permission bitmask satisfies a required scope policy, verifying the credential has not expired via a LessThan(64) comparator, and outputting an identity-bound scope commitment computed as a Poseidon hash of the permission bitmask and the credential commitment, without revealing the AI agent's credential fields;
-(d) verifying both the first zero-knowledge proof and the second zero-knowledge proof in a single blockchain transaction, wherein the on-chain verifier enforces that the session nonce embedded in each proof's public signals equals the transaction's session nonce argument, and the session nonce is checked for freshness against a used-nonce mapping; and
+(c) receiving, from the AI agent, a second zero-knowledge proof generated using a PLONK proving system, the second zero-knowledge proof proving Merkle membership of the AI agent's credential commitment in the second Merkle tree, verifying an EdDSA signature of an operator over the credential commitment, performing Num2Bits(64) range checks on the permission bitmask and an expiry timestamp to prevent field overflow, enforcing bit-by-bit that the permission bitmask satisfies a required scope policy, verifying the credential has not expired via a LessThan(64) comparator, and outputting, as a public signal, an identity-bound scope commitment computed as a Poseidon hash of the permission bitmask and the AI agent's credential commitment that is Merkle-included in the second Merkle tree, without revealing the AI agent's credential fields;
+(d) verifying both the first zero-knowledge proof and the second zero-knowledge proof in a single blockchain transaction, wherein the on-chain verifier: (i) enforces that the session nonce embedded in each proof's public signals equals the transaction's session nonce argument, (ii) checks the session nonce for freshness against a used-nonce mapping, and (iii) stores the identity-bound scope commitment from the second zero-knowledge proof as an on-chain chain-state seed indexed by the session nonce, enabling subsequent delegation operations to cryptographically extend from this authenticated mutual handshake without relying on caller-supplied chain state; and
 (e) emitting a verification event only if both proofs are valid, the session nonce is fresh and matches both proofs, and the human user's nullifier has not been revoked.
 
 **Claim 2.** The method of claim 1, wherein the first proving system is Groth16 and the second proving system is PLONK.
@@ -480,14 +480,15 @@ What is claimed is:
 **Claim 8.** The method of claim 1, wherein the first zero-knowledge proof further outputs a nonce binding value computed as a Poseidon hash of a nullifier hash and the session nonce, binding the proof to both the human user's identity and the specific session.
 
 **Claim 9.** A computer-implemented method for privacy-preserving delegation of scoped permissions through a chain of artificial intelligence agents using zero-knowledge proofs, comprising:
-(a) receiving a previous scope commitment, the previous scope commitment being a Poseidon hash of a delegator's permission bitmask and the delegator's credential commitment, published as a public output of a preceding proof in the chain;
-(b) receiving, as private inputs to a delegation zero-knowledge proof circuit, the delegator's actual permission bitmask, the delegator's credential commitment, a delegatee's permission bitmask, and a delegatee's credential commitment;
-(c) constraining, within the circuit, that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals the previous scope commitment, thereby linking the current delegation to both the preceding proof's scope and the specific delegator's identity without revealing the delegator's actual permissions;
-(d) performing Num2Bits(64) range checks on both permission bitmasks and constraining, within the circuit, that the delegatee's permission bitmask is a bitwise subset of the delegator's permission bitmask by enforcing, for each bit position i, that delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero;
-(e) constraining, within the circuit, that the delegatee's expiry timestamp is less than or equal to the delegator's expiry timestamp using a LessEqThan(64) comparator;
-(f) verifying, within the circuit, an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp;
-(g) outputting, as a public signal, a new scope commitment computed as a two-input Poseidon hash of the delegatee's permission bitmask and the delegatee's credential commitment; and
-(h) verifying the delegation zero-knowledge proof on a blockchain, including storing a delegation nullifier for replay protection, verifying chain-linking correctness against an expected previous scope commitment, and enforcing a maximum delegation hop count.
+(a) maintaining, on a blockchain, a Lean Incremental Merkle Tree storing agent credential commitments and a session-indexed on-chain chain-state mapping from session nonce to last-verified scope commitment, the chain-state mapping being initialized by a previously-verified mutual handshake proof and never populated by caller-supplied values;
+(b) receiving a delegation request identifying a session nonce, and requiring that the session nonce was previously consumed by a verified mutual authentication handshake that established the initial scope commitment in the chain-state mapping;
+(c) receiving, as private inputs to a delegation zero-knowledge proof circuit, a delegator's actual permission bitmask, the delegator's credential commitment which is Merkle-included in said agent credential tree, a delegatee's permission bitmask, and a delegatee's credential commitment;
+(d) constraining, within the circuit, that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;
+(e) performing Num2Bits(64) range checks on both permission bitmasks and constraining, within the circuit, that the delegatee's permission bitmask is a bitwise subset of the delegator's permission bitmask by enforcing, for each bit position i, that delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero;
+(f) constraining, within the circuit, that the delegatee's expiry timestamp is less than or equal to the delegator's expiry timestamp using a LessEqThan(64) comparator;
+(g) verifying, within the circuit, an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp;
+(h) outputting, as a public signal, a new scope commitment computed as a two-input Poseidon hash of the delegatee's permission bitmask and the delegatee's credential commitment; and
+(i) verifying the delegation zero-knowledge proof on a blockchain by: (1) reverting if no handshake consumed the session nonce, (2) comparing the proof's previous scope commitment public signal to the on-chain chain-state mapping value and reverting on mismatch, (3) storing a delegation nullifier derived from a delegation token hash and the session nonce to prevent replay, (4) advancing the chain-state mapping to the new scope commitment such that a subsequent delegation hop must extend from this newly-written on-chain value, and (5) enforcing a maximum delegation hop count stored as an on-chain constant.
 
 **Claim 10.** The method of claim 9, wherein the delegation nullifier is computed as a Poseidon hash of the delegation token hash and the session nonce, providing per-session replay protection that is independent of the handshake nullifiers.
 
@@ -503,7 +504,13 @@ the first permission bit represents authority at a first tier, wherein the tiers
 
 **Claim 14.** The method of claim 9, wherein the chain of artificial intelligence agents comprises a configurable maximum number of delegation hops enforced on-chain, each hop being verified by a separate call to a delegation verification function on the blockchain, with chain linking enforced by matching each hop's previous scope commitment public input to the preceding hop's new scope commitment public output.
 
-**Claim 15.** A system for unified human and artificial intelligence agent identity management with privacy-preserving mutual authentication and composable delegation, the system comprising:
+**Claim 15.** A computer-implemented method for integrated privacy-preserving authentication and delegation across a heterogeneous population of human users and artificial intelligence agents, comprising:
+(a) performing a mutual authentication handshake between a human user and an AI agent by verifying, in a single blockchain transaction, a first zero-knowledge proof of the human user's Merkle membership in a human identity tree and a second zero-knowledge proof of the AI agent's Merkle membership in an agent credential tree, wherein the on-chain verifier enforces that a session nonce embedded in each proof's public signals equals a transaction-argument session nonce, and wherein the second zero-knowledge proof outputs as a public signal an identity-bound scope commitment computed as a Poseidon hash of the AI agent's permission bitmask and the AI agent's credential commitment;
+(b) storing, upon successful completion of the handshake, the identity-bound scope commitment from step (a) into an on-chain chain-state mapping indexed by the session nonce, the chain-state mapping being the sole authoritative source of chain-linking information for subsequent delegation operations;
+(c) for each delegation hop in a chain comprising at most a predetermined maximum number of hops, verifying a delegation zero-knowledge proof that (i) proves knowledge of a delegator permission bitmask and a delegator credential commitment whose Poseidon hash equals the on-chain chain-state value for the session nonce, (ii) proves that a delegatee permission bitmask is a bitwise subset of the delegator permission bitmask with Num2Bits(64) range checks, (iii) proves that a delegatee expiry timestamp does not exceed the delegator expiry timestamp, (iv) proves an EdDSA signature of the delegator over a delegation token, and (v) outputs a new identity-bound scope commitment that is written to the chain-state mapping as the new authoritative value for subsequent hops; and
+(d) rejecting any delegation zero-knowledge proof for which (i) no handshake has consumed the session nonce, (ii) the proof's previous scope commitment public signal does not equal the current on-chain chain-state value, (iii) the proof's delegation nullifier has been seen before, or (iv) the delegation hop count for the session nonce exceeds the predetermined maximum, wherein said rejection conditions are checked exclusively against on-chain state and do not rely on caller-supplied chain continuity information.
+
+**Claim 16.** A system for unified human and artificial intelligence agent identity management with privacy-preserving mutual authentication and composable delegation, the system comprising:
 a blockchain-based identity registry contract maintaining:
 a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;
 a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;
@@ -516,7 +523,7 @@ a third verifier contract configured to verify PLONK zero-knowledge proofs for d
 a handshake verification function that receives a Groth16 proof and a PLONK proof bound to a common session nonce, enforces that the session nonce embedded in each proof's public signals equals the transaction argument, verifies both proofs in a single transaction through the first and second verifier contracts respectively, checks nonce freshness and human revocation status, and emits a verification event upon success; and
 a delegation verification function that receives a delegation proof for a single hop, verifies chain-linking correctness against an expected previous scope commitment, enforces session nonce equality, stores a delegation nullifier for replay protection, increments and checks a per-session hop counter against a maximum, verifies the proof through the third verifier contract, and emits a delegation event with the new scope commitment.
 
-**Claim 16.** The system of claim 15, further comprising:
+**Claim 17.** The system of claim 16, further comprising:
 a human identity circuit compiled in Circom 2.1.6 with a Merkle tree depth of 20, the circuit configured to:
 derive an EdDSA public key from a private secret scalar using Baby Jubjub point multiplication;
 compute an identity commitment as a Poseidon hash of the derived public key;
@@ -524,7 +531,7 @@ prove Merkle membership of the identity commitment in the first Merkle tree;
 compute a nullifier as a Poseidon hash of a scope identifier and the secret scalar; and
 compute a nonce binding as a Poseidon hash of the nullifier and a session nonce.
 
-**Claim 17.** The system of claim 15, further comprising:
+**Claim 18.** The system of claim 16, further comprising:
 an agent credential circuit compiled in Circom 2.1.6 with a Merkle tree depth of 20, the circuit configured to:
 perform Num2Bits(64) range checks on the permission bitmask, expiry timestamp, and current timestamp to prevent field overflow;
 compute a credential commitment as a five-input Poseidon hash including both coordinates of the operator's EdDSA public key;
@@ -533,7 +540,7 @@ prove Merkle membership of the credential commitment in the second Merkle tree;
 enforce bit-by-bit permission scope satisfaction against a required scope mask; and
 output an identity-bound scope commitment as a two-input Poseidon hash of the permission bitmask and the credential commitment for delegation chain entry.
 
-**Claim 18.** The system of claim 15, further comprising:
+**Claim 19.** The system of claim 16, further comprising:
 a delegation circuit compiled in Circom 2.1.6, the circuit configured to:
 receive as a public input a previous scope commitment and as private inputs a delegator scope, a delegator credential commitment, a delegatee scope, and a delegatee credential commitment;
 constrain that the two-input Poseidon hash of the delegator scope and delegator credential commitment equals the previous scope commitment, providing identity-bound chain linking;
@@ -542,9 +549,11 @@ enforce a cumulative bit encoding invariant on the delegatee scope;
 verify an EdDSA signature of the delegator over a delegation token; and
 output a new identity-bound scope commitment as a two-input Poseidon hash of the delegatee scope and delegatee credential commitment.
 
-**Claim 19.** A non-transitory computer-readable medium storing instructions that, when executed by a processor, cause the processor to perform the method of claim 1.
+**Claim 20.** A non-transitory computer-readable medium storing instructions that, when executed by a processor, cause the processor to perform the method of claim 1.
 
-**Claim 20.** A non-transitory computer-readable medium storing instructions that, when executed by a processor, cause the processor to perform the method of claim 9.
+**Claim 21.** A non-transitory computer-readable medium storing instructions that, when executed by a processor, cause the processor to perform the method of claim 9.
+
+**Claim 22.** A non-transitory computer-readable medium storing instructions that, when executed by a processor, cause the processor to perform the method of claim 15.
 
 ---
 
@@ -593,10 +602,11 @@ The claims do not preempt all ZKP-based authentication; they recite a specific p
 
 ### Claim Budget
 
-- Total claims: 20 (at the small entity excess claim fee threshold)
-- Independent claims: 3 (Claims 1, 9, 15) (at the excess independent claim fee threshold)
-- CRM claims: 2 (Claims 19, 20) — completing the three-legged stool (method + system + CRM)
-- Dependent claims: 15 — creating fallback chains for each independent
+- Total claims: 22 (exceeds the small entity 20-claim threshold by 2 — incurs excess claim fees at $50 each = $100)
+- Independent claims: 4 (Claims 1, 9, 15, 16) (exceeds the 3-independent threshold by 1 — incurs $240 excess independent claim fee)
+- CRM claims: 3 (Claims 20, 21, 22) — completing three-legged stool (method + system + CRM) for each independent
+- Dependent claims: 14 — creating fallback chains for each independent
+- Added Claim 15 as an integrated super-claim spanning handshake + delegation + on-chain chain-state. This is the narrowest, hardest-to-design-around claim and the primary defense against 103 obviousness combinations.
 
 ### CIP Candidates (for future filing)
 

@@ -128,6 +128,27 @@ template AgentPolicy(MAX_DEPTH) {
         scopeViolation[i] === 0;
     }
 
+    // ============ STEP 5b: Cumulative bit encoding invariant ============
+    // Enforce on the agent's own permissionBitmask so the "first agent" in any
+    // delegation chain starts with a consistent hierarchical state. Without this,
+    // an agent could be enrolled with bit 4 set but bits 2-3 unset, and the
+    // cumulative invariant would only be checked at delegation time.
+    //
+    // bit 4 (unlimited financial) implies bits 2+3 set
+    // bit 3 ($10k financial) implies bit 2 set
+
+    signal agent_bit4_requires_bit3;
+    agent_bit4_requires_bit3 <== bitmaskRange.out[4] * (1 - bitmaskRange.out[3]);
+    agent_bit4_requires_bit3 === 0;
+
+    signal agent_bit4_requires_bit2;
+    agent_bit4_requires_bit2 <== bitmaskRange.out[4] * (1 - bitmaskRange.out[2]);
+    agent_bit4_requires_bit2 === 0;
+
+    signal agent_bit3_requires_bit2;
+    agent_bit3_requires_bit2 <== bitmaskRange.out[3] * (1 - bitmaskRange.out[2]);
+    agent_bit3_requires_bit2 === 0;
+
     // ============ STEP 6: Expiry check ============
     // Verify that expiryTimestamp > currentTimestamp (credential not expired).
     // Using LessThan(64) from circomlib: checks if currentTimestamp < expiryTimestamp.
