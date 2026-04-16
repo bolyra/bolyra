@@ -16,8 +16,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from _shared import call_claude_cli, extract_json_array
+from dataclasses import asdict
 
+from _shared import call_claude_cli, extract_json_array
+from judge import rank_attacks
+
+
+# Maximum number of high-priority attacks promoted to Tier 2 per iteration.
+# More than this creates too many candidate-generation CLI calls (cost + time).
+MAX_SELECTED_HIGH_PRIORITY: int = 8
 
 HERE = Path(__file__).resolve().parent
 PERSONAS_PATH = HERE / "personas.json"
@@ -160,7 +167,64 @@ def run_tier1(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "tier1_attacks.json").write_text(json.dumps(all_attacks, indent=2))
-    return {"attacks": all_attacks, "output_dir": str(output_dir)}
+
+    # Tier 1b: Judge prioritization.
+    # Meta-stubs (parse errors, exceptions) are excluded from scoring — they have
+    # no real claim refs or finding content for the judge to evaluate.
+    scorable_attacks = [a for a in all_attacks if a.get("category") != "meta"]
+    scored: list[dict] = []
+    if scorable_attacks:
+        try:
+            attack_scores = rank_attacks(scorable_attacks, context_patent_text=patent_text)
+            if not attack_scores:
+                # Judge returned no scores (e.g. mocked out). Fall back to zero scores.
+                scored = [
+                    {**a, "severity": 0, "specificity": 0, "remediability": 0, "total": 0, "priority": "low"}
+                    for a in all_attacks
+                ]
+            else:
+                # Build positional mapping for scorable attacks (preserves order, handles duplicate IDs)
+                scorable_idx = 0
+                for a in all_attacks:
+                    if a.get("category") == "meta":
+                        # Meta-stub — include with zero scores
+                        scored.append({
+                            **a,
+                            "severity": 0,
+                            "specificity": 0,
+                            "remediability": 0,
+                            "total": 0,
+                            "priority": "low",
+                        })
+                    else:
+                        s = attack_scores[scorable_idx]
+                        scorable_idx += 1
+                        scored.append({**a, **asdict(s), "attack_id": s.attack_id})
+        except RuntimeError as e:
+            # Judge failed (timeout, count mismatch). Fall back to no-scoring.
+            # Write the scored file with zero scores so downstream doesn't break.
+            scored = [
+                {**a, "severity": 0, "specificity": 0, "remediability": 0, "total": 0, "priority": "low"}
+                for a in all_attacks
+            ]
+            (output_dir / "tier1_judge_error.txt").write_text(f"Judge failed: {type(e).__name__}: {e}")
+    else:
+        scored = []
+
+    (output_dir / "tier1_scored.json").write_text(json.dumps(scored, indent=2))
+
+    # Tier 1c: Select top MAX_SELECTED_HIGH_PRIORITY high-priority attacks by total score.
+    high_priority = [s for s in scored if s.get("priority") == "high"]
+    high_priority.sort(key=lambda x: x.get("total", 0), reverse=True)
+    selected = high_priority[:MAX_SELECTED_HIGH_PRIORITY]
+    (output_dir / "tier1_selected.json").write_text(json.dumps(selected, indent=2))
+
+    return {
+        "attacks": all_attacks,
+        "scored": scored,
+        "selected": selected,
+        "output_dir": str(output_dir),
+    }
 
 
 def main() -> int:
