@@ -48,6 +48,14 @@ def test_attack_score_boundary_medium():
     assert s.priority == "medium"
 
 
+def test_attack_score_boundary_low():
+    # total = SEVERITY_MEDIUM_THRESHOLD - 1 should be low
+    s = AttackScore(attack_id="a", severity=5, specificity=5, remediability=SEVERITY_MEDIUM_THRESHOLD - 11)
+    s.finalize()
+    assert s.total == SEVERITY_MEDIUM_THRESHOLD - 1  # 14
+    assert s.priority == "low"
+
+
 def test_rubric_file_exists():
     rubric_path = Path(__file__).parent / "rubrics" / "tier1_attack_rubric.md"
     assert rubric_path.exists(), f"tier1 rubric missing: {rubric_path}"
