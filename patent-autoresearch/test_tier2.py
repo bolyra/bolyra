@@ -9,6 +9,26 @@ from run_tier2_claim import (
     DEFAULT_K,
 )
 
+from dataclasses import asdict
+
+from scoring import CandidateScore, DimensionScore, DIMENSIONS
+from run_tier2_claim import score_and_pick_winners, MIN_WINNER_TOTAL
+
+
+def _make_candidate_score(candidate_id: str, total: int, verdict: str = None) -> CandidateScore:
+    """Helper: build a fake CandidateScore with uniform per-dim points summing to total."""
+    per_dim = total // len(DIMENSIONS)
+    remainder = total - per_dim * len(DIMENSIONS)
+    dims = {}
+    for i, d in enumerate(DIMENSIONS):
+        pts = per_dim + (1 if i < remainder else 0)
+        dims[d] = DimensionScore(name=d, points=pts, evidence="x", critique="y")
+    cs = CandidateScore(candidate_id=candidate_id, dimensions=dims)
+    cs.finalize()
+    if verdict is not None:
+        cs.verdict = verdict  # override for tests that explicitly test the reject-by-low-dim path
+    return cs
+
 
 def test_default_k_is_three():
     """Spec: K defaults to 3 candidates per attack."""
@@ -232,3 +252,183 @@ def test_generate_candidates_against_real_attack():
     candidates = generate_candidates_for_attack(attack, patent_text=patent_text, k=2)
     assert len(candidates) >= 1
     assert all(c.get("targets_weakness") == "alice_claim_15" for c in candidates)
+
+
+def test_score_and_pick_winners_writes_scored_and_winners(monkeypatch, tmp_path):
+    """Happy path: 2 candidates per weakness, one wins per weakness."""
+    candidates = [
+        {"id": "c1", "strategy": "narrow", "claim_text": "a", "rationale": "r1", "targets_weakness": "w1"},
+        {"id": "c2", "strategy": "positive_structural", "claim_text": "b", "rationale": "r2", "targets_weakness": "w1"},
+        {"id": "c3", "strategy": "narrow", "claim_text": "c", "rationale": "r3", "targets_weakness": "w2"},
+        {"id": "c4", "strategy": "dependent_claim", "claim_text": "d", "rationale": "r4", "targets_weakness": "w2"},
+    ]
+
+    scores_by_id = {
+        "c1": _make_candidate_score("c1", 85),   # apply
+        "c2": _make_candidate_score("c2", 70),   # consider
+        "c3": _make_candidate_score("c3", 90),   # apply
+        "c4": _make_candidate_score("c4", 65),   # consider
+    }
+
+    def fake_score(c, context_patent_text, context_priorart):
+        return scores_by_id[c["id"]]
+
+    monkeypatch.setattr("run_tier2_claim.score_candidate", fake_score)
+
+    output_dir = tmp_path / "iter_winners"
+    output_dir.mkdir()
+
+    winners = score_and_pick_winners(
+        candidates=candidates,
+        patent_text="patent",
+        prior_art=[],
+        output_dir=output_dir,
+    )
+
+    # 2 weaknesses, one winner each
+    assert len(winners) == 2
+    winner_ids = {w["id"] for w in winners}
+    # c1 (85) beats c2 (70) for w1
+    # c3 (90) beats c4 (65) for w2
+    assert winner_ids == {"c1", "c3"}
+
+    # tier2_scored.json has all 4 candidates
+    scored_path = output_dir / "tier2_scored.json"
+    assert scored_path.exists()
+    scored = json.loads(scored_path.read_text())
+    assert len(scored) == 4
+    for s in scored:
+        assert "score" in s
+        assert "total" in s["score"]
+        assert "verdict" in s["score"]
+
+    # tier2_winners.json matches
+    winners_path = output_dir / "tier2_winners.json"
+    assert winners_path.exists()
+    assert json.loads(winners_path.read_text()) == winners
+
+
+def test_score_and_pick_winners_rejects_below_threshold(monkeypatch, tmp_path):
+    """Candidates with total < 60 are not eligible as winners."""
+    candidates = [
+        {"id": "c1", "strategy": "narrow", "claim_text": "a", "rationale": "r1", "targets_weakness": "w1"},
+        {"id": "c2", "strategy": "narrow", "claim_text": "b", "rationale": "r2", "targets_weakness": "w1"},
+    ]
+
+    def fake_score(c, context_patent_text, context_priorart):
+        # Both below threshold
+        return _make_candidate_score(c["id"], 45)
+
+    monkeypatch.setattr("run_tier2_claim.score_candidate", fake_score)
+
+    output_dir = tmp_path / "iter_noreject"
+    output_dir.mkdir()
+
+    winners = score_and_pick_winners(candidates, patent_text="p", prior_art=[], output_dir=output_dir)
+    assert winners == []
+
+    # tier2_scored.json still has both candidates
+    scored = json.loads((output_dir / "tier2_scored.json").read_text())
+    assert len(scored) == 2
+
+
+def test_score_and_pick_winners_picks_highest_per_weakness(monkeypatch, tmp_path):
+    """Three candidates for one weakness: highest total wins."""
+    candidates = [
+        {"id": f"c{i}", "strategy": "narrow", "claim_text": str(i), "rationale": str(i), "targets_weakness": "w1"}
+        for i in range(3)
+    ]
+
+    totals = {"c0": 70, "c1": 85, "c2": 78}
+
+    def fake_score(c, context_patent_text, context_priorart):
+        return _make_candidate_score(c["id"], totals[c["id"]])
+
+    monkeypatch.setattr("run_tier2_claim.score_candidate", fake_score)
+
+    output_dir = tmp_path / "iter_highest"
+    output_dir.mkdir()
+
+    winners = score_and_pick_winners(candidates, patent_text="p", prior_art=[], output_dir=output_dir)
+    assert len(winners) == 1
+    assert winners[0]["id"] == "c1"  # highest total (85)
+    assert winners[0]["score"]["total"] == 85
+
+
+def test_score_and_pick_winners_handles_score_exception(monkeypatch, tmp_path):
+    """If scoring one candidate raises, that candidate gets a zero-score entry and doesn't win."""
+    candidates = [
+        {"id": "c1", "strategy": "narrow", "claim_text": "a", "rationale": "r", "targets_weakness": "w1"},
+        {"id": "c2", "strategy": "narrow", "claim_text": "b", "rationale": "r", "targets_weakness": "w1"},
+    ]
+
+    def fake_score(c, context_patent_text, context_priorart):
+        if c["id"] == "c1":
+            raise RuntimeError("Claude CLI failed")
+        return _make_candidate_score("c2", 80)
+
+    monkeypatch.setattr("run_tier2_claim.score_candidate", fake_score)
+
+    output_dir = tmp_path / "iter_score_err"
+    output_dir.mkdir()
+
+    winners = score_and_pick_winners(candidates, patent_text="p", prior_art=[], output_dir=output_dir)
+    # c2 wins (80), c1 errored
+    assert len(winners) == 1
+    assert winners[0]["id"] == "c2"
+
+    scored = json.loads((output_dir / "tier2_scored.json").read_text())
+    assert len(scored) == 2
+    c1_entry = next(s for s in scored if s["id"] == "c1")
+    assert c1_entry["score"]["total"] == 0
+    assert c1_entry["score"]["verdict"] == "reject"
+    assert "error" in c1_entry["score"]
+
+
+def test_score_and_pick_winners_skips_error_stubs(monkeypatch, tmp_path):
+    """Error-stub candidates (strategy=='error') are not scored; they're skipped entirely."""
+    score_calls = []
+
+    def fake_score(c, context_patent_text, context_priorart):
+        score_calls.append(c["id"])
+        return _make_candidate_score(c["id"], 85)
+
+    monkeypatch.setattr("run_tier2_claim.score_candidate", fake_score)
+
+    candidates = [
+        {"id": "cand_good", "strategy": "narrow", "claim_text": "x", "rationale": "y",
+         "targets_weakness": "w1"},
+        {"id": "cand_err", "strategy": "error", "claim_text": "", "rationale": "parse failed",
+         "targets_weakness": "w2"},
+    ]
+    output_dir = tmp_path / "iter_skip_err"
+    output_dir.mkdir()
+
+    winners = score_and_pick_winners(candidates, patent_text="p", prior_art=[], output_dir=output_dir)
+    # Only cand_good was scored
+    assert score_calls == ["cand_good"]
+    # Only one winner (cand_good)
+    assert len(winners) == 1
+    assert winners[0]["id"] == "cand_good"
+
+    # But tier2_scored.json contains BOTH (error stub included with zero score for visibility)
+    scored = json.loads((output_dir / "tier2_scored.json").read_text())
+    assert len(scored) == 2
+    err_entry = next(s for s in scored if s["id"] == "cand_err")
+    assert err_entry["score"]["total"] == 0
+    assert err_entry["score"]["verdict"] == "reject"
+
+
+def test_score_and_pick_winners_empty(tmp_path):
+    """No candidates → empty files, no winners."""
+    output_dir = tmp_path / "iter_empty_tier2"
+    output_dir.mkdir()
+    winners = score_and_pick_winners([], patent_text="p", prior_art=[], output_dir=output_dir)
+    assert winners == []
+    assert json.loads((output_dir / "tier2_scored.json").read_text()) == []
+    assert json.loads((output_dir / "tier2_winners.json").read_text()) == []
+
+
+def test_min_winner_total_constant():
+    """MIN_WINNER_TOTAL must match the scoring rubric's 'consider' threshold."""
+    assert MIN_WINNER_TOTAL == 60

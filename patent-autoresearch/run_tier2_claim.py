@@ -14,13 +14,20 @@ import json
 import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from _shared import call_claude_cli, extract_json_array
+from scoring import score_candidate
 
 
 DEFAULT_K: int = 3
+
+# Minimum total score to be eligible as a winner. Matches scoring.py's
+# "consider" threshold — we promote even moderate wins, but never the "reject"
+# range (<60 or any dim <= 4).
+MIN_WINNER_TOTAL: int = 60
 
 CANDIDATE_PROMPT = """You are a senior patent attorney drafting revised claim language.
 A hostile reviewer has identified the following weakness in the patent:
@@ -151,6 +158,82 @@ def generate_candidates_for_run(
     return all_candidates
 
 
+def score_and_pick_winners(
+    candidates: list[dict],
+    patent_text: str,
+    prior_art: list[dict],
+    output_dir: Path,
+) -> list[dict]:
+    """Score all candidates on 5 dims, write tier2_scored.json, pick winner per weakness.
+
+    Scoring:
+      - Error-stub candidates (strategy == "error") are skipped but included
+        in tier2_scored.json with zero score for visibility
+      - Scoring exceptions caught → zero-score entry with 'error' field
+    Winner selection:
+      - Group by targets_weakness
+      - Pick highest-scoring candidate per weakness
+      - Only candidates with total >= MIN_WINNER_TOTAL (60) are eligible
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    scored: list[dict] = []
+    for c in candidates:
+        if c.get("strategy") == "error":
+            # Don't score error stubs. Include them with zero for visibility.
+            scored.append({
+                **c,
+                "score": {
+                    "total": 0,
+                    "verdict": "reject",
+                    "dimensions": {},
+                    "note": "skipped — error stub from candidate generation",
+                },
+            })
+            continue
+        try:
+            cs = score_candidate(c, patent_text, prior_art)
+            entry = {
+                **c,
+                "score": {
+                    "total": cs.total,
+                    "verdict": cs.verdict,
+                    "dimensions": {
+                        k: asdict(v) for k, v in cs.dimensions.items()
+                    },
+                },
+            }
+            scored.append(entry)
+        except Exception as e:
+            scored.append({
+                **c,
+                "score": {
+                    "total": 0,
+                    "verdict": "reject",
+                    "dimensions": {},
+                    "error": f"{type(e).__name__}: {e}",
+                },
+            })
+
+    (output_dir / "tier2_scored.json").write_text(json.dumps(scored, indent=2, default=str))
+
+    # Group by targets_weakness, pick highest-scoring per weakness >= threshold
+    by_weakness: dict[str, list[dict]] = {}
+    for s in scored:
+        weakness = s.get("targets_weakness", "unknown")
+        by_weakness.setdefault(weakness, []).append(s)
+
+    winners: list[dict] = []
+    for weakness, cands in by_weakness.items():
+        cands_sorted = sorted(cands, key=lambda x: x["score"].get("total", 0), reverse=True)
+        best = cands_sorted[0]
+        if best["score"].get("total", 0) >= MIN_WINNER_TOTAL:
+            winners.append(best)
+
+    (output_dir / "tier2_winners.json").write_text(json.dumps(winners, indent=2, default=str))
+    return winners
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Tier 2: candidate claim generation")
     ap.add_argument("--selected", required=True, help="Path to tier1_selected.json")
@@ -159,6 +242,8 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=DEFAULT_K, help="Candidates per attack")
     ap.add_argument("--model", default="opus")
     ap.add_argument("--timeout", type=int, default=360)
+    ap.add_argument("--score", action="store_true", help="Also score candidates and pick winners")
+    ap.add_argument("--prior-art", default=None, help="Path to prior_art.json (for scoring)")
     args = ap.parse_args()
 
     selected = json.loads(Path(args.selected).read_text())
@@ -170,6 +255,17 @@ def main() -> int:
         model=args.model, timeout=args.timeout,
     )
     print(f"Generated {len(candidates)} candidates → {output_dir / 'tier2_candidates.json'}")
+
+    # If --score flag passed, also score candidates and pick winners
+    if args.score:
+        prior_art_path = Path(args.prior_art) if args.prior_art else None
+        if prior_art_path and prior_art_path.exists():
+            prior_art = json.loads(prior_art_path.read_text())
+        else:
+            prior_art = []
+        winners = score_and_pick_winners(candidates, patent_text, prior_art, output_dir)
+        print(f"Picked {len(winners)} winners → {output_dir / 'tier2_winners.json'}")
+
     return 0
 
 
