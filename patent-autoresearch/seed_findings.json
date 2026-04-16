@@ -1,0 +1,25 @@
+{
+  "source_reviews": [
+    "drafts/adversarial-review.md",
+    "drafts/adversarial-review-r2.md",
+    "drafts/adversarial-review-r3.md"
+  ],
+  "resolved": [
+    {"id": "r1_nonce_eq", "category": "112", "summary": "Nonce equality not enforced on-chain", "status": "fixed in Attack 2"},
+    {"id": "r1_agent_revocation", "category": "accuracy", "summary": "Agent revocation key mismatch", "status": "fixed in bug round"},
+    {"id": "r1_delegation_identity_binding", "category": "103", "summary": "Delegation chain doesn't bind delegator identity", "status": "fixed in bug round"},
+    {"id": "r2_chain_state_undefined", "category": "112", "summary": "'chain-state mapping' undefined in spec", "status": "fixed via Section 7.5"},
+    {"id": "r3_m2_self_inflicted", "category": "112+103", "summary": "M2 genus broadening created LizardTech 112(a) hole + read on Tornado Cash", "status": "reverted in MF1/MF2"}
+  ],
+  "open": [
+    {"id": "r3_mf3", "category": "strategy", "summary": "Priority anchors for CIP candidates (recursive SNARK, platform attestations)", "status": "pending"},
+    {"id": "r3_mf4", "category": "112", "summary": "sessionNonce generation mechanism not specified", "status": "pending"},
+    {"id": "r3_mf5", "category": "112", "summary": "Scope commitment brute-force mitigation missing", "status": "pending"},
+    {"id": "r3_alice_15", "category": "101", "summary": "Claim 15 at only 40-50% 101 survival", "status": "pending"},
+    {"id": "r3_claim_15_prime", "category": "strategy", "summary": "Add backup Claim 15' with specific Poseidon/EdDSA/BabyJub/LeanIMT stack", "status": "pending"}
+  ],
+  "persistent_risks": [
+    {"id": "persistent_obviousness", "summary": "Semaphore v4 + Indicio + zkLogin + Tornado Cash root history → Claim 1 obviousness"},
+    {"id": "persistent_agent_only", "summary": "Pure agent-to-agent system escapes Claim 15 'human user and AI agent' language"}
+  ]
+}
