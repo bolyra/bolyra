@@ -59,5 +59,6 @@ patent-autoresearch/
 ├── runs/iter_NNN_TS/       # Per-iteration state
 ├── reports/                # Auto-generated adversarial-review-r{N}.md
 ├── history/                # Score trajectory + plateau detector
+├── experiments/            # Experiment results and analysis
 └── scripts/                # Helper scripts
 ```
