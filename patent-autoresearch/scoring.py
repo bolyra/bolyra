@@ -1,0 +1,184 @@
+"""5-dimension claim scorer using Claude CLI as LLM-as-judge.
+
+Uses user's Claude MAX login via the `claude` CLI, never API keys or the SDK
+(user preference recorded in feedback_claude_max memory).
+
+Typical flow:
+    from scoring import score_candidate
+    score = score_candidate(candidate_dict, patent_text, prior_art_list)
+    # score.total in [0, 100], score.verdict in {apply, consider, reject}
+
+Module is pure-Python stdlib + subprocess; no pip dependencies.
+"""
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+DIMENSIONS: list[str] = ["alice_101", "obviousness_103", "support_112", "design_around", "scope"]
+MAX_PER_DIMENSION: int = 20
+MAX_TOTAL: int = MAX_PER_DIMENSION * len(DIMENSIONS)  # 100
+
+# Verdict thresholds (see rubrics/tier2_claim_rubric.md and program.md §4)
+APPLY_TOTAL_MIN: int = 80
+CONSIDER_TOTAL_MIN: int = 60
+REJECT_IF_ANY_DIM_LE: int = 4
+APPLY_REQUIRES_ALL_DIMS_ABOVE: int = 8  # apply requires no dim ≤ 8
+
+
+@dataclass
+class DimensionScore:
+    name: str
+    points: int
+    max_points: int = MAX_PER_DIMENSION
+    evidence: str = ""
+    critique: str = ""
+
+
+@dataclass
+class CandidateScore:
+    candidate_id: str
+    dimensions: dict[str, DimensionScore] = field(default_factory=dict)
+    total: int = 0
+    verdict: str = "reject"
+
+    def finalize(self) -> None:
+        """Compute total and verdict from dimensions. Called after dimensions are populated."""
+        self.total = sum(d.points for d in self.dimensions.values())
+        # Apply the verdict rules from the rubric.
+        any_too_low = any(d.points <= REJECT_IF_ANY_DIM_LE for d in self.dimensions.values())
+        any_below_apply_floor = any(d.points <= APPLY_REQUIRES_ALL_DIMS_ABOVE for d in self.dimensions.values())
+        if any_too_low:
+            self.verdict = "reject"
+        elif self.total >= APPLY_TOTAL_MIN and not any_below_apply_floor:
+            self.verdict = "apply"
+        elif self.total >= CONSIDER_TOTAL_MIN:
+            self.verdict = "consider"
+        else:
+            self.verdict = "reject"
+
+
+def _load_rubric() -> str:
+    rubric_path = Path(__file__).parent / "rubrics" / "tier2_claim_rubric.md"
+    return rubric_path.read_text()
+
+
+def _call_claude_judge(prompt: str, model: str = "opus", timeout: int = 300) -> str:
+    """Invoke Claude CLI. Uses the user's Claude MAX login (no API keys).
+
+    Returns stdout as string. Raises RuntimeError on CLI failure.
+    """
+    result = subprocess.run(
+        ["claude", "-p", prompt, "--model", model],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr[:500]}")
+    return result.stdout
+
+
+def _extract_json_object(raw: str) -> dict[str, Any]:
+    """Find the first top-level JSON object in raw text.
+
+    LLMs often wrap JSON in prose or markdown fences; this recovers the object
+    by balancing braces, ignoring braces inside strings.
+    """
+    start = raw.find("{")
+    if start == -1:
+        raise ValueError("no JSON object found in response")
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(raw)):
+        ch = raw[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(raw[start : i + 1])
+    raise ValueError("unbalanced JSON object in response")
+
+
+def _parse_judge_response(raw: str) -> dict[str, DimensionScore]:
+    """Parse a Claude judge response into DimensionScore entries.
+
+    Validates:
+      - all 5 dimensions present
+      - points in [0, MAX_PER_DIMENSION]
+    """
+    data = _extract_json_object(raw)
+    dims: dict[str, DimensionScore] = {}
+    for name in DIMENSIONS:
+        if name not in data:
+            raise KeyError(f"missing dimension in judge response: {name}")
+        d = data[name]
+        points = int(d["points"])
+        if not (0 <= points <= MAX_PER_DIMENSION):
+            raise ValueError(f"dimension {name} points={points} out of range [0, {MAX_PER_DIMENSION}]")
+        dims[name] = DimensionScore(
+            name=name,
+            points=points,
+            evidence=str(d.get("evidence", "")),
+            critique=str(d.get("critique", "")),
+        )
+    return dims
+
+
+def score_candidate(
+    candidate: dict[str, Any],
+    context_patent_text: str,
+    context_priorart: list[dict[str, Any]],
+    *,
+    model: str = "opus",
+    timeout: int = 300,
+) -> CandidateScore:
+    """Score a candidate claim rewrite on 5 dimensions via Claude CLI judge.
+
+    Args:
+        candidate: dict with at least {id, claim_text, rationale, targets_weakness}
+        context_patent_text: patent text for reviewer context (truncated at 8000 chars)
+        context_priorart: list of prior-art entries (truncated JSON at 4000 chars)
+
+    Returns:
+        CandidateScore with dimensions populated and verdict finalized.
+    """
+    rubric = _load_rubric()
+    prompt = (
+        "You are a hostile USPTO patent examiner + competitor attorney.\n"
+        "Score the following candidate claim revision on 5 dimensions (0-20 each, 100 total).\n\n"
+        f"RUBRIC:\n{rubric}\n\n"
+        f"PATENT CONTEXT (for reference, not to be scored):\n{context_patent_text[:8000]}\n\n"
+        f"PRIOR ART DATABASE:\n{json.dumps(context_priorart, indent=2)[:4000]}\n\n"
+        f"CANDIDATE:\n{json.dumps(candidate, indent=2)}\n\n"
+        "Return ONLY a JSON object (no markdown fences) of the form:\n"
+        '{\n'
+        '  "alice_101":       {"points": N, "evidence": "...", "critique": "..."},\n'
+        '  "obviousness_103": {"points": N, "evidence": "...", "critique": "..."},\n'
+        '  "support_112":     {"points": N, "evidence": "...", "critique": "..."},\n'
+        '  "design_around":   {"points": N, "evidence": "...", "critique": "..."},\n'
+        '  "scope":           {"points": N, "evidence": "...", "critique": "..."}\n'
+        "}\n"
+    )
+    raw = _call_claude_judge(prompt, model=model, timeout=timeout)
+    dims = _parse_judge_response(raw)
+    score = CandidateScore(candidate_id=candidate["id"], dimensions=dims)
+    score.finalize()
+    return score
