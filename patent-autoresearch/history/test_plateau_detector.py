@@ -1,7 +1,11 @@
 """Tests for plateau_detector."""
+import sys
+from pathlib import Path
+
 import pytest
 
-from plateau_detector import should_stop
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from plateau_detector import should_stop  # noqa: E402
 
 
 def test_no_trajectory():
