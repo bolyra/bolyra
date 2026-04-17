@@ -1,0 +1,314 @@
+[
+  {
+    "id": "cand_enablement_auditor_at_least_poseidon_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions",
+    "claim_text": "a two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions",
+    "rationale": "Removes the open-ended 'at least' genus language and narrows to the exact two-input Poseidon construction disclosed in Section 5.1 ('Poseidon2(delegatorScope, delegatorCredCommitment) === previousScopeCommitment'). This directly addresses the LizardTech single-species problem by making the claim coextensive with the disclosed embodiment. The 'two-input' language is consistent with Claims 5, 15(c)(i), and 19, which already recite 'two-input Poseidon hash' for the same construction.",
+    "targets_weakness": "enablement_auditor_at_least_poseidon",
+    "tradeoffs": "Loses coverage over future embodiments that add additional hash inputs (e.g., a blinding salt per Section 3, Step 3.8). Competitors could design around by adding a third input to the Poseidon hash."
+  },
+  {
+    "id": "cand_enablement_auditor_at_least_poseidon_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input",
+    "claim_text": "a Poseidon hash of the delegator's actual permission bitmask, the delegator's credential commitment, and optionally a blinding salt, equals a previous scope commitment public input",
+    "rationale": "Replaces the unbounded 'at least' genus with a closed set of inputs that includes both the disclosed primary embodiment (two-input Poseidon per Section 5.1) and the disclosed alternative embodiment with a blinding salt (three-input Poseidon per Section 3, Step 3.8, which discloses 'Poseidon3(permissionBitmask, credentialCommitment, blindingSalt)'). This addresses the LizardTech concern by claiming only species actually disclosed in the specification, while preserving slightly broader coverage than the narrow two-input version.",
+    "targets_weakness": "enablement_auditor_at_least_poseidon",
+    "tradeoffs": "Slightly broader than the narrow fix but still limited to two disclosed species. The 'optionally' construction may invite indefiniteness questions under 112(b), though MPEP 2173.05(h) permits optional language in method claims when the alternatives are clear."
+  },
+  {
+    "id": "cand_enablement_auditor_at_least_poseidon_03",
+    "strategy": "dependent_claim",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;\n(e)",
+    "claim_text": "a two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;\n(e)",
+    "rationale": "Narrows the independent claim to the exact two-input disclosed construction, eliminating the 'at least' genus entirely. This is the safest approach: it makes the independent claim bulletproof against the 112 written description challenge while the specification's disclosure of the blinding salt alternative (Section 3, Step 3.8) remains available for a future dependent claim such as 'The method of claim 9, wherein the Poseidon hash further includes a random blinding salt as a third input.' That dependent claim would be supported by the existing specification text and can be added during prosecution without new matter.",
+    "targets_weakness": "enablement_auditor_at_least_poseidon",
+    "tradeoffs": "Same scope loss as candidate 01 for the independent claim. The blinding-salt dependent claim is noted as a prosecution strategy but not drafted here since Claim 15 also references this construction with 'Poseidon hash' language and would need conforming edits for consistency."
+  },
+  {
+    "id": "cand_enablement_auditor_exclusive_write_negative_limitation_01",
+    "strategy": "positive_structural",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "the chain-state record being a mapping from session nonce to a field-element commitment that is written exclusively by the handshake verification function of step (a) and the delegation verification function of step (c), such that no caller-supplied parameter can write to or modify the chain-state record",
+    "claim_text": "the chain-state record being a mapping from session nonce to a field-element commitment, wherein the handshake verification function of step (a) sets the chain-state record value for a given session nonce to the identity-bound scope commitment output as a public signal by the agent's zero-knowledge proof upon successful handshake verification, and the delegation verification function of step (c) advances the chain-state record value for the same session nonce to the new identity-bound scope commitment output as a public signal by the delegation zero-knowledge proof upon successful delegation verification, wherein each value written to the chain-state record is derived from a verified zero-knowledge proof's public signal output rather than from a caller-supplied commitment parameter",
+    "rationale": "Replaces the negative limitation ('written exclusively by... no caller-supplied parameter') with affirmative language describing what each function writes and where the written value originates (verified proof public signals). The final clause clarifies that the commitment value itself is proof-derived, resolving the indefiniteness around 'caller-supplied parameter' by distinguishing the commitment value from the session nonce indexing parameter. This satisfies Santarus by affirmatively describing the write mechanism rather than defining the invention by exclusion.",
+    "targets_weakness": "enablement_auditor_exclusive_write_negative_limitation",
+    "tradeoffs": "Slightly more verbose. An adversary could argue that a contract with an additional admin write function that also happens to derive its value from a proof output might satisfy this language, whereas the original negative limitation would have excluded it."
+  },
+  {
+    "id": "cand_enablement_auditor_exclusive_write_negative_limitation_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "that is written exclusively by the handshake verification function of step (a) and the delegation verification function of step (c), such that no caller-supplied parameter can write to or modify the chain-state record",
+    "claim_text": "whose commitment value for a given session nonce is set by the handshake verification function of step (a) to the identity-bound scope commitment output by the handshake's agent proof and is updated by the delegation verification function of step (c) to the new scope commitment output by the delegation proof, wherein the commitment value stored in the chain-state record is not accepted from a caller-supplied argument to the handshake verification function or the delegation verification function but is instead read from the respective zero-knowledge proof's public signal outputs",
+    "claim_text_note": "",
+    "rationale": "Narrows the overbroad 'no caller-supplied parameter' to the specific prohibition: the commitment value itself is not accepted from a caller argument but is derived from verified proof outputs. This preserves the anti-confused-deputy protection (preventing a relayer from injecting an arbitrary scope commitment) while acknowledging that the session nonce is caller-supplied for indexing purposes. The affirmative 'is instead read from' clause reduces Santarus exposure by stating what the system does, not just what it excludes.",
+    "targets_weakness": "enablement_auditor_exclusive_write_negative_limitation",
+    "tradeoffs": "Still contains a narrow negative clause ('is not accepted from a caller-supplied argument'), but scoped to the commitment value field only, which the spec affirmatively supports in Section 7.5. Slightly narrower than original because it permits alternative write paths that also derive from proof outputs."
+  },
+  {
+    "id": "cand_enablement_auditor_exclusive_write_negative_limitation_03",
+    "strategy": "delete_problem_language",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "the chain-state record being a mapping from session nonce to a field-element commitment that is written exclusively by the handshake verification function of step (a) and the delegation verification function of step (c), such that no caller-supplied parameter can write to or modify the chain-state record;",
+    "claim_text": "the chain-state record being a mapping from session nonce to a field-element commitment, wherein the field-element commitment stored for a given session nonce is the identity-bound scope commitment output as a public signal by the most recently verified proof for that session nonce;",
+    "rationale": "Deletes both the 'written exclusively by' and 'no caller-supplied parameter' clauses entirely, replacing them with a concise affirmative definition: the stored value is always the public-signal scope commitment from the most recently verified proof. This eliminates the Santarus negative-limitation issue and the indefiniteness around 'caller-supplied parameter' in one stroke. The anti-confused-deputy protection is preserved structurally by step (d)(ii), which already requires the stored value to match the proof's previous scope commitment, making injection of an arbitrary value ineffective even without the negative limitation.",
+    "targets_weakness": "enablement_auditor_exclusive_write_negative_limitation",
+    "tradeoffs": "Loses the explicit exclusion of alternative write paths, making the claim easier to design around by adding an admin function that also writes proof-derived values. However, step (d) independently enforces chain integrity, so the practical security property is preserved even without the negative limitation."
+  },
+  {
+    "id": "cand_obviousness_hunter_root_history_buffer_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      6,
+      7
+    ],
+    "original_language": "**Claim 6.** The method of claim 1, wherein verifying the second zero-knowledge proof comprises checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, accommodating tree updates between proof generation and verification.\n\n**Claim 7.** The method of claim 6, wherein N equals 30.",
+    "claim_text": "**Claim 6.** The method of claim 1, wherein verifying the first zero-knowledge proof comprises checking the human user's Merkle root against the current root of the first Merkle tree by exact equality, and verifying the second zero-knowledge proof comprises checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, such that the on-chain verifier applies an asymmetric staleness policy in which the first Merkle tree requires exact root match and the second Merkle tree tolerates root staleness within the buffer window, the asymmetric policy reflecting different enrollment frequency assumptions for human and agent populations within the dual-tree architecture.\n\n**Claim 7.** The method of claim 6, wherein agent revocation is enforced by updating the revoked agent's credential commitment to a zero value in the second Merkle tree, causing the tree root to change and Merkle proofs generated before revocation to remain verifiable only during a grace window while the pre-revocation root persists in the circular buffer, after which the pre-revocation root is evicted by subsequent enrollments.",
+    "rationale": "The circular buffer alone is anticipated by Tornado Cash. By reciting the asymmetric staleness policy (exact match for humans, buffer for agents) within a dual-tree architecture, Claim 6 now claims a non-obvious combination: two heterogeneous identity populations with deliberately different verification strictness in a single contract. Claim 7 is rewritten to recite the revocation-via-root-eviction mechanism that interacts with the buffer, replacing the purely anticipated N=30 parameter with a novel functional limitation. Neither Tornado Cash nor Semaphore teaches asymmetric root verification across two co-managed Merkle trees with different trust assumptions.",
+    "targets_weakness": "obviousness_hunter_root_history_buffer",
+    "tradeoffs": "Loses independent coverage of the root history buffer mechanism in isolation. An implementer using a single-tree system with the same buffer would not infringe these narrower claims."
+  },
+  {
+    "id": "cand_obviousness_hunter_root_history_buffer_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "a root history circular buffer storing the last N roots of the second Merkle tree;",
+    "claim_text": "a root history circular buffer storing the last N roots of the second Merkle tree, wherein the handshake verification function applies an asymmetric root verification policy that requires exact equality between the first zero-knowledge proof's Merkle root output and the current root of the first Merkle tree while accepting any root within the circular buffer for the second zero-knowledge proof's Merkle root output;",
+    "rationale": "In independent Claim 16 (system claim), the buffer is currently recited as a bare data structure identical to Tornado Cash. By embedding the asymmetric verification policy directly into the system claim, the buffer is no longer claimed in isolation but only as part of a dual-tree system with differentiated staleness tolerance. This combination is not taught by Tornado Cash (single tree) or Semaphore (no buffer at all), making the system claim more defensible against a 102/103 rejection.",
+    "targets_weakness": "obviousness_hunter_root_history_buffer",
+    "tradeoffs": "Narrows the system claim so that an implementation using identical staleness policies for both trees would not infringe. The claim now requires the specific asymmetric design choice."
+  },
+  {
+    "id": "cand_obviousness_hunter_root_history_buffer_03",
+    "strategy": "delete_problem_language",
+    "claim_refs": [
+      6,
+      7
+    ],
+    "original_language": "**Claim 6.** The method of claim 1, wherein verifying the second zero-knowledge proof comprises checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, accommodating tree updates between proof generation and verification.\n\n**Claim 7.** The method of claim 6, wherein N equals 30.",
+    "claim_text": "**Claim 6.** The method of claim 1, wherein verifying the first zero-knowledge proof requires exact equality between the human user's Merkle root and the current root of the first Merkle tree, and verifying the second zero-knowledge proof requires membership of the AI agent's Merkle root in a root history maintained by the identity registry contract, such that the verifier contract enforces an asymmetric root freshness requirement across the two Merkle trees within the single blockchain transaction of step (d).\n\n**Claim 7.** The method of claim 6, wherein agent credential revocation is performed by updating the revoked agent's credential commitment to a designated invalid value in the second Merkle tree via an incremental tree update operation that changes the tree root, such that proofs generated against pre-revocation roots verify only while those roots remain in the root history, and proofs generated against post-revocation roots fail Merkle membership verification due to the invalidated leaf value.",
+    "rationale": "This is a more aggressive rewrite that completely removes the 'circular buffer of last N roots' and 'N=30' language that maps directly to Tornado Cash. Claim 6 now recites the asymmetric freshness requirement as the inventive concept without specifying the buffer implementation. Claim 7 recites the revocation-through-root-eviction interaction, which is a novel mechanism not found in Tornado Cash (which has no revocation) or Semaphore (which has no root buffer). The examiner cannot map either claim to Tornado Cash alone.",
+    "targets_weakness": "obviousness_hunter_root_history_buffer",
+    "tradeoffs": "Broadens the root history mechanism (no longer specifying circular buffer or N=30) which could invite a different 112 rejection if the examiner finds the 'root history' language insufficiently definite. However, the specification fully supports the broader term."
+  },
+  {
+    "id": "cand_competitor_attorney_signature_scheme_swap_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      20
+    ],
+    "original_language": "Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve",
+    "claim_text": "Poseidon hashes of public key coordinates derived under a circuit-friendly digital signature scheme on an elliptic curve embedded in the scalar field of the proof system's base curve",
+    "rationale": "Replaces the species-level 'EdDSA on Baby Jubjub' with genus language covering any SNARK-friendly signature scheme (Schnorr, ECDSA, EdDSA) on any embedded curve (Baby Jubjub, Bandersnatch, Grumpkin, etc.). The structural requirement \u2014 that the curve must be embedded in the proof system's scalar field \u2014 is the technically necessary constraint that distinguishes from non-ZK signature schemes while covering all viable alternatives. Existing Claim 15A and a new dependent can preserve the specific EdDSA/Baby Jubjub species as an Alice anchor.",
+    "targets_weakness": "competitor_attorney_signature_scheme_swap",
+    "tradeoffs": "Broader genus language is more vulnerable to anticipation by prior art that generically describes 'circuit-friendly signatures on embedded curves' without the mutual-handshake context. Also slightly weaker under Alice Step 2 without the specific cryptographic primitives named \u2014 mitigated by Claim 15A which retains the full specific stack."
+  },
+  {
+    "id": "cand_competitor_attorney_signature_scheme_swap_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      21
+    ],
+    "original_language": "an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp",
+    "claim_text": "a digital signature, verified within the delegation zero-knowledge proof circuit using a circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve, of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp",
+    "rationale": "Broadens the delegation authorization signature from EdDSA-only to any circuit-friendly signature verified in-circuit. The key structural limitation \u2014 verification must occur inside the ZK circuit on an embedded curve \u2014 is what makes delegation privacy-preserving and distinguishes from cleartext delegation (UCAN, Biscuit). A competitor using Schnorr on Bandersnatch for delegation signatures would fall within this genus. The four-input Poseidon delegation token structure is preserved as the novel structural element.",
+    "targets_weakness": "competitor_attorney_signature_scheme_swap",
+    "tradeoffs": "The phrase 'circuit-friendly signature verification algorithm' is broader but potentially less definite under 35 USC 112(b). An examiner may require clarification of what qualifies as 'circuit-friendly.' Mitigated by the specification's disclosure of EdDSA, Schnorr, and ECDSA as exemplary embodiments and the embedded-curve constraint providing a concrete technical boundary."
+  },
+  {
+    "id": "cand_competitor_attorney_signature_scheme_swap_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      16,
+      17,
+      18,
+      19,
+      22
+    ],
+    "original_language": "a first Merkle tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Merkle tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "claim_text": "a first Merkle tree storing human identity commitments computed as Poseidon hashes of public key coordinates derived under a circuit-friendly digital signature scheme on an elliptic curve embedded in the scalar field of the proof system's base curve;\na second Merkle tree storing AI agent credential commitments computed as multi-input Poseidon hashes of agent credential fields including a model identifier hash, coordinates of an operator's public key on an elliptic curve embedded in said scalar field, a permission bitmask, and an expiry timestamp;",
+    "rationale": "Broadens the system claim (Claim 16) in parallel with the method claim changes, ensuring the system-claim leg of the three-legged stool is equally resilient to the signature-scheme swap design-around. Replaces 'five-input' with 'multi-input' to avoid locking the arity (a Schnorr key might use a single compressed coordinate rather than two, yielding a four-input hash). Replaces 'both coordinates of an operator's EdDSA public key' with genus language covering compressed and uncompressed key representations across signature schemes.",
+    "targets_weakness": "competitor_attorney_signature_scheme_swap",
+    "tradeoffs": "Changing 'five-input' to 'multi-input' and removing the explicit two-coordinate requirement slightly reduces the specificity that helps under Alice Step 2. Claim 15A already preserves the exact five-input Poseidon/EdDSA/Baby Jubjub stack as an Alice safety net, so the independent claim can afford to broaden. Risk: an examiner may object that 'multi-input' is indefinite \u2014 could add 'at least four inputs' as a floor if needed during prosecution."
+  },
+  {
+    "id": "cand_code_spec_auditor_phantom_delegatee_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "(c) receiving, as private inputs to a delegation zero-knowledge proof circuit, a delegator's actual permission bitmask, the delegator's credential commitment which is Merkle-included in said agent credential tree, a delegatee's permission bitmask, and a delegatee's credential commitment;",
+    "claim_text": "(c) receiving, as private inputs to a delegation zero-knowledge proof circuit, a delegator's actual permission bitmask, the delegator's credential commitment which is Merkle-included in said agent credential tree, a delegatee's permission bitmask, the delegatee's credential commitment, and a delegatee Merkle proof, and constraining within the circuit that the delegatee's credential commitment is Merkle-included in said agent credential tree by verifying the delegatee Merkle proof against a delegatee agent Merkle root output as a public signal;",
+    "rationale": "The attack correctly identifies that the delegatee's credential commitment enters the Delegation circuit as a bare private input with no Merkle membership check, allowing fabrication of phantom agents. This revision adds an explicit Merkle membership proof for the delegatee inside the circuit, outputting the verified root as a public signal so the on-chain verifier can check it against the agentTree root history buffer. This closes the phantom delegatee vector by ensuring every delegatee is a registered agent.",
+    "targets_weakness": "code_spec_auditor_phantom_delegatee",
+    "tradeoffs": "Approximately doubles the Delegation circuit constraint count (adding ~10k constraints for the Merkle proof), increasing proof generation time. Narrows the claim by requiring in-circuit delegatee Merkle verification, which could be designed around by systems using on-chain delegatee verification instead of in-circuit verification."
+  },
+  {
+    "id": "cand_code_spec_auditor_phantom_delegatee_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      19
+    ],
+    "original_language": "receive as a public input a previous scope commitment and as private inputs a delegator scope, a delegator credential commitment, a delegatee scope, and a delegatee credential commitment;\nconstrain that the two-input Poseidon hash of the delegator scope and delegator credential commitment equals the previous scope commitment, providing identity-bound chain linking;\nconstrain bit-by-bit that the delegatee scope is a subset of the delegator scope;\nenforce a cumulative bit encoding invariant on the delegatee scope;\nverify an EdDSA signature of the delegator over a delegation token; and\noutput a new identity-bound scope commitment as a two-input Poseidon hash of the delegatee scope and delegatee credential commitment.",
+    "claim_text": "receive as a public input a previous scope commitment and as private inputs a delegator scope, a delegator credential commitment, a delegatee scope, a delegatee credential commitment, and a delegatee Merkle proof comprising sibling hashes and a proof index;\nconstrain that the two-input Poseidon hash of the delegator scope and delegator credential commitment equals the previous scope commitment, providing identity-bound chain linking;\nprove Merkle membership of the delegatee credential commitment in the second Merkle tree by computing a Merkle root from the delegatee credential commitment and the delegatee Merkle proof, and outputting said computed Merkle root as a public signal for on-chain verification against a root history buffer of the second Merkle tree;\nconstrain bit-by-bit that the delegatee scope is a subset of the delegator scope;\nenforce a cumulative bit encoding invariant on the delegatee scope;\nverify an EdDSA signature of the delegator over a delegation token; and\noutput a new identity-bound scope commitment as a two-input Poseidon hash of the delegatee scope and delegatee credential commitment.",
+    "rationale": "This revision targets Claim 19 (the system claim's delegation circuit description) to add an explicit Merkle membership proof step for the delegatee. By requiring the circuit to compute and output a delegatee Merkle root as a public signal, the on-chain verifier can confirm the delegatee is a registered agent in the agentTree. This directly addresses the phantom delegatee attack where a fabricated credential commitment would fail the Merkle membership check.",
+    "targets_weakness": "code_spec_auditor_phantom_delegatee",
+    "tradeoffs": "Adds specificity to the system claim's circuit description, narrowing it to require in-circuit Merkle verification with a public root output. Competitors could potentially design around by verifying delegatee membership via a separate circuit or a non-Merkle accumulator."
+  },
+  {
+    "id": "cand_code_spec_auditor_phantom_delegatee_03",
+    "strategy": "narrow",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "(c) for each delegation hop in a chain comprising at most a predetermined maximum number of hops, verifying a delegation zero-knowledge proof that (i) proves knowledge of a delegator permission bitmask and a delegator credential commitment whose Poseidon hash equals the on-chain chain-state value for the session nonce, (ii) proves that a delegatee permission bitmask is a bitwise subset of the delegator permission bitmask with Num2Bits(64) range checks, (iii) proves that a delegatee expiry timestamp does not exceed the delegator expiry timestamp, (iv) proves an EdDSA signature of the delegator over a delegation token, and (v) outputs a new identity-bound scope commitment that is written to the chain-state mapping as the new authoritative value for subsequent hops;",
+    "claim_text": "(c) for each delegation hop in a chain comprising at most a predetermined maximum number of hops, verifying a delegation zero-knowledge proof that (i) proves knowledge of a delegator permission bitmask and a delegator credential commitment whose Poseidon hash equals the on-chain chain-state value for the session nonce, (ii) proves that a delegatee permission bitmask is a bitwise subset of the delegator permission bitmask with Num2Bits(64) range checks, (iii) proves that a delegatee expiry timestamp does not exceed the delegator expiry timestamp, (iv) proves an EdDSA signature of the delegator over a delegation token, (v) proves Merkle membership of the delegatee's credential commitment in the agent credential tree by computing a Merkle root from the delegatee's credential commitment and a delegatee Merkle proof provided as a private input, and outputting said computed Merkle root as a public signal that the delegation verification function verifies against a root history buffer of the agent credential tree, and (vi) outputs a new identity-bound scope commitment that is written to the chain-state mapping as the new authoritative value for subsequent hops;",
+    "rationale": "Claim 15 is the narrowest independent claim and the one most vulnerable to the phantom delegatee attack because it enumerates all delegation verification steps. Adding step (v) for delegatee Merkle membership closes the gap by requiring that every delegatee in the chain is a registered agent whose credential commitment exists as a leaf in the agentTree. The on-chain verification against the root history buffer ensures the delegatee was enrolled at or near the time of delegation.",
+    "targets_weakness": "code_spec_auditor_phantom_delegatee",
+    "tradeoffs": "Further narrows the already-narrowest independent claim. The enumeration of verification steps is now more specific, making design-arounds slightly easier for competitors who might verify delegatee membership outside the ZK circuit (e.g., via a separate on-chain lookup). However, this is the claim most likely to withstand validity challenges, and the added specificity strengthens the Alice Step 2 position."
+  },
+  {
+    "id": "cand_competitor_attorney_swap_proving_system_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      1,
+      2
+    ],
+    "original_language": "a first zero-knowledge proof generated using a Groth16 proving system, the first zero-knowledge proof proving Merkle membership",
+    "claim_text": "a first zero-knowledge proof generated using a succinct non-interactive argument of knowledge (SNARK) proving system, the first zero-knowledge proof proving Merkle membership",
+    "rationale": "Generalizes the human proof from the Groth16 species to the SNARK genus. Claim 2 already recites 'the first proving system is Groth16 and the second proving system is PLONK,' so it serves as the species dependent. The specification's Alternative Embodiment 1 discloses recursive SNARKs (Nova, Halo2) and the Mixed Proving System Rationale explains Groth16 was chosen for ceremony reuse convenience, not as a core architectural element, providing written-description support for the genus. Must be applied together with candidate 02 to fully close the design-around.",
+    "targets_weakness": "competitor_attorney_swap_proving_system",
+    "tradeoffs": "Broader genus claim is more vulnerable to a LizardTech written-description challenge; mitigated by the alternative embodiments disclosure and by retaining Claims 2-3 as species fallbacks."
+  },
+  {
+    "id": "cand_competitor_attorney_swap_proving_system_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      1,
+      2
+    ],
+    "original_language": "a second zero-knowledge proof generated using a PLONK proving system, the second zero-knowledge proof proving Merkle membership",
+    "claim_text": "a second zero-knowledge proof generated using a succinct non-interactive argument of knowledge (SNARK) proving system, the second zero-knowledge proof proving Merkle membership",
+    "rationale": "Generalizes the agent proof from the PLONK species to the SNARK genus, completing the broadening of Claim 1 when applied with candidate 01. A competitor using Groth16-for-both, PLONK-for-both, or FFlonk/UltraPLONK/Halo2 now reads on the independent claim. Claim 2 captures the disclosed mixed-system species as a narrower fallback. The specification supports this because it explains PLONK was chosen for universal-setup convenience (avoiding per-circuit ceremonies), not as an inventive element.",
+    "targets_weakness": "competitor_attorney_swap_proving_system",
+    "tradeoffs": "Same LizardTech exposure as candidate 01; the two must be applied together. Losing PLONK specificity in Claim 1 means an examiner may cite broader SNARK-based prior art during prosecution."
+  },
+  {
+    "id": "cand_competitor_attorney_swap_proving_system_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "a first verifier contract configured to verify Groth16 zero-knowledge proofs for human identity;\na second verifier contract configured to verify PLONK zero-knowledge proofs for AI agent credentials;\na third verifier contract configured to verify PLONK zero-knowledge proofs for delegation;",
+    "claim_text": "a first verifier contract configured to verify zero-knowledge proofs for human identity;\na second verifier contract configured to verify zero-knowledge proofs for AI agent credentials;\na third verifier contract configured to verify zero-knowledge proofs for delegation;",
+    "rationale": "Removes the Groth16/PLONK lock from the system claim (Claim 16), which is the independent claim most likely asserted against an infringing product. The structural innovation \u2014 three distinct verifier contracts for human, agent, and delegation proofs verified within a single registry \u2014 is preserved and is the actual point of novelty. Claim 15A already serves as the technology-stack-specific species dependent covering Groth16+PLONK+BN128+Poseidon+EdDSA+LeanIMT.",
+    "targets_weakness": "competitor_attorney_swap_proving_system",
+    "tradeoffs": "Removing proving-system names from Claim 16 weakens the Alice Step 2 specificity argument for this claim; however, the remaining structural elements (dual Merkle trees, root history buffer, handshake + delegation verification functions, scope commitment chain linking) provide substantial technical specificity."
+  },
+  {
+    "id": "cand_obviousness_hunter_mutual_handshake_combination_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      1
+    ],
+    "original_language": "and (iii) writes the identity-bound scope commitment from the second zero-knowledge proof into a storage variable of the verifier contract indexed by the session nonce, the storage variable being subsequently read by a delegation verification function to enforce chain continuity;",
+    "claim_text": "and (iii) writes the identity-bound scope commitment from the second zero-knowledge proof into a chain-state storage variable of the verifier contract indexed by the session nonce, wherein said chain-state storage variable is writable exclusively by the handshake verification function of step (d) to seed an initial delegation chain anchor and by a delegation verification function to advance the chain by one hop upon successful delegation proof verification, wherein no external function, caller-supplied parameter, or other code path of the verifier contract can write to or modify said chain-state storage variable, and wherein the delegation verification function reads said chain-state storage variable as the sole authoritative source of a previous scope commitment required for chain-linking verification of any subsequent delegation hop on the same session nonce;",
+    "rationale": "The attack concedes that no prior art teaches a handshake that seeds an on-chain delegation chain-state. Aztec Connect teaches shared context binding across batched proofs, but not an exclusively-writable on-chain record that serves as the sole authoritative anchor for a subsequent delegation chain. By making the exclusivity constraint and the chain-seeding purpose structural elements of Claim 1 itself, the combination argument fails because the claimed handshake does something none of the three references teach or suggest: it atomically creates a tamper-proof on-chain anchor that gates all future delegation, with write access limited to exactly two contract functions.",
+    "targets_weakness": "obviousness_hunter_mutual_handshake_combination",
+    "tradeoffs": "Narrows Claim 1 to require the exclusive-write chain-state mechanism, so an implementation that uses a different chain-state architecture (e.g., caller-supplied previous commitments) would not infringe. However, any such alternative architecture would be vulnerable to confused-deputy attacks, making design-around unattractive."
+  },
+  {
+    "id": "cand_obviousness_hunter_mutual_handshake_combination_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "a handshake verification function that receives a Groth16 proof and a PLONK proof bound to a common session nonce, enforces that the session nonce embedded in each proof's public signals equals the transaction argument, verifies both proofs in a single transaction through the first and second verifier contracts respectively, checks nonce freshness and human revocation status, and emits a verification event upon success; and",
+    "claim_text": "a handshake verification function that receives a Groth16 proof and a PLONK proof bound to a common session nonce, enforces that the session nonce embedded in each proof's public signals equals the transaction argument, verifies both proofs in a single transaction through the first and second verifier contracts respectively, checks nonce freshness and human revocation status, and upon successful verification of both proofs, atomically writes the identity-bound scope commitment output by the PLONK proof as a public signal into a chain-state mapping of the identity registry contract indexed by the session nonce, the chain-state mapping being writable only by the handshake verification function to seed an initial chain anchor and by the delegation verification function to advance the chain, such that said chain-state mapping value serves as the sole on-chain source of the previous scope commitment required by the delegation verification function for chain-linking verification, and emits a verification event upon success; and",
+    "rationale": "This parallel fix in the system claim (Claim 16) mirrors the Claim 1 narrowing by requiring that the handshake verification function atomically seeds the chain-state mapping as part of its success path. The system claim now structurally requires the chain-seeding mechanism as an integral hardware/software element, not just an operational step. Since Claim 16 is the system independent claim and the attack targets it, this ensures the system claim independently survives the \u00a7103 combination argument by requiring an architectural element (exclusive-write chain-state seeded by handshake) absent from Semaphore + Iden3 + Aztec Connect.",
+    "targets_weakness": "obviousness_hunter_mutual_handshake_combination",
+    "tradeoffs": "Makes Claim 16 longer and more complex, which could make prosecution harder if the examiner raises clarity objections. Also narrows the system claim to require the chain-state mapping architecture, excluding systems that verify handshakes without seeding delegation chains."
+  },
+  {
+    "id": "cand_obviousness_hunter_mutual_handshake_combination_03",
+    "strategy": "dependent_claim",
+    "claim_refs": [
+      1,
+      8
+    ],
+    "original_language": "**Claim 8.** The method of claim 1, wherein the first zero-knowledge proof further outputs a nonce binding value computed as a Poseidon hash of a nullifier hash and the session nonce, binding the proof to both the human user's identity and the specific session.\n\n**Claim 9.**",
+    "claim_text": "**Claim 8.** The method of claim 1, wherein the first zero-knowledge proof further outputs a nonce binding value computed as a Poseidon hash of a nullifier hash and the session nonce, binding the proof to both the human user's identity and the specific session.\n\n**Claim 8A.** The method of claim 1, further comprising:\nreceiving, after the verifying step (d), a delegation zero-knowledge proof for a first delegation hop, wherein a delegation verification function of the verifier contract reads the identity-bound scope commitment previously written in step (d)(iii) from the chain-state storage variable indexed by the session nonce, compares it to a previous scope commitment public signal of the delegation zero-knowledge proof, reverts on mismatch, verifies within the delegation proof that a delegatee permission bitmask is a bitwise subset of a delegator permission bitmask whose Poseidon hash with the delegator's credential commitment equals said previous scope commitment, and upon successful verification writes a new identity-bound scope commitment to the same chain-state storage variable, thereby advancing the delegation chain from the handshake-seeded anchor without accepting any caller-supplied previous scope commitment value.\n\n**Claim 9.**",
+    "rationale": "This dependent claim creates a fallback position that explicitly bridges the handshake (Claim 1) and delegation chain in a single claim, making the non-obvious integration undeniable. Even if the examiner finds Claim 1 standing alone to be an obvious combination, Claim 8A requires the end-to-end flow: the handshake seeds the chain-state, and the delegation function consumes exclusively from that chain-state. No combination of Semaphore + Iden3 + Aztec Connect teaches or suggests this flow because Aztec Connect's shared context is consumed at batch-verification time, not stored on-chain as a seed for a subsequent multi-hop delegation protocol.",
+    "targets_weakness": "obviousness_hunter_mutual_handshake_combination",
+    "tradeoffs": "Being a dependent claim, this is narrower than an independent claim fix and only provides fallback protection. It also increases claim count. However, it preserves Claim 1's current scope while providing an explicit bridge claim that an examiner can allow even if Claim 1 is rejected, giving prosecution flexibility."
+  },
+  {
+    "id": "cand_code_spec_auditor_delegation_signing_key_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "(g) verifying, within the circuit, an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp;",
+    "claim_text": "(g) verifying, within the circuit, an EdDSA signature over a delegation token using the operator EdDSA keypair whose public key coordinates are committed as fields of the delegator's credential commitment that is Merkle-included in said agent credential tree, the delegation token being computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp, wherein the circuit verifies the signature against the same operator public key coordinates used to compute the delegator's credential commitment;",
+    "rationale": "This resolves the enablement gap by explicitly tying the delegation signing key to the operator EdDSA keypair already disclosed in the credential commitment (Section 3.2: Poseidon5 includes operatorPubkeyAx, operatorPubkeyAy). The circuit already has the operator key as a private input for credential commitment computation, so no new key infrastructure is needed. The operator authorizes each delegation hop, which is consistent with the trust model where operators are accountable for their agents' actions.",
+    "targets_weakness": "code_spec_auditor_delegation_signing_key",
+    "tradeoffs": "Narrows scope to operator-key signing only, meaning the operator must be involved (online or via pre-signed tokens) for each delegation hop. Forecloses future claims to fully autonomous agent-to-agent delegation using agent-owned keys without a CIP filing."
+  },
+  {
+    "id": "cand_code_spec_auditor_delegation_signing_key_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      19
+    ],
+    "original_language": "verify an EdDSA signature of the delegator over a delegation token; and",
+    "claim_text": "verify an EdDSA signature over a delegation token against the operator EdDSA public key coordinates that are fields of the delegator's credential commitment, the operator EdDSA public key coordinates being the same values used as inputs to the Poseidon hash that produces the delegator's credential commitment which is Merkle-included in the agent credential tree; and",
+    "rationale": "Parallel fix for claim 19 (system claim dependent on claim 16). Specifies that the delegation signature is verified against the operator key already embedded in the credential commitment's Poseidon pre-image. This closes the 112 gap by identifying exactly which key signs and how the circuit obtains it \u2014 the same private inputs (operatorPubkeyAx, operatorPubkeyAy) used for credential commitment computation are reused for delegation signature verification.",
+    "targets_weakness": "code_spec_auditor_delegation_signing_key",
+    "tradeoffs": "Same operator-involvement constraint as candidate 01. Claim 19 is a system claim dependent on 16, so this narrowing propagates to CRM claim 21 as well."
+  },
+  {
+    "id": "cand_code_spec_auditor_delegation_signing_key_03",
+    "strategy": "narrow",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "(iv) proves an EdDSA signature of the delegator over a delegation token, and",
+    "claim_text": "(iv) proves an EdDSA signature over a delegation token verified against the operator EdDSA public key coordinates committed within the delegator's credential commitment, such that the signing key is the same operator keypair whose public key coordinates are inputs to the Poseidon hash producing the delegator's credential commitment, and",
+    "rationale": "Completes the fix across all three affected claims. Claim 15 is the narrowest independent claim and the hardest to design around, so closing the 112 gap here is critical. By specifying the operator key as the signing key and tying it to the credential commitment's pre-image, a PHOSITA can implement the delegation circuit using only disclosed components: the operator key is already a private input to the AgentPolicy circuit and can be passed through to the Delegation circuit.",
+    "targets_weakness": "code_spec_auditor_delegation_signing_key",
+    "tradeoffs": "All three candidates should be applied together for consistency. The spec (Section 5.4) should also be amended to add a sentence stating: 'The delegator's EdDSA signature is produced using the operator keypair whose public key coordinates (operatorPubkeyAx, operatorPubkeyAy) are committed within the delegator's credential commitment, and the delegation circuit verifies this signature against those same coordinates.' Without this spec amendment, even the narrowed claims may face residual 112 challenges."
+  }
+]

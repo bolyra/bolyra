@@ -1,0 +1,161 @@
+[
+  {
+    "id": "cand_competitor_attorney_scope_commitment_restructure_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input",
+    "claim_text": "that a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input",
+    "rationale": "This broadens independent Claim 9(d) from a fixed two-input Poseidon construction to a genus covering any Poseidon hash whose pre-image includes at least the bitmask and credential commitment. A competitor using Poseidon3 with a blinding salt, reversed argument order, or additional inputs still meets the 'includes at least' limitation. The spec's Section 3.8 disclosure of the three-input blinding-salt variant now falls within the claimed genus rather than outside it, neutralizing the Festo estoppel argument.",
+    "targets_weakness": "competitor_attorney_scope_commitment_restructure",
+    "tradeoffs": "Slightly broader claim may face examiner pushback on definiteness of 'at least' language, and the genus must still be fully supported by the spec's disclosure of both two-input and three-input embodiments. No prosecution history estoppel risk since this broadens rather than narrows.",
+    "score": {
+      "total": 63,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "The claim recites a specific cryptographic primitive (Poseidon hash) with defined pre-image structure (permission bitmask + credential commitment) producing a scope commitment verified as a public input. This is concrete mechanism, not abstract idea. However, the 'includes at least' genus language softens the machine-or-transformation anchor \u2014 the claim no longer specifies exact arity or circuit constraint topology. Under Electric Power Group, functional result language ('equals a previous scope commitment public input') without tying to specific circuit constraints (Num2Bits, LessThan) leaves room for a 101 challenge. The broadening trades specificity for scope, moving from the 15-18 band down.",
+          "critique": "The original two-input formulation was more defensible under Alice Step 2 because it recited a specific, non-conventional ordered-pair construction. By generalizing to 'at least,' you've made the claim read more like 'hash these things together somehow with Poseidon' \u2014 closer to an abstract mathematical operation applied on a computer. An examiner could argue the 'at least' language encompasses any Poseidon invocation that happens to include these two values anywhere in its input vector, which is dangerously close to claiming the mathematical concept itself."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 11,
+          "max_points": 20,
+          "evidence": "The scope commitment chain-linking concept still requires combining Semaphore (Merkle membership), UCAN/Biscuit (capability attenuation), and Tornado Cash Nova (chained Poseidon commitments with nullifiers) \u2014 a three-reference combination minimum. However, broadening from two-input to 'at least' weakens the non-obviousness argument. The original two-input construction was a specific, non-obvious design choice (why not three inputs? why this specific pair?). Now the claim covers any arity, which an examiner could argue is the obvious generalization once you decide to hash bitmask + credential together. Under KSR, a person of ordinary skill combining Tornado's chained commitments with UCAN's attenuation model would naturally try various Poseidon arities.",
+          "critique": "The motivation-to-combine is slightly easier for an examiner to articulate now: 'one skilled in the art would obviously try hashing at least these two values with Poseidon because those are the two security-critical inputs, and adding more inputs (salt, nonce) is routine cryptographic practice.' The fixed two-input version created a stronger argument that the specific pairing was a non-obvious design choice."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The spec discloses two embodiments: a two-input Poseidon2(bitmask, credential_commitment) and a three-input Poseidon3(bitmask, credential_commitment, blinding_salt). The 'at least' genus covers both disclosed species. Under LizardTech, you need enough species to support the genus \u2014 two species (arity-2 and arity-3) is thin but arguably adequate for the narrow genus of 'Poseidon with at least these two inputs.' The term 'at least' is reasonably definite \u2014 it means the two named inputs are required and additional inputs are permitted.",
+          "critique": "An examiner applying Ariad v. Eli Lilly will ask: does the spec show possession of a Poseidon-5 or Poseidon-8 variant? It does not. The genus technically covers Poseidon with 50 inputs where two happen to be the bitmask and credential. Under LizardTech, claiming a genus with only two species is risky \u2014 especially when the genus extends to unbounded arity. The 'at least' language also creates a Nautilus definiteness question: does 'includes at least' mean the two values must be the first two inputs? Any position? Must they be contiguous? The spec's circuit pseudocode shows specific argument ordering, but the claim language does not preserve that specificity."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 12,
+          "max_points": 20,
+          "evidence": "The broadened claim now captures Poseidon3 with blinding salt, reversed argument order, and additional auxiliary inputs \u2014 closing the most obvious design-arounds from the two-input version. A competitor can no longer escape by simply adding a salt or reordering inputs. However, escape routes remain: (1) use a non-Poseidon algebraic hash (Rescue, Griffin, Anemoi) \u2014 the claim is still Poseidon-specific; (2) use a commitment scheme that doesn't hash the bitmask directly (e.g., Pedersen commitment over the bitmask, then hash the Pedersen output with the credential); (3) separate the scope commitment into two linked commitments rather than one compound hash. These are moderate-effort escapes requiring days of circuit redesign.",
+          "critique": "The biggest gap is the Poseidon specificity. Any ZK-friendly hash that isn't literally Poseidon escapes. Rescue-Prime, Griffin, and Anemoi are all viable substitutes with similar circuit efficiency. A competitor's engineer swaps the hash function in a day. The 'at least' broadening helps within the Poseidon family but does nothing against cross-hash-family substitution. A dependent claim covering 'algebraic hash function' would help, but this independent claim remains Poseidon-locked."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The revision meaningfully expands coverage from the original. It now covers the primary two-input product implementation, the three-input blinding-salt variant, and any future Poseidon-based scope commitment that includes additional metadata fields. This covers the product plus one foreseeable extension (salted commitments). However, scope remains limited to Poseidon-family hashes and does not reach non-Poseidon constructions, recursive SNARK compositions, or platform attestation extensions. The claim also only covers one element (9d) of the delegation circuit \u2014 the full claim 9 scope depends on the other sub-limitations.",
+          "critique": "Commercial coverage is decent for the Poseidon ecosystem but leaves a visible gap for the inevitable migration to newer ZK-friendly hash families. Any competitor watching this space knows Poseidon will eventually be superseded. The claim also doesn't capture scope commitment schemes built on polynomial commitments (KZG-based) rather than hash-based commitments, which is a plausible future architecture as PLONK ecosystems mature."
+        }
+      }
+    }
+  },
+  {
+    "id": "cand_competitor_attorney_hash_function_lock_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "constraining, within the circuit, that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;",
+    "claim_text": "constraining, within the circuit, that a two-input output of an algebraic hash function operating over the proving system's native scalar field, applied to the delegator's actual permission bitmask and the delegator's credential commitment, equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;",
+    "rationale": "Broadens the delegation chain-linking constraint in independent Claim 9 from Poseidon to the same algebraic-hash-function genus used in Candidate 01. The chain-linking hash is the single most critical hash in the delegation architecture \u2014 if a competitor substitutes Griffin here alone, they break literal infringement of the entire delegation claim. This substitution ensures the delegation chain-linking mechanism is covered regardless of which SNARK-friendly hash is used, as long as it operates over the proving system's native field (the functional requirement that makes it circuit-efficient).",
+    "targets_weakness": "competitor_attorney_hash_function_lock",
+    "tradeoffs": "Same LizardTech exposure as Candidate 01. Additionally, Claim 9 still references 'Poseidon hash' in step (g) (delegation token) and step (h) (new scope commitment). For full coverage, those steps would need parallel broadening in a separate revision pass, or a single wherein clause similar to Candidate 01's approach should be appended to Claim 9's preamble.",
+    "score": {
+      "total": 61,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The claim recites a specific circuit constraint \u2014 a two-input algebraic hash over the native scalar field applied to a permission bitmask and credential commitment, with the output compared against an on-chain chain-state mapping indexed by session nonce. This is a concrete cryptographic mechanism tied to circuit execution, not a result-oriented abstract idea.",
+          "critique": "Broadening from Poseidon to 'algebraic hash function operating over the proving system's native scalar field' weakens the 101 position slightly versus the original. An examiner could argue the genus language is functional at the point of abstraction \u2014 you're claiming ANY algebraic hash that works in a SNARK field, which starts to read as 'use math to link things.' However, the surrounding structural constraints (two-input arity, chain-state mapping, session nonce indexing, Merkle-included identity binding) provide enough concrete technical recitation to survive Step 2A Prong Two. The circuit constraint framing helps \u2014 this is not 'apply it on a computer' but 'enforce this invariant inside an arithmetic circuit.' Lands solidly in the 10-14 band but doesn't reach 15+ because the hash function itself is now genus-level rather than implementation-specific."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 12,
+          "max_points": 20,
+          "evidence": "The specific integration pattern \u2014 binding a permission bitmask AND credential commitment via a two-input hash, then verifying equality against an on-chain chain-state mapping indexed by session nonce to link delegation hops \u2014 requires combining at minimum: (1) Tornado Cash Nova's chained commitments, (2) UCAN/Biscuit's permission attenuation model, (3) Semaphore's Merkle membership proofs, and (4) the dual-binding of permissions+identity in a single hash preimage. No single reference teaches this integration.",
+          "critique": "The broadening actually helps 103 marginally \u2014 an examiner can no longer reject with 'obvious to substitute Griffin for Poseidon in the chain-linking step' because the claim now covers that substitution. However, the core integration pattern (hash-chain-linking delegation with permission narrowing in ZK) is the same novelty as before. Tornado Cash Nova teaches chained Poseidon commitments with nullifiers; DAC 2008 teaches private delegation chains; UCAN teaches permission attenuation. The three-reference combination is strained but not impossible \u2014 a motivated examiner could argue the two-input binding of bitmask+commitment is an obvious design choice once you decide to do ZK delegation. The 'chain-state mapping indexed by session nonce' detail adds specificity that makes the combination less obvious. Solid 103 defense but not bulletproof."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 10,
+          "max_points": 20,
+          "evidence": "The specification discloses Poseidon as the algebraic hash function. The candidate broadens to genus ('algebraic hash function operating over the proving system's native scalar field') while the spec describes only the Poseidon species in worked examples.",
+          "critique": "This is the primary vulnerability. LizardTech v. Earth Resource Mapping is directly on point \u2014 you cannot claim a genus when you've only disclosed one species. The spec likely does not include worked examples with Griffin, Rescue, or other SNARK-friendly hashes. The functional limitation 'operating over the proving system's native scalar field' helps define the genus boundary, but an examiner will argue: (1) What is the metes and bounds of 'algebraic hash function'? Is SHA-256 with field embedding included? (2) The spec shows possession of Poseidon only \u2014 has the inventor demonstrated possession of the full genus? (3) The tradeoffs note itself admits steps (g) and (h) still say 'Poseidon,' creating internal inconsistency within Claim 9 \u2014 one step uses genus language while others use species language, which is a definiteness problem under Nautilus. The inconsistency between broadened step (f) and un-broadened steps (g)/(h) is a gift to an examiner."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "The genus language closes the most obvious escape route \u2014 substituting a different SNARK-friendly hash function for the chain-linking step. A competitor cannot simply swap Poseidon for Griffin or Rescue in the delegation chain-linking and escape infringement.",
+          "critique": "Good improvement over the original's hash-function lock vulnerability. However, the tradeoffs section reveals the critical gap: steps (g) and (h) of Claim 9 still reference 'Poseidon hash' specifically. A competitor who uses Griffin for the delegation token (step g) and new scope commitment (step h) while using Poseidon only for the chain-linking step (now broadened) would NOT infringe the un-broadened steps. This is a partial fix \u2014 it closes one of three hash-function escape hatches in Claim 9. Additionally, a competitor could escape by: (1) using a non-algebraic hash with a field wrapper, arguing it's not 'an algebraic hash function'; (2) using a three-input hash (bitmask, commitment, salt) instead of two-input; (3) deriving the previous scope commitment from a different on-chain structure than a 'chain-state mapping indexed by session nonce.' The two-input arity constraint is both a strength (specificity) and a weakness (easy to add a third dummy input)."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 12,
+          "max_points": 20,
+          "evidence": "The broadening from Poseidon to genus covers the primary product plus foreseeable hash-function substitutions (Griffin, Rescue, Anemoi, future SNARK-friendly hashes). The 'native scalar field' limitation appropriately scopes to circuit-friendly hashes without over-claiming.",
+          "critique": "Covers the primary product and the most obvious alternative implementations for this specific step. However, scope is limited by: (1) only one of three hash steps in Claim 9 is broadened \u2014 steps (g) and (h) remain Poseidon-locked, so the overall claim scope improvement is partial; (2) the claim still requires two-input arity, excluding designs that pack additional entropy or context into the hash; (3) the claim still requires on-chain chain-state mapping indexed by session nonce, excluding off-chain or L2 state channel designs. For a CIP candidate perspective, this revision positions well for a future continuation that broadens all three hash steps simultaneously, but standing alone it's an incomplete scope expansion."
+        }
+      }
+    }
+  },
+  {
+    "id": "cand_competitor_attorney_no_merkle_tree_required_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Lean Incremental Merkle Tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "claim_text": "a first Merkle tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Merkle tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "rationale": "Claim 16 is the system claim \u2014 the apparatus-form counterpart to the method claims. Broadening the tree limitation here ensures the three-legged stool (method Claims 1 and 9, system Claim 16, CRM Claims 20-22) all benefit from the wider genus. Claim 16 retains substantial structural specificity (five-input Poseidon credential commitment, root history circular buffer, three separate verifier contracts, dual handshake and delegation verification functions) that independently narrows the claim and satisfies Alice Step 2, so removing 'Lean Incremental' does not create an abstractness vulnerability. The existing dependent Claim 15A already recites the full LeanIMT + depth-20 species as an Alice safety net.",
+    "targets_weakness": "competitor_attorney_no_merkle_tree_required",
+    "tradeoffs": "The system claim becomes slightly broader, which may invite more prior art challenges at the Merkle-tree level. However, the five-input Poseidon credential commitment structure, the dual-tree architecture with root history buffer, and the three-verifier-contract topology remain highly specific structural limitations that distinguish over generic Merkle tree prior art.",
+    "score": {
+      "total": 62,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The claim still recites concrete cryptographic operations: Poseidon hashes, EdDSA on Baby Jubjub, five-input Poseidon with enumerated credential fields. The rationale correctly notes that Claim 16 retains substantial structural specificity (root history buffer, three verifier contracts, dual handshake). Removing 'Lean Incremental' does not meaningfully degrade the Step 2 analysis.",
+          "critique": "An examiner could argue that broadening the tree to genus-level makes the data-structure element more abstract \u2014 'store commitments in a Merkle tree' is closer to conventional activity than 'store commitments in a Lean Incremental Merkle Tree with specific update semantics.' The claim loses the machine-transformation hook of incremental insertion. However, the five-input Poseidon commitment and dual-tree architecture still provide adequate technical specificity to survive Step 2. Not a significant 101 regression."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 11,
+          "max_points": 20,
+          "evidence": "Semaphore v4 already teaches Poseidon-hashed EdDSA commitments in a Merkle tree (generic concept). Iden3 teaches signed ZK credentials in Merkle trees. Tornado Cash teaches Poseidon commitments in Merkle trees with root history. By removing the LeanIMT limitation, the claim now reads on the exact tree structure taught by these references. The five-input agent credential commitment remains the distinguishing element.",
+          "critique": "The broadening is a net negative for 103. 'Lean Incremental Merkle Tree' was a specific data structure with particular insertion complexity and proof-generation properties not taught by standard Merkle tree references. Generic 'Merkle tree' is anticipated by Semaphore+Iden3 for the human side and is routine/conventional for the agent side. An examiner now needs only two references (Semaphore for human Merkle membership + any agent credential scheme) rather than needing to also teach LeanIMT specifically. The five-input Poseidon commitment still requires combination, but the motivation to combine is straightforward: 'include all relevant credential fields in a single commitment.'"
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 11,
+          "max_points": 20,
+          "evidence": "The specification discloses LeanIMT specifically \u2014 depth-20, incremental insertion, specific update semantics. The claim now covers ALL Merkle tree variants: sparse Merkle trees, standard binary Merkle trees, Verkle trees, append-only logs, etc. The spec describes one species (LeanIMT) but the claim now covers the full genus.",
+          "critique": "This is a textbook LizardTech v. Earth Resource Mapping risk. The spec works through LeanIMT with specific depth, insertion, and proof-generation properties. An examiner can argue the applicant has not demonstrated possession of the invention across ALL Merkle tree variants \u2014 e.g., does the system work with a sparse Merkle tree where update costs differ? With a Verkle tree using polynomial commitments? The dependent claim reciting LeanIMT as a species helps, but the independent claim's genus scope may exceed what the spec enables. A 112(a) written description rejection is plausible."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The broadening closes one escape route: a competitor previously could have used a standard (non-lean-incremental) Merkle tree to avoid literal infringement on Claim 16. Now any Merkle tree variant is captured. The remaining escape vectors are: (1) use a different hash function than Poseidon, (2) use a different commitment structure than five-input Poseidon, (3) use a non-Merkle accumulator (RSA accumulator, polynomial commitment).",
+          "critique": "The revision improves design-around resistance modestly. However, the five-input Poseidon commitment remains the binding constraint \u2014 a competitor who uses SHA-256 or Pedersen commitments with different input arity escapes entirely. The real escape is still at the hash/commitment level, not the tree level. Moving to a polynomial commitment scheme (KZG) or RSA accumulator would also escape. The broadening helps but doesn't move the needle dramatically because the tree type was not the cheapest escape route to begin with."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "The revision extends coverage from one specific Merkle tree implementation to all Merkle tree variants. This captures competitors using standard binary Merkle trees, sparse Merkle trees, or any future Merkle tree optimizations. The claim now covers the primary product (LeanIMT) plus foreseeable variations (other Merkle trees used in ZK systems).",
+          "critique": "Good incremental broadening that covers the obvious alternative implementations without overreaching into non-Merkle accumulators. The scope gain is real but bounded \u2014 Merkle trees are the dominant accumulator in ZK systems today, so capturing the genus is commercially valuable. Does not extend to future CIP candidates like recursive SNARKs or polynomial commitment schemes, which would require separate claims. Net positive for commercial coverage."
+        }
+      }
+    }
+  }
+]

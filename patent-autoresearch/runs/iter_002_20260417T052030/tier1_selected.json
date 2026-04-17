@@ -1,0 +1,159 @@
+[
+  {
+    "id": "obviousness_hunter_root_history_buffer",
+    "persona": "obviousness_hunter",
+    "claim_refs": [
+      6,
+      7,
+      16
+    ],
+    "category": "103",
+    "finding": "Claims 6-7 reciting a 'circular buffer of the last N Merkle roots' (N=30) are directly anticipated or at minimum obvious over Tornado Cash's MerkleTreeWithHistory contract (2019), which implements exactly this mechanism \u2014 a circular buffer of the last 30 Merkle roots to accommodate proof staleness. The specification even uses depth-20 Merkle trees like Tornado. Claim 7 specifying N=30 is the exact same parameter Tornado Cash uses. These claims add zero novelty and will be rejected on first office action.",
+    "recommended_direction": "Cancel Claims 6 and 7 or fold the root history buffer into a broader dependent that combines it with other novel elements (e.g., the dual-tree architecture where human tree uses exact root match but agent tree uses root history buffer \u2014 this asymmetric staleness policy is at least arguably non-obvious). Do not waste prosecution resources defending these claims independently.",
+    "evidence": "Claim 6: 'checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, accommodating tree updates between proof generation and verification.' Claim 7: 'N equals 30.' Tornado Cash MerkleTreeWithHistory (2019) implements `ROOT_HISTORY_SIZE = 30`, a circular buffer of roots via `roots[currentRootIndex]`, with `isKnownRoot()` checking against the buffer. This is verbatim the same mechanism with the same parameter. No combination argument is even needed \u2014 this is anticipation under 102(a)(1).",
+    "attack_id": "obviousness_hunter_root_history_buffer",
+    "severity": 9,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_at_least_poseidon",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      9,
+      15
+    ],
+    "category": "112",
+    "finding": "Claim 9(d) recites \"a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment.\" The open-ended \"at least\" language claims a genus of hash constructions with arbitrary additional inputs, but the specification discloses exactly one species: Poseidon2(permissionBitmask, credentialCommitment). No alternative hash input configurations are described, no additional fields are contemplated, and no guidance is given on what other inputs could be included or how the circuit would accommodate them. Under LizardTech v. Earth Resource Mapping and Ariad v. Eli Lilly, claiming a genus from a single disclosed species fails the written description requirement.",
+    "recommended_direction": "Remove \"at least\" and recite the exact two-input Poseidon hash disclosed: \"a Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment.\" If broader coverage is desired, disclose at least one alternative embodiment with additional hash inputs (e.g., a blinding salt as mentioned in Section 3, Step 3.8) and claim it as a dependent claim.",
+    "evidence": "Claim 9(d): \"a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment\". Specification Section 5.1 discloses only: \"Poseidon2(delegatorScope, delegatorCredCommitment) === previousScopeCommitment\". LizardTech v. Earth Resource Mapping, 424 F.3d 1336 (Fed. Cir. 2005); Ariad v. Eli Lilly, 598 F.3d 1336 (Fed. Cir. 2010, en banc).",
+    "attack_id": "enablement_auditor_at_least_poseidon",
+    "severity": 6,
+    "specificity": 9,
+    "remediability": 9,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_swap_proving_system",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      2,
+      3,
+      15,
+      15.1,
+      16
+    ],
+    "category": "design_around",
+    "finding": "Claims 1 and 15 require exactly 'a first zero-knowledge proof generated using a Groth16 proving system' for the human and 'a second zero-knowledge proof generated using a PLONK proving system' for the agent. A competitor using Groth16 for both, PLONK for both, or using FFlonk/UltraPLONK/Halo2 for either side escapes all independent claims. The mixed-proof-system requirement is presented as a core innovation (Section 4, 'Mixed Proving System Rationale') but is actually an implementation convenience (Semaphore ceremony reuse), meaning a competitor loses nothing by using a uniform proving system.",
+    "recommended_direction": "Use PLONK (or Halo2) for both human and agent circuits. Run your own Phase 1 ceremony or use Hermez's universal setup. The mutual handshake protocol is otherwise identical but falls outside every independent claim. Claim 2 is dependent on Claim 1 and explicitly recites the Groth16/PLONK split, confirming the independent claim requires it.",
+    "evidence": "Claim 1(b): 'a first zero-knowledge proof generated using a Groth16 proving system'; Claim 1(c): 'a second zero-knowledge proof generated using a PLONK proving system'; Claim 15A: 'the first zero-knowledge proof uses the Groth16 proving system\u2026 the second zero-knowledge proof uses the PLONK proving system'. LizardTech v. Earth Resource Mapping, 424 F.3d 1336 \u2014 applicant disclosed only the single species (Groth16+PLONK) and cannot claim the genus of all mixed-proof architectures.",
+    "attack_id": "competitor_attorney_swap_proving_system",
+    "severity": 9,
+    "specificity": 9,
+    "remediability": 6,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_exclusive_write_negative_limitation",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      15
+    ],
+    "category": "112",
+    "finding": "Claim 15(b) recites that the chain-state record is \"written exclusively by the handshake verification function of step (a) and the delegation verification function of step (c), such that no caller-supplied parameter can write to or modify the chain-state record.\" This is a negative limitation \u2014 it defines the invention partly by what it excludes (any other write path). Under Santarus v. Par Pharmaceutical, negative limitations require the specification to affirmatively describe why excluded embodiments are excluded. While Section 7.5 states \"The contract exposes no function that accepts a caller-supplied value,\" it does not address upgradeability proxies, contract owner admin functions, or any reason why alternative write paths were affirmatively excluded rather than simply not implemented. The \"no caller-supplied parameter\" language is also indefinite: the session nonce IS a caller-supplied parameter used to index the write \u2014 the spec means no caller-supplied *value* for the commitment field, but the claim language does not make this distinction.",
+    "recommended_direction": "Rewrite to affirmative language: \"wherein the chain-state record value for a given session nonce is set to the identity-bound scope commitment output by the handshake's agent proof upon successful handshake verification, and is updated to the new scope commitment output by the delegation proof upon successful delegation verification.\" Drop the negative \"no caller-supplied parameter\" clause or narrow it to \"no caller-supplied commitment value.\"",
+    "evidence": "Claim 15(b): \"written exclusively by...such that no caller-supplied parameter can write to or modify the chain-state record\". But the function call itself supplies the session nonce parameter that indexes the write. Santarus v. Par Pharmaceutical, 694 F.3d 1344 (Fed. Cir. 2012) \u2014 negative limitations require affirmative disclosure of why excluded embodiments are excluded.",
+    "attack_id": "enablement_auditor_exclusive_write_negative_limitation",
+    "severity": 6,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_signature_scheme_swap",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      4,
+      9,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "category": "design_around",
+    "finding": "Claims hard-code 'EdDSA' on 'Baby Jubjub' for both human identity keys and operator/delegator signatures. A competitor using Schnorr signatures on a different embedded curve (e.g., Bandersnatch, which is embedded in BLS12-381 and has growing ZK tooling), or using ECDSA verification circuits (now feasible with efficient-ECDSA circuit libraries), escapes literal scope. The identity commitment, credential commitment, and delegation authorization signature all name EdDSA/Baby Jubjub as structural elements.",
+    "recommended_direction": "Implement the same protocol using Schnorr on Bandersnatch (or even BLS12-381 with Groth16 on that curve). The scope commitment chain, bitwise subset enforcement, and hop counting are all curve-agnostic concepts that work identically. This also enables compatibility with Ethereum's forthcoming Verkle tree infrastructure which favors Bandersnatch.",
+    "evidence": "Claim 1(a): 'EdDSA public key coordinates on the Baby Jubjub elliptic curve'; Claim 4: 'both coordinates of the operator's EdDSA public key on the Baby Jubjub elliptic curve'; Claim 9(g): 'an EdDSA signature of the delegator'; Claim 16: 'Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve'. Festo, 535 U.S. 722 \u2014 naming specific curve and signature scheme throughout creates estoppel against broadening to other schemes.",
+    "attack_id": "competitor_attorney_signature_scheme_swap",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 6,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "obviousness_hunter_mutual_handshake_combination",
+    "persona": "obviousness_hunter",
+    "claim_refs": [
+      1,
+      15,
+      16
+    ],
+    "category": "103",
+    "finding": "Claim 1's mutual handshake is an obvious combination of Semaphore v4 (human group membership via Groth16 over LeanIMT with Poseidon/EdDSA/Baby Jubjub \u2014 teaching every element of the human proof) with Iden3 circuits (signed ZK credentials with Merkle trees and on-chain verification for credential holders) and Aztec Connect (batched multi-proof verification in a single transaction with shared context). A PHOSITA facing the known problem of authenticating both humans and AI agents would combine Semaphore's human anonymity circuit with Iden3's credential circuit in a single Aztec-style batched transaction. The session nonce equality check across both proofs is a trivial engineering choice \u2014 Aztec Connect already teaches shared context binding across batched proofs, and nonce-freshness via a used-nonce mapping is standard replay protection (Tornado Cash). No element of the combination requires non-obvious modification of any reference.",
+    "recommended_direction": "Narrow Claim 1 to recite the identity-bound scope commitment chain-linking mechanism as a required output of the handshake step \u2014 specifically that the handshake writes the scope commitment to an on-chain chain-state record that is exclusively writable by the handshake and delegation functions. This narrows the combination gap because no prior art teaches a handshake that seeds an on-chain delegation chain-state. Alternatively, collapse Claims 1 and 9 into a single independent claim requiring both mutual authentication AND delegation chain seeding.",
+    "evidence": "Claim 1(b) recites 'a first zero-knowledge proof generated using a Groth16 proving system... proving Merkle membership... computing a nullifier as a Poseidon hash of a scope identifier and a secret scalar' \u2014 this is verbatim Semaphore v4 (nullifier = Poseidon(scope, secret), Groth16 over LeanIMT). Claim 1(c) recites agent credential proof with 'EdDSA signature of an operator over the credential commitment' and Merkle membership \u2014 taught by Iden3 circuits (signed ZK credentials with Merkle trees, on-chain verification). Claim 1(d) recites 'verifying both... in a single blockchain transaction' with shared nonce \u2014 taught by Aztec Connect (batched multi-proof verification with shared context). Under KSR v. Teleflex, 550 U.S. 398 (2007), market pressure from AI agent proliferation provides motivation to combine human identity (Semaphore) with agent credential (Iden3) proofs in a batched transaction (Aztec), and each reference performs its known function in the combination.",
+    "attack_id": "obviousness_hunter_mutual_handshake_combination",
+    "severity": 9,
+    "specificity": 8,
+    "remediability": 6,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "code_spec_auditor_phantom_delegatee",
+    "persona": "code_spec_auditor",
+    "claim_refs": [
+      9,
+      15,
+      19
+    ],
+    "category": "accuracy",
+    "finding": "The Delegation circuit takes delegateeCredCommitment as a private input and outputs Poseidon2(delegateeScope, delegateeCredCommitment) as the new scope commitment, but NEVER verifies that the delegatee's credential commitment is a leaf in the agentTree via a Merkle membership proof. The AgentPolicy circuit Merkle-verifies only the first agent in the chain (during handshake). At delegation hop 0, Agent A's credCmt is indirectly verified via chain-linking to the handshake output. But Agent B's credCmt (the delegatee) is accepted as a bare private input with no Merkle check. At hop 1, Agent B becomes the delegator (indirectly bound), but Agent C's credCmt is again unverified. This means any party can fabricate a credential commitment for a phantom agent that does not exist in the agentTree, receive delegated permissions, and produce a valid delegation proof. The 'identity-bound' property claimed throughout is hollow for all delegatees \u2014 binding to a fabricated identity is no binding at all.",
+    "recommended_direction": "Add a Merkle membership proof for the delegatee's credential commitment inside the Delegation circuit, or add an on-chain check that the delegatee credCmt exists in agentTree. This will increase constraint count substantially (approximately doubling the circuit) but is necessary for the security claim. Update Claims 9(c), 15(c)(v), and 19 to recite delegatee Merkle membership verification.",
+    "evidence": "Claim 9(c): 'receiving, as private inputs to a delegation zero-knowledge proof circuit, a delegator's actual permission bitmask, the delegator's credential commitment which is Merkle-included in said agent credential tree, a delegatee's permission bitmask, and a delegatee's credential commitment.' Note 'Merkle-included' modifies only the delegator's commitment, not the delegatee's. Section 5 Delegation circuit description lists constraints: chain-linking, subset, expiry, signature, nullifier \u2014 NO Merkle proof for delegatee. Delegation circuit has only 10,769 constraints (vs. AgentPolicy's 20,832 which includes Merkle proof), confirming absence.",
+    "attack_id": "code_spec_auditor_phantom_delegatee",
+    "severity": 9,
+    "specificity": 9,
+    "remediability": 5,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "code_spec_auditor_delegation_signing_key",
+    "persona": "code_spec_auditor",
+    "claim_refs": [
+      9,
+      15,
+      19
+    ],
+    "category": "112",
+    "finding": "Claims 9(g), 15(c)(iv), and 19 require 'an EdDSA signature of the delegator over a delegation token,' but the specification never discloses what key the delegating agent uses to sign. The AgentPolicy circuit (Section 3) uses the OPERATOR's EdDSA key to sign the credential commitment \u2014 this is the human operator's key, not the agent's own key. For delegation, the delegator is an AI agent, not a human operator. The specification does not disclose: (a) whether agents have their own EdDSA keypairs separate from the operator's key, (b) how such keys are generated or managed, (c) whether the operator must be online for every delegation hop, or (d) how the delegation circuit's EdDSA verifier obtains the delegator's public key (it is not part of the credential commitment's five fields as a standalone agent key). This is a fatal enablement gap \u2014 a person skilled in the art cannot implement delegation signing without knowing whose key is used.",
+    "recommended_direction": "Disclose explicitly that either: (a) the operator key from the credential commitment is reused for delegation signing (requiring operator involvement at every hop, undermining autonomous agent operation), or (b) agents derive their own EdDSA keypair and the credential commitment is extended to include it, or (c) a separate agent key registry is maintained. Amend the circuit description and claims to specify the signing key's provenance. Under Ariad v. Eli Lilly, 598 F.3d 1336 (Fed. Cir. 2010, en banc), the specification must demonstrate possession of the full scope.",
+    "evidence": "Claim 9(g): 'verifying, within the circuit, an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp.' Section 3.2: credential commitment = Poseidon5(modelHash, operatorPubkeyAx, operatorPubkeyAy, permissionBitmask, expiryTimestamp) \u2014 only the operator's key is included. Section 5.4: 'The delegator signs a delegation token...using EdDSA over the Baby Jubjub curve' \u2014 whose key? Not specified.",
+    "attack_id": "code_spec_auditor_delegation_signing_key",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 6,
+    "total": 23,
+    "priority": "high"
+  }
+]

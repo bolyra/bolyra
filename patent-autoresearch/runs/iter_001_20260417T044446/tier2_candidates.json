@@ -1,0 +1,294 @@
+[
+  {
+    "id": "cand_obviousness_hunter_root_history_buffer_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      6
+    ],
+    "original_language": "The method of claim 1, wherein verifying the second zero-knowledge proof comprises checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, accommodating tree updates between proof generation and verification.",
+    "claim_text": "The method of claim 1, wherein verifying the second zero-knowledge proof within the single blockchain transaction of step (d) comprises checking the AI agent's Merkle root against a circular buffer of the last N Merkle roots of the second Merkle tree, and wherein acceptance of the AI agent's Merkle root from said circular buffer is a prerequisite for writing the identity-bound scope commitment into the storage variable of the verifier contract indexed by the session nonce as recited in step (d)(iii), such that the circular buffer check and the chain-state seeding occur atomically within the same transaction that also verifies the first zero-knowledge proof of the human user.",
+    "rationale": "Tornado Cash's MerkleTreeWithHistory operates in a single-tree deposit/withdraw context with no dual-proof verification or chain-state seeding. This revision ties the root buffer check to the novel dual-tree mutual handshake transaction that atomically verifies both human and agent proofs and seeds the delegation chain-state record. The combination of buffer-based root acceptance gating chain-state seeding within a dual-proof atomic transaction is not taught by Tornado.",
+    "targets_weakness": "obviousness_hunter_root_history_buffer",
+    "tradeoffs": "Claim 6 now depends more tightly on the handshake transaction structure of Claim 1, reducing its standalone defensive value. It cannot be asserted against implementations that check the buffer outside the atomic handshake transaction."
+  },
+  {
+    "id": "cand_obviousness_hunter_root_history_buffer_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      7
+    ],
+    "original_language": "The method of claim 6, wherein N equals 30.",
+    "claim_text": "The method of claim 6, wherein N is an immutable constant set at deployment of the identity registry contract and is configurable independently of the maximum depth of the second Merkle tree.",
+    "rationale": "The N=30 constant is identical to Tornado Cash's hardcoded value and invites a single-reference 102 rejection. Replacing the fixed constant with a deployment-configurable immutable parameter removes the aesthetic embarrassment of claiming the exact same value while preserving the claim as a narrowing dependent. This also broadens the claim slightly to cover any chosen buffer size rather than a single number.",
+    "targets_weakness": "obviousness_hunter_root_history_buffer",
+    "tradeoffs": "Loses the specificity of a fixed constant, which some examiners view favorably for concreteness. However, a deployment-configurable constant is still concrete (immutable once deployed) and avoids the 102 problem entirely."
+  },
+  {
+    "id": "cand_obviousness_hunter_root_history_buffer_03",
+    "strategy": "narrow",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "a root history circular buffer storing the last N roots of the second Merkle tree;",
+    "claim_text": "a root history circular buffer storing the last N roots of the second Merkle tree, wherein upon each insertion into the second Merkle tree the resulting root is recorded in said buffer and a corresponding existence mapping is updated, and wherein upon buffer wrap the oldest root is removed from said existence mapping, and wherein the handshake verification function conditions writing the identity-bound scope commitment to the chain-state record on the AI agent's proof referencing a root present in said buffer;",
+    "rationale": "This narrows the system claim's buffer recitation to specify the operational mechanics (insertion, wrap-around eviction from the existence mapping) and, critically, the causal dependency between buffer acceptance and chain-state seeding. Tornado Cash's MerkleTreeWithHistory implements the buffer mechanics but has no chain-state record or scope commitment seeding gated by buffer acceptance. The narrowing makes Claim 16's buffer language defensible as part of the integrated system rather than as a standalone data structure.",
+    "targets_weakness": "obviousness_hunter_root_history_buffer",
+    "tradeoffs": "The added specificity about buffer wrap mechanics and existence-mapping eviction narrows the claim to one implementation pattern. An alternative implementation that, e.g., retains all historical roots without eviction would not infringe this language."
+  },
+  {
+    "id": "cand_competitor_attorney_scope_commitment_restructure_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input",
+    "claim_text": "that a Poseidon hash whose inputs include at least the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input",
+    "rationale": "This broadens independent Claim 9(d) from a fixed two-input Poseidon construction to a genus covering any Poseidon hash whose pre-image includes at least the bitmask and credential commitment. A competitor using Poseidon3 with a blinding salt, reversed argument order, or additional inputs still meets the 'includes at least' limitation. The spec's Section 3.8 disclosure of the three-input blinding-salt variant now falls within the claimed genus rather than outside it, neutralizing the Festo estoppel argument.",
+    "targets_weakness": "competitor_attorney_scope_commitment_restructure",
+    "tradeoffs": "Slightly broader claim may face examiner pushback on definiteness of 'at least' language, and the genus must still be fully supported by the spec's disclosure of both two-input and three-input embodiments. No prosecution history estoppel risk since this broadens rather than narrows."
+  },
+  {
+    "id": "cand_competitor_attorney_scope_commitment_restructure_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "a new scope commitment computed as a two-input Poseidon hash of the delegatee's permission bitmask and the delegatee's credential commitment",
+    "claim_text": "a new scope commitment computed as a Poseidon hash whose inputs include at least the delegatee's permission bitmask and the delegatee's credential commitment",
+    "rationale": "This fixes the second two-input pinch point in independent Claim 9(h), the delegation output. Without this fix, a competitor's delegation circuit outputting Poseidon3(bitmask, credentialCommitment, blindingSalt) would not literally infringe step (h) even if it infringed step (d). Both (d) and (h) must be broadened together to close the design-around for the full delegation chain.",
+    "targets_weakness": "competitor_attorney_scope_commitment_restructure",
+    "tradeoffs": "Same definiteness risk as candidate 01. Both candidates should be applied together to fully close the gap in Claim 9; applying only one leaves an open literal non-infringement argument on the other step."
+  },
+  {
+    "id": "cand_competitor_attorney_scope_commitment_restructure_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      5
+    ],
+    "original_language": "wherein the identity-bound scope commitment output by the second zero-knowledge proof is computed as a two-input Poseidon hash of the AI agent's permission bitmask and the AI agent's credential commitment, binding permission scope to agent identity to prevent impersonation in delegation chains.",
+    "claim_text": "wherein the identity-bound scope commitment output by the second zero-knowledge proof is computed as a Poseidon hash whose inputs include at least the AI agent's permission bitmask and the AI agent's credential commitment, and optionally one or more additional private inputs including a blinding salt, binding permission scope to agent identity to prevent impersonation in delegation chains.",
+    "rationale": "This broadens dependent Claim 5 to a genus that explicitly names the blinding-salt variant as an optional input, capturing the Section 3.8 alternative embodiment within the claim scope. By affirmatively claiming the blinding salt as an optional additional input, the applicant forecloses the attacker's primary design-around (Poseidon3 with blindingSalt) and eliminates the disclosed-but-unclaimed gap that would otherwise support a Festo estoppel argument if narrowing occurs during prosecution.",
+    "targets_weakness": "competitor_attorney_scope_commitment_restructure",
+    "tradeoffs": "Explicitly naming 'blinding salt' in the claim narrows the genus of additional inputs somewhat compared to the pure 'at least' formulation. However, because Claim 5 depends from Claim 1 (which already uses unqualified 'Poseidon hash' language without a two-input limitation), this dependent claim still adds meaningful species coverage while Claim 1 retains full genus breadth."
+  },
+  {
+    "id": "cand_examiner_strict_101_scope_commitment_functional_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      5
+    ],
+    "original_language": "binding permission scope to agent identity to prevent impersonation in delegation chains.",
+    "claim_text": "binding permission scope to agent identity such that any entity possessing a different credential commitment that is Merkle-included in the second Merkle tree cannot reproduce the same scope commitment value, and such that the chain-linking constraint in a delegation circuit rejects any delegation proof in which the Poseidon hash of the prover's actual permission bitmask and credential commitment does not equal the previous scope commitment recorded in the on-chain chain-state mapping.",
+    "rationale": "Replaces the functional result language ('prevent impersonation') with a concrete structural description of what the two-input Poseidon binding actually enforces: different-credential agents produce different commitments, and the chain-linking constraint in the delegation circuit mechanically rejects mismatches. This satisfies Two-Way Media's requirement that claims recite the specific means, not the aspirational result. It also avoids any claim to hiding the bitmask from offline adversaries, which the spec admits is not achieved by the unblinded variant.",
+    "targets_weakness": "examiner_strict_101_scope_commitment_functional",
+    "tradeoffs": "Narrower than the original \u2014 no longer broadly claims 'impersonation prevention' as a result, only the specific Poseidon-commitment-mismatch mechanism. An infringer using a different chain-linking approach (e.g., encryption-based) might avoid this claim."
+  },
+  {
+    "id": "cand_examiner_strict_101_scope_commitment_functional_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "without revealing the delegator's actual permissions;",
+    "claim_text": "wherein the delegator's actual permission bitmask is a private input to the delegation zero-knowledge proof circuit and does not appear as a public signal of the proof or as a value stored in on-chain contract storage, such that no on-chain observer or proof verifier receives the permission bitmask in cleartext;",
+    "rationale": "The original 'without revealing' language is functional \u2014 it claims a privacy result without specifying the concrete mechanism that achieves it, and the spec admits offline enumeration can defeat it. This revision replaces the functional result with the structural fact: the bitmask is a private circuit input, absent from public signals and on-chain storage. This is verifiably true of the disclosed circuit architecture and scopes the non-disclosure guarantee to on-chain observers and proof verifiers, matching the actual threat model described in Section 3.8. An examiner cannot characterize 'private input that does not appear in public signals' as aspirational \u2014 it is a concrete architectural property.",
+    "targets_weakness": "examiner_strict_101_scope_commitment_functional",
+    "tradeoffs": "Explicitly limits the privacy guarantee to on-chain context, which means the claim does not cover offline-enumeration resistance. This is consistent with the spec's own admission and prevents an examiner from using Section 3.8 as an estoppel weapon, but it also means the unblinded variant's claim scope is honestly narrow."
+  },
+  {
+    "id": "cand_examiner_strict_101_scope_commitment_functional_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "an identity-bound scope commitment computed as a Poseidon hash of the AI agent's permission bitmask and the AI agent's credential commitment;",
+    "claim_text": "an identity-bound scope commitment computed as a Poseidon hash whose pre-image includes at least the AI agent's permission bitmask and the AI agent's credential commitment, wherein the permission bitmask is a private input to the second zero-knowledge proof and does not appear as a separate public signal, and wherein in a preferred embodiment the Poseidon hash further includes a random blinding salt as a private input to the second zero-knowledge proof, producing a three-input Poseidon hash of the permission bitmask, the credential commitment, and the blinding salt that is computationally hiding against offline enumeration of the bitmask domain;",
+    "rationale": "Uses genus-with-species structure: the genus covers any Poseidon hash whose pre-image includes at least the bitmask and credential commitment (covering the unblinded Poseidon2 variant), while the preferred-embodiment species recites the blinded Poseidon3 variant with a random blinding salt that is computationally hiding against the 2^64 offline enumeration attack disclosed in Section 3.8. This gives the examiner a clear concrete mechanism (blinding salt) that actually achieves the privacy result, satisfying Two-Way Media's Step 2A requirement. The genus language avoids claiming 'privacy' for the unblinded variant \u2014 it only claims the structural binding \u2014 while the species makes the full privacy-hiding claim with supporting mechanism.",
+    "targets_weakness": "examiner_strict_101_scope_commitment_functional",
+    "tradeoffs": "The genus claim is broader but makes no privacy-hiding assertion, so it may be easier to design around if an infringer uses a non-Poseidon commitment. The species claim is narrower (requires blinding salt) but bulletproof on 101. Using 'preferred embodiment' language in a claim is unusual and an attorney may want to split this into a base claim plus a dependent claim reciting the blinded variant; the current formulation keeps it as a single substitution."
+  },
+  {
+    "id": "cand_competitor_attorney_hash_function_lock_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      1
+    ],
+    "original_language": "(a) maintaining, on a blockchain, a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields including an agent's permission bitmask;",
+    "claim_text": "(a) maintaining, on a blockchain, a first Lean Incremental Merkle Tree storing human identity commitments each computed as an output of an algebraic hash function operating over a native scalar field of the zero-knowledge proving system, applied to EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments each computed as an output of the algebraic hash function applied to agent credential fields including an agent's permission bitmask, wherein all hash commitments, nullifiers, nonce bindings, and scope commitments recited herein are computed using said algebraic hash function;",
+    "rationale": "Broadens the foundational independent claim from the Poseidon species to the genus of algebraic hash functions operating over the proving system's native scalar field. This genus is supported by Section 9.1's functional description of Poseidon as 'an algebraic hash function optimized for arithmetic circuits over prime fields' operating 'over the BN128 scalar field.' The trailing wherein clause propagates the genus to all hash operations in the claim, preventing a competitor from substituting Rescue, Griffin, or Anemoi in any single hash call. Claim 15A and dependent claims retain Poseidon as the preferred species, providing fallback if the genus is narrowed during prosecution.",
+    "targets_weakness": "competitor_attorney_hash_function_lock",
+    "tradeoffs": "LizardTech risk: the spec discloses only Poseidon as a working species. An examiner or challenger could argue the genus is unsupported. Mitigated by (1) the spec's functional description defining the genus, (2) Poseidon-specific dependent claims as fallback, and (3) adding additional species (Rescue-Prime, Griffin) to the non-provisional detailed description before filing, which is permissible new matter in the non-provisional as long as it does not contradict the provisional disclosure."
+  },
+  {
+    "id": "cand_competitor_attorney_hash_function_lock_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "constraining, within the circuit, that the two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;",
+    "claim_text": "constraining, within the circuit, that a two-input output of an algebraic hash function operating over the proving system's native scalar field, applied to the delegator's actual permission bitmask and the delegator's credential commitment, equals a previous scope commitment public input that is derived on-chain from the chain-state mapping indexed by the session nonce, thereby linking the current delegation to both the preceding chain state and the specific Merkle-included delegator identity without revealing the delegator's actual permissions;",
+    "rationale": "Broadens the delegation chain-linking constraint in independent Claim 9 from Poseidon to the same algebraic-hash-function genus used in Candidate 01. The chain-linking hash is the single most critical hash in the delegation architecture \u2014 if a competitor substitutes Griffin here alone, they break literal infringement of the entire delegation claim. This substitution ensures the delegation chain-linking mechanism is covered regardless of which SNARK-friendly hash is used, as long as it operates over the proving system's native field (the functional requirement that makes it circuit-efficient).",
+    "targets_weakness": "competitor_attorney_hash_function_lock",
+    "tradeoffs": "Same LizardTech exposure as Candidate 01. Additionally, Claim 9 still references 'Poseidon hash' in step (g) (delegation token) and step (h) (new scope commitment). For full coverage, those steps would need parallel broadening in a separate revision pass, or a single wherein clause similar to Candidate 01's approach should be appended to Claim 9's preamble."
+  },
+  {
+    "id": "cand_competitor_attorney_hash_function_lock_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "an identity-bound scope commitment computed as a Poseidon hash of the AI agent's permission bitmask and the AI agent's credential commitment;\n(b) recording, upon successful completion of the handshake, the identity-bound scope commitment from step (a) in an on-chain chain-state record indexed by the session nonce",
+    "claim_text": "an identity-bound scope commitment computed as an output of an algebraic hash function operating over the proving system's native scalar field, applied to the AI agent's permission bitmask and the AI agent's credential commitment, wherein each hash commitment, nullifier, scope commitment, and delegation token hash recited in this claim is computed using said algebraic hash function;\n(b) recording, upon successful completion of the handshake, the identity-bound scope commitment from step (a) in an on-chain chain-state record indexed by the session nonce",
+    "rationale": "Broadens Claim 15 \u2014 the narrowest, hardest-to-design-around independent claim that integrates both handshake and delegation \u2014 from Poseidon to the algebraic hash genus. The inserted wherein clause propagates the genus to every hash operation in the claim (including those in steps (c) and (d) that reference scope commitments and delegation tokens), providing comprehensive coverage against hash-function substitution design-arounds. Claim 15A already exists as an Alice safety net and retains the specific Poseidon+Groth16+PLONK+EdDSA+BabyJub stack, so the Poseidon species is preserved as a dependent fallback.",
+    "targets_weakness": "competitor_attorney_hash_function_lock",
+    "tradeoffs": "LizardTech risk as with other candidates. The wherein clause broadening all hashes in the claim is aggressive \u2014 an examiner may require each hash call to be individually recited with genus language rather than covered by a blanket wherein. The advantage is that Claim 15A already anchors the full specific stack, so even if the genus language in Claim 15 is narrowed during prosecution, the patent retains enforceable claims at the species level."
+  },
+  {
+    "id": "cand_competitor_attorney_proving_system_swap_01",
+    "strategy": "delete_problem_language",
+    "claim_refs": [
+      1,
+      2,
+      3
+    ],
+    "original_language": "a first zero-knowledge proof generated using a Groth16 proving system, the first zero-knowledge proof proving Merkle membership of the human user's identity commitment in the first Merkle tree",
+    "claim_text": "a first zero-knowledge proof generated using a succinct non-interactive zero-knowledge proving system, the first zero-knowledge proof proving Merkle membership of the human user's identity commitment in the first Merkle tree",
+    "rationale": "Replaces the specific 'Groth16' limitation in Claim 1(b) with the genus 'succinct non-interactive zero-knowledge proving system,' which covers Groth16, PLONK, Halo2, STARK, FFlonk, UltraPlonk, and any future SNARK/STARK system. Claim 2 already narrows to Groth16+PLONK as a species, so no coverage is lost \u2014 the dependent chain still provides Alice Step 2 specificity. A competitor using all-Halo2 or all-PLONK now infringes the independent claim.",
+    "targets_weakness": "competitor_attorney_proving_system_swap",
+    "tradeoffs": "Broadening the genus weakens the Alice Step 2 argument at the independent claim level (less 'specific technical implementation'), but Claim 2 and 15A still anchor the specific Groth16+PLONK stack for Alice safety. Slightly easier for an examiner to find prior art against a generic SNARK-based handshake."
+  },
+  {
+    "id": "cand_competitor_attorney_proving_system_swap_02",
+    "strategy": "delete_problem_language",
+    "claim_refs": [
+      1,
+      2,
+      3
+    ],
+    "original_language": "a second zero-knowledge proof generated using a PLONK proving system, the second zero-knowledge proof proving Merkle membership of the AI agent's credential commitment in the second Merkle tree",
+    "claim_text": "a second zero-knowledge proof generated using a succinct non-interactive zero-knowledge proving system, the second zero-knowledge proof proving Merkle membership of the AI agent's credential commitment in the second Merkle tree",
+    "rationale": "Companion fix to candidate 01 \u2014 replaces the specific 'PLONK' limitation in Claim 1(c) with the same genus term. Together with candidate 01, this makes independent Claim 1 fully proving-system-agnostic while Claims 2, 3, and 15A preserve the Groth16+PLONK species for Alice anchoring. The competitor's recommended design-around (homogeneous Groth16, all-Halo2, FFlonk variants) would all fall within the genus.",
+    "targets_weakness": "competitor_attorney_proving_system_swap",
+    "tradeoffs": "Same Alice trade-off as candidate 01. Both candidates should be applied together to fully close the design-around; applying only one still leaves half the mixed-prover limitation exploitable."
+  },
+  {
+    "id": "cand_competitor_attorney_proving_system_swap_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "the first zero-knowledge proof uses the Groth16 proving system over the BN128 pairing-friendly elliptic curve; the second zero-knowledge proof uses the PLONK proving system over the BN128 curve;",
+    "claim_text": "the first zero-knowledge proof and the second zero-knowledge proof each use a succinct non-interactive zero-knowledge proving system operating over a pairing-friendly or polynomial-commitment-compatible elliptic curve, wherein the first and second proving systems are independently selected from the group consisting of Groth16, PLONK, FFlonk, UltraPlonk, Halo2, Marlin, and STARK-based proving systems, and wherein the first and second proving systems may be the same proving system or different proving systems;",
+    "rationale": "Rewrites Claim 15A's proving-system limitation as an explicit Markush group that covers both homogeneous (same system for both proofs) and heterogeneous (mixed system) deployments, while enumerating specific species for Alice Step 2. This closes the competitor's recommended design-arounds: all-Halo2, all-Groth16, FFlonk variants, and UltraPlonk are all within the enumerated group. The 'may be the same or different' language explicitly forecloses the homogeneous-system escape route.",
+    "targets_weakness": "competitor_attorney_proving_system_swap",
+    "tradeoffs": "The Markush group is bounded \u2014 a proving system not in the list (e.g., a hypothetical future 'NovaFold' system) could arguably escape. However, the genus language ('succinct non-interactive zero-knowledge proving system') preceding the group provides a fallback capture. The enumeration may invite an examiner to require evidence that each listed system works with the claimed circuit architecture."
+  },
+  {
+    "id": "cand_competitor_attorney_signature_scheme_lock_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      1
+    ],
+    "original_language": "human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields including an agent's permission bitmask",
+    "claim_text": "human identity commitments, each computed as an algebraic hash of public key coordinates derived from a digital signature scheme whose key derivation and signature verification are natively expressible as arithmetic constraints over the zero-knowledge proof system's scalar field, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as algebraic hashes of agent credential fields including an agent's permission bitmask",
+    "rationale": "Replaces 'EdDSA on Baby Jubjub' with a functionally-defined genus: any signature scheme whose operations are arithmetic-constraint-native to the proof system's field. This captures Schnorr-over-Bandersnatch (also BN254-embedded) and any future SNARK-friendly scheme. The spec supports this genus because it explains WHY Baby Jubjub was chosen \u2014 circuit-friendliness via field embedding (Section 9.2) \u2014 which is the functional requirement, not the specific curve. Also generalizes 'Poseidon' to 'algebraic hash' since Poseidon is the species of that genus. Claim 15A and new dependent claims can pin EdDSA/Baby Jubjub/Poseidon as the preferred species.",
+    "targets_weakness": "competitor_attorney_signature_scheme_lock",
+    "tradeoffs": "Moderate Ariad risk \u2014 the spec only literally implements EdDSA/Baby Jubjub. An examiner or challenger could argue the spec does not demonstrate possession of Schnorr/Bandersnatch. Mitigated by the fact that the functional genus is inherent in the spec's rationale (circuit-friendliness), and further mitigated if the spec is amended to briefly disclose alternative SNARK-friendly signature schemes before filing the non-provisional. Also loses the concrete '16,409 constraints' anchor for the human circuit."
+  },
+  {
+    "id": "cand_competitor_attorney_signature_scheme_lock_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "verifying, within the circuit, an EdDSA signature of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp;",
+    "claim_text": "verifying, within the zero-knowledge proof circuit using arithmetic constraints native to the proof system's scalar field, a digital signature of the delegator over a delegation token computed as an algebraic hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp;",
+    "rationale": "Broadens the delegation signature verification from 'EdDSA' to any digital signature verifiable within arithmetic constraints, and 'Poseidon hash' to 'algebraic hash.' The spec supports this because the delegation circuit's structural novelty is the chain-linking mechanism and subset enforcement, not the specific signature primitive \u2014 Section 5.4 describes the signature's ROLE (delegator authorization of a specific delegation token) which is scheme-agnostic. A competitor using Schnorr-over-Bandersnatch for the delegation signature would now still infringe the chain-linking and subset-enforcement structure of Claim 9.",
+    "targets_weakness": "competitor_attorney_signature_scheme_lock",
+    "tradeoffs": "Same Ariad risk as candidate 1 \u2014 spec only implements EdDSA/Poseidon. Slightly lower risk here because the delegation signature is more clearly a pluggable component (the spec's structural description in Section 5 treats it as 'the delegator signs a delegation token' without the signature scheme being load-bearing to the invention). Loses specificity that helps with Alice Step 2 \u2014 but Claim 9 has plenty of other concrete technical anchors (Num2Bits(64), bitwise subset, LessEqThan(64), scope commitment chain linking)."
+  },
+  {
+    "id": "cand_competitor_attorney_signature_scheme_lock_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      4
+    ],
+    "original_language": "both coordinates of the operator's EdDSA public key on the Baby Jubjub elliptic curve, a permission bitmask, and an expiry timestamp",
+    "claim_text": "both coordinates of the operator's public key derived from a digital signature scheme whose verification is expressible as arithmetic constraints over the zero-knowledge proof system's scalar field, a permission bitmask, and an expiry timestamp",
+    "rationale": "Claim 4 defines the agent credential commitment's five-input hash structure. By generalizing the operator key from 'EdDSA on Baby Jubjub' to any circuit-friendly signature scheme, the five-field Poseidon commitment structure (model hash + operator key coordinates + bitmask + expiry) remains the claimed novelty while no longer being escapable by swapping the signature primitive. The spec supports this because the credential commitment's novelty is the five-field binding structure, not the key type \u2014 any SNARK-friendly key pair has two field-element coordinates when the curve is embedded.",
+    "targets_weakness": "competitor_attorney_signature_scheme_lock",
+    "tradeoffs": "Claim 4 is a dependent claim (depends on Claim 1), so this fix alone does not broaden the independent claim. Must be combined with candidate 1 to fully address the weakness. Lower standalone impact but also lower Ariad risk since Claim 4's narrower scope makes the functional genus more defensible \u2014 the five-field structure is the real contribution, and any embedded-curve key pair inherently has two coordinates."
+  },
+  {
+    "id": "cand_enablement_auditor_ai_agent_indefinite_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      1
+    ],
+    "original_language": "A computer-implemented method for privacy-preserving mutual authentication between a human user and an artificial intelligence agent, comprising:",
+    "claim_text": "A computer-implemented method for privacy-preserving mutual authentication between a human user and an artificial intelligence agent, wherein the artificial intelligence agent is a software process that (i) holds an operator-signed credential commitment enrolled in a Lean Incremental Merkle Tree maintained on a blockchain and (ii) autonomously generates or responds to zero-knowledge proof authentication handshakes without requiring per-transaction human approval, the method comprising:",
+    "rationale": "Adds a two-prong structural/functional definition directly in Claim 1's preamble, tying 'artificial intelligence agent' to (i) holding an operator-signed credential commitment that is Merkle-enrolled on-chain and (ii) autonomous handshake participation. This distinguishes the claimed entity from a cron job (no operator-signed credential commitment in a Merkle tree), a stateless microservice (does not autonomously generate ZKP handshakes), and a rules engine (lacks Merkle-enrolled credentials). Satisfies Nautilus reasonable-certainty standard by giving a PHOSITA two concrete structural boundaries.",
+    "targets_weakness": "enablement_auditor_ai_agent_indefinite",
+    "tradeoffs": "Slightly narrows claim scope by excluding software entities that do not hold operator-signed Merkle-enrolled credentials or that require human approval for each handshake. An adversary could design around by avoiding operator signatures, though this would require a fundamentally different trust model."
+  },
+  {
+    "id": "cand_enablement_auditor_ai_agent_indefinite_02",
+    "strategy": "dependent_claim",
+    "claim_refs": [
+      1
+    ],
+    "original_language": "**Claim 8.** The method of claim 1, wherein the first zero-knowledge proof further outputs a nonce binding value computed as a Poseidon hash of a nullifier hash and the session nonce, binding the proof to both the human user's identity and the specific session.",
+    "claim_text": "**Claim 8.** The method of claim 1, wherein the first zero-knowledge proof further outputs a nonce binding value computed as a Poseidon hash of a nullifier hash and the session nonce, binding the proof to both the human user's identity and the specific session.\n\n**Claim 8A.** The method of claim 1, wherein the artificial intelligence agent is a software process that: holds a credential commitment computed as a Poseidon hash of agent credential fields including a model identifier hash, an operator's EdDSA public key coordinates, a permission bitmask, and an expiry timestamp; is enrolled in the second Lean Incremental Merkle Tree by an operator who signs the credential commitment with an EdDSA key on the Baby Jubjub elliptic curve; and autonomously initiates or responds to zero-knowledge proof handshakes by generating PLONK proofs without per-interaction human direction.",
+    "rationale": "Adds a new dependent claim providing a detailed three-part structural definition of 'artificial intelligence agent' tied to the specific credential fields, operator enrollment process, and autonomous proof generation disclosed in the specification. This preserves Claim 1's broader scope while providing a narrower fallback position during prosecution if the examiner issues an indefiniteness rejection. The dependent claim maps directly to Sections 3 and 4 of the specification, ensuring full enablement.",
+    "targets_weakness": "enablement_auditor_ai_agent_indefinite",
+    "tradeoffs": "Does not fix the indefiniteness in independent Claims 9, 15, and 16 directly \u2014 those would need their own definitional clauses or similar dependents. Claim 1 itself remains potentially vulnerable to a 112(b) rejection; the dependent claim is a prosecution fallback, not a preventive fix."
+  },
+  {
+    "id": "cand_enablement_auditor_ai_agent_indefinite_03",
+    "strategy": "positive_structural",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "A system for unified human and artificial intelligence agent identity management with privacy-preserving mutual authentication and composable delegation, the system comprising:\na blockchain-based identity registry contract maintaining:\na first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Lean Incremental Merkle Tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "claim_text": "A system for unified human and artificial intelligence agent identity management with privacy-preserving mutual authentication and composable delegation, the system comprising:\na blockchain-based identity registry contract maintaining:\na first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Lean Incremental Merkle Tree storing AI agent credential commitments, each AI agent credential commitment corresponding to an artificial intelligence agent that is a software process holding an operator-signed credential and autonomously generating zero-knowledge proofs for authentication handshakes or delegation requests without per-interaction human approval, the AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "rationale": "Embeds the structural definition of 'artificial intelligence agent' directly into the system claim's description of the agentTree data structure, establishing that each credential commitment corresponds to an entity meeting the two-prong definition (operator-signed credential + autonomous ZKP generation). This approach defines the term in the claim body rather than the preamble, giving it stronger limiting effect under Federal Circuit precedent. The definition flows naturally from the second Merkle Tree's description, tying the term to the concrete data structure that distinguishes agents from other software.",
+    "targets_weakness": "enablement_auditor_ai_agent_indefinite",
+    "tradeoffs": "Applies only to Claim 16 (system claim); Claims 1, 9, and 15 remain without an inline definition and would need parallel amendments. The 'autonomously generating zero-knowledge proofs' language could arguably exclude agents that rely on a proof-generation service rather than generating proofs in-process, though the specification's architecture implies agent-initiated proof generation."
+  },
+  {
+    "id": "cand_competitor_attorney_no_merkle_tree_required_01",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      1
+    ],
+    "original_language": "a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Lean Incremental Merkle Tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields including an agent's permission bitmask",
+    "claim_text": "a first Merkle tree storing human identity commitments computed as Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve, and a second Merkle tree storing AI agent credential commitments computed as Poseidon hashes of agent credential fields including an agent's permission bitmask",
+    "rationale": "The specification's circuits use the generic BinaryMerkleRoot component from @zk-kit/binary-merkle-root.circom, which computes a Merkle root from any binary Merkle tree \u2014 not solely from a Lean Incremental Merkle Tree. The spec describes Merkle membership proofs, sibling paths, and root computation in generic terms (Sections 2.3, 3.4). Broadening from 'Lean Incremental Merkle Tree' to 'Merkle tree' is supported by this generic circuit disclosure and covers sparse Merkle trees, indexed Merkle trees, and other binary Merkle variants, forcing a competitor to abandon tree-based accumulators entirely (moving to RSA accumulators or KZG) rather than simply swapping LeanIMT for another Merkle variant. LeanIMT remains disclosed as the preferred species and can be captured in a dependent claim.",
+    "targets_weakness": "competitor_attorney_no_merkle_tree_required",
+    "tradeoffs": "Still does not cover non-tree accumulators (RSA, KZG polynomial commitments). A competitor using a fundamentally non-Merkle-tree accumulator can still design around. However, broadening further to 'cryptographic accumulator' risks a written description rejection under LizardTech because the spec discloses only tree-based (Merkle) membership proofs with sibling-path witnesses, not polynomial evaluation proofs or RSA witness computation."
+  },
+  {
+    "id": "cand_competitor_attorney_no_merkle_tree_required_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "maintaining, on a blockchain, a Lean Incremental Merkle Tree storing agent credential commitments and a session-indexed on-chain chain-state record",
+    "claim_text": "maintaining, on a blockchain, a Merkle tree storing agent credential commitments and a session-indexed on-chain chain-state record",
+    "rationale": "Claim 9 is the independent delegation claim. The delegation circuit's chain-linking mechanism (Poseidon hash of scope and credential commitment) is entirely independent of whether the underlying membership data structure is a LeanIMT or any other Merkle tree variant \u2014 the circuit only consumes a Merkle root and sibling path via BinaryMerkleRoot. Broadening to 'Merkle tree' in this claim prevents a competitor from implementing the identical scope-commitment-chain-linking delegation protocol with a sparse Merkle tree or indexed Merkle tree while avoiding infringement. The novel delegation chain-linking mechanism \u2014 not the tree implementation \u2014 is the inventive contribution of Claim 9.",
+    "targets_weakness": "competitor_attorney_no_merkle_tree_required",
+    "tradeoffs": "Same limitation as Candidate 1: non-tree accumulators remain outside scope. Additionally, broadening only Claim 9 without also broadening Claim 1 leaves the handshake claim narrow, so a competitor could design around the handshake (Claim 1) while potentially infringing the delegation (Claim 9) only if they use a Merkle tree for delegation."
+  },
+  {
+    "id": "cand_competitor_attorney_no_merkle_tree_required_03",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      16
+    ],
+    "original_language": "a first Lean Incremental Merkle Tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Lean Incremental Merkle Tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "claim_text": "a first Merkle tree storing human identity commitments computed as Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve;\na second Merkle tree storing AI agent credential commitments computed as five-input Poseidon hashes of agent credential fields including a model identifier hash, both coordinates of an operator's EdDSA public key, a permission bitmask, and an expiry timestamp;",
+    "rationale": "Claim 16 is the system claim \u2014 the apparatus-form counterpart to the method claims. Broadening the tree limitation here ensures the three-legged stool (method Claims 1 and 9, system Claim 16, CRM Claims 20-22) all benefit from the wider genus. Claim 16 retains substantial structural specificity (five-input Poseidon credential commitment, root history circular buffer, three separate verifier contracts, dual handshake and delegation verification functions) that independently narrows the claim and satisfies Alice Step 2, so removing 'Lean Incremental' does not create an abstractness vulnerability. The existing dependent Claim 15A already recites the full LeanIMT + depth-20 species as an Alice safety net.",
+    "targets_weakness": "competitor_attorney_no_merkle_tree_required",
+    "tradeoffs": "The system claim becomes slightly broader, which may invite more prior art challenges at the Merkle-tree level. However, the five-input Poseidon credential commitment structure, the dual-tree architecture with root history buffer, and the three-verifier-contract topology remain highly specific structural limitations that distinguish over generic Merkle tree prior art."
+  }
+]
