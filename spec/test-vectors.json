@@ -1,0 +1,215 @@
+{
+  "version": "0.1.0",
+  "vectors": [
+    {
+      "id": "valid-handshake-basic",
+      "description": "Valid mutual handshake with minimum permissions",
+      "type": "handshake",
+      "inputs": {
+        "humanSecret": "123456789",
+        "agentModelHash": "12345",
+        "agentPermissions": "0x07",
+        "agentExpiry": "1750000000",
+        "requiredScope": "0x03",
+        "sessionNonce": "42"
+      },
+      "expected": {
+        "result": "PASS",
+        "humanNullifierDeterministic": true,
+        "agentScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "expired-credential",
+      "description": "Agent credential has expired — currentTimestamp >= expiryTimestamp fails LessThan(64)",
+      "type": "handshake",
+      "inputs": {
+        "agentPermissions": "0x07",
+        "agentExpiry": "1000000000",
+        "currentTimestamp": "1750000000",
+        "requiredScope": "0x03",
+        "sessionNonce": "43"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "credential_expired",
+        "failsAt": "AgentPolicy circuit: LessThan(64) constraint notExpired.out === 1"
+      }
+    },
+    {
+      "id": "insufficient-permissions",
+      "description": "Agent permissions don't satisfy required scope — bit 1 required but not set",
+      "type": "handshake",
+      "inputs": {
+        "agentPermissions": "0x01",
+        "requiredScope": "0x03",
+        "agentExpiry": "1800000000",
+        "currentTimestamp": "1750000000",
+        "sessionNonce": "44"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "scope_violation",
+        "failsAt": "AgentPolicy circuit: requiredBits[1] * (1 - permBits[1]) !== 0"
+      }
+    },
+    {
+      "id": "valid-delegation-single-hop",
+      "description": "Valid single-hop delegation narrowing permissions from 0xFF to 0x0F",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0xFF",
+        "delegateeScope": "0x0F",
+        "delegatorExpiry": "1800000000",
+        "delegateeExpiry": "1750000000"
+      },
+      "expected": {
+        "result": "PASS",
+        "scopeNarrowed": true,
+        "expiryNarrowed": true,
+        "newScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "scope-escalation-attack",
+      "description": "Delegatee attempts to gain permissions delegator doesn't have — bit 1 escalation",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x01",
+        "delegateeScope": "0x03"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "scope_escalation",
+        "failsAt": "Delegation circuit: delegateeBits[1] * (1 - delegatorBits[1]) !== 0"
+      }
+    },
+    {
+      "id": "expiry-escalation-attack",
+      "description": "Delegatee attempts to extend expiry beyond delegator — LessEqThan(64) fails",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x07",
+        "delegateeScope": "0x03",
+        "delegatorExpiry": "1750000000",
+        "delegateeExpiry": "1800000000"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "expiry_escalation",
+        "failsAt": "Delegation circuit: LessEqThan(64) expiryCheck.out !== 1"
+      }
+    },
+    {
+      "id": "cumulative-bit-violation",
+      "description": "Permission bit 4 set without bit 3 — 0x15 = 0b10101 has bit 4 and bit 2 but not bit 3",
+      "type": "enrollment",
+      "inputs": {
+        "permissionBitmask": "0x15"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "cumulative_bit_violation",
+        "failsAt": "AgentPolicy circuit: bitmaskBits[4] * (1 - bitmaskBits[3]) !== 0"
+      }
+    },
+    {
+      "id": "valid-delegation-chain-3-hops",
+      "description": "Valid 3-hop delegation chain with narrowing at each step",
+      "type": "delegation_chain",
+      "inputs": {
+        "hops": [
+          {"delegatorScope": "0xFF", "delegateeScope": "0x0F", "delegateeExpiry": "1780000000"},
+          {"delegatorScope": "0x0F", "delegateeScope": "0x03", "delegateeExpiry": "1760000000"},
+          {"delegatorScope": "0x03", "delegateeScope": "0x01", "delegateeExpiry": "1740000000"}
+        ]
+      },
+      "expected": {
+        "result": "PASS",
+        "hopCount": 3,
+        "finalScope": "0x01",
+        "chainLinkingVerified": true,
+        "eachHopScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "delegation-chain-exceeds-max-hops",
+      "description": "4th delegation hop rejected by on-chain hop counter (MAX_DELEGATION_HOPS = 3)",
+      "type": "delegation_chain",
+      "inputs": {
+        "hops": [
+          {"delegatorScope": "0xFF", "delegateeScope": "0x7F"},
+          {"delegatorScope": "0x7F", "delegateeScope": "0x3F"},
+          {"delegatorScope": "0x3F", "delegateeScope": "0x1F"},
+          {"delegatorScope": "0x1F", "delegateeScope": "0x0F"}
+        ]
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "max_hops_exceeded",
+        "failAtHop": 3,
+        "revertError": "MaxDelegationHopsExceeded()"
+      }
+    },
+    {
+      "id": "nonce-replay-attack",
+      "description": "Second handshake with same nonce rejected by on-chain usedNonces mapping",
+      "type": "handshake",
+      "inputs": {
+        "sessionNonce": "42",
+        "isReplay": true
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "nonce_already_used",
+        "revertError": "NonceAlreadyUsed()"
+      }
+    },
+    {
+      "id": "delegation-without-handshake",
+      "description": "Delegation attempted without prior handshake for this sessionNonce",
+      "type": "delegation",
+      "inputs": {
+        "sessionNonce": "99999",
+        "delegatorScope": "0xFF",
+        "delegateeScope": "0x0F"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "delegation_requires_handshake",
+        "revertError": "DelegationRequiresHandshake()"
+      }
+    },
+    {
+      "id": "scope-chain-mismatch",
+      "description": "Delegation proof's previousScopeCommitment does not match on-chain state",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0xFF",
+        "delegateeScope": "0x0F",
+        "previousScopeCommitmentTampered": true
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "scope_chain_mismatch",
+        "revertError": "ScopeChainMismatch()"
+      }
+    },
+    {
+      "id": "phantom-delegatee-attack",
+      "description": "Delegation to non-enrolled agent — delegateeMerkleRoot not in agentRootExists",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0xFF",
+        "delegateeScope": "0x0F",
+        "delegateeEnrolled": false
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "stale_agent_root",
+        "revertError": "StaleAgentRoot()",
+        "note": "CIP-1: delegatee Merkle inclusion proof prevents phantom delegatees"
+      }
+    }
+  ]
+}
