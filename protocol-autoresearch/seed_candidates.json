@@ -1,0 +1,142 @@
+[
+  {
+    "id": "phantom-delegatee-fix",
+    "title": "Fix phantom delegatee vulnerability",
+    "dimension": "correctness",
+    "description": "Add delegatee Merkle inclusion check to the Delegation circuit. Currently the delegatee credential commitment is a private input with no proof it exists in any tree.",
+    "priority": "critical"
+  },
+  {
+    "id": "human-root-history",
+    "title": "Add human tree root history buffer",
+    "dimension": "correctness",
+    "description": "Add a root history buffer for humanTree matching agentTree's existing 30-root buffer. Currently proofs go stale immediately on any new enrollment.",
+    "priority": "high"
+  },
+  {
+    "id": "scope-blinding-salt",
+    "title": "Scope commitment blinding salt",
+    "dimension": "correctness",
+    "description": "Replace Poseidon2(bitmask, credCmt) with Poseidon3(bitmask, credCmt, blindingSalt) to prevent brute-force of the 64-bit scope space.",
+    "priority": "medium"
+  },
+  {
+    "id": "formal-verification-properties",
+    "title": "Formal verification circuit invariants",
+    "dimension": "correctness",
+    "description": "Write invariant properties for all 3 circuits: no field overflow, nullifier uniqueness, scope monotonicity across delegation chain.",
+    "priority": "medium"
+  },
+  {
+    "id": "fuzz-harness",
+    "title": "Constraint-level fuzzer",
+    "dimension": "correctness",
+    "description": "Build a fuzzer that generates random valid/invalid witness inputs and checks that valid witnesses produce valid proofs and invalid witnesses are rejected.",
+    "priority": "medium"
+  },
+  {
+    "id": "recursive-delegation-nova",
+    "title": "Recursive delegation via Nova folding",
+    "dimension": "completeness",
+    "description": "Replace iterative delegation hops with a single recursive SNARK (Nova folding). One proof covers the entire delegation chain regardless of depth.",
+    "priority": "high"
+  },
+  {
+    "id": "platform-attestation-circuit",
+    "title": "Platform attestation circuit",
+    "dimension": "completeness",
+    "description": "New circuit verifying an agent runs on attested hardware (TPM/SEV/TDX) by checking a platform certificate chain inside the circuit.",
+    "priority": "medium"
+  },
+  {
+    "id": "behavioral-sybil-circuit",
+    "title": "Behavioral sybil resistance circuit",
+    "dimension": "completeness",
+    "description": "Proves a human exhibits sufficient behavioral entropy (typing cadence, interaction patterns) without revealing raw data. Upgrades from proof-of-enrollment to proof-of-human-ness.",
+    "priority": "high"
+  },
+  {
+    "id": "cross-chain-bridge",
+    "title": "Cross-chain verification bridge",
+    "dimension": "completeness",
+    "description": "Deploy verification on a second chain and implement cross-chain root sync via storage proof or light client attestation.",
+    "priority": "medium"
+  },
+  {
+    "id": "offchain-verification",
+    "title": "Off-chain verification with on-chain checkpoints",
+    "dimension": "completeness",
+    "description": "Generate proofs off-chain, batch them, post a Merkle root of verified sessions on-chain at intervals. 100x gas reduction for high-throughput.",
+    "priority": "medium"
+  },
+  {
+    "id": "typescript-sdk-core",
+    "title": "@bolyra/sdk TypeScript core",
+    "dimension": "adoption",
+    "description": "Core SDK: createIdentity(), enrollHuman(), enrollAgent(), proveHandshake(), verifyHandshake(), delegate(). Full TypeScript types. <10 lines to hello-world.",
+    "priority": "critical"
+  },
+  {
+    "id": "python-sdk-core",
+    "title": "bolyra Python SDK",
+    "dimension": "adoption",
+    "description": "PyPI package wrapping snarkjs via subprocess. Same API surface as TypeScript. Targets LangChain/CrewAI developers.",
+    "priority": "high"
+  },
+  {
+    "id": "langchain-bolyra-tool",
+    "title": "LangChain BolyraAuthTool",
+    "dimension": "adoption",
+    "description": "BaseTool wrapping the SDK for mutual auth before sensitive operations. Structured output for agent chains.",
+    "priority": "high"
+  },
+  {
+    "id": "crewai-delegation-tool",
+    "title": "CrewAI delegation integration",
+    "dimension": "adoption",
+    "description": "Maps CrewAI task delegation to Bolyra delegation circuit. Agents can delegate with cryptographically enforced scope narrowing.",
+    "priority": "medium"
+  },
+  {
+    "id": "error-messages-overhaul",
+    "title": "Descriptive error codes",
+    "dimension": "adoption",
+    "description": "Replace generic revert strings with descriptive error codes including the specific failure reason (stale root, revoked identity, etc.).",
+    "priority": "medium"
+  },
+  {
+    "id": "ietf-draft-core",
+    "title": "IETF internet-draft core spec",
+    "dimension": "standards",
+    "description": "Core protocol specification with RFC 2119 keywords. Sections: Introduction, Terminology, Protocol Overview, Circuit Specifications, Wire Format, Security Considerations.",
+    "priority": "critical"
+  },
+  {
+    "id": "w3c-did-binding",
+    "title": "W3C DID method binding",
+    "dimension": "standards",
+    "description": "Map Bolyra identities to did:bolyra:<commitment>. Define DID Document structure, resolution algorithm, VC issuance flow for handshake results.",
+    "priority": "high"
+  },
+  {
+    "id": "conformance-test-suite",
+    "title": "Conformance test suite",
+    "dimension": "standards",
+    "description": "50+ JSON test vectors covering: valid handshake, expired credential, revoked human, stale root, scope mismatch, delegation chain (1/3/4 hops), cross-chain root.",
+    "priority": "high"
+  },
+  {
+    "id": "formal-grammar",
+    "title": "ABNF wire format grammar",
+    "dimension": "standards",
+    "description": "Machine-parseable ABNF grammar for proof payloads, public signals, enrollment requests, delegation tokens.",
+    "priority": "medium"
+  },
+  {
+    "id": "nist-alignment-analysis",
+    "title": "NIST SP 800-63B alignment",
+    "dimension": "standards",
+    "description": "Map Bolyra authentication factors to AAL2/AAL3 authenticator assurance levels under NIST Digital Identity Guidelines.",
+    "priority": "medium"
+  }
+]
