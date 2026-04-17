@@ -63,7 +63,7 @@ Return ONLY a JSON array (no markdown fences) with {k} objects:
 def _build_prompt(attack: dict, patent_text: str, k: int) -> str:
     return CANDIDATE_PROMPT.format(
         attack_json=json.dumps(attack, indent=2),
-        patent_text=patent_text[:20000],
+        patent_text=patent_text[:120000],
         k=k,
         attack_id=attack["id"],
     )

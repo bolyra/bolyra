@@ -68,17 +68,28 @@ def _parse_baseline_response(raw: str) -> dict[str, Any]:
     return data
 
 
-def score_baseline(patent_text: str, *, model: str = "opus", timeout: int = 600) -> dict[str, Any]:
+def score_baseline(
+    patent_text: str,
+    *,
+    model: str = "opus",
+    timeout: int = 600,
+    max_chars: int = 120000,
+) -> dict[str, Any]:
     """Score the whole patent on 5 dimensions + per-claim breakdown.
 
     Args:
-        patent_text: full markdown of the patent draft (truncated at 30000 chars)
+        patent_text: full markdown of the patent draft. Truncated at max_chars
+            to stay within CLI argv and model context limits. The default 120k
+            covers the full IdentityOS patent (~69k chars) with headroom; the
+            prior 30k limit silently truncated mid-paragraph and led the judge
+            to report a non-existent spec truncation as a 112 red flag.
         model: Claude model alias (default opus for depth)
         timeout: seconds; default 600 since this is a big single-shot judgment
+        max_chars: truncation threshold to stay within prompt limits
 
     Returns:
         dict with keys: alice_101, obviousness_103, support_112, design_around, scope, total
     """
-    prompt = BASELINE_PROMPT.format(patent_text=patent_text[:30000])
+    prompt = BASELINE_PROMPT.format(patent_text=patent_text[:max_chars])
     raw = call_claude_cli(prompt, model=model, timeout=timeout)
     return _parse_baseline_response(raw)

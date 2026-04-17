@@ -81,7 +81,7 @@ def _build_prompt(persona: dict, patent_text: str, prior_art: list, case_law: li
         role=persona["role"],
         focus=", ".join(persona["focus"]),
         persona_id=persona["id"],
-        patent_text=patent_text[:30000],
+        patent_text=patent_text[:120000],
         prior_art=json.dumps(prior_art, indent=2)[:8000],
         case_law=json.dumps(case_law, indent=2)[:6000],
     )
