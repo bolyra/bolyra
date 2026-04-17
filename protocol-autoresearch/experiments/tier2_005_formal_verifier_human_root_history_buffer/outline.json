@@ -1,0 +1,46 @@
+{
+  "id": "formal_verifier_human_root_history_buffer",
+  "title": "Add root history buffer for humanTree matching agentTree's 30-root buffer",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/IdentityRegistry.sol",
+      "description": "Add uint256[30] humanRootHistory array and uint256 humanRootHistoryIndex pointer alongside existing agentRootHistory/agentRootIndex. Add humanRootExists mapping for O(1) lookup. Update enrollHuman() to push new humanMerkleRoot into the ring buffer with the same rotation logic used for agentRootHistory. Update verifyHandshake() to check humanMerkleRoot against humanRootExists instead of a live-tree equality check."
+    },
+    {
+      "type": "test",
+      "filename": "test/IdentityRegistry.humanRootBuffer.t.sol",
+      "description": "Foundry fuzz tests covering: (1) proof accepted when humanMerkleRoot matches any of the 30 historical roots, (2) proof rejected when root is older than buffer window (31st enrollment ago), (3) buffer rotation correctness at index wraparound (index 29 \u2192 0), (4) enrollHuman emits HumanRootAdded event with correct slot, (5) concurrent agent and human enrollments do not corrupt each other's buffers."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/human_root_history_buffer.md",
+      "description": "Formal specification: invariants (humanRootHistory always contains the last min(n,30) distinct roots; humanRootExists[r] iff r appears in current buffer window), liveness argument (proof generated immediately before any enrollment remains valid for up to 29 subsequent enrollments), security argument (stale root beyond window correctly rejected)."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/protocol-changes/human-root-buffer.md",
+      "description": "Migration notes: storage layout delta, ABI changes to verifyHandshake, recommended client-side proof freshness window, and upgrade path if IdentityRegistry is behind a proxy."
+    }
+  ],
+  "steps": [
+    "Audit existing agentRootHistory implementation in IdentityRegistry.sol to extract the exact ring-buffer and mapping pattern to replicate verbatim for humanTree.",
+    "Add storage variables: `uint256[30] public humanRootHistory`, `uint256 public humanRootHistoryIndex`, and `mapping(uint256 => bool) public humanRootExists` immediately after their agent counterparts to preserve storage layout coherence.",
+    "In enrollHuman(): after computing the new humanMerkleRoot, (a) set humanRootExists[expiredRoot] = false where expiredRoot = humanRootHistory[humanRootHistoryIndex], (b) write humanRootHistory[humanRootHistoryIndex] = newRoot, (c) set humanRootExists[newRoot] = true, (d) increment humanRootHistoryIndex modulo 30. Emit HumanRootAdded(newRoot, humanRootHistoryIndex).",
+    "In verifyHandshake(): replace the live-root equality check (`humanMerkleRoot == currentHumanRoot`) with `require(humanRootExists[proof.humanMerkleRoot], 'stale human root')`.",
+    "Remove any now-redundant `currentHumanRoot` state variable if it existed only for the equality check; otherwise retain it for off-chain indexing with a clear comment.",
+    "Write Foundry unit tests covering the five scenarios listed in the test artifact; ensure all pass with `forge test --match-path test/IdentityRegistry.humanRootBuffer.t.sol -vvv`.",
+    "Run `forge coverage` and confirm branch coverage \u2265 95% for the modified functions.",
+    "Run slither and aderyn static analysis; resolve any new findings introduced by the storage additions.",
+    "Update the formal spec document with invariants and liveness/safety arguments.",
+    "Update CHANGELOG and migration docs; if contract is upgradeable, prepare and test the storage-compatible upgrade script."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry.sol \u2014 existing agentRootHistory ring-buffer implementation (pattern source)",
+    "HumanUniqueness circuit \u2014 must output humanMerkleRoot as a public signal consumed by verifyHandshake",
+    "enrollHuman() function signature \u2014 must remain unchanged externally; only internal state mutations added",
+    "Proxy/upgrade pattern (if any) \u2014 storage layout must be append-only to avoid slot collisions",
+    "Foundry test suite \u2014 existing test helpers for tree construction and proof generation"
+  ]
+}

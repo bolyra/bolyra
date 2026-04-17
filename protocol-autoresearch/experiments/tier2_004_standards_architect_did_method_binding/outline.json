@@ -1,0 +1,93 @@
+{
+  "id": "standards_architect_did_method_binding",
+  "title": "W3C DID Method Specification: did:bolyra",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-bolyra-method-spec.md",
+      "description": "W3C DID Core v1.0-conformant method specification. Defines ABNF grammar for did:bolyra:<tree>:<commitment>, DID Document structure, CRUD operations (create/read only \u2014 no update/deactivate for on-chain commitments), resolution metadata schema, and security/privacy considerations section."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-document-schema.json",
+      "description": "JSON Schema for the bolyra DID Document. Maps identityCommitment to a JsonWebKey2020 assertionMethod and credentialCommitment to a keyAgreement entry. Includes Baby Jubjub JWK parameters (kty='OKP', crv='BabyJubJub', x, y as base64url-encoded field elements). Merkle root encoded as serviceEndpoint metadata."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-types/Groth16Proof2024.jsonld",
+      "description": "JSON-LD context document registering Groth16Proof2024 as a W3C VC proof type extension. Defines proof fields: verificationMethod (DID URL), proofPurpose, created, pi_a, pi_b, pi_c, publicSignals, protocol='groth16', curve='bn128'."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-types/PlonkProof2024.jsonld",
+      "description": "JSON-LD context document registering PlonkProof2024 as a W3C VC proof type extension. Defines proof fields: verificationMethod, proofPurpose, created, proof (hex-encoded), publicSignals, protocol='plonk', curve='bn128'."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/BolyraDidResolver.sol",
+      "description": "On-chain DID resolver. Given a commitment, queries the LeanIMT contract for tree membership (returns inclusion witness). Exposes resolve(bytes32 tree, uint256 commitment) view returning (bytes32 merkleRoot, bool isMember, uint256 leafIndex). Emits DIDResolved event. Conforms to ERC-3668 (CCIP-Read) for off-chain resolution fallback."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/resolver/did-bolyra-resolver.ts",
+      "description": "TypeScript DID resolver plugin conforming to the did-resolver npm interface. Implements getResolver() returning a ResolverRegistry for 'bolyra' method. Parses DID into (tree, commitment), calls BolyraDidResolver.sol via ethers.js, constructs a fully-compliant DIDResolutionResult with DIDDocument, didDocumentMetadata (merkleRoot, leafIndex, chainId, blockNumber), and didResolutionMetadata."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/vc/vc-issuer.ts",
+      "description": "VC issuance module. After a successful handshake (ZK proof verified on-chain), constructs a W3C VerifiableCredential with subject = did:bolyra DID, credential type 'BolyraIdentityCredential', and attaches either Groth16Proof2024 or PlonkProof2024 depending on the proof system used. Signs the outer VC envelope with the issuer's Ed25519 key. Exports issueCredential(handshakeReceipt, proofType) async function."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/vc/vc-verifier.ts",
+      "description": "VC verification module. Resolves issuer DID, fetches verification method, verifies outer signature, then re-runs the Groth16 or Plonk verifier against the embedded proof and publicSignals. Checks merkleRoot in proof matches current on-chain root via BolyraDidResolver. Exports verifyCredential(vc) returning a VerificationResult."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/jwk/babyjubjub-jwk.ts",
+      "description": "Baby Jubjub JWK codec. Converts a packed 256-bit Baby Jubjub public key (field element) into a JsonWebKey2020-compliant JWK object and back. Implements exportJWK(publicKey: bigint): JsonWebKey and importJWK(jwk: JsonWebKey): bigint. Registers 'BabyJubJub' as a named curve identifier."
+    },
+    {
+      "type": "test",
+      "filename": "tests/spec-conformance/did-resolution.test.ts",
+      "description": "Conformance tests against W3C DID Core Test Suite. Validates DID syntax parsing, DID Document structure (required properties, verification method types), resolution metadata fields, and error responses (notFound, invalidDid, methodNotSupported). Runs against a local Hardhat fork with deployed LeanIMT + BolyraDidResolver."
+    },
+    {
+      "type": "test",
+      "filename": "tests/spec-conformance/vc-issuance.test.ts",
+      "description": "VC issuance and verification integration tests. Simulates a full handshake, issues a BolyraIdentityCredential with both Groth16Proof2024 and PlonkProof2024, then verifies with vc-verifier.ts. Includes stale-root rejection test (merkle root rotated after issuance) and cross-wallet presentation test using the Veramo SDK as an external verifier."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/wallet-integration-guide.md",
+      "description": "Integration guide for W3C VC wallet developers. Covers: registering did:bolyra resolver with did-resolver, importing Groth16Proof2024/PlonkProof2024 JSON-LD contexts, presenting BolyraIdentityCredentials to a verifier, and handling merkle-root staleness. Includes worked examples using Veramo and SpruceID DIDKit."
+    }
+  ],
+  "steps": [
+    "Define ABNF grammar: did:bolyra:<tree-id>:<commitment-hex> where tree-id is a 32-byte hex tree identifier and commitment-hex is a 64-char hex-encoded Poseidon hash",
+    "Specify DID Document template: id, @context (DID Core + JsonWebKey2020 + Bolyra extension), two verificationMethods (identityCommitment \u2192 assertionMethod, credentialCommitment \u2192 keyAgreement), and a 'BolyraTree' service endpoint embedding merkleRoot and chainId",
+    "Define Baby Jubjub JWK representation: kty='OKP', crv='BabyJubJub', x and y as base64url-encoded 32-byte big-endian field elements; implement babyjubjub-jwk.ts codec",
+    "Implement BolyraDidResolver.sol: read-only resolver querying LeanIMT for (tree, commitment) membership; return (merkleRoot, leafIndex, isMember); add ERC-3668 CCIP-Read support for L2 deployments",
+    "Implement did-bolyra-resolver.ts conforming to did-resolver interface: parse DID, call on-chain resolver, construct DIDResolutionResult with full didDocumentMetadata",
+    "Register Groth16Proof2024 and PlonkProof2024 as JSON-LD proof type extensions: define context documents, map proof fields (pi_a/pi_b/pi_c for Groth16; serialized proof bytes for Plonk), publish to spec/proof-types/",
+    "Implement vc-issuer.ts: post-handshake, extract ZK proof and publicSignals from on-chain tx receipt, build W3C VC envelope, attach appropriate proof type object, sign outer VC with issuer DID key",
+    "Implement vc-verifier.ts: resolve issuer DID, verify outer signature, re-run proof verifier against embedded proof, validate merkleRoot freshness against current on-chain state",
+    "Write DID spec conformance tests (did-resolution.test.ts) covering all DID Core test suite vectors: valid resolution, invalid DID syntax errors, notFound, deactivated states",
+    "Write VC integration tests (vc-issuance.test.ts) covering issuance with both proof types, verification with Veramo as external verifier, and stale-root rejection",
+    "Produce wallet-integration-guide.md with Veramo and DIDKit worked examples, JSON-LD context registration instructions, and merkle-root staleness handling patterns",
+    "Submit did:bolyra method spec to W3C DID Methods Registry via pull request to w3c/did-extensions repository"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "W3C DID Core v1.0 (https://www.w3.org/TR/did-core/)",
+    "W3C VC Data Model v2.0 (https://www.w3.org/TR/vc-data-model-2.0/)",
+    "JsonWebKey2020 spec (https://w3c-ccg.github.io/lds-jws2020/)",
+    "LeanIMT on-chain contract (deployed, provides membership query interface)",
+    "Baby Jubjub elliptic curve implementation (circomlibjs or @zk-kit/baby-jubjub)",
+    "did-resolver npm package (universal resolver interface)",
+    "Groth16 and Plonk on-chain verifier contracts (snarkjs-generated)",
+    "ethers.js v6 (contract interaction)",
+    "Veramo SDK (cross-wallet conformance testing)",
+    "ERC-3668 CCIP-Read standard (L2 resolver fallback)"
+  ]
+}

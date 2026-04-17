@@ -1,0 +1,40 @@
+{
+  "id": "circuit_optimizer_human_root_history_buffer",
+  "title": "Add humanTree root history buffer matching agentTree's 30-root buffer",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/IdentityRegistry.sol",
+      "description": "Add uint256[30] humanRootHistory ring-buffer, humanRootHistoryIndex pointer, _pushHumanRoot() internal helper, and update verifyHandshake() to check humanRootHistory instead of single humanRoot"
+    },
+    {
+      "type": "test",
+      "filename": "test/IdentityRegistry.humanRootHistory.t.sol",
+      "description": "Foundry tests: (1) enroll 31 humans and assert all 30 most-recent roots are valid, oldest is evicted; (2) proof with stale root beyond buffer fails; (3) concurrent enrollment + verify under ring-buffer wrap-around"
+    },
+    {
+      "type": "spec",
+      "filename": "docs/specs/human-root-history.md",
+      "description": "Document liveness requirement, buffer-depth rationale (30 slots @ ~15s prove time = 7.5 min window), and invariants the contract upholds"
+    }
+  ],
+  "steps": [
+    "Read current IdentityRegistry.sol to locate agentRootHistory declaration and _pushAgentRoot() ring-buffer logic as the reference implementation",
+    "Declare parallel storage: `uint256[30] public humanRootHistory` and `uint256 public humanRootHistoryIndex` immediately after the agentTree equivalents",
+    "Add `_pushHumanRoot(uint256 newRoot)` internal function mirroring _pushAgentRoot(): store newRoot at humanRootHistory[humanRootHistoryIndex % 30], increment index",
+    "Replace bare `humanRoot = newRoot` assignment in the human enrollment function with a call to `_pushHumanRoot(newRoot)` and keep the canonical `humanRoot` field updated for backward-compatible reads",
+    "Update verifyHandshake(): replace `require(humanRoot == proof.humanRoot)` with a loop over humanRootHistory checking any slot matches proof.humanRoot (same pattern as agentTree check)",
+    "Add a view helper `isValidHumanRoot(uint256 root) returns (bool)` for off-chain SDK and relayer use",
+    "Write Foundry tests covering: normal buffer fill, ring-buffer wrap at index 30, proof valid against slot N-29, proof rejected for slot N-30 (evicted), and zero-value slot guard on fresh deploy",
+    "Run `forge test --match-contract IdentityRegistryHumanRootHistory` and confirm all pass",
+    "Update SDK root-fetching logic to call isValidHumanRoot() before submitting proofs, and surface a retry hint when the root has just been evicted",
+    "Update docs/specs/human-root-history.md with invariants, buffer depth rationale, and migration note (no circuit changes required)"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry.sol \u2014 existing agentRootHistory ring-buffer implementation (reference pattern)",
+    "verifyHandshake() \u2014 root equality check to be replaced with buffer scan",
+    "Foundry test suite \u2014 existing test harness for IdentityRegistry",
+    "Off-chain SDK proof submission path \u2014 needs isValidHumanRoot() call before submit"
+  ]
+}

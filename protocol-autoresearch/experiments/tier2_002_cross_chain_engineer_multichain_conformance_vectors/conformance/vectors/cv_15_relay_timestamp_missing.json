@@ -1,0 +1,24 @@
+{
+  "vectorId": "cv_15_relay_timestamp_missing",
+  "version": "1.0.0",
+  "category": "relay_timestamp",
+  "description": "Relay timestamp field is absent from the proof public inputs. This is a schema violation — every cross-chain proof submission must include a relay timestamp for the verifier to assess root freshness. A conformant verifier MUST reject this as malformed input.",
+  "sourceChainId": 1,
+  "targetChainId": 137,
+  "relayTimestamp": null,
+  "rootAge": 0,
+  "maxRootAge": 3600,
+  "proof": "0xb5c9d3e7a6f0b4c8d2e1a5f9b3c7d6e0a4b8f2c1d5e9a3f7b6c0d4e8a2f1b5c9d3e7a6f0b4c8d2e1a5f9b3c7d6e0a4b8f2c1d5e9a3f7b6c0d4e8a2f1b5c9d3e7a6f0b4c8d2e1a5f9b3c7d6e0a4b8f2c1d5e9a3f7b6c0d4e8a2f1b5c9d3e7a6f0b4c8d2e1a5f9b3",
+  "publicInputs": [
+    "0x8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c",
+    "0x0000000000000000000000000000000000000000000000000000000000000089"
+  ],
+  "expectedResult": "fail",
+  "failureReason": "RELAY_TIMESTAMP_MISSING",
+  "metadata": {
+    "author": "bolyra-conformance",
+    "createdAt": "2026-04-17",
+    "protocolVersion": "0.5.0",
+    "notes": "publicInputs has only 2 elements (missing the relay timestamp field). The verifier should check input arity before attempting verification. relayTimestamp is null in the vector to indicate absence."
+  }
+}

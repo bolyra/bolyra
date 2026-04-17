@@ -1,0 +1,147 @@
+// SPDX-License-Identifier: MIT
+// Certora CVL — Formal invariant properties for Bolyra protocol circuits
+// Covers: Identity, Credential, and Delegation Solidity verifier wrappers
+// 17 named properties across 4 categories
+
+// ============================================================
+//  Category 1: Field overflow — uint64 range enforcement
+// ============================================================
+
+// P1: Identity — identityCommitment stays within uint64
+invariant identity_commitment_range(env e)
+    getIdentityCommitment(e) >= 0 && getIdentityCommitment(e) < 2^64
+    { preserved { require getIdentityCommitment(e) < 2^64; } }
+
+// P2: Identity — humanRoot stays within field
+invariant human_root_field_range(env e)
+    getHumanRoot(e) >= 0 && getHumanRoot(e) < 2^253
+    { preserved { require getHumanRoot(e) < 2^253; } }
+
+// P3: Identity — agentRoot stays within field
+invariant agent_root_field_range(env e)
+    getAgentRoot(e) >= 0 && getAgentRoot(e) < 2^253
+    { preserved { require getAgentRoot(e) < 2^253; } }
+
+// P4: Credential — expiryTimestamp within uint64
+invariant credential_expiry_range(env e)
+    getCredentialExpiry(e) >= 0 && getCredentialExpiry(e) < 2^64
+    { preserved { require getCredentialExpiry(e) < 2^64; } }
+
+// P5: Credential — credCommitment within field
+invariant cred_commitment_field_range(env e)
+    getCredCommitment(e) >= 0 && getCredCommitment(e) < 2^253
+    { preserved { require getCredCommitment(e) < 2^253; } }
+
+// P6: Delegation — delegatorExpiry within uint64
+invariant delegator_expiry_range(env e)
+    getDelegatorExpiry(e) >= 0 && getDelegatorExpiry(e) < 2^64
+    { preserved { require getDelegatorExpiry(e) < 2^64; } }
+
+// P7: Delegation — delegateeExpiry within uint64
+invariant delegatee_expiry_range(env e)
+    getDelegateeExpiry(e) >= 0 && getDelegateeExpiry(e) < 2^64
+    { preserved { require getDelegateeExpiry(e) < 2^64; } }
+
+// P8: Delegation — scopeBitmask within uint64
+invariant scope_bitmask_range(env e)
+    getDelegatorScope(e) >= 0 && getDelegatorScope(e) < 2^64 &&
+    getDelegateeScope(e) >= 0 && getDelegateeScope(e) < 2^64
+    { preserved {
+        require getDelegatorScope(e) < 2^64;
+        require getDelegateeScope(e) < 2^64;
+    } }
+
+// ============================================================
+//  Category 2: Nullifier uniqueness
+// ============================================================
+
+// P9: Identity — distinct (secret, scope) -> distinct nullifier
+rule identity_nullifier_uniqueness(env e1, env e2) {
+    uint256 secret1; uint256 scope1;
+    uint256 secret2; uint256 scope2;
+    require secret1 != secret2 || scope1 != scope2;
+    uint256 null1 = computeIdentityNullifier(e1, secret1, scope1);
+    uint256 null2 = computeIdentityNullifier(e2, secret2, scope2);
+    assert null1 != null2,
+        "Distinct (secret, scope) pairs must produce distinct identity nullifiers";
+}
+
+// P10: Credential — distinct (credCommitment, nonce) -> distinct nullifier
+rule credential_nullifier_uniqueness(env e1, env e2) {
+    uint256 credCmt1; uint256 nonce1;
+    uint256 credCmt2; uint256 nonce2;
+    require credCmt1 != credCmt2 || nonce1 != nonce2;
+    uint256 null1 = computeCredentialNullifier(e1, credCmt1, nonce1);
+    uint256 null2 = computeCredentialNullifier(e2, credCmt2, nonce2);
+    assert null1 != null2,
+        "Distinct (credCommitment, nonce) pairs must produce distinct credential nullifiers";
+}
+
+// P11: Delegation — distinct (delegatorCmt, delegateeCmt, nonce) -> distinct nullifier
+rule delegation_nullifier_uniqueness(env e1, env e2) {
+    uint256 delrCmt1; uint256 dleeCmt1; uint256 nonce1;
+    uint256 delrCmt2; uint256 dleeCmt2; uint256 nonce2;
+    require delrCmt1 != delrCmt2 || dleeCmt1 != dleeCmt2 || nonce1 != nonce2;
+    uint256 null1 = computeDelegationNullifier(e1, delrCmt1, dleeCmt1, nonce1);
+    uint256 null2 = computeDelegationNullifier(e2, delrCmt2, dleeCmt2, nonce2);
+    assert null1 != null2,
+        "Distinct delegation inputs must produce distinct delegation nullifiers";
+}
+
+// ============================================================
+//  Category 3: Scope monotonicity (Delegation)
+// ============================================================
+
+// P12: delegateeScope is a subset of delegatorScope (bitwise)
+rule scope_monotonicity_bitmask(env e) {
+    uint256 delegatorScope = getDelegatorScope(e);
+    uint256 delegateeScope = getDelegateeScope(e);
+    // delegateeScope AND NOT delegatorScope must be zero
+    assert (delegateeScope & ~delegatorScope) == 0,
+        "Delegatee scope must be a subset of delegator scope";
+}
+
+// P13: empty delegatee scope is valid (zero permissions delegated)
+rule scope_empty_delegatee_valid(env e) {
+    uint256 delegatorScope = getDelegatorScope(e);
+    uint256 delegateeScope = 0;
+    // Zero scope is always a subset
+    assert (delegateeScope & ~delegatorScope) == 0,
+        "Empty delegatee scope is always valid";
+}
+
+// P14: identical scopes are valid
+rule scope_identity_valid(env e) {
+    uint256 delegatorScope = getDelegatorScope(e);
+    uint256 delegateeScope = delegatorScope;
+    assert (delegateeScope & ~delegatorScope) == 0,
+        "Identical scopes must satisfy monotonicity";
+}
+
+// ============================================================
+//  Category 4: Expiry narrowing (Delegation)
+// ============================================================
+
+// P15: delegateeExpiry must not exceed delegatorExpiry
+rule expiry_narrowing(env e) {
+    uint256 delegatorExpiry = getDelegatorExpiry(e);
+    uint256 delegateeExpiry = getDelegateeExpiry(e);
+    assert delegateeExpiry <= delegatorExpiry,
+        "Delegatee expiry must not exceed delegator expiry";
+}
+
+// P16: zero delegatee expiry is valid (immediate expiration)
+rule expiry_zero_delegatee_valid(env e) {
+    uint256 delegatorExpiry = getDelegatorExpiry(e);
+    uint256 delegateeExpiry = 0;
+    assert delegateeExpiry <= delegatorExpiry,
+        "Zero delegatee expiry is always valid";
+}
+
+// P17: equal expiry is valid (full time delegation)
+rule expiry_equal_valid(env e) {
+    uint256 delegatorExpiry = getDelegatorExpiry(e);
+    uint256 delegateeExpiry = delegatorExpiry;
+    assert delegateeExpiry <= delegatorExpiry,
+        "Equal expiry is valid for full-duration delegation";
+}

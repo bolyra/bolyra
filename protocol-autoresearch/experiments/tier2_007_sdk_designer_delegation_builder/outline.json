@@ -1,0 +1,74 @@
+{
+  "id": "sdk_designer_delegation_builder",
+  "title": "Fluent delegation chain builder API",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "src/delegation/types.ts",
+      "description": "TypeScript interfaces: ScopeFlags, DelegationHop, DelegationToken (portable JSON), ChainBuilderConfig, and BitmaskInvariant registry"
+    },
+    {
+      "type": "sdk",
+      "filename": "src/delegation/ScopeBitmask.ts",
+      "description": "Scope bit encoder: maps human-readable flags ({canRead, canWrite, financialLimit}) to uint bitmask; enforces implication invariants (e.g. bit 4 requires bits 2+3) at encode time with descriptive Error throws"
+    },
+    {
+      "type": "sdk",
+      "filename": "src/delegation/CredentialCommitment.ts",
+      "description": "Poseidon-based commitment utilities: computeCredentialCommitment(identity, salt) and computeScopeCommitment(bitmask, nonce) \u2014 thin wrappers over circomlibjs matching circuit expectations"
+    },
+    {
+      "type": "sdk",
+      "filename": "src/delegation/DelegationChainBuilder.ts",
+      "description": "Core fluent builder: DelegationChain.from(agentIdentity) \u2192 HopBuilder; HopBuilder.narrow(ScopeFlags) validates cumulative narrowing (child \u2286 parent), HopBuilder.to(delegateeIdentity).expiresIn(duration) adds hop; .addHop() enables chaining up to 3 hops; .build() threads previousScopeCommitment automatically and serializes to DelegationToken JSON"
+    },
+    {
+      "type": "sdk",
+      "filename": "src/delegation/index.ts",
+      "description": "Public re-exports and convenience factory for the builder package"
+    },
+    {
+      "type": "spec",
+      "filename": "docs/delegation-chain-spec.md",
+      "description": "Canonical bitmask layout table, implication invariant matrix, multi-hop threading algorithm, JSON token schema, and error catalog"
+    },
+    {
+      "type": "test",
+      "filename": "test/delegation/ScopeBitmask.test.ts",
+      "description": "Unit tests: all flag combinations, every invariant violation path, edge cases (zero scope, full scope), round-trip encode/decode"
+    },
+    {
+      "type": "test",
+      "filename": "test/delegation/DelegationChainBuilder.test.ts",
+      "description": "Integration tests: single-hop happy path, 2-hop and 3-hop chains, 4-hop rejection, scope-widening rejection, expired hop, JSON token round-trip, circuit witness compatibility smoke test"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/delegation-chain-builder.md",
+      "description": "Developer guide: quick-start examples, bitmask flag reference, error messages and remediation, circuit input mapping, token verification pattern"
+    }
+  ],
+  "steps": [
+    "Define ScopeFlags interface and canonical 8-bit bitmask layout in types.ts; document which bit positions map to canRead, canWrite, financialLimit tiers, and admin",
+    "Build implication invariant registry in ScopeBitmask.ts: static table mapping each bit to its prerequisite bits; encode(flags) throws BitmaskInvariantError with 'bit N requires bits X,Y' message before returning BigInt",
+    "Implement CredentialCommitment.ts: wrap circomlibjs Poseidon to compute identity commitment (hash of pubkey + salt) and scope commitment (hash of bitmask + nonce); export deterministic helpers used by both builder and circuit prover",
+    "Implement DelegationChain.from(agentIdentity): validates identity shape, initializes hop list, returns a new HopBuilder bound to hop index 0",
+    "Implement HopBuilder.narrow(ScopeFlags): calls ScopeBitmask.encode() for invariant check, then verifies new bitmask is a bitwise subset of parent hop's bitmask (throws ScopeExpansionError if not), stores encoded scope",
+    "Implement HopBuilder.to(delegateeIdentity).expiresIn(duration): parses duration string to absolute Unix timestamp, validates delegatee identity, finalizes current hop record",
+    "Implement HopBuilder.addHop(): enforces MAX_HOPS=3 limit (throws ChainLimitError), returns new HopBuilder for next hop with parent scope reference set",
+    "Implement HopBuilder.build(): iterates hop list, computes each hop's credentialCommitment and scopeCommitment, threads previousScopeCommitment = scopeCommitment[i-1] (null for hop 0), packs all fields into DelegationToken JSON with a version field and chain metadata",
+    "Add toCircuitInputs() method on DelegationToken: flattens token into the flat BigInt arrays expected by the Delegation circuit (scopeBitmasks[], credentialCommitments[], previousScopeCommitments[], expirations[]) with zero-padding to 3-hop length",
+    "Write ScopeBitmask unit tests covering all invariant paths and every valid combination; use property-based approach for exhaustive bit pair coverage",
+    "Write DelegationChainBuilder integration tests: happy-path 1/2/3-hop chains, 4-hop rejection, scope widening rejection, expiresIn parsing, toCircuitInputs() shape validation, and JSON round-trip deserialization",
+    "Write docs/delegation-chain-spec.md: bitmask table, invariant matrix, threading algorithm prose, JSON token schema (JSON Schema format), error catalog",
+    "Write docs/delegation-chain-builder.md: quick-start code example matching the proposal snippet, flag reference table, error remediation guide, circuit integration pattern"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Delegation circuit (existing) \u2014 defines bitmask layout, commitment hash function, and 3-hop wire structure",
+    "circomlibjs \u2014 Poseidon hash matching in-circuit computation",
+    "snarkjs \u2014 witness generation for toCircuitInputs() smoke test",
+    "zod \u2014 runtime validation of identity shapes and token deserialization",
+    "TypeScript 5.x \u2014 satisfies-based exhaustive invariant checks at compile time"
+  ]
+}

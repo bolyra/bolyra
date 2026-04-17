@@ -1,0 +1,58 @@
+{
+  "id": "standards_architect_nist_aal_mapping",
+  "title": "NIST SP 800-63B Authenticator Assurance Level Mapping",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "specs/nist_aal_mapping.md",
+      "description": "Formal analysis document mapping Bolyra authentication factors to NIST SP 800-63B AAL1/AAL2/AAL3. Covers human-side (EdDSA secret + Merkle membership) and agent-side (operator EdDSA + model hash + permission bitmask) authenticator classification, handshake replay/impersonation resistance analysis, and Phase 1 gap findings."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/aal2_gap_analysis.md",
+      "description": "Gap analysis document enumerating what is missing from the current Phase 1 HumanUniqueness circuit to reach AAL2: second authentication factor requirements (biometric/PIN), verifier impersonation resistance proof, nonce lifecycle management, and phishing resistance requirements."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/phase4_aal2_roadmap.md",
+      "description": "Roadmap specifying what Phase 4 behavioral enrollment must implement to satisfy AAL2: binding a memorized secret or biometric as a second factor, ZK-provable PIN/biometric commitment scheme, and updated circuit architecture to encode the second factor witness."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/HumanUniquenessAAL2.circom",
+      "description": "Stub/skeleton Circom circuit extending HumanUniqueness with a second-factor witness (PIN hash or biometric template commitment) to demonstrate the cryptographic shape required for AAL2 compliance. Not production-ready; serves as a concrete reference for the gap analysis."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/ncua_nist_alignment_brief.md",
+      "description": "Executive summary brief written for NCUA examiners. Non-technical language mapping Bolyra protocol phases to NIST AAL levels, citing specific SP 800-63B sections, and declaring current certification posture (AAL1 for human side, AAL2 candidate for agent side pending audit)."
+    },
+    {
+      "type": "test",
+      "filename": "tests/aal_compliance_checklist.yaml",
+      "description": "Machine-readable checklist of NIST SP 800-63B AAL requirements (sections 4.2, 4.3, 5.1) with pass/fail/partial status for current protocol, traceability to spec sections, and owner assignments for open items."
+    }
+  ],
+  "steps": [
+    "Extract authenticator taxonomy from NIST SP 800-63B sections 4.2 (AAL1), 4.3 (AAL2), 4.4 (AAL3) and map to the two Bolyra authenticator surfaces: human-side (EdDSA private key as 'something you have' + Merkle membership proof as binding) and agent-side (operator EdDSA + model hash + permission bitmask as bound multi-factor authenticator).",
+    "Classify the human-side EdDSA key under NIST authenticator type 'Single-factor cryptographic device' (SP 800-63B \u00a75.1.7) and document why the Merkle membership proof alone does not constitute a second factor \u2014 it is a binding assertion, not an independent authentication factor.",
+    "Analyze the handshake protocol nonce lifecycle against AAL2 replay resistance requirements (SP 800-63B \u00a74.3.2): verify that nonces are single-use, server-generated, and cryptographically bound to the session; document any gaps in nonce expiry or replay detection.",
+    "Analyze verifier impersonation resistance (SP 800-63B \u00a74.3.2 requirement): determine whether the EdDSA signature over a server-supplied challenge with domain separation satisfies phishing resistance, or whether a separate TLS channel binding is required.",
+    "Evaluate the agent-side bound authenticator (operator EdDSA + model hash + permission bitmask) against \u00a75.1.8 (Multi-factor cryptographic device) criteria: assess whether the model hash constitutes a verifiable 'something you have' second factor or merely a configuration assertion.",
+    "Document Phase 1 AAL ceiling: the current HumanUniqueness circuit provides proof-of-enrollment (membership in a Merkle tree of enrolled keys) without a second independent factor, capping human-side assurance at AAL1 under \u00a74.2.",
+    "Define the cryptographic requirements for Phase 4 behavioral enrollment to reach AAL2: a second factor commitment (e.g., Poseidon hash of a PIN or biometric template) included as a private witness in the ZK circuit, with the verifier checking the commitment against an enrolled value without learning the PIN/biometric.",
+    "Draft the HumanUniquenessAAL2.circom stub circuit showing the additional private input (pin_hash), the Poseidon commitment check, and the public output structure, to make the AAL2 upgrade path concrete for implementers.",
+    "Populate the aal_compliance_checklist.yaml with every normative AAL1 and AAL2 'SHALL' requirement from SP 800-63B, mark each as PASS/PARTIAL/FAIL for the current protocol, and assign GitHub issue references for each open item.",
+    "Write the ncua_nist_alignment_brief.md targeting NCUA examiners: state current AAL posture per phase, cite SP 800-63B section numbers, and provide a projected timeline to AAL2 on the human side contingent on Phase 4 delivery.",
+    "Peer review all spec artifacts against the actual SP 800-63B text (not paraphrases) to ensure no normative requirements are misquoted or omitted.",
+    "Publish artifacts to the protocol repo under specs/ and docs/, update the top-level README with an 'NIST Alignment' section linking to the mapping and the NCUA brief."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "NIST SP 800-63B (current revision, including September 2023 errata)",
+    "Bolyra handshake protocol spec (nonce structure, domain separation constants)",
+    "HumanUniqueness.circom Phase 1 circuit (private witness layout, public inputs)",
+    "Phase 4 behavioral enrollment design notes (biometric/PIN commitment scheme decisions)",
+    "NCUA Letter to Credit Unions 22-CU-08 (digital identity guidance for federally insured CUs)"
+  ]
+}

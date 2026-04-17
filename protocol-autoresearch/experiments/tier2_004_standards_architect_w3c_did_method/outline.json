@@ -1,0 +1,92 @@
+{
+  "id": "standards_architect_w3c_did_method",
+  "title": "W3C DID Method Specification: did:bolyra",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "did-method-bolyra.md",
+      "description": "W3C DID Core 1.0 conformant method spec: syntax (did:bolyra:<commitment>), CRUD operations, security/privacy considerations"
+    },
+    {
+      "type": "spec",
+      "filename": "vc-schema-handshake.json",
+      "description": "JSON-LD @context + JSON Schema for BolyraHandshakeCredential (issuer, subject DID pair, evidence proof hashes, expiry)"
+    },
+    {
+      "type": "contract",
+      "filename": "BolyraDidRegistry.sol",
+      "description": "On-chain DID Document storage/update: maps commitment \u2192 DID Document IPFS CID or inline JSON; emits DIDDocumentChanged events per W3C DID spec"
+    },
+    {
+      "type": "sdk",
+      "filename": "did-resolver.ts",
+      "description": "DID resolver implementing W3C DID Resolution spec: resolve(did) \u2192 DID Document; queries IdentityRegistry for tree membership + non-revocation, then fetches/constructs DID Document"
+    },
+    {
+      "type": "sdk",
+      "filename": "did-document-builder.ts",
+      "description": "Constructs DID Documents: EcdsaSecp256k1VerificationKey2019 for operator keys, Ed25519VerificationKey2020 (BabyJubjub-mapped) for humans, BolyraProofService endpoint"
+    },
+    {
+      "type": "sdk",
+      "filename": "vc-issuer.ts",
+      "description": "Issues BolyraHandshakeCredential VCs post-handshake: signs with operator key, embeds proof hashes as evidence, targets W3C VC Data Model 2.0"
+    },
+    {
+      "type": "sdk",
+      "filename": "vc-verifier.ts",
+      "description": "Verifies BolyraHandshakeCredential: checks issuer DID resolves, proof hashes match on-chain state, credential not revoked"
+    },
+    {
+      "type": "spec",
+      "filename": "babyjubjub-to-ed25519-mapping.md",
+      "description": "Documents the key mapping convention from BabyJubjub (Circom/snarkjs) to Ed25519VerificationKey2020 for W3C VC wallet interop"
+    },
+    {
+      "type": "test",
+      "filename": "did-resolver.test.ts",
+      "description": "Unit + integration tests: resolve valid DID, resolve revoked commitment (expect error), resolve unknown DID (not found), DID Document structure validation against W3C test suite"
+    },
+    {
+      "type": "test",
+      "filename": "vc-roundtrip.test.ts",
+      "description": "End-to-end: issue handshake VC \u2192 resolve issuer DID \u2192 verify VC signature \u2192 check evidence hashes on-chain"
+    },
+    {
+      "type": "docs",
+      "filename": "interop-guide.md",
+      "description": "Integration guide for W3C VC wallets (Veramo, SpruceID): how to register the did:bolyra resolver, import credentials, use BolyraProofService endpoint"
+    }
+  ],
+  "steps": [
+    "Define did:bolyra method syntax: did:bolyra:<commitment> where <commitment> is base58btc-encoded 32-byte Poseidon commitment from IdentityRegistry",
+    "Specify DID Document structure: id, verificationMethod array (EcdsaSecp256k1VerificationKey2019 for agents, Ed25519VerificationKey2020 for humans), authentication, assertionMethod, service array with BolyraProofService",
+    "Document BabyJubjub \u2192 Ed25519 key mapping convention (point compression + encoding) for human identity verification keys",
+    "Define BolyraProofService endpoint schema: serviceEndpoint URL, proof generation API, supported proof types",
+    "Specify CRUD operations: Create (commitment registration in IdentityRegistry triggers DID creation), Read (resolution algorithm), Update (operator key rotation via BolyraDidRegistry), Deactivate (revocation = DID deactivation)",
+    "Design BolyraDidRegistry.sol: commitment \u2192 document mapping, DIDDocumentChanged event, owner-only update, revocation check integration with IdentityRegistry",
+    "Implement did-resolver.ts: parse did:bolyra URI, call IdentityRegistry.isMember(commitment) + isRevoked(commitment), call BolyraDidRegistry for document, return DID Resolution Result with metadata",
+    "Implement did-document-builder.ts: construct DID Document from on-chain key material, inject verificationMethod entries per key type, add BolyraProofService entry",
+    "Define BolyraHandshakeCredential JSON-LD context and JSON Schema: credentialSubject (prover DID, verifier DID), evidence (proofHash, circuitId, timestamp), expirationDate",
+    "Implement vc-issuer.ts: post-handshake credential issuance, sign with operator secp256k1 key via EthereumEip712Signature2021 or JsonWebSignature2020",
+    "Implement vc-verifier.ts: resolve issuer DID, verify signature, cross-check evidence.proofHash against on-chain event logs",
+    "Write did-resolver.test.ts covering W3C DID Resolution test suite vectors (positive, negative, metadata validation)",
+    "Write vc-roundtrip.test.ts with mock IdentityRegistry + real BolyraDidRegistry on local hardhat node",
+    "Register did:bolyra method with W3C DID Spec Registries (GitHub PR to w3c/did-spec-registries)",
+    "Publish @bolyra/did-resolver npm package and interop-guide.md for Veramo/SpruceID wallet integration"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "W3C DID Core 1.0 spec (https://www.w3.org/TR/did-core/)",
+    "W3C Verifiable Credentials Data Model 2.0",
+    "IdentityRegistry.sol (Merkle tree membership + revocation)",
+    "Poseidon hash implementation (iden3/circomlibjs) for commitment encoding",
+    "BabyJubjub elliptic curve library (iden3/babyjubjub)",
+    "base58btc encoding (multiformats/multibase)",
+    "EcdsaSecp256k1VerificationKey2019 (Linked Data Cryptography Suite)",
+    "Ed25519VerificationKey2020 (ietf-jose/jsonld-signatures)",
+    "snarkjs / circom for proof hash generation (upstream handshake circuits)",
+    "Hardhat + ethers.js for BolyraDidRegistry.sol deployment and testing",
+    "W3C DID Spec Registries (for official method registration)"
+  ]
+}

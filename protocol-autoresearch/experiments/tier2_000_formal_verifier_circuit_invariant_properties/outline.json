@@ -1,0 +1,66 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "title": "Formal invariant property suite for all three circuits",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "specs/invariants/circuit_invariants.cvl",
+      "description": "Certora CVL property file defining all 15+ named invariants across Identity, Credential, and Delegation circuits"
+    },
+    {
+      "type": "test",
+      "filename": "test/invariants/field_overflow.test.js",
+      "description": "circom_tester harness verifying no uint64 signal exceeds 2^64-1 after range checks, covering all three circuits"
+    },
+    {
+      "type": "test",
+      "filename": "test/invariants/nullifier_uniqueness.test.js",
+      "description": "Property tests asserting distinct (secret, scope) and (credCommitment, nonce) pairs produce distinct nullifier outputs"
+    },
+    {
+      "type": "test",
+      "filename": "test/invariants/delegation_scope_monotonicity.test.js",
+      "description": "Assertion harness verifying delegateeScope AND NOT delegatorScope == 0 for all valid Delegation circuit witnesses"
+    },
+    {
+      "type": "test",
+      "filename": "test/invariants/delegation_expiry_narrowing.test.js",
+      "description": "Property tests asserting delegateeExpiry <= delegatorExpiry for all satisfying Delegation witnesses"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/invariants/property_registry.md",
+      "description": "Human-readable registry of all named properties with circuit reference, signal names, and formal statement"
+    },
+    {
+      "type": "test",
+      "filename": "scripts/run_invariants.sh",
+      "description": "CI-runnable shell script that executes all invariant test suites and exits non-zero on any failure"
+    }
+  ],
+  "steps": [
+    "Audit all three circuit source files (Identity, Credential, Delegation) to enumerate every signal, constraint, and output wire",
+    "Catalogue all uint64-range-checked signals per circuit; map each to its Num2Bits or LessThan constraint",
+    "Draft property registry (property_registry.md) listing 15+ named properties with circuit, signal references, and formal statement",
+    "Implement field_overflow.test.js: for each uint64 signal, generate witnesses at boundary values (0, 2^64-1, 2^64) and assert constraint satisfaction/rejection",
+    "Implement nullifier_uniqueness.test.js: use property-based generation (fast-check or similar) to sample 500+ distinct (secret, scope) pairs and assert pairwise distinct nullifier outputs; repeat for (credCommitment, nonce)",
+    "Implement delegation_scope_monotonicity.test.js: enumerate representative scope bitmask pairs; assert delegateeScope & ~delegatorScope === 0 for valid witnesses and constraint failure for violations",
+    "Implement delegation_expiry_narrowing.test.js: generate witnesses with delegateeExpiry > delegatorExpiry and assert constraint rejection; assert acceptance for delegateeExpiry <= delegatorExpiry",
+    "Translate property registry into circuit_invariants.cvl using Certora CVL syntax for any Solidity verifier contracts wrapping circuit output verification",
+    "Wire all test files into scripts/run_invariants.sh with parallel execution and aggregated exit code",
+    "Add run_invariants.sh as a step in CI workflow (GitHub Actions or equivalent) gated on circuit source changes",
+    "Validate harness completeness: confirm at least 15 distinct named properties are exercised with at least one passing and one rejection witness per property",
+    "Document false-positive risk for probabilistic uniqueness tests and set collision probability bound <= 2^-64"
+  ],
+  "estimated_constraints": 15,
+  "dependencies": [
+    "circom_tester",
+    "snarkjs",
+    "fast-check",
+    "circom compiler (>=2.1)",
+    "Certora Prover CLI (for CVL file)",
+    "Identity circuit source",
+    "Credential circuit source",
+    "Delegation circuit source"
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "id": "standards_architect_ietf_draft_core",
+  "title": "IETF Internet-Draft: Bolyra Core Protocol Specification",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "draft-bolyra-core-protocol-00.txt",
+      "description": "Primary Internet-Draft in RFC format covering all normative sections: Introduction, Terminology, Protocol Overview, Circuit Public Interface, Wire Format, On-Chain Verification Interface, and Security Considerations"
+    },
+    {
+      "type": "spec",
+      "filename": "bolyra-cddl-schema.cddl",
+      "description": "Normative CDDL schema definitions for all CBOR-encoded wire format messages: enrollment payloads, handshake messages, delegation proofs, and nullifier bindings"
+    },
+    {
+      "type": "spec",
+      "filename": "bolyra-abi-interface.json",
+      "description": "Normative ABI-level interface definition for on-chain verifier contracts, including function signatures, event definitions, and error codes for enrollment, verification, and delegation verification"
+    },
+    {
+      "type": "spec",
+      "filename": "bolyra-terminology.md",
+      "description": "Canonical definitions for all protocol terms: human, agent, delegatee, scope, nullifier, root, commitment, circuit, proof, and enrollment \u2014 used as source of truth referenced by the I-D"
+    },
+    {
+      "type": "docs",
+      "filename": "bolyra-circuit-interface-spec.md",
+      "description": "Detailed public interface specification for all three circuits: enrollment circuit, handshake circuit, and delegation circuit \u2014 inputs, outputs, public signals, and semantic invariants without implementation details"
+    },
+    {
+      "type": "docs",
+      "filename": "bolyra-security-considerations.md",
+      "description": "Detailed security analysis document covering replay attacks, linkability risks, Merkle root staleness, delegation chain depth limits, nullifier collision, and scope commitment binding \u2014 feeds normative Security Considerations section"
+    },
+    {
+      "type": "test",
+      "filename": "bolyra-conformance-vectors.json",
+      "description": "Test vectors for wire format serialization, nullifier derivation, scope commitment construction, and proof payload encoding to enable independent implementation validation"
+    },
+    {
+      "type": "docs",
+      "filename": "bolyra-interop-guide.md",
+      "description": "Non-normative implementer's guide explaining nullifier derivation order, scope commitment structure, and common divergence points that the I-D normatively resolves"
+    }
+  ],
+  "steps": [
+    "Establish canonical terminology: define human, agent, delegatee, scope, nullifier, commitment, root, and proof with unambiguous RFC 2119/8174-compliant language; document in bolyra-terminology.md",
+    "Draft Protocol Overview section: describe three-phase lifecycle (enrollment, handshake, delegation) with sequence diagrams, message flows, and actor responsibilities \u2014 no circuit internals",
+    "Specify Circuit Public Interface for enrollment circuit: enumerate all public inputs (identity commitment, Merkle root, scope), public outputs (nullifier), and semantic invariants (soundness, binding) in bolyra-circuit-interface-spec.md",
+    "Specify Circuit Public Interface for handshake circuit: enumerate public signals, session binding inputs, and proof semantics for agent authentication without leaking identity",
+    "Specify Circuit Public Interface for delegation circuit: enumerate delegatee commitment input, scope restriction output, chain depth counter, and nullifier linkage semantics",
+    "Define CBOR wire format for all message types (enrollment request, enrollment response, handshake initiation, handshake response, delegation grant, delegation proof presentation); author normative CDDL schema in bolyra-cddl-schema.cddl",
+    "Define normative on-chain verification ABI: IBolyraEnrollmentVerifier, IBolyraHandshakeVerifier, IBolyraChainVerifier interfaces with function signatures, return types, revert conditions, and events; produce bolyra-abi-interface.json",
+    "Author Security Considerations covering replay attack mitigations (nullifier uniqueness), linkability threat model, Merkle root staleness window policy, maximum delegation chain depth (RECOMMENDED: 3), scope commitment binding strength, and side-channel considerations",
+    "Generate conformance test vectors: at minimum one valid and one invalid vector per message type, covering nullifier derivation order and scope commitment byte layout, in bolyra-conformance-vectors.json",
+    "Assemble draft-bolyra-core-protocol-00.txt: format per RFC 7942 boilerplate, integrate all sections with normative (MUST/SHALL/SHOULD) and informative language correctly applied per RFC 8174",
+    "Review for semantic consistency: verify nullifier derivation order is unambiguous in both circuit interface spec and wire format, confirm scope commitment structure is identical in all three circuit specs",
+    "Author non-normative bolyra-interop-guide.md highlighting the five most likely divergence points (nullifier input ordering, scope encoding endianness, Merkle leaf hashing, delegation depth counting, CBOR tag usage)",
+    "Internal review pass: check all RFC 2119 keywords are uppercase, all CDDL types are referenced from the I-D, all ABI entries match the circuit interface outputs, no implementation details leak into normative sections"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "RFC 2119 - Key words for use in RFCs to Indicate Requirement Levels",
+    "RFC 8174 - Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words",
+    "RFC 7942 - Improving Awareness of Running Code: The Implementation Status Section",
+    "RFC 8949 - Concise Binary Object Representation (CBOR)",
+    "RFC 8610 - Concise Data Definition Language (CDDL)",
+    "Groth16 or PLONK proof system public interface conventions",
+    "EVM ABI specification (for on-chain verifier interface normalization)",
+    "Poseidon hash function parameter specification (for nullifier and commitment derivation)"
+  ]
+}

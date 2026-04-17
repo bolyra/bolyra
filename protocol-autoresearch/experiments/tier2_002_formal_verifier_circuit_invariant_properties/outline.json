@@ -1,0 +1,76 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "title": "Write formal invariant properties for all three circuits",
+  "artifacts": [
+    {
+      "type": "test",
+      "filename": "formal/ecne_runner.sh",
+      "description": "Shell script that compiles each circuit to R1CS and runs ecne constraint analyzer, failing CI if any unconstrained signals are detected"
+    },
+    {
+      "type": "test",
+      "filename": "formal/picus_runner.sh",
+      "description": "Shell script that invokes picus on each circuit's R1CS to detect underconstrained private signals, producing a structured JSON report"
+    },
+    {
+      "type": "test",
+      "filename": "formal/properties/nullifier_uniqueness.test.ts",
+      "description": "Snarkjs-based property test: for fixed (scope, secret) and (credentialCommitment, nonce) inputs, enumerate multiple witness candidates and assert exactly one nullifier value satisfies all constraints"
+    },
+    {
+      "type": "test",
+      "filename": "formal/properties/scope_monotonicity.test.ts",
+      "description": "Property test for Delegation circuit: generates random (delegatorScope, delegateeScope) pairs where delegateeScope has bits outside delegatorScope, asserts witness generation fails (constraint violation)"
+    },
+    {
+      "type": "test",
+      "filename": "formal/properties/field_overflow.test.ts",
+      "description": "Property test: attempts to supply values >= 2^64 to all Num2Bits(64) inputs across all three circuits, asserts constraint system rejects each overflow witness"
+    },
+    {
+      "type": "test",
+      "filename": "formal/properties/unconstrained_signals.test.ts",
+      "description": "Programmatic R1CS walker that parses compiled R1CS JSON, builds a signal-to-constraint bipartite graph, and asserts every private signal appears in at least one constraint that transitively gates a public output"
+    },
+    {
+      "type": "spec",
+      "filename": "formal/INVARIANTS.md",
+      "description": "Human-readable specification of all four invariant classes, the formal statement of each property, the tooling used to check it, and expected CI pass/fail semantics"
+    },
+    {
+      "type": "test",
+      "filename": "formal/ci_harness.ts",
+      "description": "Top-level CI entry point that orchestrates all property tests, collects results, and emits a structured summary with pass/fail per invariant per circuit"
+    },
+    {
+      "type": "spec",
+      "filename": "formal/circuits_under_test.json",
+      "description": "Registry mapping each circuit name to its .circom source path, compiled R1CS path, and which invariant checks apply to it"
+    }
+  ],
+  "steps": [
+    "Identify the three circuits under test (MembershipCredential, NullifierDerivation, Delegation) and compile each to R1CS + WASM using circom 2.x; record constraint counts and signal maps",
+    "Install and pin ecne and picus to specific versions in package.json / a Python venv; document invocation flags needed for bn128 field",
+    "Write circuits_under_test.json registry with source paths, R1CS paths, and applicable invariant checklist per circuit",
+    "Implement unconstrained_signals.test.ts: parse the R1CS JSON wire-to-constraint map, build adjacency, run reachability from each private signal to any labeled public output wire, fail if any private signal is unreachable",
+    "Run ecne_runner.sh against all three circuits and capture baseline output; fix any pre-existing under-constraint warnings before writing pass assertions",
+    "Run picus_runner.sh against all three circuits; resolve any flagged signals in source circom before locking the baseline",
+    "Implement nullifier_uniqueness.test.ts: use snarkjs fullProve with fixed inputs across a 256-sample random secret space, collect all nullifier outputs, assert the set has cardinality 1 per fixed (scope, secret) tuple",
+    "Implement scope_monotonicity.test.ts: generate 1000 random pairs where (delegateeScope & ~delegatorScope) != 0, call snarkjs wtns.calculate, assert each throws a constraint-unsatisfied error",
+    "Implement field_overflow.test.ts: for each Num2Bits(64) input signal, supply 2^64, 2^64+1, and 2^128-1, assert witness calculation fails; also supply 2^64-1 and assert it succeeds",
+    "Implement ci_harness.ts to run all four property test files sequentially, aggregate results into a JSON summary, exit non-zero on any failure",
+    "Add a GitHub Actions job (or extend existing CI) that: compiles circuits, runs ecne_runner.sh, runs picus_runner.sh, runs ci_harness.ts, uploads the JSON summary as a CI artifact",
+    "Write INVARIANTS.md with formal statements (using R1CS / arithmetic circuit notation) for all four invariant classes, mapping each to the specific test file and tooling that enforces it",
+    "Validate end-to-end: intentionally introduce an unconstrained signal in a scratch branch, confirm CI fails on the correct check, then revert"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circom 2.x compiler with bn128 support",
+    "snarkjs >= 0.7",
+    "ecne (R1CS constraint analyzer)",
+    "picus (underconstrained signal detector)",
+    "node >= 20 / ts-node for TypeScript test harness",
+    "Compiled R1CS artifacts for MembershipCredential, NullifierDerivation, and Delegation circuits",
+    "Existing circuit source files with Num2Bits(64) decompositions and nullifier templates"
+  ]
+}

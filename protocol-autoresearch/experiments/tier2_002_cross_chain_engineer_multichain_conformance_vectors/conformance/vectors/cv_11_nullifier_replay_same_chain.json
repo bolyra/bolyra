@@ -1,0 +1,30 @@
+{
+  "vectorId": "cv_11_nullifier_replay_same_chain",
+  "version": "1.0.0",
+  "category": "nullifier_replay",
+  "description": "Nullifier reuse attempt on the same chain. The nullifier hash has already been recorded in the verifier's nullifier set from a prior valid proof submission. A conformant verifier MUST reject this to prevent double-spend of identity attestations.",
+  "sourceChainId": 1,
+  "targetChainId": 1,
+  "relayTimestamp": 1713340800,
+  "rootAge": 60,
+  "maxRootAge": 3600,
+  "proof": "0x7e1f5d9c3b7a6e0d4c8b2a1f5e9d3c7b6a0e4d8c2b1a5f9e3d7c6b0a4e8d2c1b5f9a3e7d6c0b4a8e2d1c5f9b3a7e6d0c4b8a2e1f5d9c3b7a6e0d4c8b2a1f5e9d3c7b6a0e4d8c2b1a5f9e3d7c6b0a4e8d2c1b5f9a3e7d6c0b4a8e2d1c5f9b3a7e6d0c4b8a2e1f5",
+  "publicInputs": [
+    "0x5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f",
+    "0x00000000000000000000000000000000000000000000000000000000feedface",
+    "0x0000000000000000000000000000000000000000000000000000000000000001"
+  ],
+  "expectedResult": "fail",
+  "failureReason": "NULLIFIER_ALREADY_USED",
+  "nullifier": {
+    "nullifierHash": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "scope": "global",
+    "priorUsageChainId": 1
+  },
+  "metadata": {
+    "author": "bolyra-conformance",
+    "createdAt": "2026-04-17",
+    "protocolVersion": "0.5.0",
+    "notes": "The test harness must first submit a valid proof with this nullifier, then attempt re-submission. The nullifier set is global (not chain-scoped) so same-chain replay is caught."
+  }
+}

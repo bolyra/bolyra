@@ -1,0 +1,37 @@
+{
+  "vectorId": "cv_06_storage_proof_invalid_blockhash",
+  "version": "1.0.0",
+  "category": "storage_proof",
+  "description": "Storage proof referencing a tampered block hash that does not correspond to any valid block on the source chain. The proof nodes are internally consistent but the block hash is fabricated. A conformant verifier MUST reject this.",
+  "sourceChainId": 1,
+  "targetChainId": 42161,
+  "relayTimestamp": 1713340200,
+  "rootAge": 300,
+  "maxRootAge": 3600,
+  "proof": "0x4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e",
+  "publicInputs": [
+    "0x3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d",
+    "0x000000000000000000000000000000000000000000000000000000001234abcd",
+    "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddead0000"
+  ],
+  "expectedResult": "fail",
+  "failureReason": "INVALID_BLOCK_HASH",
+  "storageProof": {
+    "blockHash": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddead0000",
+    "accountAddress": "0x1234567890abcdef1234567890abcdef12345678",
+    "storageSlot": "0x0000000000000000000000000000000000000000000000000000000000000003",
+    "storageValue": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "proofNodes": [
+      "0xf90211a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "0xf871a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "0xf843a0200e0000000000000000000000000000000000000000000000000000000000009594"
+    ]
+  },
+  "metadata": {
+    "author": "bolyra-conformance",
+    "createdAt": "2026-04-17",
+    "protocolVersion": "0.5.0",
+    "notes": "blockHash 0xdeaddead... is not a valid block hash on any chain. The verifier must cross-reference relayed block hashes against its known-valid set."
+  }
+}

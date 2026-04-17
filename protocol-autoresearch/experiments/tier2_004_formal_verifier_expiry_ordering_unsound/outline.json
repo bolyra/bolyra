@@ -1,0 +1,58 @@
+{
+  "id": "formal_verifier_expiry_ordering_unsound",
+  "title": "Add explicit less-than constraint for expiry checks in AgentPolicy",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/AgentPolicy.circom",
+      "description": "Add LessThan(64) component 'isNotExpired' with currentTimestamp < expiryTimestamp enforced as isNotExpired.out === 1"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/Delegation.circom",
+      "description": "Add LessThan(64) component enforcing delegateeExpiry <= delegatorExpiry inside the SNARK"
+    },
+    {
+      "type": "test",
+      "filename": "test/circuits/AgentPolicy.test.ts",
+      "description": "Unit tests: valid unexpired credential passes, expired credential fails proof generation, boundary condition currentTimestamp === expiryTimestamp fails"
+    },
+    {
+      "type": "test",
+      "filename": "test/circuits/Delegation.test.ts",
+      "description": "Unit tests: delegatee expiry exceeding delegator expiry fails, equal expiry passes, delegatee expiry strictly less passes"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentPolicyVerifier.sol",
+      "description": "Audit and remove any redundant Solidity-side expiry re-check that was compensating for missing circuit constraint; ensure public signals include both timestamps"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/expiry-constraint-audit.md",
+      "description": "Document which expiry/ordering invariants are enforced in-circuit vs on-chain, rationale for in-circuit enforcement, and constraint cost breakdown"
+    }
+  ],
+  "steps": [
+    "Audit AgentPolicy.circom fully: confirm whether LessThan(64) for currentTimestamp < expiryTimestamp is present or absent; document finding",
+    "Audit Delegation.circom fully: confirm whether delegateeExpiry <= delegatorExpiry is enforced inside the SNARK or only in Solidity",
+    "In AgentPolicy.circom, instantiate component isNotExpired = LessThan(64); wire isNotExpired.in[0] <== currentTimestamp; isNotExpired.in[1] <== expiryTimestamp; add constraint isNotExpired.out === 1",
+    "In Delegation.circom, instantiate component delegExpValid = LessThan(64) (or LessEqThan(64)); wire delegExpValid.in[0] <== delegateeExpiry; delegExpValid.in[1] <== delegatorExpiry; add constraint delegExpValid.out === 1",
+    "Confirm both currentTimestamp and expiryTimestamp are declared as public signals in AgentPolicy so verifier contracts can observe them if needed",
+    "Recompile circuits with circom, regenerate R1CS and witness generation code, verify new constraint counts match expectation (~130 additional constraints per LessThan(64))",
+    "Re-run trusted setup or update proving/verification keys for affected circuits",
+    "Write failing tests first: craft witness inputs where currentTimestamp >= expiryTimestamp and assert proof generation fails; then confirm fix makes them pass",
+    "Write failing tests for Delegation: delegateeExpiry > delegatorExpiry must fail; delegateeExpiry === delegatorExpiry must pass",
+    "Audit AgentPolicyVerifier.sol and DelegationVerifier.sol: remove or document any Solidity-side expiry checks that were compensating for the missing circuit constraint",
+    "Update specs/expiry-constraint-audit.md with invariant table, constraint costs, and rationale",
+    "Run full test suite; confirm no regressions"
+  ],
+  "estimated_constraints": 260,
+  "dependencies": [
+    "circomlib LessThan(64) or LessEqThan(64) component",
+    "circom compiler >= 2.0",
+    "snarkjs for R1CS recompilation and key regeneration",
+    "Existing AgentPolicy.circom and Delegation.circom source files",
+    "Trusted setup ceremony artifacts (must be redone or updated after circuit changes)"
+  ]
+}

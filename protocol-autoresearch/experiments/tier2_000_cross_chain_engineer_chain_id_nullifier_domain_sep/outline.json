@@ -1,0 +1,92 @@
+{
+  "id": "cross_chain_engineer_chain_id_nullifier_domain_sep",
+  "title": "Domain-separate nullifiers and nonces by chainId",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/HumanUniqueness.circom",
+      "description": "Add chainId as public input; change nullifierHash derivation to Poseidon3(scope, secret, chainId)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/AgentPolicy.circom",
+      "description": "Add chainId as public input; change nullifierHash derivation to Poseidon4(credentialCommitment, sessionNonce, agentId, chainId)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/SessionKey.circom",
+      "description": "Add chainId as public input if session nonces are used; include chainId in any nonce-based hash"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/HumanUniquenessVerifier.sol",
+      "description": "Pass block.chainid as a public signal argument; add require(publicSignals[chainIdIndex] == block.chainid) check before accepting proof"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentPolicyVerifier.sol",
+      "description": "Same block.chainid enforcement pattern as HumanUniquenessVerifier"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/RegistryBase.sol",
+      "description": "Extract shared chainId-check modifier or internal helper used by both verifier contracts"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/prove.ts",
+      "description": "Accept chainId parameter in proof generation helpers; inject into circuit inputs automatically from provider.getNetwork()"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/verify.ts",
+      "description": "Include chainId in public signals array passed to on-chain verifier; validate client-side before submitting"
+    },
+    {
+      "type": "test",
+      "filename": "test/circuits/nullifier_domain_sep.test.ts",
+      "description": "Unit tests: same (scope, secret) on different chainIds produces different nullifiers; proof from chain A rejected on chain B"
+    },
+    {
+      "type": "test",
+      "filename": "test/contracts/replay_attack.test.ts",
+      "description": "Fork-based integration test: generate valid proof on simulated chainId=8453 (Base), attempt replay on chainId=42161 (Arbitrum), assert revert"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/nullifier-domain-separation.md",
+      "description": "Protocol spec section documenting chainId inclusion rationale, hash function arity changes, and upgrade path for existing deployments"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/migration-v2-chainid.md",
+      "description": "Migration guide: re-registration requirement for existing users, nullifier incompatibility across versions, deployment checklist"
+    }
+  ],
+  "steps": [
+    "Audit all three circuits (HumanUniqueness, AgentPolicy, SessionKey) and enumerate every Poseidon call that contributes to a nullifier or replay-sensitive nonce",
+    "Add chainId as a public input signal to HumanUniqueness.circom and update nullifierHash to Poseidon3(scope, secret, chainId)",
+    "Add chainId as a public input signal to AgentPolicy.circom and update nullifierHash to Poseidon4(credentialCommitment, sessionNonce, agentId, chainId)",
+    "Add chainId as a public input signal to SessionKey.circom (if applicable) and include it in any nonce-derived hash",
+    "Recompile all circuits with snarkjs/circom; regenerate proving and verification keys (new ptau ceremony inputs if arity changed)",
+    "Update Solidity verifier contracts (auto-generated from circom or manually): add chainId index to public signals array, add require(publicSignals[CHAIN_ID_IDX] == block.chainid) before nullifier storage",
+    "Extract shared chainId-enforcement logic into a RegistryBase modifier to avoid duplication across verifier contracts",
+    "Update SDK proof-generation functions to accept and inject chainId; auto-detect from ethers provider.getNetwork().chainId",
+    "Update SDK verify helpers to include chainId in the public signals array submitted on-chain",
+    "Write circuit-level unit tests confirming nullifier differs across chainIds for identical (scope, secret) inputs",
+    "Write contract-level replay-attack integration tests using Hardhat/Foundry forking to simulate cross-chain replay and assert revert",
+    "Update protocol spec to document the new hash arities, public input ordering, and security rationale",
+    "Write migration guide covering re-registration requirement, nullifier namespace incompatibility between v1 and v2, and multi-chain deployment checklist",
+    "Run full test suite; audit that no Poseidon call producing a nullifier omits chainId"
+  ],
+  "estimated_constraints": 12,
+  "dependencies": [
+    "circom 2.x with Poseidon3/Poseidon4 templates available",
+    "snarkjs for circuit compilation and key generation",
+    "Groth16 or PLONK proving system (arity change requires new trusted setup or re-use of sufficiently large ptau)",
+    "Hardhat or Foundry with fork testing support for replay-attack integration tests",
+    "ethers.js v6 / viem in SDK for provider.getNetwork() chainId resolution",
+    "Existing HumanUniqueness, AgentPolicy, SessionKey circuit source files",
+    "Existing Solidity verifier contract templates or auto-generation pipeline"
+  ]
+}

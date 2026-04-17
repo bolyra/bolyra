@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "persona": "formal_verifier",
+  "title": "Write formal invariant properties for all three circuits",
+  "dimension": "correctness",
+  "description": "Define and machine-check the following properties using circom-compat tooling or a custom R1CS analyzer: (1) No unconstrained signals \u2014 every private input flows into at least one constraint that gates an output. (2) Nullifier uniqueness \u2014 for fixed (scope, secret) or (credentialCommitment, nonce), exactly one nullifier value satisfies the constraints. (3) Scope monotonicity \u2014 in Delegation, prove that for any satisfying witness, delegateeScope & ~delegatorScope == 0 is enforced (no bit escalation). (4) Field overflow absence \u2014 all Num2Bits(64) decompositions fully constrain their input to [0, 2^64). Deliver as a test harness with property assertions that run in CI, using either ecne (R1CS constraint analyzer) or picus (underconstrained signal detector).",
+  "priority": "medium",
+  "estimated_effort": "week",
+  "candidate_id": "formal_verifier_circuit_invariant_properties",
+  "adoption": 15,
+  "standards": 17,
+  "completeness": 19,
+  "correctness": 22,
+  "total": 73,
+  "verdict": "consider"
+}

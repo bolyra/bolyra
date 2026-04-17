@@ -1,0 +1,37 @@
+{
+  "vectorId": "cv_05_storage_proof_valid_blockhash",
+  "version": "1.0.0",
+  "category": "storage_proof",
+  "description": "Storage proof referencing a known-valid block hash on Ethereum mainnet. The account address, storage slot, and Merkle-Patricia trie proof nodes are all consistent with the declared block hash. This is the happy-path storage proof verification.",
+  "sourceChainId": 1,
+  "targetChainId": 42161,
+  "relayTimestamp": 1713340200,
+  "rootAge": 300,
+  "maxRootAge": 3600,
+  "proof": "0x4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e",
+  "publicInputs": [
+    "0x3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d",
+    "0x000000000000000000000000000000000000000000000000000000001234abcd",
+    "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "0xabc123def456789abc123def456789abc123def456789abc123def456789abcd"
+  ],
+  "expectedResult": "pass",
+  "failureReason": null,
+  "storageProof": {
+    "blockHash": "0xabc123def456789abc123def456789abc123def456789abc123def456789abcd",
+    "accountAddress": "0x1234567890abcdef1234567890abcdef12345678",
+    "storageSlot": "0x0000000000000000000000000000000000000000000000000000000000000003",
+    "storageValue": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "proofNodes": [
+      "0xf90211a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "0xf871a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "0xf843a0200e0000000000000000000000000000000000000000000000000000000000009594"
+    ]
+  },
+  "metadata": {
+    "author": "bolyra-conformance",
+    "createdAt": "2026-04-17",
+    "protocolVersion": "0.5.0",
+    "notes": "publicInputs[3] contains the block hash matching storageProof.blockHash. Verifier on Arbitrum (42161) checks the storage proof against the relayed Ethereum block hash."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_phantom_delegatee_inclusion",
+  "persona": "formal_verifier",
+  "title": "Add delegatee Merkle inclusion proof to Delegation circuit",
+  "dimension": "correctness",
+  "description": "The Delegation circuit accepts delegateeCredCommitment as a private input but never proves it exists in any Merkle tree. An attacker can fabricate a credential commitment, receive a valid delegation, and use the resulting scopeCommitment downstream. Add a Merkle inclusion proof (reusing the BinaryMerkleRoot template at MAX_DEPTH=20) against the agentTree root, passed as a public input and checked on-chain against the root history buffer. This is the single highest-severity soundness bug in the current circuit set.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_phantom_delegatee_inclusion",
+  "adoption": 20,
+  "standards": 11,
+  "completeness": 21,
+  "correctness": 17,
+  "total": 69,
+  "verdict": "consider"
+}

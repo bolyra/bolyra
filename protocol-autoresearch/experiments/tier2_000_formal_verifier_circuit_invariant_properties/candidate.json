@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "persona": "formal_verifier",
+  "title": "Formal invariant property suite for all three circuits",
+  "dimension": "correctness",
+  "description": "Write machine-checkable invariant properties covering: (1) no field overflow \u2014 all uint64 signals stay within [0, 2^64) after range checks, (2) nullifier uniqueness \u2014 for any two distinct (secret, scope) or (credCommitment, nonce) pairs the nullifier outputs differ, (3) scope monotonicity \u2014 in Delegation, delegateeScope AND NOT delegatorScope == 0 for all valid witnesses, (4) expiry narrowing \u2014 delegateeExpiry <= delegatorExpiry. Deliver as a property specification file (Certora CVL or equivalent assertion harness in circom_tester) with at least 15 named properties and a CI-runnable test script.",
+  "priority": "medium",
+  "estimated_effort": "week",
+  "candidate_id": "formal_verifier_circuit_invariant_properties",
+  "adoption": 15,
+  "standards": 18,
+  "completeness": 18,
+  "correctness": 22,
+  "total": 73,
+  "verdict": "consider"
+}

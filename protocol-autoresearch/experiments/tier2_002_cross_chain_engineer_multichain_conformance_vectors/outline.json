@@ -1,0 +1,131 @@
+{
+  "id": "cross_chain_engineer_multichain_conformance_vectors",
+  "title": "Cross-chain test vectors for conformance suite",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "conformance/cross_chain_vector_schema.json",
+      "description": "JSON Schema defining the structure of each cross-chain test vector: sourceChainId, targetChainId, relayTimestamp, rootAge, proof, expectedResult, failureReason"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_01_unbound_chain_id.json",
+      "description": "Vector: proof generated on chain A (chainId=1) submitted to verifier on chain B (chainId=137) without chain ID binding \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_02_bound_chain_id_valid.json",
+      "description": "Vector: proof generated and verified on same logical chain with correct chain ID binding \u2014 expected PASS"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_03_stale_root_within_ttl.json",
+      "description": "Vector: Merkle root relayed with age < maxRootAge threshold \u2014 expected PASS"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_04_stale_root_exceeded_ttl.json",
+      "description": "Vector: Merkle root relayed with age > maxRootAge threshold (relay delay simulation) \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_05_storage_proof_valid_blockhash.json",
+      "description": "Vector: storage proof with a known-valid block hash on the source chain \u2014 expected PASS"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_06_storage_proof_invalid_blockhash.json",
+      "description": "Vector: storage proof with a tampered or non-existent block hash \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_07_storage_proof_wrong_chain_blockhash.json",
+      "description": "Vector: storage proof with block hash from a different chain than declared sourceChainId \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_08_batch_checkpoint_valid.json",
+      "description": "Vector: batch checkpoint inclusion proof where leaf is correctly included in the batch Merkle tree \u2014 expected PASS"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_09_batch_checkpoint_invalid_leaf.json",
+      "description": "Vector: batch checkpoint inclusion proof with incorrect leaf value \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_10_batch_checkpoint_wrong_root.json",
+      "description": "Vector: batch checkpoint proof with proof path valid but root mismatched \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_11_nullifier_replay_same_chain.json",
+      "description": "Vector: nullifier reuse attempt on the same chain \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_12_nullifier_replay_cross_chain.json",
+      "description": "Vector: nullifier from chain A replayed on chain B where nullifier set is not cross-chain-scoped \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_13_nullifier_cross_chain_scoped_valid.json",
+      "description": "Vector: distinct nullifier used on chain B after valid use on chain A with chain-scoped nullifier set \u2014 expected PASS"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_14_relay_timestamp_future.json",
+      "description": "Vector: relayTimestamp set in the future beyond block.timestamp tolerance \u2014 expected FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/cv_15_relay_timestamp_missing.json",
+      "description": "Vector: relayTimestamp field absent from proof public inputs \u2014 expected FAIL (schema violation)"
+    },
+    {
+      "type": "spec",
+      "filename": "conformance/CROSS_CHAIN_VECTORS.md",
+      "description": "Human-readable specification describing each vector's intent, the protocol invariant it tests, and instructions for bridge implementers to run the suite"
+    },
+    {
+      "type": "sdk",
+      "filename": "conformance/runner/cross_chain_runner.ts",
+      "description": "TypeScript test harness that loads all cv_*.json vectors, submits them to a configurable verifier contract or off-chain verifier function, and asserts expectedResult matches actual outcome"
+    },
+    {
+      "type": "contract",
+      "filename": "conformance/contracts/MockCrossChainVerifier.sol",
+      "description": "Minimal Solidity verifier stub implementing chain ID binding, root age check, storage proof verification, batch inclusion, and nullifier set \u2014 used as reference implementation for running vectors on-chain"
+    },
+    {
+      "type": "docs",
+      "filename": "conformance/IMPLEMENTER_GUIDE.md",
+      "description": "Guide for third-party bridge implementers: how to plug their verifier into the runner, expected pass/fail counts, and how to add custom vectors following the schema"
+    }
+  ],
+  "steps": [
+    "Define and publish conformance/cross_chain_vector_schema.json with required fields: sourceChainId (uint64), targetChainId (uint64), relayTimestamp (unix seconds), rootAge (seconds), proof (hex), publicInputs (array), expectedResult (pass|fail), failureReason (string|null)",
+    "Implement MockCrossChainVerifier.sol with five independently toggleable invariant checks: chain ID binding, root age TTL, storage proof block hash verification, batch Merkle inclusion, and scoped nullifier set",
+    "Author cv_01 and cv_02 (chain ID binding vectors): generate a real Groth16 or Plonk proof with sourceChainId in public inputs, craft the bound and unbound variants, record raw proof bytes and expected results",
+    "Author cv_03 and cv_04 (stale root vectors): parameterize rootAge field, set maxRootAge = 3600s in mock verifier, produce two vectors straddling the boundary",
+    "Author cv_05, cv_06, and cv_07 (storage proof vectors): use a known Ethereum state trie snapshot for valid block hash; mutate one byte for the invalid variant; use a Polygon block hash against an Ethereum-declared sourceChainId for the wrong-chain variant",
+    "Author cv_08, cv_09, and cv_10 (batch checkpoint vectors): construct a small Merkle tree of 8 leaves, produce valid inclusion proof for cv_08, corrupt leaf value for cv_09, swap root for cv_10",
+    "Author cv_11, cv_12, and cv_13 (nullifier replay vectors): define a nullifier as keccak256(chainId || identity || nonce); replay same value on same chain for cv_11; replay on different chain against non-scoped set for cv_12; use distinct values with chain-scoped sets for cv_13",
+    "Author cv_14 and cv_15 (relay timestamp edge cases): set relayTimestamp = block.timestamp + 3600 for cv_14; omit field entirely and expect schema validation failure for cv_15",
+    "Implement conformance/runner/cross_chain_runner.ts: parse all cv_*.json files, instantiate MockCrossChainVerifier via ethers.js against a local Hardhat/Anvil node, call verify() for each vector, compare result to expectedResult, print per-vector pass/fail and aggregate summary",
+    "Write CROSS_CHAIN_VECTORS.md documenting each vector's invariant, the specific protocol rule it exercises, and the canonical failure mode a broken implementation would exhibit",
+    "Write IMPLEMENTER_GUIDE.md: how to substitute a custom verifier address in the runner, minimum interface the verifier must expose (verify(proof, publicInputs) \u2192 bool), how to extend the suite with new vectors",
+    "Add a CI job (GitHub Actions) that spins up Anvil, deploys MockCrossChainVerifier, runs cross_chain_runner.ts, and asserts zero unexpected failures \u2014 gate merges on this job",
+    "Tag conformance suite as v1.0.0 and publish artifact checksums in CROSS_CHAIN_VECTORS.md so implementers can verify vector integrity"
+  ],
+  "estimated_constraints": 2800,
+  "dependencies": [
+    "Groth16 or Plonk proof system library (snarkjs or bellman) for generating real proof bytes in vectors",
+    "Ethereum state trie snapshot or mock MPT library for storage proof vectors",
+    "Hardhat or Foundry + Anvil for local EVM execution in CI",
+    "ethers.js or viem for TypeScript runner contract interaction",
+    "Existing conformance test suite scaffold (if any) to integrate cross-chain vectors alongside existing unit vectors",
+    "Defined maxRootAge and relay TTL constants from the protocol specification",
+    "Nullifier scoping scheme (chain-scoped vs global) finalized in protocol spec before authoring cv_11\u2013cv_13"
+  ]
+}

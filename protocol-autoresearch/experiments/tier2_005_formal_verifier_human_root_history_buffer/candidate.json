@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_human_root_history_buffer",
+  "persona": "formal_verifier",
+  "title": "Add root history buffer for humanTree matching agentTree's 30-root buffer",
+  "dimension": "correctness",
+  "description": "IdentityRegistry maintains a 30-root history buffer for agentTree (agentRootHistory, agentRootExists) but humanTree has no equivalent. The humanMerkleRoot output from HumanUniqueness is verified against a live tree root, meaning any new enrollment between proof generation and on-chain verification invalidates the proof. Add a parallel uint256[30] humanRootHistory with the same rotation logic, update it in enrollHuman(), and check humanMerkleRoot against it in verifyHandshake(). Without this, the protocol has a liveness failure under any realistic enrollment rate.",
+  "priority": "high",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_human_root_history_buffer",
+  "adoption": 14,
+  "standards": 14,
+  "completeness": 20,
+  "correctness": 21,
+  "total": 69,
+  "verdict": "consider"
+}

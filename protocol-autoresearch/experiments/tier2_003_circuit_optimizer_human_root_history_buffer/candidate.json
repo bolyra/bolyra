@@ -1,0 +1,16 @@
+{
+  "id": "circuit_optimizer_human_root_history_buffer",
+  "persona": "circuit_optimizer",
+  "title": "Add humanTree root history buffer matching agentTree's 30-root buffer",
+  "dimension": "correctness",
+  "description": "IdentityRegistry.sol maintains a 30-root history buffer for agentTree but none for humanTree. Any new human enrollment immediately invalidates in-flight HumanUniqueness proofs because the on-chain root changes. This is a liveness bug under load: if humans enroll faster than the proving time (~10-15s for Groth16 on mobile), proofs fail deterministically. Add an identical uint256[30] humanRootHistory buffer with the same ring-buffer logic. No circuit changes needed\u2014only the Solidity root check in verifyHandshake needs to query the buffer instead of a single root. Estimated: 30 lines of Solidity.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "circuit_optimizer_human_root_history_buffer",
+  "adoption": 19,
+  "standards": 15,
+  "completeness": 20,
+  "correctness": 16,
+  "total": 70,
+  "verdict": "consider"
+}

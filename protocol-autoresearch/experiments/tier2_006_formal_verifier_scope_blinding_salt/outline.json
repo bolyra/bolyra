@@ -1,0 +1,79 @@
+{
+  "id": "formal_verifier_scope_blinding_salt",
+  "title": "Blind scope commitments against bitmask brute-force",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/agent_policy.circom",
+      "description": "Replace Poseidon(permissionBitmask, credentialCommitment) with Poseidon3(permissionBitmask, credentialCommitment, blindingSalt); add blindingSalt as a private signal input"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/delegation.circom",
+      "description": "Update chain-linking check to recompute scopeCommitment using the 3-ary hash; thread blindingSalt as private input through delegation chain verification"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/scope_commitment.circom",
+      "description": "Shared component that wraps Poseidon3 for scope commitment; imported by both agent_policy and delegation circuits for consistency"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentRegistry.sol",
+      "description": "No ABI changes needed (scopeCommitment remains a bytes32 field); update NatSpec comments to document that the commitment now includes a blinding salt"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/scopeCommitment.ts",
+      "description": "Update commitment builder to generate a cryptographically random 32-byte blindingSalt, compute Poseidon3 off-chain, and return {commitment, blindingSalt} for caller to store securely"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Extend AgentPolicyInputs interface with blindingSalt: bigint field; update ProofInputs for delegation to include blindingSalt array per delegation hop"
+    },
+    {
+      "type": "test",
+      "filename": "test/circuits/scope_blinding.test.ts",
+      "description": "Circom unit tests: verify correct commitment output, verify proof fails with wrong salt, verify brute-force infeasibility by asserting ~2^16 bitmask enumeration cannot match commitment without salt"
+    },
+    {
+      "type": "test",
+      "filename": "test/sdk/scopeCommitment.test.ts",
+      "description": "SDK unit tests: check blindingSalt is fresh on each call, check commitment determinism given same inputs, check round-trip proof generation and verification"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/scope-commitment-v2.md",
+      "description": "Document the privacy threat model (bitmask brute-force attack), the fix rationale, the updated commitment schema, and key management guidance for blindingSalt storage"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/migration-scope-commitment-v1-to-v2.md",
+      "description": "Migration guide: existing scope commitments must be reissued; enrollment flow changes; backward-incompatible note with upgrade path for live deployments"
+    }
+  ],
+  "steps": [
+    "Add scope_commitment.circom shared component with a Poseidon3(permissionBitmask, credentialCommitment, blindingSalt) template",
+    "Update agent_policy.circom: add `signal input blindingSalt` as private input, replace 2-ary Poseidon call with the shared Poseidon3 component",
+    "Update delegation.circom: add blindingSalt as private input per hop, thread it through chain-linking recomputation using the same shared component",
+    "Recompile circuits, regenerate R1CS and witness generation artifacts, confirm ~800-constraint increase vs baseline",
+    "Update SDK scopeCommitment.ts to generate a fresh 32-byte random salt via crypto.getRandomValues, compute Poseidon3 off-chain, and return {commitment, blindingSalt}",
+    "Extend SDK types (AgentPolicyInputs, ProofInputs) with the blindingSalt field",
+    "Update proof generation helpers to pass blindingSalt into snarkjs/witness generation",
+    "Write circuit unit tests covering: correct output, wrong-salt rejection, delegation chain consistency",
+    "Write SDK unit tests covering: salt freshness, determinism, proof round-trip",
+    "Update specs/scope-commitment-v2.md with threat model, fix rationale, and key management guidance",
+    "Write migration guide documenting the breaking change and re-enrollment requirement",
+    "Run full test suite; confirm no regressions in existing policy and delegation proof tests"
+  ],
+  "estimated_constraints": 800,
+  "dependencies": [
+    "circomlib Poseidon3 component (arity-3 variant)",
+    "existing agent_policy.circom circuit",
+    "existing delegation.circom circuit",
+    "snarkjs witness generation pipeline",
+    "SDK Poseidon off-chain hasher (circomlibjs or equivalent)",
+    "secure randomness source in SDK runtime (crypto.getRandomValues or Node crypto)"
+  ]
+}

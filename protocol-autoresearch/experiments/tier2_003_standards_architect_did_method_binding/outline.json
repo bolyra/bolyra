@@ -1,0 +1,91 @@
+{
+  "id": "standards_architect_did_method_binding",
+  "title": "did:bolyra DID Method Specification with VC issuance",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "specs/did-method-bolyra.md",
+      "description": "W3C DID Method specification for did:bolyra, including method syntax, DID Document structure, CRUD operations, security considerations, and privacy considerations per W3C DID Core 1.0"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/vc-schema-bolyra-handshake.json",
+      "description": "JSON-LD Verifiable Credential schema for handshake results, defining credentialSubject fields: scopeCommitment, sessionNonce, verifierDID, humanityProofRoot, agentCapabilityRoot"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/bolyra-verification-method-2024.md",
+      "description": "Cryptographic suite specification for BolyraVerification2024 verification method type, defining key material representation (BN254 elliptic curve points), proof purpose, and DID Document embedding rules"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/BolyraDidRegistry.sol",
+      "description": "On-chain DID Document registry anchoring service endpoints and key rotations; wraps IdentityRegistry with DID-resolution-friendly view functions keyed by identityCommitment"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/did/resolver.ts",
+      "description": "DID resolver implementing the did:bolyra resolution algorithm: decode DID \u2192 derive identityCommitment \u2192 query humanTree/agentTree membership \u2192 construct and return DID Document JSON-LD"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/did/issuer.ts",
+      "description": "VC issuance module: takes a completed handshake result, signs a BolyraHandshakeCredential as the verifier service DID, and returns a signed JWT-VC or JSON-LD Verifiable Credential"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/did/document-builder.ts",
+      "description": "DID Document builder: constructs conformant DID Documents including verificationMethod, authentication, assertionMethod, and service endpoint sections from on-chain state"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did/resolver.test.ts",
+      "description": "Unit and integration tests for the DID resolver: valid resolution, deactivated identity, non-member identity, malformed DID, and chain query failure paths"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did/vc-issuance.test.ts",
+      "description": "Tests for VC issuance and verification: schema conformance, signature verification, credential expiry, revocation check, and round-trip JWT-VC parse"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did/interop.test.ts",
+      "description": "Interoperability tests against did-resolver universal resolver interface and vc-js / @digitalbazaar/vc libraries to validate W3C ecosystem compatibility"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-method-registration.md",
+      "description": "W3C DID Specification Registries submission template and instructions for registering did:bolyra, including method-specific parameters and contact information"
+    }
+  ],
+  "steps": [
+    "Define the did:bolyra method syntax: did:bolyra:<base58btc-encoded-identity-commitment> (32-byte BN254 field element encoded as base58btc, no version or network prefix in v1)",
+    "Specify DID Document JSON-LD structure: @context includes W3C DID Core + bolyra-specific context; id = the DID; verificationMethod array with one BolyraVerification2024 entry containing the BN254 public key; authentication and assertionMethod reference the verification method; service array includes IdentityRegistry contract address as a LinkedDomains or custom type endpoint",
+    "Define BolyraVerification2024 cryptographic suite: key type = BN254G1 (matches Semaphore/Poseidon stack); publicKeyMultibase encodes the identity commitment; proof purpose mapping to Semaphore group membership proofs",
+    "Specify resolution algorithm: (1) parse DID, extract base58-encoded string, base58btc-decode to 32-byte identity commitment; (2) call IdentityRegistry.isMember(commitment, humanTreeId) or agentTree equivalent to verify membership and retrieve group root; (3) fetch any key rotation or service endpoint deltas from BolyraDidRegistry; (4) assemble DID Document and return with metadata including deactivated flag if commitment is no longer in tree",
+    "Specify CRUD operations: Create = calling IdentityRegistry.registerIdentity() constitutes DID creation, no separate on-chain DID create tx needed; Update = key rotation via BolyraDidRegistry.setServiceEndpoint(); Delete/Deactivate = calling IdentityRegistry.revokeIdentity(); Read = resolution algorithm above",
+    "Design BolyraHandshakeCredential VC schema: type = ['VerifiableCredential', 'BolyraHandshakeCredential']; issuer = did:bolyra:<verifier-service-identity-commitment>; credentialSubject.id = did:bolyra:<prover-identity-commitment>; credentialSubject.scopeCommitment = hex string; credentialSubject.sessionNonce = hex string; credentialSubject.verifiedAt = ISO8601 timestamp; credentialSubject.humanityAsserted = bool; expirationDate = sessionNonce-derived TTL",
+    "Implement BolyraDidRegistry contract: mapping(uint256 => ServiceEndpoint[]) for identity-commitment-keyed endpoints; event-based key rotation log; view function resolveDocument(uint256 commitment) returns packed DID Document fields; integrate with existing IdentityRegistry for membership checks",
+    "Implement SDK resolver.ts: conform to did-resolver DIDResolver interface (resolve(did, options) => DIDResolutionResult); handle did:bolyra method prefix guard; implement base58btc decode; call on-chain view functions via ethers.js provider; construct JSON-LD DID Document; set didDocumentMetadata.deactivated correctly",
+    "Implement SDK issuer.ts: accept HandshakeResult struct from existing protocol; build VC payload per schema; sign using verifier service's private key via did-jwt or jsonld-signatures; support both JWT-VC compact serialization and JSON-LD Linked Data Proofs output formats",
+    "Register bolyra-specific JSON-LD context at a stable URL (or inline in spec): define BolyraVerification2024, BolyraHandshakeCredential, scopeCommitment, sessionNonce, humanityAsserted terms",
+    "Write resolver tests covering: happy-path human identity, happy-path agent identity, deactivated identity returns deactivated=true, identity not in any tree returns notFound error, malformed base58 DID returns invalidDid error",
+    "Write VC issuance tests covering: credential schema validation with ajv, JWT-VC round-trip with did-jwt, JSON-LD proof round-trip with @digitalbazaar/vc, expired credential rejection, tampered credentialSubject rejection",
+    "Write interop tests: resolve did:bolyra DID using did-resolver universal resolver shim, verify BolyraHandshakeCredential using vc-js against published context, confirm W3C VC Data Model 2.0 conformance checklist",
+    "Draft did:bolyra method specification document following W3C DID Method specification template: abstract, terminology, method name, method-specific identifier, DID Document, operations, security considerations (replay attacks via sessionNonce, Sybil resistance via Semaphore group membership, key compromise recovery), privacy considerations (commitment unlinkability, selective disclosure via ZKP)",
+    "Prepare W3C DID Specification Registries submission: fill method name, specification URL, contact, implementation status, and test suite URL fields"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry contract (humanTree and agentTree membership storage and query interface)",
+    "Semaphore group Merkle tree (BN254 / Poseidon hash \u2014 determines identity commitment derivation and key type)",
+    "Handshake protocol session result struct (scopeCommitment, sessionNonce fields must be finalized before VC schema locks)",
+    "W3C DID Core 1.0 specification",
+    "W3C Verifiable Credentials Data Model 2.0 specification",
+    "did-resolver npm package (DIDResolver interface contract)",
+    "did-jwt or @digitalbazaar/vc (VC signing library \u2014 choice affects proof format)",
+    "base58btc codec (multiformats or bs58 npm package)",
+    "ethers.js v6 (on-chain resolution queries)",
+    "JSON-LD context hosting (stable URL required for W3C registry submission)"
+  ]
+}

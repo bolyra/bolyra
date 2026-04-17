@@ -1,0 +1,77 @@
+{
+  "id": "circuit_optimizer_phantom_delegatee_merkle",
+  "title": "Add delegatee Merkle inclusion proof to Delegation circuit",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/delegation/delegation_main.circom",
+      "description": "Add BinaryMerkleRoot(20) component; wire delegateeCredCommitment as leaf input, add agentTreePathElements[20] and agentTreePathIndices[20] as private inputs, and agentTreeRoot as public output signal."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/lib/binary_merkle_root.circom",
+      "description": "Reusable BinaryMerkleRoot(MAX_DEPTH) component using Poseidon2 hash at each level. If not already present, implement it; otherwise confirm API compatibility."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/DelegationRegistry.sol",
+      "description": "Add agentRootHistory mapping (root => bool), an updateAgentRoot(bytes32) admin function, and a require check that the circuit-emitted agentTreeRoot exists in agentRootHistory during delegation submission."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/verifiers/DelegationVerifier.sol",
+      "description": "Regenerated Groth16/PLONK verifier from the updated circuit. Replace existing verifier deployment; update DelegationRegistry to reference new verifier address."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/delegation/buildDelegationInputs.ts",
+      "description": "Extend input builder to accept agentTree (MerkleTree instance), compute pathElements and pathIndices for delegateeCredCommitment leaf, and include agentTreeRoot in the public inputs struct passed to the prover."
+    },
+    {
+      "type": "test",
+      "filename": "tests/circuits/delegation_merkle.test.ts",
+      "description": "Unit tests: valid proof with correct Merkle path succeeds; wrong pathElements fails constraint; delegateeCredCommitment not in tree fails; root mismatch rejected on-chain."
+    },
+    {
+      "type": "test",
+      "filename": "tests/contracts/DelegationRegistry.merkle.test.ts",
+      "description": "Integration tests: agentRootHistory update flow; submitDelegation reverts when root not in history; accepts when root is registered; covers root rotation scenario."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/delegation-circuit-v2.md",
+      "description": "Updated circuit specification documenting new public signals (agentTreeRoot), new private inputs (pathElements, pathIndices), constraint budget breakdown, and security rationale for closing the phantom-delegatee soundness gap."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/sdk-migration-v2.md",
+      "description": "Migration guide for SDK consumers: new required fields in DelegationInputs, how to construct agentTree off-chain, and how to handle agentRootHistory updates."
+    }
+  ],
+  "steps": [
+    "Audit existing delegation_main.circom to catalogue all current signals, components, and constraints; confirm Poseidon2 hash function used elsewhere is compatible with BinaryMerkleRoot.",
+    "Implement or import BinaryMerkleRoot(MAX_DEPTH=20) component in circuits/lib/; write isolated circom unit test to validate root computation matches off-chain reference implementation.",
+    "Update delegation_main.circom: add private inputs agentTreePathElements[20] and agentTreePathIndices[20]; instantiate BinaryMerkleRoot(20); wire delegateeCredCommitment as leaf; expose computed root as public output signal agentTreeRoot.",
+    "Compile updated circuit with circom 2.x; record new constraint count; run existing test vectors to confirm no regression in other signal paths.",
+    "Generate new proving and verification keys (Powers of Tau ceremony output must support new constraint count ~10k additional); update keys in repo or trusted setup artifacts.",
+    "Regenerate DelegationVerifier.sol from new circuit; deploy to testnet; record new verifier address.",
+    "Update DelegationRegistry.sol: add agentRootHistory mapping, updateAgentRoot admin function with access control, and agentTreeRoot membership check in the delegation submission path.",
+    "Extend buildDelegationInputs.ts in the SDK to accept a MerkleTree instance, compute inclusion path for delegateeCredCommitment, and populate agentTreeRoot in the public inputs.",
+    "Write circuit-level tests (delegation_merkle.test.ts) covering valid path, invalid path, wrong leaf, and boundary depth cases.",
+    "Write contract-level integration tests (DelegationRegistry.merkle.test.ts) covering root history management, valid submission, rejection on unregistered root, and root rotation.",
+    "Update specs/delegation-circuit-v2.md with full signal table, constraint budget, and security argument.",
+    "Write SDK migration guide; update any downstream examples or demo scripts to use new input schema.",
+    "Run full test suite, lint, and verify proof generation end-to-end on testnet before tagging release."
+  ],
+  "estimated_constraints": 10240,
+  "dependencies": [
+    "circom 2.x compiler",
+    "Poseidon2 hash circom library (iden3/circomlib or equivalent)",
+    "BinaryMerkleRoot component (iden3/circomlib MerkleProof or custom)",
+    "snarkjs for key generation and verifier export",
+    "Powers of Tau ceremony output supporting >= total circuit constraint count",
+    "ethers.js / hardhat for contract deployment and integration tests",
+    "Existing DelegationRegistry.sol access-control pattern (owner or governance role for updateAgentRoot)",
+    "Off-chain MerkleTree implementation in SDK (matching hash function used in circuit)"
+  ]
+}

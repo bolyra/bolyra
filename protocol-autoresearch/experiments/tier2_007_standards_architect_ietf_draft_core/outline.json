@@ -1,0 +1,83 @@
+{
+  "id": "standards_architect_ietf_draft_core",
+  "title": "IETF Internet-Draft: Bolyra Mutual Authentication Protocol",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "draft-bolyra-mutual-auth-00.txt",
+      "description": "Complete IETF Internet-Draft in RFC 7749 (xml2rfc) plain-text output format covering all normative sections"
+    },
+    {
+      "type": "spec",
+      "filename": "draft-bolyra-mutual-auth-00.xml",
+      "description": "Source xml2rfc v3 markup file for the Internet-Draft, suitable for submission to datatracker.ietf.org"
+    },
+    {
+      "type": "spec",
+      "filename": "terminology.md",
+      "description": "Canonical glossary: identity commitment, credential commitment, scope commitment, nullifier, delegation chain, phantom-delegatee, stale-root \u2014 cross-referenced to draft sections"
+    },
+    {
+      "type": "spec",
+      "filename": "wire-format.cddl",
+      "description": "CDDL (RFC 8610) schema for all CBOR-encoded proof payloads, public signals, and protocol messages"
+    },
+    {
+      "type": "spec",
+      "filename": "msc-enrollment.txt",
+      "description": "ASCII message sequence chart (MSC) for the enrollment flow: Holder \u2194 Issuer \u2194 Accumulator Service"
+    },
+    {
+      "type": "spec",
+      "filename": "msc-handshake.txt",
+      "description": "ASCII MSC for the mutual authentication handshake flow: Prover \u2194 Verifier, including nonce exchange and nullifier submission"
+    },
+    {
+      "type": "spec",
+      "filename": "circuit-spec.md",
+      "description": "Normative circuit specification references: identity circuit, credential circuit, scope circuit \u2014 input/output signals, constraint counts, and conformance requirements"
+    },
+    {
+      "type": "spec",
+      "filename": "security-considerations.md",
+      "description": "Standalone security analysis covering phantom-delegatee attack, stale-root vulnerability, nullifier linkability, and replay mitigations \u2014 feeds into draft \u00a7Security Considerations"
+    },
+    {
+      "type": "test",
+      "filename": "conformance-vectors.json",
+      "description": "CBOR-encoded test vectors for enrollment proof, handshake proof, and negative cases (expired root, replayed nullifier)"
+    },
+    {
+      "type": "docs",
+      "filename": "iana-considerations.md",
+      "description": "IANA registration requests: CBOR tag for proof payload, media type application/bolyra-proof+cbor, and algorithm registry entries"
+    }
+  ],
+  "steps": [
+    "Collect and canonicalize all existing protocol artifacts (circuits, contracts, SDK types) to extract authoritative terminology and signal names",
+    "Draft \u00a71 Introduction and \u00a72 Conventions: establish RFC 2119/8174 normative language boilerplate, document scope, and intended use cases (credit-union mutual auth, portable identity)",
+    "Draft \u00a73 Terminology: define identity commitment, credential commitment, scope commitment, nullifier, delegation chain, phantom-delegatee, stale-root with precise mathematical notation",
+    "Draft \u00a74 Protocol Overview: high-level two-phase description (enrollment, handshake) with informative narrative and references to MSC diagrams",
+    "Produce enrollment MSC (msc-enrollment.txt): Holder\u2192Issuer credential issuance, accumulator insertion, commitment broadcast, confirmation receipt",
+    "Produce handshake MSC (msc-handshake.txt): Verifier nonce challenge, Prover proof generation, proof submission, nullifier check, accept/reject response",
+    "Draft \u00a75 Wire Format: normative CBOR (RFC 8949) encoding for ProofPayload, PublicSignals, EnrollmentRequest, HandshakeRequest, HandshakeResponse \u2014 with CDDL schema in wire-format.cddl",
+    "Draft \u00a76 Circuit Specification References: normative constraints on identity, credential, and scope circuits \u2014 required public inputs, output commitments, and groth16/plonk agility",
+    "Draft \u00a77 Security Considerations: phantom-delegatee (delegatee key binding gap), stale-root (accumulator epoch freshness), nullifier replay, proof malleability, side-channel leakage",
+    "Draft \u00a78 IANA Considerations: CBOR tag registration, media type registration, algorithm identifiers",
+    "Draft \u00a79 References: normative (RFC 2119, RFC 8949, RFC 8610, RFC 7517, Groth16 paper) and informative",
+    "Assemble xml2rfc v3 source (draft-bolyra-mutual-auth-00.xml) from all section drafts and validate with xml2rfc toolchain",
+    "Generate plain-text output (draft-bolyra-mutual-auth-00.txt) and verify idnits compliance",
+    "Produce CBOR conformance test vectors (conformance-vectors.json) covering happy-path enrollment, happy-path handshake, stale-root rejection, and nullifier replay rejection",
+    "Cross-check all signal names in circuit-spec.md against actual circuit source files and reconcile any discrepancies",
+    "Internal review pass: verify all MUST/SHALL/SHOULD/MAY usage is consistent and each normative claim is backed by a circuit or wire-format constraint",
+    "Update terminology.md with final section cross-references and publish as standalone companion document"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Finalized Circom circuit source files (identity, credential, scope) with confirmed public input/output signal names",
+    "Canonical accumulator contract interface (root update cadence, epoch definition)",
+    "Nullifier registry interface specification (submission, deduplication semantics)",
+    "Agreement on proof system agility scope (Groth16-only v1 vs. PLONK extension point)",
+    "CBOR tag range allocation decision (private range vs. IANA early allocation)"
+  ]
+}

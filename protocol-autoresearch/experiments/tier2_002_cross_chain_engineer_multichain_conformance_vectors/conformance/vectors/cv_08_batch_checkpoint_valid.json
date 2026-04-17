@@ -1,0 +1,35 @@
+{
+  "vectorId": "cv_08_batch_checkpoint_valid",
+  "version": "1.0.0",
+  "category": "batch_checkpoint",
+  "description": "Batch checkpoint inclusion proof where the leaf (identity commitment) is correctly included in the batch Merkle tree. The proof path hashes to the declared batch root. This is the happy-path batch verification case.",
+  "sourceChainId": 1,
+  "targetChainId": 10,
+  "relayTimestamp": 1713341000,
+  "rootAge": 600,
+  "maxRootAge": 3600,
+  "proof": "0x6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f1a5b9c3d7e6f0a4b8c2d1e5f9a3b7c6d0e4f8a2b1c5d9e3f7a6b0c4d8e2f",
+  "publicInputs": [
+    "0x4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
+    "0x00000000000000000000000000000000000000000000000000000000batchaaa",
+    "0x000000000000000000000000000000000000000000000000000000000000000a"
+  ],
+  "expectedResult": "pass",
+  "failureReason": null,
+  "batchCheckpoint": {
+    "batchRoot": "0x7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8",
+    "leaf": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "leafIndex": 3,
+    "proof": [
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+      "0x3333333333333333333333333333333333333333333333333333333333333333",
+      "0x4444444444444444444444444444444444444444444444444444444444444444"
+    ]
+  },
+  "metadata": {
+    "author": "bolyra-conformance",
+    "createdAt": "2026-04-17",
+    "protocolVersion": "0.5.0",
+    "notes": "Batch tree depth=3 (8 leaves). Leaf at index 3 with 3 sibling hashes. Verifier on Optimism (chainId=10) checks inclusion against relayed batchRoot."
+  }
+}

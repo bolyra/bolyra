@@ -1,0 +1,61 @@
+{
+  "id": "standards_architect_conformance_vectors",
+  "title": "Conformance Test Suite with JSON Test Vectors",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "conformance/vector-schema.json",
+      "description": "JSON Schema (draft-07) defining the test vector format: circuit name enum, input signals object, expected_output object or expected_rejection string, category tag, and optional notes field"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors.json",
+      "description": "Master file containing 50+ test vectors grouped by category covering IdentityHandshake, DelegationLink, and ScopeEnforcement circuits"
+    },
+    {
+      "type": "docs",
+      "filename": "conformance/README.md",
+      "description": "Explains vector format, category taxonomy, how to run the suite against any snarkjs-compatible implementation, and expected pass/fail counts per category"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/validate-schema.js",
+      "description": "Node.js script that validates vectors.json against vector-schema.json using ajv; exits non-zero on any schema violation"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/run-suite.js",
+      "description": "Standalone runner that loads vectors.json, calls snarkjs groth16.fullProve or expects proof rejection, and reports pass/fail per vector without depending on any project-specific test harness"
+    }
+  ],
+  "steps": [
+    "Define the JSON Schema for a single test vector: required fields are 'id' (string), 'circuit' (enum: IdentityHandshake | DelegationLink | ScopeEnforcement), 'category' (enum: valid_handshake | expired_credential | revoked_nullifier | stale_merkle_root | scope_subset_violation | cumulative_bit_violation | delegation_depth | cross_hop_scope_mismatch), 'inputs' (object of signal-name \u2192 value), and 'expected' (object with 'outputs' for valid cases or 'rejection_reason' string for invalid cases)",
+    "Enumerate all signal names for each of the three circuits from the existing circuit specs; create a reference table mapping circuit \u2192 input signals \u2192 output signals to ensure vectors use correct field names",
+    "Generate category 'valid_handshake': 8 vectors covering human-only credential, agent-delegated credential at depth 1, agent at depth 3, varying scope bitmasks (single scope, multi-scope), and boundary timestamp (currentTimestamp == expiryTimestamp - 1)",
+    "Generate category 'expired_credential': 6 vectors where currentTimestamp >= expiryTimestamp for both human and agent credentials; expected_rejection_reason = 'ExpiryCheckFailed'",
+    "Generate category 'revoked_nullifier': 5 vectors where the human nullifier hash appears in the revocation Merkle tree; expected_rejection_reason = 'NullifierRevoked'",
+    "Generate category 'stale_merkle_root': 5 vectors where the presented Merkle root is not in the 30-root rolling buffer; expected_rejection_reason = 'StaleRoot'",
+    "Generate category 'scope_subset_violation': 6 vectors where the agent's requested scope bits include at least one bit not set in the delegating human's scope; expected_rejection_reason = 'ScopeNotSubset'",
+    "Generate category 'cumulative_bit_violation': 6 vectors testing the dependency rule that bit 4 requires bits 2 and 3 both set; include cases where only bit 4 is set, bit 4 + bit 2 only, bit 4 + bit 3 only, and valid case where bits 2+3+4 are all set",
+    "Generate category 'delegation_depth': 8 vectors: depth 0 (human direct), depth 1 (single agent hop), depth 3 (max allowed), depth 4 (must fail with 'MaxDelegationDepthExceeded'), plus two edge cases with mixed valid/invalid intermediate hops",
+    "Generate category 'cross_hop_scope_commitment_mismatch': 6 vectors where the scope commitment hash at hop N does not match the re-derived commitment at hop N+1 in the delegation chain; expected_rejection_reason = 'ScopeCommitmentMismatch'",
+    "Assign deterministic numeric IDs and stable UUIDs to each vector so implementations can reference failures by ID in bug reports",
+    "Write validate-schema.js using ajv to confirm every vector in vectors.json satisfies vector-schema.json; run locally to confirm zero errors before committing",
+    "Write run-suite.js as a standalone executor: for 'outputs' vectors call groth16.fullProve and assert signal values match; for 'rejection_reason' vectors expect proof generation to throw or constraint check to fail and match the reason string",
+    "Add a summary block at the top of vectors.json with total count, per-category count, and per-circuit count for quick human verification",
+    "Write conformance/README.md documenting the schema, category definitions, how to point the runner at custom wasm/zkey artifacts, and how to interpret the pass/fail report"
+  ],
+  "estimated_constraints": 280,
+  "dependencies": [
+    "Finalized signal names for IdentityHandshake circuit",
+    "Finalized signal names for DelegationLink circuit",
+    "Finalized signal names for ScopeEnforcement circuit",
+    "Specification of the 30-root rolling buffer interface",
+    "Specification of the revocation Merkle tree structure",
+    "Agreed cumulative bit dependency rules (bit 4 requires bits 2+3)",
+    "Maximum delegation depth constant (confirmed as 3)",
+    "Scope commitment hash function specification",
+    "ajv npm package for schema validation runner",
+    "snarkjs npm package for proof generation in the standalone runner"
+  ]
+}

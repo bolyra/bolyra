@@ -1,0 +1,97 @@
+{
+  "id": "standards_architect_conformance_vectors",
+  "title": "Conformance Test Suite with JSON Test Vectors",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "conformance/schema/test-vector.schema.json",
+      "description": "JSON Schema defining the structure of a single test vector: circuit_name, public_inputs, public_outputs, expected_verdict (accept|reject), failure_reason_code, and optional notes."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/01_valid_handshake.json",
+      "description": "Vectors for fully valid human+agent proof handshakes at delegation depth 1 \u2014 all fields well-formed, non-expired, non-revoked, nonce fresh; expected verdict: accept."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/02_expired_credential.json",
+      "description": "Vectors where expiryTimestamp < currentTimestamp for both human and agent credentials; expected verdict: reject; failure_reason_code: ERR_CREDENTIAL_EXPIRED."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/03_revoked_human.json",
+      "description": "Vectors where the human nullifier appears in the on-chain revocation set; expected verdict: reject; failure_reason_code: ERR_NULLIFIER_REVOKED."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/04_stale_agent_root.json",
+      "description": "Vectors where the agent Merkle root is not present in the 30-entry history buffer; expected verdict: reject; failure_reason_code: ERR_ROOT_NOT_IN_HISTORY."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/05_scope_subset_violation.json",
+      "description": "Vectors where (delegateeScope & ~delegatorScope) != 0, i.e. delegatee claims bits the delegator never had; expected verdict: reject; failure_reason_code: ERR_SCOPE_OVERFLOW."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/06_delegation_chain_depths.json",
+      "description": "Vectors for delegation chains at depths 1, 3 (both accept) and depth 4 (reject); failure_reason_code for depth-4: ERR_MAX_DELEGATION_DEPTH."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/07_nonce_reuse.json",
+      "description": "Vectors where the same nonce appears twice in a session; second use expected verdict: reject; failure_reason_code: ERR_NONCE_REUSED."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/08_phantom_delegatee.json",
+      "description": "Vectors for the phantom delegatee attack: delegatee commitment absent from every Merkle tree; expected verdict: reject (post-fix); failure_reason_code: ERR_PHANTOM_DELEGATEE."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/09_boundary_and_edge.json",
+      "description": "Edge-case vectors: expiryTimestamp == currentTimestamp (boundary accept/reject policy), zero-bit scope, max-depth chain at exactly 3, root at index 0 and index 29 of history buffer."
+    },
+    {
+      "type": "spec",
+      "filename": "conformance/CONFORMANCE.md",
+      "description": "Human-readable conformance guide: how to load vectors, invoke a verifier, interpret verdicts, map failure_reason_codes to circuit constraint IDs, and certify a second implementation as conformant."
+    },
+    {
+      "type": "test",
+      "filename": "conformance/runner/run_vectors.py",
+      "description": "Reference Python runner: loads all vector JSON files, calls the reference verifier (snarkjs or circom witness), compares actual vs expected verdict, and emits a pass/fail report with per-vector detail."
+    },
+    {
+      "type": "docs",
+      "filename": "conformance/FAILURE_CODES.md",
+      "description": "Canonical registry of all failure_reason_codes with definitions, corresponding circuit constraint names, and the minimal condition that triggers each code."
+    }
+  ],
+  "steps": [
+    "Define and publish test-vector.schema.json, locking the fields: circuit_name, public_inputs (keyed by signal name), public_outputs (keyed by signal name), expected_verdict, failure_reason_code, notes.",
+    "Enumerate all circuits in scope (handshake, delegation-chain, scope-check, revocation, nonce) and list every public input/output signal with its field type (Fp element, bool, uint).",
+    "Produce vectors/01_valid_handshake.json: at least 10 accept vectors varying delegator identity, agent key, scope bits, and chain depth 1; verify each against reference circuit.",
+    "Produce vectors/02_expired_credential.json: at least 6 reject vectors \u2014 3 where human credential is expired, 3 where agent credential is expired; confirm constraint fires.",
+    "Produce vectors/03_revoked_human.json: at least 5 reject vectors with nullifier injected into revocation Merkle set; confirm circuit rejects membership proof.",
+    "Produce vectors/04_stale_agent_root.json: at least 5 reject vectors with root outside 30-entry ring buffer; test boundary: root at position 30 (reject) vs 29 (accept).",
+    "Produce vectors/05_scope_subset_violation.json: at least 6 reject vectors covering each individual bit overflow position and multi-bit overflow; include 3 accept vectors at exact scope equality.",
+    "Produce vectors/06_delegation_chain_depths.json: depth-1 accept (5 vectors), depth-3 accept (5 vectors), depth-4 reject (5 vectors, failure_reason_code ERR_MAX_DELEGATION_DEPTH).",
+    "Produce vectors/07_nonce_reuse.json: at least 5 reject vectors; document that the nullifier-set membership check is the enforcing constraint.",
+    "Produce vectors/08_phantom_delegatee.json: at least 5 reject vectors where delegatee Poseidon commitment is not a leaf in any published Merkle tree; document the post-fix circuit change that closes this.",
+    "Produce vectors/09_boundary_and_edge.json: expiry == current (policy decision \u2014 document), zero scope accept, scope all-ones accept, root at ring-buffer boundary indices 0 and 29.",
+    "Write FAILURE_CODES.md listing every code, its triggering condition, and the circuit constraint name (e.g. component name + signal in the Circom source).",
+    "Write run_vectors.py: validate each vector file against test-vector.schema.json, invoke snarkjs fullProve + verify using the reference zkey, assert verdict matches, output TAP-compatible results.",
+    "Run the full vector suite against the reference circuits; fix any vector that misidentifies the expected verdict.",
+    "Write CONFORMANCE.md: explain how a second implementor uses the suite, defines the conformance threshold (all 50+ vectors must pass), and describes how to add new vectors for future protocol versions."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circom source for handshake, delegation-chain, scope-check, revocation, and nonce circuits",
+    "reference zkey and verification key files for each circuit",
+    "snarkjs CLI or equivalent for witness generation and proof verification",
+    "Poseidon hash parameters matching those embedded in the circuits",
+    "canonical revocation Merkle tree construction and 30-entry history ring-buffer spec",
+    "jsonschema Python library for vector validation in the runner"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "vectorId": "cv_01_unbound_chain_id",
+  "version": "1.0.0",
+  "category": "chain_id_binding",
+  "description": "Proof generated on Ethereum mainnet (chainId=1) submitted to a verifier on Polygon (chainId=137) without chain ID binding in the circuit public inputs. The proof itself is valid but the chain ID is not committed to in the proof, allowing cross-chain replay. A conformant verifier MUST reject this.",
+  "sourceChainId": 1,
+  "targetChainId": 137,
+  "relayTimestamp": 1713340800,
+  "rootAge": 120,
+  "maxRootAge": 3600,
+  "proof": "0x2a8d9b0f3c1e4a7d6b5f8e2c9d0a1b3f4e5c6d7a8b9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b0000000000000000000000000000000000000000000000000000000000000000",
+  "publicInputs": [
+    "0x1a2b3c4d5e6f708192a3b4c5d6e7f80910111213141516171819202122232425",
+    "0x00000000000000000000000000000000000000000000000000000000deadbeef",
+    "0x0000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "expectedResult": "fail",
+  "failureReason": "CHAIN_ID_UNBOUND",
+  "metadata": {
+    "author": "bolyra-conformance",
+    "createdAt": "2026-04-17",
+    "protocolVersion": "0.5.0",
+    "notes": "publicInputs[2] is the chain ID slot — set to 0x0 to simulate an unbound proof that does not commit to any chain. The verifier must check that this field is non-zero and matches the target chain."
+  }
+}

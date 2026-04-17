@@ -1,0 +1,78 @@
+{
+  "id": "formal_verifier_phantom_delegatee_merkle",
+  "title": "Delegatee Merkle inclusion proof requirement",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/delegation/DelegationWithMerkle.circom",
+      "description": "Updated Delegation circuit that requires a Merkle inclusion proof for delegateeCredCommitment against agentTree (or union root). Exposes verifiedAgentRoot as a public output."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/lib/MerkleInclusionProof.circom",
+      "description": "Reusable Merkle path verifier template (depth-parameterized, Poseidon-based). Verifies leaf inclusion against a given root using sibling path."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/delegation/DelegationWithMerkle.test.circom",
+      "description": "Circom test harness exercising valid inclusion, wrong-root rejection, and fabricated delegatee rejection paths."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/DelegationVerifier.sol",
+      "description": "Regenerated Groth16 verifier from updated circuit. Replaces prior DelegationVerifier."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentRegistry.sol",
+      "description": "On-chain registry that stores the current agentTree Merkle root and exposes updateRoot(bytes32) (owner-gated or time-locked). Delegation verifier checks submitted proof's public verifiedAgentRoot against registry root."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/delegation/buildDelegationWitness.ts",
+      "description": "Updated witness builder that fetches the agentTree Merkle path for the delegatee, computes sibling path, and populates all new private/public inputs."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/delegation-merkle-inclusion.md",
+      "description": "Protocol spec section describing the threat model (phantom delegatee attack), the Merkle inclusion requirement, public output semantics, and root-staleness policy."
+    },
+    {
+      "type": "test",
+      "filename": "test/delegation/phantomDelegatee.test.ts",
+      "description": "Integration tests: (1) valid proof with enrolled agent passes, (2) fabricated delegateeCredCommitment produces invalid proof, (3) stale root is rejected by AgentRegistry, (4) updated root allows fresh proof."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/delegation-upgrade-guide.md",
+      "description": "Migration guide for protocol integrators: new circuit inputs, updated ABI, root-staleness handling, re-proof requirements for existing delegations."
+    }
+  ],
+  "steps": [
+    "Audit existing Delegation circuit: enumerate all inputs/outputs and confirm delegateeCredCommitment is unconstrained beyond hashing into newScopeCommitment.",
+    "Define agentTree structure: leaf format (Poseidon(agentCredCommitment, agentPubKey, nonce)), tree depth (recommend 20), and hash function (Poseidon2).",
+    "Implement MerkleInclusionProof.circom: depth-parameterized template, accepts (leaf, pathElements[depth], pathIndices[depth], root), asserts computed root equals provided root.",
+    "Update DelegationWithMerkle.circom: add private inputs (delegateeMerklePathElements[depth], delegateeMerklePathIndices[depth]), add public input/output verifiedAgentRoot, instantiate MerkleInclusionProof with delegateeCredCommitment as leaf, assert inclusion.",
+    "Run circom compilation and constraint count; verify no unexpected under-constraint warnings via circom --inspect.",
+    "Generate trusted setup (Powers of Tau + Groth16 ceremony) for updated circuit; produce new verification key.",
+    "Regenerate DelegationVerifier.sol via snarkjs; update public input array indices to match new signal ordering.",
+    "Implement AgentRegistry.sol: store agentTreeRoot, emit RootUpdated events, expose staleness window constant, add requireFreshRoot modifier used by delegation entry point.",
+    "Update DelegationEntryPoint.sol (or equivalent) to pass verifiedAgentRoot from proof public outputs into AgentRegistry.requireFreshRoot check.",
+    "Update sdk/delegation/buildDelegationWitness.ts: integrate agentTree Merkle path fetch (from indexer or local tree), populate new circuit inputs.",
+    "Write phantomDelegatee.test.ts integration tests covering all four scenarios (valid, fabricated, stale root, updated root).",
+    "Write circom-level tests (DelegationWithMerkle.test.circom) for constraint satisfaction and expected failures.",
+    "Update specs/delegation-merkle-inclusion.md with threat model, fix rationale, and root-staleness SLA.",
+    "Write docs/delegation-upgrade-guide.md for downstream integrators.",
+    "Audit for secondary under-constraint risks introduced by new signals (e.g., unused pathIndices bits).",
+    "Final review: confirm verifiedAgentRoot cannot be set to an attacker-controlled value without breaking proof, and that AgentRegistry root update is access-controlled and event-logged."
+  ],
+  "estimated_constraints": 28000,
+  "dependencies": [
+    "Poseidon2 circom library (iden3/circomlib or equivalent)",
+    "Existing agentTree leaf schema and tree-depth decision",
+    "snarkjs >= 0.7 for Groth16 circuit compilation and verifier generation",
+    "Trusted setup ceremony artifacts (Powers of Tau ptau file of sufficient size)",
+    "AgentTree indexer or off-chain tree state for SDK Merkle path generation",
+    "Existing DelegationEntryPoint.sol interface (to wire verifiedAgentRoot check)"
+  ]
+}

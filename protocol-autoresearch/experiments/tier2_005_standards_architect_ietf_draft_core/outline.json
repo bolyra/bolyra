@@ -1,0 +1,81 @@
+{
+  "id": "standards_architect_ietf_draft_core",
+  "title": "IETF Internet-Draft: Bolyra Core Protocol Specification",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "draft-bolyra-identity-core-00.txt",
+      "description": "IETF Internet-Draft in RFC 7322 plain-text format covering all normative sections"
+    },
+    {
+      "type": "spec",
+      "filename": "draft-bolyra-identity-core-00.xml",
+      "description": "RFC XML v3 (RFC 7991) source for the Internet-Draft, suitable for xml2rfc toolchain"
+    },
+    {
+      "type": "spec",
+      "filename": "cddl/proof-payload.cddl",
+      "description": "CDDL schema for the CBOR-encoded proof payload wire format (IdentityProof, DelegationProof, NullifierProof)"
+    },
+    {
+      "type": "spec",
+      "filename": "cddl/circuit-io.cddl",
+      "description": "CDDL schema describing public input/output signal arrays for each of the three Circom circuits"
+    },
+    {
+      "type": "spec",
+      "filename": "abi/IBolyraVerifier.json",
+      "description": "ABI specification (JSON) for the on-chain IBolyraVerifier interface, including verifyIdentity, verifyDelegation, and verifyNullifier entry points"
+    },
+    {
+      "type": "docs",
+      "filename": "terminology.md",
+      "description": "Normative glossary: human, agent, delegator, delegatee, scope, nullifier, Merkle root, commitment \u2014 used as source-of-truth across all downstream documents"
+    },
+    {
+      "type": "test",
+      "filename": "tests/validate-cddl.sh",
+      "description": "Shell script invoking cddl CLI to validate example CBOR payloads against the CDDL schemas"
+    },
+    {
+      "type": "test",
+      "filename": "tests/example-payloads/identity-proof.cbor",
+      "description": "Binary CBOR example of a valid IdentityProof payload for test and spec illustration"
+    },
+    {
+      "type": "test",
+      "filename": "tests/example-payloads/delegation-proof.cbor",
+      "description": "Binary CBOR example of a valid DelegationProof payload"
+    },
+    {
+      "type": "test",
+      "filename": "tests/example-payloads/nullifier-proof.cbor",
+      "description": "Binary CBOR example of a valid NullifierProof payload"
+    }
+  ],
+  "steps": [
+    "Establish normative terminology: define human, agent, delegator, delegatee, scope, nullifier, Merkle root, commitment in terminology.md; annotate each with RFC 2119/8174 usage level",
+    "Draft Protocol Overview section: describe the 3-circuit architecture (IdentityCircuit, DelegationCircuit, NullifierCircuit), their trust model, and the flow from off-chain proof generation to on-chain verification",
+    "Specify Circuit Public Interface: document public input signal schema (signal name, bit-width, encoding, semantic) and public output signal schema for each of the three Circom circuits in both prose and CDDL (cddl/circuit-io.cddl)",
+    "Define Wire Format section: specify CBOR encoding of proof payloads (Groth16 pi_a/pi_b/pi_c arrays, publicSignals, proofType enum, version), author cddl/proof-payload.cddl with CDDL notation, include annotated hex dumps as figures",
+    "Specify On-Chain Verification Interface: define IBolyraVerifier ABI (function selectors, calldata layout, return values, event signatures), encode as abi/IBolyraVerifier.json, reference EIP-712 structured-data hashing where applicable",
+    "Author Security Considerations section: replay attacks (nullifier binding, chain-id inclusion), Sybil resistance (commitment uniqueness guarantees), scope brute-force (entropy requirements and scope hashing scheme), root staleness (maximum root age parameter and on-chain root history depth)",
+    "Write Introduction section: motivation, target audience (CU identity, portable credentials), relationship to W3C DID/VC, non-goals",
+    "Assemble RFC XML v3 source (draft-bolyra-identity-core-00.xml) using xml2rfc boilerplate, IANA considerations (none for -00), references (RFC 2119, RFC 8174, RFC 8949 CBOR, RFC 8610 CDDL, Groth16 paper)",
+    "Run xml2rfc toolchain to produce draft-bolyra-identity-core-00.txt; fix any formatting errors reported by the tool",
+    "Create example CBOR payloads (tests/example-payloads/*.cbor) and validate them against cddl/proof-payload.cddl using tests/validate-cddl.sh",
+    "Cross-check all RFC 2119 keyword usages for consistency (no MUST in informative sections, no ambiguous SHOULDs without rationale)",
+    "Tag artifact versions and update the seed registry with artifact paths and section cross-references"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Circom circuit source files (for public signal enumeration)",
+    "Solidity verifier contracts (for ABI extraction)",
+    "RFC 7322 (IETF document formatting requirements)",
+    "RFC 8949 (CBOR)",
+    "RFC 8610 (CDDL)",
+    "RFC 2119 / RFC 8174 (requirement keywords)",
+    "xml2rfc toolchain (for .txt rendering)",
+    "cddl CLI or equivalent (for schema validation)"
+  ]
+}

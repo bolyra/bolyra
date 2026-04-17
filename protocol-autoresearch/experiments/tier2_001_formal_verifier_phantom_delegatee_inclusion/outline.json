@@ -1,0 +1,74 @@
+{
+  "id": "formal_verifier_phantom_delegatee_inclusion",
+  "title": "Add delegatee Merkle inclusion proof to Delegation circuit",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/delegation/delegation.circom",
+      "description": "Add agentTreeRoot as public input; add merkleProof (pathElements[20], pathIndices[20]) as private inputs; instantiate BinaryMerkleRoot(20) component; constrain root output === agentTreeRoot; wire delegateeCredCommitment as leaf"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/lib/binary_merkle_root.circom",
+      "description": "Existing BinaryMerkleRoot(MAX_DEPTH) template \u2014 verify it is already present and importable; no changes expected"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/DelegationVerifier.sol",
+      "description": "Regenerated Groth16 verifier from updated circuit; replace existing verifier bytecode"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/DelegationRegistry.sol",
+      "description": "Accept agentTreeRoot as calldata param; validate it exists in the on-chain root history buffer (shared with IdentityRegistry); revert if root is unknown or expired"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/delegation-circuit-v2.md",
+      "description": "Updated circuit specification: public/private input table, Merkle proof format, root history buffer interface, soundness argument for delegatee inclusion"
+    },
+    {
+      "type": "test",
+      "filename": "test/circuits/delegation.test.ts",
+      "description": "Circom unit tests: valid proof passes; proof with fabricated commitment (leaf not in tree) fails constraint; proof with wrong root fails; proof with correct leaf at varying depths passes"
+    },
+    {
+      "type": "test",
+      "filename": "test/contracts/DelegationRegistry.test.ts",
+      "description": "Solidity tests: submit delegation with valid root in history \u2192 success; submit with stale/unknown root \u2192 revert; replay attack with old root \u2192 revert"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation/prover.ts",
+      "description": "Update proof generation helper to accept agentTree MerkleProof witness (pathElements, pathIndices, leaf index); fetch current agentTreeRoot from on-chain or cached state; pass all inputs to snarkjs fullProve"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/security/delegation-soundness.md",
+      "description": "Document the phantom delegatee vulnerability, the fix, the trust model for agentTreeRoot, and upgrade path for existing delegations"
+    }
+  ],
+  "steps": [
+    "Audit BinaryMerkleRoot(MAX_DEPTH) template: confirm it accepts leaf + pathElements[MAX_DEPTH] + pathIndices[MAX_DEPTH] and outputs root; verify it is poseidon-hashed and matches the hash used for delegateeCredCommitment",
+    "Update circuits/delegation/delegation.circom: add signal input agentTreeRoot (public); add signal input merklePathElements[20] and merklePathIndices[20] (private); add component merkleCheck = BinaryMerkleRoot(20); wire leaf = delegateeCredCommitment, path inputs, and constrain merkleCheck.root === agentTreeRoot",
+    "Recompile circuit with circom 2.x; run snarkjs groth16 setup with new .r1cs; regenerate proving key and verification key; export new verifier contract",
+    "Replace DelegationVerifier.sol with regenerated verifier; update ABI references throughout contracts/",
+    "Update DelegationRegistry.sol: add agentTreeRoot parameter to submitDelegation(); call IRootHistory.isKnownRoot(agentTreeRoot) and revert with UnknownAgentRoot() if false; emit agentTreeRoot in DelegationSubmitted event",
+    "Implement or verify IRootHistory interface is already shared with IdentityRegistry's root history buffer; if not, extract to shared library contract",
+    "Write circuit unit tests covering: (a) honest witness at depth 1..20, (b) fabricated leaf not in tree \u2192 expect constraint failure, (c) correct leaf wrong root \u2192 expect constraint failure",
+    "Write DelegationRegistry contract tests covering root validation, stale root rejection, and event emission",
+    "Update SDK prover.ts to build Merkle witness from agentTree snapshot; expose helper to fetch latest agentTreeRoot from chain",
+    "Update spec and security docs; bump circuit version constant in all relevant files",
+    "Run full test suite; verify no regressions in downstream circuits consuming scopeCommitment",
+    "Coordinate trusted setup ceremony or use existing Powers of Tau if constraint count fits; document entropy source"
+  ],
+  "estimated_constraints": 42000,
+  "dependencies": [
+    "BinaryMerkleRoot circom template (circuits/lib/binary_merkle_root.circom)",
+    "IRootHistory on-chain root buffer shared with IdentityRegistry",
+    "Poseidon hash consistency between delegateeCredCommitment construction and Merkle leaf hashing",
+    "Powers of Tau ceremony supporting at least 2^16 constraints",
+    "snarkjs >= 0.7 for Groth16 proof generation",
+    "circom >= 2.1.6"
+  ]
+}

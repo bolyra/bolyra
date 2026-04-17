@@ -1,0 +1,60 @@
+{
+  "id": "standards_architect_conformance_vectors",
+  "title": "Machine-readable conformance test vectors (JSON)",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "conformance/vectors/schema.json",
+      "description": "JSON Schema defining the conformance vector envelope: id, circuit, scenario, inputs, expected_output, must_succeed, error_code"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/human_uniqueness.json",
+      "description": "Test vectors for HumanUniqueness circuit: valid witness, expired credential, revoked nullifier, stale Merkle root, replay with reused nonce"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/agent_policy.json",
+      "description": "Test vectors for AgentPolicy circuit: valid witness, scope subset violation (delegateeScope & ~delegatorScope != 0), cumulative bit encoding violation (bit 4 without bits 2+3)"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/delegation.json",
+      "description": "Test vectors for Delegation circuit: chain depths 1/2/3 (must succeed), depth 4 (must fail), scope inheritance violations, expired delegation credential"
+    },
+    {
+      "type": "spec",
+      "filename": "conformance/ERROR_CODES.md",
+      "description": "Canonical error code registry referenced by vectors: ERR_EXPIRED_CREDENTIAL, ERR_REVOKED_NULLIFIER, ERR_STALE_ROOT, ERR_SCOPE_VIOLATION, ERR_BIT_ENCODING, ERR_CHAIN_DEPTH, ERR_REPLAY_NONCE"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/validate_vectors.py",
+      "description": "CI harness: loads all vector files, validates against schema, runs each vector through the reference prover/verifier, asserts must_succeed/error_code outcomes"
+    },
+    {
+      "type": "docs",
+      "filename": "conformance/README.md",
+      "description": "Conformance guide: how to run vectors against a new implementation, pass criteria, how to add new vectors, versioning policy"
+    }
+  ],
+  "steps": [
+    "Define JSON Schema for vector envelope (id, circuit, scenario, inputs, expected_output.proof_valid, expected_output.error_code, notes)",
+    "Enumerate error code registry (ERR_EXPIRED_CREDENTIAL, ERR_REVOKED_NULLIFIER, ERR_STALE_ROOT, ERR_SCOPE_VIOLATION, ERR_BIT_ENCODING, ERR_CHAIN_DEPTH, ERR_REPLAY_NONCE) and publish as ERROR_CODES.md",
+    "Author HumanUniqueness vectors: 1 valid witness (must succeed), 1 expired credential (expiryTimestamp < currentTimestamp, must fail ERR_EXPIRED_CREDENTIAL), 1 revoked nullifier (must fail ERR_REVOKED_NULLIFIER), 1 stale Merkle root not in history buffer (must fail ERR_STALE_ROOT), 2 replay vectors with reused nonce (must fail ERR_REPLAY_NONCE)",
+    "Author AgentPolicy vectors: 1 valid witness, 3 scope subset violations with differing bit masks (delegateeScope & ~delegatorScope != 0, must fail ERR_SCOPE_VIOLATION), 2 cumulative bit encoding violations (bit 4 set without bits 2+3, must fail ERR_BIT_ENCODING), 1 valid edge-case with all bits set",
+    "Author Delegation chain vectors: depth 1 valid (succeed), depth 2 valid (succeed), depth 3 valid (succeed), depth 4 (must fail ERR_CHAIN_DEPTH), depth 2 with scope escalation (must fail ERR_SCOPE_VIOLATION), depth 3 with expired intermediate credential (must fail ERR_EXPIRED_CREDENTIAL)",
+    "Pad each circuit file to reach 50+ total vectors: add boundary-value inputs (timestamp == expiryTimestamp, root at history buffer boundary, scope == 0, scope == all-bits-set)",
+    "Write validate_vectors.py: parse all JSON files, validate schema, invoke reference prover for must_succeed cases and assert valid proof, invoke reference verifier for must_fail cases and assert correct error_code",
+    "Integrate validate_vectors.py into CI (GitHub Actions) as a blocking check on every PR touching circuits or vectors",
+    "Write conformance/README.md: pass criteria definition, how to point the harness at an alternative implementation, versioning (semver on vector set), contribution guide for new scenarios"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Reference circuit implementations for HumanUniqueness, AgentPolicy, Delegation (Circom or equivalent)",
+    "Reference prover/verifier CLI or library callable from validate_vectors.py",
+    "Canonical definition of history buffer size (needed for stale-root boundary vectors)",
+    "Canonical max delegation chain depth (confirmed as 3)",
+    "Canonical scope bit layout (bit positions 0-N, cumulative encoding rules)"
+  ]
+}

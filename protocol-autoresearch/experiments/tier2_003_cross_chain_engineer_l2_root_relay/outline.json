@@ -1,0 +1,103 @@
+{
+  "id": "cross_chain_engineer_l2_root_relay",
+  "title": "L2-to-L2 Merkle root relay via storage proofs",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/IdentityRegistry.sol",
+      "description": "Base IdentityRegistry storing agentTree and humanTree Merkle roots with slot-stable layout for EIP-1186 proof targeting"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/StorageProofRelay.sol",
+      "description": "Core relay contract: accepts an EIP-1186 storage proof + L1 block hash, verifies account/storage proof via RLP-decoded state trie, and emits verified roots"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/adapters/ArbitrumL2Registry.sol",
+      "description": "Arbitrum-side IdentityRegistry that sources the L1 block hash via ArbSys.arbBlockHash() and delegates proof verification to StorageProofRelay"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/adapters/PolygonL2Registry.sol",
+      "description": "Polygon-side IdentityRegistry that sources the L1 state root via the Polygon bor checkpoint mechanism and delegates to StorageProofRelay"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/lib/RLPReader.sol",
+      "description": "Gas-optimized RLP decoding library for parsing Ethereum MPT account and storage proofs on-chain"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/lib/MerklePatriciaProof.sol",
+      "description": "EIP-1186 MPT proof verifier: walks account proof to extract storageRoot, then walks storage proof to extract slot value"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/storage_proof_relay.md",
+      "description": "Protocol spec: slot layout commitments, proof format, finality assumptions per chain, trust model comparison vs. trusted relayer, and upgrade path"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/prover/generate_storage_proof.ts",
+      "description": "TypeScript helper using eth_getProof to fetch EIP-1186 proofs for agentTree/humanTree slots at a finalized L1 block, serializing for on-chain submission"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/relay/submit_relay.ts",
+      "description": "CLI + SDK entry point: queries finalized L1 block, generates proof, estimates gas, and submits relay transaction to Arbitrum or Polygon registry"
+    },
+    {
+      "type": "test",
+      "filename": "test/StorageProofRelay.t.sol",
+      "description": "Foundry fork tests against Base mainnet: pins a finalized block, generates real EIP-1186 proofs, verifies correct root extraction and rejection of tampered proofs"
+    },
+    {
+      "type": "test",
+      "filename": "test/ArbitrumL2Registry.t.sol",
+      "description": "Foundry fork test against Arbitrum One: mocks ArbSys.arbBlockHash() return, submits valid and invalid proofs, asserts root acceptance window and replay protection"
+    },
+    {
+      "type": "test",
+      "filename": "test/PolygonL2Registry.t.sol",
+      "description": "Foundry fork test against Polygon mainnet: validates checkpoint-sourced state root path, end-to-end proof submission"
+    },
+    {
+      "type": "test",
+      "filename": "test/integration/relay_e2e.test.ts",
+      "description": "Hardhat/Foundry integration test: full relay cycle from proof generation to on-chain verification across simulated L2 environments"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross_chain_relay_runbook.md",
+      "description": "Operator runbook: how to run the relay CLI, monitor finality windows, handle proof staleness, and upgrade registry contracts"
+    }
+  ],
+  "steps": [
+    "Audit IdentityRegistry storage layout: assign fixed slot indices to agentTreeRoot and humanTreeRoot, document in NatSpec, add a slotManifest() view function returning slot numbers for SDK use",
+    "Implement RLPReader.sol and MerklePatriciaProof.sol with full EIP-1186 account+storage proof verification; fuzz-test against known mainnet proof fixtures",
+    "Implement StorageProofRelay.sol: accepts (l1BlockHash, accountProof[], storageProof[], slotIndex), verifies MPT proofs, extracts slot value, emits RootRelayed(chain, root, l1BlockNumber)",
+    "Add replay protection to StorageProofRelay: track highest accepted l1BlockNumber per chain, reject proofs for older or duplicate blocks",
+    "Implement ArbitrumL2Registry.sol: call ArbSys(0x64).arbBlockHash(l1BlockNumber) for block hash sourcing, integrate StorageProofRelay, enforce 12-minute finality window minimum before acceptance",
+    "Implement PolygonL2Registry.sol: read L1 state root from Polygon's bor checkpoint contract (0x86E4Dc95c7FBdBf52e33D563BbDB00823894C287), integrate StorageProofRelay",
+    "Write generate_storage_proof.ts SDK: call eth_getProof on Base RPC at finalized block, serialize account proof and storage proof arrays to ABI-encoded bytes for contract input",
+    "Write submit_relay.ts CLI: orchestrate proof generation, gas estimation, and submission; support --chain arbitrum|polygon and --dry-run flags",
+    "Write Foundry fork tests for StorageProofRelay against pinned Base mainnet block; assert correct root value extraction, reject tampered account proof, reject tampered storage proof",
+    "Write Foundry fork tests for ArbitrumL2Registry and PolygonL2Registry covering: valid relay accepted, stale block rejected, replay rejected, wrong registry contract address rejected",
+    "Write TypeScript integration test (relay_e2e.test.ts) using anvil forks of Base + Arbitrum, executing full proof-generate-then-submit cycle and asserting emitted events",
+    "Deploy IdentityRegistry to Arbitrum Sepolia and Polygon Amoy testnets; run relay CLI against Sepolia Base, record gas costs for proof verification (target < 500k gas)",
+    "Optimize MerklePatriciaProof.sol if verification gas exceeds 500k: consider precompile delegation or chunked proof batching",
+    "Write specs/storage_proof_relay.md covering slot commitments, finality windows per chain, failure modes (reorg handling, checkpoint delays), and upgrade governance",
+    "Write docs/cross_chain_relay_runbook.md with step-by-step operator guide, monitoring checklist, and incident response for proof failures",
+    "Security review: confirm no trusted relayer surfaces remain, validate that slot layout changes require registry upgrade (document in CHANGELOG), audit for griefing via large proof submissions"
+  ],
+  "estimated_constraints": 6,
+  "dependencies": [
+    "EIP-1186 (eth_getProof RPC standard)",
+    "ArbSys precompile (Arbitrum, address 0x0000000000000000000000000000000000000064)",
+    "Polygon bor checkpoint contract (0x86E4Dc95c7FBdBf52e33D563BbDB00823894C287)",
+    "Foundry forge with --fork-url support for mainnet/testnet fork testing",
+    "ethers.js v6 or viem for eth_getProof in SDK",
+    "Base L1 finality (~12 min Ethereum block finality) for proof freshness window"
+  ]
+}

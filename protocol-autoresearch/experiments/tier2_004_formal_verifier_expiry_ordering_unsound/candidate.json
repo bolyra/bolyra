@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_expiry_ordering_unsound",
+  "persona": "formal_verifier",
+  "title": "Add explicit less-than constraint for expiry checks in AgentPolicy",
+  "dimension": "correctness",
+  "description": "AgentPolicy performs Num2Bits(64) range checks on expiryTimestamp and currentTimestamp but the circuit source shown is truncated and may lack an explicit LessThan(64) constraint proving currentTimestamp < expiryTimestamp. If this comparison is missing or only checked in Solidity, an attacker can generate a proof with an expired credential and submit it before the contract-side check (or the contract may not re-derive expiry from public signals). Add a LessThan(64) component inside the circuit: isNotExpired.in[0] <== currentTimestamp; isNotExpired.in[1] <== expiryTimestamp; isNotExpired.out === 1. Similarly verify the Delegation circuit enforces delegateeExpiry <= delegatorExpiry inside the SNARK, not just in the contract. Constraint cost is ~130 per LessThan(64).",
+  "priority": "high",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_expiry_ordering_unsound",
+  "adoption": 15,
+  "standards": 14,
+  "completeness": 18,
+  "correctness": 22,
+  "total": 69,
+  "verdict": "consider"
+}

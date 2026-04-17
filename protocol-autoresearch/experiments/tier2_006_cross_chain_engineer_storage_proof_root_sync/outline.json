@@ -1,0 +1,76 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "title": "EIP-1186 storage proof cross-chain root sync",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/BolyraRootRelay.sol",
+      "description": "Deployed on Arbitrum and Polygon. Accepts RLP-encoded EIP-1186 storage proof of IdentityRegistry's humanTree and agentTree roots from Base. Verifies proof against a trusted Base block hash sourced from L1 state roots, then caches verified roots locally with a timestamp."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/interfaces/IL1BlockOracle.sol",
+      "description": "Interface abstracting chain-specific L1 block hash oracles (e.g. ArbSys on Arbitrum, L1Block on Polygon/OP-stack) so BolyraRootRelay can retrieve the canonical Base block hash from L1 state roots without hardcoding chain logic."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/lib/RLPReader.sol",
+      "description": "RLP decoding library (e.g. Hamdiallah/solidity-rlp or equivalent audited fork) used by BolyraRootRelay to decode the account proof and storage proof nodes from the EIP-1186 payload."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/lib/MerklePatriciaVerifier.sol",
+      "description": "Merkle-Patricia trie proof verifier. Traverses the account proof to extract the storage root of IdentityRegistry, then traverses storage proof nodes to extract humanTree and agentTree slot values."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/storage_proof_root_sync.md",
+      "description": "End-to-end specification: storage slot layout for humanTree/agentTree in IdentityRegistry, EIP-1186 proof construction workflow, L1 state root availability windows per target chain, latency model (~15 min), and security assumptions."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/proofRelay.ts",
+      "description": "TypeScript SDK module that calls eth_getProof on a Base RPC for the IdentityRegistry contract at a chosen finalized block, RLP-encodes the returned account+storage proof, and submits it to BolyraRootRelay on the target chain."
+    },
+    {
+      "type": "test",
+      "filename": "test/BolyraRootRelay.t.sol",
+      "description": "Foundry fork tests pinned to real Base, Arbitrum, and Polygon blocks. Verifies happy path proof acceptance, rejects tampered node hashes, rejects stale block hashes beyond the accepted window, and confirms root cache is updated correctly."
+    },
+    {
+      "type": "test",
+      "filename": "test/MerklePatriciaVerifier.t.sol",
+      "description": "Unit tests for the MerklePatriciaVerifier library using known-good EIP-1186 proof fixtures from Base mainnet, covering short-node, extension-node, and leaf-node edge cases."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross_chain_root_sync.md",
+      "description": "Integration guide: how downstream verifier contracts on Arbitrum/Polygon read cached roots from BolyraRootRelay, latency tradeoffs, how to re-sync after a long gap, and operator runbook for the proof-relay SDK."
+    }
+  ],
+  "steps": [
+    "Audit IdentityRegistry storage layout to identify exact slot indices for humanTree and agentTree roots; record these as constants in the spec and relay contract.",
+    "Research L1 block hash availability on Arbitrum (ArbSys.arbBlockHash) and Polygon (L1Block / cross-chain message latency); document the earliest finalized Base block hash accessible on each L2 and the typical ~15 min lag.",
+    "Define IL1BlockOracle interface with getL1BlockHash(blockNumber) \u2192 bytes32; implement ArbitrumL1BlockOracle and PolygonL1BlockOracle adapters that delegate to chain-native precompiles.",
+    "Integrate or vendor an audited RLPReader (solidity-rlp) and write MerklePatriciaVerifier with verifyAccountProof and verifyStorageProof entry points, returning the storage slot value or reverting on any node hash mismatch.",
+    "Implement BolyraRootRelay: constructor takes IdentityRegistry address on Base, IL1BlockOracle address, and an accepted block-hash staleness window (e.g. 256 blocks). Expose syncRoots(blockNumber, rlpAccountProof, rlpStorageProofs) that (a) fetches block hash from oracle, (b) verifies account proof to extract storageRoot, (c) verifies two storage proofs for humanTree and agentTree slots, (d) writes verified roots + timestamp to storage.",
+    "Add a root consumer interface: getHumanRoot() and getAgentRoot() view functions on BolyraRootRelay, plus an event RootsSynced(blockNumber, humanRoot, agentRoot).",
+    "Write MerklePatriciaVerifier unit tests with mainnet proof fixtures, covering all trie node types and deliberate corruption cases.",
+    "Write Foundry fork tests for BolyraRootRelay against real Base/Arbitrum/Polygon states; assert root values match on-chain IdentityRegistry state at the pinned block.",
+    "Implement proofRelay.ts SDK: call eth_getProof for IdentityRegistry at a finalized Base block, RLP-encode result, estimate gas, and submit to BolyraRootRelay on target chain; expose CLI entrypoint for operator use.",
+    "Deploy BolyraRootRelay on Arbitrum Sepolia and Polygon Amoy testnets; run SDK end-to-end to confirm roots propagate and match Base state within the expected latency window.",
+    "Security review: confirm no trusted relayer assumption remains, validate staleness window is sufficient to prevent replay of very old block hashes, check for reentrancy and integer overflow in trie traversal.",
+    "Write integration guide and operator runbook; update IdentityRegistry docs to note that storage layout changes require a coordinated relay contract upgrade."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry contract (Base) with stable storage layout for humanTree and agentTree roots",
+    "ArbSys precompile (Arbitrum) for L1 block hash access",
+    "L1Block precompile or equivalent (Polygon/OP-stack) for L1 block hash access",
+    "Audited RLP decoding library (e.g. solidity-rlp by Hamdiallah)",
+    "Base archival RPC node supporting eth_getProof at finalized blocks",
+    "Foundry with --fork-url support for Arbitrum Sepolia and Polygon Amoy",
+    "EIP-1186 (eth_getProof) JSON-RPC standard",
+    "ethers.js / viem for RLP encoding in the TypeScript SDK"
+  ]
+}

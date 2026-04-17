@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_chain_id_nullifier_domain_sep",
+      "persona": "cross_chain_engineer",
+      "title": "Domain-separate nullifiers and nonces by chainId",
+      "dimension": "correctness",
+      "description": "Currently nullifierHash in both HumanUniqueness and AgentPolicy circuits is computed without chain context (Poseidon2(scope, secret) and Poseidon3(credentialCommitment, sessionNonce, ...)). If the same registry is deployed on multiple chains, a proof verified on Base can be replayed on Arbitrum since the nullifier is identical. Add chainId as a public input to all three circuits and include it in nullifier derivation: nullifier = Poseidon3(scope, secret, chainId) for humans, Poseidon4(..., chainId) for agents. The on-chain verifier passes block.chainid and checks it matches the public signal.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_id_nullifier_domain_sep",
+      "adoption": 18,
+      "standards": 16,
+      "completeness": 19,
+      "correctness": 21,
+      "total": 74,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_000_cross_chain_engineer_chain_id_nullifier_domain_sep",
+    "score": {
+      "experiment_id": "tier2_000_cross_chain_engineer_chain_id_nullifier_domain_sep",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_ietf_draft_core",
+      "persona": "standards_architect",
+      "title": "IETF Internet-Draft: Bolyra Core Protocol Specification",
+      "dimension": "standards",
+      "description": "Author an Internet-Draft following RFC 7942 (Running Code) and using RFC 2119/8174 keywords. Sections: Introduction, Terminology (human/agent/delegatee/scope/nullifier), Protocol Overview (enrollment, handshake, delegation), Circuit Public Interface (inputs/outputs/semantics for all three circuits without implementation details), Wire Format (CBOR-encoded proof payloads with CDDL schema), On-Chain Verification Interface (ABI-level contract interface as normative), and Security Considerations (replay, linkability, root staleness, delegation chain depth). This is the foundational document that all interop work depends on \u2014 without it, independent implementations will diverge on semantics like nullifier derivation order or scope commitment structure.",
+      "priority": "critical",
+      "estimated_effort": "week",
+      "candidate_id": "standards_architect_ietf_draft_core",
+      "adoption": 19,
+      "standards": 24,
+      "completeness": 20,
+      "correctness": 15,
+      "total": 78,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_001_standards_architect_ietf_draft_core",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_ietf_draft_core",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 10,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_vectors",
+      "persona": "standards_architect",
+      "title": "Conformance Test Suite with JSON Test Vectors",
+      "dimension": "standards",
+      "description": "Produce a machine-readable test suite (JSON) with 50+ vectors covering: valid handshake (human+agent proofs accepted), expired credential (expiryTimestamp < currentTimestamp, must reject), revoked human (nullifier in revocation set), stale agent root (root not in 30-entry history buffer), scope subset violation (delegateeScope & ~delegatorScope != 0), delegation chain at depths 1, 3, and 4 (4 must fail), nonce reuse (must reject), and the phantom delegatee attack (delegatee commitment not in any tree, must reject once fixed). Each vector specifies: circuit name, all public inputs/outputs, expected verdict (accept/reject), and failure reason code. This is essential for any second implementation to prove conformance without reverse-engineering the Circom source.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_vectors",
+      "adoption": 20,
+      "standards": 21,
+      "completeness": 20,
+      "correctness": 17,
+      "total": 78,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_002_standards_architect_conformance_vectors",
+    "score": {
+      "experiment_id": "tier2_002_standards_architect_conformance_vectors",
+      "total": 24,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_l2_root_relay",
+      "persona": "cross_chain_engineer",
+      "title": "L2-to-L2 Merkle root relay via storage proofs",
+      "dimension": "completeness",
+      "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside the existing Base deployment, and implement a StorageProofRelay contract that reads agentTree/humanTree roots from Base's L1 state root using EIP-1186 storage proofs. Each L2 registry accepts cross-chain roots after verifying the storage proof against the L1 block hash available via the L2's precompile (ArbSys on Arbitrum, StateSender on Polygon). This eliminates trusted relayers and lets a proof generated against Base's tree be verified on Arbitrum or Polygon within one L1 finality window (~12 min).",
+      "priority": "high",
+      "estimated_effort": "week",
+      "candidate_id": "cross_chain_engineer_l2_root_relay",
+      "adoption": 17,
+      "standards": 20,
+      "completeness": 22,
+      "correctness": 14,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_003_cross_chain_engineer_l2_root_relay",
+    "score": {
+      "experiment_id": "tier2_003_cross_chain_engineer_l2_root_relay",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_w3c_did_method",
+      "persona": "standards_architect",
+      "title": "W3C DID Method Specification: did:bolyra",
+      "dimension": "standards",
+      "description": "Define a DID method binding per W3C DID Core 1.0. Method-specific identifier is the identity/credential commitment (base58btc-encoded). DID Document includes a verificationMethod of type EcdsaSecp256k1VerificationKey2019 for the operator key (agents) or Ed25519VerificationKey2020 mapped from BabyJubjub for humans, plus a BolyraProofService endpoint. Resolution algorithm: given did:bolyra:<commitment>, query the IdentityRegistry to confirm tree membership and non-revocation, then construct the DID Document. Also define a VerifiableCredential schema for handshake results (issuer = verifier, subject = DID pair, evidence = proof hashes). This bridges Bolyra into the existing decentralized identity ecosystem and enables interop with any W3C VC wallet.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_w3c_did_method",
+      "adoption": 18,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 12,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_004_standards_architect_w3c_did_method",
+    "score": {
+      "experiment_id": "tier2_004_standards_architect_w3c_did_method",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_nist_aal_mapping",
+      "persona": "standards_architect",
+      "title": "NIST SP 800-63B Authenticator Assurance Level Mapping",
+      "dimension": "standards",
+      "description": "Produce a formal analysis mapping Bolyra's authentication factors to NIST AAL levels. The human side (EdDSA secret + Merkle membership) constitutes a single cryptographic authenticator factor; the agent side (operator EdDSA signature + model hash + permission bitmask) constitutes a bound multi-factor authenticator. Analyze whether the handshake protocol meets AAL2 requirements (two distinct factors, verifier impersonation resistance, replay resistance via nonce). Identify gaps: the current HumanUniqueness circuit is Phase 1 'proof of enrollment' without a second factor (e.g., biometric or PIN), which likely caps human-side assurance at AAL1. Document what Phase 4 behavioral enrollment would need to reach AAL2. This mapping is essential for credit union adoption where NCUA examiners will ask for NIST alignment.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_nist_aal_mapping",
+      "adoption": 18,
+      "standards": 21,
+      "completeness": 17,
+      "correctness": 16,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_005_standards_architect_nist_aal_mapping",
+    "score": {
+      "experiment_id": "tier2_005_standards_architect_nist_aal_mapping",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "circuit_optimizer_phantom_delegatee_merkle",
+      "persona": "circuit_optimizer",
+      "title": "Add delegatee Merkle inclusion proof to Delegation circuit",
+      "dimension": "correctness",
+      "description": "The Delegation circuit accepts delegateeCredCommitment as a private input but never proves it exists in any on-chain tree. An attacker can fabricate a credential commitment, receive a valid delegation, and use the resulting scopeCommitment downstream. Fix: add a BinaryMerkleRoot(MAX_DEPTH) component that proves delegateeCredCommitment is a leaf in agentTree, and output the computed root as a public signal for on-chain verification. This adds ~10k constraints (one Merkle path at depth 20) but closes a critical soundness gap. The contract must then check the output root against agentRootHistory.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_phantom_delegatee_merkle",
+      "adoption": 16,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 22,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_006_circuit_optimizer_phantom_delegatee_merkle",
+    "score": {
+      "experiment_id": "tier2_006_circuit_optimizer_phantom_delegatee_merkle",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_phantom_delegatee_merkle",
+      "persona": "formal_verifier",
+      "title": "Delegatee Merkle inclusion proof requirement",
+      "dimension": "correctness",
+      "description": "The Delegation circuit accepts delegateeCredCommitment as a private input with zero verification that it corresponds to an enrolled entity in either humanTree or agentTree. An attacker can fabricate an arbitrary field element as delegateeCredCommitment, receive a valid delegation proof, and then use the resulting newScopeCommitment downstream. Fix: add a Merkle inclusion proof for the delegatee against agentTree (or a union root), with the verified root exposed as a public output for on-chain root-staleness checking.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_phantom_delegatee_merkle",
+      "adoption": 14,
+      "standards": 15,
+      "completeness": 20,
+      "correctness": 22,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_007_formal_verifier_phantom_delegatee_merkle",
+    "score": {
+      "experiment_id": "tier2_007_formal_verifier_phantom_delegatee_merkle",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]
