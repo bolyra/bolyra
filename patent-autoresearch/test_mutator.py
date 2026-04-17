@@ -190,3 +190,53 @@ def test_apply_winners_mutations_skipped_when_later_depends_on_earlier_miss(tmp_
     assert result.applied == ["good"]
     assert result.skipped[0]["id"] == "bad"
     assert output_path.read_text() == "(a) keep; (b) REPLACED;"
+
+
+def test_apply_mutation_rejects_instruction_language_in_claim_text():
+    """The LLM sometimes returns meta-instructions ('REPLACE step X with...')
+    instead of literal replacement prose. The mutator must refuse those to
+    prevent corrupting the patent."""
+    patent = "Claim 1. A method comprising: (a) foo."
+    # The LLM returned an instruction instead of replacement text
+    bad_winner = {
+        "original_language": "(a) foo.",
+        "claim_text": "REPLACE step (a) with: something else.",
+        "targets_weakness": "w1",
+    }
+    with pytest.raises(ValueError, match="meta-instructions"):
+        apply_mutation(patent, bad_winner)
+
+
+def test_apply_mutation_rejects_various_instruction_markers():
+    patent = "some text"
+    for bad in [
+        "REVISED CLAIM 5: new claim language",
+        "ADD NEW DEPENDENT CLAIM 9A: ...",
+        "In each independent claim, replace...",
+        "Strike the adjective phrase 'foo'",
+        "[ADD new subsection]",
+        "Apply the same substitution to...",
+    ]:
+        w = {"original_language": "text", "claim_text": bad, "targets_weakness": "w"}
+        with pytest.raises(ValueError, match="meta-instructions"):
+            apply_mutation(patent, w)
+
+
+def test_apply_mutation_accepts_normal_claim_text():
+    """Baseline: normal claim prose must still pass the guard."""
+    patent = "Claim 1. A method comprising: (a) foo."
+    good = {
+        "original_language": "(a) foo.",
+        "claim_text": "(a) foo with additional technical anchor.",
+        "targets_weakness": "w1",
+    }
+    # Should NOT raise
+    result = apply_mutation(patent, good)
+    assert "(a) foo with additional technical anchor." in result
+
+
+def test_apply_mutation_rejects_empty_claim_text():
+    patent = "Claim 1. A method."
+    w = {"original_language": "Claim 1.", "claim_text": "", "targets_weakness": "w"}
+    with pytest.raises(ValueError, match="meta-instructions"):
+        apply_mutation(patent, w)

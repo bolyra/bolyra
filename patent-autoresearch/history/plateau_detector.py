@@ -26,8 +26,12 @@ def should_stop(
     latest = trajectory[-1]["total"]
     if latest >= target_score:
         return True, f"target score {target_score} reached (latest={latest})"
-    if len(trajectory) >= max_iters:
-        return True, f"max iterations {max_iters} reached"
+    # trajectory contains the iter-0 baseline + one entry per completed iteration.
+    # We stop when the number of iterations completed (excluding baseline) reaches
+    # max_iters. iter_count = len(trajectory) - 1 (baseline at iter 0 doesn't count).
+    iter_count = max(0, len(trajectory) - 1)
+    if iter_count >= max_iters:
+        return True, f"max iterations {max_iters} reached (completed {iter_count})"
     if len(trajectory) < plateau_window + 1:
         return False, f"need {plateau_window + 1} iterations for plateau check (have {len(trajectory)})"
     window = [t["total"] for t in trajectory[-(plateau_window + 1):]]

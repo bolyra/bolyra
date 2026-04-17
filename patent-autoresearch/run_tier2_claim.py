@@ -39,25 +39,86 @@ PATENT CONTEXT:
 {patent_text}
 
 Your task: produce {k} DIFFERENT candidate revisions that address this weakness.
-Each candidate must be a SPECIFIC replacement for the identified claim language,
-not a philosophical direction. Be concrete. Different candidates should represent
-DIFFERENT strategies (e.g., one narrows, one adds a dependent, one rewrites the
-limitation as positive structure).
 
-Return ONLY a JSON array (no markdown fences) with {k} objects:
+CRITICAL RULES FOR THE JSON FIELDS:
+1. `original_language` must be an exact, literal, contiguous substring of the
+   patent text above. Copy it character-for-character. Do NOT quote it with
+   extra apostrophes, do NOT add claim numbers like "Claim 5:" as a prefix
+   unless that prefix also appears verbatim in the source. If you cannot find
+   a clean literal substring, do NOT emit that candidate — emit a different
+   strategy instead.
+2. `claim_text` must be ONLY the literal replacement prose that will textually
+   substitute for `original_language`. It must read as patent claim language,
+   starting with the same grammatical form as what it replaces (e.g., a claim
+   step starting with "(e) " stays a claim step starting with "(e) ").
+   - Do NOT include meta-instructions like "Replace step X with...", "In each
+     independent claim...", "REPLACE WITH:", "REVISED CLAIM 5:", or "ADD NEW
+     DEPENDENT CLAIMS:". Those phrases destroy the patent when pasted.
+   - Do NOT include explanations, rationale, or commentary in `claim_text` —
+     put those in `rationale`.
+   - Do NOT describe what to do; write what the new text IS.
+3. If your strategy is `dependent_claim`, your `claim_text` should still be a
+   direct substitute for the `original_language` (e.g., augment the end of a
+   claim with dependent text that reads naturally in place). If you cannot
+   express the change as a single contiguous string substitution, skip this
+   candidate.
+4. Both fields must be prose that could paste cleanly into the patent with
+   zero editing.
+
+Before returning, verify your candidate would produce a grammatical, readable
+patent if `original_language` were replaced with `claim_text` verbatim.
+
+Return ONLY a JSON array (no markdown fences) with up to {k} objects (fewer
+is fine if you cannot produce {k} clean substitutions):
 [
   {{
     "id": "cand_{attack_id}_01",
     "strategy": "narrow" | "positive_structural" | "dependent_claim" | "genus_with_species" | "delete_problem_language",
     "claim_refs": [<claim numbers>],
-    "original_language": "exact text being replaced",
-    "claim_text": "exact replacement text",
-    "rationale": "why this fixes the weakness, 2-4 sentences",
+    "original_language": "EXACT literal substring from the patent above",
+    "claim_text": "LITERAL replacement prose — no instructions, no commentary",
+    "rationale": "why this fixes the weakness, 2-4 sentences (commentary goes HERE)",
     "targets_weakness": "{attack_id}",
     "tradeoffs": "what it loses in scope or risk in exchange"
   }}
 ]
 """
+
+# Phrases that indicate the LLM wrote instructions instead of replacement text.
+# The mutator uses this list to reject candidates before applying.
+_INSTRUCTION_MARKERS: tuple[str, ...] = (
+    "REPLACE WITH",
+    "REPLACE step",
+    "REPLACE THIS",
+    "REVISED CLAIM",
+    "REVISED:",
+    "REPLACE EACH",
+    "REPLACE ALL",
+    "ADD NEW DEPENDENT",
+    "ADD NEW CLAIM",
+    "Strike the",
+    "In each independent claim",
+    "In each claim",
+    "Apply the same substitution",
+    "Apply this to",
+    "[ADD ",
+    "[DELETE",
+    "[INSERT",
+    "Attorney may",
+    "attorney will",
+)
+
+
+def looks_like_instruction(text: str) -> bool:
+    """True if `text` looks like meta-instructions rather than literal replacement prose.
+
+    Used by the mutator to reject M2-style self-inflicted-wound candidates
+    where the LLM describes what to do rather than providing the replacement.
+    """
+    if not text or not text.strip():
+        return True
+    head = text.strip()[:200]
+    return any(marker in head for marker in _INSTRUCTION_MARKERS)
 
 
 def _build_prompt(attack: dict, patent_text: str, k: int) -> str:

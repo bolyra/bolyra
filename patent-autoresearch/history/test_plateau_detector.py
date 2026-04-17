@@ -15,16 +15,34 @@ def test_no_trajectory():
 
 
 def test_max_iters_reached():
-    traj = [{"total": 50}] * 10
+    # Baseline + 10 completed iterations = 11 entries, stops at max_iters=10
+    traj = [{"total": 50}] * 11
     stop, reason = should_stop(traj, max_iters=10)
     assert stop
     assert "max iterations" in reason
 
 
 def test_max_iters_not_reached():
-    traj = [{"total": 50}] * 3
+    # Baseline + 3 iterations = 4 entries, well under max_iters=10
+    traj = [{"total": 50}] * 4
     stop, _ = should_stop(traj, max_iters=10, plateau_window=5)
     assert not stop  # not at max, not enough for plateau
+
+
+def test_baseline_only_does_not_stop_at_max_iters_1():
+    """Regression guard: baseline-only (1 entry) with max_iters=1 must NOT stop —
+    baseline is iter 0, so the loop should run 1 real iteration after it."""
+    traj = [{"iter": 0, "total": 73}]
+    stop, _ = should_stop(traj, max_iters=1, plateau_window=3)
+    assert not stop  # baseline doesn't count toward max_iters
+
+
+def test_one_full_iteration_stops_at_max_iters_1():
+    """After baseline + 1 iteration, max_iters=1 should stop."""
+    traj = [{"iter": 0, "total": 73}, {"iter": 1, "total": 75}]
+    stop, reason = should_stop(traj, max_iters=1, plateau_window=3)
+    assert stop
+    assert "max iterations" in reason
 
 
 def test_target_score_reached():

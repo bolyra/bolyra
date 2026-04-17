@@ -1,0 +1,166 @@
+[
+  {
+    "id": "competitor_attorney_num2bits64_and_constraint_form",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      9,
+      15,
+      18,
+      19
+    ],
+    "category": "design_around",
+    "finding": "The claims repeatedly recite 'Num2Bits(64)' as the range-check primitive and a specific constraint form 'delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero' for subset enforcement. Both are trivially designed around: a competitor can use Num2Bits(32), Num2Bits(63), Num2Bits(128), or a lookup-table range check (as in Halo2/plookup) and fall outside the literal range-check limitation; for the subset proof, a competitor can use the algebraically equivalent 'delegateeBits[i] * delegatorBits[i] == delegateeBits[i]' formulation, or a packed-word AND check 'delegatee & ~delegator == 0' evaluated as a single field-element constraint, neither of which reads on 'delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero.' The specification's choice of 64 bits is acknowledged as a design parameter (a uint64 representation) and is not inventive.",
+    "recommended_direction": "Broaden to 'a range check constraining the bitmask to a predetermined bit width' and 'a set of arithmetic circuit constraints enforcing that each permission bit in the delegatee's bitmask is also set in the delegator's bitmask' in each independent claim. Keep Num2Bits(64) and the specific constraint form as dependents. Otherwise a one-line circuit rewrite defeats Claims 1, 9, 15, 18, and 19 simultaneously.",
+    "evidence": "Claim 9(e): 'performing Num2Bits(64) range checks...enforcing, for each bit position i, that delegateeBits[i] multiplied by (1 minus delegatorBits[i]) equals zero'; Claim 1(c): 'performing Num2Bits(64) range checks'. Under KSR v. Teleflex, 550 U.S. 398, the choice of 32/64/128-bit decomposition and algebraically equivalent constraint forms are obvious design choices \u2014 but infringement is judged on literal claim language, so the narrow recitation hurts only you.",
+    "attack_id": "competitor_attorney_num2bits64_and_constraint_form",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_identity_bound_indefinite",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      1,
+      5,
+      9,
+      15,
+      16,
+      18,
+      19
+    ],
+    "category": "112",
+    "finding": "The term 'identity-bound scope commitment' (and 'identity-bound chain linking' in claim 19) is used as a term of art throughout the claims but is never defined with reasonable certainty in the specification. The spec at Section 5.1 merely says binding 'scope to identity' 'prevents impersonation,' which is aspirational/functional rather than structural. A POSITA cannot determine from the claim language alone whether any Poseidon hash that happens to include a credential commitment qualifies as 'identity-bound,' or whether additional properties (domain separation, collision resistance proof, non-malleability) are required. Under Nautilus, 572 U.S. 898, a term must inform skilled artisans 'with reasonable certainty' of scope; under Interval Licensing, 766 F.3d 1364, inconsistent usage (sometimes 'identity-bound scope commitment,' sometimes just 'scope commitment,' sometimes 'newScopeCmt') is fatal.",
+    "recommended_direction": "Replace 'identity-bound scope commitment' with the explicit structural recitation 'Poseidon2(permissionBitmask, credentialCommitment) where credentialCommitment is a leaf of the agent credential Merkle tree' in every claim and standardize the label. Add a definitional paragraph in the spec: 'As used herein, identity-bound means computed via a collision-resistant hash over both the permission data and the Merkle-included credential commitment of the entity asserting the permission.'",
+    "evidence": "Claim 1(c): 'outputting, as a public signal, an identity-bound scope commitment computed as a Poseidon hash of the permission bitmask and the AI agent's credential commitment'; Claim 19: 'providing identity-bound chain linking' \u2014 used as a functional label with no structural definition. Nautilus v. Biosig (reasonable certainty); Interval Licensing v. AOL (inconsistent terminology).",
+    "attack_id": "enablement_auditor_identity_bound_indefinite",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_leanimt_narrowness",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      9,
+      15,
+      16
+    ],
+    "category": "design_around",
+    "finding": "Every independent claim recites 'Lean Incremental Merkle Tree' as the accumulator structure, both in the 'maintaining' step and as a structural system element. A competitor can trivially substitute a Sparse Merkle Tree (as used in Iden3/Polygon ID), a standard binary IMT (as used in Tornado Cash and Semaphore v3), or a Verkle tree, and escape literal infringement while preserving every functional property the specification cares about (append-only, O(log n) membership, gas-efficient insertion). The LeanIMT limitation adds no non-obvious technical contribution to the asserted inventive concept (human/agent mutual auth + delegation chaining) and therefore gives up enormous scope for no prosecution benefit.",
+    "recommended_direction": "Replace 'Lean Incremental Merkle Tree' with a broader genus such as 'an append-only cryptographic accumulator supporting logarithmic-size membership proofs' in each independent claim, and add a dependent claim reciting LeanIMT specifically. Otherwise the literal scope is reduced to a single species and will not capture SMT/Verkle-based competitor deployments.",
+    "evidence": "Claim 1(a): 'maintaining...a first Lean Incremental Merkle Tree...and a second Lean Incremental Merkle Tree'; Claim 16: 'a first Lean Incremental Merkle Tree...a second Lean Incremental Merkle Tree'. Per LizardTech v. Earth Resource Mapping, 424 F.3d 1336, claiming a single species (LeanIMT) without a broader genus term caps your enforceable scope at that species.",
+    "attack_id": "competitor_attorney_leanimt_narrowness",
+    "severity": 6,
+    "specificity": 9,
+    "remediability": 9,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_poseidon_babyjubjub_lockin",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      4,
+      5,
+      9,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "category": "design_around",
+    "finding": "Every independent and nearly every dependent claim hard-codes 'Poseidon' as the hash function and 'Baby Jubjub' as the curve for EdDSA. A competitor can swap in Poseidon2, Rescue-Prime, Griffin, Neptune, Anemoi, or MiMC for the hash, and swap Baby Jubjub for Jubjub-on-BLS12-381, Pallas, or Vesta for the curve, producing a functionally identical system that does not literally infringe a single claim. The spec even concedes Poseidon is conventional ('optimized for arithmetic circuits') and cites its well-known x^5 S-box \u2014 signaling that hash choice is a design parameter, not the invention. Claim 5's 'two-input Poseidon hash of the permission bitmask and the AI agent's credential commitment' is the identity-bound scope commitment \u2014 the heart of the delegation novelty \u2014 and is limited to Poseidon with no genus term.",
+    "recommended_direction": "In every independent claim, replace 'Poseidon hash' with 'an algebraic hash function operating over a prime field compatible with a zero-knowledge proof circuit' and 'Baby Jubjub elliptic curve' with 'an elliptic curve embedded in the scalar field of a pairing-friendly curve.' File dependent claims that recite Poseidon and Baby Jubjub specifically. Without this, Claim 5's identity-bound scope commitment \u2014 your strongest novelty \u2014 is trivially avoided by using Poseidon2 or Rescue.",
+    "evidence": "Claim 1: 'Poseidon hashes of EdDSA public key coordinates on the Baby Jubjub elliptic curve'; Claim 5: 'two-input Poseidon hash of the AI agent's permission bitmask'; Claim 9(d): 'two-input Poseidon hash of the delegator's actual permission bitmask'. Festo v. Shoketsu, 535 U.S. 722, bars reaching equivalents after narrowing for patentability; hashing/curve equivalents will be argued as surrendered unless captured by genus claims now.",
+    "attack_id": "competitor_attorney_poseidon_babyjubjub_lockin",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_max_hops_inconsistent",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      9,
+      11,
+      14,
+      15
+    ],
+    "category": "112",
+    "finding": "The maximum delegation hop count is claimed with three mutually inconsistent formulations: Claim 9(i)(5) 'enforcing a maximum delegation hop count stored as an on-chain constant' (constant); Claim 11 'a predetermined value stored on the blockchain' (predetermined \u2014 when, by whom?); Claim 14 'a configurable maximum number of delegation hops enforced on-chain' (configurable \u2014 who configures, at what time, through what governance?); Claim 15(d)(iv) 'exceeds the predetermined maximum' (predetermined again). 'Constant,' 'predetermined,' and 'configurable' are not synonyms; a constant cannot be configurable. Specification Section 5 and Section 8 only disclose MAX_DELEGATION_HOPS = 3 as an immutable constant; no configuration mechanism, governance path, or upgradeable-contract embodiment is disclosed to support 'configurable.'",
+    "recommended_direction": "Pick one: (1) harmonize all claims to 'an on-chain immutable constant MAX_DELEGATION_HOPS' to match what Section 5/8 actually discloses, or (2) keep 'configurable' in Claim 14 but add a full written description in Section 8 disclosing the configuration mechanism (governance role, setter function, access control, timelock, event emission). Also pick a specific numeric value (disclosed: 3) and decide whether the claims will recite it or leave it open.",
+    "evidence": "Claim 9(i)(5) 'on-chain constant'; Claim 11 'predetermined value stored on the blockchain'; Claim 14 'configurable maximum number of delegation hops'; Claim 15(d)(iv) 'predetermined maximum.' Spec Sec. 8: 'MAX_DELEGATION_HOPS (3)'. Interval Licensing v. AOL, 766 F.3d 1364 ('inconsistent or ambiguous terminology renders claims indefinite').",
+    "attack_id": "enablement_auditor_max_hops_inconsistent",
+    "severity": 6,
+    "specificity": 9,
+    "remediability": 9,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_required_scope_policy_and_merkle_included",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      1,
+      9,
+      15,
+      16
+    ],
+    "category": "112",
+    "finding": "Two recurring indefiniteness problems. First, Claim 1(c) recites 'enforcing bit-by-bit that the permission bitmask satisfies a required scope policy' \u2014 'a required scope policy' is introduced without antecedent basis and is inconsistent with the spec, which calls this input 'requiredScopeMask' (a 64-bit bitmask), not a 'policy.' A POSITA cannot tell whether 'policy' means a bitmask, a Datalog program, an on-chain policy contract, or something else. Second, Claims 1(c), 9(c), and 15 recite that a commitment is 'Merkle-included in said agent credential tree' \u2014 'Merkle-included' is not a term of art and is nowhere defined in the spec; the spec uses 'Merkle membership proof' or 'leaf in the... Merkle structure.' Third, Claim 16 recites 'verifies chain-linking correctness against an expected previous scope commitment' \u2014 'expected' has no antecedent basis and does not tell the reader whether 'expected' means the value stored in lastScopeCommitment or something else.",
+    "recommended_direction": "(1) Replace 'a required scope policy' with 'a required scope bitmask provided as a public input' in Claim 1(c), matching the spec's 'requiredScopeMask.' (2) Replace every occurrence of 'Merkle-included' with 'included as a leaf of [the named Merkle tree] as proven by a Merkle membership proof.' (3) In Claim 16, replace 'an expected previous scope commitment' with 'the previous scope commitment value read from the on-chain chain-state mapping indexed by the session nonce,' eliminating the antecedent-basis ambiguity.",
+    "evidence": "Claim 1(c) 'a required scope policy' (vs. spec Sec. 3.5 'requiredScopeMask'); Claim 9(c) 'the delegator's credential commitment which is Merkle-included in said agent credential tree'; Claim 16 'verifies chain-linking correctness against an expected previous scope commitment.' Nautilus v. Biosig (reasonable certainty); Interval Licensing v. AOL (terms must have consistent meaning across all uses).",
+    "attack_id": "enablement_auditor_required_scope_policy_and_merkle_included",
+    "severity": 7,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "alice_specialist_claim15_functional_results",
+    "persona": "alice_specialist",
+    "claim_refs": [
+      15,
+      22
+    ],
+    "category": "101",
+    "finding": "Claim 15 is the archetype of a Two-Way Media functional claim: it recites the desired result ('rejecting any delegation zero-knowledge proof for which (i)... (ii)... (iii)... (iv)...') rather than any concrete mechanism for achieving that result. Sub-limitation (d) is a four-way disjunction of conditions \u2014 effectively 'reject if anything is wrong' \u2014 without specifying how each condition is algorithmically detected, what Solidity opcodes are invoked, or what gas-bounded branching structure performs the rejection. The tail clause 'wherein each of said rejection conditions is evaluated against values read from on-chain state variables ... with no rejection condition accepting or evaluating a caller-supplied chain continuity parameter' is a negative limitation describing what the claim does NOT do, which under Two-Way Media is the hallmark of results-based claiming.",
+    "recommended_direction": "Replace functional 'rejecting' language with affirmative structural steps that recite the specific Solidity revert logic, the order of SLOAD operations, and the exact storage slot reads. Move the 'no caller-supplied parameter' limitation from a negative wherein clause into an affirmative architectural claim recitation (e.g., 'wherein the delegation verification function's signature comprises exactly the following parameters: ...'). Consider splitting Claim 15 into two claims: one reciting the affirmative mechanism and one reciting the security property, so that the mechanism claim can survive 101 even if the property claim is challenged.",
+    "evidence": "Claim 15(d) recites rejection conditions as a functional result: 'rejecting any delegation zero-knowledge proof for which (i) no handshake has consumed the session nonce ... (ii) the proof's previous scope commitment public signal does not equal ...' Two-Way Media v. Comcast, 874 F.3d 1329, 1337-39 (Fed. Cir. 2017) (claims reciting results of abstract process rather than specific means to achieve them fail Step 2A). Electric Power Group, 830 F.3d at 1356 ('the essentially result-focused, functional character of claim language has been a frequent feature of claims held ineligible').",
+    "attack_id": "alice_specialist_claim15_functional_results",
+    "severity": 7,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_claim15_negative_limitation",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      15
+    ],
+    "category": "design_around",
+    "finding": "Claim 15(b) requires the chain-state record be 'written exclusively by the handshake verification function of step (a) and the delegation verification function of step (c), such that no caller-supplied parameter can write to or modify the chain-state record.' Claim 15(d) redundantly recites 'no rejection condition accepting or evaluating a caller-supplied chain continuity parameter.' These 'exclusively' / 'no' negative limitations are self-destructing: any competitor that adds a third write path \u2014 an admin escape hatch, a governance-gated reset, an upgrade proxy slot, an emergency pause/restore, or even a migration helper \u2014 falls outside the claim entirely. Worse, any contract using OpenZeppelin's UUPS/Transparent proxy pattern inherently has an upgrade-authorized write path to storage, arguably avoiding the claim on its face. This turns your 'narrowest, hardest-to-design-around claim' (per attorney notes) into the easiest to avoid.",
+    "recommended_direction": "Replace 'exclusively' and 'no caller-supplied parameter' with affirmative structural language: 'wherein the chain-state record for a given session nonce is advanced by the handshake verification function with the agent proof's scope commitment public signal and by the delegation verification function with the delegation proof's new scope commitment public signal.' Move the 'no caller-supplied' restriction into a dependent claim. Also check Santarus v. Par Pharma \u2014 the spec must affirmatively describe why every excluded embodiment is excluded, which Section 7.5 only partially does.",
+    "evidence": "Claim 15(b): 'written exclusively by the handshake verification function...and the delegation verification function...such that no caller-supplied parameter can write to or modify'; Claim 15(d): 'with no rejection condition accepting or evaluating a caller-supplied chain continuity parameter.' Per Santarus v. Par Pharmaceutical, 694 F.3d 1344, negative limitations require specific written description support identifying why excluded embodiments are excluded \u2014 the spec does not justify excluding e.g. owner-gated or proxy-upgrade writes.",
+    "attack_id": "competitor_attorney_claim15_negative_limitation",
+    "severity": 7,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 23,
+    "priority": "high"
+  }
+]

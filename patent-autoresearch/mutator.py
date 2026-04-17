@@ -30,13 +30,33 @@ def apply_mutation(patent_text: str, winner: dict[str, Any]) -> str:
 
     Raises:
         ValueError: if `winner["original_language"]` is not present verbatim
-            in `patent_text`. The error message includes the winner's
-            `targets_weakness` so operators can identify which attack failed.
+            in `patent_text`, OR if `winner["claim_text"]` looks like LLM
+            meta-instructions rather than literal replacement prose. The
+            instruction-guard prevents M2-style self-inflicted wounds where
+            the LLM writes "REPLACE step (d) with..." and the mutator blindly
+            pastes that instruction text into the patent.
     """
+    # Import here to avoid circular deps at module load time.
+    from run_tier2_claim import looks_like_instruction
+
     original = winner["original_language"]
     replacement = winner["claim_text"]
+    weakness = winner.get("targets_weakness", "?")
+
+    if looks_like_instruction(replacement):
+        preview = replacement[:120].replace("\n", "\\n")
+        raise ValueError(
+            f"claim_text looks like LLM meta-instructions rather than literal "
+            f"replacement prose for winner targeting {weakness}: {preview!r}. "
+            f"Regenerate this candidate — instruction markers detected."
+        )
+    if looks_like_instruction(original):
+        preview = original[:120].replace("\n", "\\n")
+        raise ValueError(
+            f"original_language looks like LLM meta-instructions rather than "
+            f"a literal patent substring for winner targeting {weakness}: {preview!r}."
+        )
     if original not in patent_text:
-        weakness = winner.get("targets_weakness", "?")
         preview = original[:120].replace("\n", "\\n")
         raise ValueError(
             f"original_language not found in patent for winner targeting "
