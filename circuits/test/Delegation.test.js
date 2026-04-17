@@ -4,6 +4,8 @@ const circom_tester = require("circom_tester");
 const wasm_tester = circom_tester.wasm;
 const { buildPoseidon, buildEddsa } = require("circomlibjs");
 
+const MAX_DEPTH = 20;
+
 describe("Delegation Circuit", function () {
   this.timeout(120000);
 
@@ -27,6 +29,18 @@ describe("Delegation Circuit", function () {
     F = poseidon.F;
   });
 
+  // Helper: build a minimal Merkle proof for a single-leaf tree.
+  // For a tree with just the leaf, depth=1, index=0, siblings[0]=0 (empty sibling).
+  // BinaryMerkleRoot computes: hash(leaf, 0) at depth 1.
+  function buildSingleLeafMerkleProof(leaf) {
+    const siblings = new Array(MAX_DEPTH).fill("0");
+    return {
+      delegateeMerkleProofLength: "1",
+      delegateeMerkleProofIndex: "0",
+      delegateeMerkleProofSiblings: siblings,
+    };
+  }
+
   // Helper: create a delegation and sign it
   function createDelegation({
     delegatorScope,
@@ -39,6 +53,7 @@ describe("Delegation Circuit", function () {
     delegatorPrivKey = Buffer.from(
       "0001020304050607080900010203040506070809000102030405060708090001", "hex"
     ),
+    delegateeMerkleProof = null,
   }) {
     const delegatorPubKey = eddsa.prv2pub(delegatorPrivKey);
 
@@ -57,6 +72,9 @@ describe("Delegation Circuit", function () {
     // Sign the token
     const sig = eddsa.signPoseidon(delegatorPrivKey, tokenFe);
 
+    // Default: use single-leaf Merkle proof for delegatee
+    const merkleProof = delegateeMerkleProof || buildSingleLeafMerkleProof(delegateeCredCommitment);
+
     return {
       delegatorScope: delegatorScope.toString(),
       delegateeScope: delegateeScope.toString(),
@@ -71,6 +89,7 @@ describe("Delegation Circuit", function () {
       delegateeCredCommitment: delegateeCredCommitment.toString(),
       previousScopeCommitment: previousScopeCommitment.toString(),
       sessionNonce: sessionNonce.toString(),
+      ...merkleProof,
     };
   }
 
@@ -258,6 +277,53 @@ describe("Delegation Circuit", function () {
     } catch (err) {
       expect(err.message).to.include("Assert Failed");
     }
+  });
+
+  // ============ CIP-1: Delegatee Merkle proof tests ============
+
+  it("should output delegateeMerkleRoot for an enrolled delegatee (CIP-1)", async function () {
+    const input = createDelegation({
+      delegatorScope: 0b00000111n,
+      delegateeScope: 0b00000011n,
+      delegatorExpiry: 1000000n,
+      delegateeExpiry: 500000n,
+    });
+
+    const witness = await circuit.calculateWitness(input, true);
+    await circuit.checkConstraints(witness);
+
+    // Output indices: [1] = newScopeCommitment, [2] = delegationNullifier, [3] = delegateeMerkleRoot
+    const delegateeMerkleRoot = witness[3];
+    expect(delegateeMerkleRoot).to.not.equal(0n);
+    console.log("  Delegatee Merkle root:", delegateeMerkleRoot.toString().slice(0, 20) + "...");
+  });
+
+  it("should compute a different Merkle root for a different delegatee (CIP-1 on-chain check)", async function () {
+    // Two delegations with different delegatees should produce different Merkle roots
+    const input1 = createDelegation({
+      delegatorScope: 0b00000111n,
+      delegateeScope: 0b00000011n,
+      delegatorExpiry: 1000000n,
+      delegateeExpiry: 500000n,
+      delegateeCredCommitment: 11111n,
+    });
+
+    const input2 = createDelegation({
+      delegatorScope: 0b00000111n,
+      delegateeScope: 0b00000011n,
+      delegatorExpiry: 1000000n,
+      delegateeExpiry: 500000n,
+      delegateeCredCommitment: 22222n,
+    });
+
+    const witness1 = await circuit.calculateWitness(input1, true);
+    const witness2 = await circuit.calculateWitness(input2, true);
+    await circuit.checkConstraints(witness1);
+    await circuit.checkConstraints(witness2);
+
+    // Different delegatees should produce different Merkle roots
+    // (which the on-chain verifier would check against agentRootExists)
+    expect(witness1[3].toString()).to.not.equal(witness2[3].toString());
   });
 
   it("should produce unique nullifiers for different nonces", async function () {

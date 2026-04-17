@@ -4,6 +4,7 @@ include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/eddsaposeidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
 include "../node_modules/circomlib/circuits/comparators.circom";
+include "../node_modules/@zk-kit/binary-merkle-root.circom/src/binary-merkle-root.circom";
 
 // Delegation: Proves a valid scope-narrowing delegation from delegator to delegatee.
 //
@@ -31,7 +32,7 @@ include "../node_modules/circomlib/circuits/comparators.circom";
 //   - Max chain depth: 3 (enforced by on-chain contract, not circuit)
 //   - Each hop is one independent proof (iterative, not recursive)
 //
-template Delegation() {
+template Delegation(MAX_DEPTH) {
     // ============ PRIVATE INPUTS ============
 
     // Delegator's scope (the entity granting permission)
@@ -60,6 +61,12 @@ template Delegation() {
     // Delegatee's credential commitment (identifies WHO is receiving)
     signal input delegateeCredCommitment;
 
+    // Delegatee Merkle proof: proves delegateeCredCommitment is enrolled in agentTree
+    // (CIP-1: fixes phantom delegatee attack — previously unchecked)
+    signal input delegateeMerkleProofLength;
+    signal input delegateeMerkleProofIndex;
+    signal input delegateeMerkleProofSiblings[MAX_DEPTH];
+
     // ============ PUBLIC INPUTS ============
 
     // The previous hop's scope commitment — links this hop to the chain
@@ -77,6 +84,9 @@ template Delegation() {
 
     // Delegation nullifier (unique per delegation per nonce)
     signal output delegationNullifier;
+
+    // Delegatee Merkle root (CIP-1: verified on-chain against agentRootExists)
+    signal output delegateeMerkleRoot;
 
     // ============ STEP 1: Range checks ============
 
@@ -163,6 +173,19 @@ template Delegation() {
     sigVerify.R8y <== sigR8y;
     sigVerify.M <== tokenHash.out;
 
+    // ============ STEP 6b: Delegatee Merkle inclusion proof (CIP-1) ============
+    // Proves delegateeCredCommitment is a leaf in the agentTree.
+    // The computed root is a public output so the on-chain verifier can check it
+    // against agentRootExists, preventing phantom delegatees.
+
+    component delegateeMerkle = BinaryMerkleRoot(MAX_DEPTH);
+    delegateeMerkle.leaf <== delegateeCredCommitment;
+    delegateeMerkle.depth <== delegateeMerkleProofLength;
+    delegateeMerkle.index <== delegateeMerkleProofIndex;
+    for (var i = 0; i < MAX_DEPTH; i++) {
+        delegateeMerkle.siblings[i] <== delegateeMerkleProofSiblings[i];
+    }
+
     // ============ STEP 7: Outputs ============
 
     // New scope commitment for the chain (identity-bound)
@@ -176,6 +199,9 @@ template Delegation() {
     nullifier.inputs[0] <== tokenHash.out;
     nullifier.inputs[1] <== sessionNonce;
     delegationNullifier <== nullifier.out;
+
+    // CIP-1: delegatee Merkle root output
+    delegateeMerkleRoot <== delegateeMerkle.out;
 }
 
-component main {public [previousScopeCommitment, sessionNonce]} = Delegation();
+component main {public [previousScopeCommitment, sessionNonce]} = Delegation(20);

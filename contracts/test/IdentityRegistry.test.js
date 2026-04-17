@@ -25,7 +25,7 @@ describe("IdentityRegistry", function () {
     await plonkVerifier.waitForDeployment();
 
     // Deploy Delegation PLONK verifier
-    const DelegationVerifier = await ethers.getContractFactory("contracts/DelegationVerifier.sol:PlonkVerifier");
+    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
     const delegationVerifier = await DelegationVerifier.deploy();
     await delegationVerifier.waitForDeployment();
 
@@ -258,11 +258,61 @@ describe("IdentityRegistry", function () {
     });
   });
 
+  describe("Human root history buffer (CIP-2)", function () {
+    it("should track human root history on enrollment", async function () {
+      const commitment = 12345n;
+      await registry.enrollHuman(commitment);
+
+      const root = await registry.humanTreeRoot();
+      expect(await registry.isValidHumanRoot(root)).to.be.true;
+    });
+
+    it("should accept old human roots within 30-root buffer", async function () {
+      // Enroll first human, record its root
+      await registry.enrollHuman(1000n);
+      const firstRoot = await registry.humanTreeRoot();
+
+      // Enroll 29 more humans (total 30 roots in buffer)
+      for (let i = 1; i < 30; i++) {
+        await registry.enrollHuman(BigInt((i + 1) * 1000));
+      }
+
+      // First root should still be valid (exactly 30 roots)
+      expect(await registry.isValidHumanRoot(firstRoot)).to.be.true;
+    });
+
+    it("should evict old human roots beyond 30-root buffer", async function () {
+      // Enroll first human, record its root
+      await registry.enrollHuman(1000n);
+      const firstRoot = await registry.humanTreeRoot();
+
+      // Enroll 30 more humans (31 total, first root evicted)
+      for (let i = 1; i <= 30; i++) {
+        await registry.enrollHuman(BigInt((i + 1) * 1000));
+      }
+
+      // First root should be evicted
+      expect(await registry.isValidHumanRoot(firstRoot)).to.be.false;
+
+      // Latest root should be valid
+      const latestRoot = await registry.humanTreeRoot();
+      expect(await registry.isValidHumanRoot(latestRoot)).to.be.true;
+    });
+
+    it("should track human roots from batch enrollment", async function () {
+      await registry.enrollHumanBatch([100n, 200n, 300n]);
+
+      // Current root should be valid
+      const root = await registry.humanTreeRoot();
+      expect(await registry.isValidHumanRoot(root)).to.be.true;
+    });
+  });
+
   describe("Delegation verification (Attack 2 fix: handshake-prerequisite + on-chain chain state)", function () {
     it("should reject delegation without prior handshake", async function () {
       // Session nonce has not been consumed by any handshake
       const proof = new Array(24).fill(0n);
-      const pubSignals = [111n, 42n, 222n, 333n];
+      const pubSignals = [111n, 42n, 222n, 333n, 444n];
       const sessionNonce = 42n;
 
       await expect(

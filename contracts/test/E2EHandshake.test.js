@@ -47,7 +47,7 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     const PlonkVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:PlonkVerifier");
     const plonkVerifier = await PlonkVerifier.deploy();
 
-    const DelegationVerifier = await ethers.getContractFactory("contracts/DelegationVerifier.sol:PlonkVerifier");
+    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
     const delegationVerifier = await DelegationVerifier.deploy();
 
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {

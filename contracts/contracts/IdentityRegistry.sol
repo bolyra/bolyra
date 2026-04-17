@@ -22,7 +22,7 @@ interface IPlonkVerifier {
 interface IDelegationVerifier {
     function verifyProof(
         uint256[24] calldata _proof,
-        uint256[4] calldata _pubSignals
+        uint256[5] calldata _pubSignals
     ) external view returns (bool);
 }
 
@@ -93,6 +93,11 @@ contract IdentityRegistry {
     uint256 public agentRootHistoryIndex;
     mapping(uint256 => bool) public agentRootExists;
 
+    // Root history buffer for humanTree (CIP-2: last 30 roots, symmetric with agentTree)
+    uint256[30] public humanRootHistory;
+    uint256 public humanRootHistoryIndex;
+    mapping(uint256 => bool) public humanRootExists;
+
     // Human revocation is checked during handshake verification (by nullifier, stable per scope).
     // Agent revocation is enforced at the tree level: a revoked credential is zeroed in agentTree
     // via LeanIMT update, invalidating all subsequent Merkle proofs.
@@ -132,6 +137,7 @@ contract IdentityRegistry {
     /// @param identityCommitment Poseidon2(Ax, Ay) where (Ax, Ay) is the EdDSA public key.
     function enrollHuman(uint256 identityCommitment) external onlyOwner {
         uint256 newRoot = humanTree._insert(identityCommitment);
+        _recordHumanRoot(newRoot);
         emit HumanEnrolled(identityCommitment, newRoot);
     }
 
@@ -147,7 +153,8 @@ contract IdentityRegistry {
     /// @param identityCommitments Array of identity commitments.
     function enrollHumanBatch(uint256[] calldata identityCommitments) external onlyOwner {
         for (uint256 i = 0; i < identityCommitments.length; i++) {
-            humanTree._insert(identityCommitments[i]);
+            uint256 newRoot = humanTree._insert(identityCommitments[i]);
+            _recordHumanRoot(newRoot);
         }
     }
 
@@ -203,11 +210,8 @@ contract IdentityRegistry {
         // Agent revocation is enforced at the Merkle proof level: a revoked credential
         // is zeroed in the tree, so the proof will fail to verify.
 
-        // 4. Verify human Merkle root is valid
-        // For humanTree, we check the current root (Semaphore-style)
-        // TODO: Add root history for humanTree too
-        uint256 currentHumanRoot = humanTree._root();
-        if (humanMerkleRoot != currentHumanRoot) revert InvalidHumanProof();
+        // 4. Verify human Merkle root is in history (CIP-2: 30-root buffer)
+        if (!humanRootExists[humanMerkleRoot]) revert InvalidHumanProof();
 
         // 5. Verify agent Merkle root is in history
         if (!agentRootExists[agentMerkleRoot]) revert StaleAgentRoot();
@@ -239,11 +243,11 @@ contract IdentityRegistry {
     ///      on-chain (not caller-supplied) per Attack 2 fix. Delegation requires
     ///      that a mutual handshake was previously verified for this sessionNonce.
     /// @param proof PLONK proof for the Delegation circuit.
-    /// @param pubSignals [previousScopeCommitment, sessionNonce, newScopeCommitment, delegationNullifier]
+    /// @param pubSignals [previousScopeCommitment, sessionNonce, newScopeCommitment, delegationNullifier, delegateeMerkleRoot]
     /// @param sessionNonce The session nonce (must match a previously-verified handshake).
     function verifyDelegation(
         uint256[24] calldata proof,
-        uint256[4] calldata pubSignals,
+        uint256[5] calldata pubSignals,
         uint256 sessionNonce
     ) external {
         // Attack 2 fix: Delegation requires that a handshake was verified for this nonce.
@@ -267,6 +271,10 @@ contract IdentityRegistry {
         // Enforce max delegation chain depth
         delegationHopCount[sessionNonce]++;
         if (delegationHopCount[sessionNonce] > MAX_DELEGATION_HOPS) revert MaxDelegationHopsExceeded();
+
+        // CIP-1: Verify delegatee's Merkle root is a valid agent tree root
+        uint256 delegateeMerkleRoot = pubSignals[4];
+        if (!agentRootExists[delegateeMerkleRoot]) revert StaleAgentRoot();
 
         // Verify the delegation proof via the deployed verifier
         if (!delegationVerifier.verifyProof(proof, pubSignals)) {
@@ -333,6 +341,11 @@ contract IdentityRegistry {
         return agentRootExists[root];
     }
 
+    /// @notice Check if a human Merkle root is in the history buffer (CIP-2).
+    function isValidHumanRoot(uint256 root) external view returns (bool) {
+        return humanRootExists[root];
+    }
+
     // ============ INTERNAL ============
 
     /// @dev Record a new agent tree root in the history buffer.
@@ -349,6 +362,17 @@ contract IdentityRegistry {
 
         // Advance circular buffer index
         agentRootHistoryIndex = (agentRootHistoryIndex + 1) % ROOT_HISTORY_SIZE;
+    }
+
+    /// @dev Record a new human tree root in the history buffer (CIP-2).
+    function _recordHumanRoot(uint256 root) internal {
+        uint256 oldRoot = humanRootHistory[humanRootHistoryIndex];
+        if (oldRoot != 0) {
+            humanRootExists[oldRoot] = false;
+        }
+        humanRootHistory[humanRootHistoryIndex] = root;
+        humanRootExists[root] = true;
+        humanRootHistoryIndex = (humanRootHistoryIndex + 1) % ROOT_HISTORY_SIZE;
     }
 
     /// @dev Verify a Groth16 proof for the human circuit via the deployed verifier.
