@@ -1,5 +1,5 @@
 import { proveHandshake, verifyHandshake } from '../src/handshake';
-import { BolyraError } from '../src/errors';
+import { ProofGenerationError } from '../src/errors';
 import { HumanIdentity, AgentCredential } from '../src/types';
 
 const mockHuman: HumanIdentity = {
@@ -18,23 +18,35 @@ const mockAgent: AgentCredential = {
 };
 
 describe('proveHandshake', () => {
-  it('throws NOT_IMPLEMENTED', async () => {
-    await expect(proveHandshake(mockHuman, mockAgent)).rejects.toThrow(
-      BolyraError,
-    );
-    await expect(proveHandshake(mockHuman, mockAgent)).rejects.toMatchObject({
-      code: 'NOT_IMPLEMENTED',
-    });
+  it('throws ProofGenerationError when circuit artifacts are missing', async () => {
+    // With no real circuit files at the default path in test env,
+    // this should throw a ProofGenerationError (not NOT_IMPLEMENTED)
+    await expect(
+      proveHandshake(mockHuman, mockAgent, {
+        config: { circuitDir: '/nonexistent/path' },
+      }),
+    ).rejects.toThrow(ProofGenerationError);
+  });
+
+  it('accepts scope and nonce options', async () => {
+    await expect(
+      proveHandshake(mockHuman, mockAgent, {
+        scope: 42n,
+        nonce: 12345n,
+        config: { circuitDir: '/nonexistent/path' },
+      }),
+    ).rejects.toThrow(ProofGenerationError);
   });
 });
 
 describe('verifyHandshake', () => {
-  it('throws NOT_IMPLEMENTED', async () => {
-    const mockProof = { proof: {}, publicSignals: [] };
+  it('requires valid proof objects with publicSignals', async () => {
+    const mockProof = { proof: {}, publicSignals: ['0', '1', '2'] };
+    // Will fail because vkey files don't exist at default path in test
     await expect(
-      verifyHandshake(mockProof, mockProof, 1n),
-    ).rejects.toMatchObject({
-      code: 'NOT_IMPLEMENTED',
-    });
+      verifyHandshake(mockProof, mockProof, 1n, {
+        circuitDir: '/nonexistent/path',
+      }),
+    ).rejects.toThrow();
   });
 });

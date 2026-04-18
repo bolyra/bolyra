@@ -1,18 +1,9 @@
-import {
-  AgentCredential,
-  DelegationResult,
-  Proof,
-  BolyraConfig,
-} from './types';
 import { BolyraError } from './errors';
+import { DelegationResult, Proof, BolyraConfig, AgentCredential } from './types';
 
 /**
- * Delegate permissions from one agent to another via ZK proof.
- *
- * Creates a delegation proof that proves:
- * 1. The delegator has valid credentials (in the agent tree)
- * 2. The delegatee's permissions are a subset of the delegator's
- * 3. The delegation chain is valid (scope commitment links to parent)
+ * Delegate scoped permissions to another agent.
+ * Currently a stub -- full implementation requires the delegation circuit zkey.
  *
  * @param delegator - The delegating agent's credential
  * @param delegatee - The receiving agent's credential
@@ -20,16 +11,6 @@ import { BolyraError } from './errors';
  * @param hopIndex - Current hop index in the delegation chain (0-indexed)
  * @param config - SDK configuration
  * @returns Delegation proof ready for on-chain verification
- *
- * @example
- * ```ts
- * const { proof, newScopeCommitment } = await delegate(
- *   parentAgent,
- *   childAgent,
- *   handshakeResult.scopeCommitment,
- *   0, // first delegation hop
- * );
- * ```
  */
 export async function delegate(
   _delegator: AgentCredential,
@@ -38,10 +19,8 @@ export async function delegate(
   _hopIndex: number,
   _config?: BolyraConfig,
 ): Promise<{ proof: Proof; result: DelegationResult }> {
-  // TODO: Implement in SDK v0.2 — requires snarkjs proof generation
   throw new BolyraError(
-    'delegate() not yet implemented — coming in @bolyra/sdk v0.2. ' +
-      'Use the circuit files directly with snarkjs for now.',
+    'delegate() coming in @bolyra/sdk v0.3 — delegation circuit integration.',
     'NOT_IMPLEMENTED',
   );
 }
@@ -60,7 +39,7 @@ export async function verifyDelegation(
   _config?: BolyraConfig,
 ): Promise<DelegationResult> {
   throw new BolyraError(
-    'verifyDelegation() not yet implemented — coming in @bolyra/sdk v0.2.',
+    'verifyDelegation() coming in @bolyra/sdk v0.3.',
     'NOT_IMPLEMENTED',
   );
 }

@@ -19,10 +19,10 @@ export {
   validateCumulativeBitEncoding,
 } from './identity';
 
-// Handshake (stubs for v0.1, implemented in v0.2)
+// Handshake (v0.2 — real proof generation via snarkjs)
 export { proveHandshake, verifyHandshake } from './handshake';
 
-// Delegation (stubs for v0.1, implemented in v0.2)
+// Delegation (stubs — coming in v0.3)
 export { delegate, verifyDelegation } from './delegation';
 
 // Errors

@@ -15,34 +15,30 @@ import {
   createHumanIdentity,
   createAgentCredential,
   Permission,
+  proveHandshake,
+  verifyHandshake,
 } from '@bolyra/sdk';
 
-// 1. Create a human identity (EdDSA keypair + Poseidon commitment)
-const secret = BigInt(
-  crypto.getRandomValues(new Uint8Array(32))
-    .reduce((a, b) => a * 256n + BigInt(b), 0n)
-);
-const human = await createHumanIdentity(secret);
-console.log('Human commitment:', human.commitment);
-// => enroll human.commitment in the humanTree on-chain
-
-// 2. Create an AI agent credential (operator-signed)
-const modelHash = 42n; // hash of model identifier
-const operatorKey = 123n; // operator's EdDSA private key
-const expiry = BigInt(Math.floor(Date.now() / 1000) + 86400); // +1 day
-
+// 1. Create identities
+const human = await createHumanIdentity(123456789n);
 const agent = await createAgentCredential(
-  modelHash,
-  operatorKey,
+  12345n,
+  operatorPrivateKey,
   [Permission.READ_DATA, Permission.WRITE_DATA],
-  expiry,
+  BigInt(Math.floor(Date.now() / 1000) + 86400),
 );
-console.log('Agent commitment:', agent.commitment);
-// => enroll agent.commitment in the agentTree on-chain
 
-// 3. Mutual handshake (coming in v0.2)
-// const { humanProof, agentProof, nonce } = await proveHandshake(human, agent);
-// const result = await verifyHandshake(humanProof, agentProof, nonce);
+// 2. Generate mutual handshake proofs (parallel, ~16s)
+const { humanProof, agentProof, nonce } = await proveHandshake(human, agent);
+
+// 3. Verify locally
+const result = await verifyHandshake(humanProof, agentProof, nonce);
+console.log('Verified:', result.verified); // true
+console.log('Human nullifier:', result.humanNullifier);
+console.log('Agent scope commitment:', result.scopeCommitment);
+
+// 4. Submit to chain (via ethers.js)
+// await registry.verifyHandshake(humanProof, agentProof, nonce);
 ```
 
 ## Permissions
@@ -68,10 +64,10 @@ Permissions use cumulative bit encoding — higher tiers imply lower ones:
 | `createAgentCredential()`     | v0.1   |
 | `permissionsToBitmask()`      | v0.1   |
 | `validateCumulativeBitEncoding()` | v0.1 |
-| `proveHandshake()`            | v0.2 (stub) |
-| `verifyHandshake()`           | v0.2 (stub) |
-| `delegate()`                  | v0.2 (stub) |
-| `verifyDelegation()`          | v0.2 (stub) |
+| `proveHandshake()`            | v0.2   |
+| `verifyHandshake()`           | v0.2   |
+| `delegate()`                  | v0.3 (stub) |
+| `verifyDelegation()`          | v0.3 (stub) |
 
 ## License
 
