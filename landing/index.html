@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bolyra — Mutual Zero-Knowledge Authentication for Humans and AI Agents</title>
+  <meta name="description" content="Bolyra is a protocol for mutual zero-knowledge proof authentication between humans and AI agents. Neither party learns anything beyond policy satisfaction.">
+  <meta property="og:title" content="Bolyra — Mutual ZKP Auth Protocol">
+  <meta property="og:description" content="Humans prove they're human. Agents prove their credentials. One on-chain transaction. Zero knowledge leaked.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://bolyra.ai">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #0a0a0a;
+      --bg-elevated: #111113;
+      --bg-code: #1a1a2e;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --cyan: #22d3ee;
+      --green: #4ade80;
+      --orange: #fb923c;
+      --border: #222;
+      --max-width: 1100px;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    a:hover {
+      color: var(--accent-hover);
+    }
+
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 10, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+    nav .logo {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+    nav .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+    nav .nav-links a {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+    nav .nav-links a:hover {
+      color: var(--text);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 160px 0 100px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(2.8rem, 6vw, 4.5rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #e0e0e0 0%, var(--accent) 50%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .tagline {
+      font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+      color: var(--text-muted);
+      max-width: 680px;
+      margin: 0 auto 40px;
+      line-height: 1.5;
+    }
+    .hero .cta-group {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .hero .install-hint {
+      margin-top: 28px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .hero .install-hint code {
+      background: var(--bg-code);
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.85rem;
+      color: var(--cyan);
+    }
+    .hero .install-hint .badge {
+      display: inline-block;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent);
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Section shared ── */
+    section {
+      padding: 80px 0;
+    }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+    }
+    .section-subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin-bottom: 48px;
+    }
+
+    /* ── Features grid ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px 28px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature-card:hover {
+      border-color: #333;
+      transform: translateY(-2px);
+    }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 20px;
+      font-weight: 700;
+    }
+    .feature-icon.mutual { background: rgba(99, 102, 241, 0.15); color: var(--accent); }
+    .feature-icon.delegation { background: rgba(34, 211, 238, 0.12); color: var(--cyan); }
+    .feature-icon.privacy { background: rgba(74, 222, 128, 0.12); color: var(--green); }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    /* ── Code example ── */
+    .code-section {
+      background: var(--bg-elevated);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .code-block-wrapper {
+      position: relative;
+      margin-top: 32px;
+    }
+    .code-block {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.85rem;
+      line-height: 1.75;
+      tab-size: 2;
+    }
+    .code-block .kw { color: #c792ea; }       /* keywords: import, from, const, await */
+    .code-block .fn { color: #82aaff; }       /* function names */
+    .code-block .str { color: #c3e88d; }      /* strings */
+    .code-block .type { color: #ffcb6b; }     /* types */
+    .code-block .cm { color: #546e7a; }       /* comments */
+    .code-block .num { color: var(--cyan); }  /* numbers */
+    .code-block .prop { color: #f78c6c; }     /* properties */
+    .code-block .op { color: #89ddff; }       /* operators */
+
+    .copy-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    /* ── Architecture ── */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 40px;
+    }
+    .arch-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .arch-card .circuit-name {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .arch-card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .arch-card .stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .arch-card .stat .label {
+      color: var(--text-muted);
+    }
+    .arch-card .stat .value {
+      color: var(--cyan);
+      font-weight: 600;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.82rem;
+    }
+
+    .contract-stack {
+      margin-top: 24px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .contract-stack .layer {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 0.85rem;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      color: var(--text);
+      text-align: center;
+    }
+    .contract-stack .arrow {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+    }
+
+    /* ── Numbers ── */
+    .numbers-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 40px;
+    }
+    .number-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .number-card .big {
+      font-size: clamp(1.6rem, 3vw, 2rem);
+      font-weight: 800;
+      color: var(--cyan);
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+    }
+    .number-card .desc {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* ── Standards ── */
+    .standards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .standard-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+    }
+    .standard-card .std-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 10px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+    }
+    .std-badge.ietf { background: rgba(99, 102, 241, 0.15); color: var(--accent); }
+    .std-badge.w3c { background: rgba(34, 211, 238, 0.12); color: var(--cyan); }
+    .std-badge.test { background: rgba(74, 222, 128, 0.12); color: var(--green); }
+
+    .standard-card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .standard-card p {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+    .standard-card code {
+      background: var(--bg-code);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.82rem;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 48px 0;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 32px;
+    }
+    .footer-left .footer-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .footer-left p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      max-width: 360px;
+    }
+    .footer-links {
+      display: flex;
+      gap: 48px;
+    }
+    .footer-col h4 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .footer-col ul {
+      list-style: none;
+    }
+    .footer-col ul li {
+      margin-bottom: 8px;
+    }
+    .footer-col ul li a {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      transition: color 0.2s;
+    }
+    .footer-col ul li a:hover {
+      color: var(--text);
+    }
+    .footer-bottom {
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer-bottom p {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .features-grid,
+      .arch-grid,
+      .standards-grid {
+        grid-template-columns: 1fr;
+      }
+      .numbers-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .hero {
+        padding: 130px 0 70px;
+      }
+      .footer-content {
+        flex-direction: column;
+      }
+      .footer-links {
+        gap: 32px;
+      }
+      nav .nav-links {
+        display: none;
+      }
+      .contract-stack {
+        flex-direction: column;
+      }
+      .contract-stack .arrow {
+        transform: rotate(90deg);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .numbers-grid {
+        grid-template-columns: 1fr;
+      }
+      .code-block {
+        padding: 20px 16px;
+        font-size: 0.78rem;
+      }
+      .footer-links {
+        flex-direction: column;
+        gap: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <div class="logo">Bolyra</div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#sdk">SDK</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#standards">Standards</a></li>
+        <li><a href="https://github.com/saneGuy/identityos">GitHub</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <h1>Bolyra</h1>
+      <p class="tagline">Mutual zero-knowledge authentication for humans and AI agents. Both sides prove credentials. Neither side learns anything beyond policy satisfaction. One on-chain transaction.</p>
+      <div class="cta-group">
+        <a href="https://github.com/saneGuy/identityos" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="#standards" class="btn btn-secondary">IETF Draft</a>
+      </div>
+      <p class="install-hint">
+        <code>npm install @bolyra/sdk</code>
+        <span class="badge">Coming Soon</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="container">
+      <p class="section-label">Protocol</p>
+      <h2 class="section-title">What Bolyra does</h2>
+      <p class="section-subtitle">A complete authentication primitive for the human-AI boundary. Three capabilities, zero information leakage.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon mutual">ZK</div>
+          <h3>Mutual Authentication</h3>
+          <p>Humans prove uniqueness via EdDSA + Poseidon commitments. AI agents prove operator-signed credentials. Both proofs are generated in parallel and verified in a single on-chain transaction.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon delegation">&rarr;</div>
+          <h3>Delegation Chains</h3>
+          <p>Agents delegate scoped permissions to other agents through privacy-preserving delegation circuits. Each link in the chain is a ZK proof &mdash; the verifier sees only that the permission is valid, not the delegation path.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon privacy">&empty;</div>
+          <h3>Zero Knowledge</h3>
+          <p>Neither party learns anything about the other beyond policy satisfaction. No identity attributes, no model weights, no operator details are revealed. Proof of compliance without disclosure.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Code Example -->
+  <section id="sdk" class="code-section">
+    <div class="container">
+      <p class="section-label">SDK</p>
+      <h2 class="section-title">10 lines to mutual auth</h2>
+      <p class="section-subtitle">The full handshake: identity creation, credential issuance, parallel proof generation, and on-chain verification.</p>
+      <div class="code-block-wrapper">
+        <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
+        <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> { <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
+         <span class="type">Permission</span>, <span class="fn">proveHandshake</span> } <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
+
+<span class="cm">// Human creates identity (EdDSA keypair + Poseidon commitment)</span>
+<span class="kw">const</span> human <span class="op">=</span> <span class="kw">await</span> <span class="fn">createHumanIdentity</span>(secretScalar);
+
+<span class="cm">// AI agent gets operator-signed credential</span>
+<span class="kw">const</span> agent <span class="op">=</span> <span class="kw">await</span> <span class="fn">createAgentCredential</span>(
+  modelHash, operatorKey,
+  [<span class="type">Permission</span>.<span class="prop">READ_DATA</span>, <span class="type">Permission</span>.<span class="prop">WRITE_DATA</span>],
+  expiryTimestamp
+);
+
+<span class="cm">// Mutual handshake — both proofs generated in parallel (~16s)</span>
+<span class="kw">const</span> { humanProof, agentProof, nonce } <span class="op">=</span> <span class="kw">await</span> <span class="fn">proveHandshake</span>(human, agent);
+
+<span class="cm">// Verify on-chain (Base L2, ~590k gas, ~$0.15)</span>
+<span class="kw">await</span> registry.<span class="fn">verifyHandshake</span>(humanProof, agentProof, nonce);</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section id="architecture">
+    <div class="container">
+      <p class="section-label">Architecture</p>
+      <h2 class="section-title">Three circuits, one verification</h2>
+      <p class="section-subtitle">Groth16 for the fast path, PLONK for the complex paths. All verified through a unified Solidity contract stack.</p>
+      <div class="arch-grid">
+        <div class="arch-card">
+          <p class="circuit-name">Circuit 1</p>
+          <h3>HumanUniqueness</h3>
+          <div class="stat">
+            <span class="label">Constraints</span>
+            <span class="value">16,409</span>
+          </div>
+          <div class="stat">
+            <span class="label">Proof system</span>
+            <span class="value">Groth16</span>
+          </div>
+          <div class="stat">
+            <span class="label">Proving time</span>
+            <span class="value">0.57s</span>
+          </div>
+        </div>
+        <div class="arch-card">
+          <p class="circuit-name">Circuit 2</p>
+          <h3>AgentPolicy</h3>
+          <div class="stat">
+            <span class="label">Constraints</span>
+            <span class="value">20,832</span>
+          </div>
+          <div class="stat">
+            <span class="label">Proof system</span>
+            <span class="value">PLONK</span>
+          </div>
+          <div class="stat">
+            <span class="label">Proving time</span>
+            <span class="value">16.3s</span>
+          </div>
+        </div>
+        <div class="arch-card">
+          <p class="circuit-name">Circuit 3</p>
+          <h3>Delegation</h3>
+          <div class="stat">
+            <span class="label">Constraints</span>
+            <span class="value">21,254</span>
+          </div>
+          <div class="stat">
+            <span class="label">Proof system</span>
+            <span class="value">PLONK</span>
+          </div>
+          <div class="stat">
+            <span class="label">Proving time</span>
+            <span class="value">~17s</span>
+          </div>
+        </div>
+      </div>
+      <div class="contract-stack">
+        <div class="layer">Groth16Verifier.sol</div>
+        <span class="arrow">&rarr;</span>
+        <div class="layer">PlonkVerifier.sol</div>
+        <span class="arrow">&rarr;</span>
+        <div class="layer">HandshakeRouter.sol</div>
+        <span class="arrow">&rarr;</span>
+        <div class="layer">BolyraRegistry.sol</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Numbers -->
+  <section id="numbers">
+    <div class="container">
+      <p class="section-label">Benchmarks</p>
+      <h2 class="section-title">Numbers that matter</h2>
+      <p class="section-subtitle">Measured on commodity hardware. Deployed on Base L2 for cost efficiency.</p>
+      <div class="numbers-grid">
+        <div class="number-card">
+          <div class="big">~590k</div>
+          <div class="desc">Gas for full handshake verification on Base L2</div>
+        </div>
+        <div class="number-card">
+          <div class="big">$0.15</div>
+          <div class="desc">Cost per mutual authentication at current gas prices</div>
+        </div>
+        <div class="number-card">
+          <div class="big">~16s</div>
+          <div class="desc">End-to-end proving time (both proofs in parallel)</div>
+        </div>
+        <div class="number-card">
+          <div class="big">58,495</div>
+          <div class="desc">Total R1CS constraints across all three circuits</div>
+        </div>
+        <div class="number-card">
+          <div class="big">24</div>
+          <div class="desc">Patent claims filed (US Provisional #64/043,898)</div>
+        </div>
+        <div class="number-card">
+          <div class="big">13</div>
+          <div class="desc">Conformance test vectors (all passing)</div>
+        </div>
+        <div class="number-card">
+          <div class="big">0</div>
+          <div class="desc">Bits of information leaked beyond policy satisfaction</div>
+        </div>
+        <div class="number-card">
+          <div class="big">1</div>
+          <div class="desc">On-chain transaction for full mutual verification</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Standards -->
+  <section id="standards">
+    <div class="container">
+      <p class="section-label">Standards</p>
+      <h2 class="section-title">Built on open standards</h2>
+      <p class="section-subtitle">Not just code &mdash; a protocol with formal specifications, a DID method, and conformance tests.</p>
+      <div class="standards-grid">
+        <div class="standard-card">
+          <span class="std-badge ietf">IETF</span>
+          <h3>Internet-Draft</h3>
+          <p><code>draft-bolyra-mutual-zkp-auth-00</code></p>
+          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures.</p>
+        </div>
+        <div class="standard-card">
+          <span class="std-badge w3c">W3C</span>
+          <h3>DID Method</h3>
+          <p><code>did:bolyra</code></p>
+          <p style="margin-top: 10px;">W3C Decentralized Identifier method for Bolyra identities. Supports both human and agent DID documents with ZKP-aware verification methods.</p>
+        </div>
+        <div class="standard-card">
+          <span class="std-badge test">Conformance</span>
+          <h3>Test Vectors</h3>
+          <p><code>13 vectors, all passing</code></p>
+          <p style="margin-top: 10px;">Complete conformance test suite covering identity creation, credential issuance, proof generation, delegation, and on-chain verification.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-left">
+          <div class="footer-logo">Bolyra</div>
+          <p>Mutual zero-knowledge authentication for humans and AI agents. Open protocol, open source.</p>
+        </div>
+        <div class="footer-links">
+          <div class="footer-col">
+            <h4>Resources</h4>
+            <ul>
+              <li><a href="https://github.com/saneGuy/identityos">GitHub</a></li>
+              <li><a href="https://github.com/saneGuy/identityos/tree/main/spec">IETF Draft</a></li>
+              <li><a href="https://github.com/saneGuy/identityos/tree/main/sdk">SDK Documentation</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <ul>
+              <li><a href="#">US Provisional #64/043,898</a></li>
+              <li><a href="#">License (MIT)</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Connect</h4>
+            <ul>
+              <li><a href="https://github.com/saneGuy">@saneGuy</a></li>
+              <li><a href="mailto:hello@bolyra.ai">hello@bolyra.ai</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Bolyra. All rights reserved.</p>
+        <p>US Provisional Patent Application #64/043,898 &middot; 24 claims filed</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Minimal JS: copy-to-clipboard + smooth scroll already handled by CSS -->
+  <script>
+    function copyCode(btn) {
+      const code = document.getElementById('sdk-code');
+      const text = code.textContent;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+      }).catch(function() {
+        btn.textContent = 'Failed';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
