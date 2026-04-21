@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -37,6 +37,42 @@
       }
     },
     {
+      "id": "expired-credential-exact-boundary",
+      "description": "Agent credential expiry equals currentTimestamp exactly — edge case: current == expiry is expired",
+      "type": "handshake",
+      "inputs": {
+        "agentPermissions": "0x07",
+        "agentExpiry": "1750000000",
+        "currentTimestamp": "1750000000",
+        "requiredScope": "0x03",
+        "sessionNonce": "200"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "credential_expired",
+        "failsAt": "AgentPolicy circuit: LessThan(64) constraint notExpired.out === 1 (equality fails strict less-than)"
+      }
+    },
+    {
+      "id": "expired-credential-one-second-before",
+      "description": "Agent credential valid with currentTimestamp one second before expiry",
+      "type": "handshake",
+      "inputs": {
+        "humanSecret": "987654321",
+        "agentModelHash": "54321",
+        "agentPermissions": "0x07",
+        "agentExpiry": "1750000001",
+        "currentTimestamp": "1750000000",
+        "requiredScope": "0x03",
+        "sessionNonce": "201"
+      },
+      "expected": {
+        "result": "PASS",
+        "humanNullifierDeterministic": true,
+        "agentScopeCommitmentIdentityBound": true
+      }
+    },
+    {
       "id": "insufficient-permissions",
       "description": "Agent permissions don't satisfy required scope — bit 1 required but not set",
       "type": "handshake",
@@ -54,6 +90,161 @@
       }
     },
     {
+      "id": "scope-escalation-all-bits",
+      "description": "Required scope exceeds permissions on all bits — 0x00 perms vs 0xFF required",
+      "type": "handshake",
+      "inputs": {
+        "agentPermissions": "0x00",
+        "requiredScope": "0xFF",
+        "agentExpiry": "1800000000",
+        "currentTimestamp": "1750000000",
+        "sessionNonce": "202"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "scope_violation",
+        "failsAt": "AgentPolicy circuit: requiredBits[i] * (1 - permBits[i]) !== 0 for i in [0..7]"
+      }
+    },
+    {
+      "id": "zero-permission-bitmask-zero-scope",
+      "description": "Zero permission bitmask with zero required scope — vacuously valid (no permissions needed)",
+      "type": "handshake",
+      "inputs": {
+        "humanSecret": "111222333",
+        "agentModelHash": "99999",
+        "agentPermissions": "0x00",
+        "requiredScope": "0x00",
+        "agentExpiry": "1800000000",
+        "currentTimestamp": "1750000000",
+        "sessionNonce": "203"
+      },
+      "expected": {
+        "result": "PASS",
+        "humanNullifierDeterministic": true,
+        "agentScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "invalid-eddsa-signature",
+      "description": "EdDSA signature does not verify against claimed public key — tampered R component",
+      "type": "signature_verification",
+      "inputs": {
+        "message": "1234567890",
+        "signatureValid": false,
+        "tamperedComponent": "R",
+        "signerSecret": "76549",
+        "claimedSignerSecret": "76550"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "invalid_eddsa_signature",
+        "failsAt": "HumanAuth circuit: EdDSAVerifier.valid === 1"
+      }
+    },
+    {
+      "id": "invalid-eddsa-signature-wrong-message",
+      "description": "EdDSA signature valid but over wrong message — message hash mismatch",
+      "type": "signature_verification",
+      "inputs": {
+        "message": "1234567890",
+        "signedMessage": "9876543210",
+        "signatureValid": true,
+        "signerSecret": "76549",
+        "claimedSignerSecret": "76549"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "invalid_eddsa_signature",
+        "failsAt": "HumanAuth circuit: EdDSAVerifier message input mismatch"
+      }
+    },
+    {
+      "id": "stale-merkle-root-handshake",
+      "description": "Agent Merkle proof verifies against a root no longer in agentRootExists — root rotated",
+      "type": "merkle_inclusion",
+      "inputs": {
+        "agentLeaf": "0xABCDEF",
+        "merkleRoot": "0xDEADBEEF",
+        "rootIsActive": false,
+        "proofDepth": 10
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "stale_merkle_root",
+        "revertError": "StaleAgentRoot()",
+        "failsAt": "On-chain: require(agentRootExists[root], StaleAgentRoot())"
+      }
+    },
+    {
+      "id": "stale-merkle-root-after-rotation",
+      "description": "Merkle root was valid 2 epochs ago but has been rotated out of active set",
+      "type": "merkle_inclusion",
+      "inputs": {
+        "agentLeaf": "0x123456",
+        "merkleRoot": "0xOLDROOT",
+        "rootIsActive": false,
+        "epochsSinceActive": 2,
+        "proofDepth": 10
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "stale_merkle_root",
+        "revertError": "StaleAgentRoot()"
+      }
+    },
+    {
+      "id": "valid-merkle-proof-max-depth",
+      "description": "Valid Merkle inclusion proof at maximum tree depth (depth 20)",
+      "type": "merkle_inclusion",
+      "inputs": {
+        "agentLeaf": "0xABCDEF",
+        "merkleRoot": "0xVALIDROOT",
+        "rootIsActive": true,
+        "proofDepth": 20,
+        "siblingCount": 20
+      },
+      "expected": {
+        "result": "PASS",
+        "proofValid": true,
+        "depthVerified": 20
+      }
+    },
+    {
+      "id": "merkle-proof-exceeds-max-depth",
+      "description": "Merkle proof depth 21 exceeds circuit capacity (MAX_DEPTH = 20)",
+      "type": "merkle_inclusion",
+      "inputs": {
+        "agentLeaf": "0xABCDEF",
+        "merkleRoot": "0xVALIDROOT",
+        "rootIsActive": true,
+        "proofDepth": 21,
+        "siblingCount": 21
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "proof_depth_exceeded",
+        "failsAt": "Circuit compilation: MerkleInclusionProof template parameter DEPTH > MAX_DEPTH"
+      }
+    },
+    {
+      "id": "merkle-proof-wrong-sibling",
+      "description": "Merkle proof with incorrect sibling at level 5 — computed root mismatches",
+      "type": "merkle_inclusion",
+      "inputs": {
+        "agentLeaf": "0xABCDEF",
+        "merkleRoot": "0xVALIDROOT",
+        "rootIsActive": true,
+        "proofDepth": 10,
+        "tamperedSiblingLevel": 5
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "merkle_proof_invalid",
+        "failsAt": "MerkleInclusionProof circuit: computedRoot !== claimedRoot"
+      }
+    },
+    {
       "id": "valid-delegation-single-hop",
       "description": "Valid single-hop delegation narrowing permissions from 0xFF to 0x0F",
       "type": "delegation",
@@ -68,6 +259,37 @@
         "scopeNarrowed": true,
         "expiryNarrowed": true,
         "newScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "delegation-equal-scope",
+      "description": "Valid delegation with identical scope (no narrowing, but still valid subset)",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x0F",
+        "delegateeScope": "0x0F",
+        "delegatorExpiry": "1800000000",
+        "delegateeExpiry": "1750000000"
+      },
+      "expected": {
+        "result": "PASS",
+        "scopeNarrowed": false,
+        "expiryNarrowed": true,
+        "newScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "delegation-single-bit-escalation",
+      "description": "Delegatee has exactly one extra bit (bit 7) not in delegator scope",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x7F",
+        "delegateeScope": "0xFF"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "scope_escalation",
+        "failsAt": "Delegation circuit: delegateeBits[7] * (1 - delegatorBits[7]) !== 0"
       }
     },
     {
@@ -101,6 +323,23 @@
       }
     },
     {
+      "id": "delegation-expiry-equal",
+      "description": "Delegatee expiry equals delegator expiry exactly — valid (LessEqThan allows equality)",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x07",
+        "delegateeScope": "0x03",
+        "delegatorExpiry": "1750000000",
+        "delegateeExpiry": "1750000000"
+      },
+      "expected": {
+        "result": "PASS",
+        "scopeNarrowed": true,
+        "expiryNarrowed": false,
+        "newScopeCommitmentIdentityBound": true
+      }
+    },
+    {
       "id": "cumulative-bit-violation",
       "description": "Permission bit 4 set without bit 3 — 0x15 = 0b10101 has bit 4 and bit 2 but not bit 3",
       "type": "enrollment",
@@ -111,6 +350,41 @@
         "result": "FAIL",
         "reason": "cumulative_bit_violation",
         "failsAt": "AgentPolicy circuit: bitmaskBits[4] * (1 - bitmaskBits[3]) !== 0"
+      }
+    },
+    {
+      "id": "cumulative-bit-violation-bit3-without-bit2",
+      "description": "Permission bit 3 set without bit 2 — 0x09 = 0b01001 has bit 3 and bit 0 but not bit 2",
+      "type": "enrollment",
+      "inputs": {
+        "permissionBitmask": "0x09"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "cumulative_bit_violation",
+        "failsAt": "AgentPolicy circuit: bitmaskBits[3] * (1 - bitmaskBits[2]) !== 0"
+      }
+    },
+    {
+      "id": "cumulative-bit-valid-full-chain",
+      "description": "All cumulative bits properly chained — 0x1F = 0b11111 (bits 0-4 all set)",
+      "type": "enrollment",
+      "inputs": {
+        "permissionBitmask": "0x1F"
+      },
+      "expected": {
+        "result": "PASS"
+      }
+    },
+    {
+      "id": "zero-permission-bitmask-enrollment",
+      "description": "Zero bitmask is valid — no cumulative constraints apply (vacuously true)",
+      "type": "enrollment",
+      "inputs": {
+        "permissionBitmask": "0x00"
+      },
+      "expected": {
+        "result": "PASS"
       }
     },
     {
@@ -152,12 +426,61 @@
       }
     },
     {
+      "id": "delegation-chain-scope-violation-mid-chain",
+      "description": "Scope escalation occurs at hop 2 in a 3-hop chain",
+      "type": "delegation_chain",
+      "inputs": {
+        "hops": [
+          {"delegatorScope": "0xFF", "delegateeScope": "0x0F"},
+          {"delegatorScope": "0x0F", "delegateeScope": "0xFF"},
+          {"delegatorScope": "0xFF", "delegateeScope": "0x01"}
+        ]
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "scope_escalation_mid_chain",
+        "failAtHop": 1
+      }
+    },
+    {
       "id": "nonce-replay-attack",
       "description": "Second handshake with same nonce rejected by on-chain usedNonces mapping",
       "type": "handshake",
       "inputs": {
         "sessionNonce": "42",
         "isReplay": true
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "nonce_already_used",
+        "revertError": "NonceAlreadyUsed()"
+      }
+    },
+    {
+      "id": "nonce-reuse-different-agent",
+      "description": "Same nonce used by different agent — still rejected (nonces are global, not per-agent)",
+      "type": "handshake",
+      "inputs": {
+        "sessionNonce": "42",
+        "isReplay": true,
+        "differentAgent": true
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "nonce_already_used",
+        "revertError": "NonceAlreadyUsed()",
+        "note": "Nonces are global to prevent cross-agent replay"
+      }
+    },
+    {
+      "id": "nonce-reuse-in-delegation",
+      "description": "Delegation proof submitted with a nonce already consumed in a prior delegation",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0xFF",
+        "delegateeScope": "0x0F",
+        "sessionNonce": "42",
+        "isNonceReplay": true
       },
       "expected": {
         "result": "FAIL",
@@ -209,6 +532,76 @@
         "reason": "stale_agent_root",
         "revertError": "StaleAgentRoot()",
         "note": "CIP-1: delegatee Merkle inclusion proof prevents phantom delegatees"
+      }
+    },
+    {
+      "id": "max-field-element-permission",
+      "description": "Permission bitmask equals BN254 field modulus p — exceeds field, rejected before bit decomposition",
+      "type": "enrollment",
+      "inputs": {
+        "permissionBitmask": "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "field_overflow",
+        "failsAt": "AgentPolicy circuit: bitmask >= p causes undefined behavior in Num2Bits",
+        "note": "BN254 field modulus: values >= p are not valid field elements"
+      }
+    },
+    {
+      "id": "timestamp-zero",
+      "description": "Agent expiry timestamp of zero — always expired regardless of current time",
+      "type": "handshake",
+      "inputs": {
+        "agentPermissions": "0x07",
+        "agentExpiry": "0",
+        "currentTimestamp": "1",
+        "requiredScope": "0x03",
+        "sessionNonce": "204"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "credential_expired",
+        "failsAt": "AgentPolicy circuit: LessThan(64) constraint notExpired.out === 1"
+      }
+    },
+    {
+      "id": "timestamp-max-uint64",
+      "description": "Agent expiry at max uint64 — never expires within LessThan(64) domain",
+      "type": "handshake",
+      "inputs": {
+        "humanSecret": "555666777",
+        "agentModelHash": "88888",
+        "agentPermissions": "0x07",
+        "agentExpiry": "18446744073709551615",
+        "currentTimestamp": "1750000000",
+        "requiredScope": "0x03",
+        "sessionNonce": "205"
+      },
+      "expected": {
+        "result": "PASS",
+        "humanNullifierDeterministic": true,
+        "agentScopeCommitmentIdentityBound": true
+      }
+    },
+    {
+      "id": "nullifier-collision-resistance",
+      "description": "Two different secrets produce different nullifiers — collision resistance of Poseidon",
+      "type": "handshake",
+      "inputs": {
+        "humanSecret": "111111111",
+        "humanSecret2": "111111112",
+        "agentModelHash": "12345",
+        "agentPermissions": "0x07",
+        "agentExpiry": "1800000000",
+        "requiredScope": "0x03",
+        "sessionNonce": "206",
+        "verifyCollisionResistance": true
+      },
+      "expected": {
+        "result": "PASS",
+        "humanNullifierDeterministic": true,
+        "nullifiersDifferent": true
       }
     }
   ]
