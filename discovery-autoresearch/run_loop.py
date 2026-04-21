@@ -237,7 +237,7 @@ def write_report(
         f"# Discovery Iteration {iter_num} Report",
         "",
         f"- **Timestamp**: {ts}",
-        f"- **Signal sources scanned**: {signals.get('signal_count', 0)}",
+        f"- **Signal sources scanned**: {len(signals) if isinstance(signals, list) else signals.get('signal_count', 0)}",
         "",
         "## Tier 1: Discovery",
         f"- Opportunities found: {tier1_result.get('count', 0)}",

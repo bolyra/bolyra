@@ -1,0 +1,567 @@
+[
+  {
+    "id": "llm_model_provenance",
+    "title": "Verifiable AI Model Provenance for Trust Decisions",
+    "description": "Users and platforms need to verify which AI model is behind an agent before granting access. Bolyra's agent credential commitment binds model hash + operator key + permissions into a single ZK-provable credential, letting APIs enforce policies like 'only GPT-4-class models with operator X may access PII.'",
+    "category": "enterprise_auth",
+    "source": "EU AI Act model transparency requirements; AI safety community push for model identification; deepfake and impersonation concerns",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 22,
+      "feasibility": 18,
+      "total": 58
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search failed entirely \u2014 no URLs, no named buyers, no verifiable evidence of anyone actively procuring AI model provenance verification; EU AI Act references are real but no specific procurement cycles cited.",
+      "timing": "No competitor launch dates, no standard milestones, no RFC numbers provided; EU AI Act enforcement timeline exists but model-level ZKP provenance is 18+ months from any concrete market window.",
+      "fit": "Exceptional primitive mapping \u2014 AgentPolicy's modelHash field, delegation chains, and IdentityRegistry already implement 90% of the required infrastructure with only minor extensions needed.",
+      "feasibility": "MVP spec is well-scoped at ~11 days reusing existing primitives, but the model hash convention depends on provider cooperation (OpenAI/Anthropic attestations) which is unproven and outside Bolyra's control."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive. The credential commitment already binds modelHash + operatorKey + permissions + expiry via Poseidon. An API gateway can require an AgentPolicy proof where the public signal constrains modelHash to an approved set. Selective disclosure lets the agent prove 'I have permission bits X set' without revealing the full bitmask \u2014 directly maps to 'only models with PII-access permission may call this endpoint.'",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "agentTree stores agent credential commitments on-chain. Root history buffer (30 entries) lets verifiers accept proofs against recent tree states. The PLONK verification path already handles AgentPolicy proofs. An API enforcing model provenance calls verifyAgentProof on-chain or checks the proof off-chain against a known root.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables 'Operator X deployed Model Y which spawned Sub-agent Z' provenance chains. Scope narrowing ensures a sub-agent cannot escalate beyond the parent model's permissions. Expiry narrowing prevents a deprecated model version from minting long-lived sub-agent credentials. The delegator key binding (UC3.1 fix) cryptographically ties each hop to the credential that authorized it.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The atomic handshake pattern (Groth16 human proof + PLONK agent proof in single tx) lets a user verify which model they are interacting with before granting consent. The nonce binding prevents replay of a stale model attestation. Less central to the enterprise API gateway use case, but critical for consumer-facing 'know your AI' scenarios.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createAgentCredential already accepts modelHash as a first-class parameter. proveHandshake generates the paired proof. The error hierarchy (ExpiredCredentialError, InvalidPermissionError, ScopeEscalationError) maps directly to model provenance failure modes. SDK is the integration surface for API gateways and agent frameworks.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft already specifies mutual ZKP auth between human and agent. Model provenance is a natural extension \u2014 the agent's proof already commits to modelHash. The draft needs a section on model identification semantics and hash computation conventions (e.g., SHA-256 of model weights checkpoint vs. provider-attested model ID).",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "Model Hash Registry specification: defines how modelHash values are computed and attested. Two tiers \u2014 (1) self-attested hashes where the operator signs a (modelName, version, hash) tuple, and (2) third-party attested hashes where an auditor or the model provider signs. Needs a canonical hash computation method (SHA-256 of GGUF/safetensors checkpoint for open models, provider-signed opaque ID for closed models like GPT-4). This is the trust anchor the circuit cannot provide alone.",
+        "complexity": "medium"
+      },
+      {
+        "type": "circuit",
+        "description": "ModelSetMembership subcircuit: proves modelHash is a member of an approved model set (Merkle tree of approved hashes) without revealing which specific model. Extends AgentPolicy with an optional public input for the approved-set root. Estimated ~3K additional constraints on top of AgentPolicy's 20.9K. Needed for policies like 'any model in our approved tier' without leaking competitive intelligence about which model an operator chose.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "ModelRegistry contract: on-chain registry mapping modelHash \u2192 (operator, attestationType, registrationTimestamp, deprecated flag). Allows API gateways to check that a modelHash in a proof corresponds to a known, non-deprecated model. Lightweight \u2014 primarily a mapping with operator-gated write access and an event log for indexing.",
+        "complexity": "low"
+      },
+      {
+        "type": "sdk",
+        "description": "Policy builder API: fluent interface for API gateways to define model provenance policies \u2014 e.g., PolicyBuilder.requireModel(hash).requirePermissions(['pii_read']).requireOperator(pubkey).maxDelegationHops(2).build() \u2192 returns a verification config that the SDK's verifyHandshake can enforce. Wraps existing SDK functions, no new cryptography.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "API gateway middleware (Express/Fastify plugin, AWS Lambda authorizer): extracts Bolyra proof from request header (Authorization: Bolyra <proof>), verifies against policy config, injects verified model metadata into request context. This is the adoption surface \u2014 enterprises won't adopt raw SDK calls, they need drop-in middleware.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "EU AI Act alignment mapping: document how Bolyra model provenance satisfies Article 50 transparency obligations (AI systems must be identifiable as AI) and Article 52 (high-risk AI systems must be traceable). Not a technical component but critical for enterprise sales positioning.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "Model provenance reinforces the privacy-layer-under-incumbents strategy precisely. Bolyra does not compete with model providers or API platforms \u2014 it provides the cryptographic verification layer they cannot build themselves without ZKP expertise. An API gateway (Kong, Apigee, AWS API Gateway) integrates Bolyra middleware to enforce model policies, just as it integrates OAuth today. The model provider attests the hash, the operator binds it into a credential, the API gateway verifies the proof. Bolyra is invisible infrastructure in every transaction. The EU AI Act timing is ideal: enterprises need model transparency compliance by August 2026, and incumbent API platforms have no ZKP capability. Bolyra can be the 'SSL certificate for AI models' \u2014 a trust layer that every API call passes through, owned by no single model provider, verifiable by anyone.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "Model Hash Convention Spec",
+          "type": "spec",
+          "description": "Define how modelHash is computed (SHA-256 of provider-attested model ID string, not weights). Covers OpenAI, Anthropic, open-weight models. Includes attestation format for provider-signed model cards.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "AgentPolicy circuit: approved model set constraint",
+          "type": "circuit",
+          "description": "Add a public input approvedModelHashRoot (Merkle root of allowed model hashes). Prove modelHash is in the approved set without revealing which specific model. ~50 additional constraints on top of existing AgentPolicy.",
+          "days": 3,
+          "reuses": "AgentPolicy"
+        },
+        {
+          "name": "SDK: proveModelProvenance + verifyModelProvenance",
+          "type": "sdk",
+          "description": "Two new functions wrapping existing createAgentCredential and proof generation. proveModelProvenance generates selective disclosure proof exposing only model-class membership. verifyModelProvenance checks proof against approved set root.",
+          "days": 3,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "Express middleware demo",
+          "type": "demo",
+          "description": "Reference Express.js middleware that extracts ZK proof from Authorization header, calls verifyModelProvenance, enforces policy (e.g., reject non-GPT-4-class agents from PII endpoints). 200 lines of code.",
+          "days": 2,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "Model Hash Registry contract extension",
+          "type": "contract",
+          "description": "Add approvedModels mapping to IdentityRegistry \u2014 operator can register approved model hashes for their agents. Emits ModelApproved/ModelRevoked events. ~40 lines Solidity.",
+          "days": 1,
+          "reuses": "IdentityRegistry"
+        },
+        {
+          "name": "IETF draft section: Model Identification",
+          "type": "spec",
+          "description": "New section in draft-bolyra-mutual-zkp-auth-01 covering model identification semantics, hash computation conventions, and model-class membership proofs as an optional credential extension.",
+          "days": 1,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        }
+      ],
+      "total_days": 12,
+      "reuse_percentage": 85,
+      "risks": [
+        "No web search evidence of actual demand \u2014 enterprise buyers may not be ready for ZK-based model provenance when simpler attestation (signed JWTs from providers) suffices",
+        "Model hash computation is unsolved for closed-source models \u2014 relies on provider cooperation (OpenAI/Anthropic issuing signed model IDs)",
+        "EU AI Act timeline is 18+ months for enforcement \u2014 early mover advantage vs. building for a market that doesn't exist yet",
+        "Approved model set Merkle tree adds proving time (~200ms) which may be unacceptable for latency-sensitive API gateways"
+      ],
+      "success_criteria": "A public demo where Agent A (GPT-4 class, approved) gets 200 from the middleware and Agent B (unknown model) gets 403 \u2014 with the entire proof verifiable on-chain. Secondary: at least one AI agent framework (LangChain, CrewAI, AutoGen) acknowledges the spec in a GitHub issue or discussion."
+    }
+  },
+  {
+    "id": "oauth_zkp_upgrade",
+    "title": "ZKP-Enhanced OAuth for Agent API Access",
+    "description": "OAuth scopes are coarse and bearer tokens are stealable. Bolyra can augment OAuth flows with ZK proofs of identity commitment and permission scope, creating non-transferable, cryptographically-bound API credentials for AI agents that prove authorization without exposing the delegation chain.",
+    "category": "standards",
+    "source": "OAuth 2.1 standardization underway; IETF interest in post-quantum and ZKP-based auth; rising API key theft in agent ecosystems",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 22,
+      "feasibility": 16,
+      "total": 56
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence failed entirely \u2014 zero URLs, zero named buyers, zero verifiable sources; demand argument rests on general awareness of OAuth 2.1 and agent key theft without any cited engagement metrics or named enterprises seeking ZKP-bound tokens.",
+      "timing": "No competitor launch dates, no RFC draft numbers with publication timelines, no regulatory deadlines cited; OAuth 2.1 is underway but no evidence of ZKP-auth proposals reaching IETF working group stage within a defined window.",
+      "fit": "Exceptional primitive mapping \u2014 AgentPolicy scope bitmasks, Delegation chain with scope narrowing, HumanUniqueness nullifiers, and existing SDK patterns all map directly with minimal new circuit work required.",
+      "feasibility": "17-day MVP with 72% reuse is credible given the primitive mappings, but adoption depends on OAuth ecosystem buy-in which is unvalidated; the technical build is straightforward but market path is speculative."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "The permission bitmask with selective disclosure directly maps to OAuth scopes \u2014 an agent proves it holds required scope bits without revealing its full permission set. The expiry enforcement handles token TTL natively. The credential commitment becomes the non-transferable binding that replaces bearer tokens.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "OAuth's authorization code flow is fundamentally a delegation: resource owner delegates scoped access to a client. Bolyra's delegation circuit already enforces scope narrowing (delegatee scope \u2286 delegator scope) and expiry narrowing, which maps directly to OAuth scope reduction and refresh token rotation. The 3-hop chain covers user\u2192app\u2192sub-agent patterns.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The human identity commitment anchors the top of the OAuth delegation chain \u2014 proves the resource owner is a unique human who authorized the grant, without revealing identity. The scope-bound nullifier prevents the same human from issuing conflicting grants within a scope (rate-limiting).",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root history buffers allow resource servers to verify proofs against recent tree states without requiring real-time RPC. The atomic handshake verification enables a resource server to validate both the human authorization and agent credential in a single verification step. Delegation nullifier replay protection prevents reuse of revoked OAuth grants.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake and verifyHandshake become the primitives that OAuth authorization servers call during token issuance and that resource servers call during token validation. The error classes (ExpiredCredentialError, ScopeEscalationError, StaleProofError) already model OAuth failure modes.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "RFC extension draft (draft-bolyra-oauth-zkp-binding-00) defining a new OAuth token type that binds a ZK proof to the access token, specifying the proof_type parameter in token responses and the proof verification endpoint requirements",
+        "complexity": "medium"
+      },
+      {
+        "type": "circuit",
+        "description": "OAuthBinding circuit: a lightweight PLONK circuit (~8K constraints) that proves knowledge of (client_secret, authorization_code_hash, scope_commitment) and outputs a binding commitment that resource servers can verify without learning the client secret. Essentially a ZK-DPOP proof.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "OAuth provider adapters (Auth0, Keycloak, Okta) that intercept the token endpoint to attach ZK proof metadata and expose a .well-known/zkp-jwks endpoint for proof verification keys",
+        "complexity": "high"
+      },
+      {
+        "type": "sdk",
+        "description": "Extension to @bolyra/sdk: oauthBind(agentCredential, oauthGrant) \u2192 BoundToken and verifyBoundToken(token, requiredScopes) \u2192 VerificationResult, wrapping the new circuit with OAuth-native interfaces",
+        "complexity": "low"
+      },
+      {
+        "type": "contract",
+        "description": "Optional on-chain revocation registry for OAuth grant nullifiers \u2014 allows resource servers to check if a delegation chain has been revoked without contacting the authorization server, enabling offline verification",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This aligns precisely with privacy-layer-under-incumbents: Bolyra does not replace OAuth \u2014 it slots underneath existing OAuth infrastructure (Auth0, Okta, Keycloak) as a cryptographic binding layer. Incumbents keep their token endpoints, consent screens, and developer ecosystems. Bolyra adds the property they cannot build alone (non-transferable, ZK-bound credentials with delegation chain privacy). The integration path is a plugin/middleware, not a rip-and-replace. This mirrors the credit union strategy: don't compete with the identity provider, become the invisible trust layer they depend on. The OAuth ecosystem's move toward DPoP (sender-constrained tokens) creates the exact narrative opening \u2014 Bolyra is DPoP taken to its cryptographic conclusion.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "OAuthBinding circuit",
+          "type": "circuit",
+          "description": "PLONK circuit (~8K constraints) proving knowledge of client_secret + authorization_code_hash + scope_commitment, outputting a binding commitment. Essentially ZK-DPoP. Built on existing AgentPolicy scope bitmask and Delegation chain logic.",
+          "days": 5,
+          "reuses": "AgentPolicy + Delegation"
+        },
+        {
+          "name": "draft-bolyra-oauth-zkp-binding-00",
+          "type": "spec",
+          "description": "Internet-Draft style spec defining proof_type token response parameter, proof verification endpoint, and binding commitment format. Informational, not standards-track initially.",
+          "days": 3,
+          "reuses": "new"
+        },
+        {
+          "name": "OAuth ZKP binding SDK module",
+          "type": "sdk",
+          "description": "New @bolyra/sdk exports: createOAuthBinding(clientSecret, authCode, scopes) and verifyOAuthBinding(proof, expectedScopes). Wraps OAuthBinding circuit behind existing proveHandshake/verifyHandshake patterns.",
+          "days": 4,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "Express middleware demo",
+          "type": "demo",
+          "description": "Minimal Express resource server middleware that validates ZKP-bound tokens. Shows token issuance with proof attachment and resource server verification in <100 lines. README with architecture diagram.",
+          "days": 3,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "Conformance test vectors",
+          "type": "docs",
+          "description": "Test vectors covering: valid binding, expired credential, scope escalation attempt, replayed proof, stale tree root. Extends existing 37-vector conformance suite.",
+          "days": 2,
+          "reuses": "existing test harness"
+        }
+      ],
+      "total_days": 17,
+      "reuse_percentage": 72,
+      "risks": [
+        "OAuth 2.1 spec still in flux \u2014 binding format may need revision if RFC changes token structure",
+        "8K constraint estimate may grow once authorization_code_hash uses a ZK-friendly hash (Poseidon vs SHA-256 tradeoff)",
+        "IETF adoption timeline is 18+ months \u2014 this is a positioning play, not near-term traction",
+        "No web search evidence found for demand \u2014 building on thesis rather than validated signal",
+        "Grey zone risk: if the demo README reads too much like a product page, reframe as pure technical documentation"
+      ],
+      "success_criteria": "Circuit compiles and proves in <2s on consumer hardware, spec passes informal review from 2+ OAuth/ZKP practitioners (Twitter/GitHub feedback), demo middleware validates tokens end-to-end in integration tests, and at least one IETF OAuth WG member acknowledges the draft exists."
+    }
+  },
+  {
+    "id": "enterprise_agent_audit",
+    "title": "Enterprise AI Agent Audit Trail",
+    "description": "Enterprises deploying internal AI agents (code review, customer support, data analysis) need cryptographic proof of which agent acted on whose behalf with what permissions. Bolyra's nullifier-based Sybil detection and permission bitmask create a tamper-proof audit trail without exposing employee identity graphs.",
+    "category": "enterprise_auth",
+    "source": "SOC2/ISO27001 compliance requirements expanding to cover AI agent actions; enterprise AI governance frameworks emerging",
+    "scores": {
+      "demand": 8,
+      "timing": 7,
+      "fit": 20,
+      "feasibility": 18,
+      "total": 53
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search failed entirely \u2014 zero URLs provided, zero named buyers, zero funding citations; the SOC2/AI governance framing is plausible but completely unverified.",
+      "timing": "No competitor launch dates, no standard milestones, no regulatory deadlines cited; AI governance frameworks are emerging but no concrete dated events anchor a window.",
+      "fit": "Excellent primitive mapping \u2014 Delegation, AgentPolicy, HumanUniqueness, and IdentityRegistry all apply directly with minor or no modification, and the SDK already exposes the needed functions.",
+      "feasibility": "MVP spec is well-scoped at ~16 days reusing existing primitives, but the lack of validated demand means building this now risks solving a problem nobody is actively paying for yet."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Employee proves identity to authorize an agent without revealing who they are in the audit log. Scoped nullifiers let compliance teams detect if the same employee spawned duplicate agents (Sybil) within an audit scope while keeping the identity graph unlinkable across departments or projects.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive for this use case. Each internal AI agent (code reviewer, support bot, data analyst) gets a credential with a permission bitmask encoding exactly what it can do. Selective disclosure lets the audit trail prove 'this agent had write access to production' without revealing its full permission set. Expiry enforcement ensures stale agent credentials auto-invalidate, which SOC2 auditors love.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Maps directly to enterprise org charts: employee delegates to their code-review agent, which may sub-delegate to a specialized linter agent. Scope narrowing guarantees a sub-agent can never escalate beyond its parent's permissions. The 3-hop limit is natural for enterprise hierarchies (human \u2192 primary agent \u2192 sub-agent). Chain linking creates the tamper-proof audit chain auditors need.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "Dual LeanIMT trees cleanly separate employee identities (humanTree) from agent identities (agentTree). Atomic handshake verification proves human-agent authorization in a single transaction. Root history buffers allow auditors to verify proofs against historical state without replaying the entire tree. Delegation nullifier replay protection prevents credential reuse attacks.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake and verifyHandshake are the core API surface enterprises would integrate. permissionsToBitmask maps cleanly to RBAC permission models enterprises already use. Error classes (ExpiredCredentialError, ScopeEscalationError, InvalidPermissionError) provide the exact failure modes enterprise security teams need in their logging.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "IETF draft gives enterprise procurement teams a standards-track reference, which matters enormously for SOC2/ISO27001 compliance narratives. Auditors can point to a formal protocol spec rather than 'we use some ZKP thing'.",
+        "modification_needed": "none"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "sdk",
+        "description": "Audit log adapter that emits structured, append-only audit events (nullifier, scoped proof hash, permission mask subset, timestamp, verification result) in a format compatible with SIEM systems (Splunk, Datadog, Elastic). Must never emit linkable identity data.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "AuditAnchor contract that periodically commits a Merkle root of audit events on-chain, creating a tamper-evident timeline. Enterprises keep detailed logs off-chain but anchor integrity proofs on-chain for auditor verification.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Enterprise Permission Taxonomy spec mapping Bolyra's cumulative bit encoding to common enterprise RBAC models (read/write/execute/admin patterns). Defines canonical bitmask layouts for common agent archetypes (code-review-agent, support-agent, data-analyst-agent).",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "OIDC/SAML bridge that lets enterprises onboard employees into the humanTree using their existing IdP (Okta, Azure AD, Google Workspace) without exposing the IdP identity to the Bolyra layer. Employee proves IdP membership \u2192 receives Bolyra identity commitment.",
+        "complexity": "high"
+      },
+      {
+        "type": "circuit",
+        "description": "BatchAuditVerifier circuit that verifies N audit proofs in a single proof for efficient bulk auditor verification. Auditors checking a quarter of agent activity shouldn't need to verify thousands of individual proofs.",
+        "complexity": "high"
+      },
+      {
+        "type": "sdk",
+        "description": "Enterprise admin SDK functions: revokeAgentCredential(commitment), listActiveAgentsByScope(scope), auditDelegationChain(nullifier) \u2014 all operating over proofs, never raw identities.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. Enterprises already have identity (Okta, Azure AD), already have agent frameworks (LangChain, CrewAI, internal), and already have audit requirements (SOC2, ISO27001). Bolyra slots underneath all of them as the cryptographic proof layer that none of them provide. The OIDC/SAML bridge deliberately avoids replacing the incumbent IdP \u2014 it makes the incumbent IdP a prerequisite, turning potential competitors into distribution channels. The audit trail use case is especially strategic because it creates a compliance dependency: once an enterprise's SOC2 audit references Bolyra-anchored agent proofs, switching costs become regulatory, not just technical. This mirrors the credit union wedge strategy \u2014 enter through compliance requirements, expand through operational value.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "audit-event-schema",
+          "type": "spec",
+          "description": "JSON Schema for structured audit events (nullifier, scoped proof hash, permission bitmask subset, timestamp, verification result) compatible with Splunk/Datadog SIEM ingestion formats",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "@bolyra/audit-adapter",
+          "type": "sdk",
+          "description": "Thin TypeScript adapter wrapping existing SDK proveHandshake/verifyHandshake that emits append-only audit log entries. Formats events per the schema, supports stdout/file/webhook sinks. No SIEM-specific SDKs\u2014just structured JSON lines.",
+          "days": 5,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "enterprise-permission-presets",
+          "type": "sdk",
+          "description": "Pre-built permission bitmask templates mapping common enterprise agent roles (code-reviewer, support-bot, data-analyst, deployment-agent) to Bolyra permission bitmasks via permissionsToBitmask",
+          "days": 2,
+          "reuses": "AgentPolicy"
+        },
+        {
+          "name": "audit-trail-demo",
+          "type": "demo",
+          "description": "CLI-based demo simulating: employee registers \u2192 delegates to code-review agent \u2192 agent sub-delegates to linter \u2192 each action emits audit event \u2192 verifier script replays and validates the chain. Runs entirely local, no infra needed.",
+          "days": 4,
+          "reuses": "Delegation"
+        },
+        {
+          "name": "compliance-narrative-doc",
+          "type": "docs",
+          "description": "Technical whitepaper: 'ZKP-Based Agent Audit Trails for SOC2 AI Governance' explaining how nullifier-based Sybil detection, permission selective disclosure, and delegation chain verification satisfy SOC2 CC6.1/CC7.2 controls. References IETF draft.",
+          "days": 3,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "splunk-hec-example",
+          "type": "integration",
+          "description": "Example config and transformation script showing how audit-adapter JSON lines feed into Splunk HTTP Event Collector. Proves SIEM compatibility without building a full integration.",
+          "days": 2,
+          "reuses": "audit-event-schema"
+        }
+      ],
+      "total_days": 18,
+      "reuse_percentage": 78,
+      "risks": [
+        "Enterprise AI governance standards (NIST AI RMF, ISO 42001) are still draft\u2014audit requirements may shift before adoption",
+        "No real enterprise validation possible under EAD constraints; demo proves technical feasibility but not product-market fit",
+        "SOC2 auditors may not accept ZKP-based proofs without established precedent\u2014need auditor feedback that can't be solicited yet",
+        "18-month timing assessment from web search means market may not be ready when EAD arrives"
+      ],
+      "success_criteria": "Demo end-to-end: employee\u2192agent\u2192sub-agent delegation chain produces valid, verifiable audit trail that a script can independently replay and confirm. Audit events parse cleanly in Splunk HEC without transformation errors. At least one external developer (open source contributor) can run the demo from README alone within 15 minutes."
+    }
+  },
+  {
+    "id": "cu_member_portability",
+    "title": "Credit Union Member Identity Portability",
+    "description": "When members switch credit unions, their identity verification, credit history attestations, and compliance status must transfer without exposing raw PII. Bolyra's human identity commitment lets members prove KYC/AML compliance to a new CU via ZK proof of their existing verified status, cutting onboarding from weeks to minutes.",
+    "category": "other",
+    "source": "GENIUS Act stablecoin regulation creating compliance burden for credit unions; ZKProva's existing CU relationships",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 18,
+      "feasibility": 14,
+      "total": 50
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs were provided \u2014 demand is asserted from internal knowledge of CU pain points but lacks the 3+ independent sources required for scores above 10.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines with specific docket numbers were cited; the GENIUS Act creates general momentum but the timing assessment itself says 18+ months.",
+      "fit": "Strong primitive mapping across 4-5 named Bolyra components (HumanUniqueness, IdentityRegistry, AgentPolicy, Delegation, Groth16Verifier) with clear usage descriptions and mostly minor modifications, though IdentityRegistry requires major work.",
+      "feasibility": "30+ day MVP across 5 deliverables including a new circuit (~18K constraints) and a major registry extension is achievable but ambitious for a solo founder; no existing customer commitment de-risks the build."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Member's EdDSA identity commitment serves as the portable anchor. The nullifier (Poseidon2(scope, secret)) enables sybil-resistant proof of unique membership at CU-A without revealing which CU, while the Merkle membership proof confirms the member exists in a verified-members tree maintained by their origin CU.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The humanTree becomes the registry of verified CU members across the network. Root history buffers allow the receiving CU to verify proofs against recent-but-not-current roots (handling propagation delay). Each participating CU inserts verified members into the shared tree.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "When CUs use automated onboarding agents to process incoming transfers, the AgentPolicy circuit proves the receiving CU's agent has permission to access KYC attestation verification (permission bitmask) without exposing the full scope of what that agent can do. Selective disclosure of requiredScopeMask proves 'can verify KYC' bit without revealing other capabilities.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables the member to delegate a scoped credential to the receiving CU's onboarding system \u2014 e.g., 'verify my KYC status for 72 hours' with automatic expiry narrowing. The scope-narrowing constraint ensures the receiving CU cannot escalate beyond what was delegated (read-only compliance attestation, no write access to identity).",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Groth16Verifier",
+        "usage": "Verifies human uniqueness proofs on-chain during the portability handshake, confirming the member is a real verified human in the network without revealing which CU they came from.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createHumanIdentity and proveHandshake form the basis of the member-side proving flow. The SDK's error hierarchy (ExpiredCredentialError, ScopeEscalationError) already handles the failure modes relevant to portability (expired KYC, scope violations).",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "KYCAttestation circuit: proves a member holds a valid KYC/AML attestation signed by CU-A (EdDSA over attestation commitment containing: KYC-level, verification-date, expiry, issuer-commitment) without revealing the issuing CU or raw PII. Outputs: attestation-valid boolean, freshness proof (verified within N days), compliance-level (meets GENIUS Act threshold). Estimated ~18K constraints.",
+        "complexity": "high"
+      },
+      {
+        "type": "circuit",
+        "description": "CreditHistoryRange circuit: proves credit score falls within a range (e.g., >650) and account tenure exceeds threshold (e.g., >2 years) using range proofs over committed values. No raw score or dates revealed. Estimated ~12K constraints.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "PortabilityRegistry contract: manages a federation of CU identity trees, attestation revocation lists (sparse Merkle tree for revoked KYC certs), and portability event logging. Extends IdentityRegistry with multi-issuer root management \u2014 each CU maintains its own sub-tree whose root rolls up into the global tree.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "CIP-2: Credit Union Portability Protocol spec defining the message flow (request-prove-verify-accept), attestation schema (what fields a KYC attestation commits to), revocation semantics, and GENIUS Act compliance mapping. Extends draft-bolyra-mutual-zkp-auth-01 with CU-specific credential types.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "SDK extensions: proveKYCAttestation(identity, attestation, targetCU) \u2192 PortabilityProof, verifyPortability(proof, acceptanceCriteria) \u2192 PortabilityResult, plus CU-side helper createAttestation(memberIdentity, kycData, signingKey) for issuing verifiable attestations to members.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "CU Core Banking Adapter: abstract interface + reference implementation for FIS/Symitar/Corelation that maps internal member records to Bolyra attestation commitments. This is the glue between legacy CU systems and the ZKP layer.",
+        "complexity": "high"
+      }
+    ],
+    "positioning_alignment": "This is the canonical privacy-layer-under-incumbents play. Credit unions keep their existing core banking systems, member relationships, and compliance processes entirely intact. Bolyra slides underneath as invisible infrastructure: members get a ZKP identity commitment at their current CU (no UX change), and that commitment becomes portable when they switch. The CU never 'adopts Bolyra' \u2014 they adopt 'instant member transfer' and 'GENIUS Act compliance automation.' The wedge is that GENIUS Act creates a compliance burden (stablecoin KYC/AML) that makes CUs receptive to anything that reduces onboarding friction, and portability is the Trojan horse that embeds Bolyra's identity layer across the CU network. Once 2-3 CUs are on the network, network effects make it the default rail for inter-CU trust \u2014 exactly the flywheel ZKProva's existing CU relationships can kickstart.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "KYCAttestation circuit",
+          "type": "circuit",
+          "description": "Circom circuit proving member holds valid KYC/AML attestation signed by origin CU (EdDSA over attestation commitment) without revealing issuer or PII. Outputs: valid boolean, freshness proof, GENIUS Act compliance level. ~18K constraints.",
+          "days": 12,
+          "reuses": "HumanUniqueness + EdDSA verifier from existing circuits"
+        },
+        {
+          "name": "IdentityRegistry multi-CU extension",
+          "type": "circuit",
+          "description": "Extend humanTree to support multiple CU inserters with root history buffer (8-slot ring buffer for propagation delay tolerance). Adds issuer-blinding so verifier cannot determine which CU inserted the leaf.",
+          "days": 8,
+          "reuses": "IdentityRegistry (major modification)"
+        },
+        {
+          "name": "Portability handshake spec",
+          "type": "spec",
+          "description": "Protocol specification: member initiates transfer, generates ZK proof bundle (uniqueness + KYC attestation + delegation), receiving CU verifies against registry. Covers timing, revocation, failure modes. IETF-style document.",
+          "days": 3,
+          "reuses": "new"
+        },
+        {
+          "name": "SDK portability module",
+          "type": "sdk",
+          "description": "Add provePortability() and verifyPortability() to @bolyra/sdk. Wraps KYCAttestation proving, delegation creation with 72hr expiry, and proof bundling. Extends existing error hierarchy with PortabilityExpiredError, AttestationRevokedError.",
+          "days": 5,
+          "reuses": "@bolyra/sdk + Delegation primitive"
+        },
+        {
+          "name": "Groth16 verification integration",
+          "type": "contract",
+          "description": "Deploy KYCAttestation verifier contract (auto-generated from circuit) alongside existing Groth16Verifier. Add portability event emissions for audit trail.",
+          "days": 2,
+          "reuses": "Groth16Verifier (no modification)"
+        },
+        {
+          "name": "End-to-end demo",
+          "type": "demo",
+          "description": "CLI demo: member at CU-A generates identity, receives KYC attestation, proves portability to CU-B. CU-B verifies on-chain. Hardcoded test CUs, no UI. Proves the full flow works.",
+          "days": 4,
+          "reuses": "existing SDK + new modules"
+        }
+      ],
+      "total_days": 34,
+      "reuse_percentage": 58,
+      "risks": [
+        "KYCAttestation circuit complexity may exceed 18K constraints once EdDSA + Poseidon2 + range checks compose, pushing proving time beyond acceptable UX threshold",
+        "Multi-CU registry requires trust model decisions (who can insert?) that are governance problems, not technical ones \u2014 may block adoption even if code works",
+        "No web search validation succeeded \u2014 demand signal is theoretical, based on GENIUS Act analysis not actual CU pain expressed",
+        "Root history buffer introduces a timing window where revoked members could still prove valid status at receiving CU",
+        "Solo founder cannot test true multi-party flow without at least one CU counterparty willing to run a node"
+      ],
+      "success_criteria": "End-to-end demo completes in under 30 seconds: member proves KYC attestation from CU-A, receiving CU-B verifies proof on-chain, nullifier prevents double-transfer. Circuit constraints under 25K, proving time under 15s on consumer hardware. Spec reviewed by at least one cryptographer or CU technologist."
+    }
+  }
+]

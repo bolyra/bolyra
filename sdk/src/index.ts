@@ -6,6 +6,8 @@ export type {
   DelegationResult,
   Proof,
   BolyraConfig,
+  OffchainVerificationResult,
+  BatchCheckpoint,
 } from './types';
 
 // Permission enum
@@ -24,6 +26,15 @@ export {
 
 // Handshake (v0.2 — real proof generation via snarkjs)
 export { proveHandshake, verifyHandshake } from './handshake';
+
+// Off-chain verification (v0.3 — batch mode, ~100x gas reduction)
+export {
+  verifyHandshakeOffchain,
+  OffchainVerificationBatch,
+  postBatchRoot,
+  computeSessionCommitment,
+  verifyMerkleInclusion,
+} from './offchain';
 
 // Delegation (stubs — coming in v0.3)
 export { delegate, verifyDelegation } from './delegation';

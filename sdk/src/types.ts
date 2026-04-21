@@ -62,6 +62,24 @@ export interface Proof {
   publicSignals: string[];
 }
 
+/** Result of an off-chain handshake verification (batched for later on-chain checkpoint) */
+export interface OffchainVerificationResult extends HandshakeResult {
+  /** Index of this session within the current batch */
+  batchIndex: number;
+  /** Merkle root of the batch at the time this result was added (undefined until batch is sealed) */
+  batchRoot?: bigint;
+}
+
+/** On-chain checkpoint representing a batch of off-chain verified sessions */
+export interface BatchCheckpoint {
+  /** Poseidon Merkle root of all session commitments in the batch */
+  root: bigint;
+  /** Unix timestamp (seconds) when the batch was posted on-chain */
+  timestamp: number;
+  /** Number of sessions included in this batch */
+  sessionCount: number;
+}
+
 /** Configuration for the SDK */
 export interface BolyraConfig {
   /** RPC URL for the target chain (default: Base Sepolia) */
