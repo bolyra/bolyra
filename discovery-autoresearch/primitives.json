@@ -1,0 +1,107 @@
+{
+  "circuits": [
+    {
+      "id": "HumanUniqueness",
+      "proving_system": "Groth16",
+      "constraints": 16409,
+      "proving_time_s": 0.57,
+      "capabilities": [
+        "Semaphore v4 compatible EdDSA identity on Baby Jubjub",
+        "Merkle membership proof (LeanIMT, depth 20, ~1M leaves)",
+        "Nullifier: Poseidon2(scope, secret) — sybil resistance within scope, unlinkable across scopes",
+        "Nonce binding for replay protection",
+        "Range check: Num2Bits(251) on secret"
+      ]
+    },
+    {
+      "id": "AgentPolicy",
+      "proving_system": "PLONK",
+      "constraints": 20923,
+      "proving_time_s": 16.3,
+      "capabilities": [
+        "EdDSA operator signature verification over credential commitment",
+        "Merkle membership proof (LeanIMT, depth 20)",
+        "Permission bitmask with cumulative bit encoding (bit 4 implies 2+3)",
+        "Selective disclosure: proves requiredScopeMask bits are set without revealing full bitmask",
+        "Identity-bound scope commitment: Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp)",
+        "Expiry enforcement: expiryTimestamp > currentTimestamp",
+        "Range checks: Num2Bits(64) on timestamps"
+      ]
+    },
+    {
+      "id": "Delegation",
+      "proving_system": "PLONK",
+      "constraints": 22398,
+      "proving_time_s": null,
+      "capabilities": [
+        "Composable delegation chains (human -> agent -> sub-agent, max 3 hops)",
+        "Scope narrowing: delegateeScope must be bitwise subset of delegatorScope",
+        "Expiry narrowing: delegateeExpiry <= delegatorExpiry",
+        "Identity-bound scope commitment chain linking",
+        "Delegatee Merkle inclusion proof (CIP-1)",
+        "Delegator key binding to credential commitment (UC3.1 fix)",
+        "Expiry in scope commitment (UC3.2 fix)",
+        "Current-time liveness check",
+        "EdDSA delegation token signature"
+      ]
+    }
+  ],
+  "contracts": [
+    {
+      "id": "IdentityRegistry",
+      "address": "0x2781dF8b6381462d881C833Fb703d68c661c9577",
+      "network": "base-sepolia",
+      "capabilities": [
+        "Dual LeanIMT trees (humanTree + agentTree)",
+        "Root history buffers (30 entries each)",
+        "Atomic handshake verification (Groth16 + PLONK in single tx)",
+        "Delegation verification with on-chain chain-state tracking",
+        "Nonce equality enforcement",
+        "Delegation nullifier replay protection",
+        "Hop count enforcement (max 3)"
+      ]
+    },
+    {
+      "id": "Groth16Verifier",
+      "address": "0x5467FCbebeEff1824F4589Dd64ab01Cf9ccd46bE"
+    },
+    {
+      "id": "PlonkVerifier",
+      "address": "0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db"
+    },
+    {
+      "id": "DelegationPlonkVerifier",
+      "address": "0x285D2E315AdD9c82337d8a4BDF567AB3a9215B93"
+    }
+  ],
+  "sdk": {
+    "package": "@bolyra/sdk",
+    "version": "0.2.0",
+    "published": true,
+    "functions": [
+      "createHumanIdentity(secret) → HumanIdentity",
+      "createAgentCredential(modelHash, operatorKey, permissions, expiry) → AgentCredential",
+      "proveHandshake(human, agent, options) → {humanProof, agentProof, nonce}",
+      "verifyHandshake(humanProof, agentProof, nonce) → HandshakeResult",
+      "delegate() → DelegationResult [stub, v0.3]",
+      "permissionsToBitmask(permissions) → bigint",
+      "validateCumulativeBitEncoding(bitmask) → void"
+    ],
+    "error_classes": [
+      "BolyraError", "ProofGenerationError", "VerificationError",
+      "InvalidPermissionError", "ExpiredCredentialError", "ScopeEscalationError",
+      "StaleProofError", "InvalidSecretError", "CircuitArtifactNotFoundError",
+      "MerkleTreeError", "ConfigurationError"
+    ]
+  },
+  "integrations": [
+    {"id": "@bolyra/openclaw", "version": "0.1.0", "type": "OpenClaw trust verification adapter"},
+    {"id": "langchain-bolyra-tool", "type": "LangChain BaseTool wrapper", "status": "stub"},
+    {"id": "crewai-bolyra-tool", "type": "CrewAI tool wrapper", "status": "stub"}
+  ],
+  "standards": [
+    {"id": "draft-bolyra-mutual-zkp-auth-01", "type": "IETF internet-draft"},
+    {"id": "did:bolyra", "type": "W3C DID method"},
+    {"id": "test-vectors.json", "count": 37, "type": "Conformance test suite"}
+  ]
+}
