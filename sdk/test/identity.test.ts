@@ -31,6 +31,7 @@ jest.mock('../src/utils', () => ({
   poseidon2: jest.fn().mockResolvedValue(12345n),
   poseidon5: jest.fn().mockResolvedValue(67890n),
   derivePublicKey: jest.fn().mockResolvedValue({ x: 100n, y: 200n }),
+  derivePublicKeyScalar: jest.fn().mockResolvedValue({ x: 100n, y: 200n }),
   eddsaSign: jest.fn().mockResolvedValue({
     R8: { x: 1n, y: 2n },
     S: 3n,

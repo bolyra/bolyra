@@ -1,5 +1,5 @@
 import { HumanIdentity, AgentCredential, Permission } from './types';
-import { poseidon2, poseidon5, eddsaSign, derivePublicKey } from './utils';
+import { poseidon2, poseidon5, eddsaSign, derivePublicKey, derivePublicKeyScalar } from './utils';
 import { InvalidPermissionError } from './errors';
 
 /**
@@ -19,7 +19,9 @@ import { InvalidPermissionError } from './errors';
 export async function createHumanIdentity(
   secret: bigint,
 ): Promise<HumanIdentity> {
-  const publicKey = await derivePublicKey(secret);
+  // HumanUniqueness circuit uses BabyPbk (direct scalar multiply),
+  // NOT EdDSA prv2pub. Use derivePublicKeyScalar here.
+  const publicKey = await derivePublicKeyScalar(secret);
   const commitment = await poseidon2(publicKey.x, publicKey.y);
   return { secret, publicKey, commitment };
 }
