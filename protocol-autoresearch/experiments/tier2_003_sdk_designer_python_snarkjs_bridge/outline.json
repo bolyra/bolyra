@@ -1,0 +1,105 @@
+{
+  "id": "sdk_designer_python_snarkjs_bridge",
+  "title": "Python SDK with async snarkjs subprocess bridge",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "bolyra/__init__.py",
+      "description": "Package root exporting prove_handshake, delegate, and exception classes"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/bridge.py",
+      "description": "NodeBridge class managing Node.js subprocess lifecycle with stdin/stdout JSON framing, both sync and async variants"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/models.py",
+      "description": "Pydantic v2 models: HandshakeInput, HandshakeProof, DelegateInput, DelegateProof, BridgeRequest, BridgeResponse"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/exceptions.py",
+      "description": "Structured exception hierarchy: BridgeError (base), CircuitNotFoundError, ProofVerificationError, BridgeTimeoutError"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/node_bridge/index.js",
+      "description": "Bundled Node.js bridge process: reads JSON from stdin, calls snarkjs groth16.prove / groth16.verify, writes JSON to stdout, handles SIGTERM"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/node_bridge/package.json",
+      "description": "Minimal package.json pinning snarkjs version for the bundled bridge"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/langchain_tool.py",
+      "description": "BolyraAuthTool extending LangChain BaseTool with _run/_arun wrappers for prove_handshake and delegate; installed via bolyra[langchain] extras"
+    },
+    {
+      "type": "sdk",
+      "filename": "pyproject.toml",
+      "description": "Package metadata, optional dependencies [langchain], entry points, Python >=3.10 constraint"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_bridge.py",
+      "description": "Unit tests for NodeBridge using subprocess mocking; covers happy path, timeout, malformed JSON, missing circuit file"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_models.py",
+      "description": "Pydantic v2 validation tests for all input/output models including field coercion and rejection cases"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_langchain_tool.py",
+      "description": "Integration test for BolyraAuthTool.run and arun with mocked bridge, verifying LangChain tool schema compliance"
+    },
+    {
+      "type": "test",
+      "filename": "tests/integration/test_e2e_bridge.py",
+      "description": "End-to-end test requiring Node.js + snarkjs installed; proves and verifies a handshake using real circuit artifacts"
+    },
+    {
+      "type": "docs",
+      "filename": "README.md",
+      "description": "Quick-start guide: pip install, Node.js prerequisite, prove_handshake example, delegate example, LangChain tool usage, exception handling"
+    },
+    {
+      "type": "spec",
+      "filename": "PROTOCOL.md",
+      "description": "Bridge wire protocol spec: JSON envelope schema (action, payload, request_id), error codes, timeout contract, versioning"
+    }
+  ],
+  "steps": [
+    "Define bridge wire protocol: JSON envelope {action, payload, request_id} over stdin/stdout with newline framing; document in PROTOCOL.md",
+    "Author bolyra/node_bridge/index.js: readline loop reading JSON, dispatch to snarkjs groth16.prove/verify/fullProve, write response JSON, exit cleanly on SIGTERM",
+    "Run npm install snarkjs inside node_bridge/ and commit package-lock.json; pin snarkjs to a specific minor version",
+    "Implement bolyra/exceptions.py with BridgeError base and subclasses CircuitNotFoundError, ProofVerificationError, BridgeTimeoutError mapping to bridge error codes",
+    "Implement bolyra/models.py with Pydantic v2 BaseModel classes for HandshakeInput, HandshakeProof, DelegateInput, DelegateProof, BridgeRequest, BridgeResponse",
+    "Implement bolyra/bridge.py NodeBridge: spawn Node subprocess pointing to bundled index.js, send JSON line, read JSON line, deserialize response, raise typed exceptions on error codes",
+    "Add async variant in bridge.py using asyncio.create_subprocess_exec and asyncio StreamReader for non-blocking I/O",
+    "Implement top-level bolyra/__init__.py: module-level prove_handshake(input) and delegate(input) functions that instantiate NodeBridge, call it, and return typed Pydantic models",
+    "Write pyproject.toml: hatchling build backend, optional deps [langchain] = ['langchain-core>=0.2'], include node_bridge/ as package data",
+    "Implement bolyra/langchain_tool.py: BolyraAuthTool(BaseTool) with name, description, args_schema pointing to HandshakeInput, _run calling sync prove_handshake, _arun calling async variant",
+    "Write unit tests test_bridge.py using unittest.mock.patch on subprocess.Popen; cover success, timeout (configurable), bad JSON response, non-zero exit",
+    "Write unit tests test_models.py validating Pydantic v2 field validation, alias handling, and serialization round-trips",
+    "Write test_langchain_tool.py verifying BolyraAuthTool.args_schema, tool name, and mocked _run/_arun return shapes",
+    "Write integration test test_e2e_bridge.py gated by pytest.importorskip or a CI env flag; uses real snarkjs with test .wasm/.zkey fixtures",
+    "Verify all tests pass: pytest tests/ -x -q; confirm no imports of langchain fail when extra not installed",
+    "Write README.md with pip install bolyra, Node.js >= 18 prereq note, minimal prove_handshake snippet, LangChain tool example, exception handling table"
+  ],
+  "estimated_constraints": 12,
+  "dependencies": [
+    "Node.js >= 18 (runtime, not a Python dep)",
+    "snarkjs >= 0.7 (npm, bundled in node_bridge/)",
+    "pydantic >= 2.0",
+    "langchain-core >= 0.2 (optional, extras install)",
+    "pytest",
+    "pytest-asyncio",
+    "hatchling (build backend)",
+    "Existing .wasm and .zkey circuit artifacts from tier2_007 for integration tests"
+  ]
+}

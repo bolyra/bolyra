@@ -1,0 +1,68 @@
+{
+  "id": "standards_architect_abnf_wire_format",
+  "title": "ABNF grammar for proof payloads and enrollment messages",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/wire-format.abnf",
+      "description": "RFC 5234 ABNF grammar covering all protocol message types: enrollment-request (human/agent), handshake-proof-bundle, delegation-token, revocation-notice. Defines terminal symbols, field ordering, length prefixes, and version negotiation."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/wire-format.cddl",
+      "description": "RFC 8610 CDDL companion spec for CBOR encoding of all message types. Targets constrained IoT verifiers; maps ABNF non-terminals to CDDL groups with deterministic CBOR (dCBOR) canonicalization rules."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/wire-format-binary.md",
+      "description": "Canonical binary encoding table for on-chain calldata: field offsets, big-endian integer widths, packed boolean flags, Groth16/PLONK proof blob layout, and ABI alignment hints for Solidity callers."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/wire-format-json.md",
+      "description": "JSON encoding schema (JSON Schema draft-2020-12) for SDK ergonomics. Specifies camelCase field names, base64url encoding for byte arrays, ISO 8601 timestamps, and round-trip fidelity rules relative to binary encoding."
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_wire_format_vectors.py",
+      "description": "Conformance test vectors: encode/decode round-trips for each message type in all three encodings (ABNF text, binary, JSON). Verifies parser rejection of malformed inputs and cross-encoding semantic equivalence."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/wire_format.py",
+      "description": "Reference Python encoder/decoder generated from the ABNF spec. Provides encode() and decode() for each message type, used by the test harness to validate conformance vectors."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/wire-format-rationale.md",
+      "description": "Design rationale: why these field orderings, encoding choices, and version negotiation strategy. Maps each decision back to the IETF draft section it resolves and notes tradeoffs vs. existing ZKP proof formats (Semaphore, anon-aadhaar)."
+    }
+  ],
+  "steps": [
+    "Inventory all message types from existing protocol files and IETF draft wire-format section; produce a flat field catalog with types, cardinalities, and size bounds",
+    "Define ABNF core rules (version, length-prefixed bytes, base64url, timestamp, scope-bitmask) as shared non-terminals reused across message types",
+    "Write ABNF grammar for enrollment-request-human and enrollment-request-agent, capturing MerkleRoot, commitment, nonce, version, and optional metadata fields",
+    "Write ABNF grammar for handshake-proof-bundle: human-proof block, optional agent-proof block, optional delegation-chain sequence, and outer envelope with MAC/signature field",
+    "Write ABNF grammar for delegation-token (delegator, delegatee, scope-bitmask, expiry, proof) and revocation-notice (token-id, timestamp, revocation-proof)",
+    "Translate each ABNF message type to CDDL groups; apply dCBOR tag assignments and map-key integer encoding for wire compactness; add CDDL type choices for optional fields",
+    "Define canonical binary encoding: fixed header (magic 2B, version 1B, msg-type 1B, length 4B), then per-message field layout with explicit byte offsets documented in wire-format-binary.md",
+    "Define JSON encoding schema using JSON Schema draft-2020-12; specify base64url for byte arrays, integer string encoding for uint256 fields, and required vs optional field rules",
+    "Implement reference Python encoder/decoder (sdk/wire_format.py) from the ABNF/binary spec; ensure encode(decode(x)) == x and decode(encode(m)) == m for all message types",
+    "Generate conformance test vectors: at least 3 valid instances per message type across all encodings, plus 5 malformed-input rejection cases per type",
+    "Cross-check binary encoding against Solidity ABI layout; document any padding or alignment adjustments needed for calldata efficiency in on-chain verifiers",
+    "Write design rationale doc mapping each choice to the IETF draft section it resolves and noting compatibility with existing ZKP proof formats",
+    "Run conformance test suite; fix any round-trip or cross-encoding discrepancies found",
+    "Integrate ABNF file into IETF draft as a normative appendix reference; update draft wire-format section to cite spec/wire-format.abnf and spec/wire-format.cddl"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "RFC 5234 (ABNF syntax)",
+    "RFC 8610 (CDDL for CBOR)",
+    "RFC 8949 (CBOR / dCBOR canonicalization)",
+    "Existing IETF internet-draft wire-format section",
+    "Groth16 proof blob layout (SnarkJS serialization format)",
+    "Semaphore / anon-aadhaar proof format references for compatibility notes",
+    "JSON Schema draft-2020-12",
+    "Solidity ABI spec (for binary calldata alignment)"
+  ]
+}

@@ -1,0 +1,7 @@
+# ABNF grammar for proof payloads and enrollment messages
+
+Define a machine-parseable ABNF grammar (RFC 5234) for all protocol messages: enrollment requests (human and agent), handshake proof bundles (human proof + agent proof + optional delegation chain), delegation tokens, and revocation notices. Each message type gets a canonical binary encoding (for on-chain calldata efficiency) and a JSON encoding (for SDK ergonomics). Include a CDDL (RFC 8610) companion spec for CBOR encoding, targeting constrained IoT verifiers. This removes ambiguity from the IETF draft's wire format section and enables automated parser generation.
+
+## Status
+
+Placeholder — awaiting implementation.

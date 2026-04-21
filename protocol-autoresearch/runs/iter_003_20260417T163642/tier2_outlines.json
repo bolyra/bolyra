@@ -1,0 +1,678 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_conformance_interop_profile",
+      "persona": "standards_architect",
+      "title": "Interoperability profile for multi-verifier deployments",
+      "dimension": "standards",
+      "description": "Write an interop profile document (modeled on OIDC Conformance) that specifies the exact wire format for proof exchange between provers and verifiers across different deployments. Define: (1) a JSON-based proof envelope with fields for circuit type, public signals array, proof bytes, and metadata; (2) content-type negotiation (application/bolyra-proof+json); (3) version negotiation via a 'protocol-version' header; (4) mandatory-to-implement cipher suites (BN254/Groth16 for human, BN254/PLONK for agent). This enables independent verifier implementations to accept proofs from any compliant prover.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_interop_profile",
+      "adoption": 18,
+      "standards": 21,
+      "completeness": 17,
+      "correctness": 15,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_interop_profile",
+      "title": "Interoperability profile for multi-verifier deployments",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/bolyra-interop-profile-v1.md",
+          "description": "Normative interoperability profile document specifying wire format, content-type negotiation, version negotiation, and mandatory cipher suites for proof exchange"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-schema.json",
+          "description": "JSON Schema definition for the bolyra proof envelope with fields: circuit_type, public_signals, proof_bytes, protocol_version, metadata"
+        },
+        {
+          "type": "test",
+          "filename": "tests/conformance/test_interop_profile.py",
+          "description": "Conformance test suite validating proof envelope structure, content-type headers, version negotiation, and cipher suite requirements"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/interop-profile-guide.md",
+          "description": "Implementer guide with worked examples for prover and verifier integrations, including cipher suite selection and version negotiation flows"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/proof_envelope.py",
+          "description": "Reference Python implementation of proof envelope serialization/deserialization and content-type negotiation helpers"
+        }
+      ],
+      "steps": [
+        "Define the canonical JSON proof envelope schema with required fields: circuit_type (enum: human_groth16, agent_plonk), public_signals (array of hex strings), proof_bytes (base64url-encoded), protocol_version (semver string), and optional metadata object",
+        "Specify content-type as application/bolyra-proof+json and define HTTP Accept/Content-Type negotiation rules for prover-verifier HTTP exchanges",
+        "Define protocol-version header semantics: provers MUST send X-Bolyra-Protocol-Version, verifiers MUST reject versions outside supported range with 406 Not Acceptable and a version-range body",
+        "Enumerate mandatory-to-implement cipher suites: MTI-1 BN254/Groth16 for human identity circuits, MTI-2 BN254/PLONK for agent delegation circuits; mark BLS12-381 variants as OPTIONAL",
+        "Write normative MUST/SHOULD/MAY language sections for prover conformance: envelope construction, field encoding rules, and signature over envelope hash",
+        "Write normative MUST/SHOULD/MAY language sections for verifier conformance: envelope validation, public signal count checks, on-chain verifier contract call requirements",
+        "Define conformance levels: Basic (MTI-1 only), Full (MTI-1 + MTI-2), Extended (all optional suites)",
+        "Produce JSON Schema (Draft 2020-12) for the proof envelope and embed normative schema reference in the spec",
+        "Implement reference Python SDK helpers for envelope construction, serialization, and content-type negotiation",
+        "Write conformance test suite with positive cases (valid envelopes per conformance level) and negative cases (wrong circuit_type, malformed proof_bytes, unsupported version)",
+        "Add IANA media type registration template for application/bolyra-proof+json as an appendix",
+        "Cross-reference with existing IETF internet-draft spec and W3C DID method docs to ensure terminology alignment"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "BN254/Groth16 circuit artifacts (human identity circuit)",
+        "BN254/PLONK circuit artifacts (agent delegation circuit)",
+        "IETF internet-draft spec (bolyra-interop-profile-v1.md references it)",
+        "W3C DID method spec for identity context fields in metadata",
+        "snarkjs or bellman for proof_bytes encoding reference"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "circuit_optimizer_eddsa_to_poseidon_signature",
+      "persona": "circuit_optimizer",
+      "title": "Replace EdDSA verification with Poseidon-based commitment binding in AgentPolicy",
+      "dimension": "completeness",
+      "description": "EdDSA verification in AgentPolicy costs ~30k constraints (60%+ of the circuit budget). The operator signature proves the operator authorized the credential, but this can be achieved more cheaply: the operator signs off-chain (verified at enrollment time on-chain), and the circuit only needs to prove knowledge of the preimage to the credential commitment that is already in the Merkle tree. Remove the in-circuit EdDSA verify, save ~30k constraints, cutting proving time roughly in half. The security model shifts to: Merkle inclusion proves the credential was operator-approved at enrollment. Deliverable: simplified AgentPolicy.circom (~20k constraints), updated test vectors, benchmarks showing proving time reduction.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_eddsa_to_poseidon_signature",
+      "adoption": 19,
+      "standards": 13,
+      "completeness": 21,
+      "correctness": 17,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "circuit_optimizer_eddsa_to_poseidon_signature",
+      "title": "Replace EdDSA verification with Poseidon-based commitment binding in AgentPolicy",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "AgentPolicy.circom",
+          "description": "Simplified AgentPolicy circuit removing EdDSA verification; proves knowledge of credential preimage (secret, nullifier, scope, expiry) whose Poseidon hash matches the leaf committed in the operator-approved Merkle tree"
+        },
+        {
+          "type": "circuit",
+          "filename": "CredentialCommitment.circom",
+          "description": "Standalone template computing Poseidon(secret, nullifier, scope, expiry, operatorId) \u2014 the canonical credential commitment hash used as the Merkle leaf"
+        },
+        {
+          "type": "contract",
+          "filename": "AgentRegistry.sol",
+          "description": "On-chain enrollment contract that verifies the operator EdDSA signature at enrollment time, inserts the credential commitment into the Merkle tree, and emits an event \u2014 moving signature verification fully off-circuit"
+        },
+        {
+          "type": "spec",
+          "filename": "security-model-shift.md",
+          "description": "Formal writeup of the security model change: EdDSA moves from in-circuit to on-chain enrollment check; Merkle inclusion proves operator approval; threat model, trust assumptions, and attack surface analysis"
+        },
+        {
+          "type": "test",
+          "filename": "agent_policy_commitment.test.ts",
+          "description": "Circomkit/snarkjs test suite: valid preimage witness, wrong preimage fails, Merkle path mismatch fails, nullifier collision resistance, scope bitmask enforcement"
+        },
+        {
+          "type": "test",
+          "filename": "bench_agent_policy.sh",
+          "description": "Shell benchmark script using snarkjs groth16 prove timing before/after; records constraint count via snarkjs info, proving time, and verification time"
+        },
+        {
+          "type": "docs",
+          "filename": "circuit-optimization-changelog.md",
+          "description": "Constraint budget breakdown before (EdDSA ~30k) and after (~20k total), proving time comparison table, migration guide for SDK callers"
+        }
+      ],
+      "steps": [
+        "Audit existing AgentPolicy.circom: extract the EdDSA verification subgraph, count its constraints via snarkjs info, and document all signals that feed into it",
+        "Define the canonical credential commitment schema: Poseidon(secret, nullifier, scope, expiry, operatorId) and pin input signal ordering in CredentialCommitment.circom",
+        "Rewrite AgentPolicy.circom: replace EdDSA inputs (pubKey[2], signature[2], message) with raw preimage inputs (secret, nullifier, scope, expiry, operatorId); compute commitment hash internally and assert it equals the Merkle leaf",
+        "Verify Merkle inclusion path as before (MerkleProof template unchanged); nullifier and scope bitmask constraints remain intact",
+        "Update AgentRegistry.sol: add enrollCredential(commitment, operatorSig, operatorPubKey) entry point that calls EdDSA verify on-chain (ecrecover or BabyJubJub verifier) before inserting commitment into the tree",
+        "Regenerate trusted setup (Powers of Tau sufficient for ~20k constraints); recompile circuit and export new verification key and proving key",
+        "Update test vectors in agent_policy_commitment.test.ts: generate valid witnesses with new signal layout, assert proof acceptance; generate negative cases (wrong secret, tampered scope, bad Merkle path) and assert rejection",
+        "Run bench_agent_policy.sh before/after and record constraint count, prover wall-clock time, and peak memory; target <50% of original proving time",
+        "Update SDK witness builder (TypeScript) to drop EdDSA signing step and instead pass raw preimage fields; bump minor version",
+        "Write security-model-shift.md documenting trust boundary change, enrollment-time guarantees, and residual risks (operator key compromise window)",
+        "Write circuit-optimization-changelog.md with before/after constraint table and SDK migration guide; open PR with all artifacts"
+      ],
+      "estimated_constraints": 20000,
+      "dependencies": [
+        "circomlib Poseidon template (poseidon.circom)",
+        "circomlib MerkleProof / MerkleTreeChecker template",
+        "snarkjs groth16 toolchain (compile, setup, prove, verify)",
+        "BabyJubJub or ECDSA on-chain verifier for AgentRegistry.sol enrollment",
+        "circomkit test harness (TypeScript)",
+        "Existing AgentPolicy.circom (pre-optimization baseline)",
+        "Existing credential Merkle tree root management in AgentRegistry.sol"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "circuit_optimizer_groth16_to_plonk_human",
+      "persona": "circuit_optimizer",
+      "title": "Migrate HumanUniqueness from Groth16 to PLONK",
+      "dimension": "correctness",
+      "description": "HumanUniqueness currently uses Groth16 requiring a trusted ceremony (reusing Semaphore v4's depth-20 ceremony). Migrating to PLONK (matching AgentPolicy and Delegation) eliminates ceremony trust assumptions, unifies the proving stack to a single backend, and simplifies the IdentityRegistry contract by removing the separate IGroth16Verifier interface. The circuit is small (~15k constraints for BabyPbk + Poseidon + Merkle), well within PLONK's efficiency range. Deliverable: recompiled HumanUniqueness circuit with PLONK proving key, updated HumanVerifier.sol, and unified verifier interface in IdentityRegistry.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_groth16_to_plonk_human",
+      "adoption": 17,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 19,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "circuit_optimizer_groth16_to_plonk_human",
+      "title": "Migrate HumanUniqueness from Groth16 to PLONK",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/human_uniqueness.circom",
+          "description": "HumanUniqueness circuit updated with snarkjs PLONK-compatible pragma and template structure; retains BabyPbk + Poseidon hash + depth-20 Merkle inclusion proof (~15k constraints)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/build/human_uniqueness_plonk.zkey",
+          "description": "PLONK proving key generated via snarkjs plonk setup using the universal powers-of-tau (ptau) file (no trusted ceremony required)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/build/human_uniqueness_verification_key.json",
+          "description": "PLONK verification key exported from the zkey for use in contract generation and off-chain verification"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/verifiers/HumanVerifier.sol",
+          "description": "Auto-generated Solidity PLONK verifier via snarkjs exportSolidityVerifier; replaces the Groth16 HumanVerifier.sol; exposes verifyProof(bytes calldata proof, uint256[] calldata pubSignals) matching the unified IPlonkVerifier interface"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/interfaces/IPlonkVerifier.sol",
+          "description": "Unified verifier interface shared by HumanVerifier, AgentPolicyVerifier, and DelegationVerifier; single verifyProof(bytes, uint256[]) signature eliminates per-backend interface divergence"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IdentityRegistry.sol",
+          "description": "Updated to import IPlonkVerifier instead of IGroth16Verifier for human uniqueness slot; removes separate groth16Verifier storage variable; constructor wired to accept single verifier address type"
+        },
+        {
+          "type": "test",
+          "filename": "test/human_uniqueness_plonk.test.ts",
+          "description": "End-to-end Hardhat test: generates witness, produces PLONK proof via snarkjs, calls HumanVerifier.verifyProof on-chain, asserts valid and invalid proof paths; mirrors existing AgentPolicy PLONK test structure"
+        },
+        {
+          "type": "test",
+          "filename": "test/identity_registry_unified_verifier.test.ts",
+          "description": "Integration test verifying IdentityRegistry correctly routes human uniqueness verification through the unified IPlonkVerifier interface; confirms no regression on AgentPolicy and Delegation paths"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/plonk_migration_human_uniqueness.md",
+          "description": "Migration rationale, constraint count comparison (Groth16 vs PLONK for this circuit size), ptau file provenance and adequacy justification, and interface unification notes for auditors"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proving_stack.md",
+          "description": "Updated proving stack documentation reflecting unified PLONK backend for all three circuits; removes trusted ceremony dependency section; adds ptau reuse policy"
+        }
+      ],
+      "steps": [
+        "Confirm existing powers-of-tau file (hermez or snarkjs default ptau) supports at least 2^15 constraints; download/verify if absent",
+        "Audit circuits/human_uniqueness.circom for any Groth16-specific pragma or template assumptions; note public/private signal layout",
+        "Recompile circuit: circom human_uniqueness.circom --r1cs --wasm --sym -o circuits/build/",
+        "Run snarkjs plonk setup using the ptau and the new .r1cs to produce human_uniqueness_plonk.zkey",
+        "Export verification key: snarkjs zkey export verificationkey human_uniqueness_plonk.zkey human_uniqueness_verification_key.json",
+        "Generate Solidity verifier: snarkjs zkey export solidityverifier human_uniqueness_plonk.zkey contracts/verifiers/HumanVerifier.sol",
+        "Define IPlonkVerifier.sol interface with verifyProof(bytes calldata proof, uint256[] calldata pubSignals) returns (bool); confirm AgentPolicyVerifier and DelegationVerifier already conform",
+        "Update HumanVerifier.sol to implement IPlonkVerifier (add interface annotation; verify function signature matches)",
+        "Refactor IdentityRegistry.sol: replace IGroth16Verifier import and humanVerifier storage type with IPlonkVerifier; remove groth16-specific call encoding if present",
+        "Write test/human_uniqueness_plonk.test.ts: load circuit wasm + zkey, generate witness for a valid identity, call snarkjs.plonk.fullProve, submit proof to HumanVerifier.verifyProof via Hardhat, assert true; test invalid proof asserts false",
+        "Write test/identity_registry_unified_verifier.test.ts: deploy IdentityRegistry with all three PLONK verifiers, exercise human uniqueness registration path, assert no interface mismatch",
+        "Run full test suite: npx hardhat test; fix any ABI or calldata encoding regressions",
+        "Update specs/plonk_migration_human_uniqueness.md with constraint count from snarkjs info output and ptau file hash",
+        "Update docs/proving_stack.md to remove Groth16 ceremony section and document unified PLONK backend"
+      ],
+      "estimated_constraints": 15000,
+      "dependencies": [
+        "circom 2.x compiler",
+        "snarkjs >= 0.7 (PLONK support)",
+        "powers-of-tau file covering 2^15 constraints (e.g. hermez ptau15 or pot15_final.ptau)",
+        "circomlibjs (BabyPbk, Poseidon, MerkleProof templates)",
+        "Hardhat + @nomicfoundation/hardhat-toolbox",
+        "Existing AgentPolicy and Delegation PLONK verifier contracts (for interface conformance reference)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_w3c_did_method",
+      "persona": "standards_architect",
+      "title": "W3C DID method specification for did:bolyra",
+      "dimension": "standards",
+      "description": "Define a complete W3C DID method binding: did:bolyra:<identityCommitment>. Specify the DID Document structure (verification methods map to EdDSA Baby Jubjub keys, service endpoints for handshake initiation), the resolution algorithm (on-chain lookup via IdentityRegistry humanTree/agentTree), and CRUD operations (create = enroll, deactivate = revoke). Include a Verifiable Credential issuance flow where successful handshake verification produces a VC with the nullifier as proof, enabling interop with any W3C VC-compatible wallet.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_w3c_did_method",
+      "adoption": 20,
+      "standards": 22,
+      "completeness": 22,
+      "correctness": 12,
+      "total": 76,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_w3c_did_method",
+      "title": "W3C DID method specification for did:bolyra",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Full W3C DID Method specification document covering method syntax, DID Document schema, resolution algorithm, CRUD operations, security considerations, and privacy considerations per W3C DID Core 1.0"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-document-schema.json",
+          "description": "JSON Schema for a did:bolyra DID Document including verificationMethod (EdDSA Baby Jubjub keys), authentication, assertionMethod, and service endpoints for handshake initiation"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/vc-issuance-flow.md",
+          "description": "Verifiable Credential issuance flow specification: handshake verification produces a VC with nullifier as proof, conforming to W3C VC Data Model 2.0"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/DIDResolver.sol",
+          "description": "On-chain DID resolver that looks up identityCommitment in IdentityRegistry humanTree/agentTree and returns DID Document metadata; emits events for create/deactivate lifecycle"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/resolver.ts",
+          "description": "TypeScript DID resolver implementing the DIF DID Resolver interface; resolves did:bolyra:<identityCommitment> by querying DIDResolver contract and constructing the DID Document"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/document-builder.ts",
+          "description": "Builder utility that constructs a W3C-conformant DID Document from on-chain data: maps Baby Jubjub public keys to JsonWebKey2020 verification methods and injects service endpoints"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/vc/issuer.ts",
+          "description": "VC issuer that wraps a successful handshake verification result into a W3C Verifiable Credential, embedding the nullifier as a proof value and signing with the issuer's key"
+        },
+        {
+          "type": "test",
+          "filename": "tests/did/resolution.test.ts",
+          "description": "Integration tests for DID resolution: create identity, resolve DID Document, verify structure against JSON Schema, assert verification methods and service endpoints"
+        },
+        {
+          "type": "test",
+          "filename": "tests/vc/issuance.test.ts",
+          "description": "End-to-end tests for VC issuance flow: enroll identity, perform handshake, verify proof, issue VC with nullifier, validate VC against W3C VC Data Model schema"
+        },
+        {
+          "type": "test",
+          "filename": "tests/did/crud.test.ts",
+          "description": "CRUD lifecycle tests: create (enroll maps to DID create), update (key rotation via IdentityRegistry), deactivate (revoke maps to DID deactivate), resolve-after-deactivate returns deactivatedAt"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/did-bolyra-quickstart.md",
+          "description": "Developer quickstart: resolve a did:bolyra DID, integrate with universal resolvers, issue and verify a VC using the nullifier proof, wallet interop notes"
+        }
+      ],
+      "steps": [
+        "Define the DID method syntax: did:bolyra:<identityCommitment> where identityCommitment is the hex-encoded Poseidon commitment (64 chars), with optional path fragment for agent sub-DIDs: did:bolyra:<identityCommitment>:agent:<agentIndex>",
+        "Specify DID Document structure: id field = the DID, controller = self, verificationMethod array with type JsonWebKey2020 mapping Baby Jubjub public keys to JWK crv=BabyJub-JubJub, authentication and assertionMethod references pointing to those methods",
+        "Specify service endpoints in DID Document: type=BolyraHandshakeEndpoint with serviceEndpoint pointing to the handshake initiation API, type=BolyraCredentialEndpoint for VC issuance",
+        "Define resolution algorithm: (1) parse identityCommitment from DID, (2) call DIDResolver.resolve(identityCommitment) which queries IdentityRegistry humanTree/agentTree, (3) check revocation status, (4) reconstruct DID Document from on-chain public key and metadata, (5) return DIDResolutionResult with didDocument and didDocumentMetadata",
+        "Define CRUD operations: Create = identity enrollment transaction emitting IdentityRegistered event sets created timestamp; Read = resolution algorithm above; Update = key rotation via IdentityRegistry updateKey; Deactivate = revoke transaction sets deactivated flag, resolution returns document with deactivated:true and deactivatedAt timestamp",
+        "Implement DIDResolver.sol: expose resolve(bytes32 identityCommitment) view returning (bytes pubKey, uint256 createdAt, uint256 deactivatedAt, string serviceEndpoint), reading from IdentityRegistry storage",
+        "Implement SDK resolver.ts conforming to DIF DID Resolver interface (resolve method returning DIDResolutionResult), calling DIDResolver contract via ethers.js and delegating document construction to document-builder.ts",
+        "Implement document-builder.ts: convert raw Baby Jubjub public key bytes to JWK format, construct verificationMethod entries, inject configured service endpoints, assemble full W3C DID Document object",
+        "Specify VC issuance flow: after successful ZK proof verification, issuer signs a VC with credentialSubject.id = did:bolyra:<identityCommitment>, proof.nullifier = nullifier hex, proof.type = BolyraHandshakeProof2024, conforming to W3C VC Data Model 2.0",
+        "Implement vc/issuer.ts: accept verified handshake result, build VC payload, sign with issuer key using Ed25519Signature2020 or JsonWebSignature2020, return signed VC ready for wallet consumption",
+        "Write JSON Schema for DID Document (did-document-schema.json) and validate all test fixtures against it",
+        "Write integration tests covering full resolution lifecycle (create, resolve, deactivate, resolve-after-deactivate) against a local Hardhat node",
+        "Write VC issuance end-to-end tests: enroll, handshake, issue VC, verify VC signature and nullifier binding",
+        "Document universal resolver integration: provide driver configuration for the DIF Universal Resolver so did:bolyra DIDs can be resolved by any standards-compliant resolver",
+        "Publish spec/did-method-bolyra.md to the W3C DID Method Registry and reference it from the protocol README"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "IdentityRegistry contract (humanTree and agentTree storage, enroll/revoke functions)",
+        "Baby Jubjub key generation and EdDSA signing library (circomlibjs or noble-curves)",
+        "ZK handshake verification circuit and verifier contract",
+        "W3C DID Core 1.0 specification",
+        "W3C VC Data Model 2.0 specification",
+        "DIF DID Resolver interface (@decentralized-identity/did-resolver)",
+        "ethers.js v6 for contract interaction",
+        "Hardhat local node for integration tests"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_conformance_vectors_multichain",
+      "persona": "standards_architect",
+      "title": "Conformance test vectors with multi-chain coverage",
+      "dimension": "standards",
+      "description": "Produce 60+ JSON test vectors organized by circuit (HumanUniqueness, AgentPolicy, Delegation) covering: valid proofs, expired credentials, revoked identities, stale roots (both human and agent), scope subset violations, cumulative bit encoding violations (bit 4 without bits 2+3), delegation chain at depths 1/2/3/4 (4 must fail), phantom delegatee rejection, nonce replay, and cross-chain root sync scenarios. Each vector includes input signals, expected public outputs, and expected pass/fail status. Ship as a standalone JSON file with a JSON Schema so other implementations can validate their parser.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_vectors_multichain",
+      "adoption": 14,
+      "standards": 22,
+      "completeness": 11,
+      "correctness": 18,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_vectors_multichain",
+      "title": "Conformance test vectors with multi-chain coverage",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "conformance_vectors.json",
+          "description": "60+ JSON test vectors organized by circuit covering all required scenarios with input signals, expected public outputs, and pass/fail status"
+        },
+        {
+          "type": "spec",
+          "filename": "conformance_vectors.schema.json",
+          "description": "JSON Schema for validating the structure of conformance_vectors.json so third-party implementations can validate their parsers"
+        },
+        {
+          "type": "test",
+          "filename": "test_conformance_vectors.py",
+          "description": "Python test harness that loads conformance_vectors.json and verifies each vector against the circuits using snarkjs/circom, asserting pass/fail outcomes match"
+        },
+        {
+          "type": "docs",
+          "filename": "CONFORMANCE.md",
+          "description": "Human-readable guide explaining vector categories, how to run the harness, and how to add new vectors"
+        }
+      ],
+      "steps": [
+        "Define JSON Schema for a single vector: fields for id, circuit, category, description, inputs (signal map), expected_public_outputs (signal map), expected_result (pass|fail), chain_id (optional), notes",
+        "Define top-level schema: version, circuits array, vectors array, each circuit entry listing its signal names and types",
+        "Author HumanUniqueness vectors: valid proof (pass), expired credential (fail), revoked identity (fail), stale human root (fail), nonce replay (fail) \u2014 minimum 15 vectors",
+        "Author AgentPolicy vectors: valid proof (pass), stale agent root (fail), scope subset violation (fail), cumulative bit encoding violation (bit 4 set without bits 2+3, fail) \u2014 minimum 12 vectors",
+        "Author Delegation vectors: chain depth 1 (pass), depth 2 (pass), depth 3 (pass), depth 4 (fail \u2014 exceeds max), phantom delegatee rejection (fail) \u2014 minimum 10 vectors",
+        "Author cross-chain root sync vectors: valid sync (pass), mismatched chain_id root (fail), stale synced root (fail) \u2014 minimum 8 vectors covering at least 3 chain IDs (e.g. 1, 137, 42161)",
+        "Fill remaining vectors to reach 60+ total, prioritizing boundary conditions: credential expiry at exact timestamp boundary, scope bitmask at all-zeros and all-ones, delegation at exact max depth",
+        "Validate all vectors against the JSON Schema using jsonschema; fail CI if any vector is malformed",
+        "Implement test_conformance_vectors.py: load JSON, compile circuits if needed, generate/verify proofs per vector using snarkjs subprocess, assert expected_result",
+        "Run the full harness against existing circuit artifacts; record any circuit bugs surfaced by vectors and note them in CONFORMANCE.md",
+        "Write CONFORMANCE.md: vector taxonomy table, harness usage, contributor guide for adding vectors",
+        "Lint JSON with jsonschema CLI and Python tests with ruff; ensure all 60+ vectors produce correct outcomes before shipping"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "HumanUniqueness.circom",
+        "AgentPolicy.circom",
+        "Delegation.circom",
+        "snarkjs",
+        "circom",
+        "jsonschema (Python)",
+        "cross-chain root sync mechanism spec"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_abnf_wire_format",
+      "persona": "standards_architect",
+      "title": "ABNF grammar for proof payloads and enrollment messages",
+      "dimension": "standards",
+      "description": "Define a machine-parseable ABNF grammar (RFC 5234) for all protocol messages: enrollment requests (human and agent), handshake proof bundles (human proof + agent proof + optional delegation chain), delegation tokens, and revocation notices. Each message type gets a canonical binary encoding (for on-chain calldata efficiency) and a JSON encoding (for SDK ergonomics). Include a CDDL (RFC 8610) companion spec for CBOR encoding, targeting constrained IoT verifiers. This removes ambiguity from the IETF draft's wire format section and enables automated parser generation.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_abnf_wire_format",
+      "adoption": 15,
+      "standards": 22,
+      "completeness": 16,
+      "correctness": 16,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_abnf_wire_format",
+      "title": "ABNF grammar for proof payloads and enrollment messages",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/wire-format.abnf",
+          "description": "RFC 5234 ABNF grammar covering all protocol message types: enrollment-request (human/agent), handshake-proof-bundle, delegation-token, revocation-notice. Defines terminal symbols, field ordering, length prefixes, and version negotiation."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/wire-format.cddl",
+          "description": "RFC 8610 CDDL companion spec for CBOR encoding of all message types. Targets constrained IoT verifiers; maps ABNF non-terminals to CDDL groups with deterministic CBOR (dCBOR) canonicalization rules."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/wire-format-binary.md",
+          "description": "Canonical binary encoding table for on-chain calldata: field offsets, big-endian integer widths, packed boolean flags, Groth16/PLONK proof blob layout, and ABI alignment hints for Solidity callers."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/wire-format-json.md",
+          "description": "JSON encoding schema (JSON Schema draft-2020-12) for SDK ergonomics. Specifies camelCase field names, base64url encoding for byte arrays, ISO 8601 timestamps, and round-trip fidelity rules relative to binary encoding."
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_wire_format_vectors.py",
+          "description": "Conformance test vectors: encode/decode round-trips for each message type in all three encodings (ABNF text, binary, JSON). Verifies parser rejection of malformed inputs and cross-encoding semantic equivalence."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/wire_format.py",
+          "description": "Reference Python encoder/decoder generated from the ABNF spec. Provides encode() and decode() for each message type, used by the test harness to validate conformance vectors."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/wire-format-rationale.md",
+          "description": "Design rationale: why these field orderings, encoding choices, and version negotiation strategy. Maps each decision back to the IETF draft section it resolves and notes tradeoffs vs. existing ZKP proof formats (Semaphore, anon-aadhaar)."
+        }
+      ],
+      "steps": [
+        "Inventory all message types from existing protocol files and IETF draft wire-format section; produce a flat field catalog with types, cardinalities, and size bounds",
+        "Define ABNF core rules (version, length-prefixed bytes, base64url, timestamp, scope-bitmask) as shared non-terminals reused across message types",
+        "Write ABNF grammar for enrollment-request-human and enrollment-request-agent, capturing MerkleRoot, commitment, nonce, version, and optional metadata fields",
+        "Write ABNF grammar for handshake-proof-bundle: human-proof block, optional agent-proof block, optional delegation-chain sequence, and outer envelope with MAC/signature field",
+        "Write ABNF grammar for delegation-token (delegator, delegatee, scope-bitmask, expiry, proof) and revocation-notice (token-id, timestamp, revocation-proof)",
+        "Translate each ABNF message type to CDDL groups; apply dCBOR tag assignments and map-key integer encoding for wire compactness; add CDDL type choices for optional fields",
+        "Define canonical binary encoding: fixed header (magic 2B, version 1B, msg-type 1B, length 4B), then per-message field layout with explicit byte offsets documented in wire-format-binary.md",
+        "Define JSON encoding schema using JSON Schema draft-2020-12; specify base64url for byte arrays, integer string encoding for uint256 fields, and required vs optional field rules",
+        "Implement reference Python encoder/decoder (sdk/wire_format.py) from the ABNF/binary spec; ensure encode(decode(x)) == x and decode(encode(m)) == m for all message types",
+        "Generate conformance test vectors: at least 3 valid instances per message type across all encodings, plus 5 malformed-input rejection cases per type",
+        "Cross-check binary encoding against Solidity ABI layout; document any padding or alignment adjustments needed for calldata efficiency in on-chain verifiers",
+        "Write design rationale doc mapping each choice to the IETF draft section it resolves and noting compatibility with existing ZKP proof formats",
+        "Run conformance test suite; fix any round-trip or cross-encoding discrepancies found",
+        "Integrate ABNF file into IETF draft as a normative appendix reference; update draft wire-format section to cite spec/wire-format.abnf and spec/wire-format.cddl"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "RFC 5234 (ABNF syntax)",
+        "RFC 8610 (CDDL for CBOR)",
+        "RFC 8949 (CBOR / dCBOR canonicalization)",
+        "Existing IETF internet-draft wire-format section",
+        "Groth16 proof blob layout (SnarkJS serialization format)",
+        "Semaphore / anon-aadhaar proof format references for compatibility notes",
+        "JSON Schema draft-2020-12",
+        "Solidity ABI spec (for binary calldata alignment)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "circuit_optimizer_scope_blinding_salt",
+      "persona": "circuit_optimizer",
+      "title": "Add blinding salt to scope commitment in AgentPolicy and Delegation",
+      "dimension": "correctness",
+      "description": "scopeCommitment = Poseidon(permissionBitmask, credentialCommitment) is vulnerable to offline brute-force since the 64-bit bitmask has at most 2^64 preimages and credentialCommitment is a public Merkle leaf. Adding a random blinding salt as a third Poseidon input (Poseidon3) makes the commitment computationally hiding. Cost is ~1 additional Poseidon round (~300 constraints). Deliverable: updated AgentPolicy.circom and Delegation.circom with blindingSalt private input, updated scope commitment computation, and matching contract-side changes to accept the new public signal layout.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_scope_blinding_salt",
+      "adoption": 14,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 20,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "circuit_optimizer_scope_blinding_salt",
+      "title": "Add blinding salt to scope commitment in AgentPolicy and Delegation",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/AgentPolicy.circom",
+          "description": "Add blindingSalt as a private input signal; replace Poseidon2(permissionBitmask, credentialCommitment) with Poseidon3(permissionBitmask, credentialCommitment, blindingSalt) for scopeCommitment"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/Delegation.circom",
+          "description": "Same Poseidon2 \u2192 Poseidon3 change for scopeCommitment; add blindingSalt private input"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/AgentPolicyVerifier.sol",
+          "description": "Regenerated Groth16/PLONK verifier from updated AgentPolicy.circom; public signal indices shift if scopeCommitment index changes \u2014 must audit calldata layout in AgentPolicyGateway.sol"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/DelegationVerifier.sol",
+          "description": "Regenerated verifier from updated Delegation.circom; same public-signal-layout audit required"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/AgentPolicyGateway.sol",
+          "description": "Update publicSignals[] index constants for scopeCommitment and any downstream signals shifted by the new circuit layout"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/prover/scopeCommitment.ts",
+          "description": "Export generateBlindingSalt() (32-byte CSPRNG); update ProverInput type to include blindingSalt; update buildAgentPolicyInput() and buildDelegationInput() helpers"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_scope_blinding_salt.py",
+          "description": "Positive: valid proof with blinded commitment verifies on-chain. Negative: omitted salt (zero) still produces valid proof but commitment differs from Poseidon2. Collision test: two distinct salts produce distinct scopeCommitments for identical bitmask+credential. Constraint delta regression: assert compiled constraint count \u2264 baseline + 350"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/scope-commitment.md",
+          "description": "Update formal definition to scopeCommitment = Poseidon3(permissionBitmask, credentialCommitment, blindingSalt); document hiding vs binding properties; note blindingSalt must be stored off-chain by the prover to reconstruct the commitment"
+        }
+      ],
+      "steps": [
+        "Audit AgentPolicy.circom and Delegation.circom to locate all Poseidon2 calls for scopeCommitment and record current public signal index layout",
+        "In both circuits, add 'signal input blindingSalt;' as a private input immediately after credentialCommitment",
+        "Replace 'component scopeHash = Poseidon(2)' with 'component scopeHash = Poseidon(3)' and wire scopeHash.inputs[2] <== blindingSalt in both circuits",
+        "Compile updated circuits with circom --r1cs --wasm --sym; confirm constraint delta is ~300 (one Poseidon3 round vs Poseidon2)",
+        "Re-run snarkjs phase2 contribution or reuse existing ptau to generate new .zkey files for AgentPolicy and Delegation",
+        "Export updated Solidity verifiers via snarkjs zkey export solidityverifier; diff public signal count and index order against prior verifiers",
+        "Patch AgentPolicyGateway.sol and any contract that indexes publicSignals[] by position to use updated scopeCommitment index",
+        "Update SDK buildAgentPolicyInput() and buildDelegationInput() to accept and pass blindingSalt; add generateBlindingSalt() utility using crypto.getRandomValues",
+        "Write tests/test_scope_blinding_salt.py covering: valid blinded proof, zero-salt edge case, collision independence, and constraint count regression",
+        "Run full test suite (pytest + hardhat); confirm all existing tests pass with updated verifier ABIs",
+        "Update spec/scope-commitment.md with new Poseidon3 definition, hiding argument, and off-chain salt storage requirement"
+      ],
+      "estimated_constraints": 300,
+      "dependencies": [
+        "circomlib poseidon.circom (Poseidon with 3 inputs already supported via nInputs parameter)",
+        "existing AgentPolicy.circom public signal layout documentation",
+        "existing Delegation.circom public signal layout documentation",
+        "snarkjs >= 0.7 for updated phase2 and verifier export",
+        "hardhat for contract recompilation and on-chain verifier tests",
+        "Node.js crypto.getRandomValues or equivalent CSPRNG for SDK salt generation"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "security_auditor_storage_proof_blockhash_trust",
+      "persona": "security_auditor",
+      "title": "Harden cross-chain storage proof block hash verification",
+      "dimension": "correctness",
+      "description": "RootRelay.sol's _getL1BlockHash uses a simplified trust model (documented as placeholder) that returns bytes32(0) on failure but does not parse actual block header RLP or validate against a real L1 oracle like the EIP-4788 beacon root contract. An attacker controlling the oracle address could inject arbitrary state roots. Replace with EIP-4788 parentBeaconBlockRoot precompile on L2s that support it, or Axiom/Relic-style historic block hash proofs. Add a block age check (reject blocks older than ~256 blocks or staler than the root history buffer window). Artifact: production-grade _getL1BlockHash using 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02, integration test with forked mainnet.",
+      "priority": "high",
+      "estimated_effort": "week",
+      "candidate_id": "security_auditor_storage_proof_blockhash_trust",
+      "adoption": 16,
+      "standards": 13,
+      "completeness": 19,
+      "correctness": 17,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "security_auditor_storage_proof_blockhash_trust",
+      "title": "Harden cross-chain storage proof block hash verification",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/RootRelay.sol",
+          "description": "Production-grade _getL1BlockHash replacing placeholder with EIP-4788 beacon root precompile (0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02) call, RLP block header parser, block age validation (reject if older than 256 blocks or outside root history buffer window), and fallback path for chains without EIP-4788 support"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/BlockHashOracle.sol",
+          "description": "Thin adapter interface with two implementations: EIP4788BlockHashOracle (reads parentBeaconBlockRoot precompile) and AxiomBlockHashOracle (calls Axiom v2 query interface for historic hashes beyond 256-block window)"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/RLPBlockHeaderLib.sol",
+          "description": "Library to RLP-decode an Ethereum block header and extract blockHash, parentHash, stateRoot, and blockNumber for on-chain verification"
+        },
+        {
+          "type": "test",
+          "filename": "test/RootRelay.fork.t.sol",
+          "description": "Foundry fork test against mainnet/OP-mainnet: exercises EIP-4788 happy path, age-check rejection, tampered oracle address rejection, and fallback to Axiom-style proof path"
+        },
+        {
+          "type": "test",
+          "filename": "test/BlockHashOracle.unit.t.sol",
+          "description": "Unit tests for EIP4788BlockHashOracle and RLPBlockHeaderLib using hardcoded known block headers"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/block-hash-trust-model.md",
+          "description": "Security rationale: threat model (malicious oracle injection), EIP-4788 trust guarantees, 256-block recency window, Axiom fallback for historic roots, migration notes for existing deployments"
+        }
+      ],
+      "steps": [
+        "Audit existing RootRelay._getL1BlockHash: document current placeholder logic, identify all callers, and map which L2 networks are deployment targets",
+        "Define IBlockHashOracle interface with getBlockHash(uint256 blockNumber) returning (bytes32 hash, bool valid) and a supportsHistoricProofs() flag",
+        "Implement RLPBlockHeaderLib: parse RLP-encoded block header bytes, extract blockNumber and blockHash, verify keccak256(rlpHeader) == claimed hash",
+        "Implement EIP4788BlockHashOracle: call precompile at 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02 with target timestamp derived from blockNumber, validate returned parentBeaconBlockRoot matches supplied RLP header",
+        "Implement AxiomBlockHashOracle stub (or Relic-style): accept a Merkle proof of historic block hash for blocks older than 256, verify against Axiom v2 on the target chain",
+        "Add block age check in RootRelay: require submitted blockNumber >= block.number - 256 for EIP-4788 path; for older blocks require Axiom proof path; reject blocks newer than latest finalized slot",
+        "Replace placeholder _getL1BlockHash with dispatch logic: if chain supports EIP-4788 use EIP4788BlockHashOracle, else revert with explicit UnsupportedChain error until Axiom oracle is wired",
+        "Write RLPBlockHeaderLib unit tests covering mainnet blocks, edge cases (empty uncle hash, zero nonce post-merge), and malformed input revert",
+        "Write Foundry fork tests: fork OP-mainnet, submit valid storage proof via EIP-4788 path, verify acceptance; replay with oracle address swapped to attacker-controlled contract, verify revert",
+        "Write fork test for age-check boundary: submit block at number - 255 (accept), number - 257 (reject), and a future block (reject)",
+        "Run slither and aderyn static analysis on RootRelay.sol and BlockHashOracle.sol; fix any high/medium findings",
+        "Update specs/block-hash-trust-model.md with final design, trust assumptions, and per-chain deployment matrix",
+        "Update deployment scripts to pass oracle address as constructor argument and verify correct precompile address per chain"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "EIP-4788 beacon root precompile availability on target L2 (OP-mainnet \u2713, Base \u2713, Arbitrum One requires verification)",
+        "Axiom v2 or Relic deployed on target chains for historic block hash fallback path",
+        "Foundry with --fork-url support for mainnet and OP-mainnet integration tests",
+        "solidity-rlp or equivalent RLP library (or inline implementation to avoid dependency risk)",
+        "Existing RootRelay.sol and root history buffer window constant (for age check upper bound)"
+      ]
+    }
+  }
+]

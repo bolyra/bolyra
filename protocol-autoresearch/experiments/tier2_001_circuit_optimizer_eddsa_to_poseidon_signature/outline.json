@@ -1,0 +1,64 @@
+{
+  "id": "circuit_optimizer_eddsa_to_poseidon_signature",
+  "title": "Replace EdDSA verification with Poseidon-based commitment binding in AgentPolicy",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "AgentPolicy.circom",
+      "description": "Simplified AgentPolicy circuit removing EdDSA verification; proves knowledge of credential preimage (secret, nullifier, scope, expiry) whose Poseidon hash matches the leaf committed in the operator-approved Merkle tree"
+    },
+    {
+      "type": "circuit",
+      "filename": "CredentialCommitment.circom",
+      "description": "Standalone template computing Poseidon(secret, nullifier, scope, expiry, operatorId) \u2014 the canonical credential commitment hash used as the Merkle leaf"
+    },
+    {
+      "type": "contract",
+      "filename": "AgentRegistry.sol",
+      "description": "On-chain enrollment contract that verifies the operator EdDSA signature at enrollment time, inserts the credential commitment into the Merkle tree, and emits an event \u2014 moving signature verification fully off-circuit"
+    },
+    {
+      "type": "spec",
+      "filename": "security-model-shift.md",
+      "description": "Formal writeup of the security model change: EdDSA moves from in-circuit to on-chain enrollment check; Merkle inclusion proves operator approval; threat model, trust assumptions, and attack surface analysis"
+    },
+    {
+      "type": "test",
+      "filename": "agent_policy_commitment.test.ts",
+      "description": "Circomkit/snarkjs test suite: valid preimage witness, wrong preimage fails, Merkle path mismatch fails, nullifier collision resistance, scope bitmask enforcement"
+    },
+    {
+      "type": "test",
+      "filename": "bench_agent_policy.sh",
+      "description": "Shell benchmark script using snarkjs groth16 prove timing before/after; records constraint count via snarkjs info, proving time, and verification time"
+    },
+    {
+      "type": "docs",
+      "filename": "circuit-optimization-changelog.md",
+      "description": "Constraint budget breakdown before (EdDSA ~30k) and after (~20k total), proving time comparison table, migration guide for SDK callers"
+    }
+  ],
+  "steps": [
+    "Audit existing AgentPolicy.circom: extract the EdDSA verification subgraph, count its constraints via snarkjs info, and document all signals that feed into it",
+    "Define the canonical credential commitment schema: Poseidon(secret, nullifier, scope, expiry, operatorId) and pin input signal ordering in CredentialCommitment.circom",
+    "Rewrite AgentPolicy.circom: replace EdDSA inputs (pubKey[2], signature[2], message) with raw preimage inputs (secret, nullifier, scope, expiry, operatorId); compute commitment hash internally and assert it equals the Merkle leaf",
+    "Verify Merkle inclusion path as before (MerkleProof template unchanged); nullifier and scope bitmask constraints remain intact",
+    "Update AgentRegistry.sol: add enrollCredential(commitment, operatorSig, operatorPubKey) entry point that calls EdDSA verify on-chain (ecrecover or BabyJubJub verifier) before inserting commitment into the tree",
+    "Regenerate trusted setup (Powers of Tau sufficient for ~20k constraints); recompile circuit and export new verification key and proving key",
+    "Update test vectors in agent_policy_commitment.test.ts: generate valid witnesses with new signal layout, assert proof acceptance; generate negative cases (wrong secret, tampered scope, bad Merkle path) and assert rejection",
+    "Run bench_agent_policy.sh before/after and record constraint count, prover wall-clock time, and peak memory; target <50% of original proving time",
+    "Update SDK witness builder (TypeScript) to drop EdDSA signing step and instead pass raw preimage fields; bump minor version",
+    "Write security-model-shift.md documenting trust boundary change, enrollment-time guarantees, and residual risks (operator key compromise window)",
+    "Write circuit-optimization-changelog.md with before/after constraint table and SDK migration guide; open PR with all artifacts"
+  ],
+  "estimated_constraints": 20000,
+  "dependencies": [
+    "circomlib Poseidon template (poseidon.circom)",
+    "circomlib MerkleProof / MerkleTreeChecker template",
+    "snarkjs groth16 toolchain (compile, setup, prove, verify)",
+    "BabyJubJub or ECDSA on-chain verifier for AgentRegistry.sol enrollment",
+    "circomkit test harness (TypeScript)",
+    "Existing AgentPolicy.circom (pre-optimization baseline)",
+    "Existing credential Merkle tree root management in AgentRegistry.sol"
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "id": "cross_chain_engineer_chain_agnostic_nullifier",
+  "title": "Chain-agnostic nullifier registry to prevent cross-chain replay",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/HumanUniqueness.circom",
+      "description": "Add chainId as a public input; update nullifier derivation to Poseidon3(scope, secret, chainId)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/AgentPolicy.circom",
+      "description": "Add chainId as a public input; update nullifier derivation to Poseidon3(credentialCommitment, sessionNonce, chainId)"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/NullifierRegistry.sol",
+      "description": "Chain-local nullifier storage with chain-scoped mapping; emits NullifierUsed events for cross-chain relayer indexing"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/BloomFilterCommitment.sol",
+      "description": "On-chain Bloom filter commitment updated by authorized relayers; exposes probabilistic double-spend check for cross-chain verification before finality"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/HumanUniquenessVerifier.sol",
+      "description": "Updated verifier wiring to pass chainId from calldata into nullifier check; delegates nullifier storage to NullifierRegistry"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentPolicyVerifier.sol",
+      "description": "Updated verifier wiring to pass chainId into AgentPolicy nullifier check; delegates to NullifierRegistry"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/cross-chain-nullifier.md",
+      "description": "Protocol spec: nullifier derivation scheme, chainId encoding (EIP-155), Bloom filter commitment format, relayer API, finality assumptions per chain"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/nullifier.ts",
+      "description": "TypeScript helpers: deriveHumanNullifier(scope, secret, chainId) and deriveAgentNullifier(credentialCommitment, sessionNonce, chainId) using circomlibjs Poseidon"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/bloomFilter.ts",
+      "description": "Client-side Bloom filter query helper: checks nullifier against the latest on-chain commitment before submitting a proof"
+    },
+    {
+      "type": "test",
+      "filename": "test/circuits/nullifierChainId.test.ts",
+      "description": "Circom unit tests: same (scope, secret) with different chainIds produce distinct nullifiers; constraint count regression"
+    },
+    {
+      "type": "test",
+      "filename": "test/contracts/NullifierRegistry.test.ts",
+      "description": "Hardhat tests: nullifier isolation per chainId, double-spend revert on same chain, cross-chain replay scenario simulation"
+    },
+    {
+      "type": "test",
+      "filename": "test/contracts/BloomFilterCommitment.test.ts",
+      "description": "Hardhat tests: commitment update access control, false-positive rate validation, staleness/expiry logic"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-replay-protection.md",
+      "description": "Developer guide: migration notes for existing deployments, chainId encoding convention, relayer integration, known limitations (probabilistic Bloom filter)"
+    }
+  ],
+  "steps": [
+    "Update HumanUniqueness.circom: add chainId as a 32-bit public input signal; replace Poseidon2(scope, secret) nullifier with Poseidon3(scope, secret, chainId); regenerate trusted setup artifacts",
+    "Update AgentPolicy.circom: add chainId public input; replace existing Poseidon2 nullifier with Poseidon3(credentialCommitment, sessionNonce, chainId); regenerate trusted setup artifacts",
+    "Recompute and commit new constraint counts; verify no unexpected constraint blowup (expected delta: +1 Poseidon round per circuit)",
+    "Deploy NullifierRegistry.sol: mapping(uint256 chainId => mapping(bytes32 nullifier => bool)) with onlyVerifier write access; emit NullifierUsed(chainId, nullifier, block.timestamp)",
+    "Deploy BloomFilterCommitment.sol: stores rotating Bloom filter root commitments; exposes isLikelyUsed(bytes32 nullifier) view; updatable by authorized cross-chain relayer multisig",
+    "Update HumanUniquenessVerifier.sol and AgentPolicyVerifier.sol to accept chainId in calldata, assert chainId == block.chainid, pass to NullifierRegistry, and check BloomFilterCommitment before writing",
+    "Update SDK: implement deriveHumanNullifier and deriveAgentNullifier in sdk/src/nullifier.ts using circomlibjs Poseidon with chainId parameter",
+    "Implement sdk/src/bloomFilter.ts: fetch latest BloomFilterCommitment from target chain RPC, run client-side probabilistic check before proof submission",
+    "Write circuit unit tests covering: same inputs + different chainIds yield distinct nullifiers, same inputs + same chainId yield identical nullifiers (determinism), constraint count within budget",
+    "Write contract tests covering: NullifierRegistry rejects replay on same chain, accepts same nullifier on different simulated chainIds as separate entries, BloomFilterCommitment access control and update cycle",
+    "Write integration test simulating cross-chain relay: prove on chain A, attempt replay on chain B, verify Bloom filter flags it before NullifierRegistry write",
+    "Write spec document cross-chain-nullifier.md: encoding convention (EIP-155 uint256), Bloom filter parameter choices (k, m, target FPR), relayer update cadence, finality assumptions (Arbitrum ~1 week, Base ~7 days optimistic)",
+    "Write developer migration guide covering existing deployment upgrade path, re-issuance policy for legacy nullifiers missing chainId, and ABI changes",
+    "Audit: verify Poseidon3 implementation matches iden3 reference; check for chainId malleability (ensure circuit constrains chainId == public input, not free signal)",
+    "Deploy to testnets (Base Sepolia, Arbitrum Sepolia), run end-to-end cross-chain replay scenario, confirm Bloom filter commitment sync via relayer"
+  ],
+  "estimated_constraints": 4,
+  "dependencies": [
+    "circomlib Poseidon3 (iden3/circomlib >= 2.0.5)",
+    "circomlibjs for TypeScript Poseidon3 SDK implementation",
+    "EIP-155 chainId standard for encoding convention",
+    "Hardhat with hardhat-circom plugin for circuit + contract co-testing",
+    "Cross-chain relayer infrastructure (e.g. Hyperlane or custom) for BloomFilterCommitment sync",
+    "Existing HumanUniqueness.circom and AgentPolicy.circom trusted setup ceremony tooling (snarkjs, Groth16 or PLONK)"
+  ]
+}

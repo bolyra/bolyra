@@ -1,0 +1,80 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "title": "Certora-style invariant properties for all three circuits",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "circuits/properties/invariants.json",
+      "description": "Machine-checkable invariant property file consumable by circomspect/picus: bit-width bounds, nullifier determinism, scope monotonicity, Merkle uniqueness for all three circuits"
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/properties/human_uniqueness.properties",
+      "description": "circomspect annotation file for HumanUniqueness circuit: Num2Bits overflow guards, nullifierHash determinism over (scope, secret)"
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/properties/agent_policy.properties",
+      "description": "circomspect annotation file for AgentPolicy circuit: Num2Bits overflow guards, nullifierHash determinism over (nonce, credCommitment), Merkle root uniqueness"
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/properties/delegation.properties",
+      "description": "circomspect annotation file for Delegation circuit: scope monotonicity invariant (delegateeScope & ~delegatorScope == 0), Merkle root uniqueness, nullifier determinism"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/negative_witnesses/human_uniqueness_violations.json",
+      "description": "10+ negative witness test vectors that violate HumanUniqueness invariants: over-bit-width inputs, colliding nullifiers with different secrets, scope mismatch"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/negative_witnesses/agent_policy_violations.json",
+      "description": "10+ negative witness test vectors that violate AgentPolicy invariants: malformed credCommitment, non-deterministic nonce reuse, forged Merkle paths"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/negative_witnesses/delegation_violations.json",
+      "description": "10+ negative witness test vectors that violate Delegation invariants: scope widening attempts, Merkle path forgery, nullifier collision across hops"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/property_harness.ts",
+      "description": "TypeScript test harness using snarkjs witness generation to assert each negative vector fails to produce a valid witness or produces a constraint violation"
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/properties/README.md",
+      "description": "Explains property specification format, how to run circomspect and picus against each .properties file, and how to add new invariants"
+    }
+  ],
+  "steps": [
+    "Audit all three circuit source files (HumanUniqueness, AgentPolicy, Delegation) to enumerate every signal, its declared bit-width, and all Num2Bits component instantiations",
+    "Define the JSON schema for invariants.json: properties array with fields {circuit, property_id, type (bit_width|determinism|monotonicity|uniqueness), signals[], formula_smt2, picus_query}",
+    "Write P1 (bit-width) invariants: for each Num2Bits(n) instantiation assert in[i] < 2^n; express as SMT2 range assertions in invariants.json and as circomspect @assert annotations",
+    "Write P2 (nullifier determinism) invariants: assert that two witnesses agreeing on (scope, secret) must produce identical nullifierHash; express as a picus forall-exists query pairing",
+    "Write P3 (scope monotonicity) invariants for Delegation: assert delegateeScope & (~delegatorScope) == 0 using bitwise constraint encoding; model as a linear arithmetic assertion over bit decomposition signals",
+    "Write P4 (Merkle root uniqueness) invariants: assert that fixing leaf + sibling path uniquely determines root; express as a picus differential query showing two distinct paths cannot yield same root with different leaves",
+    "Author human_uniqueness.properties, agent_policy.properties, delegation.properties in circomspect annotation format referencing the JSON property IDs",
+    "Generate negative witness vectors for P1: craft inputs with values at 2^n and 2^n+1 boundary for each Num2Bits call across all three circuits (minimum 4 vectors per circuit)",
+    "Generate negative witness vectors for P2: craft (scope, secret) pairs that share one component but differ in the other, expecting distinct nullifiers; include a crafted collision attempt",
+    "Generate negative witness vectors for P3: craft delegation witnesses where delegateeScope sets a bit not set in delegatorScope (scope widening), plus multi-hop widening chain",
+    "Generate negative witness vectors for P4: craft Merkle proof with a flipped sibling bit and assert witness generation fails constraint check",
+    "Implement property_harness.ts: for each negative vector JSON, call snarkjs.wtns.calculate(), catch constraint errors, assert expected failure; output a pass/fail report per property",
+    "Run circomspect on all three circuits using the .properties files; capture output and assert zero unverified properties",
+    "Run picus (or picus-compatible tool) on invariants.json queries for determinism and uniqueness; document any counterexamples found",
+    "Update circuits/properties/README.md with exact CLI invocations, expected output, and CI integration snippet"
+  ],
+  "estimated_constraints": 340,
+  "dependencies": [
+    "circom >= 2.1.6",
+    "circomspect >= 0.9.0",
+    "picus (or compatible SMT-based ZK property checker)",
+    "snarkjs >= 0.7.0",
+    "HumanUniqueness.circom source",
+    "AgentPolicy.circom source",
+    "Delegation.circom source",
+    "poseidon_constants.circom (for nullifier hash signal tracing)",
+    "MerkleProof component source (for path uniqueness analysis)"
+  ]
+}

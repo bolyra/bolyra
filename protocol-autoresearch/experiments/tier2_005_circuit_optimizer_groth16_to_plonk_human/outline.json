@@ -1,0 +1,84 @@
+{
+  "id": "circuit_optimizer_groth16_to_plonk_human",
+  "title": "Migrate HumanUniqueness from Groth16 to PLONK for unified proving",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/human_uniqueness/human_uniqueness.circom",
+      "description": "Existing HumanUniqueness circuit (BabyPbk + depth-20 Merkle + Poseidon nullifier). No logic changes required; only proving system swap. Annotate with PLONK-compatible custom gate hints if snarkjs PLONK is used."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/human_uniqueness/compile.sh",
+      "description": "Updated build script: replace groth16 setup phase with plonk setup using the shared universal SRS (ptau file already used by AgentPolicy and Delegation circuits). Produces plonk.zkey and verification_key.json."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/verifiers/HumanUniquenessVerifier.sol",
+      "description": "Regenerated Solidity verifier via snarkjs exportSolidityVerifier --plonk. Replaces the Groth16 verifier. ABI surface: single verifyProof(bytes calldata proof, uint256[] calldata pubSignals) matching the unified verifier interface used by AgentPolicyVerifier and DelegationVerifier."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/HumanRegistry.sol",
+      "description": "Update verifier interface import and call site to use the new PLONK verifier ABI. Remove any Groth16-specific vkAlpha/vkBeta/vkGamma/vkDelta storage if previously embedded on-chain."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/provers/humanUniqueness.ts",
+      "description": "Replace groth16.fullProve with plonk.fullProve (snarkjs). Remove groth16 WASM/zkey imports; point to shared plonk.zkey and human_uniqueness.wasm. Export proof in the unified ProofBundle type already used by agentPolicy and delegation provers."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/proving-system.ts",
+      "description": "Remove the ProvingSystem enum branch for GROTH16 in HumanUniqueness. Assert single PLONK path. Simplify bundle exports: drop groth16_wasm and groth16_zkey from the human module entry point."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/human-uniqueness-plonk.md",
+      "description": "Updated circuit spec: document SRS requirements (min 2^15 powers of tau), public signal layout, nullifier derivation, and proof serialization format. Note removal of trusted setup ceremony dependency."
+    },
+    {
+      "type": "test",
+      "filename": "tests/circuits/human_uniqueness_plonk.test.ts",
+      "description": "Full prove/verify round-trip tests with PLONK. Cover: valid membership proof, invalid Merkle path rejection, nullifier collision detection, and proof serialization compatibility with HumanUniquenessVerifier.sol."
+    },
+    {
+      "type": "test",
+      "filename": "tests/contracts/HumanRegistry.plonk.test.ts",
+      "description": "Hardhat/Foundry integration tests: deploy new PLONK verifier, submit valid and malformed proofs, assert gas costs are within acceptable delta vs Groth16 baseline (~10-15% increase expected on-chain)."
+    },
+    {
+      "type": "test",
+      "filename": "tests/sdk/bundle-size.test.ts",
+      "description": "Regression test asserting WASM bundle does not include groth16 runtime. Measure total SDK bundle size before/after; assert \u22651.8MB reduction."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/migration/groth16-to-plonk.md",
+      "description": "Consumer migration guide: updated key file paths, new proof shape, removed ceremony requirement. Include before/after SDK snippet and bundle size comparison table."
+    }
+  ],
+  "steps": [
+    "Verify shared universal SRS (ptau) has sufficient size for HumanUniqueness: compute constraint count for BabyPbk + Poseidon-3 + depth-20 Merkle (expected ~12k-15k constraints); confirm ptau supports \u22652^14 (16k) constraints.",
+    "Run circom compilation of human_uniqueness.circom unchanged; confirm R1CS output is identical to current Groth16 build (same constraint count validates no circuit regression).",
+    "Execute `snarkjs plonk setup` with the shared ptau to produce human_uniqueness.plonk.zkey; commit zkey hash to circuit/human_uniqueness/checksums.txt alongside AgentPolicy and Delegation zkey hashes.",
+    "Export PLONK verification key JSON via `snarkjs zkey export verificationkey`; regenerate HumanUniquenessVerifier.sol via `snarkjs zkey export solidityverifier --plonk`.",
+    "Update HumanRegistry.sol: swap verifier import, update verifyProof call signature to PLONK ABI, remove any on-chain Groth16 verification key storage slots, write Foundry migration script.",
+    "Update SDK humanUniqueness.ts prover to call plonk.fullProve; align ProofBundle serialization (bytes proof + uint256[] pubSignals) with unified interface; remove groth16 imports.",
+    "Update SDK build config (rollup/webpack): remove human_uniqueness_groth16.wasm and .zkey from bundle; ensure single proving-system code path in tree-shaking.",
+    "Write and run circuit-level round-trip tests (prove + verify off-chain) for valid and invalid inputs.",
+    "Write and run Hardhat/Foundry contract integration tests with new PLONK verifier; record gas costs.",
+    "Run bundle-size regression test; assert \u22651.8MB reduction in browser WASM payload.",
+    "Run full existing test suite (AgentPolicy, Delegation, HumanUniqueness) to confirm no cross-circuit regressions.",
+    "Update specs/human-uniqueness-plonk.md and consumer migration guide.",
+    "Open PR: include before/after bundle size diff, gas cost table, and confirmation that Semaphore v4 ceremony dependency is removed from build pipeline."
+  ],
+  "estimated_constraints": 14000,
+  "dependencies": [
+    "snarkjs >= 0.7 (PLONK support)",
+    "circomlib (BabyPbk, Poseidon, MerkleProof templates \u2014 unchanged)",
+    "Shared powers-of-tau file (ptau) with \u22652^14 constraints, already used by AgentPolicy and Delegation circuits",
+    "Hardhat or Foundry for Solidity verifier integration tests",
+    "Existing unified ProofBundle type in SDK (AgentPolicy/Delegation prover interface)"
+  ]
+}

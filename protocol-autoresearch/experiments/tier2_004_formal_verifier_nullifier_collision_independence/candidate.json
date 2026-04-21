@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_nullifier_collision_independence",
+  "persona": "formal_verifier",
+  "title": "Prove nullifier uniqueness across all three circuits",
+  "dimension": "correctness",
+  "description": "HumanUniqueness uses Poseidon2(scope, secret), AgentPolicy uses a nullifier derived from credential fields + nonce, and Delegation has its own delegationNullifier. No formal argument exists that these three nullifier domains are collision-resistant across circuits. Write a formal property showing domain separation: prove that no valid witness for circuit A can produce a nullifierHash that equals a valid nullifierHash from circuit B, by demonstrating the Poseidon input arities and domain tags differ. Deliver: a symbolic analysis document with Halo2 MockProver test cases exercising cross-circuit nullifier values on shared inputs.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_nullifier_collision_independence",
+  "adoption": 14,
+  "standards": 15,
+  "completeness": 17,
+  "correctness": 20,
+  "total": 66,
+  "verdict": "consider"
+}

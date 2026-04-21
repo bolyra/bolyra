@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" font-family="Arial, sans-serif" font-size="11">
+  <text x="400" y="22" text-anchor="middle" font-size="14" font-weight="bold">FIG. 5 — Delegation Chain with Identity-Bound Scope Commitment Linking (500)</text>
+
+  <!-- Hop 0: Agent A (from handshake) -->
+  <rect x="30" y="60" width="220" height="120" rx="3" fill="#fff0f0" stroke="black" stroke-width="1.5"/>
+  <text x="140" y="80" text-anchor="middle" font-weight="bold">Agent A (from handshake)</text>
+  <text x="140" y="98" text-anchor="middle" font-size="10">scope_A = 0xFF (all permissions)</text>
+  <text x="140" y="114" text-anchor="middle" font-size="10" fill="#666">credCommitment_A</text>
+  <line x1="50" y1="125" x2="230" y2="125" stroke="#ccc"/>
+  <text x="140" y="142" text-anchor="middle" font-size="10" font-weight="bold">scopeCommitment_0 =</text>
+  <text x="140" y="158" text-anchor="middle" font-size="10">Poseidon2(scope_A, credCmt_A)</text>
+  <text x="140" y="174" text-anchor="middle" font-size="9" fill="#060">PUBLIC OUTPUT</text>
+
+  <!-- Arrow -->
+  <line x1="250" y1="120" x2="290" y2="120" stroke="black" stroke-width="2" marker-end="url(#ar5)"/>
+  <text x="270" y="110" text-anchor="middle" font-size="9" fill="#666">chain link</text>
+
+  <!-- Hop 1: Delegation A→B -->
+  <rect x="290" y="50" width="220" height="200" rx="3" fill="#f0f0ff" stroke="black" stroke-width="1.5"/>
+  <text x="400" y="72" text-anchor="middle" font-weight="bold">Delegation Circuit — Hop 0</text>
+  <text x="400" y="88" text-anchor="middle" font-size="10" fill="#666">Agent A → Agent B</text>
+  <line x1="310" y1="95" x2="490" y2="95" stroke="#ccc"/>
+
+  <text x="310" y="112" font-size="10">PUBLIC IN: previousScopeCommitment</text>
+  <text x="310" y="128" font-size="10" fill="#333">PROVES:</text>
+  <text x="320" y="144" font-size="10">1. Poseidon2(scope_A, credCmt_A)</text>
+  <text x="334" y="158" font-size="10">== scopeCommitment_0</text>
+  <text x="320" y="174" font-size="10">2. scope_B &amp; ~scope_A == 0</text>
+  <text x="334" y="188" font-size="9" fill="#666">(subset check, private bits)</text>
+  <text x="320" y="204" font-size="10">3. expiry_B &lt;= expiry_A</text>
+  <text x="320" y="220" font-size="10">4. EdDSA sig of A over token</text>
+  <text x="320" y="236" font-size="10">5. delegatee Merkle inclusion</text>
+  <text x="320" y="244" font-size="9" fill="#060">(CIP-1)</text>
+
+  <!-- Arrow -->
+  <line x1="510" y1="120" x2="550" y2="120" stroke="black" stroke-width="2" marker-end="url(#ar5)"/>
+  <text x="530" y="110" text-anchor="middle" font-size="9" fill="#666">chain link</text>
+
+  <!-- Hop 2: Agent B output -->
+  <rect x="550" y="60" width="220" height="120" rx="3" fill="#fff0f0" stroke="black" stroke-width="1.5"/>
+  <text x="660" y="80" text-anchor="middle" font-weight="bold">Agent B (delegatee)</text>
+  <text x="660" y="98" text-anchor="middle" font-size="10">scope_B = 0x0F (narrowed)</text>
+  <text x="660" y="114" text-anchor="middle" font-size="10" fill="#666">credCommitment_B</text>
+  <line x1="570" y1="125" x2="750" y2="125" stroke="#ccc"/>
+  <text x="660" y="142" text-anchor="middle" font-size="10" font-weight="bold">scopeCommitment_1 =</text>
+  <text x="660" y="158" text-anchor="middle" font-size="10">Poseidon2(scope_B, credCmt_B)</text>
+  <text x="660" y="174" text-anchor="middle" font-size="9" fill="#060">PUBLIC OUTPUT → next hop</text>
+
+  <!-- On-chain state -->
+  <rect x="100" y="290" width="600" height="130" rx="3" fill="#f0fff0" stroke="black" stroke-width="2"/>
+  <text x="400" y="313" text-anchor="middle" font-weight="bold" font-size="12">On-Chain Chain-State Record</text>
+  <line x1="120" y1="320" x2="680" y2="320" stroke="#ccc"/>
+
+  <text x="130" y="340" font-size="11">Handshake seeds: lastScopeCommitment[nonce] = scopeCommitment_0</text>
+  <text x="130" y="360" font-size="11">After hop 0:     lastScopeCommitment[nonce] = scopeCommitment_1</text>
+  <text x="130" y="380" font-size="11">After hop 1:     lastScopeCommitment[nonce] = scopeCommitment_2</text>
+  <text x="130" y="400" font-size="11" fill="#c00">After hop 2:     MAX_DELEGATION_HOPS (3) reached → revert</text>
+
+  <!-- Arrow from delegation to on-chain -->
+  <line x1="400" y1="250" x2="400" y2="290" stroke="black" stroke-width="1.5" marker-end="url(#ar5)"/>
+  <text x="420" y="275" font-size="9" fill="#666">advances chain state</text>
+
+  <!-- Privacy note -->
+  <text x="400" y="450" text-anchor="middle" font-size="11" fill="#333">Privacy: scope bits are PRIVATE inputs. Only Poseidon2(scope, credCommitment) is PUBLIC.</text>
+  <text x="400" y="468" text-anchor="middle" font-size="11" fill="#333">Identity-bound: prevents impersonation — an actor with same bits but different credential fails.</text>
+
+  <defs>
+    <marker id="ar5" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="black"/>
+    </marker>
+  </defs>
+</svg>

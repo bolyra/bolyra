@@ -1,0 +1,68 @@
+{
+  "id": "circuit_optimizer_scope_blinding_salt",
+  "title": "Add blinding salt to scope commitment in AgentPolicy and Delegation",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/AgentPolicy.circom",
+      "description": "Add blindingSalt as a private input signal; replace Poseidon2(permissionBitmask, credentialCommitment) with Poseidon3(permissionBitmask, credentialCommitment, blindingSalt) for scopeCommitment"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/Delegation.circom",
+      "description": "Same Poseidon2 \u2192 Poseidon3 change for scopeCommitment; add blindingSalt private input"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentPolicyVerifier.sol",
+      "description": "Regenerated Groth16/PLONK verifier from updated AgentPolicy.circom; public signal indices shift if scopeCommitment index changes \u2014 must audit calldata layout in AgentPolicyGateway.sol"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/DelegationVerifier.sol",
+      "description": "Regenerated verifier from updated Delegation.circom; same public-signal-layout audit required"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentPolicyGateway.sol",
+      "description": "Update publicSignals[] index constants for scopeCommitment and any downstream signals shifted by the new circuit layout"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/prover/scopeCommitment.ts",
+      "description": "Export generateBlindingSalt() (32-byte CSPRNG); update ProverInput type to include blindingSalt; update buildAgentPolicyInput() and buildDelegationInput() helpers"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_scope_blinding_salt.py",
+      "description": "Positive: valid proof with blinded commitment verifies on-chain. Negative: omitted salt (zero) still produces valid proof but commitment differs from Poseidon2. Collision test: two distinct salts produce distinct scopeCommitments for identical bitmask+credential. Constraint delta regression: assert compiled constraint count \u2264 baseline + 350"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/scope-commitment.md",
+      "description": "Update formal definition to scopeCommitment = Poseidon3(permissionBitmask, credentialCommitment, blindingSalt); document hiding vs binding properties; note blindingSalt must be stored off-chain by the prover to reconstruct the commitment"
+    }
+  ],
+  "steps": [
+    "Audit AgentPolicy.circom and Delegation.circom to locate all Poseidon2 calls for scopeCommitment and record current public signal index layout",
+    "In both circuits, add 'signal input blindingSalt;' as a private input immediately after credentialCommitment",
+    "Replace 'component scopeHash = Poseidon(2)' with 'component scopeHash = Poseidon(3)' and wire scopeHash.inputs[2] <== blindingSalt in both circuits",
+    "Compile updated circuits with circom --r1cs --wasm --sym; confirm constraint delta is ~300 (one Poseidon3 round vs Poseidon2)",
+    "Re-run snarkjs phase2 contribution or reuse existing ptau to generate new .zkey files for AgentPolicy and Delegation",
+    "Export updated Solidity verifiers via snarkjs zkey export solidityverifier; diff public signal count and index order against prior verifiers",
+    "Patch AgentPolicyGateway.sol and any contract that indexes publicSignals[] by position to use updated scopeCommitment index",
+    "Update SDK buildAgentPolicyInput() and buildDelegationInput() to accept and pass blindingSalt; add generateBlindingSalt() utility using crypto.getRandomValues",
+    "Write tests/test_scope_blinding_salt.py covering: valid blinded proof, zero-salt edge case, collision independence, and constraint count regression",
+    "Run full test suite (pytest + hardhat); confirm all existing tests pass with updated verifier ABIs",
+    "Update spec/scope-commitment.md with new Poseidon3 definition, hiding argument, and off-chain salt storage requirement"
+  ],
+  "estimated_constraints": 300,
+  "dependencies": [
+    "circomlib poseidon.circom (Poseidon with 3 inputs already supported via nInputs parameter)",
+    "existing AgentPolicy.circom public signal layout documentation",
+    "existing Delegation.circom public signal layout documentation",
+    "snarkjs >= 0.7 for updated phase2 and verifier export",
+    "hardhat for contract recompilation and on-chain verifier tests",
+    "Node.js crypto.getRandomValues or equivalent CSPRNG for SDK salt generation"
+  ]
+}

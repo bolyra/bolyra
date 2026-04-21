@@ -1,0 +1,78 @@
+{
+  "id": "standards_architect_w3c_did_method",
+  "title": "did:bolyra DID method specification",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-bolyra-method.md",
+      "description": "W3C DID method specification for did:bolyra:<network>:<identityCommitment>, covering syntax, DID Document structure, CRUD operations, security/privacy considerations, and conformance requirements"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-bolyra-document-schema.json",
+      "description": "JSON-LD context and schema for the did:bolyra DID Document, mapping humanMerkleRoot to verificationMethod, nullifierHash to authentication proof, and scopeCommitment to capabilityDelegation"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-bolyra-vc-issuance.md",
+      "description": "Verifiable Credential issuance flow spec: successful handshake produces a VC with session nonce as challenge, both nullifiers (humanNullifier + scopeNullifier) as evidence, and issuer DID as did:bolyra method"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/BolyraDidRegistry.sol",
+      "description": "On-chain DID registry that wraps IdentityRegistry; exposes resolve(identityCommitment) returning enrollment status, verificationMethod data, and revocation check by nullifier"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/did-resolver/bolyra-resolver.ts",
+      "description": "W3C DID Resolver compliant driver for did:bolyra; implements resolve() fetching DID Document from BolyraDidRegistry, constructing JSON-LD output per spec"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/did-resolver/vc-issuer.ts",
+      "description": "VC issuance helper: takes completed handshake proof, session nonce, nullifiers; produces a W3C Verifiable Credential signed with the did:bolyra verification method"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did-resolver/bolyra-resolver.test.ts",
+      "description": "Unit + integration tests for DID resolution: enrolled identity resolves correctly, revoked nullifier returns deactivated status, malformed DID returns notFound error"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did-resolver/vc-issuance.test.ts",
+      "description": "End-to-end tests for VC issuance flow: valid handshake proof produces conformant VC, invalid proof is rejected, VC verifies against did:bolyra resolver"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-bolyra-primer.md",
+      "description": "Developer-facing primer: why did:bolyra, quick-start resolution example, VC issuance walkthrough, interoperability with Universal Resolver and existing SSI wallets"
+    }
+  ],
+  "steps": [
+    "Define DID syntax: did:bolyra:<network>:<identityCommitment> where network \u2208 {mainnet, testnet, devnet} and identityCommitment is a 32-byte hex-encoded Poseidon hash",
+    "Specify DID Document structure: id = DID URI, verificationMethod entry with type BolyraHumanMerkleKey2024 and publicKeyHex = humanMerkleRoot, authentication referencing that method via nullifierHash proof, capabilityDelegation entry with scopeCommitment as delegation key",
+    "Define JSON-LD context at https://bolyra.xyz/ns/did/v1 mapping all custom property names to IRIs; publish context document",
+    "Specify CRUD operations: Create = enroll in IdentityRegistry emitting IdentityRegistered event; Read = resolve via BolyraDidRegistry.resolve(); Update = not supported (commitments are immutable, new enrollment required); Deactivate = nullifier revocation sets status to deactivated",
+    "Specify resolution algorithm: parse DID, extract network + identityCommitment, query IdentityRegistry.enrollments(identityCommitment) for enrollment status, call nullifierRegistry.isRevoked(nullifierHash) to set deactivated flag, assemble DID Document from on-chain data",
+    "Define DID URL dereferencing for did:bolyra:<network>:<id>#keys-1 (verificationMethod) and did:bolyra:<network>:<id>#delegation-1 (capabilityDelegation)",
+    "Specify VC issuance flow: after successful ZKP handshake, issuer constructs credential with type BolyraIdentityCredential, credentialSubject.id = did:bolyra DID, challenge = sessionNonce, evidence array containing humanNullifierHash and scopeNullifierHash, issuer = did:bolyra of the relying party or registry",
+    "Implement BolyraDidRegistry.sol wrapping IdentityRegistry; expose resolve(bytes32 identityCommitment, string network) view function returning packed DID Document fields",
+    "Implement bolyra-resolver.ts conforming to W3C DID Resolution spec interfaces; integrate with ethers.js to call BolyraDidRegistry on correct network by parsing DID method-specific identifier",
+    "Implement vc-issuer.ts using @digitalbazaar/vc or veramo SDK; sign VC with did:bolyra key material, attach nullifier evidence, embed session nonce as challenge",
+    "Write resolver unit tests covering: valid enrolled identity, deactivated (revoked) identity, unknown identity (notFound), invalid DID syntax (invalidDid)",
+    "Write VC issuance integration tests: produce VC from mock handshake proof, verify VC using did:bolyra resolver, confirm nullifiers present in evidence",
+    "Register did:bolyra method in W3C DID Spec Registries PR and Universal Resolver driver list",
+    "Write developer primer documenting resolution quickstart, VC flow, and SSI wallet interoperability notes"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry contract (enrollment + revocation state)",
+    "nullifierRegistry contract (isRevoked check)",
+    "Poseidon hash library (identityCommitment derivation)",
+    "W3C DID Core specification (https://www.w3.org/TR/did-core/)",
+    "W3C Verifiable Credentials Data Model (https://www.w3.org/TR/vc-data-model/)",
+    "ethers.js v6 (on-chain resolution calls)",
+    "@digitalbazaar/vc or veramo SDK (VC signing and verification)",
+    "JSON-LD context hosting (bolyra.xyz/ns/did/v1)"
+  ]
+}

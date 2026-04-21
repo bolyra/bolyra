@@ -1,0 +1,117 @@
+{
+  "id": "framework_integrator_python_sdk_snarkjs_bridge",
+  "title": "Python SDK with native snarkjs bridge for LangChain/CrewAI",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "bolyra/__init__.py",
+      "description": "Package root exposing enroll_agent, prove_handshake, verify_handshake, delegate as top-level symbols"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/bridge.py",
+      "description": "Node subprocess / WASM bridge that shells out to snarkjs, handles JSON I/O, manages process lifecycle, and raises typed exceptions on failure"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/models.py",
+      "description": "Pydantic v2 models: EnrollmentResult, Handshake, ProofArtifact, DelegationToken \u2014 consumable directly by LangChain structured output and CrewAI task results"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/async_api.py",
+      "description": "asyncio wrappers around bridge.py using asyncio.subprocess so async agent frameworks don't block the event loop"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/sync_api.py",
+      "description": "Synchronous wrappers using run_in_executor for frameworks that require blocking calls (e.g. CrewAI default executor)"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/exceptions.py",
+      "description": "BridgeError, CircuitNotFoundError, ProofVerificationError, SnarkjsNotFoundError \u2014 structured exceptions for framework error handling"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/node_bridge/index.js",
+      "description": "Thin Node.js entry point that reads a JSON command from stdin, calls the appropriate snarkjs API (groth16.prove, groth16.verify, etc.), and writes a JSON result to stdout"
+    },
+    {
+      "type": "sdk",
+      "filename": "bolyra/node_bridge/package.json",
+      "description": "Minimal Node package declaring snarkjs dependency, bundled into the PyPI wheel via hatch build hook"
+    },
+    {
+      "type": "sdk",
+      "filename": "pyproject.toml",
+      "description": "PEP 517 build config with hatch backend; declares pydantic>=2, optional langchain and crewai extras; includes node_modules bundling script"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_bridge.py",
+      "description": "Unit tests for bridge.py using a mock Node subprocess; verifies JSON protocol, timeout handling, and error propagation"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_models.py",
+      "description": "Pydantic model round-trip tests: serialization, deserialization, and schema compatibility with LangChain's with_structured_output"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_integration.py",
+      "description": "End-to-end integration tests requiring Node + snarkjs installed; tests enroll\u2192prove\u2192verify\u2192delegate flow against real circuit artifacts"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_langchain_compat.py",
+      "description": "Tests that ProofArtifact and DelegationToken pass LangChain structured output parsing without schema errors"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_crewai_compat.py",
+      "description": "Tests that CrewAI Task output_pydantic=ProofArtifact works end-to-end with a mock crew"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/quickstart.md",
+      "description": "30-line getting-started guide showing pip install, Node prerequisite check, and a LangChain agent using prove_handshake"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/api_reference.md",
+      "description": "Full API reference for all four callables, Pydantic models, and exception hierarchy"
+    },
+    {
+      "type": "spec",
+      "filename": "docs/bridge_protocol.md",
+      "description": "JSON wire protocol spec for stdin/stdout communication between Python and Node bridge \u2014 versioned so future WASM backend can implement same interface"
+    }
+  ],
+  "steps": [
+    "Define the JSON wire protocol for the Python\u2194Node bridge: command envelope {op, params, circuit_path, zkey_path} and response envelope {ok, result, error}",
+    "Implement bolyra/node_bridge/index.js with handlers for ops: enroll, prove, verify, delegate \u2014 each calling snarkjs groth16 APIs and returning structured JSON",
+    "Write bolyra/bridge.py: spawn Node subprocess pointed at bundled index.js, write command JSON to stdin, read response JSON from stdout, enforce timeout, raise typed exceptions",
+    "Define Pydantic v2 models in bolyra/models.py for all proof artifacts; add model_json_schema() validation and LangChain-compatible field annotations",
+    "Implement bolyra/sync_api.py with enroll_agent(), prove_handshake(), verify_handshake(), delegate() as blocking callables using bridge.py",
+    "Implement bolyra/async_api.py with async variants using asyncio.create_subprocess_exec directly for non-blocking event loop integration",
+    "Write pyproject.toml with hatch build backend; add hatch_build.py hook that runs npm install inside bolyra/node_bridge/ and includes node_modules in the wheel",
+    "Add runtime Node.js detection in bolyra/__init__.py: check for node binary on PATH at import time, raise SnarkjsNotFoundError with install instructions if missing",
+    "Write unit tests for bridge.py mocking subprocess; write model round-trip tests; write LangChain and CrewAI compatibility tests",
+    "Write end-to-end integration test using real circuit .wasm and .zkey files from the existing @bolyra/sdk fixtures",
+    "Configure CI: matrix across Python 3.10/3.11/3.12, Node 18/20; run unit tests without Node, integration tests with Node",
+    "Write docs/quickstart.md and docs/api_reference.md; publish to PyPI as bolyra with version matching @bolyra/sdk TypeScript package"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "snarkjs>=0.7 (Node package, bundled in wheel)",
+    "pydantic>=2.0",
+    "node>=18 (runtime requirement, detected at import)",
+    "npm>=9 (build-time only, for wheel packaging)",
+    "existing circuit artifacts: .wasm and .zkey files from @bolyra/sdk",
+    "langchain-core>=0.2 (optional extra)",
+    "crewai>=0.28 (optional extra)",
+    "hatch (build backend)",
+    "pytest-asyncio (test)"
+  ]
+}

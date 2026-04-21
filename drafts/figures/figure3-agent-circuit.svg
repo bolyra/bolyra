@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 560" font-family="Arial, sans-serif" font-size="11">
+  <text x="410" y="22" text-anchor="middle" font-size="14" font-weight="bold">FIG. 3 — AgentPolicy Circuit (300)</text>
+
+  <!-- Column headers -->
+  <text x="80" y="50" font-weight="bold" font-size="12" fill="#333">PRIVATE INPUTS</text>
+  <text x="360" y="50" font-weight="bold" font-size="12" fill="#333">CIRCUIT OPERATIONS</text>
+  <text x="680" y="50" font-weight="bold" font-size="12" fill="#333">PUBLIC OUTPUTS</text>
+
+  <!-- Private inputs -->
+  <rect x="30" y="65" width="190" height="25" rx="3" fill="#e8e8ff" stroke="#666"/>
+  <text x="125" y="82" text-anchor="middle">modelHash</text>
+  <rect x="30" y="95" width="190" height="25" rx="3" fill="#e8e8ff" stroke="#666"/>
+  <text x="125" y="112" text-anchor="middle">operatorPubkey (Ax, Ay)</text>
+  <rect x="30" y="125" width="190" height="25" rx="3" fill="#e8e8ff" stroke="#666"/>
+  <text x="125" y="142" text-anchor="middle">permissionBitmask (64-bit)</text>
+  <rect x="30" y="155" width="190" height="25" rx="3" fill="#e8e8ff" stroke="#666"/>
+  <text x="125" y="172" text-anchor="middle">expiryTimestamp</text>
+  <rect x="30" y="185" width="190" height="25" rx="3" fill="#e8e8ff" stroke="#666"/>
+  <text x="125" y="202" text-anchor="middle">EdDSA signature (R8, S)</text>
+  <rect x="30" y="215" width="190" height="25" rx="3" fill="#e8e8ff" stroke="#666"/>
+  <text x="125" y="232" text-anchor="middle">merkleProof[20]</text>
+
+  <!-- Public inputs -->
+  <rect x="30" y="265" width="190" height="25" rx="3" fill="#ffe8e8" stroke="#666"/>
+  <text x="125" y="282" text-anchor="middle">requiredScopeMask (pub)</text>
+  <rect x="30" y="295" width="190" height="25" rx="3" fill="#ffe8e8" stroke="#666"/>
+  <text x="125" y="312" text-anchor="middle">currentTimestamp (pub)</text>
+  <rect x="30" y="325" width="190" height="25" rx="3" fill="#ffe8e8" stroke="#666"/>
+  <text x="125" y="342" text-anchor="middle">sessionNonce (pub)</text>
+
+  <!-- Step 1: Range checks -->
+  <rect x="280" y="65" width="220" height="35" rx="3" fill="#fff8e0" stroke="#b90"/>
+  <text x="390" y="80" text-anchor="middle" font-weight="bold">Step 1: Num2Bits(64)</text>
+  <text x="390" y="94" text-anchor="middle" font-size="10">Range check: bitmask, expiry, timestamp</text>
+
+  <!-- Step 2: Credential commitment -->
+  <rect x="280" y="115" width="220" height="35" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="130" text-anchor="middle" font-weight="bold">Step 2: Poseidon5</text>
+  <text x="390" y="144" text-anchor="middle" font-size="10">cred = hash(model, Ax, Ay, bitmask, exp)</text>
+
+  <!-- Step 3: EdDSA verify -->
+  <rect x="280" y="165" width="220" height="35" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="180" text-anchor="middle" font-weight="bold">Step 3: EdDSA Verify</text>
+  <text x="390" y="194" text-anchor="middle" font-size="10">operator signed credentialCommitment</text>
+
+  <!-- Step 4: Merkle -->
+  <rect x="280" y="215" width="220" height="35" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="230" text-anchor="middle" font-weight="bold">Step 4: MerkleRoot(20)</text>
+  <text x="390" y="244" text-anchor="middle" font-size="10">leaf = credentialCommitment</text>
+
+  <!-- Step 5: Scope check -->
+  <rect x="280" y="265" width="220" height="35" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="280" text-anchor="middle" font-weight="bold">Step 5: Scope Check</text>
+  <text x="390" y="294" text-anchor="middle" font-size="10">req[i] * (1 - perm[i]) == 0</text>
+
+  <!-- Step 5b: Cumulative -->
+  <rect x="280" y="310" width="220" height="30" rx="3" fill="#fff8e0" stroke="#b90"/>
+  <text x="390" y="329" text-anchor="middle" font-size="10">Step 5b: Cumulative bit invariant (3 constraints)</text>
+
+  <!-- Step 6: Expiry -->
+  <rect x="280" y="350" width="220" height="30" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="369" text-anchor="middle" font-size="10">Step 6: LessThan(64) — currentTs &lt; expiry</text>
+
+  <!-- Step 7: Nullifier -->
+  <rect x="280" y="390" width="220" height="35" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="405" text-anchor="middle" font-weight="bold">Step 7: Poseidon2</text>
+  <text x="390" y="419" text-anchor="middle" font-size="10">nullifier = hash(cred, nonce)</text>
+
+  <!-- Step 8: Scope commitment -->
+  <rect x="280" y="435" width="220" height="35" rx="3" fill="#fff" stroke="black" stroke-width="1.5"/>
+  <text x="390" y="450" text-anchor="middle" font-weight="bold">Step 8: Poseidon2</text>
+  <text x="390" y="464" text-anchor="middle" font-size="10">scopeCommit = hash(bitmask, cred)</text>
+
+  <!-- Public outputs -->
+  <rect x="590" y="215" width="190" height="28" rx="3" fill="#e0ffe0" stroke="#060"/>
+  <text x="685" y="234" text-anchor="middle" font-weight="bold">agentMerkleRoot</text>
+  <line x1="500" y1="232" x2="590" y2="229" stroke="black" marker-end="url(#ar3)"/>
+
+  <rect x="590" y="390" width="190" height="28" rx="3" fill="#e0ffe0" stroke="#060"/>
+  <text x="685" y="409" text-anchor="middle" font-weight="bold">nullifierHash</text>
+  <line x1="500" y1="407" x2="590" y2="404" stroke="black" marker-end="url(#ar3)"/>
+
+  <rect x="590" y="435" width="190" height="28" rx="3" fill="#e0ffe0" stroke="#060"/>
+  <text x="685" y="454" text-anchor="middle" font-weight="bold">scopeCommitment</text>
+  <text x="685" y="467" text-anchor="middle" font-size="9" fill="#666">(identity-bound, chain seed)</text>
+  <line x1="500" y1="452" x2="590" y2="449" stroke="black" marker-end="url(#ar3)"/>
+
+  <!-- Footer -->
+  <text x="410" y="510" text-anchor="middle" font-size="12" fill="#666">20,832 R1CS constraints · PLONK · 16.3s proof · 2,098 bytes</text>
+  <text x="410" y="530" text-anchor="middle" font-size="11" fill="#666">Cumulative bit encoding: bit 4 → bits 2+3 · bit 3 → bit 2</text>
+
+  <defs>
+    <marker id="ar3" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="black"/>
+    </marker>
+  </defs>
+</svg>

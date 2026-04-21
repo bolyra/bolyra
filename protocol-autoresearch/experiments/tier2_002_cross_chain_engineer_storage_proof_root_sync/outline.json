@@ -1,0 +1,81 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "title": "Cross-chain root sync via EIP-1186 storage proofs",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/StorageProofLib.sol",
+      "description": "Library for verifying EIP-1186 Merkle-Patricia trie proofs against a trusted state root. Decodes RLP-encoded account proof and storage proof, verifies the trie path, and returns the slot value."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/RootRelay.sol",
+      "description": "Deployed on Arbitrum and Polygon. Accepts a block header hash (sourced from the L1 state root anchor exposed by each L2), the EIP-1186 account + storage proof for agentRootHistory and humanRootHistory slots on the Base IdentityRegistry, and updates local shadow roots after verification via StorageProofLib."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/ChainRegistry.sol",
+      "description": "Registry mapping chainId -> RootRelay address and chainId -> trusted L1 block oracle address (e.g. Arbitrum ArbSys / Polygon StateReceiver). Allows governance to add new chains without redeploying core contracts."
+    },
+    {
+      "type": "sdk",
+      "filename": "relayer/src/relayRoots.ts",
+      "description": "TypeScript relayer script. Queries the Base node for the latest finalized block, fetches EIP-1186 proofs for agentRootHistory and humanRootHistory storage slots via eth_getProof, encodes the RLP proof, and submits to RootRelay on each target L2."
+    },
+    {
+      "type": "sdk",
+      "filename": "relayer/src/proofEncoder.ts",
+      "description": "Utility module that RLP-encodes EIP-1186 proof nodes into the byte format expected by StorageProofLib. Handles both account proof and storage proof arrays."
+    },
+    {
+      "type": "spec",
+      "filename": "specs/storage-proof-root-sync.md",
+      "description": "Protocol spec describing the trusted L1 anchor mechanism per L2, storage slot derivation for agentRootHistory and humanRootHistory, the proof submission flow, finality assumptions, and security model (trust assumptions, replay protection via block number monotonicity)."
+    },
+    {
+      "type": "test",
+      "filename": "test/StorageProofLib.t.sol",
+      "description": "Foundry unit tests for StorageProofLib using real EIP-1186 proof fixtures captured from a Base Sepolia node. Covers valid proof, wrong root rejection, invalid proof bytes, and empty slot handling."
+    },
+    {
+      "type": "test",
+      "filename": "test/RootRelay.t.sol",
+      "description": "Foundry integration tests for RootRelay. Mocks the L1 block oracle, submits valid and invalid proofs, checks root updates, verifies replay protection (same block number rejected twice), and tests access control."
+    },
+    {
+      "type": "test",
+      "filename": "relayer/src/__tests__/proofEncoder.test.ts",
+      "description": "Jest unit tests for proofEncoder.ts verifying RLP encoding round-trips against known-good fixtures from eth_getProof responses."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-root-sync.md",
+      "description": "Developer guide covering deployment steps per chain, relayer configuration, monitoring recommendations, and upgrade path for adding new L2 chains via ChainRegistry."
+    }
+  ],
+  "steps": [
+    "Define the two target storage slots: keccak256 of agentRootHistory and humanRootHistory mappings in the Base IdentityRegistry, and document their derivation in the spec.",
+    "Research L1 block hash oracle addresses for Arbitrum One (ArbSys.arbBlockHash / L1Block precompile) and Polygon PoS (StateReceiver / block.blockhash via heimdall checkpoints) to determine the trusted anchor per chain.",
+    "Implement StorageProofLib.sol: RLP decoding of account proof nodes, Merkle-Patricia trie traversal against accountRoot, extraction of storageRoot from account RLP, trie traversal for the storage slot, return uint256 value.",
+    "Capture real EIP-1186 proof fixtures from Base Sepolia via eth_getProof for both storage slots, encode to fixture files for use in Foundry tests.",
+    "Write and pass StorageProofLib.t.sol unit tests against fixtures before proceeding to RootRelay.",
+    "Implement ChainRegistry.sol with chainId -> RootRelay and chainId -> L1 oracle mappings, owner-controlled registration.",
+    "Implement RootRelay.sol: accept (blockNumber, blockHeaderRLP, accountProof[], storageProof[]) calldata, retrieve trusted L1 block hash from oracle, verify block header hash matches, call StorageProofLib for each slot, enforce blockNumber monotonicity for replay protection, emit RootUpdated events.",
+    "Write and pass RootRelay.t.sol integration tests with mocked L1 oracle.",
+    "Implement relayer/src/proofEncoder.ts: encode EIP-1186 proof node arrays to ABI-compatible bytes using ethers RLP utilities.",
+    "Write and pass Jest unit tests for proofEncoder.ts.",
+    "Implement relayer/src/relayRoots.ts: poll Base for finalized block, call eth_getProof for both slots, encode proofs, submit to RootRelay on Arbitrum and Polygon via ethers, log results.",
+    "Deploy StorageProofLib and RootRelay to Arbitrum Sepolia and Polygon Amoy testnets; run relayer end-to-end against Base Sepolia.",
+    "Document deployment addresses, relayer env vars, and monitoring hooks in docs/cross-chain-root-sync.md."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Base IdentityRegistry deployed with stable agentRootHistory and humanRootHistory storage slots",
+    "Arbitrum L1Block precompile (0x4200...0015) or ArbSys for trusted L1 block hash",
+    "Polygon PoS L1 block hash oracle (heimdall checkpoint contract or block.blockhash equivalent)",
+    "ethers.js v6 (RLP encoding, eth_getProof provider call)",
+    "Foundry (forge) for Solidity tests",
+    "Node.js 20+ for relayer TypeScript",
+    "Base Sepolia RPC endpoint with eth_getProof support"
+  ]
+}

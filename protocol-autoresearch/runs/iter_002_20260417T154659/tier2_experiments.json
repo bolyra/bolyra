@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_vectors_multichain",
+      "persona": "standards_architect",
+      "title": "Cross-implementation conformance test vectors",
+      "dimension": "standards",
+      "description": "Produce 60+ JSON test vectors organized by circuit (HumanUniqueness, AgentPolicy, Delegation) and by outcome (valid, invalid-stale-root, invalid-revoked, invalid-scope-superset, invalid-expired, invalid-nonce-reuse, invalid-phantom-delegatee). Each vector includes: input witness, expected public signals, expected verification result, and the specific error code from the contract. Vectors cover the root history buffer edge case (root at position 29 vs evicted root at position 30) and the cumulative bit encoding invariant (bit 4 without bits 2+3). These become the canonical interop test suite \u2014 any conforming implementation must pass all vectors.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_vectors_multichain",
+      "adoption": 19,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 77,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_000_standards_architect_conformance_vectors_multichain",
+    "score": {
+      "experiment_id": "tier2_000_standards_architect_conformance_vectors_multichain",
+      "total": 24,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_w3c_did_method",
+      "persona": "standards_architect",
+      "title": "did:bolyra DID method specification",
+      "dimension": "standards",
+      "description": "Write a W3C DID method spec for did:bolyra:<network>:<identityCommitment>. Define the DID Document structure mapping: humanMerkleRoot as verification method, nullifierHash as authentication proof, scopeCommitment as capability delegation. Specify the resolution algorithm (query IdentityRegistry for enrollment status, check revocation by nullifier). Include a Verifiable Credential issuance flow where a successful handshake produces a VC with the session nonce as challenge and both nullifiers as evidence. This bridges Bolyra into the existing SSI ecosystem.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_w3c_did_method",
+      "adoption": 20,
+      "standards": 22,
+      "completeness": 18,
+      "correctness": 13,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_001_standards_architect_w3c_did_method",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_w3c_did_method",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "dimension": "completeness",
+      "description": "Implement a RootRelay contract on Arbitrum and Polygon that accepts EIP-1186 storage proofs of agentRootHistory and humanRootHistory slots from the Base IdentityRegistry. A relayer submits the block header (via the L1 state root accessible on each L2) plus the Merkle-Patricia proof of the storage slot. This avoids bridges and oracles entirely \u2014 verification is pure math against the L1 anchor. Estimated 3 contracts (RootRelay, StorageProofLib, ChainRegistry) plus a TypeScript relayer script.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+      "adoption": 17,
+      "standards": 18,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_002_cross_chain_engineer_storage_proof_root_sync",
+    "score": {
+      "experiment_id": "tier2_002_cross_chain_engineer_storage_proof_root_sync",
+      "total": 37,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 14,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "sdk_designer_python_snarkjs_bridge",
+      "persona": "sdk_designer",
+      "title": "Python SDK with async snarkjs subprocess bridge",
+      "dimension": "adoption",
+      "description": "Implement the bolyra PyPI package specified in tier2_007 outline: a Node.js subprocess bridge (stdin/JSON/stdout) wrapped in Pydantic v2 models with both sync and async APIs. The target audience is LangChain/CrewAI developers who need `bolyra.prove_handshake()` and `bolyra.delegate()` in Python without touching Node directly. Ship with a bundled node_bridge/index.js, structured exceptions (BridgeError, CircuitNotFoundError, ProofVerificationError), and a `bolyra[langchain]` extras install that includes the BolyraAuthTool BaseTool wrapper.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_python_snarkjs_bridge",
+      "adoption": 21,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_003_sdk_designer_python_snarkjs_bridge",
+    "score": {
+      "experiment_id": "tier2_003_sdk_designer_python_snarkjs_bridge",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_nullifier_collision_independence",
+      "persona": "formal_verifier",
+      "title": "Prove nullifier uniqueness across all three circuits",
+      "dimension": "correctness",
+      "description": "HumanUniqueness uses Poseidon2(scope, secret), AgentPolicy uses a nullifier derived from credential fields + nonce, and Delegation has its own delegationNullifier. No formal argument exists that these three nullifier domains are collision-resistant across circuits. Write a formal property showing domain separation: prove that no valid witness for circuit A can produce a nullifierHash that equals a valid nullifierHash from circuit B, by demonstrating the Poseidon input arities and domain tags differ. Deliver: a symbolic analysis document with Halo2 MockProver test cases exercising cross-circuit nullifier values on shared inputs.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_nullifier_collision_independence",
+      "adoption": 14,
+      "standards": 15,
+      "completeness": 17,
+      "correctness": 20,
+      "total": 66,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_004_formal_verifier_nullifier_collision_independence",
+    "score": {
+      "experiment_id": "tier2_004_formal_verifier_nullifier_collision_independence",
+      "total": 30,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 12,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "persona": "cross_chain_engineer",
+      "title": "Chain-agnostic nullifier registry with cross-chain replay protection",
+      "dimension": "correctness",
+      "description": "The current nullifierHash is Poseidon2(scope, secret) and is chain-unaware. If the same verifier contract is deployed on Base and Arbitrum, a proof verified on Base can be replayed on Arbitrum since nullifier sets are per-chain. Fix: include chainId in the nullifier derivation (Poseidon3(scope, secret, chainId)) and add a chainId public input to HumanUniqueness and AgentPolicy circuits. This is a breaking change to the circuit but critical before multi-chain deployment.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "adoption": 15,
+      "standards": 15,
+      "completeness": 17,
+      "correctness": 18,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_005_cross_chain_engineer_chain_agnostic_nullifier",
+    "score": {
+      "experiment_id": "tier2_005_cross_chain_engineer_chain_agnostic_nullifier",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_under_constrained_delegation_expiry",
+      "persona": "formal_verifier",
+      "title": "Prove delegation expiry narrowing is sound",
+      "dimension": "correctness",
+      "description": "The Delegation circuit claims delegateeExpiry <= delegatorExpiry but the constraint enforcement is not visible in the truncated source. Write a Certora-style property spec that proves: for all valid witnesses, delegateeExpiry <= delegatorExpiry AND delegateeExpiry <= currentTimestamp is rejected. Additionally, verify that the comparison uses the range-checked 64-bit values (not raw field elements) to prevent wraparound where a huge field element passes the LessThan comparator. Deliver: a .spec file with 4 invariants and a test harness generating boundary witnesses (expiry = 2^64-1, expiry = 0, expiry = delegatorExpiry \u00b1 1).",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_under_constrained_delegation_expiry",
+      "adoption": 13,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 21,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_006_formal_verifier_under_constrained_delegation_expiry",
+    "score": {
+      "experiment_id": "tier2_006_formal_verifier_under_constrained_delegation_expiry",
+      "total": 37,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 12,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 14,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 9,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_scope_bitmask_cumulative_invariant",
+      "persona": "formal_verifier",
+      "title": "Verify cumulative bit encoding is enforced in-circuit",
+      "dimension": "correctness",
+      "description": "The Delegation circuit header documents that bit 4 implies bits 2+3 and bit 3 implies bit 2, but the actual constraint enforcement must be verified. Write a Halo2 MockProver test suite that attempts to create valid witnesses violating cumulative encoding (e.g., bit 4 set without bit 3) and asserts they fail. Additionally, write a formal invariant proving that any satisfying witness for Delegation has delegateeScope where the cumulative property holds. This prevents a delegatee from receiving a 'financial unlimited' scope without the intermediate tiers. Deliver: 12+ negative test vectors and a property spec.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_scope_bitmask_cumulative_invariant",
+      "adoption": 13,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 21,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_007_formal_verifier_scope_bitmask_cumulative_invariant",
+    "score": {
+      "experiment_id": "tier2_007_formal_verifier_scope_bitmask_cumulative_invariant",
+      "total": 18,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 7,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 3,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

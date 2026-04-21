@@ -1,0 +1,46 @@
+{
+  "id": "formal_verifier_scope_bitmask_cumulative_invariant",
+  "title": "Verify cumulative bit encoding is enforced in-circuit",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "src/delegation/scope_bitmask.rs",
+      "description": "Halo2 chip implementing cumulative scope bitmask constraints: bit4 => bit3, bit3 => bit2, expressed as polynomial constraints (1 - bit_n) * bit_m = 0"
+    },
+    {
+      "type": "test",
+      "filename": "tests/scope_bitmask_negative.rs",
+      "description": "MockProver test suite with 12+ negative vectors: each sets a higher scope bit without the required lower bits and asserts prover returns VerifyFailure"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/scope_bitmask_invariant.md",
+      "description": "Formal property spec stating the cumulative invariant: forall satisfying witness w, w.delegateeScope satisfies bit4=>bit3 AND bit3=>bit2, with pen-and-paper proof sketch and reference to circuit constraints"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/scope_bitmask_audit_report.md",
+      "description": "Audit report summarising constraint coverage, test results, and confirmation that financial-unlimited scope cannot be reached without intermediate tiers"
+    }
+  ],
+  "steps": [
+    "Read existing Delegation circuit source to locate delegateeScope signal decomposition and any existing range/boolean constraints",
+    "Identify where (or confirm absence of) cumulative implication constraints: (1 - bit4) * bit3 = 0 and (1 - bit3) * bit2 = 0",
+    "Add ScopeBitmaskChip in scope_bitmask.rs implementing the two implication gates as Halo2 custom gates or lookup arguments, wiring into the Delegation circuit's constraint system",
+    "Write negative test vector helper that constructs a witness with arbitrary bit4/bit3/bit2 values and runs MockProver::run, collecting VerifyFailure results",
+    "Implement 12 negative vectors: {bit4=1,bit3=0,bit2=0}, {bit4=1,bit3=0,bit2=1}, {bit4=1,bit3=1,bit2=0}, {bit3=1,bit2=0} for each financial tier combination, plus edge cases with all upper bits set and lower cleared",
+    "Implement 4 positive control vectors (all-zeros, bit2 only, bit2+bit3, bit2+bit3+bit4) asserting MockProver succeeds",
+    "Assert every negative vector returns at least one VerifyFailure::ConstraintNotSatisfied referencing the cumulative constraint rows",
+    "Write the formal invariant in specs/scope_bitmask_invariant.md: define P(w) = (w[4]=1 => w[3]=1) AND (w[3]=1 => w[2]=1); prove by constraint algebra that any assignment satisfying all circuit polynomials satisfies P",
+    "Cross-reference the invariant proof against the actual gate expressions in scope_bitmask.rs to confirm they match",
+    "Run cargo test --test scope_bitmask_negative and confirm all 12+ negative tests fail verification and all positive tests pass",
+    "Write docs/scope_bitmask_audit_report.md summarising constraint IDs, test pass/fail matrix, and conclusion that the financial-unlimited escalation path is closed"
+  ],
+  "estimated_constraints": 6,
+  "dependencies": [
+    "halo2_proofs (PSE fork or zcash/halo2)",
+    "Delegation circuit source with delegateeScope bit decomposition",
+    "Existing scope bit constants / enum definitions",
+    "Rust toolchain (edition 2021, cargo test harness)"
+  ]
+}

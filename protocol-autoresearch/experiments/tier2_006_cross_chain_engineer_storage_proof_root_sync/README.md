@@ -1,6 +1,6 @@
-# EIP-1186 storage proof cross-chain root sync
+# Cross-chain root sync via EIP-1186 storage proofs
 
-Implement cross-chain root synchronization using EIP-1186 storage proofs. Deploy a BolyraRootRelay contract on Arbitrum and Polygon that accepts an RLP-encoded storage proof of IdentityRegistry's humanTree and agentTree roots from Base. The relay contract verifies the proof against a known Base block hash (available via L1 state roots on each L2), then caches the verified roots locally. This eliminates reliance on trusted relayers and lets proofs generated against Base roots be verified on any target chain with ~15 minute latency.
+Deploy IdentityRegistry on Arbitrum and Polygon alongside the existing Base deployment. Implement a RootRelay contract that accepts EIP-1186 storage proofs of humanRootHistory/agentRootHistory slots from the source chain, verified against the source chain's state root available via each L2's L1 block oracle. This avoids bridges entirely — any relayer can post a storage proof and the destination chain verifies it trustlessly. Add a `foreignRootExists` mapping and extend `handshakeVerify` to accept roots from any registered source chain.
 
 ## Status
 

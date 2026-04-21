@@ -1,0 +1,95 @@
+{
+  "id": "standards_architect_conformance_vectors_multichain",
+  "title": "Cross-implementation conformance test vectors",
+  "artifacts": [
+    {
+      "type": "test",
+      "filename": "conformance/vectors/human_uniqueness_valid.json",
+      "description": "Valid HumanUniqueness circuit vectors with correct witness, public signals, and expected verification=true"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/human_uniqueness_invalid.json",
+      "description": "Invalid HumanUniqueness vectors covering stale-root, revoked, expired, nonce-reuse outcomes with error codes"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/agent_policy_valid.json",
+      "description": "Valid AgentPolicy circuit vectors including cumulative bit encoding invariant cases"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/agent_policy_invalid.json",
+      "description": "Invalid AgentPolicy vectors covering scope-superset and invalid cumulative bit encoding (bit 4 without bits 2+3)"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/delegation_valid.json",
+      "description": "Valid Delegation circuit vectors including phantom delegatee Merkle proof cases"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/delegation_invalid.json",
+      "description": "Invalid Delegation vectors covering phantom-delegatee, scope-superset, expired, revoked outcomes"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/vectors/root_history_edge_cases.json",
+      "description": "Edge-case vectors for root history buffer: root at position 29 (valid) vs evicted root at position 30 (invalid-stale-root)"
+    },
+    {
+      "type": "spec",
+      "filename": "conformance/VECTOR_SCHEMA.md",
+      "description": "JSON schema definition for a conformance vector: input_witness, public_signals, expected_result (bool), error_code (string|null), circuit, category"
+    },
+    {
+      "type": "spec",
+      "filename": "conformance/ERROR_CODES.md",
+      "description": "Canonical error code registry mapping each contract revert/error to a stable string identifier used across all vectors"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/runner/run_vectors.py",
+      "description": "Python test runner that loads all JSON vectors, generates proofs via snarkjs/circom, submits to contract, and asserts expected outcomes"
+    },
+    {
+      "type": "test",
+      "filename": "conformance/runner/run_vectors.ts",
+      "description": "TypeScript test runner (Hardhat/Mocha) for the same vector suite, enabling JS-ecosystem conformance verification"
+    },
+    {
+      "type": "docs",
+      "filename": "conformance/README.md",
+      "description": "Interop test suite documentation: how to run, how to add vectors, coverage table by circuit and outcome category"
+    }
+  ],
+  "steps": [
+    "Define and document the canonical JSON schema for a conformance vector (input_witness, public_signals, expected_result, error_code, circuit, category) in VECTOR_SCHEMA.md",
+    "Enumerate all contract error codes and map them to stable string identifiers in ERROR_CODES.md",
+    "For HumanUniqueness: generate \u226510 valid vectors with correct witnesses and public signals",
+    "For HumanUniqueness: generate \u226510 invalid vectors covering stale-root, revoked, expired, nonce-reuse categories",
+    "For AgentPolicy: generate \u22658 valid vectors including cumulative bit encoding edge cases",
+    "For AgentPolicy: generate \u22658 invalid vectors covering scope-superset and malformed cumulative bits (bit 4 without bits 2+3)",
+    "For Delegation: generate \u22658 valid vectors including phantom delegatee Merkle proof scenarios",
+    "For Delegation: generate \u22658 invalid vectors covering phantom-delegatee, revoked, expired, and scope-superset outcomes",
+    "Generate root history buffer edge-case vectors: root at buffer position 29 (valid) and evicted root at position 30 (invalid-stale-root)",
+    "Implement the Python conformance runner that loads vectors, calls circom/snarkjs for proof generation, invokes contract, and asserts result and error code",
+    "Implement the TypeScript/Hardhat conformance runner using the same vector files",
+    "Run both runners against a local devnet to verify all vectors produce expected outcomes; fix any mismatches",
+    "Validate total vector count \u226560 and coverage across all 7 outcome categories for all 3 circuits",
+    "Write conformance/README.md with coverage table, run instructions, and contribution guide for new vectors"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "HumanUniqueness.circom circuit (compiled artifacts)",
+    "AgentPolicy.circom circuit (compiled artifacts)",
+    "Delegation.circom circuit (compiled artifacts)",
+    "IdentityOS contract ABI and deployed address (local devnet)",
+    "Root history buffer implementation (ring buffer, capacity 30)",
+    "Phantom delegatee Merkle proof implementation",
+    "Cumulative bit encoding spec for AgentPolicy scopes",
+    "snarkjs \u22650.7 for proof generation in both runners",
+    "Hardhat + ethers.js for TypeScript runner",
+    "Python web3.py + py_ecc for Python runner"
+  ]
+}

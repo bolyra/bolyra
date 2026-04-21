@@ -1,0 +1,47 @@
+{
+  "id": "formal_verifier_under_constrained_delegation_expiry",
+  "title": "Prove delegation expiry narrowing is sound",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "specs/delegation_expiry_soundness.spec",
+      "description": "Certora-style property spec with 4 invariants: (1) delegateeExpiry <= delegatorExpiry for all valid witnesses, (2) delegateeExpiry > currentTimestamp is required for proof acceptance, (3) comparisons operate on range-checked 64-bit values not raw field elements, (4) no field-element wraparound can satisfy LessThan comparator with out-of-range inputs"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/DelegationExpiryCheck.circom",
+      "description": "Circom circuit fragment enforcing range-checked 64-bit expiry comparison using Num2Bits(64) decomposition before LessThan, ensuring wraparound is impossible"
+    },
+    {
+      "type": "test",
+      "filename": "tests/test_delegation_expiry_boundary.py",
+      "description": "Test harness generating boundary witnesses: expiry=2^64-1, expiry=0, expiry=delegatorExpiry+1 (should reject), expiry=delegatorExpiry-1 (should accept), expiry=delegatorExpiry (should accept), currentTimestamp edge cases"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/delegation_expiry_formal_analysis.md",
+      "description": "Write-up of soundness argument, identified attack vectors (field element wraparound), constraint count justification, and interpretation of spec invariant results"
+    }
+  ],
+  "steps": [
+    "Audit existing Delegation circuit source for the delegateeExpiry <= delegatorExpiry constraint; locate the LessThan component instantiation and verify it receives Num2Bits-decomposed 64-bit signals, not raw field element inputs",
+    "Identify the missing or truncated constraint: confirm whether delegateeExpiry <= currentTimestamp rejection is explicitly enforced or implicitly assumed; document the gap",
+    "Draft invariant I1 in spec: for all witnesses w where proof verifies, w.delegateeExpiry <= w.delegatorExpiry holds in Z (not F_p arithmetic)",
+    "Draft invariant I2 in spec: for all witnesses w where proof verifies, w.delegateeExpiry > w.currentTimestamp (proof rejects expired delegatee credentials)",
+    "Draft invariant I3 in spec: the LessThan comparator inputs are range-checked to [0, 2^64) via Num2Bits(64) before comparison, ruling out field-element wraparound where p - 1 < 2^64 mod p could pass",
+    "Draft invariant I4 in spec: no witness with delegateeExpiry >= 2^64 can satisfy the range-check sub-circuit, making the comparator input domain provably bounded",
+    "Implement the DelegationExpiryCheck circuit fragment with explicit Num2Bits(64) for both expiry signals before feeding into LessThan(64), add GreaterThan(64) for currentTimestamp check",
+    "Write boundary witness generator in the test harness: cases expiry=0, expiry=1, expiry=delegatorExpiry-1 (valid), expiry=delegatorExpiry (valid boundary), expiry=delegatorExpiry+1 (must reject), expiry=2^64-1 (range boundary), expiry=2^64 (must fail range check)",
+    "Run snarkjs witness generation for each boundary case; assert expected accept/reject outcomes match; capture constraint satisfaction status",
+    "Count active constraints in DelegationExpiryCheck circuit (estimate: 64 bits * 2 signals for Num2Bits + LessThan internals + GreaterThan internals)",
+    "Write formal analysis doc summarizing the soundness argument, the wraparound attack vector, and how Num2Bits decomposition closes it"
+  ],
+  "estimated_constraints": 320,
+  "dependencies": [
+    "circomlib LessThan(n) component",
+    "circomlib Num2Bits(n) component",
+    "circomlib GreaterThan(n) component",
+    "snarkjs (witness generation and proof verification for boundary tests)",
+    "existing Delegation.circom (parent circuit this fragment integrates into)"
+  ]
+}

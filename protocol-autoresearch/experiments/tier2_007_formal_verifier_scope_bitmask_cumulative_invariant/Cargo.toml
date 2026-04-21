@@ -1,0 +1,18 @@
+[package]
+name = "bolyra-scope-bitmask"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bolyra Protocol Contributors"]
+description = "Halo2 chip enforcing cumulative scope bitmask invariant for the Delegation circuit"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "bolyra_scope_bitmask"
+path = "src/delegation/scope_bitmask.rs"
+
+[dependencies]
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2", tag = "v0.3.0" }
+
+[[test]]
+name = "scope_bitmask_negative"
+path = "tests/scope_bitmask_negative.rs"

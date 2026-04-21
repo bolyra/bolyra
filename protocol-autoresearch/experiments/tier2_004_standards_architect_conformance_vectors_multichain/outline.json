@@ -1,0 +1,50 @@
+{
+  "id": "standards_architect_conformance_vectors_multichain",
+  "title": "Conformance test vectors with multi-chain coverage",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "conformance_vectors.json",
+      "description": "60+ JSON test vectors organized by circuit covering all required scenarios with input signals, expected public outputs, and pass/fail status"
+    },
+    {
+      "type": "spec",
+      "filename": "conformance_vectors.schema.json",
+      "description": "JSON Schema for validating the structure of conformance_vectors.json so third-party implementations can validate their parsers"
+    },
+    {
+      "type": "test",
+      "filename": "test_conformance_vectors.py",
+      "description": "Python test harness that loads conformance_vectors.json and verifies each vector against the circuits using snarkjs/circom, asserting pass/fail outcomes match"
+    },
+    {
+      "type": "docs",
+      "filename": "CONFORMANCE.md",
+      "description": "Human-readable guide explaining vector categories, how to run the harness, and how to add new vectors"
+    }
+  ],
+  "steps": [
+    "Define JSON Schema for a single vector: fields for id, circuit, category, description, inputs (signal map), expected_public_outputs (signal map), expected_result (pass|fail), chain_id (optional), notes",
+    "Define top-level schema: version, circuits array, vectors array, each circuit entry listing its signal names and types",
+    "Author HumanUniqueness vectors: valid proof (pass), expired credential (fail), revoked identity (fail), stale human root (fail), nonce replay (fail) \u2014 minimum 15 vectors",
+    "Author AgentPolicy vectors: valid proof (pass), stale agent root (fail), scope subset violation (fail), cumulative bit encoding violation (bit 4 set without bits 2+3, fail) \u2014 minimum 12 vectors",
+    "Author Delegation vectors: chain depth 1 (pass), depth 2 (pass), depth 3 (pass), depth 4 (fail \u2014 exceeds max), phantom delegatee rejection (fail) \u2014 minimum 10 vectors",
+    "Author cross-chain root sync vectors: valid sync (pass), mismatched chain_id root (fail), stale synced root (fail) \u2014 minimum 8 vectors covering at least 3 chain IDs (e.g. 1, 137, 42161)",
+    "Fill remaining vectors to reach 60+ total, prioritizing boundary conditions: credential expiry at exact timestamp boundary, scope bitmask at all-zeros and all-ones, delegation at exact max depth",
+    "Validate all vectors against the JSON Schema using jsonschema; fail CI if any vector is malformed",
+    "Implement test_conformance_vectors.py: load JSON, compile circuits if needed, generate/verify proofs per vector using snarkjs subprocess, assert expected_result",
+    "Run the full harness against existing circuit artifacts; record any circuit bugs surfaced by vectors and note them in CONFORMANCE.md",
+    "Write CONFORMANCE.md: vector taxonomy table, harness usage, contributor guide for adding vectors",
+    "Lint JSON with jsonschema CLI and Python tests with ruff; ensure all 60+ vectors produce correct outcomes before shipping"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "HumanUniqueness.circom",
+    "AgentPolicy.circom",
+    "Delegation.circom",
+    "snarkjs",
+    "circom",
+    "jsonschema (Python)",
+    "cross-chain root sync mechanism spec"
+  ]
+}

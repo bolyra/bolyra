@@ -1,0 +1,153 @@
+[
+  {
+    "id": "competitor_attorney_single_proof_system",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      2,
+      3,
+      15,
+      15,
+      16
+    ],
+    "category": "design_around",
+    "finding": "Claims 1 and 15 require 'a first zero-knowledge proving system' and 'a second zero-knowledge proving system' \u2014 two distinct systems. Claim 2 narrows to Groth16+PLONK. A competitor using a single proving system for both human and agent proofs (e.g., PLONK for both, or Halo2 for both, or a future folding scheme like Nova for both) avoids the 'first/second proving system' distinction. The mixed-system requirement is presented as a practical convenience (reusing Semaphore ceremony), not a security necessity. A unified-PLONK implementation with a universal SRS performs identically and escapes every independent claim that recites two distinct proving systems. Claim 16's handshake function explicitly requires 'a Groth16 proof and a PLONK proof' \u2014 using two PLONK proofs dodges it entirely.",
+    "recommended_direction": "Add at least one independent claim that is agnostic to whether the two proof systems are the same or different \u2014 e.g., 'a first zero-knowledge proof and a second zero-knowledge proof, each generated using one or more zero-knowledge proving systems.' This covers same-system and mixed-system embodiments.",
+    "evidence": "Claim 1(b)-(c): 'a first zero-knowledge proof generated using a first zero-knowledge proving system... a second zero-knowledge proof generated using a second zero-knowledge proving system'; Claim 16: 'receives a Groth16 proof and a PLONK proof'. The specification admits the mixed system is a practical choice (Section 4, 'Mixed Proving System Rationale'), not a technical necessity, yet every independent claim bakes in the two-system requirement.",
+    "attack_id": "competitor_attorney_single_proof_system",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_off_chain_verification",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      9,
+      15,
+      16
+    ],
+    "category": "design_around",
+    "finding": "Every independent claim requires on-chain (blockchain) verification. Claim 1(d): 'verifying both... in a single blockchain transaction'; Claim 9(a)/(i): 'on a blockchain'; Claim 15: 'single blockchain transaction'; Claim 16: 'blockchain-based identity registry contract.' A competitor implementing the identical ZKP mutual-auth and delegation protocol with off-chain verification (e.g., a TEE-based verifier, a state channel, an MPC committee, or a centralized server that checks Groth16/PLONK proofs without submitting to a blockchain) escapes all claims. The alternative embodiment in Section 5 of the notes mentions off-chain verification but it is not claimed. Given the market trend toward off-chain AI agent orchestration (most AI agents don't interact with blockchains), this is a massive gap \u2014 the most commercially relevant deployment mode is uncovered.",
+    "recommended_direction": "Add independent method claims for off-chain verification: 'verifying both proofs by a verifier process, the verifier process maintaining a nonce-freshness store and a chain-state record' \u2014 without requiring a blockchain. Keep blockchain claims as a separate independent or dependent set.",
+    "evidence": "Claim 1(d): 'verifying both the first zero-knowledge proof and the second zero-knowledge proof in a single blockchain transaction'; Claim 9(i): 'verifying the delegation zero-knowledge proof on a blockchain'; Claim 15(a): 'in a single blockchain transaction'; Claim 16: 'blockchain-based identity registry contract.' The specification's own Alternative Embodiment 5 (off-chain verification with periodic checkpoints) discloses but does not claim this mode.",
+    "attack_id": "competitor_attorney_off_chain_verification",
+    "severity": 9,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "code_spec_auditor_delegation_pubsignal_count",
+    "persona": "code_spec_auditor",
+    "claim_refs": [
+      9,
+      14,
+      19
+    ],
+    "category": "accuracy",
+    "finding": "The IDelegationVerifier interface (Section 7.3) accepts exactly 4 public signals, but the Delegation circuit as described outputs at least 5 distinct public signals: previousScopeCommitment (public input per Section 5.1), newScopeCommitment (public output per Section 5.1), delegationNullifier (public output per Section 5.5), sessionNonce (public input per Section 8 step 3), and delegateeMerkleRoot (public output per Claim 14A). The verifyDelegation pseudocode in Section 8 references all five values but the interface says 4. Either Claim 14A's delegatee Merkle root verification is not actually implemented in the working code, or the interface count is wrong. This is a 112(a) enablement problem: a POSITA cannot reproduce the system because the specification contradicts itself on whether delegatee Merkle membership is verified on-chain.",
+    "recommended_direction": "Reconcile by either (a) changing IDelegationVerifier to accept 5 public signals and updating Section 7.3, or (b) removing Claim 14A's delegatee Merkle root output requirement and acknowledging that delegatee tree membership is NOT verified on-chain (only delegator membership is indirectly verified via chain-linking). If the working code uses 4 signals without delegatee Merkle root, Claim 14A has no written description support under Ariad v. Eli Lilly.",
+    "evidence": "Section 7.3: 'IDelegationVerifier: Accepts a 24-element PLONK proof array and 4 public signals for Delegation.' Claim 14A: 'the delegation circuit further proves Merkle membership of the delegatee's credential commitment in said agent credential tree and outputs a computed delegatee Merkle root as a public signal verified against a root history buffer.' Section 8 step 2 also treats previousScopeCommitment as a proof public signal the contract reads. 4 slots cannot hold 5 values. Ariad v. Eli Lilly, 598 F.3d 1336.",
+    "attack_id": "code_spec_auditor_delegation_pubsignal_count",
+    "severity": 7,
+    "specificity": 10,
+    "remediability": 8,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "code_spec_auditor_scope_commitment_brute_force",
+    "persona": "code_spec_auditor",
+    "claim_refs": [
+      5,
+      9,
+      15
+    ],
+    "category": "accuracy",
+    "finding": "Section 3.8 candidly admits that the scope commitment Poseidon2(permissionBitmask, credentialCommitment) is brute-forceable in 2^64 hash evaluations because the credentialCommitment is public (Merkle-included on-chain). The patent hand-waves this as acceptable because 'the primary threat model (preventing impersonation) is addressed by the identity-binding property.' But the claims recite the scope commitment as the privacy mechanism for delegation chains ('without revealing the actual permission bits to any on-chain observer' \u2014 Abstract; 'without revealing the delegator's actual permissions' \u2014 Claim 9(d)). If a determined adversary can recover the exact bitmask from any published scope commitment, the privacy claim is misleading. An examiner or challenger can argue the claims are directed to an abstract idea of 'hiding permissions' that the disclosed mechanism fails to achieve, weakening the Alice Step 2 argument that the specific technical implementation provides a concrete improvement.",
+    "recommended_direction": "Either (a) implement the blinding salt mitigation (Poseidon3 with blindingSalt) as the preferred embodiment rather than an alternative, updating Claims 5 and 9(d) to require the blinded construction, or (b) add explicit language to the claims acknowledging that privacy is computational rather than information-theoretic, and that the scope commitment prevents real-time on-chain extraction (not offline enumeration). Option (a) is strongly preferred because it actually fixes the vulnerability and makes the claims harder to design around.",
+    "evidence": "Section 3.8: 'An offline attacker who knows the credentialCommitment can enumerate all 2^64 possible bitmask values and precompute the corresponding Poseidon hashes in approximately 2^64 hash evaluations. On modern GPUs this is feasible for a determined adversary.' Claim 9(d): 'without revealing the delegator's actual permissions.' The specification's own disclosure undermines the claim language.",
+    "attack_id": "code_spec_auditor_scope_commitment_brute_force",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_genus_hash",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      15
+    ],
+    "category": "112",
+    "finding": "Claim 15(a) recites 'a collision-resistant algebraic hash of the AI agent's permission bitmask and the AI agent's credential commitment, the algebraic hash being a hash function whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve.' The specification discloses exactly one species: Poseidon. No other algebraic hash (e.g., Rescue, Griffin, Anemoi, Reinforced Concrete) is described, analyzed for constraint cost, or shown to satisfy the identity-binding property relied upon throughout the delegation chain. Under LizardTech v. Earth Resource Mapping, claiming a genus ('collision-resistant algebraic hash') when only a single species (Poseidon) is disclosed fails the written description requirement because the applicant has not demonstrated possession of the full claimed scope.",
+    "recommended_direction": "Either narrow Claim 15 to recite 'Poseidon hash' explicitly (matching Claims 1, 9, and 16 which already do), or add specification disclosure of at least two additional algebraic hash families with concrete constraint counts, security parameters, and confirmation that the chain-linking mechanism works with each.",
+    "evidence": "Claim 15(a): 'collision-resistant algebraic hash... whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve.' Spec Section 9.1 discloses only Poseidon. LizardTech, 424 F.3d at 1345: 'the claim is not supported by the written description... because the specification discloses only a single embodiment.'",
+    "attack_id": "enablement_auditor_genus_hash",
+    "severity": 7,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 24,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_genus_signature",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      9
+    ],
+    "category": "112",
+    "finding": "Claim 9(g) recites 'a digital signature, verified within the delegation zero-knowledge proof circuit using a circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve.' This is pure genus claiming. The specification discloses exactly one signature scheme (EdDSA-Poseidon on Baby Jubjub over BN128) and no others. The phrase 'circuit-friendly signature verification algorithm' is undefined in the art and in the specification \u2014 it is a functional characterization that encompasses any future signature scheme that happens to work in a SNARK circuit. Under Ariad v. Eli Lilly, the specification must demonstrate possession of the full scope; functional genus claims require correspondingly broad disclosure.",
+    "recommended_direction": "Replace 'a digital signature, verified within the delegation zero-knowledge proof circuit using a circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve' with 'an EdDSA signature verified within the delegation zero-knowledge proof circuit using a Poseidon-based EdDSA verifier on the Baby Jubjub twisted Edwards curve embedded in the BN128 scalar field.' This aligns with the actual disclosure and avoids genus-species mismatch.",
+    "evidence": "Claim 9(g): 'circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve.' Spec Section 9.2 discloses only EdDSA on Baby Jubjub with Poseidon. Ariad v. Eli Lilly, 598 F.3d at 1351: 'the specification must demonstrate... possession of the full scope of the claimed invention.'",
+    "attack_id": "enablement_auditor_genus_signature",
+    "severity": 6,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_indefinite_designated_invalid",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      7
+    ],
+    "category": "112",
+    "finding": "Claim 7 recites revocation 'by updating the revoked agent's credential commitment to a designated invalid value in the second Merkle tree.' The term 'designated invalid value' is indefinite under Nautilus v. Biosig. The specification states the value is 'zero' (Section 4.4, Step 4: 'credential commitment is set to zero'). But the claim's 'designated invalid value' could be any value \u2014 zero, a sentinel, a hash of a revocation flag \u2014 and the specification provides no criteria for what makes a value 'designated' or 'invalid' beyond the single example of zero. A POSITA cannot determine with reasonable certainty what values fall within the claim scope.",
+    "recommended_direction": "Amend to 'updating the revoked agent's credential commitment to zero in the second Merkle tree' to match the specification's sole disclosure, or add specification text defining 'designated invalid value' as any value not producible by the Poseidon5 credential commitment computation (with proof that zero satisfies this).",
+    "evidence": "Claim 7: 'a designated invalid value.' Spec Section 4.4: 'credential commitment is set to zero in the agentTree.' Nautilus v. Biosig, 572 U.S. at 901: claims must 'inform those skilled in the art about the scope of the invention with reasonable certainty.'",
+    "attack_id": "enablement_auditor_indefinite_designated_invalid",
+    "severity": 5,
+    "specificity": 9,
+    "remediability": 9,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_scope_commitment_definition_inconsistency",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      1,
+      9,
+      14,
+      15
+    ],
+    "category": "112",
+    "finding": "The term 'identity-bound scope commitment' is defined in Section 3.7 as a commitment 'whose cryptographic pre-image includes both a policy field... and an identity field... such that the commitment cannot be reproduced by any party not in possession of both fields.' But Section 3.8 immediately discloses that because the credentialCommitment is public (a Merkle leaf), an offline attacker CAN reproduce the commitment by enumerating 2^64 bitmask values. The specification's own disclosure contradicts the definitional predicate ('cannot be reproduced by any party not in possession of both fields') since the credentialCommitment IS publicly possessed. Under Interval Licensing v. AOL, inconsistent terminology throughout the specification renders claims indefinite. The claims rely heavily on 'identity-bound' as the distinguishing feature over prior art, yet the specification's own analysis undermines the definition.",
+    "recommended_direction": "Revise the definition of 'identity-bound' in Section 3.7 to be honest about the security model: e.g., 'a commitment is identity-bound when its pre-image includes both a policy field and an identity field, such that a valid zero-knowledge proof of knowledge of the pre-image requires the prover to also demonstrate Merkle membership of the identity field.' This shifts the binding from computational hardness of the hash to the ZK proof's Merkle constraint, which is what actually prevents impersonation. Corresponding claim language should be tightened.",
+    "evidence": "Spec Section 3.7: 'cannot be reproduced by any party not in possession of both fields.' Spec Section 3.8: 'An offline attacker who knows the credentialCommitment can enumerate all 2^64 possible bitmask values.' Interval Licensing v. AOL, 766 F.3d at 1371: 'the inconsistency of the... terminology... renders the claims indefinite.'",
+    "attack_id": "enablement_auditor_scope_commitment_definition_inconsistency",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 6,
+    "total": 23,
+    "priority": "high"
+  }
+]

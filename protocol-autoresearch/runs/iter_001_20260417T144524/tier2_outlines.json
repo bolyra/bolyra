@@ -1,0 +1,858 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_conformance_interop_profile",
+      "persona": "standards_architect",
+      "title": "Interoperability profile with mandatory/optional feature tiers",
+      "dimension": "standards",
+      "description": "Define three conformance tiers using RFC 2119 language: Core (MUST: handshake verify, enrollment, root history checks), Extended (SHOULD: delegation chains up to depth 3, scope commitment verification), and Full (MAY: cross-chain root sync, off-chain batching). Each tier specifies the exact set of circuits, contract interfaces, and wire format messages an implementation must support. Pair this with the existing conformance test vectors, tagging each vector with its required tier. This prevents fragmentation where partial implementations claim Bolyra compatibility without supporting critical security properties like nullifier checking.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_interop_profile",
+      "adoption": 16,
+      "standards": 22,
+      "completeness": 18,
+      "correctness": 16,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_interop_profile",
+      "title": "Interoperability profile with mandatory/optional feature tiers",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/conformance-profile.md",
+          "description": "RFC 2119 conformance profile defining Core (MUST), Extended (SHOULD), and Full (MAY) tiers with exact circuit, contract, and wire-format requirements per tier"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/wire-format.md",
+          "description": "Canonical wire-format message definitions (enrollment, handshake, root-history, delegation, scope-commitment, cross-chain-sync, batch) with tier tags"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IBolyraCore.sol",
+          "description": "Solidity interface defining the MUST-implement contract surface: handshake verify, enrollment, and root history checks"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IBolyraExtended.sol",
+          "description": "Solidity interface for SHOULD-implement surface: delegation chains (depth \u2264 3) and scope commitment verification, inheriting IBolyraCore"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IBolyraFull.sol",
+          "description": "Solidity interface for MAY-implement surface: cross-chain root sync and off-chain batching, inheriting IBolyraExtended"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/core/nullifier_check.circom",
+          "description": "Core-tier Circom circuit enforcing nullifier uniqueness \u2014 MUST be supported by all conformant implementations"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/extended/delegation_chain.circom",
+          "description": "Extended-tier circuit verifying delegation chains up to depth 3 with scope commitment binding"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/full/cross_chain_root_sync.circom",
+          "description": "Full-tier circuit for cross-chain Merkle root synchronization proofs"
+        },
+        {
+          "type": "test",
+          "filename": "test/vectors/conformance-vectors.json",
+          "description": "Existing conformance test vectors augmented with a 'tier' field ('core' | 'extended' | 'full') and a 'required' boolean per vector"
+        },
+        {
+          "type": "test",
+          "filename": "test/conformance/core.test.ts",
+          "description": "Automated conformance harness for Core tier \u2014 runs all 'core' tagged vectors and asserts MUST-level compliance"
+        },
+        {
+          "type": "test",
+          "filename": "test/conformance/extended.test.ts",
+          "description": "Conformance harness for Extended tier \u2014 runs 'extended' tagged vectors, reports SHOULD violations as warnings not failures"
+        },
+        {
+          "type": "test",
+          "filename": "test/conformance/full.test.ts",
+          "description": "Conformance harness for Full tier \u2014 runs 'full' tagged vectors, MAY failures are informational only"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/conformance.ts",
+          "description": "SDK helper that detects which tier a target implementation supports and emits a conformance report with pass/warn/info per vector"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/conformance-badge.md",
+          "description": "Badge spec and self-certification checklist for implementers claiming 'Bolyra Core', 'Bolyra Extended', or 'Bolyra Full' compatibility"
+        }
+      ],
+      "steps": [
+        "Audit existing circuits, contract interfaces, and wire-format messages to produce a complete inventory of all protocol features",
+        "Classify each feature under Core/Extended/Full using RFC 2119 (MUST/SHOULD/MAY) based on security criticality \u2014 nullifier checks and root history are MUST; delegation and scope commitment are SHOULD; cross-chain sync and batching are MAY",
+        "Draft spec/conformance-profile.md with tier definitions, rationale for each classification, and explicit list of circuits, contract selectors, and message types per tier",
+        "Draft spec/wire-format.md with canonical message schemas (JSON Schema or protobuf) and tier annotations for each message type",
+        "Define IBolyraCore.sol, IBolyraExtended.sol, and IBolyraFull.sol Solidity interfaces matching the spec, ensuring inheritance chain preserves tier layering",
+        "Annotate existing conformance-vectors.json by adding 'tier' and 'required' fields to each vector; add missing Core-tier vectors for nullifier double-spend and enrollment replay",
+        "Implement core.test.ts conformance harness that loads tier-tagged vectors, runs them against a pluggable implementation adapter, and hard-fails on any MUST violation",
+        "Implement extended.test.ts and full.test.ts harnesses using the same adapter pattern with appropriate severity levels (warn vs info)",
+        "Add SDK conformance.ts utility that wraps the three harnesses and outputs a machine-readable conformance report (JSON) and a human-readable summary",
+        "Write docs/conformance-badge.md self-certification checklist and update the IETF internet-draft with the three-tier profile as a normative section",
+        "Run the full conformance suite against the reference implementation, fix any gaps, and tag the passing commit as the canonical conformance baseline"
+      ],
+      "estimated_constraints": 18400,
+      "dependencies": [
+        "spec/bolyra-internet-draft.md",
+        "test/vectors/conformance-vectors.json",
+        "circuits/handshake_verify.circom",
+        "circuits/enrollment.circom",
+        "contracts/BolyraRegistry.sol",
+        "@bolyra/sdk v0.1.0"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_circuit_invariant_properties",
+      "persona": "formal_verifier",
+      "title": "Certora-style invariant properties for all three circuits",
+      "dimension": "standards",
+      "description": "Write machine-checkable invariant specifications for HumanUniqueness, AgentPolicy, and Delegation. Properties include: (1) no private input can exceed its declared bit-width after Num2Bits decomposition, (2) nullifierHash is deterministic given (scope, secret) or (nonce, credCommitment), (3) scopeCommitment chain is monotonically narrowing across delegation hops (delegateeScope & ~delegatorScope == 0), (4) Merkle root output is uniquely determined by leaf + proof path. Express these in a property specification language (circomspect annotations or a standalone JSON property file) that can be consumed by circomspect or picus. Include 10+ negative witness test vectors that violate each property.",
+      "priority": "high",
+      "estimated_effort": "week",
+      "candidate_id": "formal_verifier_circuit_invariant_properties",
+      "adoption": 15,
+      "standards": 21,
+      "completeness": 16,
+      "correctness": 20,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_circuit_invariant_properties",
+      "title": "Certora-style invariant properties for all three circuits",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "circuits/properties/invariants.json",
+          "description": "Machine-checkable invariant property file consumable by circomspect/picus: bit-width bounds, nullifier determinism, scope monotonicity, Merkle uniqueness for all three circuits"
+        },
+        {
+          "type": "spec",
+          "filename": "circuits/properties/human_uniqueness.properties",
+          "description": "circomspect annotation file for HumanUniqueness circuit: Num2Bits overflow guards, nullifierHash determinism over (scope, secret)"
+        },
+        {
+          "type": "spec",
+          "filename": "circuits/properties/agent_policy.properties",
+          "description": "circomspect annotation file for AgentPolicy circuit: Num2Bits overflow guards, nullifierHash determinism over (nonce, credCommitment), Merkle root uniqueness"
+        },
+        {
+          "type": "spec",
+          "filename": "circuits/properties/delegation.properties",
+          "description": "circomspect annotation file for Delegation circuit: scope monotonicity invariant (delegateeScope & ~delegatorScope == 0), Merkle root uniqueness, nullifier determinism"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/negative_witnesses/human_uniqueness_violations.json",
+          "description": "10+ negative witness test vectors that violate HumanUniqueness invariants: over-bit-width inputs, colliding nullifiers with different secrets, scope mismatch"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/negative_witnesses/agent_policy_violations.json",
+          "description": "10+ negative witness test vectors that violate AgentPolicy invariants: malformed credCommitment, non-deterministic nonce reuse, forged Merkle paths"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/negative_witnesses/delegation_violations.json",
+          "description": "10+ negative witness test vectors that violate Delegation invariants: scope widening attempts, Merkle path forgery, nullifier collision across hops"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/property_harness.ts",
+          "description": "TypeScript test harness using snarkjs witness generation to assert each negative vector fails to produce a valid witness or produces a constraint violation"
+        },
+        {
+          "type": "docs",
+          "filename": "circuits/properties/README.md",
+          "description": "Explains property specification format, how to run circomspect and picus against each .properties file, and how to add new invariants"
+        }
+      ],
+      "steps": [
+        "Audit all three circuit source files (HumanUniqueness, AgentPolicy, Delegation) to enumerate every signal, its declared bit-width, and all Num2Bits component instantiations",
+        "Define the JSON schema for invariants.json: properties array with fields {circuit, property_id, type (bit_width|determinism|monotonicity|uniqueness), signals[], formula_smt2, picus_query}",
+        "Write P1 (bit-width) invariants: for each Num2Bits(n) instantiation assert in[i] < 2^n; express as SMT2 range assertions in invariants.json and as circomspect @assert annotations",
+        "Write P2 (nullifier determinism) invariants: assert that two witnesses agreeing on (scope, secret) must produce identical nullifierHash; express as a picus forall-exists query pairing",
+        "Write P3 (scope monotonicity) invariants for Delegation: assert delegateeScope & (~delegatorScope) == 0 using bitwise constraint encoding; model as a linear arithmetic assertion over bit decomposition signals",
+        "Write P4 (Merkle root uniqueness) invariants: assert that fixing leaf + sibling path uniquely determines root; express as a picus differential query showing two distinct paths cannot yield same root with different leaves",
+        "Author human_uniqueness.properties, agent_policy.properties, delegation.properties in circomspect annotation format referencing the JSON property IDs",
+        "Generate negative witness vectors for P1: craft inputs with values at 2^n and 2^n+1 boundary for each Num2Bits call across all three circuits (minimum 4 vectors per circuit)",
+        "Generate negative witness vectors for P2: craft (scope, secret) pairs that share one component but differ in the other, expecting distinct nullifiers; include a crafted collision attempt",
+        "Generate negative witness vectors for P3: craft delegation witnesses where delegateeScope sets a bit not set in delegatorScope (scope widening), plus multi-hop widening chain",
+        "Generate negative witness vectors for P4: craft Merkle proof with a flipped sibling bit and assert witness generation fails constraint check",
+        "Implement property_harness.ts: for each negative vector JSON, call snarkjs.wtns.calculate(), catch constraint errors, assert expected failure; output a pass/fail report per property",
+        "Run circomspect on all three circuits using the .properties files; capture output and assert zero unverified properties",
+        "Run picus (or picus-compatible tool) on invariants.json queries for determinism and uniqueness; document any counterexamples found",
+        "Update circuits/properties/README.md with exact CLI invocations, expected output, and CI integration snippet"
+      ],
+      "estimated_constraints": 340,
+      "dependencies": [
+        "circom >= 2.1.6",
+        "circomspect >= 0.9.0",
+        "picus (or compatible SMT-based ZK property checker)",
+        "snarkjs >= 0.7.0",
+        "HumanUniqueness.circom source",
+        "AgentPolicy.circom source",
+        "Delegation.circom source",
+        "poseidon_constants.circom (for nullifier hash signal tracing)",
+        "MerkleProof component source (for path uniqueness analysis)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "persona": "cross_chain_engineer",
+      "title": "Chain-agnostic nullifier registry to prevent cross-chain replay",
+      "dimension": "correctness",
+      "description": "The current nullifier check (`usedNonces`, `usedNullifiers`) is per-contract, meaning a handshake proof verified on Base can be replayed on Arbitrum if the same root is synced. Add a `chainId` field to the nullifier derivation: `nullifier = Poseidon3(scope, secret, chainId)` in HumanUniqueness and `Poseidon3(credentialCommitment, sessionNonce, chainId)` in AgentPolicy. This makes nullifiers chain-specific at the circuit level. Publish a shared nullifier Bloom filter commitment on-chain that cross-chain relayers can reference for probabilistic double-spend detection before full finality.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "adoption": 16,
+      "standards": 14,
+      "completeness": 18,
+      "correctness": 20,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "title": "Chain-agnostic nullifier registry to prevent cross-chain replay",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/HumanUniqueness.circom",
+          "description": "Add chainId as a public input; update nullifier derivation to Poseidon3(scope, secret, chainId)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/AgentPolicy.circom",
+          "description": "Add chainId as a public input; update nullifier derivation to Poseidon3(credentialCommitment, sessionNonce, chainId)"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/NullifierRegistry.sol",
+          "description": "Chain-local nullifier storage with chain-scoped mapping; emits NullifierUsed events for cross-chain relayer indexing"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/BloomFilterCommitment.sol",
+          "description": "On-chain Bloom filter commitment updated by authorized relayers; exposes probabilistic double-spend check for cross-chain verification before finality"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/HumanUniquenessVerifier.sol",
+          "description": "Updated verifier wiring to pass chainId from calldata into nullifier check; delegates nullifier storage to NullifierRegistry"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/AgentPolicyVerifier.sol",
+          "description": "Updated verifier wiring to pass chainId into AgentPolicy nullifier check; delegates to NullifierRegistry"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/cross-chain-nullifier.md",
+          "description": "Protocol spec: nullifier derivation scheme, chainId encoding (EIP-155), Bloom filter commitment format, relayer API, finality assumptions per chain"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/nullifier.ts",
+          "description": "TypeScript helpers: deriveHumanNullifier(scope, secret, chainId) and deriveAgentNullifier(credentialCommitment, sessionNonce, chainId) using circomlibjs Poseidon"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/bloomFilter.ts",
+          "description": "Client-side Bloom filter query helper: checks nullifier against the latest on-chain commitment before submitting a proof"
+        },
+        {
+          "type": "test",
+          "filename": "test/circuits/nullifierChainId.test.ts",
+          "description": "Circom unit tests: same (scope, secret) with different chainIds produce distinct nullifiers; constraint count regression"
+        },
+        {
+          "type": "test",
+          "filename": "test/contracts/NullifierRegistry.test.ts",
+          "description": "Hardhat tests: nullifier isolation per chainId, double-spend revert on same chain, cross-chain replay scenario simulation"
+        },
+        {
+          "type": "test",
+          "filename": "test/contracts/BloomFilterCommitment.test.ts",
+          "description": "Hardhat tests: commitment update access control, false-positive rate validation, staleness/expiry logic"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/cross-chain-replay-protection.md",
+          "description": "Developer guide: migration notes for existing deployments, chainId encoding convention, relayer integration, known limitations (probabilistic Bloom filter)"
+        }
+      ],
+      "steps": [
+        "Update HumanUniqueness.circom: add chainId as a 32-bit public input signal; replace Poseidon2(scope, secret) nullifier with Poseidon3(scope, secret, chainId); regenerate trusted setup artifacts",
+        "Update AgentPolicy.circom: add chainId public input; replace existing Poseidon2 nullifier with Poseidon3(credentialCommitment, sessionNonce, chainId); regenerate trusted setup artifacts",
+        "Recompute and commit new constraint counts; verify no unexpected constraint blowup (expected delta: +1 Poseidon round per circuit)",
+        "Deploy NullifierRegistry.sol: mapping(uint256 chainId => mapping(bytes32 nullifier => bool)) with onlyVerifier write access; emit NullifierUsed(chainId, nullifier, block.timestamp)",
+        "Deploy BloomFilterCommitment.sol: stores rotating Bloom filter root commitments; exposes isLikelyUsed(bytes32 nullifier) view; updatable by authorized cross-chain relayer multisig",
+        "Update HumanUniquenessVerifier.sol and AgentPolicyVerifier.sol to accept chainId in calldata, assert chainId == block.chainid, pass to NullifierRegistry, and check BloomFilterCommitment before writing",
+        "Update SDK: implement deriveHumanNullifier and deriveAgentNullifier in sdk/src/nullifier.ts using circomlibjs Poseidon with chainId parameter",
+        "Implement sdk/src/bloomFilter.ts: fetch latest BloomFilterCommitment from target chain RPC, run client-side probabilistic check before proof submission",
+        "Write circuit unit tests covering: same inputs + different chainIds yield distinct nullifiers, same inputs + same chainId yield identical nullifiers (determinism), constraint count within budget",
+        "Write contract tests covering: NullifierRegistry rejects replay on same chain, accepts same nullifier on different simulated chainIds as separate entries, BloomFilterCommitment access control and update cycle",
+        "Write integration test simulating cross-chain relay: prove on chain A, attempt replay on chain B, verify Bloom filter flags it before NullifierRegistry write",
+        "Write spec document cross-chain-nullifier.md: encoding convention (EIP-155 uint256), Bloom filter parameter choices (k, m, target FPR), relayer update cadence, finality assumptions (Arbitrum ~1 week, Base ~7 days optimistic)",
+        "Write developer migration guide covering existing deployment upgrade path, re-issuance policy for legacy nullifiers missing chainId, and ABI changes",
+        "Audit: verify Poseidon3 implementation matches iden3 reference; check for chainId malleability (ensure circuit constrains chainId == public input, not free signal)",
+        "Deploy to testnets (Base Sepolia, Arbitrum Sepolia), run end-to-end cross-chain replay scenario, confirm Bloom filter commitment sync via relayer"
+      ],
+      "estimated_constraints": 4,
+      "dependencies": [
+        "circomlib Poseidon3 (iden3/circomlib >= 2.0.5)",
+        "circomlibjs for TypeScript Poseidon3 SDK implementation",
+        "EIP-155 chainId standard for encoding convention",
+        "Hardhat with hardhat-circom plugin for circuit + contract co-testing",
+        "Cross-chain relayer infrastructure (e.g. Hyperlane or custom) for BloomFilterCommitment sync",
+        "Existing HumanUniqueness.circom and AgentPolicy.circom trusted setup ceremony tooling (snarkjs, Groth16 or PLONK)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_w3c_did_method",
+      "persona": "standards_architect",
+      "title": "W3C DID Method Specification for did:bolyra",
+      "dimension": "standards",
+      "description": "Define a complete did:bolyra DID method spec mapping identity commitments to did:bolyra:<hex(commitment)>. Specify the DID Document structure (verification methods using BabyJubJub keys, service endpoints for handshake initiation), the resolution algorithm (on-chain lookup via IdentityRegistry), CRUD operations (create = enroll, deactivate = revoke), and a Verifiable Credential schema for handshake attestations. Without a DID binding, Bolyra identities are siloed and cannot interoperate with the W3C Verifiable Credentials ecosystem or existing SSI wallets.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_w3c_did_method",
+      "adoption": 19,
+      "standards": 23,
+      "completeness": 21,
+      "correctness": 9,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_w3c_did_method",
+      "title": "W3C DID Method Specification for did:bolyra",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "specs/did-method-bolyra.md",
+          "description": "W3C DID Method specification document for did:bolyra, covering method syntax (did:bolyra:<hex(commitment)>), DID Document structure, CRUD operations, security considerations, and privacy considerations per W3C DID Core 1.0"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/vc-schema-handshake-attestation.json",
+          "description": "JSON Schema + JSON-LD context for HandshakeAttestationCredential \u2014 a W3C Verifiable Credential encoding a completed bolyra handshake (issuer DID, subject DID, handshake root, timestamp, expiry)"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/did-document-example.json",
+          "description": "Canonical example DID Document for a did:bolyra identity: verificationMethod with BabyJubJub public key (JsonWebKey2020 + custom type BabyJubJubKey2021), assertionMethod, authentication, and service endpoint for handshake initiation"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IdentityRegistry.sol",
+          "description": "On-chain registry mapping commitment (bytes32) \u2192 DID Document hash + controller address + status (active/revoked). Emits DIDCreated, DIDUpdated, DIDRevoked events. Implements resolve(), create(), update(), deactivate() per the spec CRUD definitions"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/sdk/src/did/resolver.ts",
+          "description": "did:bolyra DID resolver implementing the DIF DID Resolver interface: resolve(did) \u2192 DIDResolutionResult. Reads IdentityRegistry on-chain, reconstructs DID Document, validates commitment matches DID string"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/sdk/src/did/document-builder.ts",
+          "description": "DID Document builder: derives did:bolyra DID from identity commitment, constructs verificationMethod entries from BabyJubJub public key (packed x/y coordinates encoded as JsonWebKey), appends handshake service endpoint"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/sdk/src/vc/issue.ts",
+          "description": "Verifiable Credential issuer for HandshakeAttestationCredential: signs credential with issuer BabyJubJub key using Data Integrity proof (EdDSA-BabyJubJub suite), returns W3C VC JSON-LD document"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/sdk/src/vc/verify.ts",
+          "description": "Verifiable Credential verifier: resolves issuer DID, retrieves verification key, verifies EdDSA-BabyJubJub proof, checks credential status and expiry"
+        },
+        {
+          "type": "test",
+          "filename": "packages/sdk/src/did/__tests__/resolver.test.ts",
+          "description": "Unit + integration tests for DID resolver: resolve active DID, resolve revoked DID (expect deactivated metadata), resolve unknown DID (expect notFound error), verify DID Document shape matches spec"
+        },
+        {
+          "type": "test",
+          "filename": "packages/sdk/src/vc/__tests__/roundtrip.test.ts",
+          "description": "VC roundtrip tests: issue HandshakeAttestationCredential, verify proof, tamper credential and expect verification failure, verify expired credential rejection"
+        },
+        {
+          "type": "test",
+          "filename": "test/did-conformance.ts",
+          "description": "W3C DID Core conformance test suite runner adapted for did:bolyra: exercises all MUST/SHOULD requirements from the spec using the did-core-test-suite harness"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/did-integration-guide.md",
+          "description": "Developer guide: how to resolve a did:bolyra DID in an SSI wallet, how to present a HandshakeAttestationCredential to a relying party, how to register an existing bolyra identity as a DID"
+        }
+      ],
+      "steps": [
+        "Define did:bolyra method name syntax: did:bolyra:<hex(Poseidon(identity_commitment))> \u2014 lowercase hex, 64 chars, no checksum; document in specs/did-method-bolyra.md section 1",
+        "Specify DID Document structure: id = did:bolyra:<commitment_hex>, verificationMethod array with type BabyJubJubKey2021 + publicKeyJwk (crv: Baby-Jubjub, x/y base64url), authentication and assertionMethod referencing the VM, service array with type BolyraHandshakeEndpoint and serviceEndpoint URL",
+        "Define CRUD semantics: Create = enroll() call on IdentityRegistry storing keccak256(DID Document) + controller; Read = resolve() returning stored document hash + reconstruction; Update = updateDocument() for service endpoint changes only (keys are commitment-derived, immutable); Deactivate = revoke() setting status flag, making DID Document return empty with deactivated=true metadata",
+        "Implement IdentityRegistry.sol with create/resolve/update/deactivate functions, AccessControl for controller-only mutations, event log for DID audit trail, and view function returning (docHash, controller, active, updatedAt)",
+        "Implement DID resolver in packages/sdk/src/did/resolver.ts: parse did:bolyra DID string, validate hex commitment format, call IdentityRegistry.resolve() via ethers provider, reconstruct DID Document from stored hash + commitment, return DIDResolutionResult with didDocument + didDocumentMetadata",
+        "Implement document-builder.ts: accept (commitment: bigint, bjjPublicKey: {x: bigint, y: bigint}, serviceEndpoint?: string) \u2192 DIDDocument; encode BabyJubJub key as JsonWebKey (crv Baby-Jubjub per draft-ietf-cose-bls-key-representations analogue); include handshake service endpoint",
+        "Define HandshakeAttestationCredential JSON-LD context and JSON Schema in specs/vc-schema-handshake-attestation.json: @type, issuer (did:bolyra), credentialSubject (did:bolyra, handshakeRoot hex, participantCommitments array), issuanceDate, expirationDate, proof (EdDSA-BabyJubJub Data Integrity)",
+        "Implement VC issuer (packages/sdk/src/vc/issue.ts): serialize credential without proof, hash with Poseidon, sign hash with issuer BabyJubJub private key using EdDSA (circomlibjs), attach proof block with verificationMethod reference",
+        "Implement VC verifier (packages/sdk/src/vc/verify.ts): resolve issuer did:bolyra, extract BabyJubJub public key from DID Document, re-hash credential body, verify EdDSA signature, check expirationDate and issuer deactivation status",
+        "Write resolver unit tests against a hardhat-forked or in-memory IdentityRegistry: test active DID resolution, revoked DID returns deactivated metadata, malformed DID string returns invalidDid error",
+        "Write VC roundtrip tests: issue credential, serialize to JSON-LD, parse, verify \u2014 assert proof valid; mutate credentialSubject field, re-verify \u2014 assert proof invalid; set expiry in the past \u2014 assert expired error",
+        "Run W3C DID Core conformance suite (did-core-test-suite) against a local resolver instance; document any MUST requirement gaps and resolve them in the spec",
+        "Write docs/did-integration-guide.md covering: importing @bolyra/sdk resolver into a universal-resolver driver, presenting HandshakeAttestationCredential via DIF Presentation Exchange, registering bolyra identity as DID via SDK CLI command"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "W3C DID Core 1.0 specification (https://www.w3.org/TR/did-core/)",
+        "W3C Verifiable Credentials Data Model 2.0",
+        "DIF DID Resolver interface (@decentralized-identity/did-resolver)",
+        "circomlibjs (BabyJubJub EdDSA sign/verify)",
+        "ethers v6 (IdentityRegistry on-chain calls)",
+        "IdentityRegistry.sol (new contract, no existing dependency)",
+        "@bolyra/sdk v0.1.0 (existing SDK core for key types and enrollment flow)",
+        "did-core-test-suite (W3C conformance harness)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_conformance_vectors_multichain",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain test vectors in conformance suite",
+      "dimension": "standards",
+      "description": "Extend the existing conformance test suite with 10+ vectors covering multi-chain scenarios: valid storage proof relay, stale foreign root rejection, cross-chain nullifier replay (must fail), delegation chain spanning two chains, and chainId mismatch in nullifier derivation. Each vector should include the source chainId, destination chainId, and the storage proof or CCIP payload. This ensures any new chain deployment can validate interop correctness before going live.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_conformance_vectors_multichain",
+      "adoption": 16,
+      "standards": 21,
+      "completeness": 15,
+      "correctness": 14,
+      "total": 66,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_conformance_vectors_multichain",
+      "title": "Cross-chain test vectors in conformance suite",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/conformance/cross-chain-vectors.md",
+          "description": "Narrative spec defining the 5 cross-chain scenario categories, field schema for each vector (srcChainId, dstChainId, storageProof/ccipPayload, expectedOutcome), and the validity rules each scenario exercises."
+        },
+        {
+          "type": "test",
+          "filename": "test/conformance/vectors/cross_chain_vectors.json",
+          "description": "Machine-readable JSON array of 10+ fully-specified cross-chain test vectors. Each entry includes srcChainId, dstChainId, nullifier, rootHash, storageProof or ccipPayload, delegationChain (if applicable), and expectedResult (valid|invalid) with failureReason."
+        },
+        {
+          "type": "test",
+          "filename": "test/conformance/cross_chain_conformance.test.ts",
+          "description": "TypeScript test harness that loads cross_chain_vectors.json and exercises each vector against the on-chain verifier contracts and/or SDK proof-generation path, asserting expectedResult matches actual outcome."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/test/CrossChainConformanceHarness.sol",
+          "description": "Thin Solidity harness wrapping the production verifier and storage-proof relay logic, exposing individual verification steps so test vectors can probe internal acceptance/rejection paths without deploying full protocol infra."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/conformance/crossChainVectorRunner.ts",
+          "description": "SDK utility that accepts a vector from the JSON corpus, constructs the appropriate CCIP payload or storage proof, submits it to the harness, and returns a structured result for CI comparison."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/conformance/cross-chain-guide.md",
+          "description": "Operator guide: how to run the cross-chain conformance suite against a new chain deployment, what each scenario category validates, and how to add new vectors for custom chain configurations."
+        }
+      ],
+      "steps": [
+        "Define the vector schema: fields srcChainId, dstChainId, scenario (enum: VALID_RELAY | STALE_ROOT | NULLIFIER_REPLAY | DELEGATION_CROSS_CHAIN | CHAINID_MISMATCH), storageProof, ccipPayload, nullifier, rootHash, delegationChain, expectedResult, failureReason.",
+        "Author 3 VALID_RELAY vectors: well-formed storage proof relayed from chain A to chain B, varying chainId pairs (e.g., 1\u2192137, 1\u219242161, 137\u21928453), all expected to pass.",
+        "Author 2 STALE_ROOT vectors: foreign root that has been superseded by a newer root on the source chain; expected to be rejected with STALE_ROOT error.",
+        "Author 2 NULLIFIER_REPLAY vectors: nullifier already consumed on destination chain submitted again cross-chain; expected to fail with NULLIFIER_ALREADY_USED.",
+        "Author 2 DELEGATION_CROSS_CHAIN vectors: delegation chain where delegator is on chain A and delegatee claim is verified on chain B; one valid, one where the cross-chain link is broken.",
+        "Author 2 CHAINID_MISMATCH vectors: nullifier derived with wrong chainId embedded in the leaf hash; expected to fail signature/hash validation.",
+        "Implement CrossChainConformanceHarness.sol exposing verifyStorageProof(srcChainId, dstChainId, proof), verifyNullifier(nullifier, chainId), and replayCheck(nullifier) so harness can be driven per-scenario.",
+        "Implement crossChainVectorRunner.ts in the SDK to load a vector, select the appropriate harness entry-point by scenario type, execute, and return {vectorId, passed, actual, expected}.",
+        "Write cross_chain_conformance.test.ts using the runner: iterate all vectors, assert pass/fail, collect failures and report with scenario context.",
+        "Add CI job (e.g., GitHub Actions step) that runs the conformance suite against a local Hardhat fork of each reference chainId pair, gating on zero failures.",
+        "Update spec/conformance/cross-chain-vectors.md with rationale for each scenario and reference to the relevant protocol clause (storage proof relay spec, nullifier derivation spec, delegation spec).",
+        "Write docs/conformance/cross-chain-guide.md with instructions for new chain operators to validate interop before going live."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "Existing storage proof relay verifier contract (source of truth for VALID_RELAY and STALE_ROOT logic)",
+        "Nullifier derivation spec (defines chainId embedding in leaf hash, needed for CHAINID_MISMATCH vectors)",
+        "Delegation Merkle proof implementation (CIP-1, needed for DELEGATION_CROSS_CHAIN vectors)",
+        "CCIP payload schema / cross-chain message format spec",
+        "Hardhat multi-chain fork configuration for CI (srcChainId and dstChainId fork pairs)",
+        "@bolyra/sdk v0.1.0 (TypeScript SDK core, needed for crossChainVectorRunner.ts)",
+        "Existing IETF internet-draft conformance test vector format (for schema consistency)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "circuit_optimizer_groth16_to_plonk_human",
+      "persona": "circuit_optimizer",
+      "title": "Migrate HumanUniqueness from Groth16 to PLONK for unified proving",
+      "dimension": "adoption",
+      "description": "HumanUniqueness uses Groth16 (requiring trusted setup ceremony reuse from Semaphore v4 depth-20), while AgentPolicy and Delegation use PLONK. This forces SDK consumers to bundle two different proving systems, increasing WASM bundle size by ~2MB and doubling key management complexity. Migrate HumanUniqueness to PLONK with the same universal SRS. The circuit is small (~15k constraints with BabyPbk + Merkle + Poseidon), well within PLONK's sweet spot. Unifies the verifier interface, halves client-side code, and removes the ceremony dependency.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_groth16_to_plonk_human",
+      "adoption": 22,
+      "standards": 15,
+      "completeness": 16,
+      "correctness": 12,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "circuit_optimizer_groth16_to_plonk_human",
+      "title": "Migrate HumanUniqueness from Groth16 to PLONK for unified proving",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/human_uniqueness/human_uniqueness.circom",
+          "description": "Existing HumanUniqueness circuit (BabyPbk + depth-20 Merkle + Poseidon nullifier). No logic changes required; only proving system swap. Annotate with PLONK-compatible custom gate hints if snarkjs PLONK is used."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/human_uniqueness/compile.sh",
+          "description": "Updated build script: replace groth16 setup phase with plonk setup using the shared universal SRS (ptau file already used by AgentPolicy and Delegation circuits). Produces plonk.zkey and verification_key.json."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/verifiers/HumanUniquenessVerifier.sol",
+          "description": "Regenerated Solidity verifier via snarkjs exportSolidityVerifier --plonk. Replaces the Groth16 verifier. ABI surface: single verifyProof(bytes calldata proof, uint256[] calldata pubSignals) matching the unified verifier interface used by AgentPolicyVerifier and DelegationVerifier."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/HumanRegistry.sol",
+          "description": "Update verifier interface import and call site to use the new PLONK verifier ABI. Remove any Groth16-specific vkAlpha/vkBeta/vkGamma/vkDelta storage if previously embedded on-chain."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/provers/humanUniqueness.ts",
+          "description": "Replace groth16.fullProve with plonk.fullProve (snarkjs). Remove groth16 WASM/zkey imports; point to shared plonk.zkey and human_uniqueness.wasm. Export proof in the unified ProofBundle type already used by agentPolicy and delegation provers."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/proving-system.ts",
+          "description": "Remove the ProvingSystem enum branch for GROTH16 in HumanUniqueness. Assert single PLONK path. Simplify bundle exports: drop groth16_wasm and groth16_zkey from the human module entry point."
+        },
+        {
+          "type": "spec",
+          "filename": "specs/human-uniqueness-plonk.md",
+          "description": "Updated circuit spec: document SRS requirements (min 2^15 powers of tau), public signal layout, nullifier derivation, and proof serialization format. Note removal of trusted setup ceremony dependency."
+        },
+        {
+          "type": "test",
+          "filename": "tests/circuits/human_uniqueness_plonk.test.ts",
+          "description": "Full prove/verify round-trip tests with PLONK. Cover: valid membership proof, invalid Merkle path rejection, nullifier collision detection, and proof serialization compatibility with HumanUniquenessVerifier.sol."
+        },
+        {
+          "type": "test",
+          "filename": "tests/contracts/HumanRegistry.plonk.test.ts",
+          "description": "Hardhat/Foundry integration tests: deploy new PLONK verifier, submit valid and malformed proofs, assert gas costs are within acceptable delta vs Groth16 baseline (~10-15% increase expected on-chain)."
+        },
+        {
+          "type": "test",
+          "filename": "tests/sdk/bundle-size.test.ts",
+          "description": "Regression test asserting WASM bundle does not include groth16 runtime. Measure total SDK bundle size before/after; assert \u22651.8MB reduction."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/migration/groth16-to-plonk.md",
+          "description": "Consumer migration guide: updated key file paths, new proof shape, removed ceremony requirement. Include before/after SDK snippet and bundle size comparison table."
+        }
+      ],
+      "steps": [
+        "Verify shared universal SRS (ptau) has sufficient size for HumanUniqueness: compute constraint count for BabyPbk + Poseidon-3 + depth-20 Merkle (expected ~12k-15k constraints); confirm ptau supports \u22652^14 (16k) constraints.",
+        "Run circom compilation of human_uniqueness.circom unchanged; confirm R1CS output is identical to current Groth16 build (same constraint count validates no circuit regression).",
+        "Execute `snarkjs plonk setup` with the shared ptau to produce human_uniqueness.plonk.zkey; commit zkey hash to circuit/human_uniqueness/checksums.txt alongside AgentPolicy and Delegation zkey hashes.",
+        "Export PLONK verification key JSON via `snarkjs zkey export verificationkey`; regenerate HumanUniquenessVerifier.sol via `snarkjs zkey export solidityverifier --plonk`.",
+        "Update HumanRegistry.sol: swap verifier import, update verifyProof call signature to PLONK ABI, remove any on-chain Groth16 verification key storage slots, write Foundry migration script.",
+        "Update SDK humanUniqueness.ts prover to call plonk.fullProve; align ProofBundle serialization (bytes proof + uint256[] pubSignals) with unified interface; remove groth16 imports.",
+        "Update SDK build config (rollup/webpack): remove human_uniqueness_groth16.wasm and .zkey from bundle; ensure single proving-system code path in tree-shaking.",
+        "Write and run circuit-level round-trip tests (prove + verify off-chain) for valid and invalid inputs.",
+        "Write and run Hardhat/Foundry contract integration tests with new PLONK verifier; record gas costs.",
+        "Run bundle-size regression test; assert \u22651.8MB reduction in browser WASM payload.",
+        "Run full existing test suite (AgentPolicy, Delegation, HumanUniqueness) to confirm no cross-circuit regressions.",
+        "Update specs/human-uniqueness-plonk.md and consumer migration guide.",
+        "Open PR: include before/after bundle size diff, gas cost table, and confirmation that Semaphore v4 ceremony dependency is removed from build pipeline."
+      ],
+      "estimated_constraints": 14000,
+      "dependencies": [
+        "snarkjs >= 0.7 (PLONK support)",
+        "circomlib (BabyPbk, Poseidon, MerkleProof templates \u2014 unchanged)",
+        "Shared powers-of-tau file (ptau) with \u22652^14 constraints, already used by AgentPolicy and Delegation circuits",
+        "Hardhat or Foundry for Solidity verifier integration tests",
+        "Existing unified ProofBundle type in SDK (AgentPolicy/Delegation prover interface)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "dimension": "completeness",
+      "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside the existing Base deployment. Implement a RootRelay contract that accepts EIP-1186 storage proofs of humanRootHistory/agentRootHistory slots from the source chain, verified against the source chain's state root available via each L2's L1 block oracle. This avoids bridges entirely \u2014 any relayer can post a storage proof and the destination chain verifies it trustlessly. Add a `foreignRootExists` mapping and extend `handshakeVerify` to accept roots from any registered source chain.",
+      "priority": "high",
+      "estimated_effort": "week",
+      "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+      "adoption": 18,
+      "standards": 14,
+      "completeness": 22,
+      "correctness": 13,
+      "total": 67,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/StorageProofVerifier.sol",
+          "description": "Library implementing RLP decoding and Merkle-Patricia Trie (MPT) proof verification for EIP-1186 storage proofs. Exposes verifyStorageProof(bytes32 stateRoot, address account, bytes32 slot, bytes[] calldata accountProof, bytes[] calldata storageProof) returning the slot value."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IL1BlockOracle.sol",
+          "description": "Abstract interface for L1 block hash oracles across supported L2s. Implementations: ArbL1BlockOracle (wraps ArbSys.getL1BlockHash), PolygonL1BlockOracle (wraps bor/state-sync block hash feed). Returns (blockNumber, stateRoot) for a given L1 block."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/RootRelay.sol",
+          "description": "Core cross-chain relay contract. Maintains a registry of (chainId => sourceRegistryAddress => IL1BlockOracle). Accepts relay submissions: given an L1 block reference, an account proof for the source IdentityRegistry, and a storage proof for humanRootHistory[root] or agentRootHistory[root], verifies trustlessly via StorageProofVerifier and writes to foreignRootExists[chainId][root] = true. Emits RootRelayed(chainId, root, relayer)."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/IdentityRegistry.sol",
+          "description": "Extended IdentityRegistry with: (1) foreignRootExists(uint256 chainId, bytes32 root) mapping populated by RootRelay; (2) handshakeVerify overload accepting a sourceChainId param that checks foreignRootExists in addition to local roots; (3) onlyRootRelay modifier restricting foreignRootExists writes."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/ChainRegistry.sol",
+          "description": "Owner-governed registry mapping chainId => (registryAddress, oracleAddress, storageSlotLayout). Stores packed slot indices for humanRootHistory and agentRootHistory mappings to support future registry upgrades without redeploying RootRelay."
+        },
+        {
+          "type": "test",
+          "filename": "test/StorageProofVerifier.t.sol",
+          "description": "Foundry fuzz + unit tests. Includes fixtures of real eth_getProof responses captured from Base mainnet for humanRootHistory slots. Tests MPT proof accept/reject, RLP edge cases, and wrong-stateRoot reverts."
+        },
+        {
+          "type": "test",
+          "filename": "test/RootRelay.t.sol",
+          "description": "Foundry fork tests (Base + Arbitrum + Polygon forks). Simulates a full relay cycle: insert a root on Base, capture eth_getProof output, submit to Arbitrum RootRelay, assert foreignRootExists is set. Also tests invalid proofs, stale block references, and unauthorized registry writes."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/cross-chain/storageProof.ts",
+          "description": "TypeScript relayer utility. Calls eth_getProof on source chain for (registryAddress, [humanRootHistorySlot, agentRootHistorySlot]). Encodes account + storage proof as ABI-ready bytes[]. Exports buildRelayCalldata(root, chainId, provider) for submission to RootRelay."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/cross-chain/slotLayout.ts",
+          "description": "Deterministic slot computation for mapping(bytes32 => ...) at known storage positions. Derives keccak256(abi.encode(root, mappingSlot)) for humanRootHistory and agentRootHistory given the registry's current storage layout."
+        },
+        {
+          "type": "spec",
+          "filename": "specs/cross-chain-root-sync.md",
+          "description": "Protocol spec covering: threat model (relayer is untrusted), block reference freshness window (configurable staleness bound in L1 blocks), storage slot stability requirements, multi-chain deployment topology, and upgrade path if oracle contracts change."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/relay-operator-guide.md",
+          "description": "Runbook for relayer operators: how to monitor new root insertions via RootInserted events on source chain, generate proofs using the SDK, estimate gas, handle reorgs, and configure the staleness window."
+        }
+      ],
+      "steps": [
+        "Audit IdentityRegistry storage layout: pin exact slot indices for humanRootHistory and agentRootHistory mappings; document in ChainRegistry to ensure proof generation always targets the correct slot",
+        "Implement StorageProofVerifier library: RLP-decode account proof to extract storageRoot, then verify storage proof via MPT walk against storageRoot; return decoded slot value or revert on mismatch",
+        "Define IL1BlockOracle interface and implement ArbL1BlockOracle (ArbSys.getL1BlockHash) and PolygonL1BlockOracle (bor blockhash opcode / state-sync precompile) with a freshness check (revert if L1 block older than STALENESS_BLOCKS)",
+        "Implement ChainRegistry with owner-governed mapping of chainId to (registryAddress, oracleAddress, humanRootHistorySlot, agentRootHistorySlot) to decouple chain config from RootRelay logic",
+        "Implement RootRelay: validate source chain is registered, fetch stateRoot from oracle, call StorageProofVerifier, confirm slot value == keccak256(root) or nonzero sentinel, write foreignRootExists, emit RootRelayed",
+        "Extend IdentityRegistry: add foreignRootExists mapping with onlyRootRelay write guard; add handshakeVerify(bytes32 root, uint256 sourceChainId) that checks local roots OR foreignRootExists[sourceChainId][root]",
+        "Write Foundry unit tests for StorageProofVerifier using real eth_getProof fixtures from Base; cover valid proofs, tampered proofs, wrong account, and empty slot edge cases",
+        "Write Foundry fork tests for full relay cycle across Base\u2192Arbitrum and Base\u2192Polygon; assert correct state transitions and revert conditions (stale block, unregistered chain, bad proof)",
+        "Implement TypeScript SDK: slotLayout.ts for deterministic slot derivation; storageProof.ts wrapping eth_getProof and encoding output for RootRelay.submitProof ABI call",
+        "Deploy contracts on Arbitrum Sepolia and Polygon Amoy testnets; register chains in ChainRegistry; run SDK-driven relay of a test root end-to-end and verify foreignRootExists on destination",
+        "Produce cross-chain-root-sync.md spec covering threat model, staleness bounds, upgrade path, and multi-chain topology",
+        "Write relay-operator-guide.md covering event monitoring, proof generation, gas estimation, and reorg handling"
+      ],
+      "estimated_constraints": 6,
+      "dependencies": [
+        "EIP-1186 eth_getProof RPC method available on source chain nodes",
+        "Arbitrum ArbSys precompile (0x0000000000000000000000000000000000000064) for L1 block hash access",
+        "Polygon bor blockhash opcode or state-sync precompile for L1 state root feed",
+        "MPT/RLP library (e.g., ethereum-optimism/optimism/packages/contracts-bedrock/src/libraries/trie or Hamdiakoguz/eth-proof port to Solidity)",
+        "Existing IdentityRegistry deployment on Base with stable storage layout",
+        "Foundry fork testing infrastructure with live RPC endpoints for Base, Arbitrum, and Polygon"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "framework_integrator_python_sdk_snarkjs_bridge",
+      "persona": "framework_integrator",
+      "title": "Python SDK with native snarkjs bridge for LangChain/CrewAI",
+      "dimension": "adoption",
+      "description": "Ship a `bolyra` PyPI package that wraps snarkjs via a lightweight Node subprocess or WASM bridge, exposing `enroll_agent()`, `prove_handshake()`, `verify_handshake()`, and `delegate()` as sync/async Python callables. The SDK must return Pydantic models so LangChain's structured output parsing and CrewAI's task results can consume proof artifacts directly. Without this, every Python agent framework user has to hand-roll subprocess calls to snarkjs and parse JSON outputs manually \u2014 a dealbreaker for adoption.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_python_sdk_snarkjs_bridge",
+      "adoption": 22,
+      "standards": 10,
+      "completeness": 19,
+      "correctness": 13,
+      "total": 64,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "framework_integrator_python_sdk_snarkjs_bridge",
+      "title": "Python SDK with native snarkjs bridge for LangChain/CrewAI",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "bolyra/__init__.py",
+          "description": "Package root exposing enroll_agent, prove_handshake, verify_handshake, delegate as top-level symbols"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/bridge.py",
+          "description": "Node subprocess / WASM bridge that shells out to snarkjs, handles JSON I/O, manages process lifecycle, and raises typed exceptions on failure"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/models.py",
+          "description": "Pydantic v2 models: EnrollmentResult, Handshake, ProofArtifact, DelegationToken \u2014 consumable directly by LangChain structured output and CrewAI task results"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/async_api.py",
+          "description": "asyncio wrappers around bridge.py using asyncio.subprocess so async agent frameworks don't block the event loop"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/sync_api.py",
+          "description": "Synchronous wrappers using run_in_executor for frameworks that require blocking calls (e.g. CrewAI default executor)"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/exceptions.py",
+          "description": "BridgeError, CircuitNotFoundError, ProofVerificationError, SnarkjsNotFoundError \u2014 structured exceptions for framework error handling"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/node_bridge/index.js",
+          "description": "Thin Node.js entry point that reads a JSON command from stdin, calls the appropriate snarkjs API (groth16.prove, groth16.verify, etc.), and writes a JSON result to stdout"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/node_bridge/package.json",
+          "description": "Minimal Node package declaring snarkjs dependency, bundled into the PyPI wheel via hatch build hook"
+        },
+        {
+          "type": "sdk",
+          "filename": "pyproject.toml",
+          "description": "PEP 517 build config with hatch backend; declares pydantic>=2, optional langchain and crewai extras; includes node_modules bundling script"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_bridge.py",
+          "description": "Unit tests for bridge.py using a mock Node subprocess; verifies JSON protocol, timeout handling, and error propagation"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_models.py",
+          "description": "Pydantic model round-trip tests: serialization, deserialization, and schema compatibility with LangChain's with_structured_output"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_integration.py",
+          "description": "End-to-end integration tests requiring Node + snarkjs installed; tests enroll\u2192prove\u2192verify\u2192delegate flow against real circuit artifacts"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_langchain_compat.py",
+          "description": "Tests that ProofArtifact and DelegationToken pass LangChain structured output parsing without schema errors"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_crewai_compat.py",
+          "description": "Tests that CrewAI Task output_pydantic=ProofArtifact works end-to-end with a mock crew"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/quickstart.md",
+          "description": "30-line getting-started guide showing pip install, Node prerequisite check, and a LangChain agent using prove_handshake"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/api_reference.md",
+          "description": "Full API reference for all four callables, Pydantic models, and exception hierarchy"
+        },
+        {
+          "type": "spec",
+          "filename": "docs/bridge_protocol.md",
+          "description": "JSON wire protocol spec for stdin/stdout communication between Python and Node bridge \u2014 versioned so future WASM backend can implement same interface"
+        }
+      ],
+      "steps": [
+        "Define the JSON wire protocol for the Python\u2194Node bridge: command envelope {op, params, circuit_path, zkey_path} and response envelope {ok, result, error}",
+        "Implement bolyra/node_bridge/index.js with handlers for ops: enroll, prove, verify, delegate \u2014 each calling snarkjs groth16 APIs and returning structured JSON",
+        "Write bolyra/bridge.py: spawn Node subprocess pointed at bundled index.js, write command JSON to stdin, read response JSON from stdout, enforce timeout, raise typed exceptions",
+        "Define Pydantic v2 models in bolyra/models.py for all proof artifacts; add model_json_schema() validation and LangChain-compatible field annotations",
+        "Implement bolyra/sync_api.py with enroll_agent(), prove_handshake(), verify_handshake(), delegate() as blocking callables using bridge.py",
+        "Implement bolyra/async_api.py with async variants using asyncio.create_subprocess_exec directly for non-blocking event loop integration",
+        "Write pyproject.toml with hatch build backend; add hatch_build.py hook that runs npm install inside bolyra/node_bridge/ and includes node_modules in the wheel",
+        "Add runtime Node.js detection in bolyra/__init__.py: check for node binary on PATH at import time, raise SnarkjsNotFoundError with install instructions if missing",
+        "Write unit tests for bridge.py mocking subprocess; write model round-trip tests; write LangChain and CrewAI compatibility tests",
+        "Write end-to-end integration test using real circuit .wasm and .zkey files from the existing @bolyra/sdk fixtures",
+        "Configure CI: matrix across Python 3.10/3.11/3.12, Node 18/20; run unit tests without Node, integration tests with Node",
+        "Write docs/quickstart.md and docs/api_reference.md; publish to PyPI as bolyra with version matching @bolyra/sdk TypeScript package"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "snarkjs>=0.7 (Node package, bundled in wheel)",
+        "pydantic>=2.0",
+        "node>=18 (runtime requirement, detected at import)",
+        "npm>=9 (build-time only, for wheel packaging)",
+        "existing circuit artifacts: .wasm and .zkey files from @bolyra/sdk",
+        "langchain-core>=0.2 (optional extra)",
+        "crewai>=0.28 (optional extra)",
+        "hatch (build backend)",
+        "pytest-asyncio (test)"
+      ]
+    }
+  }
+]

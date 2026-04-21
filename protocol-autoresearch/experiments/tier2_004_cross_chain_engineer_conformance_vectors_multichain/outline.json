@@ -1,0 +1,60 @@
+{
+  "id": "cross_chain_engineer_conformance_vectors_multichain",
+  "title": "Cross-chain test vectors in conformance suite",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/conformance/cross-chain-vectors.md",
+      "description": "Narrative spec defining the 5 cross-chain scenario categories, field schema for each vector (srcChainId, dstChainId, storageProof/ccipPayload, expectedOutcome), and the validity rules each scenario exercises."
+    },
+    {
+      "type": "test",
+      "filename": "test/conformance/vectors/cross_chain_vectors.json",
+      "description": "Machine-readable JSON array of 10+ fully-specified cross-chain test vectors. Each entry includes srcChainId, dstChainId, nullifier, rootHash, storageProof or ccipPayload, delegationChain (if applicable), and expectedResult (valid|invalid) with failureReason."
+    },
+    {
+      "type": "test",
+      "filename": "test/conformance/cross_chain_conformance.test.ts",
+      "description": "TypeScript test harness that loads cross_chain_vectors.json and exercises each vector against the on-chain verifier contracts and/or SDK proof-generation path, asserting expectedResult matches actual outcome."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/test/CrossChainConformanceHarness.sol",
+      "description": "Thin Solidity harness wrapping the production verifier and storage-proof relay logic, exposing individual verification steps so test vectors can probe internal acceptance/rejection paths without deploying full protocol infra."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/conformance/crossChainVectorRunner.ts",
+      "description": "SDK utility that accepts a vector from the JSON corpus, constructs the appropriate CCIP payload or storage proof, submits it to the harness, and returns a structured result for CI comparison."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/conformance/cross-chain-guide.md",
+      "description": "Operator guide: how to run the cross-chain conformance suite against a new chain deployment, what each scenario category validates, and how to add new vectors for custom chain configurations."
+    }
+  ],
+  "steps": [
+    "Define the vector schema: fields srcChainId, dstChainId, scenario (enum: VALID_RELAY | STALE_ROOT | NULLIFIER_REPLAY | DELEGATION_CROSS_CHAIN | CHAINID_MISMATCH), storageProof, ccipPayload, nullifier, rootHash, delegationChain, expectedResult, failureReason.",
+    "Author 3 VALID_RELAY vectors: well-formed storage proof relayed from chain A to chain B, varying chainId pairs (e.g., 1\u2192137, 1\u219242161, 137\u21928453), all expected to pass.",
+    "Author 2 STALE_ROOT vectors: foreign root that has been superseded by a newer root on the source chain; expected to be rejected with STALE_ROOT error.",
+    "Author 2 NULLIFIER_REPLAY vectors: nullifier already consumed on destination chain submitted again cross-chain; expected to fail with NULLIFIER_ALREADY_USED.",
+    "Author 2 DELEGATION_CROSS_CHAIN vectors: delegation chain where delegator is on chain A and delegatee claim is verified on chain B; one valid, one where the cross-chain link is broken.",
+    "Author 2 CHAINID_MISMATCH vectors: nullifier derived with wrong chainId embedded in the leaf hash; expected to fail signature/hash validation.",
+    "Implement CrossChainConformanceHarness.sol exposing verifyStorageProof(srcChainId, dstChainId, proof), verifyNullifier(nullifier, chainId), and replayCheck(nullifier) so harness can be driven per-scenario.",
+    "Implement crossChainVectorRunner.ts in the SDK to load a vector, select the appropriate harness entry-point by scenario type, execute, and return {vectorId, passed, actual, expected}.",
+    "Write cross_chain_conformance.test.ts using the runner: iterate all vectors, assert pass/fail, collect failures and report with scenario context.",
+    "Add CI job (e.g., GitHub Actions step) that runs the conformance suite against a local Hardhat fork of each reference chainId pair, gating on zero failures.",
+    "Update spec/conformance/cross-chain-vectors.md with rationale for each scenario and reference to the relevant protocol clause (storage proof relay spec, nullifier derivation spec, delegation spec).",
+    "Write docs/conformance/cross-chain-guide.md with instructions for new chain operators to validate interop before going live."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Existing storage proof relay verifier contract (source of truth for VALID_RELAY and STALE_ROOT logic)",
+    "Nullifier derivation spec (defines chainId embedding in leaf hash, needed for CHAINID_MISMATCH vectors)",
+    "Delegation Merkle proof implementation (CIP-1, needed for DELEGATION_CROSS_CHAIN vectors)",
+    "CCIP payload schema / cross-chain message format spec",
+    "Hardhat multi-chain fork configuration for CI (srcChainId and dstChainId fork pairs)",
+    "@bolyra/sdk v0.1.0 (TypeScript SDK core, needed for crossChainVectorRunner.ts)",
+    "Existing IETF internet-draft conformance test vector format (for schema consistency)"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "id": "cross_chain_engineer_chain_agnostic_nullifier",
+  "title": "Chain-agnostic nullifier registry with cross-chain replay protection",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/HumanUniqueness.circom",
+      "description": "Add chainId as a public input; update nullifierHash derivation to Poseidon3(scope, secret, chainId)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/AgentPolicy.circom",
+      "description": "Add chainId as a public input; update nullifierHash derivation to Poseidon3(scope, secret, chainId)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/lib/NullifierLib.circom",
+      "description": "Shared template wrapping Poseidon3(scope, secret, chainId) so both circuits import a single nullifier derivation"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/NullifierRegistry.sol",
+      "description": "On-chain nullifier set that validates msg.chainId (block.chainid) matches the public input chainId before marking a nullifier as spent"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/HumanUniquenessVerifier.sol",
+      "description": "Updated Groth16 verifier stub regenerated from new circuit; enforces chainId public input matches block.chainid"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/AgentPolicyVerifier.sol",
+      "description": "Updated Groth16 verifier stub regenerated from new circuit; enforces chainId public input matches block.chainid"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/nullifier-chain-binding.md",
+      "description": "Formal specification of the nullifier domain-separation scheme, threat model (cross-chain replay), and migration path from Poseidon2 to Poseidon3"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/nullifier.ts",
+      "description": "Update client-side nullifier computation helper to accept chainId parameter and call poseidon3([scope, secret, chainId])"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/prover.ts",
+      "description": "Pass chainId as witness input when generating proofs for HumanUniqueness and AgentPolicy circuits"
+    },
+    {
+      "type": "test",
+      "filename": "tests/circuits/nullifier_chain_binding.test.ts",
+      "description": "Circom unit tests: same (scope, secret) on different chainIds must produce distinct nullifiers; cross-chain replay attempt must fail"
+    },
+    {
+      "type": "test",
+      "filename": "tests/contracts/NullifierRegistry.test.ts",
+      "description": "Solidity integration tests: verify proof with correct chainId succeeds; mismatched chainId reverts; nullifier double-spend on same chain reverts"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/breaking-changes/v2-nullifier-migration.md",
+      "description": "Migration guide for integrators: describes the breaking circuit change, how to re-derive nullifiers, and re-registration requirements for existing users"
+    }
+  ],
+  "steps": [
+    "Create circuits/lib/NullifierLib.circom with a Poseidon3(scope, secret, chainId) template to centralize nullifier derivation",
+    "Update HumanUniqueness.circom: add signal input chainId (public), replace Poseidon2 nullifier call with NullifierLib template",
+    "Update AgentPolicy.circom: same chainId public input addition and NullifierLib substitution",
+    "Recompile both circuits with snarkjs/circom2, regenerate R1CS, zkey, and Verifier.sol artifacts",
+    "Update NullifierRegistry.sol to assert that the chainId public input equals block.chainid before spending a nullifier",
+    "Regenerate HumanUniquenessVerifier.sol and AgentPolicyVerifier.sol from new circuit verification keys",
+    "Update sdk/src/nullifier.ts to expose computeNullifier(scope, secret, chainId) using poseidon3",
+    "Update sdk/src/prover.ts to include chainId in the witness inputs for both circuits",
+    "Write circuit unit tests covering same-secret cross-chain nullifier distinctness and replay rejection",
+    "Write Solidity integration tests covering valid proof acceptance, chainId mismatch revert, and double-spend revert",
+    "Write specs/nullifier-chain-binding.md documenting threat model, domain separation rationale, and v1\u2192v2 migration path",
+    "Write docs/breaking-changes/v2-nullifier-migration.md for downstream integrators",
+    "Run full test suite across circuits, contracts, and SDK; verify no regressions",
+    "Tag circuit artifacts with a v2 semver bump and publish updated SDK"
+  ],
+  "estimated_constraints": 68,
+  "dependencies": [
+    "circom2 >= 2.1.6",
+    "snarkjs >= 0.7",
+    "poseidon-solidity or equivalent on-chain Poseidon3 implementation",
+    "ethers.js >= 6 (SDK chain detection via provider.getNetwork())",
+    "Hardhat >= 2.19 with circom plugin for integrated circuit tests",
+    "Existing HumanUniqueness.circom and AgentPolicy.circom source files",
+    "Existing NullifierRegistry.sol deployment addresses (for migration coordination)"
+  ]
+}

@@ -1,0 +1,753 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_conformance_vectors_multichain",
+      "persona": "standards_architect",
+      "title": "Cross-implementation conformance test vectors",
+      "dimension": "standards",
+      "description": "Produce 60+ JSON test vectors organized by circuit (HumanUniqueness, AgentPolicy, Delegation) and by outcome (valid, invalid-stale-root, invalid-revoked, invalid-scope-superset, invalid-expired, invalid-nonce-reuse, invalid-phantom-delegatee). Each vector includes: input witness, expected public signals, expected verification result, and the specific error code from the contract. Vectors cover the root history buffer edge case (root at position 29 vs evicted root at position 30) and the cumulative bit encoding invariant (bit 4 without bits 2+3). These become the canonical interop test suite \u2014 any conforming implementation must pass all vectors.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_vectors_multichain",
+      "adoption": 19,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 77,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_vectors_multichain",
+      "title": "Cross-implementation conformance test vectors",
+      "artifacts": [
+        {
+          "type": "test",
+          "filename": "conformance/vectors/human_uniqueness_valid.json",
+          "description": "Valid HumanUniqueness circuit vectors with correct witness, public signals, and expected verification=true"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/human_uniqueness_invalid.json",
+          "description": "Invalid HumanUniqueness vectors covering stale-root, revoked, expired, nonce-reuse outcomes with error codes"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/agent_policy_valid.json",
+          "description": "Valid AgentPolicy circuit vectors including cumulative bit encoding invariant cases"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/agent_policy_invalid.json",
+          "description": "Invalid AgentPolicy vectors covering scope-superset and invalid cumulative bit encoding (bit 4 without bits 2+3)"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/delegation_valid.json",
+          "description": "Valid Delegation circuit vectors including phantom delegatee Merkle proof cases"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/delegation_invalid.json",
+          "description": "Invalid Delegation vectors covering phantom-delegatee, scope-superset, expired, revoked outcomes"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/root_history_edge_cases.json",
+          "description": "Edge-case vectors for root history buffer: root at position 29 (valid) vs evicted root at position 30 (invalid-stale-root)"
+        },
+        {
+          "type": "spec",
+          "filename": "conformance/VECTOR_SCHEMA.md",
+          "description": "JSON schema definition for a conformance vector: input_witness, public_signals, expected_result (bool), error_code (string|null), circuit, category"
+        },
+        {
+          "type": "spec",
+          "filename": "conformance/ERROR_CODES.md",
+          "description": "Canonical error code registry mapping each contract revert/error to a stable string identifier used across all vectors"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/runner/run_vectors.py",
+          "description": "Python test runner that loads all JSON vectors, generates proofs via snarkjs/circom, submits to contract, and asserts expected outcomes"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/runner/run_vectors.ts",
+          "description": "TypeScript test runner (Hardhat/Mocha) for the same vector suite, enabling JS-ecosystem conformance verification"
+        },
+        {
+          "type": "docs",
+          "filename": "conformance/README.md",
+          "description": "Interop test suite documentation: how to run, how to add vectors, coverage table by circuit and outcome category"
+        }
+      ],
+      "steps": [
+        "Define and document the canonical JSON schema for a conformance vector (input_witness, public_signals, expected_result, error_code, circuit, category) in VECTOR_SCHEMA.md",
+        "Enumerate all contract error codes and map them to stable string identifiers in ERROR_CODES.md",
+        "For HumanUniqueness: generate \u226510 valid vectors with correct witnesses and public signals",
+        "For HumanUniqueness: generate \u226510 invalid vectors covering stale-root, revoked, expired, nonce-reuse categories",
+        "For AgentPolicy: generate \u22658 valid vectors including cumulative bit encoding edge cases",
+        "For AgentPolicy: generate \u22658 invalid vectors covering scope-superset and malformed cumulative bits (bit 4 without bits 2+3)",
+        "For Delegation: generate \u22658 valid vectors including phantom delegatee Merkle proof scenarios",
+        "For Delegation: generate \u22658 invalid vectors covering phantom-delegatee, revoked, expired, and scope-superset outcomes",
+        "Generate root history buffer edge-case vectors: root at buffer position 29 (valid) and evicted root at position 30 (invalid-stale-root)",
+        "Implement the Python conformance runner that loads vectors, calls circom/snarkjs for proof generation, invokes contract, and asserts result and error code",
+        "Implement the TypeScript/Hardhat conformance runner using the same vector files",
+        "Run both runners against a local devnet to verify all vectors produce expected outcomes; fix any mismatches",
+        "Validate total vector count \u226560 and coverage across all 7 outcome categories for all 3 circuits",
+        "Write conformance/README.md with coverage table, run instructions, and contribution guide for new vectors"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "HumanUniqueness.circom circuit (compiled artifacts)",
+        "AgentPolicy.circom circuit (compiled artifacts)",
+        "Delegation.circom circuit (compiled artifacts)",
+        "IdentityOS contract ABI and deployed address (local devnet)",
+        "Root history buffer implementation (ring buffer, capacity 30)",
+        "Phantom delegatee Merkle proof implementation",
+        "Cumulative bit encoding spec for AgentPolicy scopes",
+        "snarkjs \u22650.7 for proof generation in both runners",
+        "Hardhat + ethers.js for TypeScript runner",
+        "Python web3.py + py_ecc for Python runner"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_w3c_did_method",
+      "persona": "standards_architect",
+      "title": "did:bolyra DID method specification",
+      "dimension": "standards",
+      "description": "Write a W3C DID method spec for did:bolyra:<network>:<identityCommitment>. Define the DID Document structure mapping: humanMerkleRoot as verification method, nullifierHash as authentication proof, scopeCommitment as capability delegation. Specify the resolution algorithm (query IdentityRegistry for enrollment status, check revocation by nullifier). Include a Verifiable Credential issuance flow where a successful handshake produces a VC with the session nonce as challenge and both nullifiers as evidence. This bridges Bolyra into the existing SSI ecosystem.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_w3c_did_method",
+      "adoption": 20,
+      "standards": 22,
+      "completeness": 18,
+      "correctness": 13,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_w3c_did_method",
+      "title": "did:bolyra DID method specification",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/did-bolyra-method.md",
+          "description": "W3C DID method specification for did:bolyra:<network>:<identityCommitment>, covering syntax, DID Document structure, CRUD operations, security/privacy considerations, and conformance requirements"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-bolyra-document-schema.json",
+          "description": "JSON-LD context and schema for the did:bolyra DID Document, mapping humanMerkleRoot to verificationMethod, nullifierHash to authentication proof, and scopeCommitment to capabilityDelegation"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-bolyra-vc-issuance.md",
+          "description": "Verifiable Credential issuance flow spec: successful handshake produces a VC with session nonce as challenge, both nullifiers (humanNullifier + scopeNullifier) as evidence, and issuer DID as did:bolyra method"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/BolyraDidRegistry.sol",
+          "description": "On-chain DID registry that wraps IdentityRegistry; exposes resolve(identityCommitment) returning enrollment status, verificationMethod data, and revocation check by nullifier"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/did-resolver/bolyra-resolver.ts",
+          "description": "W3C DID Resolver compliant driver for did:bolyra; implements resolve() fetching DID Document from BolyraDidRegistry, constructing JSON-LD output per spec"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/did-resolver/vc-issuer.ts",
+          "description": "VC issuance helper: takes completed handshake proof, session nonce, nullifiers; produces a W3C Verifiable Credential signed with the did:bolyra verification method"
+        },
+        {
+          "type": "test",
+          "filename": "tests/did-resolver/bolyra-resolver.test.ts",
+          "description": "Unit + integration tests for DID resolution: enrolled identity resolves correctly, revoked nullifier returns deactivated status, malformed DID returns notFound error"
+        },
+        {
+          "type": "test",
+          "filename": "tests/did-resolver/vc-issuance.test.ts",
+          "description": "End-to-end tests for VC issuance flow: valid handshake proof produces conformant VC, invalid proof is rejected, VC verifies against did:bolyra resolver"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/did-bolyra-primer.md",
+          "description": "Developer-facing primer: why did:bolyra, quick-start resolution example, VC issuance walkthrough, interoperability with Universal Resolver and existing SSI wallets"
+        }
+      ],
+      "steps": [
+        "Define DID syntax: did:bolyra:<network>:<identityCommitment> where network \u2208 {mainnet, testnet, devnet} and identityCommitment is a 32-byte hex-encoded Poseidon hash",
+        "Specify DID Document structure: id = DID URI, verificationMethod entry with type BolyraHumanMerkleKey2024 and publicKeyHex = humanMerkleRoot, authentication referencing that method via nullifierHash proof, capabilityDelegation entry with scopeCommitment as delegation key",
+        "Define JSON-LD context at https://bolyra.xyz/ns/did/v1 mapping all custom property names to IRIs; publish context document",
+        "Specify CRUD operations: Create = enroll in IdentityRegistry emitting IdentityRegistered event; Read = resolve via BolyraDidRegistry.resolve(); Update = not supported (commitments are immutable, new enrollment required); Deactivate = nullifier revocation sets status to deactivated",
+        "Specify resolution algorithm: parse DID, extract network + identityCommitment, query IdentityRegistry.enrollments(identityCommitment) for enrollment status, call nullifierRegistry.isRevoked(nullifierHash) to set deactivated flag, assemble DID Document from on-chain data",
+        "Define DID URL dereferencing for did:bolyra:<network>:<id>#keys-1 (verificationMethod) and did:bolyra:<network>:<id>#delegation-1 (capabilityDelegation)",
+        "Specify VC issuance flow: after successful ZKP handshake, issuer constructs credential with type BolyraIdentityCredential, credentialSubject.id = did:bolyra DID, challenge = sessionNonce, evidence array containing humanNullifierHash and scopeNullifierHash, issuer = did:bolyra of the relying party or registry",
+        "Implement BolyraDidRegistry.sol wrapping IdentityRegistry; expose resolve(bytes32 identityCommitment, string network) view function returning packed DID Document fields",
+        "Implement bolyra-resolver.ts conforming to W3C DID Resolution spec interfaces; integrate with ethers.js to call BolyraDidRegistry on correct network by parsing DID method-specific identifier",
+        "Implement vc-issuer.ts using @digitalbazaar/vc or veramo SDK; sign VC with did:bolyra key material, attach nullifier evidence, embed session nonce as challenge",
+        "Write resolver unit tests covering: valid enrolled identity, deactivated (revoked) identity, unknown identity (notFound), invalid DID syntax (invalidDid)",
+        "Write VC issuance integration tests: produce VC from mock handshake proof, verify VC using did:bolyra resolver, confirm nullifiers present in evidence",
+        "Register did:bolyra method in W3C DID Spec Registries PR and Universal Resolver driver list",
+        "Write developer primer documenting resolution quickstart, VC flow, and SSI wallet interoperability notes"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "IdentityRegistry contract (enrollment + revocation state)",
+        "nullifierRegistry contract (isRevoked check)",
+        "Poseidon hash library (identityCommitment derivation)",
+        "W3C DID Core specification (https://www.w3.org/TR/did-core/)",
+        "W3C Verifiable Credentials Data Model (https://www.w3.org/TR/vc-data-model/)",
+        "ethers.js v6 (on-chain resolution calls)",
+        "@digitalbazaar/vc or veramo SDK (VC signing and verification)",
+        "JSON-LD context hosting (bolyra.xyz/ns/did/v1)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "dimension": "completeness",
+      "description": "Implement a RootRelay contract on Arbitrum and Polygon that accepts EIP-1186 storage proofs of agentRootHistory and humanRootHistory slots from the Base IdentityRegistry. A relayer submits the block header (via the L1 state root accessible on each L2) plus the Merkle-Patricia proof of the storage slot. This avoids bridges and oracles entirely \u2014 verification is pure math against the L1 anchor. Estimated 3 contracts (RootRelay, StorageProofLib, ChainRegistry) plus a TypeScript relayer script.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+      "adoption": 17,
+      "standards": 18,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/StorageProofLib.sol",
+          "description": "Library for verifying EIP-1186 Merkle-Patricia trie proofs against a trusted state root. Decodes RLP-encoded account proof and storage proof, verifies the trie path, and returns the slot value."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/RootRelay.sol",
+          "description": "Deployed on Arbitrum and Polygon. Accepts a block header hash (sourced from the L1 state root anchor exposed by each L2), the EIP-1186 account + storage proof for agentRootHistory and humanRootHistory slots on the Base IdentityRegistry, and updates local shadow roots after verification via StorageProofLib."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/ChainRegistry.sol",
+          "description": "Registry mapping chainId -> RootRelay address and chainId -> trusted L1 block oracle address (e.g. Arbitrum ArbSys / Polygon StateReceiver). Allows governance to add new chains without redeploying core contracts."
+        },
+        {
+          "type": "sdk",
+          "filename": "relayer/src/relayRoots.ts",
+          "description": "TypeScript relayer script. Queries the Base node for the latest finalized block, fetches EIP-1186 proofs for agentRootHistory and humanRootHistory storage slots via eth_getProof, encodes the RLP proof, and submits to RootRelay on each target L2."
+        },
+        {
+          "type": "sdk",
+          "filename": "relayer/src/proofEncoder.ts",
+          "description": "Utility module that RLP-encodes EIP-1186 proof nodes into the byte format expected by StorageProofLib. Handles both account proof and storage proof arrays."
+        },
+        {
+          "type": "spec",
+          "filename": "specs/storage-proof-root-sync.md",
+          "description": "Protocol spec describing the trusted L1 anchor mechanism per L2, storage slot derivation for agentRootHistory and humanRootHistory, the proof submission flow, finality assumptions, and security model (trust assumptions, replay protection via block number monotonicity)."
+        },
+        {
+          "type": "test",
+          "filename": "test/StorageProofLib.t.sol",
+          "description": "Foundry unit tests for StorageProofLib using real EIP-1186 proof fixtures captured from a Base Sepolia node. Covers valid proof, wrong root rejection, invalid proof bytes, and empty slot handling."
+        },
+        {
+          "type": "test",
+          "filename": "test/RootRelay.t.sol",
+          "description": "Foundry integration tests for RootRelay. Mocks the L1 block oracle, submits valid and invalid proofs, checks root updates, verifies replay protection (same block number rejected twice), and tests access control."
+        },
+        {
+          "type": "test",
+          "filename": "relayer/src/__tests__/proofEncoder.test.ts",
+          "description": "Jest unit tests for proofEncoder.ts verifying RLP encoding round-trips against known-good fixtures from eth_getProof responses."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/cross-chain-root-sync.md",
+          "description": "Developer guide covering deployment steps per chain, relayer configuration, monitoring recommendations, and upgrade path for adding new L2 chains via ChainRegistry."
+        }
+      ],
+      "steps": [
+        "Define the two target storage slots: keccak256 of agentRootHistory and humanRootHistory mappings in the Base IdentityRegistry, and document their derivation in the spec.",
+        "Research L1 block hash oracle addresses for Arbitrum One (ArbSys.arbBlockHash / L1Block precompile) and Polygon PoS (StateReceiver / block.blockhash via heimdall checkpoints) to determine the trusted anchor per chain.",
+        "Implement StorageProofLib.sol: RLP decoding of account proof nodes, Merkle-Patricia trie traversal against accountRoot, extraction of storageRoot from account RLP, trie traversal for the storage slot, return uint256 value.",
+        "Capture real EIP-1186 proof fixtures from Base Sepolia via eth_getProof for both storage slots, encode to fixture files for use in Foundry tests.",
+        "Write and pass StorageProofLib.t.sol unit tests against fixtures before proceeding to RootRelay.",
+        "Implement ChainRegistry.sol with chainId -> RootRelay and chainId -> L1 oracle mappings, owner-controlled registration.",
+        "Implement RootRelay.sol: accept (blockNumber, blockHeaderRLP, accountProof[], storageProof[]) calldata, retrieve trusted L1 block hash from oracle, verify block header hash matches, call StorageProofLib for each slot, enforce blockNumber monotonicity for replay protection, emit RootUpdated events.",
+        "Write and pass RootRelay.t.sol integration tests with mocked L1 oracle.",
+        "Implement relayer/src/proofEncoder.ts: encode EIP-1186 proof node arrays to ABI-compatible bytes using ethers RLP utilities.",
+        "Write and pass Jest unit tests for proofEncoder.ts.",
+        "Implement relayer/src/relayRoots.ts: poll Base for finalized block, call eth_getProof for both slots, encode proofs, submit to RootRelay on Arbitrum and Polygon via ethers, log results.",
+        "Deploy StorageProofLib and RootRelay to Arbitrum Sepolia and Polygon Amoy testnets; run relayer end-to-end against Base Sepolia.",
+        "Document deployment addresses, relayer env vars, and monitoring hooks in docs/cross-chain-root-sync.md."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "Base IdentityRegistry deployed with stable agentRootHistory and humanRootHistory storage slots",
+        "Arbitrum L1Block precompile (0x4200...0015) or ArbSys for trusted L1 block hash",
+        "Polygon PoS L1 block hash oracle (heimdall checkpoint contract or block.blockhash equivalent)",
+        "ethers.js v6 (RLP encoding, eth_getProof provider call)",
+        "Foundry (forge) for Solidity tests",
+        "Node.js 20+ for relayer TypeScript",
+        "Base Sepolia RPC endpoint with eth_getProof support"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "sdk_designer_python_snarkjs_bridge",
+      "persona": "sdk_designer",
+      "title": "Python SDK with async snarkjs subprocess bridge",
+      "dimension": "adoption",
+      "description": "Implement the bolyra PyPI package specified in tier2_007 outline: a Node.js subprocess bridge (stdin/JSON/stdout) wrapped in Pydantic v2 models with both sync and async APIs. The target audience is LangChain/CrewAI developers who need `bolyra.prove_handshake()` and `bolyra.delegate()` in Python without touching Node directly. Ship with a bundled node_bridge/index.js, structured exceptions (BridgeError, CircuitNotFoundError, ProofVerificationError), and a `bolyra[langchain]` extras install that includes the BolyraAuthTool BaseTool wrapper.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_python_snarkjs_bridge",
+      "adoption": 21,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "sdk_designer_python_snarkjs_bridge",
+      "title": "Python SDK with async snarkjs subprocess bridge",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "bolyra/__init__.py",
+          "description": "Package root exporting prove_handshake, delegate, and exception classes"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/bridge.py",
+          "description": "NodeBridge class managing Node.js subprocess lifecycle with stdin/stdout JSON framing, both sync and async variants"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/models.py",
+          "description": "Pydantic v2 models: HandshakeInput, HandshakeProof, DelegateInput, DelegateProof, BridgeRequest, BridgeResponse"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/exceptions.py",
+          "description": "Structured exception hierarchy: BridgeError (base), CircuitNotFoundError, ProofVerificationError, BridgeTimeoutError"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/node_bridge/index.js",
+          "description": "Bundled Node.js bridge process: reads JSON from stdin, calls snarkjs groth16.prove / groth16.verify, writes JSON to stdout, handles SIGTERM"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/node_bridge/package.json",
+          "description": "Minimal package.json pinning snarkjs version for the bundled bridge"
+        },
+        {
+          "type": "sdk",
+          "filename": "bolyra/langchain_tool.py",
+          "description": "BolyraAuthTool extending LangChain BaseTool with _run/_arun wrappers for prove_handshake and delegate; installed via bolyra[langchain] extras"
+        },
+        {
+          "type": "sdk",
+          "filename": "pyproject.toml",
+          "description": "Package metadata, optional dependencies [langchain], entry points, Python >=3.10 constraint"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_bridge.py",
+          "description": "Unit tests for NodeBridge using subprocess mocking; covers happy path, timeout, malformed JSON, missing circuit file"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_models.py",
+          "description": "Pydantic v2 validation tests for all input/output models including field coercion and rejection cases"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_langchain_tool.py",
+          "description": "Integration test for BolyraAuthTool.run and arun with mocked bridge, verifying LangChain tool schema compliance"
+        },
+        {
+          "type": "test",
+          "filename": "tests/integration/test_e2e_bridge.py",
+          "description": "End-to-end test requiring Node.js + snarkjs installed; proves and verifies a handshake using real circuit artifacts"
+        },
+        {
+          "type": "docs",
+          "filename": "README.md",
+          "description": "Quick-start guide: pip install, Node.js prerequisite, prove_handshake example, delegate example, LangChain tool usage, exception handling"
+        },
+        {
+          "type": "spec",
+          "filename": "PROTOCOL.md",
+          "description": "Bridge wire protocol spec: JSON envelope schema (action, payload, request_id), error codes, timeout contract, versioning"
+        }
+      ],
+      "steps": [
+        "Define bridge wire protocol: JSON envelope {action, payload, request_id} over stdin/stdout with newline framing; document in PROTOCOL.md",
+        "Author bolyra/node_bridge/index.js: readline loop reading JSON, dispatch to snarkjs groth16.prove/verify/fullProve, write response JSON, exit cleanly on SIGTERM",
+        "Run npm install snarkjs inside node_bridge/ and commit package-lock.json; pin snarkjs to a specific minor version",
+        "Implement bolyra/exceptions.py with BridgeError base and subclasses CircuitNotFoundError, ProofVerificationError, BridgeTimeoutError mapping to bridge error codes",
+        "Implement bolyra/models.py with Pydantic v2 BaseModel classes for HandshakeInput, HandshakeProof, DelegateInput, DelegateProof, BridgeRequest, BridgeResponse",
+        "Implement bolyra/bridge.py NodeBridge: spawn Node subprocess pointing to bundled index.js, send JSON line, read JSON line, deserialize response, raise typed exceptions on error codes",
+        "Add async variant in bridge.py using asyncio.create_subprocess_exec and asyncio StreamReader for non-blocking I/O",
+        "Implement top-level bolyra/__init__.py: module-level prove_handshake(input) and delegate(input) functions that instantiate NodeBridge, call it, and return typed Pydantic models",
+        "Write pyproject.toml: hatchling build backend, optional deps [langchain] = ['langchain-core>=0.2'], include node_bridge/ as package data",
+        "Implement bolyra/langchain_tool.py: BolyraAuthTool(BaseTool) with name, description, args_schema pointing to HandshakeInput, _run calling sync prove_handshake, _arun calling async variant",
+        "Write unit tests test_bridge.py using unittest.mock.patch on subprocess.Popen; cover success, timeout (configurable), bad JSON response, non-zero exit",
+        "Write unit tests test_models.py validating Pydantic v2 field validation, alias handling, and serialization round-trips",
+        "Write test_langchain_tool.py verifying BolyraAuthTool.args_schema, tool name, and mocked _run/_arun return shapes",
+        "Write integration test test_e2e_bridge.py gated by pytest.importorskip or a CI env flag; uses real snarkjs with test .wasm/.zkey fixtures",
+        "Verify all tests pass: pytest tests/ -x -q; confirm no imports of langchain fail when extra not installed",
+        "Write README.md with pip install bolyra, Node.js >= 18 prereq note, minimal prove_handshake snippet, LangChain tool example, exception handling table"
+      ],
+      "estimated_constraints": 12,
+      "dependencies": [
+        "Node.js >= 18 (runtime, not a Python dep)",
+        "snarkjs >= 0.7 (npm, bundled in node_bridge/)",
+        "pydantic >= 2.0",
+        "langchain-core >= 0.2 (optional, extras install)",
+        "pytest",
+        "pytest-asyncio",
+        "hatchling (build backend)",
+        "Existing .wasm and .zkey circuit artifacts from tier2_007 for integration tests"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_nullifier_collision_independence",
+      "persona": "formal_verifier",
+      "title": "Prove nullifier uniqueness across all three circuits",
+      "dimension": "correctness",
+      "description": "HumanUniqueness uses Poseidon2(scope, secret), AgentPolicy uses a nullifier derived from credential fields + nonce, and Delegation has its own delegationNullifier. No formal argument exists that these three nullifier domains are collision-resistant across circuits. Write a formal property showing domain separation: prove that no valid witness for circuit A can produce a nullifierHash that equals a valid nullifierHash from circuit B, by demonstrating the Poseidon input arities and domain tags differ. Deliver: a symbolic analysis document with Halo2 MockProver test cases exercising cross-circuit nullifier values on shared inputs.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_nullifier_collision_independence",
+      "adoption": 14,
+      "standards": 15,
+      "completeness": 17,
+      "correctness": 20,
+      "total": 66,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_nullifier_collision_independence",
+      "title": "Prove nullifier uniqueness across all three circuits",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "docs/nullifier_domain_separation.md",
+          "description": "Symbolic analysis document: defines nullifier construction for each circuit (HumanUniqueness, AgentPolicy, Delegation), enumerates Poseidon2 input vectors and arities, proves domain separation via distinct input tuples, and provides a collision impossibility argument."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/human_uniqueness.circom",
+          "description": "HumanUniqueness circuit with explicit domain tag constant (DOMAIN_HUMAN = 1) prepended to Poseidon2 inputs: Poseidon2([DOMAIN_HUMAN, scope, secret])."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/agent_policy.circom",
+          "description": "AgentPolicy circuit with explicit domain tag constant (DOMAIN_AGENT = 2) prepended to Poseidon2 inputs: Poseidon2([DOMAIN_AGENT, credentialField0, credentialField1, nonce])."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/delegation.circom",
+          "description": "Delegation circuit with explicit domain tag constant (DOMAIN_DELEG = 3) prepended to Poseidon2 inputs: Poseidon2([DOMAIN_DELEG, delegatorId, delegateeId, nonce])."
+        },
+        {
+          "type": "test",
+          "filename": "tests/nullifier_collision_independence_test.rs",
+          "description": "Halo2 MockProver test suite: exercises cross-circuit nullifier values on shared raw inputs (same scope/secret/nonce values), asserts no two circuits produce equal nullifierHash outputs, and verifies constraint satisfaction per circuit."
+        },
+        {
+          "type": "test",
+          "filename": "tests/nullifier_domain_separation_symbolic.py",
+          "description": "Python symbolic analysis script using sympy or sage: enumerates all pairwise (circuitA, circuitB) input arity differences and domain tag differences, asserts collision is impossible under Poseidon2 preimage resistance, outputs proof table."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/nullifier_formal_proof.md",
+          "description": "Formal writeup: definitions, collision resistance assumption, domain separation theorem with proof sketch, and cross-reference to test results."
+        }
+      ],
+      "steps": [
+        "Audit each circuit's current nullifier construction: record exact Poseidon2 input vector length and field semantics for HumanUniqueness (scope, secret), AgentPolicy (credential fields + nonce), and Delegation (delegatorId, delegateeId, nonce).",
+        "Define DOMAIN_HUMAN=1, DOMAIN_AGENT=2, DOMAIN_DELEG=3 as field constants and prepend each to the respective Poseidon2 input vector, updating circuit constraint logic accordingly.",
+        "Update HumanUniqueness circuit: change nullifier to Poseidon2([DOMAIN_HUMAN, scope, secret]) with arity 3; add constraint asserting domain tag equals DOMAIN_HUMAN.",
+        "Update AgentPolicy circuit: change nullifier to Poseidon2([DOMAIN_AGENT, credentialField0, credentialField1, nonce]) with arity 4; add constraint asserting domain tag equals DOMAIN_AGENT.",
+        "Update Delegation circuit: change delegationNullifier to Poseidon2([DOMAIN_DELEG, delegatorId, delegateeId, nonce]) with arity 4; add constraint asserting domain tag equals DOMAIN_DELEG.",
+        "Write symbolic analysis in Python/Sage: for each pair (A, B) show input tuples differ in at least one position (domain tag or arity) making equal outputs a preimage collision under Poseidon2, which is computationally infeasible.",
+        "Implement Halo2 MockProver tests: create shared raw inputs (same numeric values for scope/credentialField0/delegatorId etc.), run all three circuits, assert pairwise nullifier inequality, assert each circuit's constraints are satisfied.",
+        "Write MockProver negative test: attempt to construct a witness for circuit B using a nullifier value produced by circuit A on the same raw input; verify the circuit rejects it (unsatisfied domain tag constraint).",
+        "Document formal theorem in nullifier_formal_proof.md: state collision resistance assumption, define domain separation as distinct Poseidon2 preimages, prove no valid cross-circuit witness exists.",
+        "Run all tests and symbolic analysis, capture output tables, embed results in docs/nullifier_domain_separation.md."
+      ],
+      "estimated_constraints": 12,
+      "dependencies": [
+        "poseidon2-halo2",
+        "circomlib (poseidon)",
+        "halo2_proofs MockProver",
+        "sympy or sagemath (symbolic analysis)",
+        "existing HumanUniqueness circuit",
+        "existing AgentPolicy circuit",
+        "existing Delegation circuit"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "persona": "cross_chain_engineer",
+      "title": "Chain-agnostic nullifier registry with cross-chain replay protection",
+      "dimension": "correctness",
+      "description": "The current nullifierHash is Poseidon2(scope, secret) and is chain-unaware. If the same verifier contract is deployed on Base and Arbitrum, a proof verified on Base can be replayed on Arbitrum since nullifier sets are per-chain. Fix: include chainId in the nullifier derivation (Poseidon3(scope, secret, chainId)) and add a chainId public input to HumanUniqueness and AgentPolicy circuits. This is a breaking change to the circuit but critical before multi-chain deployment.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "adoption": 15,
+      "standards": 15,
+      "completeness": 17,
+      "correctness": 18,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_chain_agnostic_nullifier",
+      "title": "Chain-agnostic nullifier registry with cross-chain replay protection",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/HumanUniqueness.circom",
+          "description": "Add chainId as a public input; update nullifierHash derivation to Poseidon3(scope, secret, chainId)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/AgentPolicy.circom",
+          "description": "Add chainId as a public input; update nullifierHash derivation to Poseidon3(scope, secret, chainId)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/lib/NullifierLib.circom",
+          "description": "Shared template wrapping Poseidon3(scope, secret, chainId) so both circuits import a single nullifier derivation"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/NullifierRegistry.sol",
+          "description": "On-chain nullifier set that validates msg.chainId (block.chainid) matches the public input chainId before marking a nullifier as spent"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/HumanUniquenessVerifier.sol",
+          "description": "Updated Groth16 verifier stub regenerated from new circuit; enforces chainId public input matches block.chainid"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/AgentPolicyVerifier.sol",
+          "description": "Updated Groth16 verifier stub regenerated from new circuit; enforces chainId public input matches block.chainid"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/nullifier-chain-binding.md",
+          "description": "Formal specification of the nullifier domain-separation scheme, threat model (cross-chain replay), and migration path from Poseidon2 to Poseidon3"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/nullifier.ts",
+          "description": "Update client-side nullifier computation helper to accept chainId parameter and call poseidon3([scope, secret, chainId])"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/prover.ts",
+          "description": "Pass chainId as witness input when generating proofs for HumanUniqueness and AgentPolicy circuits"
+        },
+        {
+          "type": "test",
+          "filename": "tests/circuits/nullifier_chain_binding.test.ts",
+          "description": "Circom unit tests: same (scope, secret) on different chainIds must produce distinct nullifiers; cross-chain replay attempt must fail"
+        },
+        {
+          "type": "test",
+          "filename": "tests/contracts/NullifierRegistry.test.ts",
+          "description": "Solidity integration tests: verify proof with correct chainId succeeds; mismatched chainId reverts; nullifier double-spend on same chain reverts"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/breaking-changes/v2-nullifier-migration.md",
+          "description": "Migration guide for integrators: describes the breaking circuit change, how to re-derive nullifiers, and re-registration requirements for existing users"
+        }
+      ],
+      "steps": [
+        "Create circuits/lib/NullifierLib.circom with a Poseidon3(scope, secret, chainId) template to centralize nullifier derivation",
+        "Update HumanUniqueness.circom: add signal input chainId (public), replace Poseidon2 nullifier call with NullifierLib template",
+        "Update AgentPolicy.circom: same chainId public input addition and NullifierLib substitution",
+        "Recompile both circuits with snarkjs/circom2, regenerate R1CS, zkey, and Verifier.sol artifacts",
+        "Update NullifierRegistry.sol to assert that the chainId public input equals block.chainid before spending a nullifier",
+        "Regenerate HumanUniquenessVerifier.sol and AgentPolicyVerifier.sol from new circuit verification keys",
+        "Update sdk/src/nullifier.ts to expose computeNullifier(scope, secret, chainId) using poseidon3",
+        "Update sdk/src/prover.ts to include chainId in the witness inputs for both circuits",
+        "Write circuit unit tests covering same-secret cross-chain nullifier distinctness and replay rejection",
+        "Write Solidity integration tests covering valid proof acceptance, chainId mismatch revert, and double-spend revert",
+        "Write specs/nullifier-chain-binding.md documenting threat model, domain separation rationale, and v1\u2192v2 migration path",
+        "Write docs/breaking-changes/v2-nullifier-migration.md for downstream integrators",
+        "Run full test suite across circuits, contracts, and SDK; verify no regressions",
+        "Tag circuit artifacts with a v2 semver bump and publish updated SDK"
+      ],
+      "estimated_constraints": 68,
+      "dependencies": [
+        "circom2 >= 2.1.6",
+        "snarkjs >= 0.7",
+        "poseidon-solidity or equivalent on-chain Poseidon3 implementation",
+        "ethers.js >= 6 (SDK chain detection via provider.getNetwork())",
+        "Hardhat >= 2.19 with circom plugin for integrated circuit tests",
+        "Existing HumanUniqueness.circom and AgentPolicy.circom source files",
+        "Existing NullifierRegistry.sol deployment addresses (for migration coordination)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_under_constrained_delegation_expiry",
+      "persona": "formal_verifier",
+      "title": "Prove delegation expiry narrowing is sound",
+      "dimension": "correctness",
+      "description": "The Delegation circuit claims delegateeExpiry <= delegatorExpiry but the constraint enforcement is not visible in the truncated source. Write a Certora-style property spec that proves: for all valid witnesses, delegateeExpiry <= delegatorExpiry AND delegateeExpiry <= currentTimestamp is rejected. Additionally, verify that the comparison uses the range-checked 64-bit values (not raw field elements) to prevent wraparound where a huge field element passes the LessThan comparator. Deliver: a .spec file with 4 invariants and a test harness generating boundary witnesses (expiry = 2^64-1, expiry = 0, expiry = delegatorExpiry \u00b1 1).",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_under_constrained_delegation_expiry",
+      "adoption": 13,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 21,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_under_constrained_delegation_expiry",
+      "title": "Prove delegation expiry narrowing is sound",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "specs/delegation_expiry_soundness.spec",
+          "description": "Certora-style property spec with 4 invariants: (1) delegateeExpiry <= delegatorExpiry for all valid witnesses, (2) delegateeExpiry > currentTimestamp is required for proof acceptance, (3) comparisons operate on range-checked 64-bit values not raw field elements, (4) no field-element wraparound can satisfy LessThan comparator with out-of-range inputs"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/DelegationExpiryCheck.circom",
+          "description": "Circom circuit fragment enforcing range-checked 64-bit expiry comparison using Num2Bits(64) decomposition before LessThan, ensuring wraparound is impossible"
+        },
+        {
+          "type": "test",
+          "filename": "tests/test_delegation_expiry_boundary.py",
+          "description": "Test harness generating boundary witnesses: expiry=2^64-1, expiry=0, expiry=delegatorExpiry+1 (should reject), expiry=delegatorExpiry-1 (should accept), expiry=delegatorExpiry (should accept), currentTimestamp edge cases"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/delegation_expiry_formal_analysis.md",
+          "description": "Write-up of soundness argument, identified attack vectors (field element wraparound), constraint count justification, and interpretation of spec invariant results"
+        }
+      ],
+      "steps": [
+        "Audit existing Delegation circuit source for the delegateeExpiry <= delegatorExpiry constraint; locate the LessThan component instantiation and verify it receives Num2Bits-decomposed 64-bit signals, not raw field element inputs",
+        "Identify the missing or truncated constraint: confirm whether delegateeExpiry <= currentTimestamp rejection is explicitly enforced or implicitly assumed; document the gap",
+        "Draft invariant I1 in spec: for all witnesses w where proof verifies, w.delegateeExpiry <= w.delegatorExpiry holds in Z (not F_p arithmetic)",
+        "Draft invariant I2 in spec: for all witnesses w where proof verifies, w.delegateeExpiry > w.currentTimestamp (proof rejects expired delegatee credentials)",
+        "Draft invariant I3 in spec: the LessThan comparator inputs are range-checked to [0, 2^64) via Num2Bits(64) before comparison, ruling out field-element wraparound where p - 1 < 2^64 mod p could pass",
+        "Draft invariant I4 in spec: no witness with delegateeExpiry >= 2^64 can satisfy the range-check sub-circuit, making the comparator input domain provably bounded",
+        "Implement the DelegationExpiryCheck circuit fragment with explicit Num2Bits(64) for both expiry signals before feeding into LessThan(64), add GreaterThan(64) for currentTimestamp check",
+        "Write boundary witness generator in the test harness: cases expiry=0, expiry=1, expiry=delegatorExpiry-1 (valid), expiry=delegatorExpiry (valid boundary), expiry=delegatorExpiry+1 (must reject), expiry=2^64-1 (range boundary), expiry=2^64 (must fail range check)",
+        "Run snarkjs witness generation for each boundary case; assert expected accept/reject outcomes match; capture constraint satisfaction status",
+        "Count active constraints in DelegationExpiryCheck circuit (estimate: 64 bits * 2 signals for Num2Bits + LessThan internals + GreaterThan internals)",
+        "Write formal analysis doc summarizing the soundness argument, the wraparound attack vector, and how Num2Bits decomposition closes it"
+      ],
+      "estimated_constraints": 320,
+      "dependencies": [
+        "circomlib LessThan(n) component",
+        "circomlib Num2Bits(n) component",
+        "circomlib GreaterThan(n) component",
+        "snarkjs (witness generation and proof verification for boundary tests)",
+        "existing Delegation.circom (parent circuit this fragment integrates into)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_scope_bitmask_cumulative_invariant",
+      "persona": "formal_verifier",
+      "title": "Verify cumulative bit encoding is enforced in-circuit",
+      "dimension": "correctness",
+      "description": "The Delegation circuit header documents that bit 4 implies bits 2+3 and bit 3 implies bit 2, but the actual constraint enforcement must be verified. Write a Halo2 MockProver test suite that attempts to create valid witnesses violating cumulative encoding (e.g., bit 4 set without bit 3) and asserts they fail. Additionally, write a formal invariant proving that any satisfying witness for Delegation has delegateeScope where the cumulative property holds. This prevents a delegatee from receiving a 'financial unlimited' scope without the intermediate tiers. Deliver: 12+ negative test vectors and a property spec.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_scope_bitmask_cumulative_invariant",
+      "adoption": 13,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 21,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_scope_bitmask_cumulative_invariant",
+      "title": "Verify cumulative bit encoding is enforced in-circuit",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "src/delegation/scope_bitmask.rs",
+          "description": "Halo2 chip implementing cumulative scope bitmask constraints: bit4 => bit3, bit3 => bit2, expressed as polynomial constraints (1 - bit_n) * bit_m = 0"
+        },
+        {
+          "type": "test",
+          "filename": "tests/scope_bitmask_negative.rs",
+          "description": "MockProver test suite with 12+ negative vectors: each sets a higher scope bit without the required lower bits and asserts prover returns VerifyFailure"
+        },
+        {
+          "type": "spec",
+          "filename": "specs/scope_bitmask_invariant.md",
+          "description": "Formal property spec stating the cumulative invariant: forall satisfying witness w, w.delegateeScope satisfies bit4=>bit3 AND bit3=>bit2, with pen-and-paper proof sketch and reference to circuit constraints"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/scope_bitmask_audit_report.md",
+          "description": "Audit report summarising constraint coverage, test results, and confirmation that financial-unlimited scope cannot be reached without intermediate tiers"
+        }
+      ],
+      "steps": [
+        "Read existing Delegation circuit source to locate delegateeScope signal decomposition and any existing range/boolean constraints",
+        "Identify where (or confirm absence of) cumulative implication constraints: (1 - bit4) * bit3 = 0 and (1 - bit3) * bit2 = 0",
+        "Add ScopeBitmaskChip in scope_bitmask.rs implementing the two implication gates as Halo2 custom gates or lookup arguments, wiring into the Delegation circuit's constraint system",
+        "Write negative test vector helper that constructs a witness with arbitrary bit4/bit3/bit2 values and runs MockProver::run, collecting VerifyFailure results",
+        "Implement 12 negative vectors: {bit4=1,bit3=0,bit2=0}, {bit4=1,bit3=0,bit2=1}, {bit4=1,bit3=1,bit2=0}, {bit3=1,bit2=0} for each financial tier combination, plus edge cases with all upper bits set and lower cleared",
+        "Implement 4 positive control vectors (all-zeros, bit2 only, bit2+bit3, bit2+bit3+bit4) asserting MockProver succeeds",
+        "Assert every negative vector returns at least one VerifyFailure::ConstraintNotSatisfied referencing the cumulative constraint rows",
+        "Write the formal invariant in specs/scope_bitmask_invariant.md: define P(w) = (w[4]=1 => w[3]=1) AND (w[3]=1 => w[2]=1); prove by constraint algebra that any assignment satisfying all circuit polynomials satisfies P",
+        "Cross-reference the invariant proof against the actual gate expressions in scope_bitmask.rs to confirm they match",
+        "Run cargo test --test scope_bitmask_negative and confirm all 12+ negative tests fail verification and all positive tests pass",
+        "Write docs/scope_bitmask_audit_report.md summarising constraint IDs, test pass/fail matrix, and conclusion that the financial-unlimited escalation path is closed"
+      ],
+      "estimated_constraints": 6,
+      "dependencies": [
+        "halo2_proofs (PSE fork or zcash/halo2)",
+        "Delegation circuit source with delegateeScope bit decomposition",
+        "Existing scope bit constants / enum definitions",
+        "Rust toolchain (edition 2021, cargo test harness)"
+      ]
+    }
+  }
+]

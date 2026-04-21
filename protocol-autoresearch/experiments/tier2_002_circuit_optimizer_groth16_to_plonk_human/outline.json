@@ -1,0 +1,81 @@
+{
+  "id": "circuit_optimizer_groth16_to_plonk_human",
+  "title": "Migrate HumanUniqueness from Groth16 to PLONK",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/human_uniqueness.circom",
+      "description": "HumanUniqueness circuit updated with snarkjs PLONK-compatible pragma and template structure; retains BabyPbk + Poseidon hash + depth-20 Merkle inclusion proof (~15k constraints)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/build/human_uniqueness_plonk.zkey",
+      "description": "PLONK proving key generated via snarkjs plonk setup using the universal powers-of-tau (ptau) file (no trusted ceremony required)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/build/human_uniqueness_verification_key.json",
+      "description": "PLONK verification key exported from the zkey for use in contract generation and off-chain verification"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/verifiers/HumanVerifier.sol",
+      "description": "Auto-generated Solidity PLONK verifier via snarkjs exportSolidityVerifier; replaces the Groth16 HumanVerifier.sol; exposes verifyProof(bytes calldata proof, uint256[] calldata pubSignals) matching the unified IPlonkVerifier interface"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/interfaces/IPlonkVerifier.sol",
+      "description": "Unified verifier interface shared by HumanVerifier, AgentPolicyVerifier, and DelegationVerifier; single verifyProof(bytes, uint256[]) signature eliminates per-backend interface divergence"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/IdentityRegistry.sol",
+      "description": "Updated to import IPlonkVerifier instead of IGroth16Verifier for human uniqueness slot; removes separate groth16Verifier storage variable; constructor wired to accept single verifier address type"
+    },
+    {
+      "type": "test",
+      "filename": "test/human_uniqueness_plonk.test.ts",
+      "description": "End-to-end Hardhat test: generates witness, produces PLONK proof via snarkjs, calls HumanVerifier.verifyProof on-chain, asserts valid and invalid proof paths; mirrors existing AgentPolicy PLONK test structure"
+    },
+    {
+      "type": "test",
+      "filename": "test/identity_registry_unified_verifier.test.ts",
+      "description": "Integration test verifying IdentityRegistry correctly routes human uniqueness verification through the unified IPlonkVerifier interface; confirms no regression on AgentPolicy and Delegation paths"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/plonk_migration_human_uniqueness.md",
+      "description": "Migration rationale, constraint count comparison (Groth16 vs PLONK for this circuit size), ptau file provenance and adequacy justification, and interface unification notes for auditors"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proving_stack.md",
+      "description": "Updated proving stack documentation reflecting unified PLONK backend for all three circuits; removes trusted ceremony dependency section; adds ptau reuse policy"
+    }
+  ],
+  "steps": [
+    "Confirm existing powers-of-tau file (hermez or snarkjs default ptau) supports at least 2^15 constraints; download/verify if absent",
+    "Audit circuits/human_uniqueness.circom for any Groth16-specific pragma or template assumptions; note public/private signal layout",
+    "Recompile circuit: circom human_uniqueness.circom --r1cs --wasm --sym -o circuits/build/",
+    "Run snarkjs plonk setup using the ptau and the new .r1cs to produce human_uniqueness_plonk.zkey",
+    "Export verification key: snarkjs zkey export verificationkey human_uniqueness_plonk.zkey human_uniqueness_verification_key.json",
+    "Generate Solidity verifier: snarkjs zkey export solidityverifier human_uniqueness_plonk.zkey contracts/verifiers/HumanVerifier.sol",
+    "Define IPlonkVerifier.sol interface with verifyProof(bytes calldata proof, uint256[] calldata pubSignals) returns (bool); confirm AgentPolicyVerifier and DelegationVerifier already conform",
+    "Update HumanVerifier.sol to implement IPlonkVerifier (add interface annotation; verify function signature matches)",
+    "Refactor IdentityRegistry.sol: replace IGroth16Verifier import and humanVerifier storage type with IPlonkVerifier; remove groth16-specific call encoding if present",
+    "Write test/human_uniqueness_plonk.test.ts: load circuit wasm + zkey, generate witness for a valid identity, call snarkjs.plonk.fullProve, submit proof to HumanVerifier.verifyProof via Hardhat, assert true; test invalid proof asserts false",
+    "Write test/identity_registry_unified_verifier.test.ts: deploy IdentityRegistry with all three PLONK verifiers, exercise human uniqueness registration path, assert no interface mismatch",
+    "Run full test suite: npx hardhat test; fix any ABI or calldata encoding regressions",
+    "Update specs/plonk_migration_human_uniqueness.md with constraint count from snarkjs info output and ptau file hash",
+    "Update docs/proving_stack.md to remove Groth16 ceremony section and document unified PLONK backend"
+  ],
+  "estimated_constraints": 15000,
+  "dependencies": [
+    "circom 2.x compiler",
+    "snarkjs >= 0.7 (PLONK support)",
+    "powers-of-tau file covering 2^15 constraints (e.g. hermez ptau15 or pot15_final.ptau)",
+    "circomlibjs (BabyPbk, Poseidon, MerkleProof templates)",
+    "Hardhat + @nomicfoundation/hardhat-toolbox",
+    "Existing AgentPolicy and Delegation PLONK verifier contracts (for interface conformance reference)"
+  ]
+}

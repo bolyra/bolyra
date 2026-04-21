@@ -1,0 +1,59 @@
+{
+  "id": "security_auditor_storage_proof_blockhash_trust",
+  "title": "Harden cross-chain storage proof block hash verification",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/RootRelay.sol",
+      "description": "Production-grade _getL1BlockHash replacing placeholder with EIP-4788 beacon root precompile (0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02) call, RLP block header parser, block age validation (reject if older than 256 blocks or outside root history buffer window), and fallback path for chains without EIP-4788 support"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/BlockHashOracle.sol",
+      "description": "Thin adapter interface with two implementations: EIP4788BlockHashOracle (reads parentBeaconBlockRoot precompile) and AxiomBlockHashOracle (calls Axiom v2 query interface for historic hashes beyond 256-block window)"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/RLPBlockHeaderLib.sol",
+      "description": "Library to RLP-decode an Ethereum block header and extract blockHash, parentHash, stateRoot, and blockNumber for on-chain verification"
+    },
+    {
+      "type": "test",
+      "filename": "test/RootRelay.fork.t.sol",
+      "description": "Foundry fork test against mainnet/OP-mainnet: exercises EIP-4788 happy path, age-check rejection, tampered oracle address rejection, and fallback to Axiom-style proof path"
+    },
+    {
+      "type": "test",
+      "filename": "test/BlockHashOracle.unit.t.sol",
+      "description": "Unit tests for EIP4788BlockHashOracle and RLPBlockHeaderLib using hardcoded known block headers"
+    },
+    {
+      "type": "spec",
+      "filename": "specs/block-hash-trust-model.md",
+      "description": "Security rationale: threat model (malicious oracle injection), EIP-4788 trust guarantees, 256-block recency window, Axiom fallback for historic roots, migration notes for existing deployments"
+    }
+  ],
+  "steps": [
+    "Audit existing RootRelay._getL1BlockHash: document current placeholder logic, identify all callers, and map which L2 networks are deployment targets",
+    "Define IBlockHashOracle interface with getBlockHash(uint256 blockNumber) returning (bytes32 hash, bool valid) and a supportsHistoricProofs() flag",
+    "Implement RLPBlockHeaderLib: parse RLP-encoded block header bytes, extract blockNumber and blockHash, verify keccak256(rlpHeader) == claimed hash",
+    "Implement EIP4788BlockHashOracle: call precompile at 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02 with target timestamp derived from blockNumber, validate returned parentBeaconBlockRoot matches supplied RLP header",
+    "Implement AxiomBlockHashOracle stub (or Relic-style): accept a Merkle proof of historic block hash for blocks older than 256, verify against Axiom v2 on the target chain",
+    "Add block age check in RootRelay: require submitted blockNumber >= block.number - 256 for EIP-4788 path; for older blocks require Axiom proof path; reject blocks newer than latest finalized slot",
+    "Replace placeholder _getL1BlockHash with dispatch logic: if chain supports EIP-4788 use EIP4788BlockHashOracle, else revert with explicit UnsupportedChain error until Axiom oracle is wired",
+    "Write RLPBlockHeaderLib unit tests covering mainnet blocks, edge cases (empty uncle hash, zero nonce post-merge), and malformed input revert",
+    "Write Foundry fork tests: fork OP-mainnet, submit valid storage proof via EIP-4788 path, verify acceptance; replay with oracle address swapped to attacker-controlled contract, verify revert",
+    "Write fork test for age-check boundary: submit block at number - 255 (accept), number - 257 (reject), and a future block (reject)",
+    "Run slither and aderyn static analysis on RootRelay.sol and BlockHashOracle.sol; fix any high/medium findings",
+    "Update specs/block-hash-trust-model.md with final design, trust assumptions, and per-chain deployment matrix",
+    "Update deployment scripts to pass oracle address as constructor argument and verify correct precompile address per chain"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "EIP-4788 beacon root precompile availability on target L2 (OP-mainnet \u2713, Base \u2713, Arbitrum One requires verification)",
+    "Axiom v2 or Relic deployed on target chains for historic block hash fallback path",
+    "Foundry with --fork-url support for mainnet and OP-mainnet integration tests",
+    "solidity-rlp or equivalent RLP library (or inline implementation to avoid dependency risk)",
+    "Existing RootRelay.sol and root history buffer window constant (for age check upper bound)"
+  ]
+}

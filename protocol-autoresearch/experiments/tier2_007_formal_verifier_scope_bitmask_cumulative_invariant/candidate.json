@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_scope_bitmask_cumulative_invariant",
+  "persona": "formal_verifier",
+  "title": "Verify cumulative bit encoding is enforced in-circuit",
+  "dimension": "correctness",
+  "description": "The Delegation circuit header documents that bit 4 implies bits 2+3 and bit 3 implies bit 2, but the actual constraint enforcement must be verified. Write a Halo2 MockProver test suite that attempts to create valid witnesses violating cumulative encoding (e.g., bit 4 set without bit 3) and asserts they fail. Additionally, write a formal invariant proving that any satisfying witness for Delegation has delegateeScope where the cumulative property holds. This prevents a delegatee from receiving a 'financial unlimited' scope without the intermediate tiers. Deliver: 12+ negative test vectors and a property spec.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_scope_bitmask_cumulative_invariant",
+  "adoption": 13,
+  "standards": 14,
+  "completeness": 17,
+  "correctness": 21,
+  "total": 65,
+  "verdict": "consider"
+}

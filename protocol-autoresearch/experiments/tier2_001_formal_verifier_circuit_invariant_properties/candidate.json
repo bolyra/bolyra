@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "persona": "formal_verifier",
+  "title": "Certora-style invariant properties for all three circuits",
+  "dimension": "standards",
+  "description": "Write machine-checkable invariant specifications for HumanUniqueness, AgentPolicy, and Delegation. Properties include: (1) no private input can exceed its declared bit-width after Num2Bits decomposition, (2) nullifierHash is deterministic given (scope, secret) or (nonce, credCommitment), (3) scopeCommitment chain is monotonically narrowing across delegation hops (delegateeScope & ~delegatorScope == 0), (4) Merkle root output is uniquely determined by leaf + proof path. Express these in a property specification language (circomspect annotations or a standalone JSON property file) that can be consumed by circomspect or picus. Include 10+ negative witness test vectors that violate each property.",
+  "priority": "high",
+  "estimated_effort": "week",
+  "candidate_id": "formal_verifier_circuit_invariant_properties",
+  "adoption": 15,
+  "standards": 21,
+  "completeness": 16,
+  "correctness": 20,
+  "total": 72,
+  "verdict": "consider"
+}

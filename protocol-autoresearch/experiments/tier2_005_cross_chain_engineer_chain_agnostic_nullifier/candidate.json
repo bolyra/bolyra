@@ -1,0 +1,16 @@
+{
+  "id": "cross_chain_engineer_chain_agnostic_nullifier",
+  "persona": "cross_chain_engineer",
+  "title": "Chain-agnostic nullifier registry with cross-chain replay protection",
+  "dimension": "correctness",
+  "description": "The current nullifierHash is Poseidon2(scope, secret) and is chain-unaware. If the same verifier contract is deployed on Base and Arbitrum, a proof verified on Base can be replayed on Arbitrum since nullifier sets are per-chain. Fix: include chainId in the nullifier derivation (Poseidon3(scope, secret, chainId)) and add a chainId public input to HumanUniqueness and AgentPolicy circuits. This is a breaking change to the circuit but critical before multi-chain deployment.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "cross_chain_engineer_chain_agnostic_nullifier",
+  "adoption": 15,
+  "standards": 15,
+  "completeness": 17,
+  "correctness": 18,
+  "total": 65,
+  "verdict": "consider"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_under_constrained_delegation_expiry",
+  "persona": "formal_verifier",
+  "title": "Prove delegation expiry narrowing is sound",
+  "dimension": "correctness",
+  "description": "The Delegation circuit claims delegateeExpiry <= delegatorExpiry but the constraint enforcement is not visible in the truncated source. Write a Certora-style property spec that proves: for all valid witnesses, delegateeExpiry <= delegatorExpiry AND delegateeExpiry <= currentTimestamp is rejected. Additionally, verify that the comparison uses the range-checked 64-bit values (not raw field elements) to prevent wraparound where a huge field element passes the LessThan comparator. Deliver: a .spec file with 4 invariants and a test harness generating boundary witnesses (expiry = 2^64-1, expiry = 0, expiry = delegatorExpiry \u00b1 1).",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_under_constrained_delegation_expiry",
+  "adoption": 13,
+  "standards": 14,
+  "completeness": 17,
+  "correctness": 21,
+  "total": 65,
+  "verdict": "consider"
+}

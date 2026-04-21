@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_interop_profile",
+      "persona": "standards_architect",
+      "title": "Interoperability profile for multi-verifier deployments",
+      "dimension": "standards",
+      "description": "Write an interop profile document (modeled on OIDC Conformance) that specifies the exact wire format for proof exchange between provers and verifiers across different deployments. Define: (1) a JSON-based proof envelope with fields for circuit type, public signals array, proof bytes, and metadata; (2) content-type negotiation (application/bolyra-proof+json); (3) version negotiation via a 'protocol-version' header; (4) mandatory-to-implement cipher suites (BN254/Groth16 for human, BN254/PLONK for agent). This enables independent verifier implementations to accept proofs from any compliant prover.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_interop_profile",
+      "adoption": 18,
+      "standards": 21,
+      "completeness": 17,
+      "correctness": 15,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_000_standards_architect_conformance_interop_profile",
+    "score": {
+      "experiment_id": "tier2_000_standards_architect_conformance_interop_profile",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "circuit_optimizer_eddsa_to_poseidon_signature",
+      "persona": "circuit_optimizer",
+      "title": "Replace EdDSA verification with Poseidon-based commitment binding in AgentPolicy",
+      "dimension": "completeness",
+      "description": "EdDSA verification in AgentPolicy costs ~30k constraints (60%+ of the circuit budget). The operator signature proves the operator authorized the credential, but this can be achieved more cheaply: the operator signs off-chain (verified at enrollment time on-chain), and the circuit only needs to prove knowledge of the preimage to the credential commitment that is already in the Merkle tree. Remove the in-circuit EdDSA verify, save ~30k constraints, cutting proving time roughly in half. The security model shifts to: Merkle inclusion proves the credential was operator-approved at enrollment. Deliverable: simplified AgentPolicy.circom (~20k constraints), updated test vectors, benchmarks showing proving time reduction.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_eddsa_to_poseidon_signature",
+      "adoption": 19,
+      "standards": 13,
+      "completeness": 21,
+      "correctness": 17,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_001_circuit_optimizer_eddsa_to_poseidon_signature",
+    "score": {
+      "experiment_id": "tier2_001_circuit_optimizer_eddsa_to_poseidon_signature",
+      "total": 26,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "circuit_optimizer_groth16_to_plonk_human",
+      "persona": "circuit_optimizer",
+      "title": "Migrate HumanUniqueness from Groth16 to PLONK",
+      "dimension": "correctness",
+      "description": "HumanUniqueness currently uses Groth16 requiring a trusted ceremony (reusing Semaphore v4's depth-20 ceremony). Migrating to PLONK (matching AgentPolicy and Delegation) eliminates ceremony trust assumptions, unifies the proving stack to a single backend, and simplifies the IdentityRegistry contract by removing the separate IGroth16Verifier interface. The circuit is small (~15k constraints for BabyPbk + Poseidon + Merkle), well within PLONK's efficiency range. Deliverable: recompiled HumanUniqueness circuit with PLONK proving key, updated HumanVerifier.sol, and unified verifier interface in IdentityRegistry.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_groth16_to_plonk_human",
+      "adoption": 17,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 19,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_002_circuit_optimizer_groth16_to_plonk_human",
+    "score": {
+      "experiment_id": "tier2_002_circuit_optimizer_groth16_to_plonk_human",
+      "total": 26,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_w3c_did_method",
+      "persona": "standards_architect",
+      "title": "W3C DID method specification for did:bolyra",
+      "dimension": "standards",
+      "description": "Define a complete W3C DID method binding: did:bolyra:<identityCommitment>. Specify the DID Document structure (verification methods map to EdDSA Baby Jubjub keys, service endpoints for handshake initiation), the resolution algorithm (on-chain lookup via IdentityRegistry humanTree/agentTree), and CRUD operations (create = enroll, deactivate = revoke). Include a Verifiable Credential issuance flow where successful handshake verification produces a VC with the nullifier as proof, enabling interop with any W3C VC-compatible wallet.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_w3c_did_method",
+      "adoption": 20,
+      "standards": 22,
+      "completeness": 22,
+      "correctness": 12,
+      "total": 76,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_003_standards_architect_w3c_did_method",
+    "score": {
+      "experiment_id": "tier2_003_standards_architect_w3c_did_method",
+      "total": 20,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 4,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 3,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_vectors_multichain",
+      "persona": "standards_architect",
+      "title": "Conformance test vectors with multi-chain coverage",
+      "dimension": "standards",
+      "description": "Produce 60+ JSON test vectors organized by circuit (HumanUniqueness, AgentPolicy, Delegation) covering: valid proofs, expired credentials, revoked identities, stale roots (both human and agent), scope subset violations, cumulative bit encoding violations (bit 4 without bits 2+3), delegation chain at depths 1/2/3/4 (4 must fail), phantom delegatee rejection, nonce replay, and cross-chain root sync scenarios. Each vector includes input signals, expected public outputs, and expected pass/fail status. Ship as a standalone JSON file with a JSON Schema so other implementations can validate their parser.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_vectors_multichain",
+      "adoption": 14,
+      "standards": 22,
+      "completeness": 11,
+      "correctness": 18,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_004_standards_architect_conformance_vectors_multichain",
+    "score": {
+      "experiment_id": "tier2_004_standards_architect_conformance_vectors_multichain",
+      "total": 25,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 4,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 8,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_abnf_wire_format",
+      "persona": "standards_architect",
+      "title": "ABNF grammar for proof payloads and enrollment messages",
+      "dimension": "standards",
+      "description": "Define a machine-parseable ABNF grammar (RFC 5234) for all protocol messages: enrollment requests (human and agent), handshake proof bundles (human proof + agent proof + optional delegation chain), delegation tokens, and revocation notices. Each message type gets a canonical binary encoding (for on-chain calldata efficiency) and a JSON encoding (for SDK ergonomics). Include a CDDL (RFC 8610) companion spec for CBOR encoding, targeting constrained IoT verifiers. This removes ambiguity from the IETF draft's wire format section and enables automated parser generation.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_abnf_wire_format",
+      "adoption": 15,
+      "standards": 22,
+      "completeness": 16,
+      "correctness": 16,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_005_standards_architect_abnf_wire_format",
+    "score": {
+      "experiment_id": "tier2_005_standards_architect_abnf_wire_format",
+      "total": 25,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 4,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 8,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "circuit_optimizer_scope_blinding_salt",
+      "persona": "circuit_optimizer",
+      "title": "Add blinding salt to scope commitment in AgentPolicy and Delegation",
+      "dimension": "correctness",
+      "description": "scopeCommitment = Poseidon(permissionBitmask, credentialCommitment) is vulnerable to offline brute-force since the 64-bit bitmask has at most 2^64 preimages and credentialCommitment is a public Merkle leaf. Adding a random blinding salt as a third Poseidon input (Poseidon3) makes the commitment computationally hiding. Cost is ~1 additional Poseidon round (~300 constraints). Deliverable: updated AgentPolicy.circom and Delegation.circom with blindingSalt private input, updated scope commitment computation, and matching contract-side changes to accept the new public signal layout.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "circuit_optimizer_scope_blinding_salt",
+      "adoption": 14,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 20,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_006_circuit_optimizer_scope_blinding_salt",
+    "score": {
+      "experiment_id": "tier2_006_circuit_optimizer_scope_blinding_salt",
+      "total": 26,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "security_auditor_storage_proof_blockhash_trust",
+      "persona": "security_auditor",
+      "title": "Harden cross-chain storage proof block hash verification",
+      "dimension": "correctness",
+      "description": "RootRelay.sol's _getL1BlockHash uses a simplified trust model (documented as placeholder) that returns bytes32(0) on failure but does not parse actual block header RLP or validate against a real L1 oracle like the EIP-4788 beacon root contract. An attacker controlling the oracle address could inject arbitrary state roots. Replace with EIP-4788 parentBeaconBlockRoot precompile on L2s that support it, or Axiom/Relic-style historic block hash proofs. Add a block age check (reject blocks older than ~256 blocks or staler than the root history buffer window). Artifact: production-grade _getL1BlockHash using 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02, integration test with forked mainnet.",
+      "priority": "high",
+      "estimated_effort": "week",
+      "candidate_id": "security_auditor_storage_proof_blockhash_trust",
+      "adoption": 16,
+      "standards": 13,
+      "completeness": 19,
+      "correctness": 17,
+      "total": 65,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/identityos/protocol-autoresearch/experiments/tier2_007_security_auditor_storage_proof_blockhash_trust",
+    "score": {
+      "experiment_id": "tier2_007_security_auditor_storage_proof_blockhash_trust",
+      "total": 26,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

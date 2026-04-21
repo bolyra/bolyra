@@ -1,0 +1,53 @@
+{
+  "id": "standards_architect_conformance_interop_profile",
+  "title": "Interoperability profile for multi-verifier deployments",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-interop-profile-v1.md",
+      "description": "Normative interoperability profile document specifying wire format, content-type negotiation, version negotiation, and mandatory cipher suites for proof exchange"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-schema.json",
+      "description": "JSON Schema definition for the bolyra proof envelope with fields: circuit_type, public_signals, proof_bytes, protocol_version, metadata"
+    },
+    {
+      "type": "test",
+      "filename": "tests/conformance/test_interop_profile.py",
+      "description": "Conformance test suite validating proof envelope structure, content-type headers, version negotiation, and cipher suite requirements"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/interop-profile-guide.md",
+      "description": "Implementer guide with worked examples for prover and verifier integrations, including cipher suite selection and version negotiation flows"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/proof_envelope.py",
+      "description": "Reference Python implementation of proof envelope serialization/deserialization and content-type negotiation helpers"
+    }
+  ],
+  "steps": [
+    "Define the canonical JSON proof envelope schema with required fields: circuit_type (enum: human_groth16, agent_plonk), public_signals (array of hex strings), proof_bytes (base64url-encoded), protocol_version (semver string), and optional metadata object",
+    "Specify content-type as application/bolyra-proof+json and define HTTP Accept/Content-Type negotiation rules for prover-verifier HTTP exchanges",
+    "Define protocol-version header semantics: provers MUST send X-Bolyra-Protocol-Version, verifiers MUST reject versions outside supported range with 406 Not Acceptable and a version-range body",
+    "Enumerate mandatory-to-implement cipher suites: MTI-1 BN254/Groth16 for human identity circuits, MTI-2 BN254/PLONK for agent delegation circuits; mark BLS12-381 variants as OPTIONAL",
+    "Write normative MUST/SHOULD/MAY language sections for prover conformance: envelope construction, field encoding rules, and signature over envelope hash",
+    "Write normative MUST/SHOULD/MAY language sections for verifier conformance: envelope validation, public signal count checks, on-chain verifier contract call requirements",
+    "Define conformance levels: Basic (MTI-1 only), Full (MTI-1 + MTI-2), Extended (all optional suites)",
+    "Produce JSON Schema (Draft 2020-12) for the proof envelope and embed normative schema reference in the spec",
+    "Implement reference Python SDK helpers for envelope construction, serialization, and content-type negotiation",
+    "Write conformance test suite with positive cases (valid envelopes per conformance level) and negative cases (wrong circuit_type, malformed proof_bytes, unsupported version)",
+    "Add IANA media type registration template for application/bolyra-proof+json as an appendix",
+    "Cross-reference with existing IETF internet-draft spec and W3C DID method docs to ensure terminology alignment"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "BN254/Groth16 circuit artifacts (human identity circuit)",
+    "BN254/PLONK circuit artifacts (agent delegation circuit)",
+    "IETF internet-draft spec (bolyra-interop-profile-v1.md references it)",
+    "W3C DID method spec for identity context fields in metadata",
+    "snarkjs or bellman for proof_bytes encoding reference"
+  ]
+}

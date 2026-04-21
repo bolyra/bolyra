@@ -1,0 +1,89 @@
+{
+  "id": "standards_architect_w3c_did_method",
+  "title": "W3C DID method specification for did:bolyra",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Full W3C DID Method specification document covering method syntax, DID Document schema, resolution algorithm, CRUD operations, security considerations, and privacy considerations per W3C DID Core 1.0"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-document-schema.json",
+      "description": "JSON Schema for a did:bolyra DID Document including verificationMethod (EdDSA Baby Jubjub keys), authentication, assertionMethod, and service endpoints for handshake initiation"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/vc-issuance-flow.md",
+      "description": "Verifiable Credential issuance flow specification: handshake verification produces a VC with nullifier as proof, conforming to W3C VC Data Model 2.0"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/DIDResolver.sol",
+      "description": "On-chain DID resolver that looks up identityCommitment in IdentityRegistry humanTree/agentTree and returns DID Document metadata; emits events for create/deactivate lifecycle"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did/resolver.ts",
+      "description": "TypeScript DID resolver implementing the DIF DID Resolver interface; resolves did:bolyra:<identityCommitment> by querying DIDResolver contract and constructing the DID Document"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did/document-builder.ts",
+      "description": "Builder utility that constructs a W3C-conformant DID Document from on-chain data: maps Baby Jubjub public keys to JsonWebKey2020 verification methods and injects service endpoints"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/vc/issuer.ts",
+      "description": "VC issuer that wraps a successful handshake verification result into a W3C Verifiable Credential, embedding the nullifier as a proof value and signing with the issuer's key"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did/resolution.test.ts",
+      "description": "Integration tests for DID resolution: create identity, resolve DID Document, verify structure against JSON Schema, assert verification methods and service endpoints"
+    },
+    {
+      "type": "test",
+      "filename": "tests/vc/issuance.test.ts",
+      "description": "End-to-end tests for VC issuance flow: enroll identity, perform handshake, verify proof, issue VC with nullifier, validate VC against W3C VC Data Model schema"
+    },
+    {
+      "type": "test",
+      "filename": "tests/did/crud.test.ts",
+      "description": "CRUD lifecycle tests: create (enroll maps to DID create), update (key rotation via IdentityRegistry), deactivate (revoke maps to DID deactivate), resolve-after-deactivate returns deactivatedAt"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-bolyra-quickstart.md",
+      "description": "Developer quickstart: resolve a did:bolyra DID, integrate with universal resolvers, issue and verify a VC using the nullifier proof, wallet interop notes"
+    }
+  ],
+  "steps": [
+    "Define the DID method syntax: did:bolyra:<identityCommitment> where identityCommitment is the hex-encoded Poseidon commitment (64 chars), with optional path fragment for agent sub-DIDs: did:bolyra:<identityCommitment>:agent:<agentIndex>",
+    "Specify DID Document structure: id field = the DID, controller = self, verificationMethod array with type JsonWebKey2020 mapping Baby Jubjub public keys to JWK crv=BabyJub-JubJub, authentication and assertionMethod references pointing to those methods",
+    "Specify service endpoints in DID Document: type=BolyraHandshakeEndpoint with serviceEndpoint pointing to the handshake initiation API, type=BolyraCredentialEndpoint for VC issuance",
+    "Define resolution algorithm: (1) parse identityCommitment from DID, (2) call DIDResolver.resolve(identityCommitment) which queries IdentityRegistry humanTree/agentTree, (3) check revocation status, (4) reconstruct DID Document from on-chain public key and metadata, (5) return DIDResolutionResult with didDocument and didDocumentMetadata",
+    "Define CRUD operations: Create = identity enrollment transaction emitting IdentityRegistered event sets created timestamp; Read = resolution algorithm above; Update = key rotation via IdentityRegistry updateKey; Deactivate = revoke transaction sets deactivated flag, resolution returns document with deactivated:true and deactivatedAt timestamp",
+    "Implement DIDResolver.sol: expose resolve(bytes32 identityCommitment) view returning (bytes pubKey, uint256 createdAt, uint256 deactivatedAt, string serviceEndpoint), reading from IdentityRegistry storage",
+    "Implement SDK resolver.ts conforming to DIF DID Resolver interface (resolve method returning DIDResolutionResult), calling DIDResolver contract via ethers.js and delegating document construction to document-builder.ts",
+    "Implement document-builder.ts: convert raw Baby Jubjub public key bytes to JWK format, construct verificationMethod entries, inject configured service endpoints, assemble full W3C DID Document object",
+    "Specify VC issuance flow: after successful ZK proof verification, issuer signs a VC with credentialSubject.id = did:bolyra:<identityCommitment>, proof.nullifier = nullifier hex, proof.type = BolyraHandshakeProof2024, conforming to W3C VC Data Model 2.0",
+    "Implement vc/issuer.ts: accept verified handshake result, build VC payload, sign with issuer key using Ed25519Signature2020 or JsonWebSignature2020, return signed VC ready for wallet consumption",
+    "Write JSON Schema for DID Document (did-document-schema.json) and validate all test fixtures against it",
+    "Write integration tests covering full resolution lifecycle (create, resolve, deactivate, resolve-after-deactivate) against a local Hardhat node",
+    "Write VC issuance end-to-end tests: enroll, handshake, issue VC, verify VC signature and nullifier binding",
+    "Document universal resolver integration: provide driver configuration for the DIF Universal Resolver so did:bolyra DIDs can be resolved by any standards-compliant resolver",
+    "Publish spec/did-method-bolyra.md to the W3C DID Method Registry and reference it from the protocol README"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry contract (humanTree and agentTree storage, enroll/revoke functions)",
+    "Baby Jubjub key generation and EdDSA signing library (circomlibjs or noble-curves)",
+    "ZK handshake verification circuit and verifier contract",
+    "W3C DID Core 1.0 specification",
+    "W3C VC Data Model 2.0 specification",
+    "DIF DID Resolver interface (@decentralized-identity/did-resolver)",
+    "ethers.js v6 for contract interaction",
+    "Hardhat local node for integration tests"
+  ]
+}

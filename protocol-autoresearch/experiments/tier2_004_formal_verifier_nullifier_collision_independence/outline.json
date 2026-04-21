@@ -1,0 +1,63 @@
+{
+  "id": "formal_verifier_nullifier_collision_independence",
+  "title": "Prove nullifier uniqueness across all three circuits",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "docs/nullifier_domain_separation.md",
+      "description": "Symbolic analysis document: defines nullifier construction for each circuit (HumanUniqueness, AgentPolicy, Delegation), enumerates Poseidon2 input vectors and arities, proves domain separation via distinct input tuples, and provides a collision impossibility argument."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/human_uniqueness.circom",
+      "description": "HumanUniqueness circuit with explicit domain tag constant (DOMAIN_HUMAN = 1) prepended to Poseidon2 inputs: Poseidon2([DOMAIN_HUMAN, scope, secret])."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/agent_policy.circom",
+      "description": "AgentPolicy circuit with explicit domain tag constant (DOMAIN_AGENT = 2) prepended to Poseidon2 inputs: Poseidon2([DOMAIN_AGENT, credentialField0, credentialField1, nonce])."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/delegation.circom",
+      "description": "Delegation circuit with explicit domain tag constant (DOMAIN_DELEG = 3) prepended to Poseidon2 inputs: Poseidon2([DOMAIN_DELEG, delegatorId, delegateeId, nonce])."
+    },
+    {
+      "type": "test",
+      "filename": "tests/nullifier_collision_independence_test.rs",
+      "description": "Halo2 MockProver test suite: exercises cross-circuit nullifier values on shared raw inputs (same scope/secret/nonce values), asserts no two circuits produce equal nullifierHash outputs, and verifies constraint satisfaction per circuit."
+    },
+    {
+      "type": "test",
+      "filename": "tests/nullifier_domain_separation_symbolic.py",
+      "description": "Python symbolic analysis script using sympy or sage: enumerates all pairwise (circuitA, circuitB) input arity differences and domain tag differences, asserts collision is impossible under Poseidon2 preimage resistance, outputs proof table."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/nullifier_formal_proof.md",
+      "description": "Formal writeup: definitions, collision resistance assumption, domain separation theorem with proof sketch, and cross-reference to test results."
+    }
+  ],
+  "steps": [
+    "Audit each circuit's current nullifier construction: record exact Poseidon2 input vector length and field semantics for HumanUniqueness (scope, secret), AgentPolicy (credential fields + nonce), and Delegation (delegatorId, delegateeId, nonce).",
+    "Define DOMAIN_HUMAN=1, DOMAIN_AGENT=2, DOMAIN_DELEG=3 as field constants and prepend each to the respective Poseidon2 input vector, updating circuit constraint logic accordingly.",
+    "Update HumanUniqueness circuit: change nullifier to Poseidon2([DOMAIN_HUMAN, scope, secret]) with arity 3; add constraint asserting domain tag equals DOMAIN_HUMAN.",
+    "Update AgentPolicy circuit: change nullifier to Poseidon2([DOMAIN_AGENT, credentialField0, credentialField1, nonce]) with arity 4; add constraint asserting domain tag equals DOMAIN_AGENT.",
+    "Update Delegation circuit: change delegationNullifier to Poseidon2([DOMAIN_DELEG, delegatorId, delegateeId, nonce]) with arity 4; add constraint asserting domain tag equals DOMAIN_DELEG.",
+    "Write symbolic analysis in Python/Sage: for each pair (A, B) show input tuples differ in at least one position (domain tag or arity) making equal outputs a preimage collision under Poseidon2, which is computationally infeasible.",
+    "Implement Halo2 MockProver tests: create shared raw inputs (same numeric values for scope/credentialField0/delegatorId etc.), run all three circuits, assert pairwise nullifier inequality, assert each circuit's constraints are satisfied.",
+    "Write MockProver negative test: attempt to construct a witness for circuit B using a nullifier value produced by circuit A on the same raw input; verify the circuit rejects it (unsatisfied domain tag constraint).",
+    "Document formal theorem in nullifier_formal_proof.md: state collision resistance assumption, define domain separation as distinct Poseidon2 preimages, prove no valid cross-circuit witness exists.",
+    "Run all tests and symbolic analysis, capture output tables, embed results in docs/nullifier_domain_separation.md."
+  ],
+  "estimated_constraints": 12,
+  "dependencies": [
+    "poseidon2-halo2",
+    "circomlib (poseidon)",
+    "halo2_proofs MockProver",
+    "sympy or sagemath (symbolic analysis)",
+    "existing HumanUniqueness circuit",
+    "existing AgentPolicy circuit",
+    "existing Delegation circuit"
+  ]
+}
