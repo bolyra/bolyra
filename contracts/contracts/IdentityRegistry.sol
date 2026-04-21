@@ -27,7 +27,7 @@ interface IDelegationVerifier {
 }
 
 /// @title IdentityRegistry
-/// @notice On-chain registry for IdentityOS: manages human identities and AI agent
+/// @notice On-chain registry for Bolyra: manages human identities and AI agent
 ///         credentials, verifies mutual handshake proofs, and tracks delegation chains.
 /// @dev Architecture decisions (from eng review):
 ///   - Human side: Groth16 (Semaphore v4 ceremony, depth 20)

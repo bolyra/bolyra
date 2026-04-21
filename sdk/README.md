@@ -1,6 +1,6 @@
 # @bolyra/sdk
 
-TypeScript SDK for **Bolyra (IdentityOS)** — mutual ZKP authentication for humans and AI agents.
+TypeScript SDK for **Bolyra** — mutual ZKP authentication for humans and AI agents.
 
 > **New here?** Start with the [5-minute Quickstart](./QUICKSTART.md) — from `npm install` to on-chain verification.
 

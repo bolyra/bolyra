@@ -127,7 +127,7 @@ async function createTestInput() {
 
 async function main() {
   console.log("╔══════════════════════════════════════════════╗");
-  console.log("║  IdentityOS — PLONK Proof Benchmark          ║");
+  console.log("║  Bolyra — PLONK Proof Benchmark               ║");
   console.log("║  Circuit: AgentPolicy (depth 20)             ║");
   console.log("║  Target: <30s proof generation (M-series Mac) ║");
   console.log("╚══════════════════════════════════════════════╝\n");

@@ -73,7 +73,7 @@ async function createTestInput() {
 
 async function main() {
   console.log("╔══════════════════════════════════════════════╗");
-  console.log("║  IdentityOS — Groth16 Proof Benchmark        ║");
+  console.log("║  Bolyra — Groth16 Proof Benchmark             ║");
   console.log("║  Circuit: HumanUniqueness (depth 20)         ║");
   console.log("║  Target: <10s proof generation (M-series Mac) ║");
   console.log("╚══════════════════════════════════════════════╝\n");

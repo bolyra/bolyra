@@ -87,7 +87,7 @@ template HumanUniqueness(MAX_DEPTH) {
     // ============ STEP 4: Nullifier ============
     // nullifier = Poseidon2(scope, secret)
     // Same as Semaphore v4. One valid proof per identity per scope.
-    // The scope for handshakes is a constant (e.g., hash("identityos-handshake-v1")).
+    // The scope for handshakes is a constant (e.g., hash("bolyra-handshake-v1")).
 
     component nullifier = Poseidon(2);
     nullifier.inputs[0] <== scope;
