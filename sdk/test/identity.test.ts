@@ -60,17 +60,18 @@ describe('createHumanIdentity', () => {
 
 describe('createAgentCredential', () => {
   it('returns correct shape with all fields', async () => {
+    const expiry = BigInt(Math.floor(Date.now() / 1000) + 86400);
     const credential = await createAgentCredential(
       111n,
       42n,
       [Permission.READ_DATA, Permission.WRITE_DATA],
-      1700000000n,
+      expiry,
     );
 
     expect(credential.modelHash).toBe(111n);
     expect(credential.operatorPublicKey).toEqual({ x: 100n, y: 200n });
     expect(credential.permissionBitmask).toBe(3n); // bits 0 + 1
-    expect(credential.expiryTimestamp).toBe(1700000000n);
+    expect(credential.expiryTimestamp).toBe(expiry);
     expect(credential.signature).toEqual({ R8: { x: 1n, y: 2n }, S: 3n });
     expect(credential.commitment).toBe(67890n);
   });
@@ -81,7 +82,7 @@ describe('createAgentCredential', () => {
         111n,
         42n,
         [Permission.FINANCIAL_MEDIUM], // bit 3 without bit 2
-        1700000000n,
+        BigInt(Math.floor(Date.now() / 1000) + 86400),
       ),
     ).rejects.toThrow(InvalidPermissionError);
   });
@@ -92,7 +93,7 @@ describe('createAgentCredential', () => {
         111n,
         42n,
         [Permission.FINANCIAL_SMALL, Permission.FINANCIAL_UNLIMITED], // bit 4 without bit 3
-        1700000000n,
+        BigInt(Math.floor(Date.now() / 1000) + 86400),
       ),
     ).rejects.toThrow(InvalidPermissionError);
   });
@@ -106,7 +107,7 @@ describe('createAgentCredential', () => {
         Permission.FINANCIAL_MEDIUM,
         Permission.FINANCIAL_UNLIMITED,
       ],
-      1700000000n,
+      BigInt(Math.floor(Date.now() / 1000) + 86400),
     );
     // bits 2 + 3 + 4 = 4 + 8 + 16 = 28
     expect(credential.permissionBitmask).toBe(28n);

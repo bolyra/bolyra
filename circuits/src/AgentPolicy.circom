@@ -168,14 +168,15 @@ template AgentPolicy(MAX_DEPTH) {
     nullifierHash <== nullifier.out;
 
     // ============ STEP 8: Scope commitment for delegation chain ============
-    // scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment)
-    // Published as public output. Binding scope to the credential's identity
-    // prevents impersonation: an actor with the same scope bits but a different
-    // credential cannot satisfy the chain-linking check in Delegation.circom.
+    // scopeCommitment = Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp)
+    // Published as public output. Binding scope + identity + expiry prevents:
+    //   - Impersonation (different credential cannot satisfy chain-linking)
+    //   - Expiry self-assertion in downstream Delegation hops (UC3.2 fix)
 
-    component scopeHash = Poseidon(2);
+    component scopeHash = Poseidon(3);
     scopeHash.inputs[0] <== permissionBitmask;
     scopeHash.inputs[1] <== credentialCommitment;
+    scopeHash.inputs[2] <== expiryTimestamp;
     scopeCommitment <== scopeHash.out;
 }
 

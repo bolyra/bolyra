@@ -1,7 +1,7 @@
 ---
 title: "Mutual Zero-Knowledge Proof Authentication for Human and AI Agent Identities"
 abbrev: "Bolyra Mutual ZKP Auth"
-docname: draft-bolyra-mutual-zkp-auth-00
+docname: draft-bolyra-mutual-zkp-auth-01
 category: std
 ipr: trust200902
 
@@ -628,6 +628,125 @@ timestamps) MUST be range-checked via Num2Bits decomposition to prevent
 field overflow attacks. A value that is valid in the BN128 scalar field
 (~254 bits) but exceeds the Solidity uint64 range would bypass on-chain
 overflow checks while satisfying circuit constraints.
+
+# Conformance Test Suite
+
+## Overview
+
+This specification is accompanied by a machine-readable conformance test suite
+containing 37 test vectors defined in the companion file `test-vectors.json`
+(version 0.2.0). Implementations MUST pass all 37 vectors to claim conformance
+with this specification.
+
+## Test Categories
+
+The test suite covers the following categories:
+
+### Handshake Vectors (10 vectors)
+
+Basic mutual handshake flows including valid completions, expired credentials,
+insufficient permissions, boundary timestamps, nullifier collision resistance,
+and nonce replay detection.
+
+### Signature Verification Vectors (2 vectors)
+
+EdDSA signature verification failures: tampered R component and message hash
+mismatch. These vectors exercise the HumanAuth circuit's EdDSAVerifier
+constraint.
+
+### Merkle Inclusion Vectors (5 vectors)
+
+Merkle tree membership proof scenarios: stale root rejection (including
+post-rotation), maximum depth verification, depth overflow, and corrupted
+sibling paths.
+
+### Delegation Vectors (8 vectors)
+
+Single-hop delegation flows: valid narrowing, equal-scope pass-through,
+single-bit escalation, scope escalation attacks, expiry escalation attacks,
+expiry equality edge case, nonce reuse in delegation context, delegation
+without prior handshake, scope chain mismatch, and phantom delegatee
+prevention.
+
+### Delegation Chain Vectors (3 vectors)
+
+Multi-hop delegation scenarios: valid 3-hop chain with progressive narrowing,
+exceeding MAX_DELEGATION_HOPS (3), and mid-chain scope escalation detection.
+
+### Cumulative Bit Encoding Vectors (4 vectors)
+
+Permission bitmask invariant enforcement: bit 4 without bit 3, bit 3 without
+bit 2, valid full chain (0x1F), and zero bitmask (vacuous validity).
+
+### Nonce Reuse Vectors (3 vectors)
+
+Replay protection: same-agent nonce replay, cross-agent nonce replay (global
+nonce namespace), and nonce reuse across delegation contexts.
+
+### Boundary Value Vectors (2 vectors)
+
+Field and domain boundary conditions: BN254 field modulus overflow in
+permission bitmask, and maximum uint64 timestamp (never-expiring credential).
+
+## Normative Requirements for Security-Critical Vectors
+
+Implementations MUST enforce the following behaviors, each corresponding to
+one or more test vectors in the conformance suite:
+
+1. Expired credentials MUST be rejected. An agent credential where
+   currentTimestamp >= expiryTimestamp MUST cause proof verification to fail.
+   Equality (currentTimestamp == expiryTimestamp) MUST also be treated as
+   expired. (Vectors: expired-credential, expired-credential-exact-boundary,
+   timestamp-zero)
+
+2. Scope escalation MUST be rejected. Any attempt by an agent or delegatee
+   to assert permission bits not present in the required scope or delegator
+   scope MUST cause proof verification to fail. (Vectors:
+   insufficient-permissions, scope-escalation-all-bits,
+   scope-escalation-attack, delegation-single-bit-escalation)
+
+3. Nonce replay MUST be rejected. A session nonce that has been previously
+   consumed MUST cause the on-chain registry to revert with NonceAlreadyUsed().
+   Nonces MUST be global -- the same nonce used by a different agent MUST
+   also be rejected. (Vectors: nonce-replay-attack,
+   nonce-reuse-different-agent, nonce-reuse-in-delegation)
+
+4. Stale Merkle roots MUST be rejected. An agent Merkle root that is not
+   present in the active root history buffer MUST cause the on-chain registry
+   to revert with StaleAgentRoot(). (Vectors: stale-merkle-root-handshake,
+   stale-merkle-root-after-rotation)
+
+5. Invalid EdDSA signatures MUST be rejected. A proof containing a tampered
+   signature component or a signature over a mismatched message MUST fail
+   the EdDSAVerifier constraint. (Vectors: invalid-eddsa-signature,
+   invalid-eddsa-signature-wrong-message)
+
+6. Cumulative bit encoding violations MUST be rejected. A permission bitmask
+   where a higher-tier bit is set without its prerequisite lower-tier bits
+   MUST be rejected. (Vectors: cumulative-bit-violation,
+   cumulative-bit-violation-bit3-without-bit2)
+
+7. Delegation without prior handshake MUST be rejected. A delegation proof
+   submitted for a session nonce that was never consumed by verifyHandshake
+   MUST cause the registry to revert with DelegationRequiresHandshake().
+   (Vector: delegation-without-handshake)
+
+8. Scope chain mismatch MUST be rejected. A delegation proof whose
+   previousScopeCommitment does not match the on-chain lastScopeCommitment
+   MUST cause the registry to revert with ScopeChainMismatch().
+   (Vector: scope-chain-mismatch)
+
+9. Delegation chain depth MUST be bounded. A delegation chain exceeding
+   MAX_DELEGATION_HOPS (default: 3) MUST cause the registry to revert with
+   MaxDelegationHopsExceeded(). (Vector: delegation-chain-exceeds-max-hops)
+
+10. Field overflow MUST be prevented. A permission bitmask value equal to or
+    exceeding the BN254 field modulus p MUST be rejected as undefined behavior
+    in Num2Bits decomposition. (Vector: max-field-element-permission)
+
+11. Phantom delegatees MUST be prevented. Delegation to a non-enrolled agent
+    whose credential commitment is not in the agent Merkle tree MUST cause the
+    registry to revert with StaleAgentRoot(). (Vector: phantom-delegatee-attack)
 
 # IANA Considerations
 

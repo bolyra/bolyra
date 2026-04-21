@@ -17,6 +17,9 @@ export {
   createAgentCredential,
   permissionsToBitmask,
   validateCumulativeBitEncoding,
+  validateHumanSecret,
+  validateAgentExpiry,
+  BN254_FIELD_ORDER,
 } from './identity';
 
 // Handshake (v0.2 — real proof generation via snarkjs)
@@ -34,4 +37,8 @@ export {
   ExpiredCredentialError,
   ScopeEscalationError,
   StaleProofError,
+  InvalidSecretError,
+  CircuitArtifactNotFoundError,
+  MerkleTreeError,
+  ConfigurationError,
 } from './errors';

@@ -47,6 +47,9 @@ template Delegation(MAX_DEPTH) {
     // Delegator's expiry (to enforce narrowing)
     signal input delegatorExpiry;
 
+    // Delegator's model hash (needed to recompute delegatorCredCommitment for UC3.1 binding)
+    signal input delegatorModelHash;
+
     // Delegator signs the delegation token
     // Token = Poseidon4(delegatorScopeCommitment, delegateeCredCommitment, delegateeScope, delegateeExpiry)
     signal input delegatorPubkeyAx;
@@ -77,6 +80,9 @@ template Delegation(MAX_DEPTH) {
     // Session nonce (same as handshake, for replay protection)
     signal input sessionNonce;
 
+    // Current timestamp (for delegatee expiry liveness check)
+    signal input currentTimestamp;
+
     // ============ PUBLIC OUTPUTS ============
 
     // New scope commitment for the next hop (or for the verifier)
@@ -102,16 +108,37 @@ template Delegation(MAX_DEPTH) {
     component delegatorExpiryRange = Num2Bits(64);
     delegatorExpiryRange.in <== delegatorExpiry;
 
+    component currentTimestampRange = Num2Bits(64);
+    currentTimestampRange.in <== currentTimestamp;
+
+    // ============ STEP 1b: UC3.1 FIX — Bind delegator signing key to delegatorCredCommitment ============
+    // Recompute the delegator's credential commitment from its components and verify it matches
+    // the claimed delegatorCredCommitment. This ensures the signing key is the one embedded
+    // in the credential, preventing a malicious actor from using an unrelated key.
+    // Format matches AgentPolicy: Poseidon5(modelHash, Ax, Ay, permissionBitmask, expiryTimestamp)
+
+    component recomputedDelegatorCred = Poseidon(5);
+    recomputedDelegatorCred.inputs[0] <== delegatorModelHash;
+    recomputedDelegatorCred.inputs[1] <== delegatorPubkeyAx;
+    recomputedDelegatorCred.inputs[2] <== delegatorPubkeyAy;
+    recomputedDelegatorCred.inputs[3] <== delegatorScope;
+    recomputedDelegatorCred.inputs[4] <== delegatorExpiry;
+
+    recomputedDelegatorCred.out === delegatorCredCommitment;
+
     // ============ STEP 2: Verify delegator scope commitment matches previous hop ============
     // Identity-bound: Poseidon(delegatorScope, delegatorCredCommitment) must match
     // the previous hop's output. This prevents impersonation by actors with the same scope.
 
-    component delegatorScopeHash = Poseidon(2);
+    // UC3.2 FIX: Include delegatorExpiry in scope commitment to prevent self-assertion.
+    // Format: Poseidon3(scope, credCommitment, expiry)
+    component delegatorScopeHash = Poseidon(3);
     delegatorScopeHash.inputs[0] <== delegatorScope;
     delegatorScopeHash.inputs[1] <== delegatorCredCommitment;
+    delegatorScopeHash.inputs[2] <== delegatorExpiry;
 
     // This is the critical chain-linking constraint:
-    // The delegator's actual scope + identity must hash to what the previous hop published.
+    // The delegator's actual scope + identity + expiry must hash to what the previous hop published.
     delegatorScopeHash.out === previousScopeCommitment;
 
     // ============ STEP 3: Scope subset check ============
@@ -154,6 +181,14 @@ template Delegation(MAX_DEPTH) {
     expiryCheck.in[1] <== delegatorExpiry;
     expiryCheck.out === 1;
 
+    // ============ STEP 5b: Delegatee expiry liveness check ============
+    // delegateeExpiry > currentTimestamp (delegation must not be expired at proof time)
+
+    component expiryLiveness = LessThan(64);
+    expiryLiveness.in[0] <== currentTimestamp;
+    expiryLiveness.in[1] <== delegateeExpiry;
+    expiryLiveness.out === 1;
+
     // ============ STEP 6: Delegation token and signature verification ============
     // Delegator signs: Poseidon4(previousScopeCommitment, delegateeCredCommitment, delegateeScope, delegateeExpiry)
     // This binds the delegation to a specific delegatee with specific permissions.
@@ -188,10 +223,11 @@ template Delegation(MAX_DEPTH) {
 
     // ============ STEP 7: Outputs ============
 
-    // New scope commitment for the chain (identity-bound)
-    component delegateeScopeHash = Poseidon(2);
+    // New scope commitment for the chain (identity-bound, expiry-bound per UC3.2 fix)
+    component delegateeScopeHash = Poseidon(3);
     delegateeScopeHash.inputs[0] <== delegateeScope;
     delegateeScopeHash.inputs[1] <== delegateeCredCommitment;
+    delegateeScopeHash.inputs[2] <== delegateeExpiry;
     newScopeCommitment <== delegateeScopeHash.out;
 
     // Delegation nullifier: unique per delegation per session
@@ -204,4 +240,4 @@ template Delegation(MAX_DEPTH) {
     delegateeMerkleRoot <== delegateeMerkle.out;
 }
 
-component main {public [previousScopeCommitment, sessionNonce]} = Delegation(20);
+component main {public [previousScopeCommitment, sessionNonce, currentTimestamp]} = Delegation(20);

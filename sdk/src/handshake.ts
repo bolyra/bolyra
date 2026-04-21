@@ -1,5 +1,6 @@
 import * as snarkjs from 'snarkjs';
 import * as path from 'path';
+import * as fs from 'fs';
 import {
   HumanIdentity,
   AgentCredential,
@@ -7,7 +8,7 @@ import {
   Proof,
   BolyraConfig,
 } from './types';
-import { ProofGenerationError } from './errors';
+import { ProofGenerationError, CircuitArtifactNotFoundError, VerificationError } from './errors';
 
 // Default paths to circuit artifacts (relative to package root)
 const DEFAULT_CIRCUIT_DIR = path.join(__dirname, '../../circuits/build');
@@ -43,6 +44,25 @@ export async function proveHandshake(
   const scope = options?.scope ?? 1n;
   const nonce = options?.nonce ?? BigInt(Date.now());
   const circuitDir = options?.config?.circuitDir ?? DEFAULT_CIRCUIT_DIR;
+
+  // Validate circuit artifacts exist before attempting proof generation
+  const humanWasm = path.join(circuitDir, 'HumanUniqueness_js/HumanUniqueness.wasm');
+  const humanZkey = path.join(circuitDir, 'HumanUniqueness_final.zkey');
+  const agentWasm = path.join(circuitDir, 'AgentPolicy_js/AgentPolicy.wasm');
+  const agentZkey = path.join(circuitDir, 'AgentPolicy_plonk.zkey');
+
+  if (!fs.existsSync(humanWasm)) {
+    throw new CircuitArtifactNotFoundError(humanWasm, 'wasm');
+  }
+  if (!fs.existsSync(humanZkey)) {
+    throw new CircuitArtifactNotFoundError(humanZkey, 'zkey');
+  }
+  if (!fs.existsSync(agentWasm)) {
+    throw new CircuitArtifactNotFoundError(agentWasm, 'wasm');
+  }
+  if (!fs.existsSync(agentZkey)) {
+    throw new CircuitArtifactNotFoundError(agentZkey, 'zkey');
+  }
 
   // Generate both proofs in parallel
   const [humanProof, agentProof] = await Promise.all([
@@ -158,8 +178,43 @@ export async function verifyHandshake(
 ): Promise<HandshakeResult> {
   const circuitDir = config?.circuitDir ?? DEFAULT_CIRCUIT_DIR;
 
-  // Verify human proof (Groth16)
+  // Validate proof structure before verification
+  if (!humanProof || !humanProof.proof || !Array.isArray(humanProof.publicSignals)) {
+    throw new VerificationError(
+      'Invalid humanProof structure: expected { proof: object, publicSignals: string[] }. ' +
+        'Ensure you are passing the proof object returned by proveHandshake().'
+    );
+  }
+  if (!agentProof || !agentProof.proof || !Array.isArray(agentProof.publicSignals)) {
+    throw new VerificationError(
+      'Invalid agentProof structure: expected { proof: object, publicSignals: string[] }. ' +
+        'Ensure you are passing the proof object returned by proveHandshake().'
+    );
+  }
+  if (humanProof.publicSignals.length < 2) {
+    throw new VerificationError(
+      `humanProof has ${humanProof.publicSignals.length} public signals, expected at least 2. ` +
+        'The proof may have been generated with an incompatible circuit version.'
+    );
+  }
+  if (agentProof.publicSignals.length < 3) {
+    throw new VerificationError(
+      `agentProof has ${agentProof.publicSignals.length} public signals, expected at least 3. ` +
+        'The proof may have been generated with an incompatible circuit version.'
+    );
+  }
+
+  // Verify vkey files exist
   const humanVkeyPath = path.join(circuitDir, 'HumanUniqueness_vkey.json');
+  if (!fs.existsSync(humanVkeyPath)) {
+    throw new CircuitArtifactNotFoundError(humanVkeyPath, 'vkey');
+  }
+  const agentVkeyPath = path.join(circuitDir, 'AgentPolicy_vkey.json');
+  if (!fs.existsSync(agentVkeyPath)) {
+    throw new CircuitArtifactNotFoundError(agentVkeyPath, 'vkey');
+  }
+
+  // Verify human proof (Groth16)
   const humanVkey = require(humanVkeyPath);
   const humanValid = await snarkjs.groth16.verify(
     humanVkey,
@@ -168,7 +223,6 @@ export async function verifyHandshake(
   );
 
   // Verify agent proof (PLONK)
-  const agentVkeyPath = path.join(circuitDir, 'AgentPolicy_vkey.json');
   const agentVkey = require(agentVkeyPath);
   const agentValid = await snarkjs.plonk.verify(
     agentVkey,

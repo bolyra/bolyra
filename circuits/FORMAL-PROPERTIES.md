@@ -355,31 +355,29 @@ Note: `delegatorCredCommitment`, `delegateeCredCommitment`, public keys, and sig
 
 ### 3.6 Underconstraint Analysis
 
-**UC3.1** (Delegator public key not bound to delegatorCredCommitment): The circuit verifies that the delegator's public key signed the token, and that `P(delegatorScope, delegatorCredCommitment)` equals the previous scope commitment. However, there is NO constraint that `delegatorPubkeyAx/Ay` is the key embedded within `delegatorCredCommitment`.
+**UC3.1** (Delegator public key not bound to delegatorCredCommitment): ~~The circuit verifies that the delegator's public key signed the token, and that `P(delegatorScope, delegatorCredCommitment)` equals the previous scope commitment. However, there is NO constraint that `delegatorPubkeyAx/Ay` is the key embedded within `delegatorCredCommitment`.~~
 
-**Implication**: If the credential commitment scheme is `P(modelHash, Ax, Ay, perm, expiry)` (as in AgentPolicy), then the binding between the signing key and the credential is established by the PREVIOUS hop's AgentPolicy proof (which verifies the signature over the credential). The Delegation circuit trusts that the `previousScopeCommitment` was produced by a valid AgentPolicy proof. This is secure IF the on-chain verifier checks the chain linkage properly. If `previousScopeCommitment` is not validated against a known-good AgentPolicy output, a malicious prover could fabricate a delegatorCredCommitment that hashes to match `previousScopeCommitment` but uses a different key pair.
+**Status**: **FIXED** (2026-04-20). The circuit now recomputes `delegatorCredCommitment` from its preimage components: `Poseidon5(delegatorModelHash, delegatorPubkeyAx, delegatorPubkeyAy, delegatorScope, delegatorExpiry)` and constrains it to equal the claimed `delegatorCredCommitment`. This ensures the signing key is provably the one embedded in the credential commitment, eliminating reliance on external chain verification for key binding.
 
-**Severity**: Medium. Security depends on correct on-chain chain verification.
+**Severity**: ~~Medium~~ Resolved.
 
-**UC3.2** (delegatorExpiry not bound to any public output): `delegatorExpiry` is a private input that participates only in the `LessEqThan` check against `delegateeExpiry`. It is NOT committed to in `previousScopeCommitment` (which only binds scope and credential).
+**UC3.2** (delegatorExpiry not bound to any public output): ~~`delegatorExpiry` is a private input that participates only in the `LessEqThan` check against `delegateeExpiry`. It is NOT committed to in `previousScopeCommitment` (which only binds scope and credential).~~
 
-**Implication**: A delegator could claim any `delegatorExpiry` value, as long as it is ≥ `delegateeExpiry`. The actual expiry enforcement must come from the AgentPolicy proof that generated the original scope commitment (which checks `currentTimestamp < expiryTimestamp`).
+**Status**: **FIXED** (2026-04-20). The scope commitment format is now `Poseidon3(scope, credCommitment, expiry)` — both in the Delegation circuit (for verifying `previousScopeCommitment` and producing `newScopeCommitment`) and in AgentPolicy (which produces the initial `scopeCommitment` output). The delegator can no longer self-assert an arbitrary expiry because it must match what was committed by the previous hop.
 
-**Severity**: Low-Medium. The delegator can artificially raise their claimed expiry within the delegation circuit. However, the chain is secure if the original AgentPolicy proof was valid at its time of creation. The delegatee's expiry is still bounded by whatever the delegator claims.
-
-**Mitigation**: Consider including expiry in the scope commitment: `P(scope, credCommitment, expiry)`. This would require a protocol change.
+**Severity**: ~~Low-Medium~~ Resolved.
 
 **UC3.3** (Delegatee Merkle siblings beyond depth): Same pattern as UC1.1 — siblings beyond `delegateeMerkleProofLength` are unconstrained but do not affect the output. Standard variable-depth Merkle proof pattern. NOT a vulnerability.
 
 ### 3.7 Known Limitations
 
-1. **No current-time check**: Unlike AgentPolicy, the Delegation circuit does NOT verify that `delegateeExpiry > currentTimestamp`. It only enforces `delegateeExpiry ≤ delegatorExpiry`. Liveness checking (is the delegatee's credential currently valid?) must be done by a separate AgentPolicy proof or on-chain logic.
+1. ~~**No current-time check**~~: **FIXED** (2026-04-20). The Delegation circuit now takes `currentTimestamp` as a public input and enforces `delegateeExpiry > currentTimestamp` (Step 5b), matching AgentPolicy's liveness guarantee.
 
 2. **Chain depth not enforced in-circuit**: The maximum delegation depth (3 hops) is enforced by the on-chain contract, not by the circuit. The circuit itself would accept arbitrarily deep chains.
 
 3. **No revocation of delegations**: Once a delegation signature is issued, it cannot be revoked within the circuit. Revocation requires removing the delegatee from the agent tree (which invalidates CIP-1 Merkle proof).
 
-4. **Delegator expiry is self-asserted** (see UC3.2): The delegator's expiry is not bound to the scope commitment chain. A malicious delegator could use an inflated expiry value.
+4. ~~**Delegator expiry is self-asserted**~~: **FIXED** (2026-04-20, see UC3.2). Expiry is now bound in the scope commitment chain.
 
 5. **Single-use nonce semantics**: The nullifier is `P(token, sessionNonce)`. If the same delegation token is used with different nonces, different nullifiers are produced. The on-chain contract must track nonces to prevent reuse.
 
@@ -442,9 +440,9 @@ Note: This is only guaranteed if delegatorExpiry at each hop is honestly provide
 4. Cumulative bit encoding is enforced at both enrollment (AgentPolicy) and delegation time
 
 ### Findings Requiring Protocol-Level Consideration
-1. **UC3.2**: `delegatorExpiry` is not committed to in the scope commitment, allowing self-assertion. Consider `scopeCommitment = P(scope, cred, expiry)`.
-2. **UC3.1**: Delegator key binding depends on correct on-chain chain verification. Document this trust assumption explicitly in the verifier contract.
-3. **Limitation 3.1**: No current-time check in Delegation means expired delegatees can still produce valid delegation proofs if the Merkle root hasn't been rotated.
+1. ~~**UC3.2**~~: **FIXED** (2026-04-20). Scope commitment is now `P(scope, cred, expiry)`.
+2. ~~**UC3.1**~~: **FIXED** (2026-04-20). Delegator credential commitment is recomputed in-circuit from preimage including signing key.
+3. ~~**Limitation 3.1**~~: **FIXED** (2026-04-20). `currentTimestamp` is now a public input with `delegateeExpiry > currentTimestamp` enforced.
 
 ### Verification Recommendations
 1. Implement automated constraint counting to verify no signal is unconstrained

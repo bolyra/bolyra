@@ -67,3 +67,49 @@ export class StaleProofError extends BolyraError {
     );
   }
 }
+
+export class InvalidSecretError extends BolyraError {
+  constructor(reason: string) {
+    super(
+      `Invalid secret: ${reason}. Provide a non-zero bigint less than the BN254 scalar field order (approx 2^254).`,
+      'INVALID_SECRET',
+      { reason }
+    );
+  }
+}
+
+export class CircuitArtifactNotFoundError extends ProofGenerationError {
+  constructor(artifactPath: string, artifactType: 'wasm' | 'zkey' | 'vkey') {
+    super(
+      artifactType === 'vkey' ? 'verification' : 'proof generation',
+      `Circuit artifact not found: ${artifactPath}. ` +
+        `Ensure the ${artifactType} file exists at this path. ` +
+        `If using a custom circuitDir, verify it contains the compiled circuit outputs. ` +
+        `Run the circuit build script or download trusted artifacts from the Bolyra release.`
+    );
+    this.code = 'CIRCUIT_ARTIFACT_NOT_FOUND';
+    this.details = { ...this.details, artifactPath, artifactType };
+  }
+}
+
+export class MerkleTreeError extends BolyraError {
+  constructor(reason: string, details?: Record<string, unknown>) {
+    super(
+      `Merkle tree operation failed: ${reason}. ` +
+        `Check that the tree is properly initialized and the leaf index is within bounds.`,
+      'MERKLE_TREE_ERROR',
+      { reason, ...details }
+    );
+  }
+}
+
+export class ConfigurationError extends BolyraError {
+  constructor(field: string, reason: string) {
+    super(
+      `Invalid SDK configuration for "${field}": ${reason}. ` +
+        `Review the BolyraConfig interface and ensure all required fields are set correctly.`,
+      'CONFIGURATION_ERROR',
+      { field, reason }
+    );
+  }
+}

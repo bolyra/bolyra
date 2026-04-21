@@ -1,6 +1,58 @@
 import { HumanIdentity, AgentCredential, Permission } from './types';
 import { poseidon2, poseidon5, eddsaSign, derivePublicKey, derivePublicKeyScalar } from './utils';
-import { InvalidPermissionError } from './errors';
+import { InvalidPermissionError, InvalidSecretError } from './errors';
+
+// BN254 scalar field order (Baby Jubjub subgroup order)
+export const BN254_FIELD_ORDER = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Validate a secret value for use with createHumanIdentity.
+ * Throws InvalidSecretError if the secret is zero, negative, or exceeds BN254 field.
+ *
+ * Call this before createHumanIdentity() for strict input validation.
+ * createHumanIdentity itself is permissive (the crypto layer handles reduction),
+ * but using an invalid secret will produce an identity that fails proof generation.
+ *
+ * @param secret - The secret to validate
+ * @throws InvalidSecretError if validation fails
+ */
+export function validateHumanSecret(secret: bigint): void {
+  if (secret === 0n) {
+    throw new InvalidSecretError(
+      'secret must be non-zero — a zero secret produces a trivial identity that cannot generate valid proofs'
+    );
+  }
+  if (secret < 0n) {
+    throw new InvalidSecretError(
+      'secret must be positive — negative values are not valid field elements'
+    );
+  }
+  if (secret >= BN254_FIELD_ORDER) {
+    throw new InvalidSecretError(
+      `secret exceeds BN254 scalar field order (got ${secret.toString().slice(0, 20)}..., max is ~2^254). Use a value less than ${BN254_FIELD_ORDER}`
+    );
+  }
+}
+
+/**
+ * Validate an expiry timestamp for use with createAgentCredential.
+ * Throws InvalidPermissionError if the timestamp is in the past.
+ *
+ * Call this before createAgentCredential() to catch expired timestamps early.
+ * The circuit enforces expiry at verification time, but this provides an early check.
+ *
+ * @param expiryTimestamp - Unix timestamp to validate
+ * @throws InvalidPermissionError if timestamp is not in the future
+ */
+export function validateAgentExpiry(expiryTimestamp: bigint): void {
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+  if (expiryTimestamp <= nowSeconds) {
+    throw new InvalidPermissionError(
+      `expiryTimestamp (${expiryTimestamp}) is not in the future (current time: ${nowSeconds}). ` +
+        `Set expiryTimestamp to a Unix timestamp after the current time, e.g. BigInt(Math.floor(Date.now() / 1000) + 86400) for +1 day.`
+    );
+  }
+}
 
 /**
  * Create a human identity (EdDSA keypair + commitment).
@@ -19,6 +71,7 @@ import { InvalidPermissionError } from './errors';
 export async function createHumanIdentity(
   secret: bigint,
 ): Promise<HumanIdentity> {
+  validateHumanSecret(secret);
   // HumanUniqueness circuit uses BabyPbk (direct scalar multiply),
   // NOT EdDSA prv2pub. Use derivePublicKeyScalar here.
   const publicKey = await derivePublicKeyScalar(secret);
@@ -52,6 +105,7 @@ export async function createAgentCredential(
   permissions: Permission[],
   expiryTimestamp: bigint,
 ): Promise<AgentCredential> {
+  validateAgentExpiry(expiryTimestamp);
   const bitmask = permissionsToBitmask(permissions);
   validateCumulativeBitEncoding(bitmask);
 
