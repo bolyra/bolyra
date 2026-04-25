@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {InternalLeanIMT, LeanIMTData} from "@zk-kit/lean-imt.sol/InternalLeanIMT.sol";
 
-interface IGroth16Verifier {
+interface IHumanGroth16Verifier {
     function verifyProof(
         uint[2] calldata _pA,
         uint[2][2] calldata _pB,
@@ -12,17 +12,21 @@ interface IGroth16Verifier {
     ) external view returns (bool);
 }
 
-interface IPlonkVerifier {
+interface IAgentGroth16Verifier {
     function verifyProof(
-        uint256[24] calldata _proof,
-        uint256[6] calldata _pubSignals
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[6] calldata _pubSignals
     ) external view returns (bool);
 }
 
-interface IDelegationVerifier {
+interface IDelegationGroth16Verifier {
     function verifyProof(
-        uint256[24] calldata _proof,
-        uint256[5] calldata _pubSignals
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[5] calldata _pubSignals
     ) external view returns (bool);
 }
 
@@ -31,7 +35,8 @@ interface IDelegationVerifier {
 ///         credentials, verifies mutual handshake proofs, and tracks delegation chains.
 /// @dev Architecture decisions (from eng review):
 ///   - Human side: Groth16 (Semaphore v4 ceremony, depth 20)
-///   - Agent side: PLONK (universal setup, no ceremony)
+///   - Agent side: Groth16 (per-circuit ceremony; ~10x cheaper on-chain than PLONK)
+///   - Delegation: Groth16 (same rationale as agent)
 ///   - Target: Base L2 (cheap gas for multi-proof verification)
 ///   - Root history buffer: last 30 roots for agentTree (humanTree uses Semaphore's)
 ///   - Nonce: verifier-generated, freshness checked via usedNonces mapping
@@ -76,9 +81,9 @@ contract IdentityRegistry {
     address public owner;
 
     // Proof verifiers (deployed separately, addresses set in constructor)
-    IGroth16Verifier public immutable humanVerifier;
-    IPlonkVerifier public immutable agentVerifier;
-    IDelegationVerifier public immutable delegationVerifier;
+    IHumanGroth16Verifier public immutable humanVerifier;
+    IAgentGroth16Verifier public immutable agentVerifier;
+    IDelegationGroth16Verifier public immutable delegationVerifier;
 
     // Human identity tree (LeanIMT, Semaphore v4 compatible)
     LeanIMTData internal humanTree;
@@ -121,9 +126,9 @@ contract IdentityRegistry {
 
     constructor(address _humanVerifier, address _agentVerifier, address _delegationVerifier) {
         owner = msg.sender;
-        humanVerifier = IGroth16Verifier(_humanVerifier);
-        agentVerifier = IPlonkVerifier(_agentVerifier);
-        delegationVerifier = IDelegationVerifier(_delegationVerifier);
+        humanVerifier = IHumanGroth16Verifier(_humanVerifier);
+        agentVerifier = IAgentGroth16Verifier(_agentVerifier);
+        delegationVerifier = IDelegationGroth16Verifier(_delegationVerifier);
     }
 
     modifier onlyOwner() {
@@ -170,18 +175,17 @@ contract IdentityRegistry {
     // ============ HANDSHAKE VERIFICATION ============
 
     /// @notice Verify a mutual handshake between a human and an AI agent.
-    /// @dev Verifies both a Groth16 proof (human) and a PLONK proof (agent)
-    ///      in a single transaction. Both proofs must be valid and bound to the
-    ///      same session nonce.
-    /// @param humanProof Groth16 proof points for the human circuit.
+    /// @dev Verifies two Groth16 proofs (human + agent) in a single transaction.
+    ///      Both proofs must be valid and bound to the same session nonce.
+    /// @param humanProof Groth16 proof points for the human circuit (flattened [pA[0], pA[1], pB[0][0], pB[0][1], pB[1][0], pB[1][1], pC[0], pC[1]]).
     /// @param humanPubSignals [humanMerkleRoot, nullifierHash, nonceBinding, scope, sessionNonce]
-    /// @param agentProof PLONK proof points for the agent circuit.
+    /// @param agentProof Groth16 proof points for the agent circuit (same flattening as humanProof).
     /// @param agentPubSignals [agentMerkleRoot, nullifierHash, scopeCommitment, requiredScope, currentTimestamp, sessionNonce]
     /// @param sessionNonce The verifier-generated nonce binding both proofs.
     function verifyHandshake(
         uint256[8] calldata humanProof,
         uint256[] calldata humanPubSignals,
-        uint256[24] calldata agentProof,
+        uint256[8] calldata agentProof,
         uint256[] calldata agentPubSignals,
         uint256 sessionNonce
     ) external {
@@ -216,16 +220,12 @@ contract IdentityRegistry {
         // 5. Verify agent Merkle root is in history
         if (!agentRootExists[agentMerkleRoot]) revert StaleAgentRoot();
 
-        // 6. Verify Groth16 proof (human)
-        // NOTE: In production, this calls the auto-generated Groth16 verifier contract.
-        // For testnet, we use a placeholder that checks proof structure.
-        // The actual verifier will be deployed from snarkjs export:
+        // 6. Verify Groth16 proof (human) — auto-generated verifier contract:
         //   snarkjs zkey export solidityverifier HumanUniqueness_final.zkey HumanVerifier.sol
         if (!_verifyHumanProof(humanProof, humanPubSignals)) revert InvalidHumanProof();
 
-        // 7. Verify PLONK proof (agent)
-        // NOTE: Same as above — production uses auto-generated PLONK verifier.
-        //   snarkjs plonk export solidityverifier AgentPolicy_final.zkey AgentVerifier.sol
+        // 7. Verify Groth16 proof (agent) — auto-generated verifier contract:
+        //   snarkjs zkey export solidityverifier AgentPolicy_final.zkey AgentVerifier.sol
         if (!_verifyAgentProof(agentProof, agentPubSignals)) revert InvalidAgentProof();
 
         // Attack 2 fix: seed the on-chain delegation chain state with the agent's scope commitment.
@@ -242,11 +242,11 @@ contract IdentityRegistry {
     /// @dev Each hop is verified independently. Chain-linking state is tracked
     ///      on-chain (not caller-supplied) per Attack 2 fix. Delegation requires
     ///      that a mutual handshake was previously verified for this sessionNonce.
-    /// @param proof PLONK proof for the Delegation circuit.
+    /// @param proof Groth16 proof for the Delegation circuit (flattened [pA[0], pA[1], pB[0][0], pB[0][1], pB[1][0], pB[1][1], pC[0], pC[1]]).
     /// @param pubSignals [previousScopeCommitment, sessionNonce, newScopeCommitment, delegationNullifier, delegateeMerkleRoot]
     /// @param sessionNonce The session nonce (must match a previously-verified handshake).
     function verifyDelegation(
-        uint256[24] calldata proof,
+        uint256[8] calldata proof,
         uint256[5] calldata pubSignals,
         uint256 sessionNonce
     ) external {
@@ -276,8 +276,11 @@ contract IdentityRegistry {
         uint256 delegateeMerkleRoot = pubSignals[4];
         if (!agentRootExists[delegateeMerkleRoot]) revert StaleAgentRoot();
 
-        // Verify the delegation proof via the deployed verifier
-        if (!delegationVerifier.verifyProof(proof, pubSignals)) {
+        // Verify the delegation proof via the deployed Groth16 verifier
+        uint[2] memory pA = [proof[0], proof[1]];
+        uint[2][2] memory pB = [[proof[2], proof[3]], [proof[4], proof[5]]];
+        uint[2] memory pC = [proof[6], proof[7]];
+        if (!delegationVerifier.verifyProof(pA, pB, pC, pubSignals)) {
             revert InvalidDelegationProof();
         }
 
@@ -394,17 +397,22 @@ contract IdentityRegistry {
         return humanVerifier.verifyProof(pA, pB, pC, signals);
     }
 
-    /// @dev Verify a PLONK proof for the agent circuit via the deployed verifier.
+    /// @dev Verify a Groth16 proof for the agent circuit via the deployed verifier.
     function _verifyAgentProof(
-        uint256[24] calldata proof,
+        uint256[8] calldata proof,
         uint256[] calldata pubSignals
     ) internal view returns (bool) {
+        // Groth16 proof format: [pA[0], pA[1], pB[0][0], pB[0][1], pB[1][0], pB[1][1], pC[0], pC[1]]
+        uint[2] memory pA = [proof[0], proof[1]];
+        uint[2][2] memory pB = [[proof[2], proof[3]], [proof[4], proof[5]]];
+        uint[2] memory pC = [proof[6], proof[7]];
+
         // AgentPolicy public signals: [agentMerkleRoot, nullifierHash, scopeCommitment, requiredScope, currentTimestamp, sessionNonce]
-        uint256[6] memory signals;
+        uint[6] memory signals;
         for (uint i = 0; i < 6; i++) {
             signals[i] = pubSignals[i];
         }
 
-        return agentVerifier.verifyProof(proof, signals);
+        return agentVerifier.verifyProof(pA, pB, pC, signals);
     }
 }

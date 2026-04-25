@@ -8,7 +8,7 @@ const { buildPoseidon, buildBabyjub, buildEddsa } = require("circomlibjs");
  * E2E Smoke Test: Real ZKP Proofs → On-Chain Verification
  *
  * This is the mandatory smoke test per prior learning (smoke-test-real-crypto-once).
- * Generates real Groth16 + PLONK proofs and verifies them on-chain.
+ * Generates real Groth16 proofs (human + agent) and verifies them on-chain.
  *
  * WHAT THIS PROVES:
  *   - Circom circuits produce valid witnesses
@@ -27,7 +27,7 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
   const HUMAN_WASM = path.join(__dirname, "../../circuits/build/HumanUniqueness_js/HumanUniqueness.wasm");
   const HUMAN_ZKEY = path.join(__dirname, "../../circuits/build/HumanUniqueness_final.zkey");
   const AGENT_WASM = path.join(__dirname, "../../circuits/build/AgentPolicy_js/AgentPolicy.wasm");
-  const AGENT_ZKEY = path.join(__dirname, "../../circuits/build/AgentPolicy_plonk.zkey");
+  const AGENT_ZKEY = path.join(__dirname, "../../circuits/build/AgentPolicy_final.zkey");
 
   before(async function () {
     poseidon = await buildPoseidon();
@@ -44,10 +44,10 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
     const groth16Verifier = await Groth16Verifier.deploy();
 
-    const PlonkVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:PlonkVerifier");
-    const plonkVerifier = await PlonkVerifier.deploy();
+    const AgentVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:AgentGroth16Verifier");
+    const agentVerifier = await AgentVerifier.deploy();
 
-    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
+    const DelegationVerifier = await ethers.getContractFactory("contracts/DelegationVerifier.sol:DelegationGroth16Verifier");
     const delegationVerifier = await DelegationVerifier.deploy();
 
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {
@@ -55,7 +55,7 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     });
     registry = await IdentityRegistry.deploy(
       await groth16Verifier.getAddress(),
-      await plonkVerifier.getAddress(),
+      await agentVerifier.getAddress(),
       await delegationVerifier.getAddress()
     );
   });
@@ -132,14 +132,14 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     console.log("  Chain human root:", humanRoot.toString().slice(0, 20) + "...");
     expect(proofHumanRoot).to.equal(humanRoot.toString());
 
-    // ─── 6. Generate Agent proof (PLONK) ───
+    // ─── 6. Generate Agent proof (Groth16) ───
     const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
     const requiredScopeMask = 0b00000011n; // require read + write
 
-    console.log("  Generating PLONK proof (agent)...");
+    console.log("  Generating Groth16 proof (agent)...");
     const agentStart = performance.now();
     const { proof: agentProofRaw, publicSignals: agentPubSignals } =
-      await snarkjs.plonk.fullProve(
+      await snarkjs.groth16.fullProve(
         {
           modelHash: modelHash.toString(),
           operatorPubkeyAx: F.toObject(operatorPubKey[0]).toString(),
@@ -177,15 +177,14 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
       humanProofRaw.pi_c[0], humanProofRaw.pi_c[1],
     ];
 
-    // PLONK: 24 uint256 values from the proof object
-    const agentProofCalldata = await snarkjs.plonk.exportSolidityCallData(
-      agentProofRaw, agentPubSignals
-    );
-    // Parse the calldata string: first array is proof[24], second is pubSignals[6]
-    const calldataParts = agentProofCalldata.split(",");
-    // The proof is the first 24 values inside the first brackets
-    const proofStr = agentProofCalldata.match(/\[([^\]]+)\]/)[1];
-    const agentProof = proofStr.split(",").map(s => s.trim().replace(/"/g, ""));
+    // Groth16: [pA[0], pA[1], pB[0][0], pB[0][1], pB[1][0], pB[1][1], pC[0], pC[1]]
+    // Note the pi_b ordering swap is required by snarkjs's solidityverifier convention.
+    const agentProof = [
+      agentProofRaw.pi_a[0], agentProofRaw.pi_a[1],
+      agentProofRaw.pi_b[0][1], agentProofRaw.pi_b[0][0],
+      agentProofRaw.pi_b[1][1], agentProofRaw.pi_b[1][0],
+      agentProofRaw.pi_c[0], agentProofRaw.pi_c[1],
+    ];
 
     // ─── 8. Submit handshake to on-chain registry ───
     console.log("  Submitting handshake to on-chain registry...");

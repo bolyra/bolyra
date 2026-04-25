@@ -58,7 +58,7 @@ export async function verifyHandshakeOffchain(
   if (!fs.existsSync(humanVkeyPath)) {
     throw new CircuitArtifactNotFoundError(humanVkeyPath, 'vkey');
   }
-  const agentVkeyPath = path.join(circuitDir, 'AgentPolicy_vkey.json');
+  const agentVkeyPath = path.join(circuitDir, 'AgentPolicy_groth16_vkey.json');
   if (!fs.existsSync(agentVkeyPath)) {
     throw new CircuitArtifactNotFoundError(agentVkeyPath, 'vkey');
   }
@@ -72,7 +72,7 @@ export async function verifyHandshakeOffchain(
   );
 
   const agentVkey = require(agentVkeyPath);
-  const agentValid = await snarkjs.plonk.verify(
+  const agentValid = await snarkjs.groth16.verify(
     agentVkey,
     agentProof.publicSignals,
     agentProof.proof,

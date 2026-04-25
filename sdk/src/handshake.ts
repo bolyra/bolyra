@@ -9,6 +9,7 @@ import {
   BolyraConfig,
 } from './types';
 import { ProofGenerationError, CircuitArtifactNotFoundError, VerificationError } from './errors';
+import { proveGroth16, ProverBackend } from './prover';
 
 // Default paths to circuit artifacts (relative to package root)
 const DEFAULT_CIRCUIT_DIR = path.join(__dirname, '../../circuits/build');
@@ -39,17 +40,19 @@ export async function proveHandshake(
     scope?: bigint;
     nonce?: bigint;
     config?: BolyraConfig;
+    backend?: ProverBackend;
   },
 ): Promise<{ humanProof: Proof; agentProof: Proof; nonce: bigint }> {
   const scope = options?.scope ?? 1n;
   const nonce = options?.nonce ?? BigInt(Date.now());
   const circuitDir = options?.config?.circuitDir ?? DEFAULT_CIRCUIT_DIR;
+  const backend = options?.backend ?? 'auto';
 
   // Validate circuit artifacts exist before attempting proof generation
   const humanWasm = path.join(circuitDir, 'HumanUniqueness_js/HumanUniqueness.wasm');
   const humanZkey = path.join(circuitDir, 'HumanUniqueness_final.zkey');
   const agentWasm = path.join(circuitDir, 'AgentPolicy_js/AgentPolicy.wasm');
-  const agentZkey = path.join(circuitDir, 'AgentPolicy_plonk.zkey');
+  const agentZkey = path.join(circuitDir, 'AgentPolicy_final.zkey');
 
   if (!fs.existsSync(humanWasm)) {
     throw new CircuitArtifactNotFoundError(humanWasm, 'wasm');
@@ -66,8 +69,8 @@ export async function proveHandshake(
 
   // Generate both proofs in parallel
   const [humanProof, agentProof] = await Promise.all([
-    generateHumanProof(human, scope, nonce, circuitDir),
-    generateAgentProof(agent, nonce, circuitDir),
+    generateHumanProof(human, scope, nonce, circuitDir, backend),
+    generateAgentProof(agent, nonce, circuitDir, backend),
   ]);
 
   return { humanProof, agentProof, nonce };
@@ -78,6 +81,7 @@ async function generateHumanProof(
   scope: bigint,
   nonce: bigint,
   circuitDir: string,
+  backend: ProverBackend,
 ): Promise<Proof> {
   const wasmPath = path.join(
     circuitDir,
@@ -98,12 +102,7 @@ async function generateHumanProof(
   };
 
   try {
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-      input,
-      wasmPath,
-      zkeyPath,
-    );
-    return { proof, publicSignals };
+    return await proveGroth16(input, wasmPath, zkeyPath, backend);
   } catch (err: any) {
     throw new ProofGenerationError(
       'HumanUniqueness',
@@ -116,12 +115,13 @@ async function generateAgentProof(
   agent: AgentCredential,
   nonce: bigint,
   circuitDir: string,
+  backend: ProverBackend,
 ): Promise<Proof> {
   const wasmPath = path.join(
     circuitDir,
     'AgentPolicy_js/AgentPolicy.wasm',
   );
-  const zkeyPath = path.join(circuitDir, 'AgentPolicy_plonk.zkey');
+  const zkeyPath = path.join(circuitDir, 'AgentPolicy_final.zkey');
 
   const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
   const requiredScopeMask = 0n; // no required scope for basic handshake
@@ -146,12 +146,7 @@ async function generateAgentProof(
   };
 
   try {
-    const { proof, publicSignals } = await snarkjs.plonk.fullProve(
-      input,
-      wasmPath,
-      zkeyPath,
-    );
-    return { proof, publicSignals };
+    return await proveGroth16(input, wasmPath, zkeyPath, backend);
   } catch (err: any) {
     throw new ProofGenerationError(
       'AgentPolicy',
@@ -209,7 +204,7 @@ export async function verifyHandshake(
   if (!fs.existsSync(humanVkeyPath)) {
     throw new CircuitArtifactNotFoundError(humanVkeyPath, 'vkey');
   }
-  const agentVkeyPath = path.join(circuitDir, 'AgentPolicy_vkey.json');
+  const agentVkeyPath = path.join(circuitDir, 'AgentPolicy_groth16_vkey.json');
   if (!fs.existsSync(agentVkeyPath)) {
     throw new CircuitArtifactNotFoundError(agentVkeyPath, 'vkey');
   }
@@ -222,9 +217,9 @@ export async function verifyHandshake(
     humanProof.proof,
   );
 
-  // Verify agent proof (PLONK)
+  // Verify agent proof (Groth16)
   const agentVkey = require(agentVkeyPath);
-  const agentValid = await snarkjs.plonk.verify(
+  const agentValid = await snarkjs.groth16.verify(
     agentVkey,
     agentProof.publicSignals,
     agentProof.proof,

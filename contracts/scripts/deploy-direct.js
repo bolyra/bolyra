@@ -44,23 +44,23 @@ async function main() {
   const groth16Addr = await groth16.getAddress();
   console.log("     Groth16Verifier:", groth16Addr);
 
-  // 3. PlonkVerifier (AgentPolicy)
-  console.log("3/5 Deploying PlonkVerifier...");
-  const plonkArt = loadArtifact("contracts/AgentVerifier.sol/PlonkVerifier.json");
-  const PlonkFactory = new ethers.ContractFactory(plonkArt.abi, plonkArt.bytecode, wallet);
-  const plonk = await PlonkFactory.deploy({ gasLimit: 3000000 });
-  await plonk.waitForDeployment();
-  const plonkAddr = await plonk.getAddress();
-  console.log("     PlonkVerifier:", plonkAddr);
+  // 3. AgentGroth16Verifier (AgentPolicy)
+  console.log("3/5 Deploying AgentGroth16Verifier...");
+  const agentArt = loadArtifact("contracts/AgentVerifier.sol/AgentGroth16Verifier.json");
+  const AgentFactory = new ethers.ContractFactory(agentArt.abi, agentArt.bytecode, wallet);
+  const agent = await AgentFactory.deploy({ gasLimit: 2000000 });
+  await agent.waitForDeployment();
+  const agentAddr = await agent.getAddress();
+  console.log("     AgentGroth16Verifier:", agentAddr);
 
-  // 4. DelegationPlonkVerifier
-  console.log("4/5 Deploying DelegationPlonkVerifier...");
-  const delegArt = loadArtifact("contracts/DelegationVerifier.sol/DelegationPlonkVerifier.json");
+  // 4. DelegationGroth16Verifier
+  console.log("4/5 Deploying DelegationGroth16Verifier...");
+  const delegArt = loadArtifact("contracts/DelegationVerifier.sol/DelegationGroth16Verifier.json");
   const DelegFactory = new ethers.ContractFactory(delegArt.abi, delegArt.bytecode, wallet);
-  const deleg = await DelegFactory.deploy({ gasLimit: 3000000 });
+  const deleg = await DelegFactory.deploy({ gasLimit: 2000000 });
   await deleg.waitForDeployment();
   const delegAddr = await deleg.getAddress();
-  console.log("     DelegationPlonkVerifier:", delegAddr);
+  console.log("     DelegationGroth16Verifier:", delegAddr);
 
   // 5. IdentityRegistry (link PoseidonT3 library)
   console.log("5/5 Deploying IdentityRegistry...");
@@ -72,7 +72,7 @@ async function main() {
   bytecode = bytecode.replace(/__\$[a-f0-9]{34}\$__/g, addrClean);
 
   const RegistryFactory = new ethers.ContractFactory(registryArt.abi, bytecode, wallet);
-  const registry = await RegistryFactory.deploy(groth16Addr, plonkAddr, delegAddr, {
+  const registry = await RegistryFactory.deploy(groth16Addr, agentAddr, delegAddr, {
     gasLimit: 8000000,
   });
   await registry.waitForDeployment();
@@ -83,11 +83,11 @@ async function main() {
   console.log("\n========================================");
   console.log("  BOLYRA DEPLOYED ON BASE SEPOLIA");
   console.log("========================================");
-  console.log("  PoseidonT3:         ", poseidonAddr);
-  console.log("  Groth16Verifier:    ", groth16Addr);
-  console.log("  PlonkVerifier:      ", plonkAddr);
-  console.log("  DelegationVerifier: ", delegAddr);
-  console.log("  IdentityRegistry:   ", registryAddr);
+  console.log("  PoseidonT3:                 ", poseidonAddr);
+  console.log("  Groth16Verifier (Human):    ", groth16Addr);
+  console.log("  AgentGroth16Verifier:       ", agentAddr);
+  console.log("  DelegationGroth16Verifier:  ", delegAddr);
+  console.log("  IdentityRegistry:           ", registryAddr);
   console.log("========================================");
   console.log("  https://sepolia.basescan.org/address/" + registryAddr);
 
@@ -99,9 +99,9 @@ async function main() {
     deployer: wallet.address,
     contracts: {
       PoseidonT3: poseidonAddr,
-      Groth16Verifier: groth16Addr,
-      PlonkVerifier: plonkAddr,
-      DelegationPlonkVerifier: delegAddr,
+      HumanGroth16Verifier: groth16Addr,
+      AgentGroth16Verifier: agentAddr,
+      DelegationGroth16Verifier: delegAddr,
       IdentityRegistry: registryAddr,
     },
   };

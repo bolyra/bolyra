@@ -19,13 +19,13 @@ describe("IdentityRegistry", function () {
     const groth16Verifier = await Groth16Verifier.deploy();
     await groth16Verifier.waitForDeployment();
 
-    // Deploy PLONK verifier (AgentPolicy)
-    const PlonkVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:PlonkVerifier");
-    const plonkVerifier = await PlonkVerifier.deploy();
-    await plonkVerifier.waitForDeployment();
+    // Deploy Groth16 verifier (AgentPolicy)
+    const AgentVerifier = await ethers.getContractFactory("contracts/AgentVerifier.sol:AgentGroth16Verifier");
+    const agentVerifier = await AgentVerifier.deploy();
+    await agentVerifier.waitForDeployment();
 
-    // Deploy Delegation PLONK verifier
-    const DelegationVerifier = await ethers.getContractFactory("DelegationPlonkVerifier");
+    // Deploy Delegation Groth16 verifier
+    const DelegationVerifier = await ethers.getContractFactory("contracts/DelegationVerifier.sol:DelegationGroth16Verifier");
     const delegationVerifier = await DelegationVerifier.deploy();
     await delegationVerifier.waitForDeployment();
 
@@ -37,7 +37,7 @@ describe("IdentityRegistry", function () {
     });
     registry = await IdentityRegistry.deploy(
       await groth16Verifier.getAddress(),
-      await plonkVerifier.getAddress(),
+      await agentVerifier.getAddress(),
       await delegationVerifier.getAddress()
     );
     await registry.waitForDeployment();
@@ -169,7 +169,7 @@ describe("IdentityRegistry", function () {
 
       const humanProof = new Array(8).fill(0n);
       const humanPubSignals = [humanRoot, humanNullifier, 2n, 3n, nonce];
-      const agentProof = new Array(24).fill(0n);
+      const agentProof = new Array(8).fill(0n);
       const agentPubSignals = [agentRoot, 4n, 5n, 6n, 7n, nonce];
 
       await expect(
@@ -191,7 +191,7 @@ describe("IdentityRegistry", function () {
 
       const humanProof = new Array(8).fill(0n);
       const humanPubSignals = [humanRoot, 1n, 2n, 3n, nonce];
-      const agentProof = new Array(24).fill(0n);
+      const agentProof = new Array(8).fill(0n);
       const agentPubSignals = [fakeAgentRoot, 4n, 5n, 6n, 7n, nonce];
 
       await expect(
@@ -222,7 +222,7 @@ describe("IdentityRegistry", function () {
       const humanProof = new Array(8).fill(0n);
       // humanPubSignals[4] = wrong nonce (999)
       const humanPubSignals = [humanRoot, 1n, 2n, 3n, 999n];
-      const agentProof = new Array(24).fill(0n);
+      const agentProof = new Array(8).fill(0n);
       const agentPubSignals = [agentRoot, 4n, 5n, 6n, 7n, nonce];
 
       await expect(
@@ -244,7 +244,7 @@ describe("IdentityRegistry", function () {
 
       const humanProof = new Array(8).fill(0n);
       const humanPubSignals = [humanRoot, 1n, 2n, 3n, nonce];
-      const agentProof = new Array(24).fill(0n);
+      const agentProof = new Array(8).fill(0n);
       // agentPubSignals[5] = wrong nonce (888)
       const agentPubSignals = [agentRoot, 4n, 5n, 6n, 7n, 888n];
 
@@ -311,7 +311,7 @@ describe("IdentityRegistry", function () {
   describe("Delegation verification (Attack 2 fix: handshake-prerequisite + on-chain chain state)", function () {
     it("should reject delegation without prior handshake", async function () {
       // Session nonce has not been consumed by any handshake
-      const proof = new Array(24).fill(0n);
+      const proof = new Array(8).fill(0n);
       const pubSignals = [111n, 42n, 222n, 333n, 444n];
       const sessionNonce = 42n;
 
