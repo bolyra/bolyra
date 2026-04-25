@@ -1,0 +1,19 @@
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco-check:
+    name: Verify Signed-off-by on every commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check DCO sign-off
+        uses: tim-actions/dco@v1.1.0
