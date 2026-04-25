@@ -1,8 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const snarkjs = require("snarkjs");
 const path = require("path");
 const { buildPoseidon, buildBabyjub, buildEddsa } = require("circomlibjs");
+const { proveGroth16, activeProverBackend } = require("../../sdk/dist/prover");
 
 /**
  * E2E Smoke Test: Real ZKP Proofs → On-Chain Verification
@@ -109,10 +109,11 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     const scope = 1n;
     const sessionNonce = BigInt(Date.now());
 
+    console.log("  Prover backend:", activeProverBackend("auto"));
     console.log("  Generating Groth16 proof (human)...");
     const humanStart = performance.now();
     const { proof: humanProofRaw, publicSignals: humanPubSignals } =
-      await snarkjs.groth16.fullProve(
+      await proveGroth16(
         {
           secret: humanSecret.toString(),
           merkleProofLength: "0",
@@ -122,9 +123,10 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
           sessionNonce: sessionNonce.toString(),
         },
         HUMAN_WASM,
-        HUMAN_ZKEY
+        HUMAN_ZKEY,
+        "auto"
       );
-    console.log(`  Human proof: ${((performance.now() - humanStart) / 1000).toFixed(2)}s`);
+    console.log(`  Human proof: ${(performance.now() - humanStart).toFixed(0)}ms`);
 
     // Verify the computed root matches what's on-chain
     const proofHumanRoot = humanPubSignals[0];
@@ -139,7 +141,7 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
     console.log("  Generating Groth16 proof (agent)...");
     const agentStart = performance.now();
     const { proof: agentProofRaw, publicSignals: agentPubSignals } =
-      await snarkjs.groth16.fullProve(
+      await proveGroth16(
         {
           modelHash: modelHash.toString(),
           operatorPubkeyAx: F.toObject(operatorPubKey[0]).toString(),
@@ -157,9 +159,10 @@ describe("E2E Handshake: Real Proofs → On-Chain Verification", function () {
           sessionNonce: sessionNonce.toString(),
         },
         AGENT_WASM,
-        AGENT_ZKEY
+        AGENT_ZKEY,
+        "auto"
       );
-    console.log(`  Agent proof: ${((performance.now() - agentStart) / 1000).toFixed(2)}s`);
+    console.log(`  Agent proof: ${(performance.now() - agentStart).toFixed(0)}ms`);
 
     // Verify agent root matches
     const proofAgentRoot = agentPubSignals[0];
