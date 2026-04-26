@@ -644,7 +644,7 @@
   expiryTimestamp
 );
 
-<span class="cm">// Mutual handshake — both proofs generated in parallel (~16s)</span>
+<span class="cm">// Mutual handshake — both Groth16 proofs generated in parallel (&lt;200ms with rapidsnark)</span>
 <span class="kw">const</span> { humanProof, agentProof, nonce } <span class="op">=</span> <span class="kw">await</span> <span class="fn">proveHandshake</span>(human, agent);
 
 <span class="cm">// Verify on-chain (Base L2, ~590k gas, ~$0.15)</span>
@@ -687,6 +687,11 @@
       <p class="section-subtitle">Plug Bolyra into your agent framework, wallet, or payment flow.</p>
       <div class="features-grid">
         <div class="feature-card">
+          <div class="feature-icon mutual">MCP</div>
+          <h3>MCP Middleware</h3>
+          <p>Drop-in auth for Model Context Protocol servers. One line wraps any McpServer with mutual ZKP handshake: <code>withBolyraAuthStdio(server, { resolveCredential, toolPolicy })</code>. ~217ms proofs via rapidsnark. <code>npm install @bolyra/mcp</code></p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon mutual">OC</div>
           <h3>OpenClaw Adapter</h3>
           <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw</code></p>
@@ -710,7 +715,7 @@
     <div class="container">
       <p class="section-label">Architecture</p>
       <h2 class="section-title">Three circuits, one verification</h2>
-      <p class="section-subtitle">Groth16 for the fast path, PLONK for the complex paths. All verified through a unified Solidity contract stack.</p>
+      <p class="section-subtitle">Groth16 across all three circuits, rapidsnark-accelerated for sub-200ms client-side proving. All verified through a unified Solidity contract stack.</p>
       <div class="arch-grid">
         <div class="arch-card">
           <p class="circuit-name">Circuit 1</p>
@@ -725,7 +730,7 @@
           </div>
           <div class="stat">
             <span class="label">Proving time</span>
-            <span class="value">0.57s</span>
+            <span class="value">~100ms (rapidsnark)</span>
           </div>
         </div>
         <div class="arch-card">
@@ -737,11 +742,11 @@
           </div>
           <div class="stat">
             <span class="label">Proof system</span>
-            <span class="value">PLONK</span>
+            <span class="value">Groth16</span>
           </div>
           <div class="stat">
             <span class="label">Proving time</span>
-            <span class="value">16.3s</span>
+            <span class="value">~100ms (rapidsnark)</span>
           </div>
         </div>
         <div class="arch-card">
@@ -753,22 +758,22 @@
           </div>
           <div class="stat">
             <span class="label">Proof system</span>
-            <span class="value">PLONK</span>
+            <span class="value">Groth16</span>
           </div>
           <div class="stat">
             <span class="label">Proving time</span>
-            <span class="value">~17s</span>
+            <span class="value">~100ms (rapidsnark)</span>
           </div>
         </div>
       </div>
       <div class="contract-stack">
-        <div class="layer">Groth16Verifier.sol</div>
+        <div class="layer">HumanVerifier.sol</div>
         <span class="arrow">&rarr;</span>
-        <div class="layer">PlonkVerifier.sol</div>
+        <div class="layer">AgentVerifier.sol</div>
         <span class="arrow">&rarr;</span>
-        <div class="layer">HandshakeRouter.sol</div>
+        <div class="layer">DelegationVerifier.sol</div>
         <span class="arrow">&rarr;</span>
-        <div class="layer">BolyraRegistry.sol</div>
+        <div class="layer">IdentityRegistry.sol</div>
       </div>
     </div>
   </section>
@@ -789,8 +794,8 @@
           <div class="desc">Cost per mutual authentication at current gas prices</div>
         </div>
         <div class="number-card">
-          <div class="big">~16s</div>
-          <div class="desc">End-to-end proving time (both proofs in parallel)</div>
+          <div class="big">&lt;200ms</div>
+          <div class="desc">End-to-end handshake proving time (Groth16 + rapidsnark)</div>
         </div>
         <div class="number-card">
           <div class="big">59,730</div>
@@ -866,7 +871,7 @@
             <h4>Legal</h4>
             <ul>
               <li><a href="#">US Provisional #64/043,898</a></li>
-              <li><a href="#">License (MIT)</a></li>
+              <li><a href="#">License (Apache-2.0 + RF grant)</a></li>
             </ul>
           </div>
           <div class="footer-col">
