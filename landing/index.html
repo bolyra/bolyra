@@ -9,6 +9,8 @@
   <meta property="og:description" content="Signed receipts for agent tool calls. Drops in front of any handler. Roadmap: SD-JWT, then zero-knowledge wrapped receipts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
   <style>
     *, *::before, *::after {
       margin: 0;
@@ -704,13 +706,13 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">4+</div>
-          <h3>IETF Drafts Active</h3>
-          <p>NIST, IETF (OpenAI co-authoring), OWASP Agentic Top 10, and FIDO Payments Working Group are all standardizing agent identity. Bolyra is the ZKP-native approach.</p>
+          <h3>Standards Bodies Active</h3>
+          <p>NIST, IETF (OpenAI co-authoring), OWASP Agentic Top 10, and FIDO Payments Working Group are all working on agent identity. Bolyra is the ZKP-native approach.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon privacy">100+</div>
-          <h3>Payment Partners Building</h3>
-          <p>Visa Trusted Agent Protocol (Stripe, Shopify, Cloudflare), Mastercard Agent Pay, Google AP2 (60+ partners). All need privacy-preserving identity verification.</p>
+          <div class="feature-icon privacy">Open</div>
+          <h3>Payment Rails Standardizing</h3>
+          <p>Visa Trusted Agent Protocol (Stripe, Shopify, Cloudflare), Mastercard Agent Pay, and Google AP2 are converging on agent payment standards. Each needs a privacy-preserving identity layer.</p>
         </div>
       </div>
     </div>
@@ -726,7 +728,7 @@
         <div class="feature-card">
           <div class="feature-icon mutual">MCP</div>
           <h3>MCP Middleware</h3>
-          <p>Drop-in auth for Model Context Protocol servers. One line wraps any McpServer with mutual ZKP handshake: <code>withBolyraAuthStdio(server, { resolveCredential, toolPolicy })</code>. ~217ms proofs via rapidsnark. <code>npm install @bolyra/mcp</code></p>
+          <p>Drop-in auth for Model Context Protocol servers. One line wraps any McpServer with mutual ZKP handshake: <code>withBolyraAuthStdio(server, { resolveCredential, toolPolicy })</code>. ~217ms proofs via rapidsnark. Reference implementation in <code>integrations/mcp/</code> &mdash; npm release with v0.3.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon mutual">OC</div>
@@ -820,7 +822,7 @@
     <div class="container">
       <p class="section-label">Benchmarks</p>
       <h2 class="section-title">Numbers that matter</h2>
-      <p class="section-subtitle">Measured on commodity hardware. Deployed on Base L2 for cost efficiency.</p>
+      <p class="section-subtitle">Measured on commodity hardware. Verifier deployed on Base Sepolia testnet &mdash; mainnet with v0.3.</p>
       <div class="numbers-grid">
         <div class="number-card">
           <div class="big">~590k</div>
@@ -867,9 +869,9 @@
       <div class="standards-grid">
         <div class="standard-card">
           <span class="std-badge ietf">IETF</span>
-          <h3>Internet-Draft</h3>
+          <h3>Draft (preparing for submission)</h3>
           <p><code>draft-bolyra-mutual-zkp-auth-01</code></p>
-          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures.</p>
+          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. Submission to IETF planned alongside the v0.3 release.</p>
         </div>
         <div class="standard-card">
           <span class="std-badge w3c">W3C</span>
@@ -890,26 +892,9 @@
   <!-- Design Partners -->
   <section id="design-partners">
     <div class="container">
-      <p class="section-label">Design Partners</p>
+      <p class="section-label">Become a design partner</p>
       <h2 class="section-title">Building Bolyra with the teams shipping agents</h2>
-      <p class="section-subtitle">A small cohort of design partners through 2026 to harden the protocol against real deployments. Early SDK access, direct line to the protocol team, joint roadmap input.</p>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon mutual">AP</div>
-          <h3>Agent Platforms</h3>
-          <p>You ship authenticated AI agents into customer workflows. You need identity that survives audit. Bolyra is the auth primitive that does not leak operator, model, or scope to the relying party.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">IP</div>
-          <h3>Identity Providers</h3>
-          <p>You issue credentials to agents or to humans acting through agents. Bolyra plugs into your stack as a ZKP credential format with on-chain or off-chain verification. Companion-spec posture to <code>draft-klrc-aiagent-auth-01</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">RE</div>
-          <h3>Regulated Enterprise</h3>
-          <p>Prove to an NCUA, FDA, or GLBA examiner that only approved models touched regulated data, without revealing the call graph. Cryptographic model-instance binding, AS-blind cross-scope unlinkability, audit-grade.</p>
-        </div>
-      </div>
+      <p class="section-subtitle">Small cohort through 2026 to harden the protocol against real deployments. We are looking for agent platforms, identity providers, and regulated enterprises with a real integration scenario. No public partner list yet &mdash; we will name partners only with their permission.</p>
       <div style="margin-top: 48px; padding: 32px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px;">
         <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 14px; letter-spacing: -0.01em;">What you get</h3>
         <ul style="list-style: none; color: var(--text-muted); font-size: 0.92rem; line-height: 1.8; margin-bottom: 24px;">

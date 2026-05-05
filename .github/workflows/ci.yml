@@ -54,12 +54,12 @@ jobs:
 
       - run: npm ci
 
-      # The openclaw package has a peer dep on @bolyra/sdk — install it from
-      # the local workspace so tests can resolve it.
+      # The openclaw package has a peer dep on @bolyra/sdk — install, build,
+      # and link from the local workspace so tests can resolve types + runtime.
       - name: Link local @bolyra/sdk
         run: |
-          cd ../../sdk && npm ci && npm link
-          cd ../../integrations/openclaw && npm link @bolyra/sdk
+          cd ../../sdk && npm ci && npm run build && npm link
+          cd ../integrations/openclaw && npm link @bolyra/sdk
 
       - run: npx tsc --noEmit
       - run: npm test
@@ -97,5 +97,5 @@ jobs:
 
       - name: Typecheck integrations/openclaw
         run: |
-          cd sdk && npm link
+          cd sdk && npm run build && npm link
           cd ../integrations/openclaw && npm ci && npm link @bolyra/sdk && npx tsc --noEmit
