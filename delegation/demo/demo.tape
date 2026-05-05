@@ -46,8 +46,8 @@ Sleep 400ms
 Enter
 
 # demo.js itself paces its own scene-by-scene output via setTimeout.
-# Wait for it to finish (~14s) plus a beat for the closing card.
-Sleep 16s
+# Wait for it to finish (~9s) plus a beat for the closing card.
+Sleep 11s
 
 # Hold the final frame so the npm-install URL stays readable.
 Sleep 2500ms

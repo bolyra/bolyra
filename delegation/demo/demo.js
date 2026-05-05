@@ -39,13 +39,8 @@ async function main() {
 
   // --- Step 1: human signs a scoped receipt --------------------------------
   console.log("");
-  console.log(C.cyan("[1/4]") + " Human issues a scoped receipt for " + C.bold("agent_alice"));
-  console.log("      action:     " + C.bold("purchase"));
-  console.log("      audience:   " + C.bold("example.com"));
-  console.log("      permission: " + C.bold("FINANCIAL_SMALL"));
-  console.log("      cap:        " + C.bold("$50 USD"));
-  console.log("      expires:    " + C.bold("1 hour"));
-  await wait(800);
+  console.log(C.cyan("[1/3]") + " Human signs receipt: " + C.bold("agent_alice") + C.dim(" → ") + C.bold("purchase @ example.com, $50 cap, 1h"));
+  await wait(600);
 
   const human = await generateKeyPair();
   const receipt = await allow(
@@ -60,13 +55,13 @@ async function main() {
     human.privateKey,
     human.publicKey,
   );
-  console.log("      " + C.green("✓") + " receipt issued  " + C.dim(receipt.slice(0, 32) + "...."));
-  await wait(1500);
+  console.log("      " + C.green("✓") + " issued  " + C.dim(receipt.slice(0, 32) + "...."));
+  await wait(1400);
 
   // --- Step 2: happy path --------------------------------------------------
   console.log("");
-  console.log(C.cyan("[2/4]") + " Agent invokes " + C.bold("purchase($25)") + " — within scope");
-  await wait(700);
+  console.log(C.cyan("[2/3]") + " Agent calls " + C.bold("purchase($25)"));
+  await wait(600);
   const ok = await verify(receipt, {
     expectedAgent: "agent_alice",
     expectedAction: "purchase",
@@ -74,18 +69,13 @@ async function main() {
     trustedIssuers: human.publicKey,
     invocationAmount: { amount: 25, currency: "USD" },
   });
-  console.log(
-    "      " +
-      (ok.valid ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")) +
-      "   " +
-      C.dim("$25 charged"),
-  );
-  await wait(1800);
+  console.log("      " + (ok.valid ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")));
+  await wait(1600);
 
   // --- Step 3: over-cap rejection -----------------------------------------
   console.log("");
-  console.log(C.cyan("[3/4]") + " Agent invokes " + C.bold("purchase($75)") + " — over the $50 cap");
-  await wait(700);
+  console.log(C.cyan("[3/3]") + " Agent calls " + C.bold("purchase($75)") + C.dim(" — over the $50 cap"));
+  await wait(600);
   const overCap = await verify(receipt, {
     expectedAgent: "agent_alice",
     expectedAction: "purchase",
@@ -97,28 +87,7 @@ async function main() {
     "      " +
       (overCap.valid ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")) +
       "   " +
-      C.yellow("reason: " + (overCap.reason ?? "ok")),
-  );
-  await wait(1800);
-
-  // --- Step 4: wrong audience ---------------------------------------------
-  console.log("");
-  console.log(
-    C.cyan("[4/4]") + " Agent presents same receipt to " + C.bold("attacker.com"),
-  );
-  await wait(700);
-  const wrongAud = await verify(receipt, {
-    expectedAgent: "agent_alice",
-    expectedAction: "purchase",
-    expectedAudience: "attacker.com",
-    trustedIssuers: human.publicKey,
-    invocationAmount: { amount: 10, currency: "USD" },
-  });
-  console.log(
-    "      " +
-      (wrongAud.valid ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")) +
-      "   " +
-      C.yellow("reason: " + (wrongAud.reason ?? "ok")),
+      C.yellow(overCap.reason ?? "ok"),
   );
   await wait(2000);
 
