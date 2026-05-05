@@ -3,7 +3,7 @@
 **Position Paper: Bolyra as a Privacy Extension to draft-klrc-aiagent-auth-01**
 
 Viswanadha Pratap Kondoju, Bolyra
-April 2026
+May 2026
 
 ---
 
@@ -11,11 +11,11 @@ April 2026
 
 The IETF draft-klrc-aiagent-auth-01 (Kline, Raghavan, Chatterjee; backed by AWS, Zscaler, Ping Identity, OpenAI) establishes a framework for authenticating AI agents acting on behalf of users. It defines agent tokens, delegation semantics, scope-restricted authorization, and lifecycle management. However, the draft relies on bearer-token and OAuth-derived constructs that expose authorization metadata to relying parties. There is no mechanism for selective disclosure, and delegation chains reveal their full structure to verifiers.
 
-Bolyra (draft-bolyra-mutual-zkp-auth-00) is a mutual zero-knowledge proof authentication protocol for human and AI agent identities. This document maps Bolyra's primitives onto the KLRC framework and identifies where Bolyra provides privacy properties that the existing draft cannot express.
+Bolyra (draft-bolyra-mutual-zkp-auth-01) is a mutual zero-knowledge proof authentication protocol for human and AI agent identities. This document maps Bolyra's primitives onto the KLRC framework and identifies where Bolyra provides privacy properties that the existing draft cannot express.
 
 ## 2. Concept Mapping
 
-| KLRC Concept (draft-klrc-aiagent-auth-01) | Bolyra Equivalent (draft-bolyra-mutual-zkp-auth-00) | Relationship |
+| KLRC Concept (draft-klrc-aiagent-auth-01) | Bolyra Equivalent (draft-bolyra-mutual-zkp-auth-01) | Relationship |
 |---|---|---|
 | **Agent Token** (bearer credential identifying the agent) | **Agent Credential Commitment** — Poseidon5(modelHash, operatorPubkeyAx, operatorPubkeyAy, permissionBitmask, expiryTimestamp) stored as a Merkle leaf | Bolyra replaces the opaque bearer token with a hiding commitment; the verifier learns that a valid credential exists but not its contents |
 | **User Identity / Principal** | **Human Identity Commitment** — Poseidon2(Ax, Ay) derived from an EdDSA secret on Baby Jubjub | The human principal is represented as a Merkle leaf; group membership is proved without revealing which leaf |
@@ -27,13 +27,19 @@ Bolyra (draft-bolyra-mutual-zkp-auth-00) is a mutual zero-knowledge proof authen
 
 ## 3. What Bolyra Adds
 
-The KLRC draft provides a sound authorization architecture but inherits the metadata exposure characteristics of OAuth 2.0. Bolyra addresses three gaps:
+The KLRC draft provides a sound authorization architecture but inherits the metadata exposure characteristics of OAuth 2.0. Under adversarial scrutiny (5-persona differentiation-autoresearch, 2026-04-22), two Bolyra properties cleared the bar that no configuration of KLRC + RFC 7662 + RFC 8693 + RFC 8707 + DPoP + WIMSE + BBS+ can match. These are the load-bearing contributions to the WG.
 
-**3.1 Selective Disclosure of Permissions.** In KLRC, a relying party inspecting an agent token learns the full scope string. In Bolyra, the agent proves `(permissionBitmask & requiredScopeMask) == requiredScopeMask` inside the ZK circuit. The relying party learns only that the required bits are set, not what other permissions exist. This is the identity-bound scope commitment primitive: the public output is Poseidon2(permissionBitmask, credentialCommitment), which is opaque without knowledge of the preimage.
+**3.1 Cryptographic Model-Instance Binding (primary contribution, 9/10 under adversarial review).** KLRC authenticates the agent's registered application (`client_id`), but not *which model instance* produced a given call. Bolyra binds `(modelHash, operator_pk, permission_bitmask, messageHash)` to each RS invocation as a single PLONK proof. The verifier learns only this tuple — not the API key, not the operator's full session history, not which call was which model. Non-malleability survives under adversarial-operator attacks: an operator holding an Opus key cannot forge a proof saying Sonnet made the call. Provider anonymity survives under rogue-RS attacks: the Anthropic-signed provider key is a private input; the verifier sees only the fingerprint registry root. The load-bearing deployment is a regulated CISO proving to an NCUA or FDA examiner that only approved models touched regulated data, without revealing which call was which model. **This property cannot be expressed in KLRC's current token model.**
 
-**3.2 Privacy-Preserving Delegation Chains.** KLRC delegation produces a chain of tokens whose structure (depth, participants, scope at each hop) is visible to the final relying party. Bolyra's delegation circuit proves that each hop's scope commitment is a valid narrowing of the previous hop's commitment, without revealing the bitmask at any intermediate step. The verifier checks `(delegatorScope & delegateeScope) == delegateeScope` in-circuit and sees only the final scope commitment.
+Scope limitation: Bolyra proves *authorization* binding, not *execution* binding. Runtime model substitution after proof generation requires TEE/hardware attestation and is out of scope for a pure-ZK construction. Closing that gap is a "Bolyra + TEE" companion track, not a claim on the KLRC spec.
 
-**3.3 Mutual Authentication with Unlinkability.** KLRC authenticates the agent to the resource server but does not define mutual authentication where both the human and agent prove identity to each other simultaneously. Bolyra's handshake binds a human's Groth16 proof and an agent's PLONK proof to a shared session nonce, verified atomically. The human's nullifier provides Sybil resistance within a scope without cross-scope linkability.
+**3.2 AS-Blind Cross-Scope Unlinkability (secondary contribution, 8/10).** In KLRC, the AS sees every agent-to-RS introspection call by construction. Pairwise subject identifiers help against RS-vs-RS collusion but do not hide the (agent, RS) pair from the AS itself. Bolyra's per-scope nullifier construction — `nullifier = Poseidon2(scope_id, secret)` — plus local post-enrollment proof generation means the AS never participates in the per-scope authorization path. The load-bearing deployment is a credit-union-as-AS that must not reconstruct its members' merchant graph under GLBA Reg P. **This property cannot be expressed in KLRC's current flow model.**
+
+**3.3 Selective Disclosure of Permissions.** In KLRC, a relying party inspecting an agent token learns the full scope string. In Bolyra, the agent proves `(permissionBitmask & requiredScopeMask) == requiredScopeMask` inside the ZK circuit. Note: a well-configured KLRC AS with per-RS scope policies can approximate this. The stronger property here is that Bolyra removes the AS from the hot path entirely, which composes with §3.2.
+
+**3.4 Privacy-Preserving Delegation Chains.** KLRC delegation produces a chain of tokens whose structure (depth, participants, scope at each hop) is visible to the final relying party. Bolyra's delegation circuit proves that each hop's scope commitment is a valid narrowing of the previous hop's commitment, without revealing the bitmask at any intermediate step. Applicability: narrow-but-real regulated scenarios (HIPAA chain of custody, cross-border financial delegation).
+
+**3.5 Mutual Authentication.** KLRC authenticates the agent to the resource server but does not define mutual authentication where both the human and agent prove identity to each other simultaneously. Bolyra's handshake binds a human's Groth16 proof and an agent's PLONK proof to a shared session nonce, verified atomically.
 
 ## 4. Proposed Integration Path
 
@@ -54,4 +60,4 @@ In either mode, the on-chain registry (Bolyra Section 3.1) serves as the trust a
 
 ---
 
-*This document is intended for discussion within the IETF community and does not constitute a standard. Bolyra is an open-source protocol; specification and reference implementation are available at https://github.com/saneGuy/bolyra.*
+*This document is intended for discussion within the IETF community and does not constitute a standard. Bolyra is an open-source protocol; specification and reference implementation are available at https://github.com/saneGuy/identityos (repository rename to `bolyra` pending).*
