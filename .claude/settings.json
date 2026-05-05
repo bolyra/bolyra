@@ -1,0 +1,30 @@
+{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); [ -z \"$file\" ] && exit 0; case \"$file\" in */circuits/test/*.test.js) nohup bash -c \"cd '$CLAUDE_PROJECT_DIR' && npm run test:circuits:fast > .claude/last-test-run.log 2>&1\" >/dev/null 2>&1 & ;; esac; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null && { echo '## identityos / Bolyra repo state'; echo; echo '### Recent commits'; git log --oneline -5 2>/dev/null; echo; echo '### Circuit build artifacts'; ls circuits/build/*_vkey.json 2>/dev/null | xargs -I{} basename {} | sort || echo '(no build artifacts)'; echo; echo '### Last test run'; [ -f .claude/last-test-run.log ] && tail -3 .claude/last-test-run.log || echo '(no test run logged yet)'; }; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
