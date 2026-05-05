@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc",
     "test": "jest --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "jose": "^5.9.6"
@@ -42,7 +43,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/bolyra/bolyra",
+    "url": "git+https://github.com/bolyra/bolyra.git",
     "directory": "delegation"
   },
   "homepage": "https://bolyra.ai",
