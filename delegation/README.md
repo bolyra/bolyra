@@ -2,6 +2,8 @@
 
 > Verifiable delegated authority for agent actions. A human signs a scoped receipt; middleware verifies it before the agent calls a tool.
 
+![demo](https://raw.githubusercontent.com/bolyra/bolyra/main/delegation/demo/demo.gif)
+
 `@bolyra/delegation` is the lightweight on-ramp into the [Bolyra](https://bolyra.ai) protocol. It ships a tiny, dependency-light package (`jose` only) that lets you wire delegation into LangChain, OpenAI Agents SDK, MCP, or any tool framework in a few lines. Full ZKP-backed delegation (via `@bolyra/sdk` + the Circom `Delegation` circuit) remains the upgrade path when you want privacy and on-chain verifiability.
 
 **Status:** v0.1.0 — EdDSA-signed JWS receipts. SD-JWT (selective disclosure) lands in v0.2. ZKP-wrapped receipts land in v0.3.
