@@ -1,4 +1,4 @@
-# identityos / .claude/
+# bolyra / .claude/
 
 Project-scoped Claude Code configuration for **Bolyra**. Workspace-wide settings live in `../../.claude/`.
 

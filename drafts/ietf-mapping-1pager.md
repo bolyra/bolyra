@@ -60,4 +60,4 @@ In either mode, the on-chain registry (Bolyra Section 3.1) serves as the trust a
 
 ---
 
-*This document is intended for discussion within the IETF community and does not constitute a standard. Bolyra is an open-source protocol; specification and reference implementation are available at https://github.com/saneGuy/identityos (repository rename to `bolyra` pending).*
+*This document is intended for discussion within the IETF community and does not constitute a standard. Bolyra is an open-source protocol; specification and reference implementation are available at https://github.com/bolyra/bolyra.*

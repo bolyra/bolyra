@@ -56,7 +56,7 @@ python3 --version
 ## First-time baseline
 
 ```bash
-cd /Users/lordviswa/Projects/identityos/patent-autoresearch
+cd ~/Projects/bolyra/patent-autoresearch
 python3 run_loop.py --baseline-only
 ```
 

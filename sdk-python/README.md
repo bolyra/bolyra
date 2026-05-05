@@ -58,4 +58,4 @@ All errors extend `BolyraError` with a `.code` property matching the TypeScript 
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](../LICENSE).

@@ -73,4 +73,4 @@ Permissions use cumulative bit encoding — higher tiers imply lower ones:
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](../LICENSE).

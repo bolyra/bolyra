@@ -52,7 +52,7 @@ python3 --version
 ## First-time baseline
 
 ```bash
-cd /Users/lordviswa/Projects/identityos/protocol-autoresearch
+cd ~/Projects/bolyra/protocol-autoresearch
 python3 run_loop.py --baseline-only
 ```
 

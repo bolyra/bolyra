@@ -8,7 +8,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 - **Domain:** bolyra.ai
 - **Company:** ZKProva Inc.
-- **Internal repo name:** `identityos/` (legacy — being renamed to `bolyra/`)
+- **Repo:** `github.com/bolyra/bolyra` (local dir: `~/Projects/bolyra/`; legacy name `identityos/` retained only inside historical patent artifacts: `drafts/IDENTITYOS-PROV-001-*`)
 - **License:** Apache 2.0 (with DCO sign-off — every commit requires `Signed-off-by:`)
 - **Patent:** Provisional #64/043,898 filed 2026-04-20. Non-provisional deadline **2027-04-20**.
 
@@ -31,7 +31,7 @@ From repo root (`package.json` orchestrates the two test suites):
 ## Architecture
 
 ```
-identityos/
+bolyra/
 ├── circuits/         # Circom 2 circuits + snarkjs/rapidsnark proving
 │   ├── src/          # HumanUniqueness, Delegation, AgentPolicy
 │   ├── test/         # Mocha tests (fast: witness-only; slow: full proof)
@@ -105,7 +105,7 @@ Do not mix winners between loops.
 - **Solidity verifiers must match `.zkey`** — when you re-run trusted setup or change a circuit, regenerate the verifier contract from the new `vkey.json`. Tests will pass against the wrong verifier locally if witness signatures happen to match — Hardhat catches this only on `verifyProof` integration tests.
 - **DCO required** — every commit needs `Signed-off-by:`. Use `git commit -s`. To fix: `git commit --amend -s --no-edit`.
 - **Apache 2.0 patent grant** — contributors implicitly grant a patent license. Be deliberate about external code.
-- **License inconsistency to fix** — SDK READMEs say MIT but `package.json` and `LICENSE` are Apache-2.0. Apache-2.0 is canonical (matches CONTRIBUTING.md + the project's patent strategy).
+- **License is uniformly Apache-2.0** — SDK READMEs, `package.json` (root + `sdk/`), `sdk-python/pyproject.toml`, and `LICENSE` all match. CONTRIBUTING.md DCO + Apache patent grant remain canonical.
 
 ## Environment
 
