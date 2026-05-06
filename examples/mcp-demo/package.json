@@ -1,0 +1,25 @@
+{
+  "name": "@bolyra/mcp-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "90-second 'broken vs fixed MCP' demo for @bolyra/mcp.",
+  "scripts": {
+    "build": "tsc",
+    "demo:broken:attacker": "ts-node src/run-pair.ts broken attacker",
+    "demo:broken:legit":    "ts-node src/run-pair.ts broken legit",
+    "demo:fixed:attacker":  "ts-node src/run-pair.ts fixed attacker",
+    "demo:fixed:legit":     "ts-node src/run-pair.ts fixed legit",
+    "demo:all": "bash run-demo.sh"
+  },
+  "dependencies": {
+    "@bolyra/mcp": "file:../../integrations/mcp",
+    "@bolyra/sdk": "file:../../sdk",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.0",
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}
