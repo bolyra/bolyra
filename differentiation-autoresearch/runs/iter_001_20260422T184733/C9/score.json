@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C9",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims four structural impossibility arguments against DPoP/WIMSE, but rfc7662_advocate Attack 1 (ephemeral-per-session DPoP keys) and Attack 2 (OIDC PPID + per-RS introspection) show the baseline can approximate both forward secrecy and cross-RS unlinkability without ZK. Attack 4 (WIMSE + ephemeral DPoP + audience binding) further narrows the gap for delegation unlinkability. The construction's impossibility argument attacks a strawman (single persistent DPoP key) that no security-conscious operator uses. The residual advantage exists (verifier learns nothing from ZK proof vs. must hold symmetric key) but is not articulated against the strongest baseline configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model (IND-FS-AGENT, FS-REPLAY games) and four named assumptions (A1-A4) are stated. However, cryptographer Attack 1 shows the unlinkability reduction requires PRF security (A2), not just preimage resistance (A1), and no hybrid argument across the epoch public key sequence is given. Attack 2 shows the SRS trust model is unspecified \u2014 a subverted SRS collapses knowledge soundness entirely. Attack 3 shows the game is under-specified for colluding AS+RS. Attack 4 shows delegation composition lacks a UC argument. The reduction sketch exists but has four identified holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "All three circuits (EpochRotation ~879, ForwardSecureAgentSession ~9,827, ForwardSecureDelegation ~9,064 constraints) map to existing Bolyra primitives (Poseidon hash, PLONK, Baby Jubjub EdDSA, nullifier scheme) with all circuits under 10k constraints, 6.1% overhead vs base AgentPolicy, and PLONK proving <5s. No external primitives required. Cost is within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: (1) auth0_pm Attack 1 \u2014 no protocol-enforced epoch rotation bound, so a lax operator gets zero forward secrecy silently; (2) rfc7662_advocate Attack 1 \u2014 ephemeral-key DPoP baseline not addressed, collapsing the impossibility argument; (3) cryptographer Attack 2 \u2014 SRS subversion extracts all epoch secrets, unaddressed; (4) cryptographer Attack 4 \u2014 delegation chain has no UC composition theorem; (5) cu_ciso Attack 1 \u2014 unlinkability prevents the CU's own forensics team from satisfying NCUA audit requirements, no privileged audit path defined; (6) spiffe_engineer Attack 3 \u2014 verifier-side key exposure not modeled. Only 2 of ~20 attacks across 5 personas were marked as survived."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU 30-day autonomous agent and CFPB whistleblower relay are named with specificity. However, cu_ciso Attack 1 shows the SECU scenario is self-defeating: cryptographic unlinkability prevents SECU's SOC team from reconstructing agent activity for NCUA examiners under Part 748 Appendix B. The construction conflates adversarial unlinkability with operational unlinkability. No privileged audit path is defined. The scenario is named but not actually deployable as described under current regulatory requirements."
+    }
+  },
+  "gaps": [
+    "Baseline impossibility must engage ephemeral-per-session DPoP keys + OIDC PPID + WIMSE delegation \u2014 not the strawman of a single persistent DPoP key",
+    "Replace A1 (preimage resistance) with PRF security and add a hybrid argument showing the epoch public key sequence is pseudorandom given s_T",
+    "Specify SRS trust model: multi-party ceremony with trust threshold, or add subverted-setup experiment",
+    "Add protocol-enforced maximum epoch lifetime (e.g., assert epoch_age < MAX_EPOCH_WINDOW in ForwardSecureAgentSession circuit)",
+    "Define a privileged audit path: encrypted audit blob under CU's HSM-held audit key, so unlinkability holds for external adversaries but forensic accountability holds for NCUA examiners",
+    "Add UC composition theorem for delegation chains or bound delegation depth with inductive security argument",
+    "Specify s_0 key ceremony: HSM generation, on-chain commitment, immediate zeroization, FIPS 140-3 Level 2 minimum",
+    "Add verifier-compromise sub-game to IND-FS-AGENT or explicitly state verifier-trust boundary",
+    "Define nullifier registry availability SLA and fallback mode (optimistic local cache with deferred settlement)",
+    "Address SPIFFE federation comparison explicitly in deployment section"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

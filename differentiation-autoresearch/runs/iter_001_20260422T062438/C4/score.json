@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction correctly identifies that BBS+ ProofVerify requires the issuer public key as a mandatory input \u2014 a real structural gap. However, the full baseline includes RFC 7662 + AS-filtered introspection + OIDC PPID, which achieves verifier-side issuer-blindness without ZK. The construction's true differentiator (AS-side blindness / no central correlation point) is implied but never explicitly framed as the baseline impossibility. The rfc7662_advocate confirms the construction survives only if AS-as-adversary is a first-class requirement, which the construction does not state. SPIFFE federation similarly hides the leaf issuer from the verifier. Without explicitly ruling out the OAuth/SPIFFE baselines, baseline dominance is preferable but not proven."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Construction provides an IND-ISS game definition, named cryptographic assumptions (Groth16 knowledge soundness, Poseidon collision resistance, BabyJubjub EdDSA), and a reduction sketch. However, the cryptographer identified a fatal predicate-policy binding gap: predicate parameters (opcodes, mask, values) are all private witness inputs, so a prover can substitute a vacuously-true predicate and the verifier cannot detect it \u2014 a soundness failure independent of IND-ISS. The IND-ISS reduction itself is incomplete: it assumes a static registry (no epoch-oracle), ignores auxiliary-input attacks from public NCUA charter records, and does not model adaptive adversaries. Groth16 trusted setup assumptions are unspecified. Nullifier unlinkability adversary class is undefined. Threat model exists but reduction has multiple identified holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to existing Bolyra primitives: depth-16 Poseidon Merkle tree for issuer registry, BabyJubjub EdDSA for credential signature verification in-circuit, Groth16 human path (~50,100 constraints, <8s) and PLONK agent path (~46,500 constraints, <3s). Constraint counts and proving times are stated and within Phase 1 budget. The 8-slot attribute encoding with opcode-based predicate evaluation is a concrete circuit design. The 'arbitrary-schema' claim is false (it's fixed-arity), but the actual 8-slot design is implementable with stated costs."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five personas were exercised. Critical unanswered attacks: (1) cryptographer Attack 1 \u2014 predicate-policy binding gap is a soundness failure; prover can submit vacuously-true predicates with no verifier enforcement mechanism; (2) cryptographer Attack 2 \u2014 IND-ISS reduction incomplete under dynamic registry with auxiliary-input attacks; (3) cu_ciso Attack 1 \u2014 no break-glass issuer attribution for incident response (NCUA Part 748 violation); (4) cu_ciso Attack 3 \u2014 key compromise revocation is architecturally impossible without mass re-issuance; (5) auth0_pm/spiffe_engineer \u2014 Merkle root rotation entirely unaddressed; (6) multiple personas \u2014 'arbitrary-schema' claim directly contradicted by 8-slot design. The predicate-policy binding gap alone is a construction-breaking soundness failure the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Construction names a concrete deployment: CUNA-managed registry of ~4,700 NCUA CUs, PenFed verifying SECU members for shared branching. Named stakeholders and real institutions. However, cu_ciso Attack 1 reveals a fundamental tension: NCUA Part 748 Appendix B requires incident response attribution, but the construction is designed to make attribution impossible. No escrow or break-glass mechanism exists. The rfc7662_advocate identifies that the load-bearing property is 'regulatory compelled disclosure resistance,' but the cu_ciso shows NCUA regulations actually require the opposite. The scenario is concrete but internally contradictory with the regulatory environment it targets."
+    }
+  },
+  "gaps": [
+    "CRITICAL: Add predicate-policy binding \u2014 hash the predicate descriptor (opcodes, mask, values) into a public signal so the verifier can enforce which predicate was evaluated; without this, the circuit has a soundness failure",
+    "Explicitly name AS-as-adversary in the IND-ISS game definition and frame AS-side blindness as the baseline impossibility (not just BBS+ issuer-key exposure) to rule out RFC 7662 + OIDC PPID + SPIFFE federation alternatives",
+    "Extend IND-ISS game to model adaptive epoch queries \u2014 include an epoch-oracle, account for public NCUA charter records as auxiliary input, and close the reduction under dynamic registry mutations",
+    "Specify Merkle root rotation protocol: versioning scheme, proof validity windows, migration path for in-flight proofs during root updates, and staleness tolerance SLA",
+    "Add issuer revocation mechanism (revocation accumulator or exclusion bitmap) that allows surgical key revocation without invalidating all 4,699 other CUs' proofs; document impact on constant-size proof claim",
+    "Add regulated-authority break-glass channel: escrowed issuer commitment (e.g. encrypted to NCUA-designated key) in public signals for incident response attribution per NCUA Part 748, without breaking verifier-side IND-ISS",
+    "Document Groth16 trusted setup ceremony: who runs it, what MPC protocol, what happens under setup compromise \u2014 or switch human path to transparent proof system",
+    "Define nullifier unlinkability adversary class explicitly: passive verifier, active verifier with partial issuer data, or colluding AS+RS \u2014 current construction is silent",
+    "Retract 'arbitrary-schema support' claim or redesign: 8 fixed slots is fixed-arity predicate support, not arbitrary schema; FINRA credentials require 15+ fields",
+    "Add a scenario where attribute-predicate privacy AND issuer-privacy are simultaneously load-bearing (not just membership proof), since SPIFFE federation handles pure membership hiding"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

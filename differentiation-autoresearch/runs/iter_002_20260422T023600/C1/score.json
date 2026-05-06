@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies AS-blind presentation (AS never learns which RS the agent visits) as something filtered JWT introspection cannot provide \u2014 rfc7662_advocate Attack 1 concedes this. However, rfc7662_advocate Attack 4 shows agentSecretCommitment is a global cross-RS linking handle worse than OIDC PPIDs, meaning the construction's unlinkability claim is broken at the commitment layer. The baseline (PPIDs) actually provides stronger pairwise unlinkability than the construction as written. Cannot award 2 when the construction's own public inputs defeat a core claimed advantage."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists (adversarial AS, semi-trusted RS), assumptions are named (A0 SRS integrity, PRF-Poseidon, DL-BJJ, EdDSA unforgeability), and reduction sketches are stated (CRU\u2192PRF-Poseidon, RPI\u2192DL-BJJ). However, cryptographer Attack 2 shows PLONK HVZK\u2260malicious-verifier ZK with no SE-SNARK transform or simulator construction for MVZ. Attack 4 shows RPI reduction assumes legitimate RS keys but no Key Registration Integrity game exists \u2014 the reduction has a dangling precondition. Attack 1 identifies missing A1 (Agent Key Isolation) that voids the CRU reduction in the stated CUSO deployment. Attack 3 shows audit token unlinkability game has no adversary coalition parameterization. Named assumptions but reductions are incomplete or broken."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives: Poseidon2 hash, Baby Jubjub EdDSA, PLONK agent circuit, Groth16 human circuit, nullifier scheme. Twelve constraints are enumerated. However, no circuit cost is stated \u2014 no constraint count, no proving time target, no benchmark on commodity hardware. auth0_pm Attack 2 estimates ~15s PLONK proving per proof with no construction rebuttal. MVZ nonce freshness requirement conflicts with proof caching, and no precomputation strategy is described. Maps to primitives but cost unknown."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with all 5 personas found attacks the construction cannot answer: (1) cryptographer Attack 4 \u2014 RS key registry has no PKI game, adversarial AS substitutes verification keys, RPI reduction is vacuous; (2) rfc7662_advocate Attack 4 \u2014 agentSecretCommitment is a global cross-RS linking handle, construction claims RS-level unlinkability but colluding RSes trivially link via public input; (3) rfc7662_advocate Attack 2 + spiffe_engineer Attack 4 \u2014 adversarial-AS model collapses at issuance since AS issues the bitmask and can lie; (4) cryptographer Attack 1 \u2014 in CU*Answers deployment AS has root on agent servers, agentSecret is observable, CRU reduction vacuous without A1. Multiple unmitigated attacks across personas."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "CU*Answers (real CUSO, 170+ credit unions) is named as the deployment scenario, and NCUA Part 748 is cited as the regulatory requirement for the audit trail. However, auth0_pm Attack 3 correctly identifies that no CU IT director believes their IdP is lying about scope membership \u2014 the adversarial-AS framing has no buyer. The load-bearing property (cryptographic assurance independent of CUSO cooperation) is academically coherent but commercially invisible. cu_ciso attacks show the scenario has unresolved operational gaps (examiner key lifecycle, agentSecret recovery, on-chain nonce SLA) that make the deployment hypothetical rather than actionable."
+    }
+  },
+  "gaps": [
+    "agentSecretCommitment is a global cross-RS linking handle \u2014 redesign as per-RS commitments or explicitly scope unlinkability to non-colluding RSes",
+    "Add Key Registration Integrity (KRI) game with a trust anchor independent of the adversarial AS \u2014 cannot reuse AS-controlled registry",
+    "Add A1 (Agent Key Isolation) assumption with TEE/HSM-bound agent runtime requirement for CUSO deployments",
+    "Replace MVZ nonce rate-limiting heuristic with SE-SNARK transform (Groth-Maller) or scope MVZ claim to honest-but-curious RS",
+    "Address adversarial-AS collapse at issuance: bitmask must be co-signed by granting CU keys, not solely CUSO AS",
+    "State circuit constraint count and proving time target on commodity hardware within Phase 1 budget",
+    "Parameterize unlinkability game with adversary coalition set; add A2 (NCUA Key Integrity) with key rotation protocol",
+    "Reframe primary claim around regulatory exam independence and AS-side access-pattern privacy rather than adversarial-AS scope correctness",
+    "Add agentSecret recovery path (hardware-bound key with institutional inventory) that documents tradeoff with adversarial-AS property",
+    "Specify SRS breach incident response runbook with detection indicators, impact bounds, and re-keying timeline"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction names per-call message-payload binding (messageHash as public output), private permission bitmask predicates (bitwise-AND in arithmetic circuit), and provider anonymity (provider key is private input, verifier sees only providerRegistryRoot) as properties the baseline provably cannot provide. The rfc7662_advocate confirms all three survive: Attack 1 concedes signed JWT introspection cannot bind per-call payloads without re-introducing the AS; Attack 2 concedes DPoP binds to URI not payload and scopes are plaintext; Attack 3 concedes provider anonymity is unreachable by PPIDs. These are specific capabilities explicitly ruled out of the baseline."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Explicit threat model with two game definitions (MODEL-BIND-FORGE v2 and PROVIDER-FORGE), adversary capabilities stated (controls operator keys, has public attestation oracle, does NOT control provider key or registry), named assumptions A1 (Poseidon collision resistance), A2 (DL on Baby Jubjub / EdDSA unforgeability), A3 (PLONK knowledge soundness in AGM+ROM), and a five-case reduction sketch covering fingerprint collision, signature forgery, provider key enrollment, victim key substitution, and cross-operator attestation reuse. Cryptographer confirms formal structure exists while identifying scope gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every construction element maps to existing Bolyra primitives: Poseidon2/3/5 hashes, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20) and BinaryMerkleRoot(8), PLONK proving system, nullifier scheme, and per-bit quadratic constraints for permission predicates. Circuit cost is stated at ~23,550 constraints with <5s proving time target, within Phase 1 budget. The only new element (depth-8 provider key tree) uses the same BinaryMerkleRoot primitive at different depth. Detailed constraint breakdown provided per gadget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 with 5 personas surfaced real attacks that weaken the claim. The most damaging: cryptographer Attack 1 and spiffe_engineer Attack 2 both identify that modelHash is a deployment authorization label, not a runtime execution measurement \u2014 an authorized operator can substitute models at runtime and produce valid proofs. This is outside the stated threat model and has no mitigation, weakening the claim from 'cryptographic execution binding' to 'cryptographic authorization binding.' Additionally, rfc7662_advocate Attack 4 and auth0_pm Attack 3 identify that modelHash semantic correctness depends on Anthropic's organizational controls, not cryptographic assumptions. However, the construction's core cryptographic properties (non-malleability of authorization binding, provider anonymity, per-call message binding) survive all attacks \u2014 the rfc7662_advocate confirms this across Attacks 1-3. The claim is weakened but not destroyed."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "SECU (State Employees' Credit Union, NC, 2.7M members) is named as a concrete deployment. NCUA examiner requirements for proving only approved model instances touched PII are a regulatory obligation under NCUA examination procedures, not hypothetical. The enrollment flow is fully specified (Anthropic provider setup \u2192 operator authorization \u2192 credential enrollment \u2192 runtime proving \u2192 NCUA audit). The EU AI Act / FDA model provenance scenario adds regulatory load-bearing weight. cu_ciso raises operational concerns but does not dispute the scenario is real and the property is load-bearing."
+    }
+  },
+  "gaps": [
+    "Runtime execution binding: modelHash proves authorization not execution \u2014 construction needs TEE/hardware attestation gadget or must explicitly narrow claim to 'authorization binding' and drop the FDA/EU AI Act scenario",
+    "modelHash semantic definition: specify exact preimage (weight hash vs identifier string), how quantization variants are handled, and what auditable process confirms on-chain modelHash corresponds to claimed model",
+    "Fingerprint semantic resolution: specify who publishes the modelOperatorFingerprint \u2192 model-class mapping registry and whether publication violates stated privacy properties",
+    "PLONK setup ceremony: specify powers-of-tau ceremony parameters (participant count, transcript publication, audit) or migrate to transparent proof system",
+    "WIMSE pre-issuance engagement: Section 8(c) mischaracterizes WIMSE as requiring per-call AS participation \u2014 must engage with deployment-time token issuance model specifically",
+    "ZK simulator: provide malicious-verifier ZK or simulation-extractable ZK argument \u2014 HVZK is insufficient when verifier controls sessionNonce and currentTimestamp public inputs"
+  ],
+  "strength": 9,
+  "verdict": "consider"
+}

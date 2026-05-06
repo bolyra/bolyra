@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "rfc7662_advocate attacks 1-4 confirm the construction survives against vanilla OAuth (message-layer binding beats DPoP's transport-layer htu binding, AS-free verification beats RFC 8693 delegation chains). However, spiffe_engineer attack 2 identifies WIMSE draft-ietf-wimse-arch \u00a75 Txn-Token + DPoP as an unaddressed baseline that removes AS from post-issuance hops \u2014 directly contradicting the 'AS sees every hop' dismissal. Since SPIFFE/WIMSE is explicitly in the rubric baseline and the construction does not engage it, baseline dominance is not proven, only preferable against the OAuth subset."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "MODEL-BIND-FORGE game is named with a reduction to Poseidon CR + PLONK soundness \u2014 this is a stated threat model with a named assumption and reduction sketch. However, cryptographer attack 1 shows no simulator is exhibited (ZK notion unspecified \u2014 HVZK vs malicious-verifier ZK vs simulation-extractable), cryptographer attack 2 shows no SRS ceremony is specified (reduction is vacuous under subverted SRS), and cryptographer attack 3 shows the reduction operates at the wrong layer (enrollment root-of-trust is unmodeled, so the adversary wins outside the game definition). Threat model exists but assumptions are incomplete and reduction has critical gaps."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives: Poseidon5 hash, PLONK circuit, BabyJubjub EdDSA, Merkle inclusion, nullifier scheme. Constraint count (~14,750) and proving time target (<5s) are explicitly stated. However, the actual construction.md was never written \u2014 only a summary paragraph exists. No circuit constraint breakdown, no witness layout, no verification key size, no concrete Phase 1 budget comparison. The mapping is plausible but unverified against actual Bolyra circuit budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five personas surfaced attacks the construction cannot answer. auth0_pm attack 1 (modelHash root-of-trust vacuum \u2014 operator self-attests model identity): out of threat model. cryptographer attacks 1-2 (no simulator, no SRS ceremony): out of threat model. spiffe_engineer attacks 2-4 (WIMSE unaddressed, enrollment bootstrap unspecified, modelHash not stable): out of threat model. cu_ciso attacks 1-4 (no regulatory crosswalk, no evidence packaging, no key custody model, no registry SLA): out of threat model. The enrollment root-of-trust gap alone (raised independently by auth0_pm, cryptographer, rfc7662_advocate, and spiffe_engineer) is a consensus failure across all four technical personas."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Four concrete scenarios are named with specific stakeholders (Enterprise CISO, bank in liability dispute, Anthropic for tiered pricing) and regulatory requirements (FDA, EU AI Act, NCUA). However, cu_ciso attacks 1-4 demonstrate that the construction does not deliver what these scenarios require: no FFIEC/NCUA control crosswalk (attack 1), no examiner-legible evidence packaging (attack 2), no GLBA-compliant key custody model (attack 3), and no registry availability SLA (attack 4). The scenarios are concrete but the construction's properties do not actually satisfy the named regulatory requirements, making them aspirational rather than load-bearing."
+    }
+  },
+  "gaps": [
+    "Enrollment root-of-trust: specify who attests modelHash (Anthropic HSM signature, TEE measurement, or equivalent) \u2014 operator self-attestation collapses the binding to what OAuth client_id already does",
+    "Address WIMSE Txn-Token + DPoP baseline: show a concrete disclosure or binding attack on draft-ietf-wimse-arch \u00a75 that the PLONK circuit prevents",
+    "Exhibit the ZK simulator explicitly: state the ZK notion (simulation-extractable NIZK in ROM), show S programs the random oracle, prove no witness-correlated values leak through public outputs",
+    "Specify SRS ceremony: updateable powers-of-tau with named participants, or state security model under SRS compromise (fail-open vs fail-closed)",
+    "Add revocation mechanism: on-chain nullifier set or rotating epoch commitments for compromised BJJ keypairs \u2014 'no AS in verification path' currently eliminates real-time revocation",
+    "Specify Merkle registry operator, root distribution protocol, availability SLA, and chain-reorg handling for historical proof validity",
+    "Add regulatory control crosswalk table: map MODEL-BIND-FORGE to FFIEC CAT Domain 2, NCUA Part 748, GLBA \u00a7314.4(c) controls",
+    "Define evidence packaging layer: how a PLONK proof becomes an examiner-legible, legally admissible artifact within 72-hour breach notification windows",
+    "Specify BJJ keypair custody: HSM level, rotation ceremony, revocation propagation SLA, escrow model",
+    "Write the actual construction.md with full circuit constraint breakdown, witness layout, and verification cost \u2014 current document is a summary paragraph only"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

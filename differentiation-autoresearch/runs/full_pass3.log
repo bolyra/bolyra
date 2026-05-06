@@ -1,0 +1,108 @@
+=== Pass 3 C7 ===
+
+========== C7: Cryptographic model-instance binding ==========
+Current strength: 0 → target: 10
+[C7] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T173217/C7
+[C7] Tier 1: survey baseline...
+[C7] Tier 2: construct from baseline...
+[C7] Tier 3: adversarial (5 personas)...
+[C7] Judge: scoring...
+[C7] iter 1: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — rfc7662_advocate attacks 1-4 confirm the construction survives against vanilla O
+      formal_security_argument: 1/2 — MODEL-BIND-FORGE game is named with a reduction to Poseidon CR + PLONK soundness
+      implementability: 1/2 — Construction maps to existing Bolyra primitives: Poseidon5 hash, PLONK circuit, 
+      adversarial_survival: 0/2 — All five personas surfaced attacks the construction cannot answer. auth0_pm atta
+      scenario_fit: 1/2 — Four concrete scenarios are named with specific stakeholders (Enterprise CISO, b
+[C7] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T174930/C7
+[C7] Tier 2: refine with 10 gap(s)...
+[C7] Tier 3: adversarial (5 personas)...
+[C7] Judge: scoring...
+[C7] iter 2: strength=6/10 verdict=drop
+      baseline_dominance: 1/2 — Construction argues baselines cannot bind model identity to messages without AS 
+      formal_security_argument: 1/2 — Threat model is explicit (MODEL-BIND-FORGE and PROVIDER-FORGE games with adversa
+      implementability: 2/2 — Section 5 maps every construction element to existing Bolyra primitives: Poseido
+      adversarial_survival: 0/2 — Critical unresolved attack: the public attestation oracle (cryptographer Attack 
+      scenario_fit: 2/2 — Section 7 names SECU (State Employees' Credit Union, NC, 2.7M members) as the de
+[C7] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T180320/C7
+[C7] Tier 2: refine with 6 gap(s)...
+[C7] Tier 3: adversarial (5 personas)...
+[C7] Judge: scoring...
+[C7] iter 3: strength=9/10 verdict=consider
+      baseline_dominance: 2/2 — Construction names per-call message-payload binding (messageHash as public outpu
+      formal_security_argument: 2/2 — Explicit threat model with two game definitions (MODEL-BIND-FORGE v2 and PROVIDE
+      implementability: 2/2 — Every construction element maps to existing Bolyra primitives: Poseidon2/3/5 has
+      adversarial_survival: 1/2 — Tier 3 with 5 personas surfaced real attacks that weaken the claim. The most dam
+      scenario_fit: 2/2 — SECU (State Employees' Credit Union, NC, 2.7M members) is named as a concrete de
+[C7] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T181717/C7
+[C7] Tier 2: refine with 6 gap(s)...
+[C7] Tier 3: adversarial (5 personas)...
+[C7] Judge: scoring...
+[C7] iter 4: strength=7/10 verdict=consider
+      baseline_dominance: 1/2 — The construction identifies genuine advantages over the baseline (atomic single-
+      formal_security_argument: 1/2 — The construction has an explicit threat model (MODEL-BIND-FORGE v2 with adversar
+      implementability: 2/2 — Construction maps comprehensively to existing Bolyra primitives: Poseidon2/3/5 f
+      adversarial_survival: 1/2 — All five personas attacked: auth0_pm (4 attacks), cryptographer (4 attacks), cu_
+      scenario_fit: 2/2 — SECU (State Employees' Credit Union, NC, 2.7M members) is named as a concrete de
+[C7] iter 5 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_005_20260422T183212/C7
+[C7] Tier 2: refine with 10 gap(s)...
+[C7] Tier 3: adversarial (5 personas)...
+[C7] Judge: scoring...
+[C7] iter 5: strength=6/10 verdict=drop
+      baseline_dominance: 1/2 — The construction identifies genuine privacy differentiators the baseline cannot 
+      formal_security_argument: 1/2 — The construction has an explicit threat model (MODEL-BIND-FORGE v2 game with def
+      implementability: 2/2 — Section 5 provides a comprehensive mapping to existing Bolyra primitives: Poseid
+      adversarial_survival: 1/2 — Tier 3 with all 5 personas surfaced real attacks that weaken the construction's 
+      scenario_fit: 1/2 — SECU (2.7M members, NCUA-regulated) is a concrete named stakeholder with specifi
+
+========== SUMMARY ==========
+  C7: strength=6/10  verdict=escalate
+=== Pass 3 C9 ===
+
+========== C9: Forward-secure agent delegation ==========
+Current strength: 0 → target: 10
+[C9] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T184733/C9
+[C9] Tier 1: survey baseline...
+[C9] Tier 2: construct from baseline...
+[C9] Tier 3: adversarial (5 personas)...
+[C9] Judge: scoring...
+[C9] iter 1: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The construction claims four structural impossibility arguments against DPoP/WIM
+      formal_security_argument: 1/2 — Threat model (IND-FS-AGENT, FS-REPLAY games) and four named assumptions (A1-A4) 
+      implementability: 2/2 — All three circuits (EpochRotation ~879, ForwardSecureAgentSession ~9,827, Forwar
+      adversarial_survival: 0/2 — Multiple Tier 3 attacks the construction cannot answer: (1) auth0_pm Attack 1 — 
+      scenario_fit: 1/2 — SECU 30-day autonomous agent and CFPB whistleblower relay are named with specifi
+[C9] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T190630/C9
+[C9] Tier 2: refine with 10 gap(s)...
+[C9] Tier 3: adversarial (5 personas)...
+[C9] Judge: scoring...
+[C9] iter 2: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — Section 8.1 identifies a genuine structural gap: Bolyra removes the AS from the 
+      formal_security_argument: 1/2 — The construction provides an explicit threat model (§3), four named cryptographi
+      implementability: 2/2 — All construction elements map to existing Bolyra primitives: Poseidon hash (epoc
+      adversarial_survival: 0/2 — Cryptographer Attack 1 is fatal and unanswered: epochCommitment_e = Poseidon1(s_
+      scenario_fit: 1/2 — SECU is named as a concrete deployment with a specific scenario (30-day autonomo
+[C9] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T191823/C9
+[C9] Tier 2: refine with 8 gap(s)...
+[C9] Tier 3: adversarial (5 personas)...
+[C9] Judge: scoring...
+[C9] iter 3: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The construction names a specific capability (epoch-isolated hiding commitments 
+      formal_security_argument: 1/2 — Threat model is explicit (adversary capabilities, IND-FS-AGENT and FS-REPLAY gam
+      implementability: 2/2 — Construction maps entirely to existing Bolyra primitives: Poseidon1/2 for epoch 
+      adversarial_survival: 0/2 — Tier 3 codex adversary surfaced multiple attacks the construction cannot answer.
+      scenario_fit: 1/2 — SECU 30-day autonomous lending agent is named as a concrete deployment with dail
+[C9] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T193527/C9
+[C9] Tier 2: refine with 11 gap(s)...
+[C9] Tier 3: adversarial (5 personas)...
+[C9] Judge: scoring...
+[C9] iter 4: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The construction claims DPoP compromise reveals the full activity graph while Bo
+      formal_security_argument: 1/2 — Threat model is stated with named assumptions (A1-A5), two formal games (IND-FS-
+      implementability: 2/2 — Construction maps entirely to existing Bolyra primitives: Poseidon hash (BN128),
+      adversarial_survival: 0/2 — Tier 3 surfaced multiple attacks the construction cannot answer: (1) cryptograph
+      scenario_fit: 1/2 — SECU 30-day lending agent and CFPB whistleblower relay are named with concrete d
+[C9] stop: plateau: last 3 deltas all < 0.5 (deltas=[0, 0, 0])
+
+========== SUMMARY ==========
+  C9: strength=5/10  verdict=escalate
+=== Pass 3 DONE ===

@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction argues AS is adversarial (\u00a73.1) and that RFC 8693+DPoP cannot provide auditable delegation without exposing intermediate scopes/participants when AS colludes. spiffe_engineer partially concedes graph-topology hiding is beyond WIMSE. However, rfc7662_advocate Attack 1 shows no formal distinguishing game where a forging AS succeeds against RFC 8693+signed JWT yet fails against the ZK circuit. The baseline can approximate for trusted-AS deployments (the majority case per auth0_pm Attack 4). Preferable but not provably beyond baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (\u00a73.1 AS adversarial), assumptions are named (A5 KZG SRS, Poseidon, PLONK ZK), and Games 1-4 provide reduction sketches. However, cryptographer Attack 1 shows the core 'narrowing' property lacks a formal scope lattice definition \u2014 the reduction is over an undefined relation, making the narrowing claim 'an assertion, not a theorem.' Attack 4 shows Game 4 invokes HVZK but needs SE-PLONK (AGM+ROM) for the malicious-verifier journalist scenario. Threat model stated but reduction has critical definitional gaps."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives: Poseidon hash, PLONK agent circuit, BabyJubjub EdDSA, ElGamal escrow. Constraints C1-C14 are enumerated. However, auth0_pm Attack 1 shows ~15s prove time per hop yields 75s for a 5-hop AI pipeline \u2014 structurally excluding the primary named scenario. No batching, recursive folding (Nova/SuperNova), or deferred-audit model is proposed. Maps to primitives but cost is prohibitive for stated use case."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer: (1) cryptographer Attack 1 \u2014 scope lattice undefined, adversary can satisfy C2 without semantic narrowing; (2) cryptographer Attack 2 \u2014 adversarial AS substitutes pk_reg in C14, no key authenticity mechanism; (3) cryptographer Attack 3 \u2014 cross-session scope correlation via equal commitments, no unlinkability game; (4) spiffe_engineer Attack 3 \u2014 phantom workloads satisfy all constraints without corresponding real workloads; (5) auth0_pm Attack 3 \u2014 RegulatorReveal inverts compliance requirements (NCUA needs identity disclosure, not ZK proof of structural integrity). These are unanswerable without construction changes."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios named: AI pipeline audit and journalist/source chain. NCUA examiner is a named stakeholder in Scenario A. However, auth0_pm Attack 1 shows the AI pipeline is structurally excluded by latency. auth0_pm Attack 3 shows NCUA examiners need identity disclosure under 12 CFR Part 748, making the privacy guarantee a liability. cu_ciso Attacks 1-4 show Scenario A lacks escrow key custody, examiner-facing artifact format, vendor-onboardable trust setup, and operational runbook. Scenarios named but deployment viability is undermined across both."
+    }
+  },
+  "gaps": [
+    "Define a formal scope lattice (L, \u2264) as a circuit public parameter with a narrowing predicate C_narrow enforcing scope[i] \u2264_L scope[i-1], and state the soundness game over this predicate",
+    "Add SE-PLONK security assumption (AGM+ROM) to support Game 4 indistinguishability against malicious verifiers in Scenario B",
+    "Bind pk_reg to a transparency log or require PoK(sk_reg) committed to the constraint system to prevent adversarial-AS key substitution in C14",
+    "Add a session-unlinkability game with per-proof random blinding to prevent cross-session scope correlation (cryptographer Attack 3)",
+    "Require hop commitments to include a verifiable workload identity binding, or prove phantom hops cannot expand scope, to close the phantom-workload attack",
+    "Provide a concrete latency solution: batch/deferred audit model, recursive SNARK folding (Nova), or explicit statement that proofs are generated offline \u2014 otherwise the AI pipeline scenario is structurally excluded",
+    "Add a formal distinguishing game where a forging AS succeeds against RFC 8693+signed JWT introspection but fails against the ZK circuit, to justify baseline dominance",
+    "Resolve the compliance inversion: either restrict Scenario A to internal audit (not NCUA) or add a human-readable, legally admissible disclosure layer on top of C14 that satisfies 12 CFR Part 748 identity disclosure requirements",
+    "Specify escrow key custody, rotation, and audit logging for C14 to satisfy NCUA Part 748 Appendix B and GLBA Safeguards Rule",
+    "Address the KZG trusted setup procurement problem: make IPA-PLONK/STARK the primary backend for Scenario A, or provide vendor-onboarding artifacts for the SRS dependency"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

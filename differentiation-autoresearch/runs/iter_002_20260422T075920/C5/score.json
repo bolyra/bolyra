@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C5",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "AS-blindness during resource access is a real property that DPoP/mTLS and JWT introspection responses cannot fully replicate \u2014 the RS verifies without the AS learning the target. However, auth0_pm Attack 4 shows H2 narrows to what client attestation already does, rfc7662_advocate Attack 1 shows DPoP+mTLS delivers H1's mutual binding, Attack 3 shows RFC 7591+8707 collapses H3's portability framing, and spiffe_engineer Attack 2 shows SPIFFE federation already provides cross-RS auth. The residual advantage (AS-blindness, cross-RS unlinkability of client_id) is real but the baseline can approximate most of the five hypotheses with existing tooling. Construction is preferable, not dominant."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction defines Games 1 and 4 (SRS-FORGE), states assumptions A1\u2013A7, provides a Theorem 2 reduction for forward secrecy, and invokes AGM + q-DLOG. A threat model exists. However, cryptographer Attack 1 shows H4 conflates session unlinkability with epoch-key recovery \u2014 no game distinguishes these two notions. Attack 2 shows no MANIFEST-INTEGRITY game exists for the unsigned manifest channel. Attack 4 shows Theorem 2's erasure assumption is circular \u2014 no ERASE oracle is formalized, making the reduction a tautology. Multiple reductions are incomplete or missing."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The construction maps to existing Bolyra primitives: AgentPolicyV2-Ratcheted uses Poseidon, Groth16 human circuit, PLONK agent circuit, BabyJubjub EdDSA for manifest signing, and the nullifier scheme. However, no constraint count is stated for any circuit, no proving time target is given, and auth0_pm Attack 2 highlights that three-hop delegation at ~15s/proof is commercially unviable. The construction never benchmarks against Phase 1 budget or commodity hardware performance."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer. Cryptographer: erasure oracle unformalizable without new game definitions (Attack 4), manifest MITM collapses H2 with no integrity game (Attack 2), universal SRS catastrophic scope under H3 not analyzed (Attack 3). CU CISO: no regulatory control mapping to NCUA/GLBA/FFIEC (Attack 1), no key custody model for epochSecret_e (Attack 2), nullifiers are architecturally hostile to post-incident attribution required by NCUA Part 748 \u00a7III.D (Attack 3). SPIFFE engineer: SPIRE + ZK attestor plugin decomposition not addressed (Attack 1), manifest protocol has worse security properties than SPIFFE bundle distribution (Attack 3). These are not mitigated \u2014 they are unaddressed."
+    },
+    "scenario_fit": {
+      "points": 0,
+      "justification": "The two scenarios listed are 'generic Claude agent talking to third-party MCP server' and 'cross-vendor agent handoff (Claude \u2192 ChatGPT).' Neither names a concrete deployment, a specific stakeholder, or a regulatory requirement that makes the property load-bearing. C5's own framing targets 'the general case, not just regulated niches,' but provides no named general-case deployment where Bolyra is necessary rather than nice-to-have. The cu_ciso attacks confirm the absence of any regulatory mapping that would ground the scenario."
+    }
+  },
+  "gaps": [
+    "H1\u2013H5 claims overstate relative to what the construction actually achieves after its own scope narrowings \u2014 rewrite each hypothesis to claim only the proven residual (AS-blindness, cross-epoch unlinkability, unlinkable client_id) rather than the broad original framing",
+    "Formalize MANIFEST-INTEGRITY game with mandatory signature verification and add manifest signing key to trust assumptions (A8), including bootstrap/TOFU resolution",
+    "Formalize ERASE oracle following Bellare-Yee or Signal model, separate erasure assumption from Theorem 2 reduction, state trust in agent runtime as orthogonal assumption",
+    "Add constraint counts and proving-time benchmarks for AgentPolicyV2-Ratcheted on target hardware, and provide latency comparison against SPIRE Workload API + WIMSE token exchange for H5",
+    "Define H4 precisely as cross-epoch forward secrecy only, or implement per-session Pedersen re-randomization (currently deferred as future work) to claim intra-epoch unlinkability",
+    "Analyze universal SRS catastrophic blast radius under H3 portability \u2014 single SRS compromise breaks all RSes simultaneously, compare blast radius to per-AS OAuth compromise",
+    "Name a concrete deployment scenario with a specific stakeholder or regulatory requirement where the residual properties (AS-blindness, unlinkable client_id, cross-epoch forward secrecy) are load-bearing in the general case, not just regulated niches",
+    "Address SPIRE + ZK attestor plugin decomposition \u2014 explain why the construction cannot live inside SPIFFE's attestor interface",
+    "Add selective-disclosure or escrow mechanism for post-incident attribution (NCUA Part 748 \u00a7III.D) that coexists with the privacy guarantees, or explicitly scope Bolyra out of sole-authorization-layer for high-value transactions",
+    "Specify epochSecret_e key custody model (storage medium, recovery procedure, NCUA/GLBA control mapping) distinct from SRS ceremony"
+  ],
+  "strength": 3,
+  "verdict": "drop"
+}

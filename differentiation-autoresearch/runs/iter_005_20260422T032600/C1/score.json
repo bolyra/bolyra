@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "rfc7662_advocate confirms AS-blind presentation survives (Attack 1) and sessionNonce unlinkability is strictly stronger than PPIDs for the collusion model (Attack 2). However, spiffe_engineer Attack 1 shows SD-JWT + JWT-SVID over SPIFFE Workload API achieves AS-blind selective disclosure without ZK, and the construction never explicitly rules it out. The surviving differentiator \u2014 proving a boolean predicate over hidden bitmask bits without revealing which are set \u2014 is implicit but not formalized. Baseline can approximate with SD-JWT for simple disclosure; the predicate-over-hidden-claims gap is real but unstated."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is partially stated: semi-trusted AS, operator-as-adversary (confirmed by rfc7662_advocate Attack 4 survival). Named primitives include Poseidon2/3, Groth16 knowledge soundness, and A7 (SRS 1-of-N honest). However, the cryptographer explicitly notes 'No simulator definition, no game, no reduction.' No multi-RS collusion game is defined (cryptographer Attack 1), no enrollment game exists (cryptographer Attack 4), delegation linkability has no formal bound (cryptographer Attack 3), and the revocation liveness property has no proof (cryptographer Attack 2). Threat model present, assumptions named, but reduction sketch entirely absent."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives: Poseidon2/Poseidon3 for commitments and nullifiers, Groth16 for human circuit, PLONK for agent circuit, Merkle tree membership proofs. However, no constraint count, no proving time target, and no circuit cost estimate is stated anywhere. The 2^64 bitmask scenario is shown by spiffe_engineer Attack 2 to be infeasible in Circom ('8 exabytes of witness material'). No realistic bitmask width is bounded. Maps to primitives but cost unknown."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks remain unanswered. Cryptographer Attack 2: nullifierSecret custody contradiction \u2014 revocation requires operator to know the secret the construction says operator never sees, with no resolution protocol. Cryptographer Attack 4: enrollment bitmask inflation \u2014 no cryptographic binding of bitmask to authoritative permission registry, only procedural controls. rfc7662_advocate Attack 3: adversarial AS can corrupt enrollment bitmask, construction equivalent to baseline at enrollment time. spiffe_engineer Attack 1: SD-JWT baseline not ruled out. All five personas surfaced at least one attack marked 'No \u2014 construction must address.' The nullifierSecret custody contradiction (cryptographer Attack 2) is an internal logical inconsistency, not a gap to patch."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Credit unions are named as stakeholders with NCUA regulatory context (Part 748, GLBA, FFIEC CAT). However, cu_ciso Attacks 1-4 show the construction fails to map to actual regulatory artifacts: no SOC 2 control mapping, no GLBA-compliant audit export format, no FIPS 140-2 key custody specification, no vendor management artifact for the MPC ceremony. The scenario is named and has regulatory grounding but is hypothetical in practice \u2014 no specific credit union deployment is identified, and the regulatory compliance path is unspecified."
+    }
+  },
+  "gaps": [
+    "Formalize the predicate class (boolean functions over hidden bitmask bits) that SD-JWT + JWT-SVID cannot express, and explicitly rule out that baseline composition",
+    "Resolve the nullifierSecret custody contradiction: define a revocation key custody protocol (threshold custody, commitment-based revelation, or separate revocation credential) that preserves agent-only knowledge while enabling operator-initiated revocation",
+    "Add a formal security game for enrollment bitmask integrity \u2014 specify which party is trusted to set bitmask values and provide a hardness reduction preventing inflation by a compromised operator",
+    "Define the multi-RS collusion game: state whether colluding RSes are in-model and add a composition theorem or per-RS blinding mechanism to prevent cross-RS bitmask reconstruction",
+    "Bound realistic bitmask width (e.g., 2^16 or 2^20) with concrete Circom constraint counts and proving time benchmarks \u2014 drop the 2^64 scenario",
+    "Either exclude delegation sessions from the unlinkability claim or replace the deterministic commitment with a re-randomizable mechanism",
+    "Specify revocation latency SLA with concrete numbers, RPC dependency model, and behavior under chain congestion",
+    "Add a SPIFFE/WIMSE positioning section \u2014 either frame as a SPIRE attestor plugin or explicitly name the gap in WIMSE that forecloses integration",
+    "Provide SOC 2 CC7.2 control mapping, GLBA-compliant human-readable audit export format, and NCUA examiner replay tooling specification",
+    "Specify nullifierSecret key custody model (browser/HSM/cloud KMS), FIPS 140-2 level, and key recovery ceremony for member device loss"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

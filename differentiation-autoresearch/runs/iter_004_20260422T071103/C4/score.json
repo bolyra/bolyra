@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction claims cryptographic issuer-hiding with constant-size proofs, which BBS+ cannot match on proof size (O(n) group elements) and RFC 7662 cannot match without AS-as-TTP. However, rfc7662_advocate Attack 1 shows the NCUA ECIES escrow is structurally equivalent to the AS TTP \u2014 trust is relocated, not eliminated. The construction never argues why the escrow has strictly smaller disclosure surface than a filtered-introspection AS. Additionally, the 'constant-size + arbitrary schema' claim is unsubstantiated (auth0_pm Attack 2, cryptographer Attack 3): no universal circuit mechanism or predicate-depth bound is specified, so the key differentiator over BBS+ is aspirational. Baseline can approximate with RFC 7662 claim-filtering + PPID + DPoP for most scenarios."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists: verifier as issuer-hiding adversary. Named assumptions: Groth16 knowledge soundness, Poseidon collision resistance, ECIES IND-CCA2. Two formal games defined (dIND-ISS \u00a73.2 with distributional adversary, MUNL \u00a73.3 with epoch-pinning). However, critical adversarial oracles are missing from both games: (1) dIND-ISS does not model corrupt-escrow oracle \u2014 cryptographer Attack 1 shows escrow+verifier collusion wins with advantage 1; (2) MUNL does not model corrupt AS with scope_id knowledge \u2014 cryptographer Attack 4 shows nullifier precomputation deanonymizes within-epoch; (3) neither game models registry timing \u2014 cryptographer Attack 2 shows revocation fingerprinting narrows anonymity sets. Reduction sketch is absent. Games are defined but incomplete."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives (Poseidon hash, Groth16 circuit, BabyJubjub EdDSA, nullifier scheme) and Section 6 provides wall-clock benchmarks on 6 platforms including constraint counts. However, the core claim \u2014 'constant-size predicate circuit that handles arbitrary Boolean expressions over claim schemas' \u2014 has no specified mechanism: no universal circuit depth parameter D, no SNARK-friendly IR compiler, no folding protocol (auth0_pm Attack 2, cryptographer Attack 3). Benchmarks appear to cover only the single-attribute demo case (chartered_by_NCUA == true), not worst-case predicate complexity. Circuit cost for the general case is unknown."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with 5 personas found multiple attacks the construction cannot answer. Most critically: cryptographer Attack 1 (ECIES escrow collusion breaks dIND-ISS with advantage 1 \u2014 the escrow ciphertext in the proof transcript lets a colluding verifier+escrow trivially recover issuer identity, defeating the construction's central security claim). Cryptographer Attack 4 (corrupt AS precomputes nullifier table for all enrolled agents within an epoch, deanonymizing any proof \u2014 360 hash evaluations). Cryptographer Attack 3 (arbitrary-schema claim is an impossibility without specified universal circuit). cu_ciso found 4 out-of-threat-model attacks on escrow key custody, MPC ceremony vetting, member key recovery, and revocation SLA. The escrow collusion attack is fatal: the construction mandates a mechanism that trivially defeats its own security game."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Three scenarios named with regulatory citations (31 U.S.C. \u00a7 5318(h), GLBA \u00a7 314.4(a), NCUA Part 748). However, spiffe_engineer Attack 4 demonstrates that for scenarios 1 (cross-CU NCUA) and 2 (cross-firm FINRA), SPIFFE federation suffices and issuer-hiding is nice-to-have, not load-bearing. Only scenario 3 (cross-country KYB with jurisdiction hiding) strictly requires issuer-hiding, but it lacks a named stakeholder or specific regulatory mandate \u2014 it is described generically as 'cross-country KYB proof where jurisdiction must stay hidden' without identifying a concrete deployment, institution, or jurisdiction-specific regulation. No scenario names a specific credit union, regulator office, or procurement engagement where this property is load-bearing."
+    }
+  },
+  "gaps": [
+    "FATAL: dIND-ISS game must include a corrupt-escrow oracle \u2014 current design lets verifier+escrow collude to recover issuer with advantage 1. Requires redesign: either designated-verifier proof, oblivious escrow (e.g., threshold ECIES where escrow requires k-of-n to decrypt), or escrow ciphertext routed through a separate channel not observable by verifier.",
+    "MUNL game must model corrupt AS as adversarial oracle with scope_id knowledge. Nullifier derivation must include per-user blinding factor not known to AS to prevent within-epoch precomputation attack.",
+    "Specify the universal circuit mechanism for arbitrary-schema predicates: state maximum predicate depth D, the circuit structure (universal Boolean evaluator vs. folding/recursion), and benchmark worst-case predicate complexity \u2014 not just single-attribute demo.",
+    "Argue why ECIES escrow has strictly smaller disclosure/subpoena surface than an always-online AS with claim-filtering policy. Without this, baseline dominance claim is a trust-topology rearrangement.",
+    "Extend MUNL/dIND-ISS to model registry timing side channel: adversary who observes on-chain batch timestamps can narrow issuer anonymity set. Either prove epoch-pinning still holds or move to private registry (Merkle commitment with ZK membership proof).",
+    "Add proof-size comparison column to Section 6 benchmarks: proof bytes vs. BBS+/SD-JWT for equivalent predicate complexity to substantiate constant-size claim.",
+    "Name a specific credit union, regulator, or procurement engagement for the cross-country KYB scenario where jurisdiction-hiding is a regulatory requirement, not just desirable.",
+    "Address escrow key custody: who holds the ECIES private key, under what contractual/regulatory framework, with what audit trail \u2014 cu_ciso's examiner will require this for GLBA \u00a7 314.4(b) compliance."
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

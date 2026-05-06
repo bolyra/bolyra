@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction provides cryptographic unlinkability against an adversarial AS (IND-UNL-AS game), which no baseline achieves. RFC 8707 + offline JWT eliminates AS from the hot path (rfc7662_advocate Attack 2 concedes this), and WIMSE provides policy-based unlinkability (spiffe_engineer Attack 3 concedes), but neither offers a game-based cryptographic guarantee against an adversarial issuer. The core capability \u2014 formal, reducible unlinkability where the AS is computationally prevented from correlating \u2014 is explicitly ruled out of BBS+ (honest issuer assumption) and absent from OIDC/WIMSE. \u00a78 overreaches on the 'AS issues every token' characterization but the named differentiator holds."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Explicit threat model (\u00a73) with enumerated adversary capabilities (enrollment omniscience, RS collusion, nonce manipulation, timing observation, adaptive queries). Four named assumptions (Poseidon-PRF, PLONK-KS, DL on Baby Jubjub, Poseidon collision resistance). IND-UNL-AS game formally defined with setup/phases/challenge/advantage. Reduction sketch via 5 hybrids from IND-UNL-AS to Poseidon-PRF. The cryptographer correctly identifies a missing Adv^ZK_PLONK term and the reduction doesn't model agentMerkleRoot correlation, but the rubric requires 'stated reduction sketch even if informal' \u2014 the sketch exists with named assumptions and hybrid structure."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "\u00a75 maps every construction element to an existing Bolyra primitive (Poseidon2 nullifier, Poseidon5 commitment, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), PLONK agent circuit, Num2Bits range checks). \u00a76 provides per-gadget constraint breakdown totaling ~12,860 constraints \u2014 comparable to existing AgentPolicy (~12,000). Proving time target <3s is within the 5s PLONK agent budget. Verification gas ~300K, proof size ~768 bytes. No new primitives required."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: (1) rfc7662_advocate Attack 1: agentMerkleRoot is a public output enabling cross-proof fingerprinting \u2014 explicitly in-threat-model, no mitigation exists; (2) cryptographer Attack 2: scopeId collision under AS-controlled scope assignment trivially breaks unlinkability \u2014 adversary capability explicitly granted in \u00a73, circuit has no defense; (3) rfc7662_advocate Attack 3: static scopeNullifier enables cross-epoch behavioral intersection attacks \u2014 adversary has 'adaptive queries' and 'log retention' per \u00a73; (4) spiffe_engineer Attack 4: handshake channel leaks session-correlated timing not modeled in IND-UNL-AS game. These are not mitigated attacks that weaken claims \u2014 they are unaddressed attacks within stated adversary capabilities."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names SECU (State Employees' Credit Union) as AS operator with a concrete deployment flow: member agent accesses Auto Dealer, Healthcare, Grocery without SECU reconstructing the merchant graph. The property is load-bearing: GLBA member privacy is a regulatory requirement, and the cu_ciso persona confirms NCUA examiners assess access control for member data. The scenario is not hypothetical \u2014 it names specific stakeholders and a regulatory framework where AS-blind authorization is legally required, not nice-to-have."
+    }
+  },
+  "gaps": [
+    "agentMerkleRoot is a public output shared across all proofs from the same Merkle snapshot \u2014 colluding RSes trivially link proofs by matching root values; must either hide the root (private input with set commitment) or prove IND-UNL-AS holds even when adversary observes it",
+    "scopeId uniqueness is not enforced in the circuit \u2014 colluding AS+RS can assign identical scopeIds to collapse nullifier separation; need on-chain scope registry with non-equivocation proof or circuit constraint binding scopeId to a verified RS certificate",
+    "epochSalt committer/governance is unspecified \u2014 adversarial AS can submit per-agent epoch salts since the circuit only checks consistency, not global uniqueness; must specify AS-independent salt source (RANDAO, drand, or permissionless commit-reveal)",
+    "Reduction bound missing Adv^ZK_PLONK term \u2014 knowledge soundness is about the prover, not what the verifier learns; need explicit ZK (ideally simulation-extractability) term since adversary controls RS/verifier",
+    "Static scopeNullifier is a persistent within-scope pseudonym enabling longitudinal behavioral fingerprinting across epochs \u2014 IND-UNL-AS game models single-shot interaction, not T-epoch sequential accumulation; need either per-epoch nullifier rerandomization or extended game definition",
+    "IND-UNL-AS game excludes handshake transcript \u2014 on-chain handshake timestamp T_h combined with Merkle root windowing lets AS narrow anonymity set; game must include handshake as adversarial input"
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

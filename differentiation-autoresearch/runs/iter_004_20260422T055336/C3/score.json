@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction argues circuit-level enforcement of monotonic narrowing survives AS compromise while RFC 8693 collapses. However, rfc7662_advocate Attack 1 shows the trust root is circular: seedScopeCommitment still requires a trusted party isomorphic to the AS. auth0_pm Attack 3 shows hardware attestation (TPM/TEE + draft-ietf-oauth-attestation-based-client-auth) mitigates the malicious AS case without ZK. The stateless-third-party intermediate case (LLM APIs that can't run SPIRE) is a genuine gap baselines can't fill, but the construction never isolates this as the distinguishing scenario. Preferable but not provably out of reach for baselines."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model names A_AS explicitly. Named assumptions: PLONK knowledge soundness (AGM+ROM, GWC19), Poseidon collision resistance. Games 1-4 provide reduction sketches. However, cryptographer Attack 1 is fatal to the reduction: the monotonic narrowing predicate lacks a formal lattice definition \u2014 no ScopeLattice, no Merkle/accumulator witness for subset check \u2014 so Game 1's reduction to PLONK knowledge soundness proves the prover knows 'something', not a narrowing chain. Additionally, the HVZK restriction (cryptographer Attack 2) means the Poseidon-PRF unlinkability argument for malicious auditors has no game definition, no simulator, no advantage bound. Reduction sketch exists but reduces to an underspecified predicate."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction uses Poseidon2, PLONK agent circuit, BabyJubjub EdDSA, nullifier scheme \u2014 all existing Bolyra primitives. C3 and C12 constraints are referenced. However, no explicit constraint count or proving time target is stated in the construction. auth0_pm Attack 1 notes ~15s per proof makes synchronous per-hop proving unusable for streaming AI pipelines, and the construction specifies no batching or scheduling strategy. Maps to primitives but cost is unknown and potentially prohibitive for the flagship scenario."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer. Cryptographer Attack 1: monotonic narrowing is vacuous without a formal scope lattice \u2014 the core claim is unverifiable. Cryptographer Attack 2: HVZK is insufficient for the journalist/whistleblower scenario where the auditor is adversarial, and the PRF-unlinkability argument has no formal game. cu_ciso Attack 4: no break-glass mechanism for incident response \u2014 ZK privacy guarantee directly conflicts with NCUA 12 CFR \u00a7748.1(b) root cause analysis. rfc7662_advocate Attack 4: workloadNonce SLH anchor provides existence but not ordering proofs within the MMD window. These are fundamental, unanswered attacks."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios named: multi-tool AI pipeline and journalist/source chain. However, auth0_pm Attack 4 shows these address incompatible buyers (enterprise SLA vs. no-vendor-relationship). cu_ciso Attack 2 shows the AI pipeline scenario conflicts with GLBA \u00a7314.4(f) third-party oversight requirements \u2014 hiding intermediate nodes violates vendor due diligence obligations for member data. No named stakeholder, no specific regulatory requirement where the property is load-bearing. Scenarios are concrete but hypothetical and internally contradictory."
+    }
+  },
+  "gaps": [
+    "Define a formal ScopeLattice with a computable leq predicate and Merkle/accumulator witness for the subset check \u2014 without this, the monotonic narrowing claim is vacuous and the Game 1 reduction proves the wrong predicate",
+    "Either upgrade to simulation-extractable PLONK for the journalist/whistleblower scenario or drop that scenario entirely \u2014 HVZK provides zero protection against adversarial auditors and the Poseidon-PRF argument lacks a formal game definition",
+    "Specify \u03a3blinding derivation explicitly: who samples it, how freshness is enforced in-circuit, and prove a malicious AS knowing seedScopeCommitment cannot link blinded nullifiers across sessions",
+    "Address tree topology leakage: chainNullifier = Poseidon2(seed, final) reveals branching structure to an auditor observing multiple nullifiers sharing the same seedScopeCommitment",
+    "Add a break-glass mechanism (threshold decryption or escrow) for post-incident reconstruction of intermediate scopes \u2014 current design makes ZK privacy and NCUA incident reporting mutually exclusive",
+    "Specify proof scheduling strategy (synchronous, batched, or forensic-only) and state whether audit guarantees are real-time or post-hoc \u2014 15s/hop is incompatible with streaming AI pipelines",
+    "Add a non-equivocation argument for the MMD window: either require workloadTimestamp to be a log sequence number from an already-included entry, or chain workloadNonces so ordering is enforced in-circuit",
+    "Pick one wedge scenario (AI pipeline OR journalist) and stage the other as a future extension with a different deployment topology \u2014 incompatible buyer profiles prevent either from converting",
+    "Add a data classification gate: ZK-hidden intermediates are only permissible for non-GLBA-covered pipelines, or specify how GLBA \u00a7314.4(f) vendor oversight is satisfied despite hidden nodes",
+    "Address hardware attestation as a competing baseline mitigation: show a concrete scenario where TPM+short-lived-tokens fails but chainNullifier survives"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

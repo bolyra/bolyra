@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies genuine advantages over the baseline (atomic single-proof binding, provider anonymity as private input, in-circuit bitwise predicates). However, rfc7662_advocate Attack 1 shows JWT introspection response removes the AS from the hot path, falsifying Section 8(c)'s core premise. Attack 2 constructs an explicit RFC 8693 + DPoP baseline achieving non-malleability and key rotation, leaving only selective disclosure as the residual gap. spiffe_engineer Attack 1 demonstrates a SPIRE attestor plugin calling Anthropic's attestation endpoint achieves the same operator-bound provider attestation in ~300 lines of Go. Attack 2 shows WIMSE + DPoP closes (a)+(b), and the construction's own SECU scenario does not require property (c) \u2014 the examiner explicitly learns model class and operator. The baseline can approximate with extra configuration; the construction is preferable but does not do something the baseline provably cannot."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model (MODEL-BIND-FORGE v2 with adversary capabilities, game definition, winning condition), named assumptions (A1: Poseidon collision resistance, A2: DL on Baby Jubjub, A3: PLONK knowledge soundness in AGM+ROM), and a detailed 5-case reduction sketch. However, cryptographer Attack 1 identifies that no simulator is given \u2014 the ZK property itself is never formally defined (HVZK? malicious-verifier ZK? simulation-extractability?), and deterministic public outputs (scopeCommitment, modelOperatorFingerprint) enable full cross-proof linkability, contradicting privacy claims. Attack 2 identifies that A3 assumes honest SRS generation, but the SRS ceremony is unspecified \u2014 no participant count, adversarial threshold, or transcript verification \u2014 meaning the trust assumption is incomplete. Attack 3 shows the nullifier protocol is underspecified (who generates sessionNonce, is the registry global or per-verifier) and PLONK lacks simulation-extractability needed for the nullifier application. Threat model stated but critical assumptions missing (SRS trust boundary) and reduction incomplete (no ZK game, no SE analysis)."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps comprehensively to existing Bolyra primitives: Poseidon2/3/5 for commitments, EdDSAPoseidonVerifier for both provider and operator signatures, BinaryMerkleRoot(20) for credentials and BinaryMerkleRoot(8) for provider keys, PLONK with universal setup, Baby Jubjub curve, nullifier scheme. Circuit cost is itemized per gadget at ~23,550 constraints total with a <5s proving time target, compared favorably to Semaphore's 30K-constraint circuits at ~3s. The depth-8 provider key tree is a new application of an existing primitive. All elements are within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "All five personas attacked: auth0_pm (4 attacks), cryptographer (4 attacks), cu_ciso (4 attacks), rfc7662_advocate (4 attacks), spiffe_engineer (4 attacks). The core authorization binding cryptographic argument survives \u2014 no persona broke the MODEL-BIND-FORGE reduction on its own terms. However, multiple attacks are marked 'in-threat-model: No' and surface real issues the construction cannot answer: (1) scenarios 2-4 overclaim relative to authorization-only security property (auth0_pm Attack 1, cryptographer Attack 4); (2) SRS ceremony subversion collapses the reduction (cryptographer Attack 2); (3) nullifier replay due to unspecified nonce protocol (cryptographer Attack 3); (4) 30-entry root buffer vs 7-year NCUA retention creates unverifiable archival gap (cu_ciso Attack 4); (5) Section 8(c) baseline comparison is factually incorrect about JWT introspection (rfc7662_advocate Attack 1). These weaken the claim substantially but the core construction mitigates within its narrowed scope."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "SECU (State Employees' Credit Union, NC, 2.7M members) is named as a concrete deployment with NCUA regulatory examination as the stakeholder requirement. The enrollment flow is detailed across 6 steps with specific operational procedures. Authorization binding IS load-bearing for the billing/contractual compliance use case (tiered pricing verification, model licensing enforcement) even though the construction overclaims by including scenarios requiring runtime binding (FDA/EU AI Act). The SECU scenario for 'was this operator authorized for this model tier' is a genuine regulatory need, not hypothetical."
+    }
+  },
+  "gaps": [
+    "Retract or narrow Section 8(c) \u2014 JWT introspection response (draft-ietf-oauth-jwt-introspection-response) removes AS from verification path; rewrite baseline comparison to engage cached JWT + DPoP + body_hash explicitly and identify the precise sub-property each fails",
+    "Restrict scenario list to authorization-binding-only use cases (billing disputes, contractual compliance); remove or explicitly caveat scenarios 2 (liability dispute), 3 (tiered pricing where Anthropic is the cheating party), and 4 (FDA/EU AI Act) which require runtime execution binding the construction disclaims",
+    "Add a ZK game definition with simulator \u2014 specify whether the achieved property is HVZK, malicious-verifier ZK, or simulation-extractability; address cross-proof linkability from deterministic scopeCommitment and modelOperatorFingerprint (either rerandomize per proof with blinding factors or formally scope the weaker privacy property)",
+    "Specify the SRS ceremony as an explicit trust assumption \u2014 participant count, adversarial threshold, transcript verification \u2014 or migrate to a transparent setup and update A3 accordingly",
+    "Specify the nullifier nonce protocol: verifier-chosen sessionNonce committed before proof generation, global vs per-verifier nullifier registry, and justify why standard PLONK knowledge soundness suffices without simulation-extractability for the nullifier application",
+    "Define modelHash derivation concretely \u2014 is it a hash of weights, a version string, or a deployment identifier? Specify how Anthropic verifies the value prior to signing the deployment authorization",
+    "Address provider onboarding as a live dependency \u2014 the security property is conditional on Anthropic adopting BJJ key ceremony and per-operator attestation issuance; describe the adoption pathway or fallback",
+    "Specify proving topology for SECU deployment \u2014 inline vs async vs audit-sample, who runs the prover, privacy implications of prover delegation if externalized",
+    "Replace 30-entry root history buffer with an archival mechanism supporting 7-year NCUA retention \u2014 either unbounded on-chain root history, append-only transparency log, or third-party notarized archive with independent verifiability",
+    "Construct explicit head-to-head comparison with RFC 8693 + DPoP + JWT introspection showing precisely which sub-property (atomicity, provider anonymity, in-circuit predicates) the baseline fails, rather than generalized AS-correlation argument"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

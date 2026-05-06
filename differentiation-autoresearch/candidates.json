@@ -1,0 +1,94 @@
+{
+  "candidates": [
+    {
+      "id": "C1",
+      "title": "Selective scope proof",
+      "current_strength": 4,
+      "target_strength": 10,
+      "claim": "Agent proves it satisfies a required permission predicate without revealing the full permission set to the resource server, in a way that no configuration of RFC 7662 (plus jwt-introspection-response, RFC 8693, RFC 8707, DPoP) can match.",
+      "gap_to_close": "RFC 7662 allows AS-side policy to return minimal scope per RS; JWT introspection response lets RS verify offline. Must find a property these fundamentally cannot express — candidates: runtime-adaptive predicate over permissions (not fixed at issuance), AS-blind presentation (no AS roundtrip, agent chooses what to disclose at the moment of use), constant-size proof regardless of bitmask width, adversarial-AS model where AS cannot lie about scope membership.",
+      "scenarios": ["regulated agent with 2^64 permission space where AS-side policy tables do not scale", "AS is semi-trusted and RS needs cryptographic assurance independent of AS cooperation"]
+    },
+    {
+      "id": "C2",
+      "title": "Cross-scope unlinkability",
+      "current_strength": 9,
+      "target_strength": 10,
+      "claim": "Same agent accessing different RS instances produces cryptographically unlinkable authorizations even under adversarial AS that tries to correlate per-agent traffic graphs.",
+      "gap_to_close": "Needs formal security definition (IND-UNL-AS game), prototype demonstrating nullifier separation per scope, empirical test showing colluding AS+RS cannot de-anonymize, treatment of side channels (timing, nonce freshness).",
+      "scenarios": ["cross-credit-union member agent where CU-as-AS must not see member merchant graph", "healthcare agent delegation across providers without issuer learning referral network"]
+    },
+    {
+      "id": "C3",
+      "title": "Delegation audit without exposure",
+      "current_strength": 7,
+      "target_strength": 10,
+      "claim": "An auditor verifies that a delegation chain narrowed monotonically without reconstructing intermediate scopes or participants, in a form usable beyond narrow regulatory niches.",
+      "gap_to_close": "Currently too narrow. Must broaden: chain-of-custody proofs for AI agent pipelines (where each hop is a tool call, not an org), whistleblower-safe agent delegation, cross-org agent handoff. Need formal semantics of narrowing proof and in-circuit enforcement.",
+      "scenarios": ["multi-tool AI pipeline where auditor wants proof that no hop exceeded its mandate without learning the mandates", "journalist/source agent chain where intermediate nodes must stay hidden from auditor"]
+    },
+    {
+      "id": "C4",
+      "title": "Issuer-blind attribute predicates",
+      "current_strength": 9,
+      "target_strength": 10,
+      "claim": "Agent proves a predicate over credential attributes (e.g. chartered_by_NCUA == true) without the verifier learning which issuer signed, with constant-size proof and arbitrary-schema support.",
+      "gap_to_close": "Needs formal proof of issuer-hiding (IND-ISS game), constant-size predicate circuit that handles arbitrary Boolean expressions over claim schemas, benchmark showing BBS+/W3C VC cannot match without comparable circuit.",
+      "scenarios": ["cross-CU NCUA membership proof", "cross-firm regulated-professional proof (e.g. FINRA-licensed agent)", "cross-country KYB proof where jurisdiction must stay hidden"]
+    },
+    {
+      "id": "C5",
+      "title": "Bolyra as MCP auth, generally",
+      "current_strength": 0,
+      "target_strength": 10,
+      "claim": "Bolyra strictly dominates vanilla OAuth 2.1 + MCP baseline (as shipped by Auth0, WorkOS, Stytch, Cloudflare Access) in the general case, not just regulated niches.",
+      "gap_to_close": "Round 2 ruled this out. Must find a primitive that is both (a) outside vanilla OAuth's expressive envelope AND (b) needed by default in agent-economy MCP, not only in regulated scenarios.",
+      "hypotheses": [
+        {
+          "id": "H1",
+          "label": "Mutual ZK handshake",
+          "claim": "Bolyra atomically proves human (Groth16) + agent (PLONK) identity bound to a session nonce. Vanilla MCP passes bearer token; no mutual identity proof; no human-in-the-loop binding."
+        },
+        {
+          "id": "H2",
+          "label": "Cryptographic binding of model instance to tool call",
+          "claim": "Bolyra binds {model_hash, operator_pk, permission_bitmask} to a specific RS invocation. Vanilla OAuth binds only client_id; runtime model identity is not authenticated."
+        },
+        {
+          "id": "H3",
+          "label": "Zero-config identity portability across MCP servers",
+          "claim": "One Bolyra credential authenticates at every compliant RS without per-RS client registration. Vanilla OAuth requires per-RS registration or RFC 7591 dynamic registration roundtrip."
+        },
+        {
+          "id": "H4",
+          "label": "Post-compromise resilience via forward-secure nullifiers",
+          "claim": "Agent secret exfiltration does not retroactively deanonymize prior sessions. Vanilla bearer tokens have no forward secrecy."
+        },
+        {
+          "id": "H5",
+          "label": "Agent-economy-native delegation",
+          "claim": "Narrow-scope delegation is a primitive (single proof per hop). Vanilla OAuth uses RFC 8693 token exchange requiring full AS roundtrip per hop."
+        }
+      ],
+      "scenarios": ["generic Claude agent talking to third-party MCP server via Anthropic connector", "cross-vendor agent handoff (Claude → ChatGPT agent accessing same tool)"]
+    },
+    {
+      "id": "C7",
+      "title": "Cryptographic model-instance binding",
+      "current_strength": 0,
+      "target_strength": 10,
+      "claim": "Bolyra cryptographically binds a specific tool call to a named model instance and operator — e.g. proves 'this call was made by Claude Sonnet 4.6 operated by ACME Corp under permission bitmask X' — without revealing the underlying API key, session token, or runtime secret to the verifier. No vanilla OAuth/MCP auth can bind runtime model identity to the message, because OAuth client_id identifies only the registered application, not which model/operator actually made the call.",
+      "gap_to_close": "Must prove: (a) binding is non-malleable — attacker with an Opus key cannot forge a proof saying 'Sonnet made this call'; (b) binding survives key rotation — operator can rotate API keys without breaking historical attestations; (c) verifier learns ONLY {model_hash, operator_pk, permission_bitmask, message_hash} and nothing else. Must prove RFC 8693 token exchange and DPoP cannot achieve (a)+(c) simultaneously: either AS sees every hop (violates (c)) or binding is not cryptographic (violates (a)).",
+      "scenarios": ["Enterprise CISO needs to prove to auditor 'only approved models (Sonnet, Opus) touched PII files, never unapproved deployments' without revealing which call was which model", "AI-agent liability dispute: bank claims agent drained account; Bolyra proves which specific model+operator made the transaction without revealing the operator's full session history", "Tiered pricing verification: Anthropic wants to prove to a tenant that their Opus usage was actually Opus (not re-billed Sonnet) without exposing the tenant's full audit log", "Model provenance for regulated AI: FDA/EU AI Act demands provable chain from deployed model weights to each inference output; OAuth cannot attest model identity"]
+    },
+    {
+      "id": "C9",
+      "title": "Forward-secure agent delegation",
+      "current_strength": 0,
+      "target_strength": 10,
+      "claim": "If an agent's signing key is compromised at time T, sessions and delegations executed before T remain cryptographically unlinkable and non-replayable. No bearer-token or DPoP-bound OAuth construction achieves this — compromise of the key retroactively reveals the agent's prior activity graph and allows replay.",
+      "gap_to_close": "Must define: (a) an IND-FS-AGENT game where adversary receives the key at time T, sees all prior transcripts, and must still fail to link or replay pre-T sessions with non-negligible advantage; (b) a concrete forward-secure nullifier construction using epoch-based key derivation that is efficient in PLONK (<10k constraints per epoch rotation); (c) proof that RFC 9449 DPoP cannot match — DPoP binds access tokens to keys but compromise of the key reveals every DPoP proof the agent ever generated, including the auth header chain.",
+      "scenarios": ["Long-running 30-day autonomous Claude agent whose key leaks on day 31 — prior 30 days of tool calls must stay private and non-replayable", "Security researcher finds leaked agent key in a public repo; without forward secrecy they reconstruct full activity history and replay sessions; Bolyra prevents this", "Model rotation for compliance: ACME rotates all agent keys quarterly; prior-quarter sessions must stay pseudonymous under new keys (key rotation ≠ forward secrecy; both needed)", "Whistleblower agent: source uses agent to relay leaks; if agent is seized, past communications must stay unlinkable to source"]
+    }
+  ]
+}

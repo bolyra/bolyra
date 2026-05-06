@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real privacy deltas (provider anonymity, selective bitmask disclosure, no AS in verification path). However, multiple Tier 3 personas demonstrated the baseline can approximate the core claim. rfc7662_advocate Attack 1 shows signed JWT introspection response + DPoP achieves offline-verifiable, provider-attested model-identity binding with operator key binding \u2014 structurally isomorphic to the Bolyra enrollment path. spiffe_engineer Attack 1 shows federated SPIFFE (Anthropic-operated trust domain) closes the root-of-trust gap Section 8(a) targets. The surviving delta is ZK privacy (verifier sees commitments, not raw credentials), but no scenario demonstrates this privacy as load-bearing: the NCUA/FINRA auditors are entitled to see the full claim set (rfc7662_advocate Attack 1), and modelOperatorFingerprint is more linkable than OIDC PPIDs (rfc7662_advocate Attack 2). The construction is preferable but the baseline approximates with DPoP + signed JWT + federation."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Explicit threat model with two formal games (MODEL-BIND-FORGE v2, PROVIDER-FORGE), named adversary capabilities (controls operator keys, has public attestation oracle, no provider key), three named assumptions (A1: Poseidon collision resistance, A2: DL on Baby Jubjub, A3: PLONK knowledge soundness in AGM+ROM), and a detailed 5-case reduction sketch. The reduction covers fingerprint collision, valid modelHash with own/victim key, credential commitment collision, and cross-operator attestation reuse. Gaps exist (SRS trust unaddressed per cryptographer Attack 1, no PERMISSION-FORGE game per cryptographer Attack 3, no ZK simulator per cryptographer Attack 4), but the rubric requires 'stated reduction sketch even if informal' \u2014 the construction provides a thorough sketch with named assumptions and explicit cases."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 provides a complete primitive mapping table: Poseidon2/3/5 for commitments, EdDSAPoseidonVerifier for both signatures, BinaryMerkleRoot(20) and BinaryMerkleRoot(8) for Merkle membership, PLONK with universal setup, Baby Jubjub curve \u2014 all existing Bolyra primitives. Section 6 provides a per-gadget constraint breakdown totaling ~23,550 constraints with a <5s proving target, benchmarked against Semaphore's 30K-constraint circuits at ~3s. On-chain verification at ~300K gas. The only new elements (Poseidon3 for deployment authorization, depth-8 provider key tree) use existing hash and Merkle primitives. Well within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "All 5 personas attacked the construction and surfaced real weaknesses that weaken claims without fully breaking the core model-binding property. Critical unresolved attacks: (1) cryptographer Attack 3 \u2014 permission bitmask is entirely self-asserted by the operator; provider attestation covers only (model, operator), not permissions, so an operator can self-grant elevated permissions with no PERMISSION-FORGE game defined; (2) cryptographer Attack 2 \u2014 nullifier enumeration via public Merkle tree + public sessionNonce collapses credential-level privacy; (3) auth0_pm/cu_ciso/rfc7662_advocate all independently identified the authorization-execution gap making scenarios oversell what the proof provides; (4) cryptographer Attack 1 \u2014 SRS as unaddressed third root of trust. The core model-hash forgery resistance holds, but permission claims, privacy claims, and scenario narratives are materially weakened."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios named \u2014 SECU with NCUA examination and FINRA broker-dealer with SEC Rule 15c3-5 / FINRA 3110 \u2014 with specific stakeholders and regulatory citations. However, cu_ciso Attack 1 and auth0_pm Attack 3 both identify a fatal mismatch: the scenarios promise the auditor 'only approved models touched PII' while the construction only proves authorization binding, not execution. GLBA Safeguards Rule \u00a7314.4(c)(2) requires actual controls over data processing. Additionally, cu_ciso Attacks 2-4 show the permissionless Merkle tree, unauditable Anthropic HSM, and shallow root buffer all fail specific NCUA/FFIEC examination requirements. The scenarios are concrete but the proof is not fully load-bearing for the stated regulatory requirements as written."
+    }
+  },
+  "gaps": [
+    "Add PERMISSION-FORGE game: provider attestation must bind permissionBitmask (expand deploymentAuthorization to Poseidon4(modelHash, opPkAx, opPkAy, permBitmask)) or explicitly scope claim to model-class binding only and remove permission attestation from regulatory value proposition",
+    "Fix nullifier enumeration: credentialCommitments are publicly enumerable in the permissionless Merkle tree and sessionNonce is public, allowing any observer to compute Poseidon2(cc_i, sessionNonce) for all leaves and identify which credential produced each proof \u2014 either blind the commitment at insertion or tighten the privacy claim",
+    "Close authorization-execution gap in scenarios: rewrite NCUA and FINRA scenarios to honestly describe authorization-only binding and name the complementary execution-layer control (TEE, container attestation) the CU must operate \u2014 current scenarios sell execution assurance the proof cannot provide",
+    "Demonstrate baseline cannot match: address federated SPIFFE (Anthropic-operated trust domain) and DPoP-bound signed JWT introspection response as baselines \u2014 current Section 8 refutes only naive single-trust-domain SPIFFE and online-AS OAuth, not the strongest baseline configurations",
+    "Specify SRS trust model: define who runs the PLONK SRS ceremony, what the adversary controls, and either describe the MPC ceremony or reduce to an assumption that doesn't require honest SRS generation",
+    "Define modelHash semantics: anchor modelHash to a verifiable artifact (transparency log entry, reproducible build hash) or narrow the claim to 'provider-label binding' throughout \u2014 current title 'model-instance binding' overstates what an opaque field element proves",
+    "Specify sessionNonce generation protocol and nullifier registry: who generates nonces, where nullifiers are stored and checked, what the anti-replay guarantee is in terms of bounded time or replay window",
+    "Address modelOperatorFingerprint cross-verifier linkability: the deterministic fingerprint is more linkable than OIDC PPIDs across verifiers \u2014 either add verifier-specific domain separation or concede this privacy gap vs baseline"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

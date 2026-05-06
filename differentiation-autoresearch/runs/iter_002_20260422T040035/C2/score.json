@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction explicitly names the structural impossibility: in OAuth 2.0, every token carries an AS-signed audience claim, so the AS issuance log contains (agent_id, RS, timestamp) tuples enabling trivial cross-scope correlation. BBS+ does not remove the issuer from the authorization path. PPID is AS-reversible. DPoP still produces correlated issuance log entries. ScopeIsolatedAuth moves proof generation entirely to the agent post-enrollment, architecturally excluding the AS from per-scope authorization. The rfc7662_advocate persona confirmed this survives: 'The property DPoP cannot provide: scope-bound nullifier separation at the identity level... independent at the issuer's issuance log.' All five personas failed to show the baseline can match this."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Explicit threat model in \u00a73: adversary controls AS, colludes with k-1 of k RS instances, observes network metadata and all on-chain state. Named assumptions: Poseidon-PRF (formally stated), PLONK knowledge soundness, Poseidon collision resistance, Baby Jubjub DLP, PLONK zero-knowledge. IND-UNL-AS game formally defined with corrected same-agent-vs-different-agent formulation. Reduction sketch provided via 3 hybrids (real \u2192 simulated proof \u2192 random nullifier \u2192 random authTag) with bound Adv \u2264 Adv_ZK + 2\u00b7Adv_PRF + negl(\u03bb). The cryptographer persona identified a real gap (multi-query vs single-query PRF assumption) but this weakens rather than breaks the claim \u2014 the reduction structure is present and the fix is a standard hybrid extension, not a fundamental redesign."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps comprehensively to existing Bolyra primitives: Poseidon2/5, BinaryMerkleRoot(20), PLONK with universal SRS, LessThan(64), bitwise constraints. Detailed constraint breakdown provided: ~28,200 without revocation, ~41,800 with. However, ScopeIsolatedAuth at 28,200 constraints targets <5s proving time based on 5,000-6,000 constraints/second WASM estimate \u2014 this is at the boundary of the PLONK agent target. With the epoch Merkle tree addition (12,000 extra constraints from \u00a74 step 6 fix), the circuit is 1.76x larger than AgentPolicy. The auth0_pm attack correctly identifies that 5s proof latency is a 50x regression vs baseline token issuance. More critically, the RevocationCheck composition at 41,800 constraints exceeds the 5s target and the construction acknowledges this. Circuit cost is stated but stretches the Phase 1 budget rather than clearly fitting within it."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex ran all 5 personas. Several attacks were correctly ruled outside the threat model (auth0_pm's latency, cu_ciso's key custody, operational concerns). The construction survived the core cryptographic challenges: rfc7662_advocate confirmed baseline cannot match, spiffe_engineer confirmed SPIFFE federation cannot close the intra-domain gap. However, multiple IN-threat-model attacks landed: (1) cryptographer Attack 1 \u2014 scope-local revocation is bypassable via epoch rotation, a real protocol flaw with no mitigation; (2) rfc7662_advocate Attack 2 / cryptographer Attack 4 \u2014 on-chain registerEpoch transactions deanonymize via tx.from address, directly undermining the anonymity claim under the stated threat model that includes on-chain observation; (3) spiffe_engineer Attack 3 \u2014 epoch boundary timing linkage at colluding RS is a real T-real correlation the construction does not address. These are substantive attacks within the stated threat model that weaken the claims."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names SECU (State Employees' Credit Union, NC, $56B AUM, 2.8M members) as concrete stakeholder. GLBA Reg P is cited as the load-bearing regulatory requirement: SECU-as-AS must not learn member merchant transaction graphs. NCUA Part 748 / GLBA Safeguards Rule requires auditable authorization trails. The construction maps the full protocol flow to SECU's deployment (enrollment, epoch rotation, per-merchant auth, audit). Healthcare variant (Kaiser Permanente, HIPAA) provides a second concrete scenario. The cu_ciso persona challenged operational readiness but confirmed the regulatory requirements are real and load-bearing, not hypothetical."
+    }
+  },
+  "gaps": [
+    "Scope-local revocation is bypassable via epoch rotation \u2014 scopeNullifier changes across epochs, making RS-A's revocation set obsolete. Must either make nullifiers epoch-stable for revocation purposes or explicitly acknowledge scope-local revocation is advisory only (cryptographer Attack 1)",
+    "On-chain registerEpoch transactions expose tx.from address, trivially linking epoch roots to enrolled agents. Must specify mandatory transaction anonymization (relayer, meta-transaction, stealth addresses) or scope the IND-UNL-AS game to exclude on-chain transaction metadata (cryptographer Attack 4, rfc7662_advocate Attack 2)",
+    "PRF assumption stated as single-query but reduction requires multi-query adaptive PRF security for Poseidon2. Must explicitly state q-query PRF assumption or provide the standard hybrid folding argument (cryptographer Attack 2)",
+    "Epoch boundary timing linkage at colluding RS: nullifier transition at ~30-day intervals is a day-granularity correlation event visible in RS replay-detection logs. Must address in T-real model or redesign scope nullifiers to rotate independently of epoch boundaries (spiffe_engineer Attack 3)",
+    "\u00a78 comparison table conflates 'AS on hot path' with 'AS holds issuance-time audience binding' \u2014 must distinguish these properties precisely (rfc7662_advocate Attack 1)",
+    "\u00a78 is silent on WIMSE \u2014 must explicitly engage draft-ietf-wimse-arch and show token exchange cannot achieve IND-UNL-AS (spiffe_engineer Attack 2)",
+    "Circuit cost at 28,200 constraints is at the PLONK agent budget boundary, not clearly within it. The epoch Merkle tree added 12,000 constraints to fix the epochRoot distinguishability gap. Should confirm this fits Phase 1 budget or propose optimization"
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

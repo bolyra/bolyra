@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The bitmask intersection predicate over a hidden integer (Constraint 6) is genuinely not expressible in BBS+ selective disclosure or SD-JWT claim selection without an external NIZK. However, Section 8 overstates several gaps: Gap 5 ('No AS-blind presentation') is largely matched by JWT introspection response offline verification (rfc7662_advocate Attack 1); Gap 2 ('No adversarial-AS resistance') is approximable via RFC 8693 Token Exchange with a separate policy AS (rfc7662_advocate Attack 3); and the comparison class omits WIMSE+SD-JWT entirely (spiffe_engineer Attack 3). The core predicate property likely holds but the formal separation argument in Section 8 is against BBS+ alone, not the full baseline including WIMSE. Cannot award 2 without a clean separation against the complete baseline class."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model names three adversary classes with explicit games (SSU, SSP, AFR) and four named cryptographic assumptions (A1-A4) with reduction sketches. However, the SSP reduction is provably wrong: scopeCommitment is a deterministic public output that trivially distinguishes credentials across sessions (confirmed by auth0_pm, cryptographer, rfc7662_advocate, spiffe_engineer). The nullifier scheme leaks credential identity to the AS via O(N) precomputation (cryptographer Attack 2). The PLONK setup ceremony is unspecified \u2014 A1 (knowledge soundness under AGM+ROM) is vacuous without an honest-CRS assumption (cryptographer Attack 3). No game covers semantic integrity of cumulative encoding, adaptive multi-query adversaries, AS-tracing, or operator key compromise. Threat model exists but multiple reductions are broken or missing."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps every element to existing Bolyra primitives: Poseidon2/5 hashing, PLONK proving, BabyJubjub EdDSA, BinaryMerkleRoot(20), Num2Bits(64), LessThan(64), nullifier scheme. Circuit cost is explicitly estimated at ~8,033 constraints with <5s PLONK proving time and ~768 byte proofs. The Operator Registry extension uses existing Poseidon2 and depth-20 Merkle components \u2014 no new cryptographic primitives required. The cumulative encoding bug (missing 2 constraints) is a specification error adding negligible cost (~2 constraints), not a primitive gap."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary across 5 personas found multiple attacks the construction cannot answer. The most critical: scopeCommitment as a public output trivially breaks the SSP game (every persona flags this \u2014 it is a deterministic cross-session fingerprint enabling credential linkability with probability 1, not negl(\u03bb)). Additionally: nullifier precomputation collapses AS-blindness (cryptographer Attack 2); cumulative encoding is provably incomplete with a soundness gap (3 personas confirm missing constraints for bits 0-1); no revocation protocol exists for credential compromise (cu_ciso Attack 3); operator key compromise voids AFR (auth0_pm Attack 3); setup ceremony is unspecified making AFR reduction vacuous (cryptographer Attack 3). The scopeCommitment flaw alone is fatal \u2014 it breaks a core stated security property by construction, not by edge case."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU is named as a concrete stakeholder with 260+ branches, a 64-bit policy space, and specific regulatory requirements (FCRA under 15 U.S.C. 1681, NCUA Part 748). Adversarial-AS resistance for FCRA-gated access is framed as load-bearing. However, cu_ciso Attack 1 demonstrates the examiner narrative is unfounded: ZK proof transcripts (nullifierHash, scopeCommitment, agentMerkleRoot) are opaque field elements that cannot satisfy NCUA Part 748.0(b) incident response or FFIEC CAT forensic reconstruction requirements without an unspecified audit integration layer. The 5s per-request proving latency has no architectural mitigation (auth0_pm Attack 4). Chain availability has no SLA or fallback (cu_ciso Attack 4). The scenario is concrete but not yet deployable as described."
+    }
+  },
+  "gaps": [
+    "scopeCommitment must be bound to sessionNonce (or removed as public output) to prevent cross-session credential linkability \u2014 SSP game and reduction must be rewritten",
+    "Nullifier must include agent-private blinding factor unknown to AS to prevent O(N) credential tracing by the issuing AS",
+    "Add missing cumulative encoding constraints: permBits[2]*(1-permBits[1])===0 and permBits[1]*(1-permBits[0])===0, plus enumerate all cumulative bit ranges explicitly",
+    "Specify PLONK setup ceremony (MPC participants, attestation, trust assumption) and add SRS operator as a fourth adversary class in the threat model",
+    "Define credential revocation protocol with SLA compatible with NCUA incident response \u2014 specify root update latency, blast radius per rotation, and emergency revocation path for operator key compromise",
+    "Extend AFR game to model operator key compromise (sk_op leaked) as an adversary capability",
+    "Add AS-Trace game to threat model covering AS ability to correlate on-chain proof transcripts with issued credentials",
+    "Redefine SSP as an adaptive multi-query game or explicitly scope to non-adaptive RS with justification",
+    "Update Section 8 baseline comparison to address WIMSE+SD-JWT explicitly, not just BBS+",
+    "Specify chain RPC availability model: target chain SLA, RS root-caching policy with staleness bounds, degraded-mode authorization fallback",
+    "Define audit integration layer mapping ZK proof transcripts to NCUA-interpretable examination artifacts (member ID, action, timestamp, data category)",
+    "Address proof latency architecture: specify which requiredScopeMask values are pre-computable, describe proof cache/server integration without breaking session binding"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

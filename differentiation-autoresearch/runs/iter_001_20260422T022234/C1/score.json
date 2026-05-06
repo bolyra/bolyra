@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties baselines lack (AS-level cross-RS unlinkability, adversarial-AS integrity via on-chain commitment). However, rfc7662_advocate systematically showed that differentiation collapses to a single load-bearing property \u2014 the adversarial-AS model \u2014 and that JWT introspection response + PPIDs + RFC 8707 approximate all other claimed properties. spiffe_engineer showed short-TTL SVIDs already achieve AS-blind presentation. The construction is preferable under adversarial-AS but the baseline approximates under honest-AS, which is the stated SECU scenario."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Three named games (SSU, CRU, ASI) with reduction sketches to PLONK knowledge soundness, Poseidon CR, and Poseidon PRF in ROM \u2014 this is a real threat model with named assumptions. However, cryptographer Attack 1 showed CRU has a circular assumption (AS holds credentialCommitment, the PRF key), Attack 2 showed HVZK is insufficient against adaptive-query malicious verifiers (no UC/malicious-verifier ZK argument), Attack 3 showed SRS trust is unstated, and Attack 4 showed no game covers RS predicate integrity (vacuous zero-mask attack is trivially winning). Assumptions named but reductions contain real holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction explicitly maps to Bolyra primitives: PLONK agent circuit (~8,553 constraints), Poseidon5 for credential commitment, Poseidon2 for rsNullifier, on-chain Merkle tree. States <3s proving time and ~500 byte proof size. Extending to 256-bit bitmask adds 384 constraints. All within Phase 1 budget and using existing primitives."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 with 5 personas found multiple unanswered attacks: cryptographer Attack 1 (CRU circular assumption \u2014 AS holds PRF key), Attack 2 (HVZK insufficient for adaptive malicious verifier \u2014 6-query binary search recovers hidden bitmask), Attack 4 (vacuous zero-mask bypasses all scope enforcement, no RS-predicate-integrity game exists). cu_ciso found audit trail destruction (NCUA Part 748), unspecified key custody (GLBA \u00a7314.4(c)), and no regulatory mapping. auth0_pm found 3s proving time breaks SLAs with no caching/batching answer. spiffe_engineer showed AS-RS collusion in SECU scenario trivially breaks rsNullifier unlinkability. The majority of attacks are marked 'No \u2014 construction must address' and the construction cannot answer them."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU is named as a concrete credit union with specific RSes (loan origination, compliance, member services). However, rfc7662_advocate Attack 3 showed the adversarial-AS threat model \u2014 the construction's sole load-bearing differentiator \u2014 is incoherent for SECU, which operates its own AS. cu_ciso showed NCUA/FFIEC audit requirements are unaddressed and AS-blindness is actually a regulatory liability. The scenario is real but does not support the construction's core claims; a multi-party CUSO scenario would be load-bearing."
+    }
+  },
+  "gaps": [
+    "CRU game circular assumption: AS holds credentialCommitment (the PRF key) from enrollment \u2014 must derive nullifier from an agent-held secret blinded from AS",
+    "No malicious-verifier ZK argument: HVZK allows adaptive-query binary search over requiredScopeMask to recover hidden bitmask bits in O(log 64) interactions",
+    "No RS-predicate-integrity game: adversarial RS can set requiredScopeMask=0x0 to bypass all scope enforcement \u2014 need circuit constraint or signed mask",
+    "SRS trust assumption unstated: all three security games collapse under subverted SRS \u2014 must be an explicit assumption in threat model header",
+    "Scenario mismatch: SECU operates its own AS, making adversarial-AS model incoherent \u2014 replace with multi-party CUSO scenario or add honest-AS justification",
+    "Audit trail gap: cross-RS unlinkability destroys the centralized access log NCUA Part 748 requires \u2014 need compensating audit aggregation layer",
+    "Key custody unspecified: witness (bitmask + blinding factor) storage between proof generations not defined \u2014 GLBA \u00a7314.4(c) requires this",
+    "Proving latency: 3s per proof \u00d7 multiple RSes breaks real-time SLAs \u2014 must specify caching, batching, or hardware acceleration path",
+    "Reframe constant-size claim: JWT introspection is already compact \u2014 the real differentiator is zero cardinality leakage, not proof size",
+    "AS-RS collusion in single-CU deployment trivially breaks rsNullifier unlinkability \u2014 restrict claim to third-party RSes or blind the nullifier input"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

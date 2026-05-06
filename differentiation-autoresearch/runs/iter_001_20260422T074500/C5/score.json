@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C5",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies atomic human+agent composition (shared sessionNonce across Groth16+PLONK) and cross-vendor delegation without a shared AS as properties beyond the baseline. However, multiple Tier 3 attacks narrow these claims: (a) auth0_pm shows the human proof is absent in the primary autonomous-agent deployment scenario, so H1 degrades to single-sided agent auth identical to DPoP+client_credentials in the general case; (b) rfc7662_advocate shows RFC 9701 signed JWT introspection eliminates the AS from the verification hot path, undermining the AS-blindness claim in \u00a78.3; (c) spiffe_engineer shows SPIFFE federation + WIMSE offline delegation covers H3 and H5 without ZK; (d) modelBindingTag proves credential binding not runtime execution binding (identical trust anchor to client_id). The baseline can approximate with extra configuration (RFC 9701 + hardware DPoP + SPIFFE federation), leaving the construction preferable but not provably dominant."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides an explicit threat model with three formally defined games (MCP-FORGE, EPOCH-LINK, SCOPE-CLIMB), six named cryptographic assumptions (A1\u2013A6), and reduction sketches. However, critical gaps remain: (a) cryptographer Attack 2 shows modelBindingTag RS verification is semantically vacuous because permissionBitmask is private\u2014the RS cannot evaluate the expected tag; (b) cryptographer Attack 3 shows the ratcheted epoch circuit required by the Forward-Secure Unlinkability theorem does not exist in \u00a72.2\u2014the theorem references a non-existent circuit; (c) MCP-FORGE's Case 1 reduction conflates knowledge of H(M) with executing M (no runtime attestation); (d) no LINK-ACROSS-RS game despite the unlinkability claim; (e) PLONK SRS subversion adversary is absent from the threat model. Threat model is stated but reductions have material gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The AgentPolicyV2 circuit maps entirely to existing Bolyra primitives: Poseidon2/3/5, Baby Jubjub EdDSA, PLONK universal setup, Groth16 (Semaphore ceremony), BinaryMerkleRoot depth 20, and the nullifier pattern. Constraint counts are explicitly stated (~13,034 for AgentPolicyV2, ~8,151 for HumanUniqueness) with proving time targets (<5s PLONK browser WASM, <15s Groth16). Total handshake gas cost estimated at ~600K. All within Phase 1 budget. The ratcheted variant lacks a circuit spec, but the base construction as written is implementable with existing primitives."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer: (1) cryptographer Attack 1: agentMerkleRoot and scopeCommitment are deterministic per-credential constants published as public outputs\u2014two colluding RSes trivially link sessions, breaking the unlinkability claim in \u00a78.3 with no cryptographic assumption violated; (2) cryptographer Attack 2: RS cannot verify modelBindingTag because permissionBitmask is private\u2014MCP-FORGE's verification procedure is incomplete at the protocol level; (3) cryptographer Attack 3: the ratcheted circuit (required for forward-secrecy theorem) contradicts the \u00a72.2 circuit spec which takes longTermSecret as private input; (4) spiffe_engineer/rfc7662_advocate: modelHash proves credential binding not runtime attestation\u2014MCP-FORGE Case 1 reduction is invalid. These are structural, not mitigatable within the current construction."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: Anthropic MCP Connector (Claude\u2192Stripe) and Navy Federal Credit Union with NCUA examination guidelines. NFCU names a specific stakeholder and regulatory requirement (NCUA examination of approved model checkpoints). However, cu_ciso Attack 1 shows the ZK unlinkability property directly conflicts with NCUA Part 748 Appendix B audit trail requirements\u2014the examiner needs plaintext attribution the construction structurally prevents. cu_ciso Attack 4 shows the on-chain registry introduces an availability dependency with no FFIEC mapping. The scenarios are concrete but the construction's core properties are in tension with the named stakeholder's actual regulatory needs, making the property not fully load-bearing as described."
+    }
+  },
+  "gaps": [
+    "agentMerkleRoot and scopeCommitment are per-credential constants exposed as public outputs \u2014 add per-session re-randomization (e.g., Pedersen commitment with session blinding) or drop cross-RS unlinkability claim",
+    "modelBindingTag RS verification requires permissionBitmask which is private \u2014 either make bitmask public, define a lookup-table protocol for operators to publish (modelHash, bitmask) \u2192 expected tag mappings, or restructure the tag to use only public inputs",
+    "Ratcheted epoch circuit does not exist in \u00a72.2 \u2014 specify the ratcheted-variant circuit where epochSecret_e is a direct private input (removing longTermSecret), add chain-binding constraints, and prove the Forward-Secure Unlinkability theorem against the actual circuit",
+    "MCP-FORGE game must address the honest-credential-dishonest-execution adversary \u2014 either require TEE/TPM attestation binding proof generation to the executing model process, or narrow H2 claim to 'operator-issued model credential binding' (not 'runtime model identity binding')",
+    "Add Game 4 (SRS-FORGE) modeling a subverted PLONK SRS adversary \u2014 argue security under AGM + q-DLOG or explicitly list honest SRS generation as a trust assumption with operational ceremony requirements",
+    "Define a model-hash discovery protocol (analogous to RFC 8414 well-known) specifying how RSes obtain, rotate, and revoke canonical model hashes from operators",
+    "Reconcile ZK unlinkability with NCUA Part 748 audit requirements \u2014 define a selective-disclosure or auditor-keyed opening mechanism that satisfies examiners while preserving privacy from non-auditor parties",
+    "Address SPIFFE/WIMSE alternative directly \u2014 either scope the general-case claim to privacy-sensitive deployments where WIMSE is insufficient, or justify why a ZK-native protocol is architecturally superior to ZK-as-SPIRE-attestor-plugin",
+    "Specify operational requirements for epoch-secret erasure discipline (TEE profile, HSM requirement, auditable erasure attestation) or weaken H4 to match what software-only deployments can guarantee"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

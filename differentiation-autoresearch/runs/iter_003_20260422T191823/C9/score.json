@@ -1,0 +1,40 @@
+{
+  "candidate_id": "C9",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction names a specific capability (epoch-isolated hiding commitments with destroyed blinding randomness) and argues baselines cannot match. However, rfc7662_advocate Attack 4 demonstrates that a hardened baseline (stateless AS + ephemeral DPoP + PPID) was never tested against the IND-FS-AGENT game. Attack 1 shows ephemeral DPoP keys with deletion have structurally identical replay resistance. Attack 2 shows RFC 8693 + PPID delegation chains break the delegation graph linkability claim. The spiffe_engineer Attack 2 shows WIMSE ephemeral WProT keys approximate the game without ZK. The construction rebuts naive/static baseline configurations but does not engage the hardened variants. Preferable but not provably exclusive."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (adversary capabilities, IND-FS-AGENT and FS-REPLAY games defined). Named assumptions A1-A5 with reduction sketches for both games. However, the cryptographer's Attack 1 is devastating: epochTransitionNullifier = Poseidon2(s_e, epochIndex) is a public output computable from s_T, enabling backward graph traversal to reconstruct the full commitment chain \u2014 directly contradicting the unlinkability claim. This is a real break in the formal argument, not just a weakening. Attack 2 (proof graph as public linked list) compounds this. The reduction in \u00a74 Case 2 claims adversary cannot identify which commitments belong to the compromised agent, but the epochTransitionNullifier provides exactly that anchor. The formal argument has a structural flaw."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps entirely to existing Bolyra primitives: Poseidon1/2 for epoch chain and hiding commitments, PLONK for all circuits, BabyJubjub EdDSA, nullifier pattern, LIMT depth-20 Merkle trees. Circuit costs are stated precisely: EpochRotation ~1,200 constraints (<1s), ForwardSecureAgentSession ~9,828 constraints (<5s), ForwardSecureDelegation ~9,064 constraints (<5s). All within Phase 1 budget. The blinding factor r_e is a standard field element requiring no new primitive. Constraint breakdowns are detailed per-circuit with component-level accounting."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary surfaced multiple attacks the construction cannot answer. Cryptographer Attack 1 (epochTransitionNullifier enables full backward chain traversal from s_T) is a fundamental break \u2014 the construction's core unlinkability claim ('cannot identify which commitments belong to the compromised agent') is false as written. This attack is squarely inside the stated threat model (adversary has s_T and on-chain read access). Additionally, the secure deletion assumption is identified as unverifiable by 4 of 5 personas (auth0_pm, cryptographer, cu_ciso, spiffe_engineer, rfc7662_advocate) with no construction-level mitigation. The privacy-audit paradox (cu_ciso Attack 2) and regulatory framework vacuum (cu_ciso Attack 4) are unanswered deployment blockers. The hardened baseline attacks (rfc7662_advocate Attacks 1, 2, 4; spiffe_engineer Attack 2) demonstrate the baseline dominance claim is overstated. Multiple attacks lie outside the stated threat model with no mitigation."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU 30-day autonomous lending agent is named as a concrete deployment with daily epoch rotation. However, cu_ciso Attacks 1-4 demonstrate that the scenario is undermined by regulatory reality: NCUA audit requirements conflict with unlinkability (no dual-mode architecture), secure deletion is unauditable under GLBA Safeguards Rule, key custody is unspecified, and no regulatory control mapping exists. Auth0_pm Attack 2 makes the same point \u2014 unlinkability is a compliance liability for credit unions. The scenario is named but the construction actively conflicts with the named stakeholder's regulatory obligations, making it hypothetical rather than load-bearing. The whistleblower scenario is more naturally fitting but targets a different buyer segment entirely."
+    }
+  },
+  "gaps": [
+    "CRITICAL: epochTransitionNullifier = Poseidon2(s_e, epochIndex) is computable from s_T and enables full backward traversal of the commitment chain \u2014 must be removed from public outputs or double-blinded with destroyed randomness",
+    "EpochRotation proofs form a public linked list via previousEpochCommitment \u2192 newEpochCommitment \u2014 must prove this graph structure doesn't violate IND-FS-AGENT or redesign to break the chain visibility",
+    "Must engage hardened baseline: stateless AS + ephemeral DPoP keys (destroyed per session) + PPID subjects + RFC 8693 token exchange \u2014 show this specific configuration fails IND-FS-AGENT, not just naive static-DPoP",
+    "Must engage WIMSE ephemeral WProT key rotation as a baseline competitor \u2014 show concrete distinguisher or narrow the dominance claim",
+    "Secure deletion assumption needs operationalization: specify TEE/HSM requirement, or add hardware attestation for deletion, or explicitly scope forward-secrecy claim to hardware-backed deployments only",
+    "Must define dual-mode audit architecture: regulatory audit path (e.g., escrow-encrypted audit log) that satisfies NCUA/GLBA without compromising forward secrecy for external adversaries",
+    "Add regulatory control mapping: cross-walk security properties to NCUA Part 748, GLBA Safeguards \u00a7314.4, FFIEC CAT controls",
+    "Specify key custody model for s_0: HSM/KMS/TEE requirement, not left as implementation detail",
+    "On-chain transaction metadata (sender address, timing, gas patterns) enables commitment clustering independent of Poseidon \u2014 must address private relay or batched submission",
+    "Address SPIRE ZK attestor plugin objection: demonstrate capability SPIRE plugin architecture cannot support, or position as SPIRE plugin rather than competing protocol",
+    "Specify PLONK SRS ceremony provenance (multi-party ceremony requirement) to close the subverted-SRS gap"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

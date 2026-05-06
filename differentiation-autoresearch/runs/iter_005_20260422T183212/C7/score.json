@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies genuine privacy differentiators the baseline cannot match: claim-set hiding behind Poseidon3 fingerprints, bitwise permission predicates over a hidden bitmask (constraint 6), one-time issuance correlation vs per-token-refresh, and provider anonymity. The cryptographer persona confirms the bitwise predicate is a legitimate ZK advantage. However, rfc7662_advocate Attack 1 demonstrates that when Anthropic is the AS (the realistic deployment), the signed JWT introspection response achieves equivalent forgery resistance \u2014 both reduce to 'can the adversary forge Anthropic's signature?' The MODEL-BIND-FORGE game has no privacy win condition, so the security dominance claim collapses to privacy dominance. spiffe_engineer Attack 1 shows federated SPIFFE (Anthropic operates the authoritative SPIRE for its namespace) closes the malleability gap the construction claims is open. The construction is preferable for privacy but the baseline approximates the security properties."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model (MODEL-BIND-FORGE v2 game with defined adversary capabilities), three named cryptographic assumptions (A1: Poseidon collision resistance, A2: DL on Baby Jubjub, A3: PLONK knowledge soundness), and a detailed 5-case reduction sketch. However, cryptographer Attack 1 identifies that knowledge soundness (A3) does not imply simulation extractability, which is required for the non-malleability claim (gap_to_close requirement a) given the game permits the adversary to observe valid proofs. SE-PLONK is never cited. Cryptographer Attack 4 notes the PLONK SRS trust assumption is completely absent \u2014 no ceremony is named, no A4 is stated. Cryptographer Attack 2 identifies that the provider registry has no namespace binding, meaning the reduction's Case 2a (provider signature forgery) is bypassed entirely by a legitimately enrolled but wrong-namespace provider. The threat model exists and is detailed but has material gaps in assumptions and reduction coverage."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 provides a comprehensive mapping to existing Bolyra primitives: Poseidon2/3/5 for commitments, EdDSAPoseidonVerifier for both provider and operator signatures, BinaryMerkleRoot(20) for credentials and BinaryMerkleRoot(8) for provider keys, PLONK universal setup for proving, Baby Jubjub curve. Section 6 gives a detailed per-gadget constraint breakdown totaling ~23,550 constraints with a <5s proving time target, benchmarked against Semaphore's comparable 30K-constraint circuits. Verification is ~300K gas. All primitives exist in the Bolyra spec (Section 3.2, 3.3, 4) and the cost is within Phase 1 agent-class budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 with all 5 personas surfaced real attacks that weaken the construction's claims. Cryptographer Attack 2 (namespace confusion) is a concrete protocol-level vulnerability: any enrolled Provider B can sign deploymentAuthorization for Anthropic's modelHash, and the circuit has no constraint binding provider keys to model namespaces. This is answerable (add namespace binding to registry leaf) but unanswered. Cryptographer Attack 1 (SE gap) means non-malleability is not formally proven despite being claimed. rfc7662_advocate Attack 1 shows the security game is equivalent to the AS-as-provider baseline, narrowing the advantage to privacy. spiffe_engineer Attack 1 shows federated SPIFFE closes the malleability gap. auth0_pm Attack 1 identifies a scope mismatch between the threat model (authorization binding) and the NCUA scenario (runtime compliance). These attacks weaken claims substantially but the construction could mitigate most with targeted fixes."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU (2.7M members, NCUA-regulated) is a concrete named stakeholder with specific regulatory requirements. However, auth0_pm Attack 1 identifies a fatal scope mismatch: the construction explicitly concedes it only proves authorization binding, not runtime execution, yet the SECU scenario describes NCUA examiners verifying 'which models processed member data' \u2014 a runtime question. auth0_pm Attack 3 notes Poseidon and Baby Jubjub are not FIPS 140-3 validated, and NCUA examinations require NIST-approved cryptography per FFIEC guidance. cu_ciso Attack 1 shows no mapping from public signals to Part 748 controls or FFIEC CAT domains. The scenario is named and load-bearing but the construction's scope and primitives don't fully satisfy what the named regulator actually requires."
+    }
+  },
+  "gaps": [
+    "Add namespace binding to provider registry: change leaf from Poseidon2(providerPk) to Poseidon3(providerPk, modelNamespaceHash) and add circuit constraint verifying provider is the designated authority for the claimed modelHash",
+    "Add simulation extractability as named assumption A4, cite a concrete SE-PLONK instantiation, and modify the reduction to invoke A4 when handling proof-mauling adversaries who observe valid proofs",
+    "Add PLONK SRS trust assumption (A5: honest-participant MPC ceremony) with named ceremony or specify transparent proving system alternative",
+    "Specify fingerprint resolution mechanism: how does the NCUA examiner map modelOperatorFingerprint to 'Sonnet' vs 'Opus' without reintroducing operator self-assertion",
+    "Address federated SPIFFE baseline: explain why Anthropic-operated SPIRE issuing operator-bound SVIDs with model_id claims does not achieve equivalent security (not just privacy)",
+    "Resolve authorization-vs-runtime mismatch in SECU scenario: either replace with a scenario where authorization binding is the operative question, or compose with TEE attestation and specify the integration",
+    "Address FIPS 140-3 gap: acknowledge non-NIST primitives as a deployment constraint for NCUA-regulated credit unions and provide a migration path or re-scope target customers",
+    "Specify minimum operator key custody requirements (HSM, audit, rotation) as deployment prerequisites to prevent credential signing key compromise from voiding A2"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

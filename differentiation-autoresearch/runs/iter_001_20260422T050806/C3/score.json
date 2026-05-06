@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction claims 6 structural wins over RFC 8693 + BBS+ but rfc7662_advocate Attack 1 demonstrates an AS with per-RS introspection policy can return a signed, filtered audit assertion (chain_valid, monotonic_narrowing, final_scope) hiding intermediate scopes and participants \u2014 achieving the core claimed property with zero ZK machinery. The construction never explicitly names the AS as adversarial or proves why AS-attested audit is insufficient. Attack 2 shows PPIDs + DPoP already break cross-hop participant linkability at the RS level. The construction is preferable in the narrow 'AS is adversarial or offline' scenario but the baseline approximates the headline property with standard configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Four named security games (narrowing forgery, participant extraction, scope extraction, length extraction) with reductions to PLONK soundness + Poseidon collision resistance \u2014 this is a real threat model with named assumptions. However, cryptographer Attack 1 shows the length extraction game lacks a formal indistinguishability argument for dummy-hop padding (reduction to PLONK soundness does not cover distinguishability of padding \u2014 requires a separate ZK simulatability argument). Attack 2 identifies a semantic gap where empty-scope bypass (scope=0) satisfies the narrowing predicate trivially, meaning the narrowing forgery game definition is under-specified without a liveness predicate. Attack 3 reveals the PLONK trusted setup assumption is not surfaced as a named assumption despite being load-bearing for the journalist scenario. Attack 4 shows participant extraction is defined single-proof only, not over an adaptive multi-proof adversary \u2014 breaking the whistleblower claim. Threat model exists but multiple reductions are incomplete or missing."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction explicitly maps to existing Bolyra primitives: Poseidon2/4 for scope commitments, EdDSA on BabyJubjub for delegation signatures, BinaryMerkleRoot for chain anchoring, PLONK for the proof system. Circuit cost is stated at ~110K constraints with <5s PLONK proving time. These are within Phase 1 budget ranges for PLONK circuits. No new primitives required."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five personas found attacks explicitly outside the construction's threat model that the construction cannot answer. Cryptographer: empty-scope bypass renders narrowing vacuous (Attack 2), multi-proof correlation breaks participant privacy for the journalist scenario (Attack 4). cu_ciso: NCUA Part 748 requires named entities in audit logs \u2014 the ZK hiding property structurally violates this (Attack 1); no trapdoor reveal or regulatory escrow mechanism exists for incident response (Attack 2); no key revocation primitive (Attack 3). auth0_pm: <5s per proof is catastrophic for sub-100ms AI pipeline hops (Attack 1); 8-hop ceiling has no migration path (Attack 2); auditor model incompatible with NCUA examination procedures (Attack 3). spiffe_engineer: chain completeness unverifiable beyond 8 hops (Attack 1); scope commitments unbound to runtime policy evaluation (Attack 2). rfc7662_advocate: AS-filtered introspection achieves the headline property without ZK (Attack 1). The overwhelming majority of attacks are marked 'not in threat model' and the construction has no mechanism to address them."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "NCUA/SECU loan pipeline and journalist/source scenarios are concretely named with regulatory stakeholders. However, cu_ciso Attacks 1-2 demonstrate the NCUA scenario is structurally incompatible: NCUA examination procedures require legible, reconstructible audit trails with named third-party entities \u2014 the construction's privacy guarantee (hiding all intermediate participants) would cause a regulatory examination failure, not pass one. The construction lacks a RegulatorReveal mode or witness escrow. The journalist/source scenario is concrete but niche and undermined by cryptographer Attack 4 (multi-proof correlation) and spiffe_engineer Attack 3 (trust domain membership leakage). Scenarios are named but the construction's properties are misaligned with what those scenarios actually require."
+    }
+  },
+  "gaps": [
+    "Construction must explicitly name the AS as adversarial and prove why AS-attested filtered introspection is insufficient \u2014 or the baseline dominance claim collapses",
+    "Add formal indistinguishability argument for dummy-hop padding in the length extraction game (separate from PLONK soundness reduction)",
+    "Add in-circuit liveness predicate (scope[i] != 0 for non-dummy hops) to close the empty-scope bypass",
+    "Surface PLONK trusted setup as a named assumption; for journalist scenario either use transparent setup (IPA/STARK) or formalize the trust assumption",
+    "Define participant extraction game over adaptive multi-proof adversary to support the whistleblower/journalist claim",
+    "Add RegulatorReveal mode: encrypted witness escrow that lets a credentialed NCUA examiner reconstruct the full chain post-incident while hiding it during routine audits",
+    "Address chain completeness: auditor must be able to verify the proof covers the entire chain, not just the first 8 of N hops",
+    "Define how scope commitments are bound to runtime authorization decisions (not just prover-supplied) for the AI pipeline scenario",
+    "Specify verifier integration surface (REST endpoint, WASM library, hosted oracle) and trust bootstrapping for auditor adoption",
+    "Add key epoch mechanism with revocation to handle root key compromise without invalidating all historical proofs"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

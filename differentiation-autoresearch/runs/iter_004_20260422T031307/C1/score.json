@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The bitwise AND predicate over a hidden packed 64-bit bitmask yielding a constant-size proof is a capability RFC 7662, JWT introspection, BBS+, and WIMSE TraT provably cannot express. RFC 8693 pre-exchange (rfc7662_advocate Attack 3) achieves AS-blind presentation for closed RS sets but cannot prove a boolean predicate over hidden data without disclosing it. BBS+ would need 64 separate claims with linear proof size or lose per-bit predicate capability entirely. The packed-representation predicate proof is a genuine architectural impossibility for the baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (semi-honest AS, honest RS, blockchain integrity). Six named cryptographic assumptions (A1-A6) with concrete instantiations. Three formal games (ScopeForge, PermExtract, CrossLink) with reduction sketches. However, the CrossLink proof is demonstrably wrong: scopeCommitment is deterministic and session-independent, so colluding RSes win by equality comparison (cryptographer Attack 1, confirmed by 4/5 personas). The nullifier scheme is structurally broken against the stated semi-honest AS (cryptographer Attack 2): credentialCommitment is a public Merkle leaf, so AS computes Poseidon2(C_i, sessionNonce) for all enrolled agents and identifies any agent in O(N) evaluations \u2014 no PRF security when the key is public. SRS trust assumption (cryptographer Attack 3) is unspecified, making the ScopeForge reduction circular if AS runs the ceremony. Reduction sketches exist but two of three security claims are falsified."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every gadget maps to a named Bolyra AgentPolicy component: Poseidon5 credential commitment, EdDSAPoseidonVerifier for operator binding, BinaryMerkleRoot(20) for enrollment anchor, Num2Bits(64) for range checks, LessThan(64) for expiry, Poseidon2 for nullifier and scope commitment. Constraint breakdown totals ~20,000 with per-gadget estimates. Proving time target <5s is supported by Semaphore v4 benchmark at comparable constraint counts (~2s on commodity hardware). No new primitives required. The auth0_pm latency concern (multi-call workflows) is operational, not a primitive budget violation."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer. (1) scopeCommitment cross-RS linkability: identified by all 5 personas, directly falsifies the CrossLink security proof and Property 4 claim \u2014 the construction's own public output table contradicts its unlinkability guarantee. (2) Nullifier preimage by semi-honest AS (cryptographer Attack 2): AS identifies any agent from (nullifier, sessionNonce) since credentialCommitment is public, breaking anonymity against the stated adversary. (3) No revocation mechanism (auth0_pm Attack 3, cu_ciso Attack 3): append-only Merkle tree with no specified revocation, contradicting NCUA incident response requirements. (4) Enrollment-time bitmask substitution (rfc7662_advocate Attack 2): AS can enroll false bitmasks, reducing the trust assumption to the same as RFC 7662. These are not mitigated weaknesses \u2014 they are unanswered structural failures."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU is named concretely with 2.7M members, NCUA examination context, 64-bit permission allocation, and a four-RS deployment flow. However, cu_ciso attacks expose that the property is not load-bearing as presented: (a) NCUA examiners cannot interpret ZK proofs without tooling the construction doesn't specify (Attack 1), (b) operator key custody is unspecified violating NCUA Part 748 (Attack 2), (c) revocation latency fails GLBA/FFIEC incident response requirements (Attack 3). rfc7662_advocate Attack 3 shows RFC 8693 pre-exchange is competitive for SECU's closed 4-RS set. The scenario is concrete but the construction's advantages are not clearly load-bearing for SECU's actual regulatory and operational requirements."
+    }
+  },
+  "gaps": [
+    "scopeCommitment must be randomized per-session (e.g., Poseidon3(bitmask, credComm, sessionNonce)) \u2014 resolve the design tension with delegation chain seed use case explicitly",
+    "Nullifier derivation must use a private nullifier secret not derivable from the public credentialCommitment (cf. Semaphore's identityNullifier pattern) \u2014 current scheme is broken against semi-honest AS",
+    "Specify SRS trust model: who generates it, multi-party ceremony requirements, or consider transparent setup (FRI-based) to close the circular reduction",
+    "Add revocation mechanism: on-chain revocation accumulator or nullifier blacklist with specified latency SLA and interaction with root history buffer",
+    "Formalize honest-RS predicate or add RS-side compartmentalization (per-RS authorized mask sets) to bound the adaptive bit-extraction oracle",
+    "Address enrollment-time bitmask correctness: member audit mechanism or out-of-band verification that enrolled bitmask matches authorized permissions",
+    "Specify NCUA-compatible audit layer: human-readable attestation records alongside ZK proofs for examiner accessibility",
+    "Specify operator key custody requirements (HSM mandate, rotation policy, compromise response)"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

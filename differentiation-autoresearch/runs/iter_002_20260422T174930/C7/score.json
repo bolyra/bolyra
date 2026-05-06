@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction argues baselines cannot bind model identity to messages without AS correlation, and rfc7662_advocate confirms per-call messageHash binding + unconditional operator anonymity (no AS trust) is a real gap. However, auth0_pm Attack 4 identifies that Client Attestation (draft-ietf-oauth-attestation-based-client-auth) + DPoP achieves non-malleability via attester signature with short-lived Attester JWTs issued per model release (not per call), removing AS from hot path. Section 8 never addresses this closest baseline. The differential narrows to ZK privacy properties (operator-pubkey unlinkability without trusted AS), which is real but not explicitly argued against Client Attestation. Score capped at 1 because the construction does not name and explicitly rule out the closest non-ZK alternative."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (MODEL-BIND-FORGE and PROVIDER-FORGE games with adversary capabilities), assumptions are named (A1-A4), and a 3-case reduction sketch is stated. However, two fundamental errors undermine the reduction: (1) Case 2a assumes adversary must forge providerSig to pass constraint 2, but providerSig is published in the public attestation registry (spiffe_engineer Attack 1, cryptographer Attack 2) \u2014 no forgery needed, adversary downloads it and enrolls a new credential. (2) Cryptographer Attack 3 identifies that non-malleability requires simulation extractability, not just knowledge soundness; PLONK is not proven SE in standard formulation. The reduction sketch is stated but contains errors that invalidate key cases."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 maps every construction element to existing Bolyra primitives: Poseidon2/3/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), BinaryMerkleRoot(8), PLONK universal setup, Baby Jubjub curve. Section 6 provides a per-gadget constraint breakdown totaling ~23,100 constraints with a <5s proving time target, comparable to Semaphore's 30K-constraint circuits. The only new element (depth-8 provider key tree) uses the same BinaryMerkleRoot primitive. Cost is stated and within Phase 1 agent-class budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Critical unresolved attack: the public attestation oracle (cryptographer Attack 2, spiffe_engineer Attack 1). Provider attestation tuples (modelHash, providerSig) are explicitly published in an append-only registry. Any operator with legitimate Opus credentials can download Sonnet's public (modelHash_sonnet, providerSig_sonnet), construct a new credentialCommitment embedding modelHash_sonnet with their own operator key, enroll it in the agent Merkle tree (no insertion authorization specified), and generate valid proofs claiming Sonnet identity. The reduction sketch Case 2a assumes forgery is required but it is not \u2014 the signature is public. The enrollment protocol specifies no access control on tree insertion. This breaks the core non-malleability claim (gap (a)). Additionally, the inference-execution gap (cryptographer Attack 1, rfc7662_advocate Attack 3, spiffe_engineer Attack 2, cu_ciso Attack 4) is identified by 4 of 5 personas and is entirely unaddressed \u2014 the circuit proves credential possession, not that the named model actually ran the inference."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Section 7 names SECU (State Employees' Credit Union, NC, 2.7M members) as the deployment. NCUA examiners require proof that only approved model instances processed member data \u2014 this is a load-bearing regulatory requirement under NCUA Part 748 and FFIEC examination procedures, not hypothetical. The enrollment flow, runtime proving, and audit steps are concretely described. Operational gaps (audit readability, key custody) were identified by cu_ciso but the scenario itself is concrete with named stakeholder and regulatory requirement."
+    }
+  },
+  "gaps": [
+    "Self-enrollment via public attestation oracle: provider signatures are published publicly, so any operator can enroll credentials for any attested model. Tree insertion contract must enforce authorization (e.g., operator must prove deployment agreement with provider for that specific model). The MODEL-BIND-FORGE game must be updated to give the adversary access to public attestation tuples.",
+    "Inference-execution gap: the circuit proves credential possession, not that the named model actually ran the inference. Construction must either (a) scope claims to credential-binding rather than execution-attestation, (b) add a TEE attestation layer, or (c) introduce a provider-issued per-inference nonce as part of messagePlaintext.",
+    "Reduction sketch Case 2a is invalid: it assumes providerSig forgery is required, but providerSig is public. The reduction must account for adversaries who obtain legitimate provider signatures from the public registry.",
+    "Section 8 baseline comparison skips Client Attestation (draft-ietf-oauth-attestation-based-client-auth) + DPoP, the closest existing mechanism. Must formally show this combination fails properties (a) or (c), or reframe differentiation as unconditional operator-pubkey unlinkability.",
+    "Non-malleability claim requires simulation extractability, not just PLONK knowledge soundness. Must either prove SE for this circuit, use an SE-SNARK variant, or argue why the public signal layout prevents malleability without SE.",
+    "modelOperatorFingerprint is a static cross-session correlation handle that contradicts the NCUA scenario claim that the examiner cannot learn how many total calls SECU made. Either randomize the fingerprint or strike the call-count-hiding claim."
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

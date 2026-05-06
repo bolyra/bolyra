@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C5",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies residual properties (AS-blind binding, unlinkable client_id, AS-blind delegation) that baselines cannot exactly match. However, the rfc7662_advocate systematically shows OAuth countermeasures for each hypothesis: PPID+RFC 8707 matches H3 unlinkability at RS layer, DPoP epoch rotation matches H4 cross-epoch FS, RFC 8693+SPIRE matches H5 delegation, per-RS introspection policy matches H1. Every residual reduces to 'only matters if AS is adversarial,' which is not a default assumption. The construction's own \u00a76 admits 20-30\u00d7 latency regression, which by definition falsifies 'strictly dominates.' Baseline approximates with extra configuration; no capability is provably ruled out of baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a real threat model with Games 1-5, named trust assumptions A1-A9, Bellare-Yee erasure oracle, and named cryptographic assumptions (Poseidon PRF, Groth16 knowledge soundness). However, the cryptographer exposes three unresolved formal gaps: (1) Groth16 achieves HVZK, not MVZK \u2014 malicious RS (the exact adversary in MCP) breaks the ZK simulator, and no simulation-extractable variant is specified; (2) AS scope_id control power is unspecified, enabling nullifier precomputation; (3) SRS subversion is not a detectable operational incident but a soundness failure with advantage 1. Reductions exist but are incomplete for the actual adversary classes in scope."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction explicitly maps to existing Bolyra primitives: Poseidon hash, Groth16 human circuit, PLONK agent circuit, BabyJubjub EdDSA, nullifier scheme. AgentPolicyV2-Ratcheted is costed at ~12,483 constraints (lighter than iter_001 due to removing longTermSecret from circuit). Full latency comparison table provided. Per-session Pedersen re-randomization costed at ~2K constraints (deferred but estimated). Circuit cost is stated and within plausible Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five personas surfaced attacks the construction cannot answer. auth0_pm Attack 4 is structural: the Gap 1 narrowing collectively converts every hypothesis into a regulated-niche claim, failing the gap_to_close criterion ('needed by default in agent-economy MCP, not only in regulated scenarios'). The cryptographer found intra-epoch linkability falsifies H3 (advantage = 1 via constant agentMerkleRoot), HVZK vs MVZK gap in H1, and SRS subversion as non-mitigable soundness failure. cu_ciso showed forward secrecy breaks GLBA audit trail requirements. spiffe_engineer showed SPIRE node attestation already provides AS-blind workload identity and WIMSE provides AS-blind delegation. Nearly every attack is marked 'No \u2014 construction must address.'"
+    },
+    "scenario_fit": {
+      "points": 0,
+      "justification": "The two scenarios listed are 'generic Claude agent talking to third-party MCP server' and 'cross-vendor agent handoff (Claude \u2192 ChatGPT).' Both are hypothetical with no named stakeholder, no named deployment, and no regulatory requirement making the properties load-bearing. The C5 claim targets the general case, but cu_ciso attacks show that in regulated CU deployments (the natural home for Bolyra), the construction's key properties (unlinkability, forward secrecy) are actually liabilities for audit and incident response. No concrete deployment where the ZK properties are load-bearing by default is identified."
+    }
+  },
+  "gaps": [
+    "Top-level claim says 'strictly dominates' but \u00a76 admits 20-30\u00d7 latency regression \u2014 must retract strict dominance or redefine the dominance relation with explicit carve-outs",
+    "Every narrowed hypothesis reduces to 'only matters if AS is adversarial' \u2014 must either elevate AS-adversary to a first-class default assumption with evidence it applies in general agent-economy MCP, or withdraw the general-case claim",
+    "Groth16 HVZK is insufficient when RS (the verifier) is a third-party adversary \u2014 must specify MVZK or simulation-extractable SNARK variant, or add RS-honest-verifier as a trust assumption",
+    "Intra-epoch linkability via constant agentMerkleRoot (advantage = 1) falsifies H3 unlinkability \u2014 must implement per-session Pedersen re-randomization (the identified ~2K constraint fix) before claiming unlinkability",
+    "AS scope_id control power is unspecified \u2014 must add explicit trust assumption bounding AS scope assignment behavior or nullifier precomputation attack succeeds",
+    "SRS subversion must be conditioned in theorem statements (soundness conditional on SRS integrity), not relegated to an appendix blast-radius section",
+    "No concrete deployment scenario with named stakeholder or regulatory requirement where ZK properties are load-bearing by default \u2014 must identify a general-case (non-regulated) deployment where AS-blindness or unlinkability is required, not nice-to-have",
+    "Forward secrecy / unlinkability conflicts with GLBA audit trail requirements \u2014 must specify how audit logging coexists with the privacy construction"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

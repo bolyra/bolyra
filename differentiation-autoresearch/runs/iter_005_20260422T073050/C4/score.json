@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction achieves issuer-hiding under threshold corruption (dIND-ISS with CorruptEscrow oracle), which RFC 8693 token exchange cannot match if the AS itself is compromised. However, the paper never explicitly rules out the baseline: rfc7662_advocate Attack 1 shows RFC 8693 already achieves verifier-side issuer hiding (the property the IND-ISS game as written formalizes), and Attack 3 shows PPID + RFC 8707 closes cross-RS linkability without ZK. The construction does not explicitly redefine IND-ISS to include a corrupt-AS oracle as the distinguishing property vs. the baseline, nor does it argue why AS-mediated delegation is unacceptable for the stated scenarios. The capability gap exists but is not explicitly named and ruled out of the baseline as the rubric requires for 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists: dIND-ISS game with CorruptEscrow(member_id) oracle, MUNL game with CorruptAS() oracle, named assumptions (Poseidon2 collision resistance, Groth16 knowledge soundness). However, cryptographer Attack 1 shows the IND-ISS game is incomplete \u2014 predicate output partitions the issuer set (possibly into singletons), giving the adversary advantage 1 without breaking ZK. The game needs a k-anonymity precondition that is absent. Cryptographer Attack 2 shows the MUNL game is missing a CorruptEscrow oracle for blinding factors \u2014 if blindingFactor is escrowed for recovery, the O(2^128) hardness collapses to O(k). These are game-definition gaps, not minor omissions. Reduction sketch exists but is incomplete."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives: Poseidon2 hash, Groth16/PLONK circuits, BabyJubjub EdDSA, nullifier scheme. Universal circuit specified as D=8, W=8 with 7 opcodes. Worst-case benchmark (all 8 LessThan(64) clauses) is stated. However, proving time is never benchmarked \u2014 auth0_pm Attack 2 notes this is absent and estimates 2-3s for Groth16/PLONK with 8 depth-8 LessThan gates, which is a 20-30x SLA regression vs. baseline token issuance. No proof caching or TTL/revocation interaction is specified. Constraint count is implied but not explicitly stated. The rubric requires 'stated circuit cost (constraints / proving time target)' \u2014 proving time target is missing."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "All 5 personas attacked. Some attacks survived (spiffe_engineer Attacks 2-3 on WIMSE/SPIFFE federation, rfc7662_advocate Attack 2 partially on jwt-introspection). However, multiple fundamental attacks are marked 'No \u2014 not in threat model': cryptographer Attack 1 (predicate-as-issuer-distinguisher breaks IND-ISS for singleton issuer sets), cryptographer Attack 2 (MUNL game missing CorruptEscrow for blindingFactor), rfc7662_advocate Attack 1 (RFC 8693 matches verifier-side hiding), cu_ciso Attack 1 (zero regulatory control mapping). The predicate-distinguisher attack is mitigable via k-anonymity precondition but fundamentally weakens the 'issuer-blind' claim \u2014 it becomes 'issuer-blind within sufficiently large predicate-satisfying sets.' Construction survives with weakened claims, scoring 1 not 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Three scenarios named: cross-CU NCUA membership proof, cross-firm FINRA-licensed agent proof, cross-country KYB. NCUA is a named stakeholder. However, cu_ciso Attack 1 shows zero regulatory controls are mapped \u2014 no NCUA Part 748 control, FFIEC CAT domain, or GLBA Safeguards Rule section is cited. rfc7662_advocate Attack 3 shows the cross-CU scenario is satisfiable by PPID + RFC 8707 without ZK. The cross-country KYB scenario (jurisdiction hidden) is the strongest candidate for load-bearing but cryptographer Attack 1 shows it breaks if only one issuer per jurisdiction. No specific regulatory requirement makes issuer-hiding mandatory. Scenarios are concrete but not demonstrably load-bearing."
+    }
+  },
+  "gaps": [
+    "Explicitly redefine IND-ISS game to model corrupt-AS oracle and prove RFC 8693 token exchange cannot achieve the same property \u2014 name the specific capability baseline lacks",
+    "Add k-anonymity precondition to IND-ISS game: proof is issuer-hiding only if predicate-satisfying issuer set has cardinality >= k; analyze impact on all three scenarios",
+    "Add CorruptEscrow oracle to MUNL game for blindingFactor recovery and re-prove O(2^128) bound under t-1 escrow corruption, or prove blindingFactor is never escrowed",
+    "Benchmark proving time (not just proof size) for worst-case D=8,W=8 circuit; specify proof caching architecture with TTL, revocation interaction, and nullifier scheme compatibility",
+    "Map each scenario to a specific regulatory control: NCUA Part 748, FFIEC CAT domain, or GLBA Safeguards Rule section that issuer-hiding satisfies or replaces",
+    "Add WIMSE SD-JWT and 8-attribute BBS+ rows to Section 6 comparison table with predicate-complexity column, not just proof size",
+    "Specify registry governance model (who controls issuer key entries, audit trail, SOC 2 mapping) and escrow custodian organizational controls (named custodian types, HSM attestation, key ceremony protocol)",
+    "Define blindingFactor key custody model across desktop browser, mobile app, and shared/kiosk terminal profiles"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Attacks from rfc7662_advocate and spiffe_engineer confirm no baseline can replicate the combination of issuer-hiding + predicate evaluation over hidden attributes without a trusted third party. rfc7662 Attack 1: federation AS leaks to AS. Attack 2: PPID+DPoP cannot do predicate-hiding. Attack 3: AS policy filtering requires AS to know home CU. spiffe Attack 1: SPIFFE trust-domain is plaintext issuer identity. spiffe Attack 2: WIMSE has no issuer-hiding mechanism. Each baseline was tried and failed on at least one structural axis the construction covers."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Attacks reference a defined IND-ISS game, named assumptions (PLONK ZK, Poseidon CR, DLP on Baby Jubjub), and reduction sketches (IND-ISS from PLONK ZK, UNF-CRED from knowledge soundness). However, cryptographer found four gaps all outside threat model: (1) IND-ISS does not cover distributional/semantic leakage from attribute-issuer correlation, (2) SRS honesty assumption not formalized \u2014 reduction silently inherits it, (3) 32-gate Boolean evaluator soundness/completeness unproven \u2014 breaks UNF-CRED reduction, (4) static IND-ISS game does not compose to multi-proof unlinkability across Merkle root epochs. Threat model stated but reductions have real holes."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to Bolyra primitives (Poseidon hash, PLONK circuit, BabyJubjub EdDSA, Merkle tree, nullifier scheme) with a stated ~42K constraint count. However, auth0_pm Attack 1 identifies no wall-clock proving time on representative hardware (Chromebook at teller, mobile device). Constraint count addresses verifier time but not prover time. Additionally, the 32-gate Boolean evaluator's expressiveness ceiling (no date arithmetic, string set membership, or dynamic schema) means real deployment schemas may exceed the circuit's capabilities without recompilation (spiffe Attack 3, auth0_pm Attack 4)."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: (1) auth0_pm Attack 3 \u2014 BSA/AML auditability paradox is called a 'category blocker'; issuer-hiding is structurally incompatible with 31 U.S.C. \u00a7 5318(h) and FinCEN CDD requirements at the named deployment target. (2) cu_ciso Attack 3 \u2014 GLBA \u00a7 314.4(a) data provenance requirement makes issuer-hiding a regulatory finding, not a feature. (3) cryptographer Attack 2 \u2014 subverted SRS collapses IND-ISS completely with no mitigation specified. (4) cu_ciso Attack 2 \u2014 revocation latency violates NCUA Part 748 \u00a7 748.1(c) with no revocation SLA or mechanism specified. (5) cryptographer Attack 1 \u2014 semantic attribute-issuer correlation breaks IND-ISS in practice. The construction survives some attacks (spiffe 1&2, rfc7662 3) but cannot answer the regulatory and SRS attacks."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "CO-OP Shared Branch is a concrete deployment with named stakeholders (Mountain America, Navy Federal) and a real regulatory requirement (NCUA membership verification). However, cu_ciso Attacks 2&3 and auth0_pm Attack 3 demonstrate that the construction's core property (issuer-hiding) is architecturally incompatible with the regulatory obligations at the named deployment (BSA audit trail, GLBA data provenance, NCUA Part 748 incident response). The scenario is concrete but the construction is self-defeating in it without a compliance escape hatch (dual-channel disclosure, audit escrow) that is not specified."
+    }
+  },
+  "gaps": [
+    "BSA/AML category blocker: must define a dual-channel disclosure protocol (issuer hidden from verifier but disclosed to regulated audit escrow / CUSO) to satisfy 31 U.S.C. \u00a7 5318(h) and GLBA \u00a7 314.4(a) at NCUA-examined institutions",
+    "SRS honesty assumption must be formalized: specify verifiable MPC ceremony with n\u22651 honest participant sufficiency, or switch to transparent proof system (FRI-based STARK / Halo2 IPA)",
+    "Extend IND-ISS to distributional variant accounting for attribute-issuer correlation and auxiliary-input adversary with issuer population statistics",
+    "Add multi-proof unlinkability game (Camenisch-Lysyanskaya style) with reduction to IND-ISS under root-update composability, or specify epoch-pinning with minimum anonymity set parameter k",
+    "Provide wall-clock prover benchmarks on representative hardware (Chromebook, mobile) with SLA commitment or mitigation path (server-side proving with TEE)",
+    "Specify issuer registry governance: write authority, update cadence, revocation SLA, availability guarantee, and examiner-readable audit log of issuer key lifecycle",
+    "Scope 'arbitrary-schema' claim honestly: define schema as versioned artifact, prove constant-size for bounded attribute count N, table constraint growth, and acknowledge schema evolution requires recompilation",
+    "Specify member key custody architecture mapped to FFIEC Authentication Guidance with recovery/re-issuance procedure"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

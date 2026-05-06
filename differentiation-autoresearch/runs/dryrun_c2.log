@@ -1,0 +1,22 @@
+
+========== C2: Cross-scope unlinkability ==========
+Current strength: 9 → target: 10
+[C2] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T010427/C2
+[C2] Tier 1: survey baseline...
+[C2] Tier 2: construct from baseline...
+[C2] Tier 3: adversarial (5 personas)...
+[C2] Judge: scoring...
+Traceback (most recent call last):
+  File "/Users/lordviswa/Projects/identityos/differentiation-autoresearch/run_loop.py", line 211, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/lordviswa/Projects/identityos/differentiation-autoresearch/run_loop.py", line 190, in main
+    score = run_candidate(
+        c["id"],
+    ...<5 lines>...
+        attack_model=args.attack_model,
+    )
+  File "/Users/lordviswa/Projects/identityos/differentiation-autoresearch/run_loop.py", line 136, in run_candidate
+    score = judge.run(candidate, iter_dir, model=judge_model)
+            ^^^^^^^^^
+AttributeError: module 'judge' has no attribute 'run'

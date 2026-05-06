@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The AS-adversarial participant hiding property (Game 2 PARTICIPANT-HIDE) is provably impossible for RFC 7662, DPoP+Token Exchange, PPIDs+RFC 8707, and signed JWT introspection \u2014 all require trusting the AS, which holds the full chain. All four rfc7662_advocate attacks confirm survival. The spiffe_engineer's SPIRE plugin attack actually validates ZK necessity (the plugin itself uses C_narrow). WIMSE's SD-JWT selective disclosure is future work, not a current baseline capability."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists (Game 2 PARTICIPANT-HIDE, Game 3 EPOCH-UNLINK) with named assumptions (SE-PLONK AGM+ROM, Poseidon preimage resistance). However, four cryptographer attacks are all outside-threat-model: (1) Game 3 does not bound AS auxiliary input (nullifier precomputation), (2) identity-point escrowPubkey is a public-input regime distinguisher defeating Game 2 for journalist scenario, (3) AGM does not model subverted SRS and no ceremony is specified, (4) C_narrow proves scope-commitment narrowing but not execution binding \u2014 the core informal claim ('no hop exceeded its mandate') has no formal reduction. Reductions are sketched but incomplete."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to Bolyra primitives: Poseidon2 (C12 chainBlinding), SE-PLONK (agent circuit), BabyJubjub EdDSA (ElGamal escrow in C11), C_narrow at 67 multiplication gates/hop. Three proof scheduling modes with explicit cost targets: Mode A ~4.8s, Mode B ~200ms/hop, Mode C ~0.6s/chain amortized. Boolean lattice over {0,1}^64 is purely arithmetic \u2014 no new primitives required."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: cryptographer Attack 2 (identity-point escrowPubkey as regime distinguisher \u2014 adversary advantage is 1, ZK property irrelevant on public inputs), cryptographer Attack 4 (no execution binding \u2014 construction proves scope narrowing but cannot prove hops respected their scopes, which is the AI pipeline scenario's core requirement), cryptographer Attack 1 (AS with credential issuance transcript as auxiliary input defeats Game 3). cu_ciso found 4 unanswered operational attacks (break-glass has no named custodians, ScopeLattice not auditor-readable, cross-org handoff is unregistered third party under GLBA, Mode A is forensic not detective). spiffe_engineer found 4 unanswered attacks including escrow infrastructure as legal attack surface for journalist scenario."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios named (AI pipeline audit, journalist/source chain) with regulatory references (NCUA Part 748, FFIEC CAT, GLBA). However, the cryptographer's Attack 4 fatally undermines the AI pipeline scenario \u2014 the construction proves scope-commitment narrowing, not mandate compliance, so the scenario's load-bearing requirement (proof no hop exceeded its mandate) is not actually delivered. The journalist scenario is undermined by the regime distinguisher (cryptographer Attack 2) and legal compellability of escrow infrastructure (spiffe_engineer Attack 3). No named deploying organization."
+    }
+  },
+  "gaps": [
+    "Execution binding: C_narrow proves scope-commitment narrowing but not that hops acted within their scopes. Add actionHash[i] commitment per hop or formally restate claim as scope-commitment-only and disclaim execution binding.",
+    "Regime distinguisher: escrowPubkey as public input leaks journalist vs enterprise mode with advantage 1. Route escrowPubkey into witness and commit only a hash, or use a universal dummy escrow key for all proofs.",
+    "AS auxiliary input in Game 3: bound AS knowledge explicitly \u2014 show EPOCH-UNLINK holds when adversary has the full credential issuance transcript. Currently Game 3 appears to model a passive auditor, not a colluding AS.",
+    "SRS ceremony: specify trusted setup model (universal SRS, ceremony participants, upgrade path) or adopt transparent setup. AGM+ROM assumption must be contextualized for regulated deployments.",
+    "Fixed-depth circuits with dummy-hop padding: state whether circuits are fixed-depth to defeat hop-count traffic analysis (auth0_pm Attack 4). If variable-depth, bound what hop-count leakage implies for PARTICIPANT-HIDE.",
+    "Break-glass operational model: name key custodian roles, recovery SLA, incident response procedure mapping to NCUA Part 748 Appendix B. Current C11 proves escrow exists but has no operable runbook.",
+    "Scope manifest: bind {0,1}^64 bit positions to human-readable entitlements in a committed registry so FFIEC CAT/SOC2 auditors can interpret proofs without cryptographic expertise.",
+    "Cross-org legal instrument: address whether delegateeCredComm constitutes member data under GLBA and what contractual framework governs cross-org handoff.",
+    "WIMSE/SPIRE differentiation: explicitly demonstrate a property gap in WIMSE token chaining and SPIRE attestor plugins that requires ZK rather than SD-JWT extensions or pluggable attestors.",
+    "Detective vs forensic: for Mode A, state explicitly it is forensic-only and does not satisfy FFIEC detective control requirements, or add a real-time alerting mechanism for chains in progress."
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

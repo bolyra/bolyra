@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C7",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction identifies provider-key privacy to verifier (\u00a78(e): BBS+ reveals issuer public key, Bolyra keeps it private) and AS-blindness as differentiators. However, rfc7662_advocate Attack 3 shows RFC 8693 with Anthropic-as-exchange-participant + DPoP achieves operator-bound model attestation with offline verification \u2014 the construction's \u00a78 only rebuts operator-controlled SPIRE, not provider-as-exchange-participant. Attack 4 further shows that since \u00a78(g) disclaims runtime execution binding, the remaining authorization-binding claim is achievable via BBS+ with Anthropic-as-issuer. The surviving gap (provider key hidden from RS) is real but not demonstrated as load-bearing for any stated scenario. Baseline can approximate with extra configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model (MODEL-BIND-FORGE v2) is explicit with adversary capabilities, game definition, and winning condition. Three named assumptions (A1-A3) with 5-case reduction sketch. However: (1) cryptographer Attack 1 identifies that the reduction proves authorization binding while \u00a71 claims execution binding ('this call was made by Claude Sonnet 4.6') \u2014 MODEL-EXEC-BIND game is undefined and has no reduction; (2) cryptographer Attack 3 shows SE-PLONK (GKK 2022) is proven for KZG commitments in AGM, but the default backend is Halo2+IPA which uses a fundamentally different commitment scheme \u2014 the simulation-extractability result does not transfer without re-proving; (3) assumption A3 cites 'PLONK in the algebraic group model' but IPA-based Halo2 is outside AGM. Threat model stated and assumptions named, but reduction covers wrong property and A3 doesn't apply to default backend."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps comprehensively to existing Bolyra primitives: Poseidon2/3/5 hashes, EdDSAPoseidonVerifier (\u00d72), BinaryMerkleRoot (depth 20 + depth 8), Baby Jubjub EdDSA, PLONK proving, nullifier scheme. \u00a75 provides a complete primitive mapping table with spec references. \u00a76 provides per-gadget constraint estimates totaling ~23,550 constraints with <5s proving time target, comparable to Semaphore's 30K-constraint circuits. On-chain verification at ~300K gas. All within Phase 1 agent-class budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer: (1) cryptographer Attack 2 \u2014 nullifier precomputation: since credentialCommitment is public on-chain and sessionNonce is a public input, verifier computes Poseidon2(credentialCommitment_i, sessionNonce) for all enrolled commitments to deanonymize which credential produced each proof \u2014 no mitigation exists in the construction; (2) cryptographer Attack 3 \u2014 SE-PLONK security proof (GKK 2022) requires KZG commitments but default backend is Halo2+IPA \u2014 the combined system has no published security proof; (3) cryptographer Attack 4 + rfc7662_advocate Attack 2 + spiffe_engineer Attack 4 (3 independent personas) \u2014 fingerprint registry publishes per-operator unique Poseidon3 values while operator public keys are observable from enrollment transactions, permanently deanonymizing every proof; (4) spiffe_engineer Attack 3 \u2014 permissionless tree is a liveness attack surface (1M garbage insertions exhaust depth-20 tree) with no rate limiting or staking. The nullifier precomputation and fingerprint deanonymization attacks are concrete privacy breaks with no construction-level mitigation."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU (State Employees' Credit Union, NC, 2.7M members) is concretely named with NCUA examination as the regulatory requirement. Enrollment flow is detailed across 6 steps. However, \u00a78(g) explicitly disclaims runtime execution binding while \u00a77 claims examiner can confirm 'this PII operation used Opus' \u2014 the actual property proven (authorization binding) is weaker than what the scenario narrative requires. cu_ciso Attack 1 shows NCUA examiners have no mechanism to run a PLONK verifier and no FFIEC CAT mapping exists. cu_ciso Attack 4 shows messageHash (Poseidon preimage) cannot be reversed for member dispute resolution required under 12 CFR Part 1031. The scenario is named but the construction as delivered does not fully serve the stated regulatory need \u2014 it is aspirational rather than load-bearing."
+    }
+  },
+  "gaps": [
+    "Nullifier deanonymization: credentialCommitment is public on-chain + sessionNonce is public input \u2192 verifier brute-forces Poseidon2(commitment_i, nonce) to identify which credential produced each proof. Must either blind the nullifier input or keep commitments off-chain.",
+    "Fingerprint registry deanonymization: modelOperatorFingerprint is unique per operator (distinct operatorPkAx) and the registry is published \u2014 any verifier with enrollment tx data maps fingerprint \u2192 operator. Need blinded per-proof fingerprints or k-anonymity guarantee.",
+    "SE-PLONK/IPA mismatch: GKK 2022 simulation-extractability is proven for KZG in AGM, not Halo2+IPA. Must either default to KZG-backed PLONK or provide independent SE proof for IPA commitment scheme.",
+    "Claim overstatement: \u00a71 says 'proves this call was made by Claude Sonnet 4.6' but \u00a78(g) disclaims runtime execution binding. Consistently narrow all claims to 'authorization binding' throughout, or specify TEE integration for execution binding.",
+    "Baseline gap not closed against RFC 8693 + provider-as-exchange: \u00a78 only rebuts operator-controlled SPIRE. Must address Anthropic-as-token-exchange-participant with DPoP sender-constraining, which achieves operator-bound model attestation without ZK.",
+    "BBS+ with Anthropic-as-issuer not addressed: since modelHash is authorization-agreement binding (not runtime), BBS+ selective disclosure over Anthropic-issued credential achieves the same authorization-binding property. Must identify a specific PLONK property BBS+ cannot provide.",
+    "Permissionless Merkle tree liveness: no rate limiting or staking on insertion \u2014 adversary can exhaust depth-20 tree (~1M leaves) to block legitimate enrollment. Need anti-spam mechanism.",
+    "Examiner-facing audit artifacts unspecified: no human-readable attestation, no SOC 2 mapping, no FFIEC CAT control reference for PLONK verification. SECU scenario assumes examiner acceptance of ZK proofs without justification.",
+    "Operator BJJ key custody unspecified: signing key must be accessible to agent runtime touching PII. No HSM requirement, no key isolation from inference environment, no revocation path for compromised operator keys."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

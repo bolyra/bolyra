@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C9",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims DPoP compromise reveals the full activity graph while Bolyra prevents this. However, rfc7662_advocate Attack 3 shows that per-session ephemeral DPoP keys + PPID achieve equivalent post-compromise unlinkability if the AS doesn't log \u2014 the real differentiator is AS-trust-independence, not the unconditional claim in \u00a71. spiffe_engineer Attack 4 shows \u00a78.2 compares against outdated X.509 SVIDs, not current WIMSE SD-JWT + ephemeral holder-of-key flows. The construction is preferable (no AS on the verification path) but the baseline can approximate with operational controls (non-logging AS, per-session ephemeral keys, short TTLs). Score 1, not 2, because the baseline comparison defeats a strawman rather than the strongest configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is stated with named assumptions (A1-A5), two formal games (IND-FS-AGENT, FS-REPLAY), and reduction sketches per case. However, the cryptographer's Attack 1 and Attack 2 are devastating: (1) The IND-FS-AGENT game excludes r_T by definitional fiat, but s_T and r_T co-reside in the same process heap \u2014 the game definition smuggles an operational assumption as a cryptographic parameter. The construction itself concedes degradation to operational mitigation when r_T is compromised. (2) Intra-epoch sessions share identical epochCommitment as a public input, making the IND-FS-AGENT challenge trivially winnable within an epoch \u2014 the adversary checks value equality, advantage is 1. The game as written is broken for same-epoch transcripts. Attack 4 notes PLONK ZK variant (HVZK vs SE-ZK) is unspecified. Threat model stated but game is flawed and reduction has gaps \u2014 score 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps entirely to existing Bolyra primitives: Poseidon hash (BN128), PLONK proving system, BabyJubjub EdDSA, nullifier scheme, Merkle membership (LIMT depth 20). Circuit costs are stated: EpochRotation ~846 constraints (<1s), ForwardSecureAgentSession ~9,828 constraints (<5s), ForwardSecureDelegation ~9,064 constraints (<5s). All within Phase 1 budget. The primitive mapping table in \u00a75 is complete with spec references. No external primitives required \u2014 r_e is a standard field element. The removed epochTransitionNullifier actually reduces circuit cost by 30%."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer: (1) cryptographer Attack 2 \u2014 intra-epoch linkability via identical epochCommitment public input makes IND-FS-AGENT trivially winnable, a fundamental game flaw not addressed. (2) All five personas independently identified the r_T exclusion as fatal \u2014 the construction concedes degradation but the claim in \u00a71 is unconditional. (3) spiffe_engineer Attack 3 \u2014 agentSlot is a stable correlator equivalent to a SPIFFE ID, never addressed in the security argument. (4) rfc7662_advocate Attack 4 \u2014 relayer mitigation doesn't hide public circuit inputs, the Tornado Cash analogy is structurally inapt. (5) cu_ciso Attack 2 \u2014 forward secrecy destroys the NCUA-required audit trail with no reconciliation. Multiple attacks lie outside the stated threat model and the construction cannot answer them. Score 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU 30-day lending agent and CFPB whistleblower relay are named with concrete deployment details. However, cu_ciso Attack 2 shows the SECU scenario is self-defeating: NCUA Part 749 requires a complete audit trail of agent decisions on loan files, and the construction's unlinkability actively prevents this with no reconciliation mechanism specified. cu_ciso Attack 4 notes no availability SLA for the on-chain registry, which cannot be placed in a core-processor failover plan. The scenarios are named but not load-bearing in their current form \u2014 the SECU scenario fails regulatory scrutiny, and the whistleblower scenario requires activity-graph privacy that agentSlot linkage defeats. Score 1 \u2014 scenarios named but have fundamental gaps preventing them from being deployment-ready."
+    }
+  },
+  "gaps": [
+    "IND-FS-AGENT game is trivially winnable for same-epoch transcripts: all sessions share identical epochCommitment public input, giving adversary advantage 1 via value equality \u2014 need Merkle anonymity set for epochCommitment or scope the game to cross-epoch only",
+    "r_T exclusion from compromise model is an operational assumption (process co-residency) not a cryptographic one \u2014 either require HSM/TEE for r_e isolation as an explicit deployment precondition in \u00a71, or prove security under (s_T, r_T) compromise via the deferred Merkle anonymity-set construction",
+    "agentSlot is a stable on-chain correlator equivalent to SPIFFE ID \u2014 verifier must know it, so activity graph (rotation dates, session counts, epoch boundaries) is fully reconstructible without any cryptographic attack; must hide agentSlot via set-membership proof",
+    "Relayer mitigation is structurally inapt: it hides msg.sender, not public PLONK inputs (previousEpochCommitment, newEpochCommitment) which remain in calldata \u2014 drop the relayer claim or replace with genuine anonymity-set construction",
+    "\u00a78.2 compares against X.509 SVIDs circa 2021, not WIMSE SD-JWT + ephemeral holder-of-key \u2014 must explicitly defeat the strongest baseline configuration (per-session ephemeral DPoP keys + PPID + non-logging AS) to justify 'no RFC construction achieves this'",
+    "SECU scenario destroys NCUA-required audit trail (Part 749, BSA/AML 31 CFR \u00a71020.410) \u2014 add a section mapping what the CU retains in a separate audit log, how records are keyed to members, and how that coexists with ZK-layer unlinkability",
+    "Specify PLONK ZK variant: HVZK vs simulation-extractable ZK \u2014 multi-verifier deployment (multiple RSs) may require malicious-verifier ZK, and the generic 'simulator exists in ROM' assertion is insufficient",
+    "Remove Tornado Cash reference \u2014 regulatory blast radius at any NCUA-examined institution; replace with neutral technical description of transaction-sender obfuscation pattern",
+    "Add on-chain registry availability architecture: acceptable substrates, epoch rotation failure mode, RTO/RPO for credit union BIA compliance"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

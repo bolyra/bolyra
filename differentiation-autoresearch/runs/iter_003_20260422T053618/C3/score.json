@@ -1,0 +1,42 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction hides intermediate chain participants from the auditor AND the token service \u2014 a property RFC 8693 act-chain + AS-signed JWT introspection cannot provide (the AS sees every exchange). However, the construction never explicitly names this as the baseline gap or argues why AS-signed narrowing attestation is insufficient. rfc7662_advocate Attack 1 shows the construction fails to position against the equi-trusted AS-signature baseline. spiffe_engineer Attack 2 shows WIMSE token exchange is unaddressed. The real differentiator (hiding from the token service itself when AS is adversarial) exists but is implicit, not argued. Baseline can approximate narrowing audit via RFC 8693 + signed introspection if AS is trusted."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is partially stated: Game 1 (NARROW-FORGE), Game 3 (SCOPE-EXTRACT), Game 4 (SE-PLONK vs malicious verifiers) are defined. Assumptions are named (Poseidon2 collision resistance, SE-PLONK simulation-extractability per Maller et al. 2019). However: (a) cryptographer Attack 2 shows NARROW-FORGE has no reduction sketch to a named hardness assumption \u2014 stating a game is not proving it; (b) cryptographer Attack 3 shows SE-PLONK ZK against malicious verifiers requires a simulator the construction does not specify (trapdoor availability problem under deployed SRS); (c) cryptographer Attack 1 shows chainNullifier derivation is unspecified so Game 3 cannot bound universe enumeration in small populations. Threat model exists but reductions are absent or broken."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to Bolyra primitives: Poseidon2 hash, PLONK agent circuit (SE-PLONK), BabyJubjub EdDSA, nullifier scheme. Timing targets are stated (4.8s deferred, 2s Nova IVC fold, 200ms pre-auth). However: (a) Nova IVC folding (mode b) is not listed as a Bolyra Phase 1 primitive \u2014 it requires new infrastructure; (b) constraint counts are not stated for the full chain circuit (only timing estimates); (c) the deferred mode at 4.8s may exceed Phase 1 proving-time budget for interactive scenarios. Maps to primitives but cost is uncertain and Nova IVC may be out of scope."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversary with all 5 personas found numerous attacks marked outside the threat model that the construction cannot answer: cryptographer found missing NARROW-FORGE reduction, broken ZK simulator claim, unspecified chainNullifier derivation, and post-compromise credential substitution in deferred mode \u2014 all 'No' in-threat-model. auth0_pm found deferred audit conflated with enforcement, on-chain registry enterprise-hostile, bitmask lattice inadequate for real permissions, phantom hop topology leakage \u2014 all 'No'. cu_ciso found unreadable audit trail for NCUA examiners, unspecified root key custody, privacy guarantee inverting into incident response liability, on-chain registry SLA failure \u2014 all 'No'. rfc7662_advocate found baseline subsumption unaddressed and journalist scenario collapsing under legal compulsion \u2014 'No'. spiffe_engineer found SPIRE plugin path not justified, phantom hop retroactive injection, SVID rotation side-channel defeating unlinkability \u2014 multiple 'No'. The construction cannot answer the majority of Tier 3 attacks."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: multi-tool AI pipeline audit and journalist/source agent chain. Both are concrete in concept but neither names a specific stakeholder, deployed system, or binding regulatory requirement. The AI pipeline scenario is undermined by auth0_pm Attack 1 (deferred audit is post-breach, not enforcement). The journalist scenario is undermined by rfc7662_advocate Attack 4 (collapses under legal compulsion of AS/infrastructure operator) and cu_ciso Attack 3 (privacy inverts into incident response liability for credit unions). No named credit union, no specific NCUA rule that mandates this specific property as load-bearing vs. nice-to-have."
+    }
+  },
+  "gaps": [
+    "Explicitly argue baseline gap: name 'malicious AS' as threat actor and show RFC 8693 + signed introspection cannot provide narrowing audit when AS is adversarial \u2014 this is the load-bearing differentiator",
+    "Provide NARROW-FORGE reduction sketch to a named hardness assumption (not just state the game)",
+    "Specify chainNullifier derivation inputs and prove no public wire leaks pre-blinding identity; bound universe enumeration for small populations",
+    "Fix SE-PLONK ZK claim against malicious verifiers: either use statistical ZK, provide a rewinding-free simulator, or restrict Scenario B to honest-verifier with separate unlinkability argument",
+    "Bind workloadNonce to an execution-time anchor (e.g., signed timestamp from immutable log) to close post-pipeline credential substitution in deferred mode",
+    "Add off-chain registry mode (CT-log-style append-only log with SLA) as alternative to on-chain governance registry for enterprise deployments",
+    "Address bitmask lattice expressiveness: either show how parameterized/ABAC permissions encode into the lattice or bound the claim to bitmask-representable models",
+    "Add break-glass/escrow-based disclosure mode for incident response (tiered: ZK for routine audit, recoverable for forensics under legal hold)",
+    "Name a concrete deployment with a specific stakeholder and regulatory requirement where this property is load-bearing, not just desirable",
+    "Engage explicitly with WIMSE draft-ietf-wimse-arch: name the hiding-from-token-service property as the gap WIMSE cannot close",
+    "Fix phantom hop topology leakage: either fix circuit size N globally or sample from a public distribution",
+    "Specify root delegation key custody model with GLBA/FFIEC mapping",
+    "Add examiner-facing verification infrastructure (SOC 2 verifier service or reproducible open-source verifier with human-readable report output)"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction removes the AS from the per-scope authorization path entirely \u2014 agent generates proofs locally post-enrollment. OAuth/OIDC structurally requires AS participation at token issuance, so the AS always sees the (agent, RS) pair. WIMSE/SD-JWT hides attributes from verifiers, not issuers. spiffe_engineer Attacks 1-2 confirm the construction survives against SPIFFE and WIMSE baselines on this specific property. rfc7662_advocate Attack 3 correctly notes Threat B (RS-to-RS correlation) is already solved by PPIDs, but Threat A (AS-side correlation) is the exclusive and provably unachievable-by-baseline differentiator."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (adversary controls AS, subset of RSes, network metadata). Named assumptions (Poseidon-PRF, PLONK knowledge soundness, Poseidon collision resistance, DLP on Baby Jubjub) are stated. Hybrid reduction sketch is provided. However, the cryptographer's Attack 1 is fatal to the game definition: scopeId is a public input (signal index 5), so the IND-UNL-AS game is trivially won with advantage 1 by reading public signals. The reduction's Hybrid 3 claim that 'public inputs are the same in both orderings' is false \u2014 \u03c0_left embeds scopeId_b and \u03c0_right embeds scopeId_{1-b}. The intended property (agent-linkage across scopes) may hold, but the formal game as written does not capture it. Reduction is broken against the stated game."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every circuit element maps to existing Bolyra primitives: Poseidon2/5, BinaryMerkleRoot(20), PLONK proving system, LessThan(64), Num2Bits. No new primitives introduced. Constraint breakdown is detailed (~15,600 total), proving time target (<3s PLONK) is within Phase 1 budget and comparable to existing AgentPolicy circuit (~16,000 constraints, <5s target). Verification is standard single PLONK check. The primitive mapping table in \u00a75 is comprehensive with spec references."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Multiple Tier 3 attacks surface real weaknesses: (1) cryptographer Attack 1 \u2014 game definition is trivially broken via public scopeId, requiring reformulation; (2) cryptographer Attack 2 \u2014 agentMerkleRoot is a cross-scope fingerprint reducing anonymity set, potentially to 1 in sparse deployments; (3) cu_ciso Attack 1 \u2014 audit trail paradox where GLBA Reg P motivation conflicts with NCUA Part 748 audit obligations; (4) cu_ciso Attack 4 \u2014 revocation mechanism is referenced but never specified; (5) rfc7662_advocate Attack 4 \u2014 blindingNonce freshness is unverifiable by RS. The underlying PRF-based unlinkability argument survives conceptually (the crypto idea is sound for agent-linkage), but the formal claim as stated is broken and multiple operational gaps weaken deployment viability. Scoring 1: real attacks that weaken but do not fundamentally destroy the core cryptographic insight."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "SECU (North Carolina) is named as a concrete stakeholder with specific regulatory requirement (GLBA Reg P \u2014 AS must not learn member merchant graph). The property is load-bearing: without AS-exclusion from per-scope authorization, SECU-as-AS can trivially reconstruct member financial activity. Healthcare variant (Kaiser Permanente) provides a second concrete scenario. The cu_ciso audit trail paradox is a real gap but concerns reconciling the privacy property with competing regulations, not the scenario's validity \u2014 the need for the property is genuine and regulatory."
+    }
+  },
+  "gaps": [
+    "Reformulate IND-UNL-AS game: current game is trivially won because scopeId is a public signal. The correct game should challenge A to distinguish same-agent vs different-agent proofs at known scopes, not which-proof-covers-which-scope.",
+    "Address Merkle root epoch anonymity set attack: specify minimum batch enrollment size or root update policy so agentMerkleRoot does not reduce anonymity set to 1 in sparse deployments.",
+    "Specify revocation mechanism: \u00a72 step 5c references scopeNullifier revocation but no registry design exists. Need a revocation scheme that does not create a linkage oracle, with propagation latency SLA.",
+    "Add agentSecret rotation protocol: current design has no forward secrecy, no key lifecycle, no compromise recovery. Specify expiryTimestamp upper bound and re-enrollment procedure.",
+    "Reconcile GLBA Reg P privacy claim with NCUA Part 748 / GLBA Safeguards audit obligations: design a privacy-preserving audit mechanism (e.g., encrypted per-scope logs openable under dual control).",
+    "Specify blindingNonce generation requirements: minimum entropy, CSPRNG mandate, or RS-issued nonce challenge for liveness \u2014 current design makes freshness unverifiable by RS.",
+    "Address TLS-terminating proxy threat: enterprise deployments route through AS-controlled infrastructure that can read scopeId in cleartext. Either encrypt public signals to RS public key or bind RS identity into proof."
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

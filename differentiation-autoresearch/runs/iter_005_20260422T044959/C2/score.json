@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a genuine structural gap: OAuth requires AS to observe scope-to-RS mapping at token issuance, while this construction removes the AS from scope selection entirely via blinded enrollment. However, the rfc7662_advocate's Attack 2 shows that JWT introspection response + RFC 8693 token exchange + PPID already eliminates per-RS AS observability post-exchange, narrowing the delta to 'AS sees scope bundle at exchange time.' More critically, the spiffe_engineer's Attack 1 shows SPIFFE/SPIRE with a ZK attestor plugin could achieve similar unlinkability without a new protocol \u2014 the construction never compares against SPIFFE or WIMSE (Attack 2), which are the actual closest baselines for workload identity. Section 8 compares only against OAuth/OIDC/BBS+, missing the most relevant standards. The baseline can approximate with extra configuration (SPIRE plugin + blind issuance), so this is 1, not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides a named threat model, explicit cryptographic assumptions (P-PRF, P-CR, KS-PLONK, DL-BJJ), and a reduction sketch from IND-UNL-AS to P-PRF. However, the cryptographer's attacks expose fundamental flaws: (1) The IND-UNL-AS game defines single-challenge scope distinguishing, not the multi-proof traffic-graph unlinkability actually claimed \u2014 the game does not prove the stated property (Attack 1). (2) Poseidon is simultaneously modeled as a ROM (for PLONK FS) and a standard-model PRF (for nullifiers) with no domain separation argument \u2014 these are incompatible assumptions (Attack 2). (3) No domain separation between enrolledLeaf and scopeNullifier computations, creating an implicit dependency on Poseidon5 preimage hardness not stated as an assumption (Attack 3). The game definition does not match the claim, and the assumption model has an internal contradiction. This is a stated-but-flawed threat model with vague/incorrect reduction \u2014 score 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon2/5, EdDSA on Baby Jubjub, binary Merkle tree depth 20, PLONK proving system. Circuit cost is explicitly estimated at ~12,850 constraints with a detailed per-component breakdown. The overhead vs standard AgentPolicy is stated as +300 constraints (~2.7%). Proving time target is <5 seconds. All gadgets (Poseidon hash, EdDSA Poseidon verify, BinaryMerkleRoot, Num2Bits, LessThan) are standard Bolyra primitives with spec references. This is within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with 5 personas found multiple attacks the construction cannot answer: (1) agentMerkleRoot is a public cross-scope correlator \u2014 AS+RS collusion links proofs by shared root version without breaking any crypto (auth0_pm Attack 1, rfc7662_advocate Attack 1). The IND-UNL-AS game does not model this. (2) BIP-32 recovery is a privacy trapdoor \u2014 enterprise key custody means AS likely holds the master seed, trivially recovering agentBlinder (auth0_pm Attack 2, spiffe_engineer Attack 4). The threat model assumption 'Cannot compromise agentBlinder storage' is violated by the recovery mechanism specified in the same document. (3) The IND-UNL-AS game proves a weaker property than claimed \u2014 single-challenge scope distinguishing vs. multi-proof traffic-graph unlinkability (cryptographer Attack 1). (4) Regulatory compliance impossibility \u2014 NCUA audit trail and GLBA breach notification are structurally prevented by the unlinkability guarantee with no dual-mode design (cu_ciso Attacks 1-2). These are not mitigated attacks weakening the claim \u2014 they are unanswered attacks breaking the core claim or deployment viability."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The SECU cross-credit-union deployment scenario is named with specific stakeholders (SECU, ServiceCU, Carolina CU, Local Government FCU) and concrete RS endpoints. However, the cu_ciso attacks demonstrate the scenario is fatally flawed for regulated deployment: NCUA Part 748 audit requirements and GLBA breach notification obligations are structurally incompatible with the unlinkability guarantee, with no dual-mode design proposed. The auth0_pm Attack 3 reinforces this \u2014 AS-invisible scope selection is a compliance liability at any regulated FI. The scenario is named but cannot survive legal/compliance review at the named stakeholder, making it hypothetical rather than load-bearing."
+    }
+  },
+  "gaps": [
+    "agentMerkleRoot is a public output that acts as a cross-scope correlator \u2014 AS+RS collusion links proofs by shared root version without any crypto break. Must either use a blinded accumulator or explicitly bound anonymity set size with a minimum-K guarantee.",
+    "BIP-32 recovery directly contradicts the threat model assumption that AS cannot access agentBlinder. Must specify key custody model: who holds the master seed, where it lives (TEE/hardware wallet/user device), and prove the recovery path does not give AS or operator access to agentBlinder.",
+    "IND-UNL-AS game defines single-challenge scope distinguishing but the claim is multi-proof traffic-graph unlinkability. Must upgrade to a k-challenge anonymity game with explicit multi-query PRF reduction.",
+    "Poseidon is modeled as both ROM (PLONK Fiat-Shamir) and standard-model PRF (nullifier) simultaneously. Must add domain separation between FS hash and nullifier hash instances and argue PRF security survives ROM access to the FS instance.",
+    "No domain separation tag between enrolledLeaf = Poseidon2(innerCommitment, b) and scopeNullifier = Poseidon2(scope_id, b). Must prepend distinct domain tags to prevent AS-crafted enrollment collisions.",
+    "freshnessBind is deterministic within 30-second epochs \u2014 same-scope cross-RS replay and same-epoch correlation are possible. Must include per-RS nonce or RS-specific binding in the freshness computation.",
+    "No dual-mode design for regulatory compliance. NCUA audit trail (Part 748) and GLBA breach notification (16 CFR 314.4(h)) are structurally impossible under full unlinkability. Must specify a compliance mode where AS retains audit capability while RS-to-RS correlation remains blocked.",
+    "scope_id namespace is uncontrolled \u2014 agent selects scope locally with no AS-approved RS registry check. Must add an RS registry Merkle root verified in-circuit.",
+    "Section 8 baseline comparison omits SPIFFE/SPIRE and WIMSE \u2014 the closest workload identity standards. Must explicitly compare against SPIRE with ZK attestor plugin and WIMSE blind-issued derived tokens.",
+    "Batched proof relay and mixnet requirements are mentioned but unspecified \u2014 no mixing topology, no k-anonymity floor, no enforcement in circuit or protocol."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

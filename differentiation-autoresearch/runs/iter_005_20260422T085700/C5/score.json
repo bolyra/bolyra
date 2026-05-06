@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C5",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The AS-adversary framing (\u00a71, four production facts) gives Bolyra real separation: properties that hold under AS compromise are outside vanilla OAuth's envelope. However, auth0_pm Attack 4 shows Client Attestation draft closes H2 without ZK; rfc7662_advocate Attack 2 shows signed JWT introspection closes H1's human-binding; rfc7662_advocate Attack 4 demonstrates H5's baseline characterization of RFC 8693 is factually incorrect (may_act pre-authorization enables local validation without per-hop AS roundtrip); spiffe_engineer Attack 3 shows SPIFFE federation already provides H3's portability. The 'general case' strict dominance claim does not survive \u2014 the strongest differentiators (GGM puncturing, AS-adversary resistance) are real but niche, not general-case. Baseline can approximate most stated properties with extra configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (AS-adversary with Okta 2023, Auth0 S-1, RFC 9701 gap, 18 U.S.C. \u00a72703(d)). Named assumptions: SE-PLONK under ROM, Poseidon2 PRF, DDH for Pedersen. Six formal games with reduction sketches. However, cryptographer Attack 2 exposes a fundamental gap: COMPOSE-EXTRACT (Game 6) assumes nonce binding between human and agent legs but does not specify whether the nonce is committed in-circuit or merely declared as public input \u2014 if public-input-only, cross-circuit malleability breaks the atomic mutual proof (H1). Cryptographer Attack 1 shows FS-NULL (Game 2) does not model key logging before puncturing under the legal compulsion adversary that \u00a71 itself motivates. Cryptographer Attack 3 shows the bearer fallback in \u00a77 has no formal anti-downgrade treatment. Reductions exist but have material soundness gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Both human and agent legs map to PLONK (existing Bolyra primitive). GGM tree uses Poseidon2, Pedersen re-randomization at ~2,100 constraints. \u00a72.8 gives concrete latency budget: cold auth ~4s (native parallel), per-tool-call <1ms (session token), 3-hop delegation ~6s (parallel PLONK). Hardware target M2+ ARM64. Session TTL = 1hr amortizes cold start. \u00a77 specifies ~380-line drop-in middleware adapter. Halo2-style recursion for chains \u22653. All primitives are within Phase 1 Bolyra stack with stated circuit costs."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 with all 5 personas surfaced multiple attacks the construction cannot answer. Critical unanswered attacks: (1) cryptographer Attack 2 \u2014 COMPOSE-EXTRACT nonce binding underspecification allows cross-circuit malleability, breaking H1's atomic mutual proof; (2) cryptographer Attack 3 \u2014 bearer fallback is a universal downgrade path with no anti-downgrade mechanism; (3) auth0_pm Attack 1 \u2014 session token is an unbound bearer token for 99.9% of the TTL window, collapsing all ZK guarantees mid-session; (4) cu_ciso Attack 1 \u2014 unlinkability by construction is a GLBA Safeguards Rule failure (no attributable audit trail); (5) cu_ciso Attack 2 \u2014 human_sk custody entirely unspecified (no recovery, no device migration); (6) rfc7662_advocate Attack 1 \u2014 PLONK verifying key distribution is an unaddressed trust root with no revocation or upgrade lifecycle; (7) rfc7662_advocate Attack 4 \u2014 H5's baseline characterization of RFC 8693 is factually incorrect. Many attacks marked 'No \u2014 not in threat model' by the attackers themselves, meaning the construction has no answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios named: 'generic Claude agent talking to third-party MCP server' and 'cross-vendor agent handoff (Claude \u2192 ChatGPT).' These are plausible but hypothetical \u2014 no named credit union, no named enterprise stakeholder, no specific regulatory requirement making the property load-bearing. The cu_ciso attacks (Attacks 1, 4) highlight that no FFIEC CAT mapping, no NCUA Part 748 compliance narrative, and no concrete CU deployment exists. The scenarios describe desirable agent-economy topology but lack the specificity of a named deployment where ZK properties are regulatory-mandated rather than nice-to-have."
+    }
+  },
+  "gaps": [
+    "Session token must be cryptographically bound to the PLONK proof transcript (e.g., DPoP-style proof-of-possession keyed to the ZK witness) \u2014 otherwise ZK guarantees evaporate for 99.9% of the session TTL",
+    "COMPOSE-EXTRACT (Game 6) must specify in-circuit nonce commitment: each circuit's witness must include a hash of the counterpart's public input vector to prevent cross-circuit malleability",
+    "Add anti-downgrade mechanism for bearer fallback: either a mandatory Bolyra-Only mode or DPoP-style binding that makes the Bearer token non-transferable without the ZK witness",
+    "Correct H5's baseline characterization: RFC 8693 \u00a74.4 may_act pre-authorization enables local chain validation without per-hop AS roundtrip \u2014 find the specific delegation topology RFC 8693 cannot handle",
+    "Address PLONK verifying-key distribution as a first-class trust operation with revocation, versioning, and authenticated distribution channel \u2014 or retract H3 zero-config claim",
+    "Specify human_sk key custody: device storage model, recovery path, HSM option, and device migration \u2014 operationally undeployable without this",
+    "Add selective-disclosure or audit-mode path reconciling unlinkability with GLBA Safeguards Rule \u00a7314.4(c)(3) attributable audit requirements",
+    "Add explicit comparison in \u00a72.3 showing why SPIRE SVID rotation is insufficient under AS-adversary (CA compromise during rotation window)",
+    "Name a concrete deployment with a specific credit union or enterprise stakeholder where the ZK properties are regulatory-mandated, not nice-to-have",
+    "Produce FFIEC CAT / NIST CSF control mapping table for examiner defensibility"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

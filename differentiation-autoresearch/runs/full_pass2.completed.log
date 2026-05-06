@@ -1,0 +1,251 @@
+
+========== C1: Selective scope proof ==========
+Current strength: 4 → target: 10
+[C1] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T022234/C1
+[C1] Tier 1: survey baseline...
+[C1] Tier 2: construct from baseline...
+[C1] Tier 3: adversarial (5 personas)...
+[C1] Judge: scoring...
+[C1] iter 1: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The construction identifies real properties baselines lack (AS-level cross-RS un
+      formal_security_argument: 1/2 — Three named games (SSU, CRU, ASI) with reduction sketches to PLONK knowledge sou
+      implementability: 2/2 — Construction explicitly maps to Bolyra primitives: PLONK agent circuit (~8,553 c
+      adversarial_survival: 0/2 — Tier 3 with 5 personas found multiple unanswered attacks: cryptographer Attack 1
+      scenario_fit: 1/2 — SECU is named as a concrete credit union with specific RSes (loan origination, c
+[C1] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T023600/C1
+[C1] Tier 2: refine with 6 gap(s)...
+[C1] Tier 3: adversarial (5 personas)...
+[C1] Judge: scoring...
+[C1] iter 2: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — The construction identifies AS-blind presentation (AS never learns which RS the 
+      formal_security_argument: 1/2 — Threat model exists (adversarial AS, semi-trusted RS), assumptions are named (A0
+      implementability: 1/2 — Construction maps to existing Bolyra primitives: Poseidon2 hash, Baby Jubjub EdD
+      adversarial_survival: 0/2 — Tier 3 codex adversary with all 5 personas found attacks the construction cannot
+      scenario_fit: 1/2 — CU*Answers (real CUSO, 170+ credit unions) is named as the deployment scenario, 
+[C1] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T025307/C1
+[C1] Tier 2: refine with 6 gap(s)...
+[C1] iter 3 FAILED: RuntimeError: Claude CLI timed out after 1200s
+[C1] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T031307/C1
+[C1] Tier 2: construct from baseline...
+[C1] Tier 3: adversarial (5 personas)...
+[C1] Judge: scoring...
+[C1] iter 4: strength=6/10 verdict=drop
+      baseline_dominance: 2/2 — The bitwise AND predicate over a hidden packed 64-bit bitmask yielding a constan
+      formal_security_argument: 1/2 — Threat model is explicit (semi-honest AS, honest RS, blockchain integrity). Six 
+      implementability: 2/2 — Every gadget maps to a named Bolyra AgentPolicy component: Poseidon5 credential 
+      adversarial_survival: 0/2 — Tier 3 found multiple attacks the construction cannot answer. (1) scopeCommitmen
+      scenario_fit: 1/2 — SECU is named concretely with 2.7M members, NCUA examination context, 64-bit per
+[C1] iter 5 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_005_20260422T032600/C1
+[C1] Tier 2: refine with 6 gap(s)...
+[C1] Tier 3: adversarial (5 personas)...
+[C1] Judge: scoring...
+[C1] iter 5: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — rfc7662_advocate confirms AS-blind presentation survives (Attack 1) and sessionN
+      formal_security_argument: 1/2 — Threat model is partially stated: semi-trusted AS, operator-as-adversary (confir
+      implementability: 1/2 — Construction maps to existing Bolyra primitives: Poseidon2/Poseidon3 for commitm
+      adversarial_survival: 0/2 — Multiple Tier 3 attacks remain unanswered. Cryptographer Attack 2: nullifierSecr
+      scenario_fit: 1/2 — Credit unions are named as stakeholders with NCUA regulatory context (Part 748, 
+
+========== C2: Cross-scope unlinkability ==========
+Current strength: 9 → target: 10
+[C2] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T034631/C2
+[C2] Tier 1: survey baseline...
+[C2] Tier 2: construct from baseline...
+[C2] Tier 3: adversarial (5 personas)...
+[C2] Judge: scoring...
+[C2] iter 1: strength=8/10 verdict=consider
+      baseline_dominance: 2/2 — Construction removes the AS from the per-scope authorization path entirely — age
+      formal_security_argument: 1/2 — Threat model is explicit (adversary controls AS, subset of RSes, network metadat
+      implementability: 2/2 — Every circuit element maps to existing Bolyra primitives: Poseidon2/5, BinaryMer
+      adversarial_survival: 1/2 — Multiple Tier 3 attacks surface real weaknesses: (1) cryptographer Attack 1 — ga
+      scenario_fit: 2/2 — SECU (North Carolina) is named as a concrete stakeholder with specific regulator
+[C2] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T040035/C2
+[C2] Tier 2: refine with 6 gap(s)...
+[C2] Tier 3: adversarial (5 personas)...
+[C2] Judge: scoring...
+[C2] iter 2: strength=8/10 verdict=consider
+      baseline_dominance: 2/2 — Construction explicitly names the structural impossibility: in OAuth 2.0, every 
+      formal_security_argument: 2/2 — Explicit threat model in §3: adversary controls AS, colludes with k-1 of k RS in
+      implementability: 1/2 — Construction maps comprehensively to existing Bolyra primitives: Poseidon2/5, Bi
+      adversarial_survival: 1/2 — Tier 3 codex ran all 5 personas. Several attacks were correctly ruled outside th
+      scenario_fit: 2/2 — §7 names SECU (State Employees' Credit Union, NC, $56B AUM, 2.8M members) as con
+[C2] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T041638/C2
+[C2] Tier 2: refine with 6 gap(s)...
+[C2] iter 3 FAILED: RuntimeError: Claude CLI timed out after 1200s
+[C2] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T043638/C2
+[C2] Tier 2: construct from baseline...
+[C2] Tier 3: adversarial (5 personas)...
+[C2] iter 4 FAILED: RuntimeError: Claude CLI timed out after 240s
+[C2] iter 5 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_005_20260422T044959/C2
+[C2] Tier 2: construct from baseline...
+[C2] Tier 3: adversarial (5 personas)...
+[C2] Judge: scoring...
+[C2] iter 5: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The construction identifies a genuine structural gap: OAuth requires AS to obser
+      formal_security_argument: 1/2 — The construction provides a named threat model, explicit cryptographic assumptio
+      implementability: 2/2 — The construction maps cleanly to existing Bolyra primitives: Poseidon2/5, EdDSA 
+      adversarial_survival: 0/2 — Tier 3 codex adversary with 5 personas found multiple attacks the construction c
+      scenario_fit: 1/2 — The SECU cross-credit-union deployment scenario is named with specific stakehold
+
+========== C3: Delegation audit without exposure ==========
+Current strength: 7 → target: 10
+[C3] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T050806/C3
+[C3] Tier 1: survey baseline...
+[C3] Tier 2: construct from baseline...
+[C3] Tier 3: adversarial (5 personas)...
+[C3] Judge: scoring...
+[C3] iter 1: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — Construction claims 6 structural wins over RFC 8693 + BBS+ but rfc7662_advocate 
+      formal_security_argument: 1/2 — Four named security games (narrowing forgery, participant extraction, scope extr
+      implementability: 2/2 — Construction explicitly maps to existing Bolyra primitives: Poseidon2/4 for scop
+      adversarial_survival: 0/2 — All five personas found attacks explicitly outside the construction's threat mod
+      scenario_fit: 1/2 — NCUA/SECU loan pipeline and journalist/source scenarios are concretely named wit
+[C3] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T052423/C3
+[C3] Tier 2: refine with 6 gap(s)...
+[C3] Tier 3: adversarial (5 personas)...
+[C3] Judge: scoring...
+[C3] iter 2: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — Construction argues AS is adversarial (§3.1) and that RFC 8693+DPoP cannot provi
+      formal_security_argument: 1/2 — Threat model is explicit (§3.1 AS adversarial), assumptions are named (A5 KZG SR
+      implementability: 1/2 — Construction maps to existing Bolyra primitives: Poseidon hash, PLONK agent circ
+      adversarial_survival: 0/2 — Tier 3 found multiple attacks the construction cannot answer: (1) cryptographer 
+      scenario_fit: 1/2 — Two scenarios named: AI pipeline audit and journalist/source chain. NCUA examine
+[C3] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T053618/C3
+[C3] Tier 2: refine with 6 gap(s)...
+[C3] Tier 3: adversarial (5 personas)...
+[C3] Judge: scoring...
+[C3] iter 3: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — The construction hides intermediate chain participants from the auditor AND the 
+      formal_security_argument: 1/2 — Threat model is partially stated: Game 1 (NARROW-FORGE), Game 3 (SCOPE-EXTRACT),
+      implementability: 1/2 — Construction maps to Bolyra primitives: Poseidon2 hash, PLONK agent circuit (SE-
+      adversarial_survival: 0/2 — Tier 3 adversary with all 5 personas found numerous attacks marked outside the t
+      scenario_fit: 1/2 — Two scenarios are named: multi-tool AI pipeline audit and journalist/source agen
+[C3] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T055336/C3
+[C3] Tier 2: refine with 6 gap(s)...
+[C3] Tier 3: adversarial (5 personas)...
+[C3] Judge: scoring...
+[C3] iter 4: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — Construction argues circuit-level enforcement of monotonic narrowing survives AS
+      formal_security_argument: 1/2 — Threat model names A_AS explicitly. Named assumptions: PLONK knowledge soundness
+      implementability: 1/2 — Construction uses Poseidon2, PLONK agent circuit, BabyJubjub EdDSA, nullifier sc
+      adversarial_survival: 0/2 — Tier 3 found multiple attacks the construction cannot answer. Cryptographer Atta
+      scenario_fit: 1/2 — Two concrete scenarios named: multi-tool AI pipeline and journalist/source chain
+[C3] iter 5 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_005_20260422T060939/C3
+[C3] Tier 2: refine with 6 gap(s)...
+[C3] Tier 3: adversarial (5 personas)...
+[C3] Judge: scoring...
+[C3] iter 5: strength=6/10 verdict=drop
+      baseline_dominance: 2/2 — The AS-adversarial participant hiding property (Game 2 PARTICIPANT-HIDE) is prov
+      formal_security_argument: 1/2 — Threat model exists (Game 2 PARTICIPANT-HIDE, Game 3 EPOCH-UNLINK) with named as
+      implementability: 2/2 — Construction maps directly to Bolyra primitives: Poseidon2 (C12 chainBlinding), 
+      adversarial_survival: 0/2 — Multiple Tier 3 attacks the construction cannot answer: cryptographer Attack 2 (
+      scenario_fit: 1/2 — Two scenarios named (AI pipeline audit, journalist/source chain) with regulatory
+
+========== C4: Issuer-blind attribute predicates ==========
+Current strength: 9 → target: 10
+[C4] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T062438/C4
+[C4] Tier 1: survey baseline...
+[C4] Tier 2: construct from baseline...
+[C4] Tier 3: adversarial (5 personas)...
+[C4] Judge: scoring...
+[C4] iter 1: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — Construction correctly identifies that BBS+ ProofVerify requires the issuer publ
+      formal_security_argument: 1/2 — Construction provides an IND-ISS game definition, named cryptographic assumption
+      implementability: 2/2 — Construction maps directly to existing Bolyra primitives: depth-16 Poseidon Merk
+      adversarial_survival: 0/2 — All five personas were exercised. Critical unanswered attacks: (1) cryptographer
+      scenario_fit: 1/2 — Construction names a concrete deployment: CUNA-managed registry of ~4,700 NCUA C
+[C4] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T064200/C4
+[C4] Tier 2: refine with 6 gap(s)...
+[C4] Tier 3: adversarial (5 personas)...
+[C4] iter 2 FAILED: RuntimeError: Claude CLI timed out after 240s
+[C4] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T065124/C4
+[C4] Tier 2: construct from baseline...
+[C4] Tier 3: adversarial (5 personas)...
+[C4] Judge: scoring...
+[C4] iter 3: strength=5/10 verdict=drop
+      baseline_dominance: 2/2 — Attacks from rfc7662_advocate and spiffe_engineer confirm no baseline can replic
+      formal_security_argument: 1/2 — Attacks reference a defined IND-ISS game, named assumptions (PLONK ZK, Poseidon 
+      implementability: 1/2 — Construction maps to Bolyra primitives (Poseidon hash, PLONK circuit, BabyJubjub
+      adversarial_survival: 0/2 — Multiple Tier 3 attacks the construction cannot answer: (1) auth0_pm Attack 3 — 
+      scenario_fit: 1/2 — CO-OP Shared Branch is a concrete deployment with named stakeholders (Mountain A
+[C4] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T071103/C4
+[C4] Tier 2: refine with 6 gap(s)...
+[C4] Tier 3: adversarial (5 personas)...
+[C4] Judge: scoring...
+[C4] iter 4: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — Construction claims cryptographic issuer-hiding with constant-size proofs, which
+      formal_security_argument: 1/2 — Threat model exists: verifier as issuer-hiding adversary. Named assumptions: Gro
+      implementability: 1/2 — Construction maps to existing Bolyra primitives (Poseidon hash, Groth16 circuit,
+      adversarial_survival: 0/2 — Tier 3 codex adversary with 5 personas found multiple attacks the construction c
+      scenario_fit: 1/2 — Three scenarios named with regulatory citations (31 U.S.C. § 5318(h), GLBA § 314
+[C4] iter 5 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_005_20260422T073050/C4
+[C4] Tier 2: refine with 6 gap(s)...
+[C4] Tier 3: adversarial (5 personas)...
+[C4] Judge: scoring...
+[C4] iter 5: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — Construction achieves issuer-hiding under threshold corruption (dIND-ISS with Co
+      formal_security_argument: 1/2 — Threat model exists: dIND-ISS game with CorruptEscrow(member_id) oracle, MUNL ga
+      implementability: 1/2 — Construction maps to existing Bolyra primitives: Poseidon2 hash, Groth16/PLONK c
+      adversarial_survival: 1/2 — All 5 personas attacked. Some attacks survived (spiffe_engineer Attacks 2-3 on W
+      scenario_fit: 1/2 — Three scenarios named: cross-CU NCUA membership proof, cross-firm FINRA-licensed
+
+========== C5: Bolyra as MCP auth, generally ==========
+Current strength: 0 → target: 10
+[C5] iter 1 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_001_20260422T074500/C5
+[C5] Tier 1: survey baseline...
+[C5] Tier 2: construct from baseline...
+[C5] Tier 3: adversarial (5 personas)...
+[C5] Judge: scoring...
+[C5] iter 1: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The construction identifies atomic human+agent composition (shared sessionNonce 
+      formal_security_argument: 1/2 — The construction provides an explicit threat model with three formally defined g
+      implementability: 2/2 — The AgentPolicyV2 circuit maps entirely to existing Bolyra primitives: Poseidon2
+      adversarial_survival: 0/2 — Tier 3 found multiple attacks the construction cannot answer: (1) cryptographer 
+      scenario_fit: 1/2 — Two concrete scenarios are named: Anthropic MCP Connector (Claude→Stripe) and Na
+[C5] iter 2 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_002_20260422T075920/C5
+[C5] Tier 2: refine with 6 gap(s)...
+[C5] Tier 3: adversarial (5 personas)...
+[C5] Judge: scoring...
+[C5] iter 2: strength=3/10 verdict=drop
+      baseline_dominance: 1/2 — AS-blindness during resource access is a real property that DPoP/mTLS and JWT in
+      formal_security_argument: 1/2 — The construction defines Games 1 and 4 (SRS-FORGE), states assumptions A1–A7, pr
+      implementability: 1/2 — The construction maps to existing Bolyra primitives: AgentPolicyV2-Ratcheted use
+      adversarial_survival: 0/2 — Tier 3 surfaced multiple attacks the construction cannot answer. Cryptographer: 
+      scenario_fit: 0/2 — The two scenarios listed are 'generic Claude agent talking to third-party MCP se
+[C5] iter 3 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_003_20260422T082041/C5
+[C5] Tier 2: refine with 6 gap(s)...
+[C5] Tier 3: adversarial (5 personas)...
+[C5] Judge: scoring...
+[C5] iter 3: strength=4/10 verdict=drop
+      baseline_dominance: 1/2 — The construction identifies residual properties (AS-blind binding, unlinkable cl
+      formal_security_argument: 1/2 — The construction has a real threat model with Games 1-5, named trust assumptions
+      implementability: 2/2 — Construction explicitly maps to existing Bolyra primitives: Poseidon hash, Groth
+      adversarial_survival: 0/2 — All five personas surfaced attacks the construction cannot answer. auth0_pm Atta
+      scenario_fit: 0/2 — The two scenarios listed are 'generic Claude agent talking to third-party MCP se
+[C5] iter 4 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_004_20260422T083918/C5
+[C5] Tier 2: refine with 6 gap(s)...
+[C5] Tier 3: adversarial (5 personas)...
+[C5] Judge: scoring...
+[C5] iter 4: strength=3/10 verdict=drop
+      baseline_dominance: 1/2 — Construction retreated from 'strictly dominates' to 'Pareto-dominates on the pri
+      formal_security_argument: 1/2 — Threat model exists: AS-adversary elevated to first-class, 10 named trust assump
+      implementability: 1/2 — Construction maps to existing Bolyra primitives: Groth16 human circuit, PLONK ag
+      adversarial_survival: 0/2 — All five personas found attacks marked 'No — not in threat model': auth0_pm (4/4
+      scenario_fit: 0/2 — The two named scenarios — 'generic Claude agent talking to third-party MCP serve
+[C5] iter 5 → /Users/lordviswa/Projects/identityos/differentiation-autoresearch/runs/iter_005_20260422T085700/C5
+[C5] Tier 2: refine with 6 gap(s)...
+[C5] Tier 3: adversarial (5 personas)...
+[C5] Judge: scoring...
+[C5] iter 5: strength=5/10 verdict=drop
+      baseline_dominance: 1/2 — The AS-adversary framing (§1, four production facts) gives Bolyra real separatio
+      formal_security_argument: 1/2 — Threat model is explicit (AS-adversary with Okta 2023, Auth0 S-1, RFC 9701 gap, 
+      implementability: 2/2 — Both human and agent legs map to PLONK (existing Bolyra primitive). GGM tree use
+      adversarial_survival: 0/2 — Tier 3 with all 5 personas surfaced multiple attacks the construction cannot ans
+      scenario_fit: 1/2 — Two scenarios named: 'generic Claude agent talking to third-party MCP server' an
+
+========== SUMMARY ==========
+  C1: strength=4/10  verdict=escalate
+  C2: strength=5/10  verdict=escalate
+  C3: strength=6/10  verdict=escalate
+  C4: strength=5/10  verdict=escalate
+  C5: strength=5/10  verdict=escalate

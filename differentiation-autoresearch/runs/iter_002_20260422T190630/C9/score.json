@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C9",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Section 8.1 identifies a genuine structural gap: Bolyra removes the AS from the identity layer entirely, so an adversarial AS (the whistleblower scenario) cannot correlate sessions. Per-epoch DPoP+PPID still leaves the AS holding the sub\u2192ppid mapping. However, rfc7662_advocate Attack 3 shows \u00a78.1 critiques per-session DPoP (a strawman) and never analyzes the natural per-epoch DPoP baseline, which narrows the gap significantly. The residual advantage (adversarial AS removal) is real but the baseline analysis is incomplete, so the baseline 'can approximate with extra configuration' for non-adversarial-AS cases."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides an explicit threat model (\u00a73), four named cryptographic assumptions (A1\u2013A4), two formal games (IND-FS-AGENT, FS-REPLAY), and reduction sketches. However, three critical flaws undermine the reductions: (1) Cryptographer Attack 1 shows epochCommitment_e = Poseidon1(s_e) = s_{e+1}, meaning all epoch secrets s_1...s_T are published on-chain in the clear \u2014 the Poseidon preimage resistance reduction (A1) is never exercised because the adversary reads s_e directly from the chain rather than inverting. (2) Cryptographer Attack 2 shows scopeCommitment is a deterministic function of compromised credential material, trivially winning IND-FS-AGENT without touching nullifiers. (3) Cryptographer Attack 3 shows the IND-FS-AGENT game is structurally malformed \u2014 it challenges over two transcripts from the same agent in the same epoch rather than modeling multi-agent unlinkability. The formal framework exists but the reductions are invalid."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "All construction elements map to existing Bolyra primitives: Poseidon hash (epoch chain, nullifiers, commitments), EdDSA on Baby Jubjub (operator signatures), PLONK proving system (all three circuits), Lean Incremental Merkle Tree (membership proofs). Circuit costs are stated and within budget: EpochRotation ~879 constraints, ForwardSecureAgentSession ~9,827, ForwardSecureDelegation ~9,064 \u2014 all under the 10k PLONK target. The primitive mapping table (\u00a75) is complete with Bolyra spec references. No new cryptographic primitives are introduced."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Cryptographer Attack 1 is fatal and unanswered: epochCommitment_e = Poseidon1(s_e) = s_{e+1} is stored on-chain, so the adversary with chain read access (explicitly granted in \u00a73) reads s_1 through s_T directly from the commitment register without any preimage inversion. This collapses the entire forward secrecy property. Cryptographer Attack 2 (scopeCommitment as persistent correlator) independently breaks IND-FS-AGENT. The secure-deletion circularity (identified by auth0_pm, cu_ciso, rfc7662_advocate, and spiffe_engineer independently) is a structural self-contradiction: \u00a78.3 attacks DPoP for relying on operational deletion while \u00a73 makes the identical assumption. None of these attacks are answered by the construction."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "SECU is named as a concrete deployment with a specific scenario (30-day autonomous lending agent). However, auth0_pm Attack 3 and cu_ciso Attack 1 demonstrate that forward-secure unlinkability directly conflicts with NCUA Part 748/749 audit trail requirements and GLBA record-keeping obligations for the lending scenario. The construction provides no audit-escrow mechanism to reconcile forward secrecy with regulatory compliance. The property is a compliance liability, not load-bearing, in the flagship scenario. The whistleblower scenario (\u00a77.2) is hypothetical and niche."
+    }
+  },
+  "gaps": [
+    "FATAL: epochCommitment_e = Poseidon1(s_e) = s_{e+1} is published on-chain, leaking all epoch secrets in the clear. Fix: use a hiding commitment epochCommitment_e = Poseidon2(s_e, r_e) with blinding randomness r_e destroyed with s_e, and derive s_{e+1} = Poseidon1(s_e) as a private intermediate never published.",
+    "scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) is a stable cross-epoch correlator computable from compromised credential material. Fix: add epoch blinding \u2014 scopeCommitment_e = Poseidon3(permissionBitmask, credentialCommitment, s_e) \u2014 making it epoch-bound.",
+    "IND-FS-AGENT game is malformed: challenges over two transcripts from the same agent/epoch rather than multi-agent unlinkability. Revise to N-agent setting where adversary must identify which transcripts belong to the compromised agent.",
+    "Secure deletion assumption in \u00a73 is identical in kind to the DPoP operational deletion criticized in \u00a78.3. Either specify a TEE/HSM key storage mechanism with attestable deletion, or retract \u00a78.3's argument and narrow the claimed advantage.",
+    "Baseline analysis in \u00a78.1 attacks per-session DPoP (strawman). Must analyze per-epoch DPoP key rotation + PPID and precisely quantify the residual gap (adversarial AS scenario only).",
+    "SECU lending scenario conflicts with NCUA Part 748/749 audit requirements. Must specify a dual-path architecture: epoch-bound unlinkability for external adversaries + encrypted audit log keyed to operator-held escrow key for regulatory compliance.",
+    "agentMerkleRoot is a stable public output enabling cross-epoch session enumeration. Must either rotate per epoch or replace with epoch-blinded credential commitment.",
+    "No MCP protocol integration specified \u2014 no mapping from PLONK proof verification to MCP Authorization header flow or Dynamic Client Registration."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

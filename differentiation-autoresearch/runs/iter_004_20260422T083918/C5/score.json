@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C5",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction retreated from 'strictly dominates' to 'Pareto-dominates on the privacy-sovereignty axis' \u2014 an explicit concession that baseline is not provably excluded. auth0_pm shows the AS-adversary premise (\u00a71) collapses under RFC 9701 offline introspection + caching, where AS runtime visibility is bounded to issuance. rfc7662_advocate demonstrates PPIDs + RFC 8707 close cross-RS linkability without ZK, DPoP + ephemeral keys partially close H4, and RFC 8693 JWT act-chains eliminate the per-hop roundtrip claimed in H5. spiffe_engineer shows SPIFFE federation closes H3 portability and WIMSE may subsume H5 delegation. Real advantages exist (unlinkable forward secrecy, selective disclosure of delegation graph) but are not framed as provably outside the baseline's envelope \u2014 they are conditional on AS-adversary being default, which is asserted not demonstrated."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists: AS-adversary elevated to first-class, 10 named trust assumptions (A1-A10), 6 security games (SESSION-LINK, NAMESPACE-FORGE, SRS subversion, etc.), named cryptographic assumptions (discrete log, Poseidon collision resistance, Groth16 knowledge soundness). However, cryptographer found three fundamental gaps: (1) Groth16 proof malleability \u2014 Groth16 is not simulation-extractable, and A10 (honest-verifier) does not cover malleability; no NM-NIZK game provided. (2) H4 forward-secure nullifiers claim forward secrecy but specify no key-evolution mechanism (no forward-secure PRF, no puncturable PRF, no ratchet); Game 4 SESSION-LINK bounds a passive observer, not a post-compromise adversary with sk. (3) Two-leg NIZK composition (Groth16 + PLONK) shares only a public nonce with no combined knowledge extractor or UC composition proof. These are not minor \u2014 they invalidate the stated reductions."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives: Groth16 human circuit, PLONK agent circuit, Poseidon hash, BabyJubjub EdDSA, nullifier scheme. Per-session Pedersen re-randomization is costed at ~2,100 constraints. However, 20-30x latency overhead is acknowledged in \u00a71 with no mitigation strategy, no hardware target, no SNARK aggregation plan. auth0_pm notes a 4-hop delegation chain costs 8-60 seconds of pure auth overhead under H5's 'single proof per hop' framing. The two-leg composition question (cryptographer Attack 3) may require merging both legs into a single circuit, which would change the constraint budget. Cost is partially stated but latency budget is unresolved and potentially prohibitive for the targeted general-case MCP scenarios."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five personas found attacks marked 'No \u2014 not in threat model': auth0_pm (4/4 attacks outside threat model), cryptographer (4/4 outside), cu_ciso (4/4 outside), rfc7662_advocate (2 outside, 2 partial), spiffe_engineer (3 outside, 1 partial). Critical unanswered attacks include: Groth16 malleability breaking H1 mutual handshake, no key-evolution for H4 forward secrecy, no combined extractor for two-leg composition, audit trail opacity violating GLBA \u00a7314.4(h), no key custody specification, SPIFFE attestor subsuming H1/H2, RFC 9701 collapsing the AS-adversary premise, and WIMSE superseding H5. The construction cannot answer the majority of Tier 3 attacks."
+    },
+    "scenario_fit": {
+      "points": 0,
+      "justification": "The two named scenarios \u2014 'generic Claude agent talking to third-party MCP server' and 'cross-vendor agent handoff (Claude \u2192 ChatGPT)' \u2014 are hypothetical with no named stakeholder, no regulatory requirement, and no concrete deployment. The construction explicitly moved away from regulated niches (credit unions, HIPAA) to target the 'general case,' but no general-case stakeholder is identified who requires these properties as load-bearing. cu_ciso showed that the credit union deployment path has four unaddressed regulatory blockers (GLBA audit trails, SRS vendor management, key custody, nullifier registry SLA). auth0_pm noted no buyer reads 'Pareto-dominates on the privacy-sovereignty axis' as a purchase decision. No deployment is named where the construction's properties are necessary rather than nice-to-have."
+    }
+  },
+  "gaps": [
+    "Demonstrate AS-adversary is the default topology with evidence from deployed production systems, not assertion \u2014 or show why RFC 9701 offline introspection + caching does not close the AS visibility gap",
+    "Replace Groth16 leg with simulation-extractable NIZK (e.g., PLONK for both legs) or add formal NM-NIZK game proving non-malleability of the human-identity proof",
+    "Specify a forward-secure PRF family (e.g., GGM tree with key puncturing) for H4 and prove FS-NULL game: Pr[Adv wins] \u2264 negl(\u03bb) even given sk_T",
+    "Provide combined knowledge extractor for two-leg Groth16+PLONK composition, or merge into single circuit, or prove UC-secure composition",
+    "Concrete latency budget per scenario with hardware target, SNARK aggregation strategy, or session-amortization plan to address 20-30x overhead",
+    "Specify RS integration surface: what a 'compliant RS' must implement, minimum viable adapter, backward-compat with vanilla OAuth RSes",
+    "Address GLBA \u00a7314.4(h) audit trail requirement: add compliance mode with linkable audit token alongside unlinkable proof",
+    "Specify concrete SRS instantiation plan (existing ceremony reuse or new MPC ceremony) with post-subversion remediation path",
+    "Specify key custody model for the human proving key (hardware-backed vs browser) with security implications of each",
+    "Name a concrete non-regulated deployment with a specific stakeholder where the privacy-sovereignty properties are load-bearing, not nice-to-have",
+    "Address WIMSE draft-ietf-wimse-arch \u00a76 explicitly \u2014 show Bolyra's ZK properties are orthogonal to what WIMSE can express",
+    "Reframe H3 as 'unlinkable portability' (not 'no registration') and H5 as 'selective disclosure of delegation provenance' (not 'fewer roundtrips') to survive RFC 7591/8693/SPIFFE rebuttals"
+  ],
+  "strength": 3,
+  "verdict": "drop"
+}
