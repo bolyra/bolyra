@@ -51,3 +51,51 @@ export function validateCumulativeBitEncoding(perm: Permission): string | null {
 export function narrows(wider: Permission, narrower: Permission): boolean {
   return (wider & narrower) === narrower;
 }
+
+/**
+ * Resolve a permission input (string label or numeric cumulative bitmask)
+ * into the numeric form, applying the cumulative-bit implication rules so
+ * higher financial tiers logically include lower ones. Returns `null` for
+ * unknown labels or undefined inputs.
+ */
+function resolvePermission(input: string | Permission | undefined): Permission | null {
+  if (input === undefined) return null;
+  let bits: Permission;
+  if (typeof input === "string") {
+    if (!(input in PERM)) return null;
+    bits = PERM[input as keyof typeof PERM];
+  } else {
+    bits = input;
+  }
+  // Apply cumulative-bit implication rules: higher financial tiers imply lower.
+  if (bits & PERM.FINANCIAL_UNLIMITED) {
+    bits |= PERM.FINANCIAL_MEDIUM | PERM.FINANCIAL_SMALL;
+  }
+  if (bits & PERM.FINANCIAL_MEDIUM) {
+    bits |= PERM.FINANCIAL_SMALL;
+  }
+  return bits;
+}
+
+/**
+ * Verifier-side implication check: does the permission `granted` (carried on
+ * a receipt) cover the permission `required` (asserted by the caller)?
+ *
+ * Accepts either string labels (e.g. "FINANCIAL_UNLIMITED") or numeric
+ * cumulative-bit forms on either side. Resolution applies the cumulative-bit
+ * implication rules from circuits/Delegation.circom — granting
+ * FINANCIAL_UNLIMITED logically also grants FINANCIAL_MEDIUM and
+ * FINANCIAL_SMALL; granting FINANCIAL_MEDIUM logically also grants
+ * FINANCIAL_SMALL. Non-financial perms use plain bitwise containment.
+ *
+ * Returns false if either side is undefined or an unknown string label.
+ */
+export function permImplies(
+  granted: string | Permission | undefined,
+  required: string | Permission | undefined,
+): boolean {
+  const g = resolvePermission(granted);
+  const r = resolvePermission(required);
+  if (g === null || r === null) return false;
+  return (g & r) === r;
+}
