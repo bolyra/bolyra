@@ -1,6 +1,6 @@
 import { SignJWT } from "jose";
 import { randomUUID } from "crypto";
-import type { AllowOptions, Receipt } from "./types";
+import type { AllowOptionsV01, Receipt } from "./types";
 import { validateCumulativeBitEncoding } from "./permissions";
 import { fingerprintPublicKey } from "./keys";
 
@@ -22,7 +22,7 @@ import { fingerprintPublicKey } from "./keys";
  *   }, privateKey, publicKey);
  */
 export async function allow(
-  opts: AllowOptions,
+  opts: AllowOptionsV01,
   privateKey: CryptoKey,
   publicKey?: CryptoKey,
 ): Promise<Receipt> {
