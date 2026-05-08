@@ -1,4 +1,5 @@
 import { deflateSync, inflateSync } from "node:zlib";
+import { SignJWT, compactVerify, decodeProtectedHeader } from "jose";
 
 // Internal helpers — module-private. Public surface from spec §5.4 is
 // setStatusBit, readStatusListPayload, publishStatusList, fetchStatusList only.
@@ -50,4 +51,90 @@ function readStatusBitInternal(bitstring: string, idx: number): SlotStatus {
   if (bits === 0b01) return "invalid";
   if (bits === 0b10) return "suspended";
   return "invalid"; // 0b11 reserved → fail-closed
+}
+
+export class StatusListSignatureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StatusListSignatureError";
+  }
+}
+
+export interface PublishStatusListOptions {
+  iss: string;
+  sub: string;
+  bits: 2;
+  bitstring: string;
+  ttlSeconds?: number;
+}
+
+const ONE_YEAR_S = 365 * 24 * 60 * 60;
+
+export async function publishStatusList(
+  opts: PublishStatusListOptions,
+  signingKey: { privateKey: CryptoKey; kid: string },
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + (opts.ttlSeconds ?? ONE_YEAR_S);
+  const payload: Record<string, unknown> = {
+    iss: opts.iss,
+    sub: opts.sub,
+    iat: now,
+    exp,
+    status_list: { bits: opts.bits, lst: opts.bitstring },
+  };
+  if (opts.ttlSeconds !== undefined) payload.ttl = opts.ttlSeconds;
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "EdDSA", typ: "statuslist+jwt", kid: signingKey.kid })
+    .sign(signingKey.privateKey);
+}
+
+export interface StatusListPayload {
+  bitstring: string;
+  iss: string;
+  exp: number;
+  ttl?: number;
+}
+
+export async function readStatusListPayload(
+  jws: string,
+  verifyKey: CryptoKey,
+): Promise<StatusListPayload> {
+  let header: Record<string, unknown>;
+  try {
+    header = decodeProtectedHeader(jws) as Record<string, unknown>;
+  } catch (e) {
+    throw new StatusListSignatureError(`malformed header: ${(e as Error).message}`);
+  }
+  if (header.typ !== "statuslist+jwt") {
+    throw new StatusListSignatureError(
+      `wrong typ: expected statuslist+jwt, got ${String(header.typ)}`,
+    );
+  }
+  let verified;
+  try {
+    verified = await compactVerify(jws, verifyKey);
+  } catch (e) {
+    throw new StatusListSignatureError(`signature verify failed: ${(e as Error).message}`);
+  }
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(verified.payload));
+  } catch (e) {
+    throw new StatusListSignatureError(`payload parse failed: ${(e as Error).message}`);
+  }
+  const sl = payload.status_list as { bits: number; lst: string } | undefined;
+  if (!sl || sl.bits !== 2 || typeof sl.lst !== "string") {
+    throw new StatusListSignatureError("status_list claim malformed");
+  }
+  if (typeof payload.exp !== "number") {
+    throw new StatusListSignatureError("exp claim missing or non-numeric");
+  }
+  const out: StatusListPayload = {
+    bitstring: sl.lst,
+    iss: String(payload.iss),
+    exp: payload.exp,
+  };
+  if (typeof payload.ttl === "number") out.ttl = payload.ttl;
+  return out;
 }
