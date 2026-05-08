@@ -202,22 +202,24 @@ export type PresentOptions = {
 export type IssuerKeyResolver =
   (iss: string, kid: string) => Promise<CryptoKey | null>;
 
-export type StatusListResult =
-  | { ok: true }
-  | {
-      ok: false;
-      reason:
-        | "STATUS_REVOKED"
-        | "STATUS_SUSPENDED"
-        | "STATUS_FETCH_FAILED"
-        | "STATUS_LIST_INVALID"
-        | "STATUS_LIST_SIG_INVALID"
-        | "STATUS_INDEX_OUT_OF_RANGE";
-    };
+/**
+ * Canonical v0.2 status-list result. See plan §1b lines 230-234 and spec §5.4:
+ * fetchStatusList resolves the slot's "valid|invalid|suspended" disposition and
+ * timestamps when the status-list token was retrieved. Failure modes throw
+ * sentinel errors (StatusListIssuerMismatchError, StatusListSignatureError,
+ * etc.) rather than encoding them in the union — the orchestrator (verify.ts)
+ * catches those errors and maps them to VerifyFailureReason.
+ */
+export interface StatusListResult {
+  status: "valid" | "invalid" | "suspended";
+  /** Unix-epoch seconds when the status-list token was retrieved. */
+  fetchedAt: number;
+}
 
 export type StatusListChecker = (
   uri: string,
   idx: number,
+  expectedIss: string,
 ) => Promise<StatusListResult>;
 
 export type VerifyOptions = {

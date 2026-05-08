@@ -82,7 +82,7 @@ describe("v0.2 types surface", () => {
 
   test("resolver and checker shapes", () => {
     const r: IssuerKeyResolver = async (_iss, _kid) => null;
-    const checker: StatusListChecker = async () => ({ ok: true });
+    const checker: StatusListChecker = async () => ({ status: "valid", fetchedAt: 0 });
     expect(typeof r).toBe("function");
     expect(typeof checker).toBe("function");
   });
@@ -97,11 +97,13 @@ describe("v0.2 types surface", () => {
     expect(_p.nonce).toBe("n");
   });
 
-  test("StatusListResult discriminates", () => {
-    const r1: StatusListResult = { ok: true };
-    const r2: StatusListResult = { ok: false, reason: "STATUS_REVOKED" };
-    expect(r1.ok).toBe(true);
-    expect(r2.ok).toBe(false);
+  test("StatusListResult shape (status + fetchedAt)", () => {
+    const r1: StatusListResult = { status: "valid", fetchedAt: 1 };
+    const r2: StatusListResult = { status: "invalid", fetchedAt: 2 };
+    const r3: StatusListResult = { status: "suspended", fetchedAt: 3 };
+    expect(r1.status).toBe("valid");
+    expect(r2.status).toBe("invalid");
+    expect(r3.status).toBe("suspended");
   });
 
   test("ReceiptClaims accepts cnf and status fields", () => {

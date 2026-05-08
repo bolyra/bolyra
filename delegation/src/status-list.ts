@@ -138,3 +138,87 @@ export async function readStatusListPayload(
   if (typeof payload.ttl === "number") out.ttl = payload.ttl;
   return out;
 }
+
+import type { IssuerKeyResolver, StatusListResult } from "./types";
+
+export class StatusListIssuerMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StatusListIssuerMismatchError";
+  }
+}
+
+export interface FetchStatusListOpts {
+  fetch?: typeof globalThis.fetch;
+  cacheTtlSeconds?: number; // accepted for spec parity; v0.2 does not cache
+  verifyKey?: CryptoKey | IssuerKeyResolver;
+}
+
+// base64url decode (JOSE standard) — JWS header peek MUST NOT use standard base64.
+function b64urlToBuf(s: string): Buffer {
+  const pad = s.length % 4 === 0 ? 0 : 4 - (s.length % 4);
+  const padded = s + "=".repeat(pad);
+  return Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+
+export async function fetchStatusList(
+  uri: string,
+  idx: number,
+  expectedIss: string,
+  opts?: FetchStatusListOpts,
+): Promise<StatusListResult> {
+  // Security invariant: HTTPS-only. Reject before any fetch is issued.
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch (e) {
+    throw new Error(`status list uri parse failed: ${(e as Error).message}`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`status list uri must be https, got ${parsed.protocol}`);
+  }
+
+  const f = opts?.fetch ?? globalThis.fetch;
+  const res = await f(uri);
+  if (!res.ok) throw new Error(`status list unreachable: ${res.status}`);
+  const jws = await res.text();
+
+  // Peek at the JWS protected header to learn (kid) and at the payload to
+  // learn (iss) BEFORE we decide which verification key to use.
+  const parts = jws.split(".");
+  if (parts.length !== 3) throw new Error("status list jws malformed");
+  let header: Record<string, unknown>;
+  let payloadPeek: Record<string, unknown>;
+  try {
+    header = JSON.parse(b64urlToBuf(parts[0]).toString("utf8"));
+    payloadPeek = JSON.parse(b64urlToBuf(parts[1]).toString("utf8"));
+  } catch (e) {
+    throw new Error(`status list jws decode failed: ${(e as Error).message}`);
+  }
+  const tokenIss = String(payloadPeek.iss ?? "");
+  const tokenKid = typeof header.kid === "string" ? header.kid : "";
+
+  if (tokenIss !== expectedIss) {
+    throw new StatusListIssuerMismatchError(
+      `status_list_issuer_mismatch: token iss ${tokenIss} != expected ${expectedIss}`,
+    );
+  }
+
+  // Resolve the verification key. Either a direct CryptoKey, or a resolver
+  // that we call with the iss/kid we just peeked.
+  let key: CryptoKey | undefined;
+  if (opts?.verifyKey && typeof opts.verifyKey === "function") {
+    const resolved = await (opts.verifyKey as IssuerKeyResolver)(tokenIss, tokenKid);
+    key = resolved ?? undefined;
+  } else if (opts?.verifyKey) {
+    key = opts.verifyKey as CryptoKey;
+  }
+  if (!key) {
+    throw new Error(`status list signer not found: ${tokenIss}/${tokenKid}`);
+  }
+
+  // readStatusListPayload throws StatusListSignatureError on sig OR typ failure.
+  const payload = await readStatusListPayload(jws, key);
+  const slot = readStatusBitInternal(payload.bitstring, idx);
+  return { status: slot, fetchedAt: Math.floor(Date.now() / 1000) };
+}
