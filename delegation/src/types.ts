@@ -181,14 +181,54 @@ export type StatusListChecker = (
 ) => Promise<StatusListResult>;
 
 export type VerifyOptions = {
-  expectedAudience: string;
+  /**
+   * Canonical v0.2 expected audience. Optional at the type level so the
+   * legacy v0.1 path (which uses `audience`) can share this single options
+   * shape; the v0.2 dispatcher still requires it at runtime.
+   */
+  expectedAudience?: string;
   expectedIssuer?: string;
-  resolveIssuerKey: IssuerKeyResolver;
+  /**
+   * Canonical v0.2 issuer key resolver. Optional at the type level so the
+   * legacy v0.1 path (which uses `trustedIssuers`) can share this shape.
+   * The v0.2 dispatcher still requires it at runtime.
+   */
+  resolveIssuerKey?: IssuerKeyResolver;
   checkStatus?: StatusListChecker;
   /** Required if the SD-JWT presentation is expected to carry a KB-JWT. */
   expectedNonce?: string;
   /** Maximum acceptable iat-skew on KB-JWT (seconds). Default 60. */
   maxKbIatSkewSeconds?: number;
+
+  // ---- Legacy v0.1 path fields (consumed by verifyV01).
+  // All optional so the canonical v0.2 shape still compiles. The v0.1 path
+  // accepts either the new names below or the old aliases (expectedAgent,
+  // expectedAction, invocationAmount, clockToleranceSeconds, trustedIssuers
+  // as a TrustedIssuer | TrustedIssuer[]).
+  /** v0.1: caller-expected audience (alias used by verifyV01 in lieu of expectedAudience). */
+  audience?: string;
+  /** v0.1: subject (agent) the verifier expects. */
+  expectedSubject?: string;
+  /** v0.1 alias of expectedSubject. */
+  expectedAgent?: string;
+  /** v0.1: action the agent is attempting. */
+  action?: string;
+  /** v0.1 alias of action. */
+  expectedAction?: string;
+  /** v0.1: required permission bitmask. */
+  perm?: number;
+  /** v0.1: caller's invocation amount. */
+  amount?: number;
+  /** v0.1: caller's invocation currency. Pairs with `amount`. */
+  currency?: string;
+  /** v0.1 grouped form of {amount, currency}. */
+  invocationAmount?: { amount: number; currency: string };
+  /** v0.1: clock skew tolerance in seconds. Default 30. */
+  clockSkewSeconds?: number;
+  /** v0.1 alias of clockSkewSeconds. */
+  clockToleranceSeconds?: number;
+  /** v0.1: issuer key resolver, OR a single TrustedIssuer / array of them. */
+  trustedIssuers?: IssuerKeyResolver | TrustedIssuer | TrustedIssuer[];
 };
 
 export type VerifyResult =
