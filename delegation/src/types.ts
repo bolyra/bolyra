@@ -87,6 +87,7 @@ export type VerifyFailureReason =
   | "WRONG_ISSUER"
   | "WRONG_AUDIENCE"
   | "WRONG_SUBJECT"
+  | "WRONG_ACTION"
   | "MISSING_CLAIM"
   | "PARENT_NOT_FOUND"
   | "DELEGATION_LOOP"
@@ -96,9 +97,21 @@ export type VerifyFailureReason =
   | "DUPLICATE_DISCLOSURE"
   | "MALFORMED_DISCLOSURE"
   | "SD_ALG_UNSUPPORTED"
+  | "SD_JWT_MALFORMED"
+  | "UNSUPPORTED_ALG"
+  | "TYP_MISMATCH"
+  | "KID_MISSING"
+  | "KID_RESOLVER_ERROR"
+  | "UNKNOWN_ISSUER_KID"
+  | "LEGACY_V01_REJECTED"
+  | "PERMISSION_VIOLATION"
+  | "AMOUNT_EXCEEDS_CAP"
+  | "CURRENCY_MISMATCH"
   | "CNF_MISSING"
   | "CNF_KEY_MISMATCH"
+  | "CNF_JWK_INVALID"
   | "KB_MISSING"
+  | "KB_NONCE_REQUIRED"
   | "KB_BAD_FORMAT"
   | "KB_INVALID_SIGNATURE"
   | "KB_WRONG_NONCE"
@@ -111,9 +124,12 @@ export type VerifyFailureReason =
   | "KB_BINDING_MISMATCH"
   | "STATUS_REVOKED"
   | "STATUS_SUSPENDED"
+  | "STATUS_CHECK_UNCONFIGURED"
   | "STATUS_FETCH_FAILED"
   | "STATUS_LIST_INVALID"
   | "STATUS_LIST_SIG_INVALID"
+  | "STATUS_LIST_ISSUER_MISMATCH"
+  | "STATUS_LIST_UNREACHABLE"
   | "STATUS_INDEX_OUT_OF_RANGE"
   | "UNKNOWN";
 
@@ -254,6 +270,15 @@ export type VerifyOptions = {
   /** Task 12: maximum acceptable KB-JWT age in seconds (iat freshness). Default 60. */
   kbMaxAgeSeconds?: number;
 
+  // ---- Task 13 orchestrator switches.
+  /**
+   * Allow plain compact-JWS receipts (no '~' separator) to be routed through
+   * the legacy v0.1 verify path. Default: false. When false (the default), a
+   * tilde-less receipt is rejected with `LEGACY_V01_REJECTED` so callers must
+   * opt in explicitly to the v0.1 surface.
+   */
+  acceptLegacyV01?: boolean;
+
   // ---- Legacy v0.1 path fields (consumed by verifyV01).
   // All optional so the canonical v0.2 shape still compiles. The v0.1 path
   // accepts either the new names below or the old aliases (expectedAgent,
@@ -289,6 +314,15 @@ export type VerifyOptions = {
   trustedIssuers?: IssuerKeyResolver | TrustedIssuer | TrustedIssuer[];
 };
 
+/**
+ * v0.2 verify() result shape. The orchestrator (Task 13) reports a single
+ * canonical failure reason on the negative branch, taken from the
+ * `VerifyFailureReason` UPPER_SNAKE_CASE union. Internal helpers
+ * (`checkIssuerClaims`, `verifyKbJwt`) emit lowercase enum literals; the
+ * orchestrator translates them via module-scope Record<,> maps. The
+ * `legacyV01` flag on the positive branch records whether the receipt was
+ * verified via the v0.1 compact-JWS path (verifyV01) or the v0.2 SD-JWT path.
+ */
 export type VerifyResult =
-  | { ok: true; claims: ReceiptClaims }
-  | { ok: false; reasons: VerifyFailureReason[] };
+  | { ok: true; claims: ReceiptClaims; legacyV01: boolean }
+  | { ok: false; reason: VerifyFailureReason; detail?: string };

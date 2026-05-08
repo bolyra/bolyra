@@ -27,11 +27,13 @@ describe("@bolyra/delegation", () => {
         expectedAgent: "agent_alice",
         expectedAction: "purchase",
         expectedAudience: "example.com",
+        audience: "example.com",
         trustedIssuers: publicKey,
+        acceptLegacyV01: true,
       });
 
-      expect(result.valid).toBe(true);
-      if (result.valid) {
+      expect(result.ok).toBe(true);
+      if (result.ok) {
         expect(result.claims.sub).toBe("agent_alice");
         expect(result.claims.act).toBe("purchase");
         expect(result.claims.aud).toBe("example.com");
@@ -55,11 +57,13 @@ describe("@bolyra/delegation", () => {
         expectedAgent: "agent_alice",
         expectedAction: "post",
         expectedAudience: "attacker.com",
+        audience: "attacker.com",
         trustedIssuers: publicKey,
+        acceptLegacyV01: true,
       });
 
-      expect(result.valid).toBe(false);
-      if (!result.valid) expect(result.reason).toBe("audience_mismatch");
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe("WRONG_AUDIENCE");
     });
 
     it("rejects when amount exceeds cap", async () => {
@@ -80,12 +84,14 @@ describe("@bolyra/delegation", () => {
         expectedAgent: "agent_alice",
         expectedAction: "purchase",
         expectedAudience: "example.com",
+        audience: "example.com",
         trustedIssuers: publicKey,
         invocationAmount: { amount: 75, currency: "USD" },
+        acceptLegacyV01: true,
       });
 
-      expect(result.valid).toBe(false);
-      if (!result.valid) expect(result.reason).toBe("amount_exceeds_cap");
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe("AMOUNT_EXCEEDS_CAP");
     });
 
     it("rejects when signed by an untrusted key", async () => {
@@ -106,11 +112,13 @@ describe("@bolyra/delegation", () => {
         expectedAgent: "agent_alice",
         expectedAction: "read",
         expectedAudience: "example.com",
+        audience: "example.com",
         trustedIssuers: otherPublicKey,
+        acceptLegacyV01: true,
       });
 
-      expect(result.valid).toBe(false);
-      if (!result.valid) expect(result.reason).toBe("invalid_signature");
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe("INVALID_SIGNATURE");
     });
   });
 
