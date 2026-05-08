@@ -18,7 +18,8 @@ describe("v0.2 types surface", () => {
     // STATUS_LIST_UNREACHABLE, LEGACY_V01_REJECTED, SD_JWT_MALFORMED,
     // UNSUPPORTED_ALG, TYP_MISMATCH, KB_NONCE_REQUIRED, CNF_JWK_INVALID,
     // PERMISSION_VIOLATION, AMOUNT_EXCEEDS_CAP, CURRENCY_MISMATCH,
-    // WRONG_ACTION). Original 36 → 52 after Task 13.
+    // WRONG_ACTION). Original 36 → 52 after Task 13. Post-merge cleanup
+    // removed the unreachable STATUS_FETCH_FAILED reason (51 total).
     const reasons: VerifyFailureReason[] = [
       // v0.1 carry-overs + Task 13 v0.1-bridge translations
       "BAD_FORMAT",
@@ -70,7 +71,6 @@ describe("v0.2 types surface", () => {
       "STATUS_REVOKED",
       "STATUS_SUSPENDED",
       "STATUS_CHECK_UNCONFIGURED",
-      "STATUS_FETCH_FAILED",
       "STATUS_LIST_INVALID",
       "STATUS_LIST_SIG_INVALID",
       "STATUS_LIST_ISSUER_MISMATCH",
@@ -79,7 +79,7 @@ describe("v0.2 types surface", () => {
       // legacy/unknown
       "UNKNOWN",
     ];
-    expect(reasons.length).toBe(52);
+    expect(reasons.length).toBe(51);
   });
 
   test("VerifyResult.ok shape", () => {

@@ -53,7 +53,6 @@ const ALL_REASONS: string[] = [
   "STATUS_REVOKED",
   "STATUS_SUSPENDED",
   "STATUS_CHECK_UNCONFIGURED",
-  "STATUS_FETCH_FAILED",
   "STATUS_LIST_INVALID",
   "STATUS_LIST_SIG_INVALID",
   "STATUS_LIST_ISSUER_MISMATCH",
@@ -62,8 +61,8 @@ const ALL_REASONS: string[] = [
 ];
 
 describe("conformance: negative-space coverage", () => {
-  it("VerifyFailureReason union has exactly 51 enumerated members (UNKNOWN exempted)", () => {
-    expect(ALL_REASONS.length).toBe(51);
+  it("VerifyFailureReason union has exactly 50 enumerated members (UNKNOWN exempted)", () => {
+    expect(ALL_REASONS.length).toBe(50);
   });
 
   it("every VerifyFailureReason is referenced by at least one test file", () => {
