@@ -14,7 +14,7 @@ describe("verify() — v0.2 orchestrator", () => {
       max: { amount: 100, currency: "USD" },
       agentPubKey: agentPub as unknown as CryptoKey,
     }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
-    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n1", audience: "merchant-x" } as any);
+    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n1", audience: "merchant-x" });
 
     const r = await verify(presented, {
       audience: "merchant-x",
@@ -52,7 +52,7 @@ describe("verify() — v0.2 orchestrator", () => {
     const receipt = await allow({
       iss: "i", sub: "s", aud: "a", act: "x", perm: "p", agentPubKey: agentPub as unknown as CryptoKey,
     }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
-    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" } as any);
+    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" });
     const r = await verify(presented, {
       audience: "a",
       trustedIssuers: async () => null,
@@ -68,7 +68,7 @@ describe("verify() — v0.2 orchestrator", () => {
     const receipt = await allow({
       iss: "i", sub: "s", aud: "a", act: "x", perm: "p", agentPubKey: agentPub as unknown as CryptoKey,
     }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
-    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" } as any);
+    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" });
     const r = await verify(presented, {
       audience: "a",
       trustedIssuers: async () => { throw new Error("DNS failure"); },
@@ -86,7 +86,7 @@ describe("verify() — v0.2 orchestrator", () => {
       agentPubKey: agentPub as unknown as CryptoKey,
       statusList: { uri: "https://issuer.example/status/1", idx: 0 },
     }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
-    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" } as any);
+    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" });
     const r = await verify(presented, {
       audience: "a",
       trustedIssuers: staticIssuerResolver({ i: { k1: issPub as unknown as CryptoKey } }),

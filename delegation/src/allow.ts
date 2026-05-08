@@ -34,6 +34,11 @@ export async function allow(
     }
     try {
       const k = await importJWK(parsed as { kty: string; [k: string]: unknown }, "EdDSA");
+      // jose v5 returns a `KeyLike` (Node `KeyObject` on Node 20, Web Crypto
+      // `CryptoKey` on Edge runtimes). Both satisfy our downstream `exportJWK`
+      // and signing usage, but `instanceof CryptoKey` returns false for the
+      // Node KeyObject branch — so we cannot runtime-narrow here. The cast is
+      // load-bearing on Node 20; do not replace it with `instanceof CryptoKey`.
       agentPubCrypto = k as CryptoKey;
     } catch {
       throw new Error("allow: agentPubKey unparseable");

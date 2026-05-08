@@ -26,7 +26,7 @@ describe("conformance: full allow → present → verify happy path", () => {
     const presented = await present(receipt, holder.privateKey as unknown as CryptoKey, {
       audience: "https://merchant.example",
       nonce: "nonce-abc-123",
-    } as any);
+    });
 
     expect(presented.split("~").length).toBe(3); // <jws>, "", <kb-jwt>
     expect(presented.split("~")[1]).toBe(""); // empty disclosure slot

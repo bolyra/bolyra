@@ -113,9 +113,12 @@ describe("v0.2 types surface", () => {
   });
 
   test("PresentOptions has nonce + audience", () => {
+    // PresentOptions carries only the request-shaped fields the present()
+    // signature consumes from the options bag; sdJwt + holderPrivateKey are
+    // positional args, not options. The earlier placeholder shape (Task 1b)
+    // listed them as required fields, which forced every test caller to use
+    // `as any`; the canonical v0.2 surface drops them.
     const _p: PresentOptions = {
-      sdJwt: "...",
-      holderPrivateKey: new Uint8Array(),
       nonce: "n",
       audience: "https://rp.example",
     };
