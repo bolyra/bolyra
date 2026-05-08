@@ -1,11 +1,13 @@
-import {
-  allow,
-  verify,
-  generateKeyPair,
-  PERM,
-  validateCumulativeBitEncoding,
-  narrows,
-} from "../src";
+// Task 14 barrel narrowing dropped PERM, validateCumulativeBitEncoding, narrows,
+// generateKeyPair, and the v0.1 3-arg `allow` from the public surface. This suite
+// exercises the v0.1 back-compat path (acceptLegacyV01: true), so it imports the
+// v0.1 `allow` directly from ./sign and the helpers from internal modules. The
+// v0.2 `verify` orchestrator stays barrel-imported — it is the canonical entry
+// point and translates the legacy lowercase reasons into UPPER_SNAKE_CASE.
+import { allow } from "../src/sign";
+import { verify } from "../src";
+import { generateKeyPair } from "../src/keys";
+import { PERM, validateCumulativeBitEncoding, narrows } from "../src/permissions";
 
 describe("@bolyra/delegation", () => {
   describe("allow + verify", () => {
