@@ -61,7 +61,12 @@ export async function verifyV01(
   const audience = opts.audience ?? opts.expectedAudience;
   const expectedSubject = opts.expectedSubject ?? opts.expectedAgent;
   const action = opts.action ?? opts.expectedAction;
-  const perm = opts.perm;
+  // v0.1 path requires the numeric cumulative-bit form. The shared
+  // VerifyOptions.perm was widened to `string | number` for the v0.2 surface
+  // (Task 11); narrow back to number here so the legacy semantic checks stay
+  // typed. v0.1 callers always supplied numeric perms, so this is a no-op at
+  // runtime for any well-formed v0.1 input.
+  const perm = typeof opts.perm === "number" ? opts.perm : undefined;
   const clockSkewSeconds = opts.clockSkewSeconds ?? opts.clockToleranceSeconds ?? 30;
   const invocation = opts.invocationAmount
     ?? (opts.amount !== undefined && opts.currency !== undefined
@@ -193,15 +198,24 @@ function checkSemantics(
   if (claims.perm === undefined) {
     return { ok: false, reason: "malformed", detail: "missing perm claim" };
   }
-  const permViolation = validateCumulativeBitEncoding(claims.perm);
+  // v0.1 receipts always carry numeric cumulative-bit perms. The shared
+  // ReceiptClaims.perm was widened to `string | Permission` for v0.2 (Task 11);
+  // narrow back here so the v0.1 semantic checks (validateCumulativeBitEncoding,
+  // hasPermission) stay number-typed. A non-numeric perm on a v0.1 receipt is
+  // treated as malformed.
+  if (typeof claims.perm !== "number") {
+    return { ok: false, reason: "malformed", detail: "perm claim must be numeric in v0.1" };
+  }
+  const claimPerm: number = claims.perm;
+  const permViolation = validateCumulativeBitEncoding(claimPerm);
   if (permViolation) {
     return { ok: false, reason: "permission_violation", detail: permViolation };
   }
-  if (s.perm !== undefined && !hasPermission(claims.perm, s.perm)) {
+  if (s.perm !== undefined && !hasPermission(claimPerm, s.perm)) {
     return {
       ok: false,
       reason: "permission_violation",
-      detail: `granted ${claims.perm} does not include required ${s.perm}`,
+      detail: `granted ${claimPerm} does not include required ${s.perm}`,
     };
   }
 
@@ -225,7 +239,7 @@ function checkSemantics(
   // Permission gating for financial actions: if the receipt covers a financial
   // action, the permission tier must be at least FINANCIAL_SMALL.
   if (claims.act && (claims.act.startsWith("purchase") || claims.act.startsWith("pay"))) {
-    if (!hasPermission(claims.perm, 1 << 2)) {
+    if (!hasPermission(claimPerm, 1 << 2)) {
       return {
         ok: false,
         reason: "permission_violation",

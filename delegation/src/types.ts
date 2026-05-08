@@ -16,8 +16,12 @@ export type ReceiptClaims = {
   parent_jti?: string;
   /** v0.1-required action; optional in v0.2 receipts where it lives in disclosures. */
   act?: string;
-  /** v0.1-required cumulative permission; optional in v0.2 where it lives in disclosures. */
-  perm?: Permission;
+  /**
+   * v0.1-required cumulative permission; optional in v0.2 where it lives in disclosures.
+   * v0.2 stores the human-readable label (e.g., "FINANCIAL_SMALL") in the body claim;
+   * v0.1 issuance still uses the numeric `Permission` cumulative-bit form. Accepts either.
+   */
+  perm?: string | Permission;
   /** Optional cap on a single invocation, e.g. { amount: 50, currency: "USD" }. */
   max?: { amount: number; currency: string };
   /** RFC 7800 confirmation key (Ed25519 holder JWK). v0.2 SD-JWT bindings always populate this. */
@@ -257,8 +261,12 @@ export type VerifyOptions = {
   action?: string;
   /** v0.1 alias of action. */
   expectedAction?: string;
-  /** v0.1: required permission bitmask. */
-  perm?: number;
+  /**
+   * v0.1: required permission. Accepts either the numeric cumulative bitmask
+   * (legacy v0.1 surface) or a string label (v0.2 surface, e.g.
+   * "FINANCIAL_UNLIMITED"). `permImplies` in ./permissions resolves both.
+   */
+  perm?: string | number;
   /** v0.1: caller's invocation amount. */
   amount?: number;
   /** v0.1: caller's invocation currency. Pairs with `amount`. */
