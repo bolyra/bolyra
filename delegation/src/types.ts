@@ -246,6 +246,14 @@ export type VerifyOptions = {
   /** Maximum acceptable iat-skew on KB-JWT (seconds). Default 60. */
   maxKbIatSkewSeconds?: number;
 
+  // ---- Task 12 KB-JWT support (consumed by verify-kb.ts).
+  // verifyKbJwt reads these directly. The Task 13 orchestrator may also accept
+  // `expectedNonce` / `maxKbIatSkewSeconds` and forward into these fields.
+  /** Task 12: required nonce the KB-JWT payload must echo. */
+  kbNonce?: string;
+  /** Task 12: maximum acceptable KB-JWT age in seconds (iat freshness). Default 60. */
+  kbMaxAgeSeconds?: number;
+
   // ---- Legacy v0.1 path fields (consumed by verifyV01).
   // All optional so the canonical v0.2 shape still compiles. The v0.1 path
   // accepts either the new names below or the old aliases (expectedAgent,
