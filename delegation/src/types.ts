@@ -1,34 +1,30 @@
 import type { Permission } from "./permissions";
 
 /**
- * Receipt claims (JWT body). Field names mirror standard JWT claims where
- * possible so that any JWT-aware verifier can do basic checks even without
- * @bolyra/delegation installed.
+ * Receipt claims (JWT body). v0.1 carried `act` and `perm` as required fields;
+ * the v0.2 SD-JWT surface no longer requires them on the receipt body (they
+ * move into selective-disclosure form), so they are optional here so the
+ * canonical v0.2 receipt shape compiles. v0.1 issuance still populates them.
  */
-export interface ReceiptClaims {
-  /** Issuer — the human (or upstream agent) that signed the delegation. */
+export type ReceiptClaims = {
   iss: string;
-  /** Subject — the agent the delegation grants authority to. */
   sub: string;
-  /** Audience — the tool, merchant, or scope the delegation is valid for. */
   aud: string;
-  /** Action being delegated, e.g. "purchase", "post", "read". */
-  act: string;
-  /** 8-bit cumulative permission bits (see PERM). */
-  perm: Permission;
+  iat: number;
+  exp: number;
+  jti: string;
+  parent_jti?: string;
+  /** v0.1-required action; optional in v0.2 receipts where it lives in disclosures. */
+  act?: string;
+  /** v0.1-required cumulative permission; optional in v0.2 where it lives in disclosures. */
+  perm?: Permission;
   /** Optional cap on a single invocation, e.g. { amount: 50, currency: "USD" }. */
   max?: { amount: number; currency: string };
-  /** Issued-at, unix seconds. */
-  iat: number;
-  /** Expiry, unix seconds. */
-  exp: number;
-  /** Receipt id — used for revocation lookups and audit. */
-  jti: string;
-  /** RFC 7800 confirmation — present in v0.2 issuer JWS, absent in v0.1. */
+  /** RFC 7800 confirmation key (Ed25519 holder JWK). v0.2 SD-JWT bindings always populate this. */
   cnf?: { jwk: { kty: "OKP"; crv: "Ed25519"; x: string } };
-  /** IETF status-list pointer — present when the issuer published one. */
+  /** IETF status-list slot (draft-ietf-oauth-status-list-20). v0.2 SD-JWT bindings always populate this. */
   status?: { status_list: { uri: string; idx: number } };
-}
+};
 
 /**
  * Wire format: a compact JWS string (EdDSA over the claims). Phase 2 swaps
@@ -80,86 +76,123 @@ export interface VerifyOptionsV01 {
 export type TrustedIssuer = string | CryptoKey;
 
 export type VerifyFailureReason =
-  // ---- v0.1 inherited (10) ----
-  | "invalid_signature" | "expired" | "not_yet_valid" | "audience_mismatch"
-  | "agent_mismatch" | "action_mismatch" | "permission_violation"
-  | "amount_exceeds_cap" | "currency_mismatch" | "malformed"
-  // ---- SD-JWT structural (6) ----
-  | "sd_jwt_malformed" | "kid_missing" | "kid_resolver_error"
-  | "unknown_issuer_kid" | "unsupported_alg" | "typ_mismatch"
-  // ---- cnf (2) ----
-  | "cnf_missing" | "cnf_jwk_invalid"
-  // ---- KB-JWT (11) ----
-  | "kb_nonce_required" | "kb_jwt_missing" | "kb_jwt_malformed"
-  | "kb_jwt_invalid_signature" | "kb_jwt_typ_mismatch"
-  | "kb_jwt_audience_mismatch" | "kb_jwt_nonce_mismatch"
-  | "kb_jwt_sd_hash_mismatch" | "kb_jwt_expired" | "kb_jwt_iat_in_future"
-  | "holder_key_thumbprint_mismatch"
-  // ---- status-list (6) ----
-  | "status_check_unconfigured" | "status_list_unreachable"
-  | "status_list_signature_invalid" | "status_list_issuer_mismatch"
-  | "status_revoked" | "status_suspended"
-  // ---- legacy gate (1) ----
-  | "legacy_v01_rejected";
+  | "BAD_FORMAT"
+  | "INVALID_SIGNATURE"
+  | "EXPIRED"
+  | "FUTURE_NBF"
+  | "WRONG_ISSUER"
+  | "WRONG_AUDIENCE"
+  | "WRONG_SUBJECT"
+  | "MISSING_CLAIM"
+  | "PARENT_NOT_FOUND"
+  | "DELEGATION_LOOP"
+  | "DISCLOSURE_TAMPERED"
+  | "DISCLOSURE_HASH_MISMATCH"
+  | "UNDISCLOSED_CLAIM_REQUIRED"
+  | "DUPLICATE_DISCLOSURE"
+  | "MALFORMED_DISCLOSURE"
+  | "SD_ALG_UNSUPPORTED"
+  | "CNF_MISSING"
+  | "CNF_KEY_MISMATCH"
+  | "KB_MISSING"
+  | "KB_BAD_FORMAT"
+  | "KB_INVALID_SIGNATURE"
+  | "KB_WRONG_NONCE"
+  | "KB_WRONG_AUDIENCE"
+  | "KB_WRONG_SD_HASH"
+  | "KB_TYP_INVALID"
+  | "KB_ALG_UNSUPPORTED"
+  | "KB_IAT_FUTURE"
+  | "KB_IAT_TOO_OLD"
+  | "KB_BINDING_MISMATCH"
+  | "STATUS_REVOKED"
+  | "STATUS_SUSPENDED"
+  | "STATUS_FETCH_FAILED"
+  | "STATUS_LIST_INVALID"
+  | "STATUS_LIST_SIG_INVALID"
+  | "STATUS_INDEX_OUT_OF_RANGE"
+  | "UNKNOWN";
+
+/**
+ * Legacy v0.1 failure reasons (lowercase). Kept separate from the canonical
+ * v0.2 `VerifyFailureReason` union — Task 1b plan dictates UPPER_SNAKE_CASE
+ * for the v0.2 surface; v0.1 verify.ts still emits its original lowercase
+ * literals so call sites that branch on them keep compiling.
+ */
+export type VerifyFailureReasonV01 =
+  | "invalid_signature"
+  | "expired"
+  | "not_yet_valid"
+  | "audience_mismatch"
+  | "agent_mismatch"
+  | "action_mismatch"
+  | "permission_violation"
+  | "amount_exceeds_cap"
+  | "currency_mismatch"
+  | "malformed";
 
 export type VerifyResultV01 =
   | { valid: true; claims: ReceiptClaims }
-  | { valid: false; reason: VerifyFailureReason; detail?: string };
+  | { valid: false; reason: VerifyFailureReasonV01; detail?: string };
 
 // ---- v0.2 additions ----
 
-export interface AllowOptions {
-  iss: string;
-  sub: string;
-  aud: string;
-  act: string;
-  /**
-   * Permission scope. v0.2 widens this from the v0.1 `Permission` enum to
-   * `string` so issuers can mint permissions outside the cumulative-bit set
-   * (e.g. SAAS-specific scopes). The cumulative-bit `permImplies()` check in
-   * `verify-claims.ts` only fires when both sides are recognized Permission
-   * values; otherwise the comparator falls back to literal equality.
-   */
-  perm: string;
-  max?: { amount: number; currency: string };
-  ttlSeconds?: number;
-  jti?: string;
-  agentPubKey: CryptoKey | string;
-  statusList?: { uri: string; idx: number };
-}
+export type Ed25519JWK = { kty: "OKP"; crv: "Ed25519"; x: string };
 
-export interface PresentOptions {
+export type AllowOptions = {
+  issuerPrivateKey: Uint8Array;
+  issuerKid: string;
+  subject: string;
+  audience: string;
+  ttlSeconds: number;
+  agentPubKey: Ed25519JWK;
+  statusList: { uri: string; idx: number };
+  parentJti?: string;
+  permissions?: { sub_delegate?: boolean };
+};
+
+export type PresentOptions = {
+  sdJwt: string;
+  holderPrivateKey: Uint8Array;
   nonce: string;
   audience: string;
-}
+  disclose?: string[];
+};
 
-export type IssuerKeyResolver =
-  (iss: string, kid: string) => Promise<CryptoKey | null>;
+export type IssuerKeyResolver = (
+  iss: string,
+  kid: string,
+) => Promise<Ed25519JWK>;
 
-export interface StatusListResult {
-  status: "valid" | "invalid" | "suspended";
-  /** Unix-epoch ms when the status-list token was retrieved. */
-  fetchedAt: number;
-}
+export type StatusListResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "STATUS_REVOKED"
+        | "STATUS_SUSPENDED"
+        | "STATUS_FETCH_FAILED"
+        | "STATUS_LIST_INVALID"
+        | "STATUS_LIST_SIG_INVALID"
+        | "STATUS_INDEX_OUT_OF_RANGE";
+    };
 
-export type StatusListChecker =
-  (uri: string, idx: number, expectedIss: string) => Promise<StatusListResult>;
+export type StatusListChecker = (
+  uri: string,
+  idx: number,
+) => Promise<StatusListResult>;
 
-export interface VerifyOptions {
-  audience: string;
-  expectedSubject?: string;
-  action?: string;
-  perm?: string;
-  amount?: number;
-  currency?: string;
-  trustedIssuers: IssuerKeyResolver;
-  kbNonce?: string;
-  kbMaxAgeSeconds?: number;
-  clockSkewSeconds?: number;
-  statusListChecker?: StatusListChecker;
-  acceptLegacyV01?: boolean;
-}
+export type VerifyOptions = {
+  expectedAudience: string;
+  expectedIssuer?: string;
+  resolveIssuerKey: IssuerKeyResolver;
+  checkStatus?: StatusListChecker;
+  /** Required if the SD-JWT presentation is expected to carry a KB-JWT. */
+  expectedNonce?: string;
+  /** Maximum acceptable iat-skew on KB-JWT (seconds). Default 60. */
+  maxKbIatSkewSeconds?: number;
+};
 
 export type VerifyResult =
-  | { ok: true; claims: ReceiptClaims; legacyV01: boolean }
-  | { ok: false; reason: VerifyFailureReason };
+  | { ok: true; claims: ReceiptClaims }
+  | { ok: false; reasons: VerifyFailureReason[] };
