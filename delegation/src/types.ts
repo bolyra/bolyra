@@ -171,8 +171,10 @@ export type Ed25519JWK = { kty: "OKP"; crv: "Ed25519"; x: string };
  *   issuerPrivateKey/issuerKid moved to the positional `issuerKey` arg of allow()
  *   agentPubKey: Ed25519JWK → agentPubKey: CryptoKey | string (JWK-as-JSON)
  *   ttlSeconds, statusList → optional (defaults: ttl=300, no status slot)
- * `parentJti` and `permissions.sub_delegate` are preserved as optional additions
- * for downstream delegation-chain support.
+ * `parentJti` is preserved as an optional addition for downstream
+ * delegation-chain support. Sub-delegation capability itself is encoded as
+ * bit 6 (SUB_DELEGATE) of the cumulative `Permission` byte (see
+ * ./permissions) — not as a separate AllowOptions flag.
  */
 export type AllowOptions = {
   /** Issuer DID/URL. Becomes the JWS `iss` claim. */
@@ -206,8 +208,6 @@ export type AllowOptions = {
   statusList?: { uri: string; idx: number };
   /** Optional parent jti for delegation chaining. */
   parentJti?: string;
-  /** Optional sub-delegation flag. Reserved for delegation chains. */
-  permissions?: { sub_delegate?: boolean };
 };
 
 export type PresentOptions = {
