@@ -27,6 +27,7 @@ describe("jwkThumbprint (RFC 7638)", () => {
   });
 
   it("rejects non-OKP/Ed25519 JWKs", async () => {
-    await expect(jwkThumbprint({ kty: "RSA" } as unknown as never)).rejects.toThrow();
+    const rsaJwk = { kty: "RSA" };
+    await expect(jwkThumbprint(rsaJwk as any)).rejects.toThrow(/OKP\/Ed25519/);
   });
 });
