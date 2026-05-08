@@ -1,4 +1,5 @@
 import type { IssuerKeyResolver } from "./types";
+export type { IssuerKeyResolver } from "./types";
 
 export class ResolverError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
