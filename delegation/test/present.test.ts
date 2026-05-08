@@ -19,7 +19,7 @@ describe("present() — KB-JWT append", () => {
     const presented = await present(receipt, agentPriv as unknown as CryptoKey, {
       nonce: "n-123",
       audience: "merchant-x",
-    } as any);
+    });
 
     const parts = presented.split("~");
     expect(parts.length).toBe(3);
@@ -47,7 +47,7 @@ describe("present() — KB-JWT append", () => {
       .setProtectedHeader({ alg: "EdDSA", typ: "bolyra-delegation+sd-jwt", kid: "k1", _sd_alg: "sha-256" })
       .sign(issPriv);
     const receipt = `${noCnfJws}~`;
-    await expect(present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" } as any))
+    await expect(present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" }))
       .rejects.toThrow(/cnf/i);
   });
 
@@ -58,8 +58,8 @@ describe("present() — KB-JWT append", () => {
       iss: "i", sub: "s", aud: "a", act: "x", perm: "p",
       agentPubKey: agentPub as unknown as CryptoKey,
     }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
-    const once = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" } as any);
-    await expect(present(once, agentPriv as unknown as CryptoKey, { nonce: "n2", audience: "a" } as any))
+    const once = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n", audience: "a" });
+    await expect(present(once, agentPriv as unknown as CryptoKey, { nonce: "n2", audience: "a" }))
       .rejects.toThrow(/already presented/i);
   });
 
@@ -71,7 +71,7 @@ describe("present() — KB-JWT append", () => {
       iss: "i", sub: "s", aud: "a", act: "x", perm: "p",
       agentPubKey: agentPub as unknown as CryptoKey,
     }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
-    await expect(present(receipt, wrongPriv as unknown as CryptoKey, { nonce: "n", audience: "a" } as any))
+    await expect(present(receipt, wrongPriv as unknown as CryptoKey, { nonce: "n", audience: "a" }))
       .rejects.toThrow(/thumbprint/i);
   });
 });

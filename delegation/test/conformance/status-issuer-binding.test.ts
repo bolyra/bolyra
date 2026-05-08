@@ -31,7 +31,7 @@ describe("conformance: status-list issuer binding", () => {
     const presented = await present(receipt, holder.privateKey as unknown as CryptoKey, {
       audience: "https://merchant.example",
       nonce: "n1",
-    } as any);
+    });
 
     // Attacker serves a status list at the right URI but signed by issuer B.
     // Status-list payload claims iss = issuer-b.example so fetchStatusList's

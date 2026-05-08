@@ -212,8 +212,6 @@ export type AllowOptions = {
 };
 
 export type PresentOptions = {
-  sdJwt: string;
-  holderPrivateKey: Uint8Array;
   nonce: string;
   audience: string;
   disclose?: string[];
