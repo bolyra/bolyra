@@ -1,16 +1,18 @@
-# @bolyra/delegation
+# @bolyra/delegation v0.2
 
-> Verifiable delegated authority for agent actions. A human signs a scoped receipt; middleware verifies it before the agent calls a tool.
+> SD-JWT (draft-20) + KB-JWT delegation receipts with IETF status-list (draft-20) revocation.
 
-![demo](https://raw.githubusercontent.com/bolyra/bolyra/main/delegation/demo/demo.gif)
+`@bolyra/delegation` is the lightweight on-ramp into the [Bolyra](https://bolyra.ai) protocol. A human (or upstream agent) issues a scoped, holder-bound receipt; the holder presents it with a fresh key-binding JWT; middleware verifies before the agent calls a tool. Standards-aligned wire format means downstream verifiers can audit the receipt with off-the-shelf SD-JWT tooling.
 
-`@bolyra/delegation` is the lightweight on-ramp into the [Bolyra](https://bolyra.ai) protocol. It ships a tiny, dependency-light package (`jose` only) that lets you wire delegation into LangChain, OpenAI Agents SDK, MCP, or any tool framework in a few lines. Full ZKP-backed delegation (via `@bolyra/sdk` + the Circom `Delegation` circuit) remains the upgrade path when you want privacy and on-chain verifiability.
+## Wire format
 
-**Status:** v0.1.0 — EdDSA-signed JWS receipts. SD-JWT (selective disclosure) lands in v0.2. ZKP-wrapped receipts land in v0.3.
+```
+<issuer-jws>~~<kb-jwt>
+```
 
-## Why
-
-Every agent platform is reinventing delegated authority — Stripe Agent Toolkit, Visa Intelligent Commerce, Skyfire, agent wallets, MCP server permissioning — in incompatible ways. `@bolyra/delegation` defines a portable receipt format with the right semantics: scope-narrowing, cumulative permissions matching the Bolyra circuit, capped invocations, expiry, and audit-friendly receipt IDs.
+- **Issuer JWS** — `typ: "bolyra-delegation+sd-jwt"`, `alg: "EdDSA"`, `_sd_alg: "sha-256"`. Payload includes `cnf.jwk` (holder pubkey) and `_sd: []` (zero disclosures in v0.2).
+- **KB-JWT** — `typ: "kb+jwt"`, signed by the holder. Payload `{aud, nonce, sd_hash, iat}` per SD-JWT draft-20 §4.3.
+- The empty middle segment between the two `~` separators is the zero-disclosure slot mandated by `draft-ietf-oauth-selective-disclosure-jwt-20`.
 
 ## Install
 
@@ -18,44 +20,63 @@ Every agent platform is reinventing delegated authority — Stripe Agent Toolkit
 npm install @bolyra/delegation
 ```
 
-## Quickstart
+## API
 
 ```ts
-import { allow, verify, generateKeyPair, PERM } from "@bolyra/delegation";
+import {
+  allow,
+  present,
+  verify,
+  staticIssuerResolver,
+  fetchStatusList,
+} from "@bolyra/delegation";
 
-// Human (or upstream agent) generates a keypair once and persists it.
-const { privateKey, publicKey } = await generateKeyPair();
-
-// Human signs a scoped receipt for an agent.
+// Issuer signs a scoped, holder-bound receipt.
 const receipt = await allow(
   {
-    agent: "agent_alice",
-    action: "purchase",
-    audience: "example.com",
-    permission: PERM.FINANCIAL_SMALL,
-    maxAmount: { amount: 50, currency: "USD" },
-    expiresIn: "1h",
+    iss: "https://issuer.example",
+    sub: "did:bolyra:holder",
+    aud: "https://merchant.example",
+    act: "spend",
+    perm: "FINANCIAL_SMALL",
+    agentPubKey: holderPublicKey,
+    ttlSeconds: 3600,
+    max: { amount: 5000, currency: "USD" },
   },
-  privateKey,
-  publicKey,
+  { privateKey: issuerPrivateKey, kid: "k1" },
 );
 
-// Agent presents the receipt to the tool / merchant. The verifier checks it.
-const result = await verify(receipt, {
-  expectedAgent: "agent_alice",
-  expectedAction: "purchase",
-  expectedAudience: "example.com",
-  trustedIssuers: publicKey,
-  invocationAmount: { amount: 25, currency: "USD" },
+// Holder produces a presentation with a fresh KB-JWT.
+const presented = await present(receipt, holderPrivateKey, {
+  audience: "https://merchant.example",
+  nonce: "fresh-server-nonce",
 });
 
-if (!result.valid) throw new Error(`delegation rejected: ${result.reason}`);
+// Verifier validates the receipt + KB-JWT + (optionally) status-list.
+const trustedIssuers = staticIssuerResolver({
+  "https://issuer.example": { k1: issuerPublicKey },
+});
+
+const result = await verify(presented, {
+  audience: "https://merchant.example",
+  action: "spend",
+  perm: "FINANCIAL_SMALL",
+  kbNonce: "fresh-server-nonce",
+  amount: 1000,
+  currency: "USD",
+  trustedIssuers,
+  // Optional: revocation via IETF status-list draft-20.
+  checkStatus: (uri, idx, expectedIss) =>
+    fetchStatusList(uri, idx, expectedIss, { verifyKey: trustedIssuers }),
+});
+
+if (!result.ok) throw new Error(`delegation rejected: ${result.reason}`);
 // proceed with the call
 ```
 
 ## Permission model
 
-The 8-bit cumulative encoding mirrors `circuits/Delegation.circom` so receipts issued here are upgrade-compatible with full ZKP delegation later.
+The 8-bit cumulative encoding mirrors `circuits/Delegation.circom` so receipts are upgrade-compatible with full ZKP delegation later.
 
 | Bit | Permission | Notes |
 |-----|------------|-------|
@@ -68,35 +89,39 @@ The 8-bit cumulative encoding mirrors `circuits/Delegation.circom` so receipts i
 | 6 | `SUB_DELEGATE` | |
 | 7 | `ACCESS_PII` | |
 
-`validateCumulativeBitEncoding(perm)` enforces the implication rules. `narrows(wider, narrower)` confirms one-way scope narrowing for sub-delegation.
+In v0.2, `perm` is passed as the string label (e.g. `"FINANCIAL_SMALL"`); the verifier expands cumulative implication internally.
 
-## Adapters
+## Migration from v0.1
 
-Working examples live in `bolyra/integrations/`:
+- v0.1 plain-JWS receipts still verify if you pass `acceptLegacyV01: true` to `verify()`. The result includes `legacyV01: true`.
+- New issuance must use `allow()` (v0.2 only — produces SD-JWT issuer form).
+- Holders must sign the KB-JWT with the private key matching `cnf.jwk` in the receipt.
+- Status-list revocation is opt-in: set `claims.status.status_list = { uri, idx }` at issuance and pass `checkStatus` to `verify()`.
 
-- `integrations/openai-agents/delegation-example.ts` — gates an OpenAI Agents SDK tool
-- `integrations/langchain/typescript/delegation-example.ts` — gates a LangChain JS tool
-- `integrations/mcp/examples/delegation-example.ts` — gates an MCP server tool call
+## Failure reasons
 
-## Verify failure reasons
+`VerifyFailureReason` is a discriminated union of 51 enumerated reasons (plus `"UNKNOWN"` as a catch-all default). Every enumerated reason is exercised by at least one test under `test/conformance/`. The negative-space gate (`test/conformance/negative-space.test.ts`) enforces full coverage in CI.
 
-| Reason | Meaning |
-|--------|---------|
-| `invalid_signature` | Receipt was not signed by any trusted issuer key |
-| `expired` | Past `exp` |
-| `not_yet_valid` | Future-dated `iat` beyond clock tolerance |
-| `audience_mismatch` | `aud` does not match `expectedAudience` |
-| `agent_mismatch` | `sub` does not match `expectedAgent` |
-| `action_mismatch` | `act` does not match `expectedAction` |
-| `permission_violation` | Bits violate cumulative encoding or required permission |
-| `amount_exceeds_cap` | Caller's `invocationAmount.amount` > `claims.max.amount` |
-| `currency_mismatch` | Caller's currency differs from `claims.max.currency` |
-| `malformed` | Receipt is not a valid JWS / claims missing |
+Reasons partition into five families:
+
+- **Envelope** — `BAD_FORMAT`, `INVALID_SIGNATURE`, `UNSUPPORTED_ALG`, `TYP_MISMATCH`, `KID_MISSING`, `KID_RESOLVER_ERROR`, `UNKNOWN_ISSUER_KID`, `LEGACY_V01_REJECTED`
+- **Claims** — `EXPIRED`, `FUTURE_NBF`, `WRONG_ISSUER`, `WRONG_AUDIENCE`, `WRONG_SUBJECT`, `WRONG_ACTION`, `MISSING_CLAIM`, `PARENT_NOT_FOUND`, `DELEGATION_LOOP`, `PERMISSION_VIOLATION`, `AMOUNT_EXCEEDS_CAP`, `CURRENCY_MISMATCH`
+- **Selective disclosure** — `DISCLOSURE_TAMPERED`, `DISCLOSURE_HASH_MISMATCH`, `UNDISCLOSED_CLAIM_REQUIRED`, `DUPLICATE_DISCLOSURE`, `MALFORMED_DISCLOSURE`, `SD_ALG_UNSUPPORTED`, `SD_JWT_MALFORMED`
+- **Key binding** — `CNF_MISSING`, `CNF_KEY_MISMATCH`, `CNF_JWK_INVALID`, `KB_MISSING`, `KB_NONCE_REQUIRED`, `KB_BAD_FORMAT`, `KB_INVALID_SIGNATURE`, `KB_WRONG_NONCE`, `KB_WRONG_AUDIENCE`, `KB_WRONG_SD_HASH`, `KB_TYP_INVALID`, `KB_ALG_UNSUPPORTED`, `KB_IAT_FUTURE`, `KB_IAT_TOO_OLD`, `KB_BINDING_MISMATCH`
+- **Status list** — `STATUS_REVOKED`, `STATUS_SUSPENDED`, `STATUS_CHECK_UNCONFIGURED`, `STATUS_FETCH_FAILED`, `STATUS_LIST_INVALID`, `STATUS_LIST_SIG_INVALID`, `STATUS_LIST_ISSUER_MISMATCH`, `STATUS_LIST_UNREACHABLE`, `STATUS_INDEX_OUT_OF_RANGE`
+
+## Standards
+
+- **SD-JWT:** `draft-ietf-oauth-selective-disclosure-jwt-20`
+- **KB-JWT:** same draft, §4.3
+- **Status list:** `draft-ietf-oauth-status-list-20` (2-bit slots, zlib RFC 1950, base64url)
+- **JWK thumbprint:** RFC 7638
+- **Media types:** `application/bolyra-delegation+sd-jwt`, `application/statuslist+jwt`, `application/kb+jwt`
 
 ## Roadmap
 
-- **v0.1** (now): EdDSA-signed JWS receipts. Single trusted-issuer verification.
-- **v0.2:** SD-JWT (selective disclosure). Status-list-backed revocation.
+- **v0.1:** EdDSA-signed plain JWS receipts (back-compat shim retained in v0.2).
+- **v0.2 (now):** SD-JWT + KB-JWT + IETF status-list revocation.
 - **v0.3:** ZKP-wrapped receipts (via `@bolyra/sdk` + Circom `Delegation` circuit). Privacy-preserving issuer + agent identity.
 
 ## License
