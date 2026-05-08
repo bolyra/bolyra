@@ -159,10 +159,8 @@ export type PresentOptions = {
   disclose?: string[];
 };
 
-export type IssuerKeyResolver = (
-  iss: string,
-  kid: string,
-) => Promise<Ed25519JWK>;
+export type IssuerKeyResolver =
+  (iss: string, kid: string) => Promise<CryptoKey | null>;
 
 export type StatusListResult =
   | { ok: true }

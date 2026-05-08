@@ -80,13 +80,9 @@ describe("v0.2 types surface", () => {
   });
 
   test("resolver and checker shapes", () => {
-    const resolver: IssuerKeyResolver = async () => ({
-      kty: "OKP",
-      crv: "Ed25519",
-      x: "...",
-    });
+    const r: IssuerKeyResolver = async (_iss, _kid) => null;
     const checker: StatusListChecker = async () => ({ ok: true });
-    expect(typeof resolver).toBe("function");
+    expect(typeof r).toBe("function");
     expect(typeof checker).toBe("function");
   });
 
