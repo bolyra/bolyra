@@ -68,15 +68,16 @@ describe("v0.2 types surface", () => {
 
   test("AllowOptions has agentPubKey and statusList", () => {
     const _o: AllowOptions = {
-      issuerPrivateKey: new Uint8Array(),
-      issuerKid: "k1",
-      subject: "agent:x",
-      audience: "https://rp.example",
+      iss: "https://issuer.example",
+      sub: "agent:x",
+      aud: "https://rp.example",
+      act: "checkout.charge",
+      perm: "FINANCIAL_SMALL",
       ttlSeconds: 600,
-      agentPubKey: { kty: "OKP", crv: "Ed25519", x: "..." },
+      agentPubKey: JSON.stringify({ kty: "OKP", crv: "Ed25519", x: "..." }),
       statusList: { uri: "https://issuer.example/sl/1", idx: 0 },
     };
-    expect(_o.subject).toBe("agent:x");
+    expect(_o.sub).toBe("agent:x");
   });
 
   test("resolver and checker shapes", () => {

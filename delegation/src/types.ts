@@ -139,15 +139,55 @@ export type VerifyResultV01 =
 
 export type Ed25519JWK = { kty: "OKP"; crv: "Ed25519"; x: string };
 
+/**
+ * v0.2 SD-JWT issuance options. Mirrors the spec §5.1 surface: the issuer key
+ * is supplied as a positional second argument to allow(), and the receipt-body
+ * fields (iss/sub/aud/act/perm/max/jti) live alongside the agent's holder key
+ * (cnf material) and an optional status-list slot.
+ *
+ * Note: this canonical shape supersedes the placeholder shape established in
+ * Task 1b's types.test.ts. Field renames vs the placeholder:
+ *   subject  → sub
+ *   audience → aud
+ *   issuerPrivateKey/issuerKid moved to the positional `issuerKey` arg of allow()
+ *   agentPubKey: Ed25519JWK → agentPubKey: CryptoKey | string (JWK-as-JSON)
+ *   ttlSeconds, statusList → optional (defaults: ttl=300, no status slot)
+ * `parentJti` and `permissions.sub_delegate` are preserved as optional additions
+ * for downstream delegation-chain support.
+ */
 export type AllowOptions = {
-  issuerPrivateKey: Uint8Array;
-  issuerKid: string;
-  subject: string;
-  audience: string;
-  ttlSeconds: number;
-  agentPubKey: Ed25519JWK;
-  statusList: { uri: string; idx: number };
+  /** Issuer DID/URL. Becomes the JWS `iss` claim. */
+  iss: string;
+  /** Subject (typically the agent identifier). Becomes the JWS `sub` claim. */
+  sub: string;
+  /** Audience (RP/merchant). Becomes the JWS `aud` claim. */
+  aud: string;
+  /** Action label, e.g. "checkout.charge". Becomes the JWS `act` claim. */
+  act: string;
+  /**
+   * Permission identifier carried as a string body claim. v0.2 keeps the
+   * numeric cumulative-bit Permission (see ./permissions) inside disclosures;
+   * the body field is the human-readable label.
+   */
+  perm: string;
+  /** Optional cap on a single invocation. */
+  max?: { amount: number; currency: string };
+  /** Receipt lifetime in seconds. Defaults to 300 when omitted. */
+  ttlSeconds?: number;
+  /** Optional explicit jti (deterministic flows / tests). Defaults to UUIDv4. */
+  jti?: string;
+  /**
+   * Agent's holder public key. Accepted forms:
+   *   - CryptoKey (Ed25519 public key)
+   *   - JSON-stringified JWK (must parse + import as OKP/Ed25519)
+   * The cnf claim is derived via exportJWK() on the resolved CryptoKey.
+   */
+  agentPubKey: CryptoKey | string;
+  /** Optional IETF status-list slot. URI must use https:// at runtime. */
+  statusList?: { uri: string; idx: number };
+  /** Optional parent jti for delegation chaining. */
   parentJti?: string;
+  /** Optional sub-delegation flag. Reserved for delegation chains. */
   permissions?: { sub_delegate?: boolean };
 };
 
