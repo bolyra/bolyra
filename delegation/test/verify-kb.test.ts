@@ -24,8 +24,6 @@ async function makeKb(opts: {
 }
 
 describe("verifyKbJwt", () => {
-  const baseClaim = { iss: "i", sub: "s", aud: "a", act: "x", perm: "p", iat: 0, exp: 9999, jti: "j" } as const;
-
   it("ok on happy path", async () => {
     const { privateKey, publicKey } = await generateKeyPair("EdDSA");
     const holderJwk = await exportJWK(publicKey);
