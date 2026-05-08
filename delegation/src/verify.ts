@@ -61,6 +61,9 @@ function checkSemantics(payload: JWTPayload, opts: VerifyOptionsV01): VerifyResu
     return { valid: false, reason: "action_mismatch", detail: `expected ${opts.expectedAction}, got ${claims.act}` };
   }
 
+  if (claims.perm === undefined) {
+    return { valid: false, reason: "malformed", detail: "missing perm claim" };
+  }
   const permViolation = validateCumulativeBitEncoding(claims.perm);
   if (permViolation) {
     return { valid: false, reason: "permission_violation", detail: permViolation };
@@ -86,7 +89,7 @@ function checkSemantics(payload: JWTPayload, opts: VerifyOptionsV01): VerifyResu
   // Permission gating for financial actions: if the receipt covers a financial
   // action, the permission tier must be at least FINANCIAL_SMALL. Higher-tier
   // checks are the verifier's responsibility (use hasPermission).
-  if (claims.act.startsWith("purchase") || claims.act.startsWith("pay")) {
+  if (claims.act && (claims.act.startsWith("purchase") || claims.act.startsWith("pay"))) {
     if (!hasPermission(claims.perm, 1 << 2)) {
       return { valid: false, reason: "permission_violation", detail: "financial action requires FINANCIAL_SMALL or higher" };
     }
