@@ -3,8 +3,8 @@ import type { JWTPayload } from "jose";
 import type {
   Receipt,
   ReceiptClaims,
-  VerifyOptions,
-  VerifyResult,
+  VerifyOptionsV01,
+  VerifyResultV01,
   TrustedIssuer,
 } from "./types";
 import { hasPermission, validateCumulativeBitEncoding } from "./permissions";
@@ -19,8 +19,8 @@ import { importKeyPair } from "./keys";
  */
 export async function verify(
   receipt: Receipt,
-  opts: VerifyOptions,
-): Promise<VerifyResult> {
+  opts: VerifyOptionsV01,
+): Promise<VerifyResultV01> {
   const issuers = Array.isArray(opts.trustedIssuers)
     ? opts.trustedIssuers
     : [opts.trustedIssuers];
@@ -51,7 +51,7 @@ export async function verify(
   return mapJoseError(lastError);
 }
 
-function checkSemantics(payload: JWTPayload, opts: VerifyOptions): VerifyResult {
+function checkSemantics(payload: JWTPayload, opts: VerifyOptionsV01): VerifyResultV01 {
   const claims = payload as unknown as ReceiptClaims;
 
   if (claims.sub !== opts.expectedAgent) {
@@ -107,7 +107,7 @@ async function coerceIssuerKey(issuer: TrustedIssuer): Promise<CryptoKey> {
   return issuer;
 }
 
-function mapJoseError(err: unknown): VerifyResult {
+function mapJoseError(err: unknown): VerifyResultV01 {
   if (err instanceof joseErrors.JWTExpired) {
     return { valid: false, reason: "expired" };
   }

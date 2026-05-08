@@ -6,9 +6,9 @@ export type { Permission } from "./permissions";
 export type {
   Receipt,
   ReceiptClaims,
-  AllowOptions,
-  VerifyOptions,
-  VerifyResult,
+  AllowOptionsV01,
+  VerifyOptionsV01,
+  VerifyResultV01,
   VerifyFailureReason,
   TrustedIssuer,
 } from "./types";

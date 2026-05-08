@@ -33,7 +33,7 @@ export interface ReceiptClaims {
  */
 export type Receipt = string;
 
-export interface AllowOptions {
+export interface AllowOptionsV01 {
   /** Identifier for the agent being granted authority. */
   agent: string;
   /** Action the agent is allowed to perform. */
@@ -55,7 +55,7 @@ export interface AllowOptions {
   jti?: string;
 }
 
-export interface VerifyOptions {
+export interface VerifyOptionsV01 {
   /** Required: agent the verifier expects to present this receipt. */
   expectedAgent: string;
   /** Required: action the agent is attempting. */
@@ -87,6 +87,6 @@ export type VerifyFailureReason =
   | "currency_mismatch"
   | "malformed";
 
-export type VerifyResult =
+export type VerifyResultV01 =
   | { valid: true; claims: ReceiptClaims }
   | { valid: false; reason: VerifyFailureReason; detail?: string };
