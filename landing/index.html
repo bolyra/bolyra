@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="Scoped delegation receipts for AI agent tool calls. The human signs once, middleware verifies before every call. 30-line adapter for LangChain, OpenAI Agents SDK, or MCP. Apache-2.0, one dep, on npm.">
+  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls. The human signs a scoped receipt; middleware verifies KB-JWT proof-of-possession, audience, expiry, amount cap, and status-list revocation before any side effect. v0.2 live on npm. Apache-2.0.">
   <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="Signed receipts for agent tool calls. Drops in front of any handler. Roadmap: SD-JWT, then zero-knowledge wrapped receipts.">
+  <meta property="og:description" content="v0.2 live on npm: SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. ~30 lines from install to verified call. Roadmap: ZKP-wrapped receipts in v0.3.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -461,17 +461,6 @@
       flex-wrap: wrap;
       gap: 32px;
     }
-    .footer-left .footer-logo {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
-    }
-    .footer-left p {
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      max-width: 360px;
-    }
     .footer-links {
       display: flex;
       gap: 48px;
@@ -581,7 +570,7 @@
     <div class="container">
       <h1>Bolyra</h1>
       <p class="tagline">Verifiable delegated authority for AI agents. The human signs a scoped receipt; middleware verifies it before the agent calls a tool.</p>
-      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">Drops in front of any tool call. Per-call agent + action + audience + amount cap + expiry checks. Apache-2.0, one dep.</p>
+      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 96 conformance tests.</p>
       <div class="cta-group">
         <a href="https://www.npmjs.com/package/@bolyra/delegation" class="btn btn-primary">
           npm @bolyra/delegation
@@ -593,7 +582,7 @@
       </div>
       <p class="install-hint">
         <code>npm install @bolyra/delegation</code>
-        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.1.1</span>
+        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.2.2 live</span>
       </p>
     </div>
   </section>
@@ -601,38 +590,49 @@
   <!-- Available today -->
   <section id="today">
     <div class="container">
-      <p class="section-label">Available today</p>
-      <h2 class="section-title">Signed receipts for tool calls</h2>
-      <p class="section-subtitle">A 30-line wrapper for LangChain, OpenAI Agents SDK, or MCP. The human signs a scoped receipt once; middleware enforces scope on every call. Rejects mismatched audience, missing receipt, expired receipt, or amount-over-cap before any side effect.</p>
+      <p class="section-label">Available today &middot; v0.2.2 on npm</p>
+      <h2 class="section-title">SD-JWT receipts for agent tool calls</h2>
+      <p class="section-subtitle">~30 lines from <code>npm install</code> to a verified call. The human issues a scoped SD-JWT receipt; the agent presents it with a fresh KB-JWT (proof of holder-key possession); middleware verifies before any side effect. Rejects wrong audience, expired receipt, amount-over-cap, currency mismatch, revoked status, or replayed nonce &mdash; each with a crisp, switchable failure reason.</p>
       <div style="margin: 32px auto 40px; max-width: 920px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-elevated);">
         <img src="https://raw.githubusercontent.com/bolyra/bolyra/main/delegation/demo/demo.gif" alt="@bolyra/delegation demo: human signs scoped receipt, agent purchase($25) allowed, agent purchase($75) rejected for amount_exceeds_cap" style="display: block; width: 100%; height: auto;">
       </div>
       <div class="code-block-wrapper">
         <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
-        <pre class="code-block"><code id="delegation-code"><span class="kw">import</span> { <span class="fn">allow</span>, <span class="fn">verify</span>, <span class="fn">generateKeyPair</span>, <span class="type">PERM</span> } <span class="kw">from</span> <span class="str">'@bolyra/delegation'</span>;
+        <pre class="code-block"><code id="delegation-code"><span class="kw">import</span> { <span class="fn">allow</span>, <span class="fn">present</span>, <span class="fn">verify</span>, <span class="fn">staticIssuerResolver</span> } <span class="kw">from</span> <span class="str">'@bolyra/delegation'</span>;
+<span class="kw">import</span> { <span class="fn">generateKeyPair</span> } <span class="kw">from</span> <span class="str">'jose'</span>;
 
-<span class="cm">// Human signs a scoped receipt for an agent.</span>
-<span class="kw">const</span> { privateKey, publicKey } <span class="op">=</span> <span class="kw">await</span> <span class="fn">generateKeyPair</span>();
+<span class="cm">// 1. Human issues a scoped SD-JWT receipt to an agent.</span>
+<span class="kw">const</span> issuer <span class="op">=</span> <span class="kw">await</span> <span class="fn">generateKeyPair</span>(<span class="str">'EdDSA'</span>);
+<span class="kw">const</span> holder <span class="op">=</span> <span class="kw">await</span> <span class="fn">generateKeyPair</span>(<span class="str">'EdDSA'</span>);
 <span class="kw">const</span> receipt <span class="op">=</span> <span class="kw">await</span> <span class="fn">allow</span>({
-  agent:      <span class="str">'agent_alice'</span>,
-  action:     <span class="str">'purchase'</span>,
-  audience:   <span class="str">'example.com'</span>,
-  permission: <span class="type">PERM</span>.<span class="prop">FINANCIAL_SMALL</span>,
-  maxAmount:  { amount: <span class="num">50</span>, currency: <span class="str">'USD'</span> },
-  expiresIn:  <span class="str">'1h'</span>,
-}, privateKey, publicKey);
+  iss:         <span class="str">'did:web:bolyra.ai'</span>,
+  sub:         <span class="str">'did:bolyra:agent-alice'</span>,
+  aud:         <span class="str">'https://merchant.example'</span>,
+  act:         <span class="str">'checkout.charge'</span>,
+  perm:        <span class="str">'FINANCIAL_SMALL'</span>,
+  max:         { amount: <span class="num">50</span>, currency: <span class="str">'USD'</span> },
+  ttlSeconds:  <span class="num">3600</span>,
+  agentPubKey: holder.publicKey,
+}, { privateKey: issuer.privateKey, kid: <span class="str">'k1'</span> });
 
-<span class="cm">// Middleware verifies before the tool runs.</span>
-<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verify</span>(receipt, {
-  expectedAgent:    <span class="str">'agent_alice'</span>,
-  expectedAction:   <span class="str">'purchase'</span>,
-  expectedAudience: <span class="str">'example.com'</span>,
-  trustedIssuers:   publicKey,
-  invocationAmount: { amount: <span class="num">25</span>, currency: <span class="str">'USD'</span> },
+<span class="cm">// 2. Agent presents the receipt with a fresh server nonce (KB-JWT binding).</span>
+<span class="kw">const</span> presented <span class="op">=</span> <span class="kw">await</span> <span class="fn">present</span>(receipt, holder.privateKey, {
+  audience: <span class="str">'https://merchant.example'</span>,
+  nonce:    serverNonce,
 });
-<span class="kw">if</span> (<span class="op">!</span>result.valid) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
+
+<span class="cm">// 3. Middleware verifies before the tool runs.</span>
+<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verify</span>(presented, {
+  audience:       <span class="str">'https://merchant.example'</span>,
+  action:         <span class="str">'checkout.charge'</span>,
+  perm:           <span class="str">'FINANCIAL_SMALL'</span>,
+  amount: <span class="num">25</span>, currency: <span class="str">'USD'</span>,
+  kbNonce:        serverNonce,
+  trustedIssuers: <span class="fn">staticIssuerResolver</span>({ <span class="str">'did:web:bolyra.ai'</span>: { k1: issuer.publicKey } }),
+});
+<span class="kw">if</span> (<span class="op">!</span>result.ok) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
       </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today:</strong> EdDSA-signed JWS receipts. <strong style="color: var(--text);">v0.2:</strong> SD-JWT (selective disclosure) + status-list revocation. <strong style="color: var(--text);">v0.3:</strong> zero-knowledge wrapped receipts — same API, same wire format, same circuit-compatible permission encoding.</p>
+      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">Roadmap (v0.3):</strong> zero-knowledge wrapped receipts and one-way delegation-chain narrowing — same public API, same wire format, same circuit-compatible permission encoding.</p>
     </div>
   </section>
 
@@ -921,10 +921,6 @@
   <footer>
     <div class="container">
       <div class="footer-content">
-        <div class="footer-left">
-          <div class="footer-logo">Bolyra</div>
-          <p>Verified identity for AI agents. Open protocol, open source.</p>
-        </div>
         <div class="footer-links">
           <div class="footer-col">
             <h4>Resources</h4>
@@ -961,7 +957,12 @@
   <!-- Minimal JS: copy-to-clipboard + smooth scroll already handled by CSS -->
   <script>
     function copyCode(btn) {
-      const code = document.getElementById('sdk-code');
+      // Find the nearest <code> inside this code-block-wrapper so the button
+      // copies the example it belongs to (was hardcoded to sdk-code, which
+      // made the delegation example's copy button copy the wrong block).
+      const wrapper = btn.closest('.code-block-wrapper');
+      const code = wrapper ? wrapper.querySelector('code') : null;
+      if (!code) return;
       const text = code.textContent;
       navigator.clipboard.writeText(text).then(function() {
         btn.textContent = 'Copied!';
