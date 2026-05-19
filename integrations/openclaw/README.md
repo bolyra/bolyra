@@ -74,4 +74,4 @@ const result = await verifyAgent(human, agentCredential, { network: 'base' });
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
