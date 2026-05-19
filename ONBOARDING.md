@@ -35,8 +35,7 @@ have a stable API shape but are stubs pending SDK v0.2 wiring.
 - **Patent:** US provisional #64/043,898 (filed 2026-04-20). Apache 2.0
   Section 3 patent grant applies to every contribution.
 
-For the marketing-free version, see [`README.md`](README.md) and the
-architecture section of [`CLAUDE.md`](CLAUDE.md).
+For the architecture details, see [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
@@ -202,17 +201,16 @@ never expand."
 
 ### 4.3 Reading order (time-budgeted)
 
-1. [`README.md`](README.md) — 10 min.
-2. [`CLAUDE.md`](CLAUDE.md) — 20 min. Architecture, commands, gotchas.
-3. [`sdk/QUICKSTART.md`](sdk/QUICKSTART.md) — 15 min. Hands-on.
-4. [`docs/quickstart.md`](docs/quickstart.md) — 10 min. Repo-level
+1. [`CLAUDE.md`](CLAUDE.md) — 20 min. Architecture, commands, gotchas.
+2. [`sdk/QUICKSTART.md`](sdk/QUICKSTART.md) — 15 min. Hands-on.
+3. [`docs/quickstart.md`](docs/quickstart.md) — 10 min. Repo-level
    quickstart; overlaps with the SDK one.
-5. [`spec/draft-bolyra-mutual-zkp-auth-01.md`](spec/draft-bolyra-mutual-zkp-auth-01.md)
+4. [`spec/draft-bolyra-mutual-zkp-auth-01.md`](spec/draft-bolyra-mutual-zkp-auth-01.md)
    §1–§4 — 30 min. Wire format and nonce binding.
-6. [`tasks/lessons.md`](tasks/lessons.md) — skim, 20 min. Reread when
+5. [`tasks/lessons.md`](tasks/lessons.md) — skim, 20 min. Reread when
    blocked.
 
-Total: ~2 hours of reading.
+Total: ~90 minutes of reading.
 
 ### 4.4 Your first PR
 
@@ -498,8 +496,7 @@ git commit --amend -s --no-edit                # fix missing sign-off
 
 **Key files:**
 
-- [`README.md`](README.md), [`CLAUDE.md`](CLAUDE.md),
-  [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- [`CLAUDE.md`](CLAUDE.md), [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - [`sdk/QUICKSTART.md`](sdk/QUICKSTART.md),
   [`docs/quickstart.md`](docs/quickstart.md)
 - [`circuits/FORMAL-PROPERTIES.md`](circuits/FORMAL-PROPERTIES.md),
