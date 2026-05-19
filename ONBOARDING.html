@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome to Bolyra — Engineer Onboarding</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --fg-muted: #555;
+    --bg: #fdfdfd;
+    --bg-code: #f4f4f6;
+    --bg-table: #fafafa;
+    --border: #e4e4e7;
+    --border-strong: #c8c8cc;
+    --link: #0b5fb4;
+    --link-hover: #073d75;
+    --accent: #0b5fb4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e8e8ea;
+      --fg-muted: #a0a0a8;
+      --bg: #1a1a1c;
+      --bg-code: #26262a;
+      --bg-table: #222226;
+      --border: #36363c;
+      --border-strong: #4a4a52;
+      --link: #6ab0ff;
+      --link-hover: #8fc4ff;
+      --accent: #6ab0ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 760px);
+    justify-content: center;
+    padding: 48px 32px 96px;
+  }
+  @media (min-width: 1100px) {
+    .layout {
+      grid-template-columns: 220px minmax(0, 760px);
+      gap: 48px;
+      justify-content: center;
+    }
+    nav.toc {
+      position: sticky;
+      top: 32px;
+      align-self: start;
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      padding-right: 8px;
+    }
+  }
+  nav.toc {
+    border-right: 1px solid var(--border);
+    padding-right: 16px;
+  }
+  @media (max-width: 1099px) {
+    nav.toc {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 0 0 24px;
+      margin-bottom: 32px;
+    }
+  }
+  nav.toc h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-muted);
+    margin: 0 0 8px;
+    border: none;
+    padding: 0;
+  }
+  nav.toc ul { list-style: none; padding: 0; margin: 0 0 12px; }
+  nav.toc li { margin: 4px 0; }
+  nav.toc a {
+    color: var(--fg-muted);
+    text-decoration: none;
+    border-bottom: 1px dotted transparent;
+  }
+  nav.toc a:hover {
+    color: var(--link);
+    border-bottom-color: var(--link);
+  }
+  nav.toc .toc-section {
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 12px 0 4px;
+  }
+  main { min-width: 0; }
+  h1 {
+    font-size: 32px;
+    line-height: 1.25;
+    margin: 0 0 8px;
+    font-weight: 700;
+  }
+  .subtitle {
+    color: var(--fg-muted);
+    margin: 0 0 32px;
+    font-size: 15px;
+  }
+  h2 {
+    font-size: 22px;
+    line-height: 1.3;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+  h3 {
+    font-size: 17px;
+    margin: 28px 0 12px;
+    font-weight: 600;
+  }
+  h4 {
+    font-size: 15px;
+    margin: 20px 0 8px;
+    font-weight: 600;
+    color: var(--fg-muted);
+  }
+  p { margin: 0 0 14px; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { color: var(--link-hover); text-decoration: underline; }
+  ul, ol { margin: 0 0 14px; padding-left: 24px; }
+  li { margin: 4px 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                 "Liberation Mono", monospace;
+    font-size: 0.88em;
+    background: var(--bg-code);
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0 0 16px;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 18px;
+    font-size: 14px;
+    background: var(--bg-table);
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-code);
+    font-weight: 600;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 16px 0;
+    padding: 4px 16px;
+    color: var(--fg-muted);
+    background: var(--bg-code);
+    border-radius: 0 4px 4px 0;
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--bg-code);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 14px;
+  }
+  .callout strong { color: var(--accent); }
+  em { color: var(--fg-muted); }
+  /* Anchored heading offsets for in-page nav */
+  h2[id], h3[id] { scroll-margin-top: 24px; }
+  .footer-note {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-size: 14px;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<nav class="toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <div class="toc-section">Main</div>
+  <ul>
+    <li><a href="#what-bolyra-is">1. What Bolyra is</a></li>
+    <li><a href="#pick-your-path">2. Pick your path</a></li>
+    <li><a href="#day-1">3. Day 1 — Setup</a></li>
+    <li><a href="#week-1">4. Week 1 — First PR</a></li>
+    <li><a href="#month-1">5. Month 1 — Own an area</a></li>
+  </ul>
+  <div class="toc-section">Appendices</div>
+  <ul>
+    <li><a href="#appendix-a">A. Circuits</a></li>
+    <li><a href="#appendix-b">B. Contracts</a></li>
+    <li><a href="#appendix-c">C. SDK (TS + Python)</a></li>
+    <li><a href="#appendix-d">D. Integrations</a></li>
+    <li><a href="#appendix-e">E. Culture &amp; workflow</a></li>
+    <li><a href="#appendix-f">F. Gotchas cheat-sheet</a></li>
+    <li><a href="#appendix-g">G. Quick reference</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Welcome to Bolyra</h1>
+<p class="subtitle">Engineer onboarding guide — from <code>git clone</code> to first merged PR.</p>
+
+<p>This is the entry point for anyone new to the Bolyra codebase — a future
+teammate, an external open-source contributor, or a specialist brought in
+to work on circuits or contracts. It takes you from <code>git clone</code> to your
+first merged PR, and points you at the canonical reference docs
+(<code>CLAUDE.md</code>, <code>tasks/lessons.md</code>, <code>circuits/FORMAL-PROPERTIES.md</code>, etc.)
+for everything else.</p>
+
+<div class="callout">
+  <strong>Only have ten minutes?</strong> Read §1, §2, and Appendix F.
+</div>
+
+<hr>
+
+<h2 id="what-bolyra-is">1. What Bolyra is (60-second pitch)</h2>
+
+<p>Bolyra is a <strong>mutual zero-knowledge proof identity protocol</strong> for humans
+and AI agents.</p>
+
+<ul>
+  <li><strong>Humans</strong> prove uniqueness via a Semaphore v4-style enrollment circuit (Groth16).</li>
+  <li><strong>Agents</strong> prove EdDSA-signed credentials with cumulative-bit permissions (Groth16 + PLONK).</li>
+  <li>A one-way <strong>delegation</strong> circuit narrows scope; it can never expand it.</li>
+  <li>A <strong>handshake</strong> binds both proofs to a shared <code>sessionNonce</code> and is verified atomically on-chain.</li>
+</ul>
+
+<p>Current scope is <strong>Phase 1 — Proof of Enrollment</strong>. Delegation is a v0.3
+stub at the SDK layer; circuits and contracts for it are live and tested.
+Framework integrations (LangChain, CrewAI, OpenClaw, MCP, x402) have a
+stable API shape but are stubs pending SDK v0.2 wiring.</p>
+
+<ul>
+  <li><strong>Domain:</strong> <a href="https://bolyra.ai">bolyra.ai</a></li>
+  <li><strong>Company:</strong> ZKProva Inc.</li>
+  <li><strong>License:</strong> Apache-2.0 with DCO sign-off on every commit.</li>
+  <li><strong>Patent:</strong> US provisional #64/043,898 (filed 2026-04-20). Apache 2.0 Section 3 patent grant applies to every contribution.</li>
+</ul>
+
+<p>For the marketing-free version, see <a href="README.md"><code>README.md</code></a> and the
+architecture section of <a href="CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+
+<hr>
+
+<h2 id="pick-your-path">2. Pick your path</h2>
+
+<table>
+  <thead><tr><th>If you are…</th><th>Read</th></tr></thead>
+  <tbody>
+    <tr><td>Joining the team / first hire</td><td>Everything below, in order.</td></tr>
+    <tr><td>Sending a single OSS PR</td><td>§3 (Day 1), §4 PR workflow, Appendix F (gotchas).</td></tr>
+    <tr><td>ZKP specialist scoped to circuits</td><td>§3, then Appendix A. Skim Appendix F.</td></tr>
+    <tr><td>Smart-contract engineer</td><td>§3, then Appendix B. Skim Appendix F.</td></tr>
+    <tr><td>SDK engineer (TS or Python)</td><td>§3, then Appendix C.</td></tr>
+    <tr><td>Integrations engineer</td><td>§3, then Appendix D.</td></tr>
+  </tbody>
+</table>
+
+<p>Appendices E (culture/workflow) and F (gotchas cheat-sheet) apply to everyone.</p>
+
+<hr>
+
+<h2 id="day-1">3. Day 1 — Environment &amp; first build (~2 hours)</h2>
+
+<p><strong>Goal:</strong> end the day with <code>npm test</code> green on your laptop and DCO sign-off configured.</p>
+
+<h3>3.1 Prerequisites</h3>
+
+<table>
+  <thead><tr><th>Tool</th><th>Version</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Node.js</td><td>18+ (20+ recommended)</td><td>Used by SDK, circuits, contracts.</td></tr>
+    <tr><td>Python</td><td>3.11+</td><td>Used by <code>sdk-python/</code>.</td></tr>
+    <tr><td>circom</td><td>2.x</td><td>Install separately (not on npm); see <a href="https://docs.circom.io">docs.circom.io</a>.</td></tr>
+    <tr><td>git</td><td>any modern</td><td>Must support <code>git commit -s</code>.</td></tr>
+  </tbody>
+</table>
+
+<p>macOS: <code>brew install node python circom</code>. Linux: package manager + a
+prebuilt circom binary from the circom release page.</p>
+
+<h3>3.2 Clone and install (per-workspace)</h3>
+
+<p>The repo is not an npm workspace. You must install dependencies in each
+subpackage independently:</p>
+
+<pre><code>git clone https://github.com/bolyra/bolyra.git
+cd bolyra
+
+npm install                              # root: orchestration only
+( cd sdk        &amp;&amp; npm install )
+( cd circuits   &amp;&amp; npm install )
+( cd contracts  &amp;&amp; npm install )
+( cd sdk-python &amp;&amp; pip install -e ".[dev]" )</code></pre>
+
+<div class="callout">
+  <strong>Most common Day 1 failure.</strong> If you skip a subpackage install, the
+  root <code>npm test</code> will fail with a missing-binary error from inside
+  <code>cd circuits</code> or <code>cd contracts</code>.
+</div>
+
+<h3>3.3 Compile circuits and contracts</h3>
+
+<pre><code>npm run compile:circuits     # ~1 min the first time
+npm run compile:contracts    # ~30 s</code></pre>
+
+<p><code>compile:circuits</code> writes artifacts (<code>.r1cs</code>, <code>.zkey</code>, <code>.wasm</code>,
+<code>.vkey.json</code>, <code>pot16.ptau</code>) to <code>circuits/build/</code>. The Powers of Tau file
+is ~75 MB. <code>compile:contracts</code> regenerates Solidity verifiers from the
+current <code>.zkey</code> files — keep this in mind any time a circuit changes
+(see Appendix B).</p>
+
+<h3>3.4 Run the test suite</h3>
+
+<pre><code>npm test                              # fast circuits + contracts (~2 min)
+npm run test:circuits:fast            # witness-gen only (~30 s)
+FULL_PROOF=1 npm run test:circuits:slow  # full Groth16/PLONK (~2 min)
+npm run test:contracts                # Hardhat
+( cd sdk        &amp;&amp; npm test )         # Jest
+( cd sdk-python &amp;&amp; pytest -v )</code></pre>
+
+<p>CI runs the fast path and the SDK suites. Circuit and contract tests are
+<strong>not</strong> run in CI (the Powers of Tau file is too large). They must pass
+locally before you push.</p>
+
+<p><strong>Acceptance:</strong> <code>npm test</code> exits 0.</p>
+
+<h3>3.5 Configure DCO sign-off once</h3>
+
+<p>Every commit needs <code>Signed-off-by:</code>. CI rejects unsigned commits and
+there is no way around it.</p>
+
+<pre><code>git config user.name  "Your Name"
+git config user.email "you@example.com"
+
+# Sign off every commit
+git commit -s -m "fix: handle empty proof input"
+
+# Fix the most recent commit if you forgot
+git commit --amend -s --no-edit
+
+# Backfill a whole branch
+git rebase -i --signoff &lt;base-branch&gt;</code></pre>
+
+<p>GPG signing (<code>-S</code>) is encouraged and <strong>required</strong> for commits forwarded
+upstream to x402. See <a href="CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> for the full
+DCO text and GPG setup.</p>
+
+<h3>3.6 If something fails</h3>
+
+<table>
+  <thead><tr><th>Symptom</th><th>Likely cause</th></tr></thead>
+  <tbody>
+    <tr><td><code>npx: command not found</code> inside <code>circuits/</code> or <code>contracts/</code></td><td>Skipped a per-workspace <code>npm install</code>.</td></tr>
+    <tr><td>Circuit tests fail with "could not find <code>.zkey</code>"</td><td><code>npm run compile:circuits</code> not run.</td></tr>
+    <tr><td>Solidity verifier reverts on a known-good proof</td><td>Verifier out of sync with current <code>.zkey</code>. Re-run compile then <code>npm run compile:contracts</code>.</td></tr>
+    <tr><td>CI fails with "DCO check failed"</td><td>Missing <code>Signed-off-by:</code> on one or more commits. Amend / rebase.</td></tr>
+    <tr><td>Hardhat complains about <code>BASE_SEPOLIA_RPC_URL</code></td><td>Only needed for <code>deploy:base-sepolia</code>; not for <code>test</code>.</td></tr>
+  </tbody>
+</table>
+
+<p>Full lessons-learned in <a href="tasks/lessons.md"><code>tasks/lessons.md</code></a> — skim it
+once today and reread it any time something surprises you.</p>
+
+<hr>
+
+<h2 id="week-1">4. Week 1 — Mental model &amp; first PR (3–5 days)</h2>
+
+<h3>4.1 The protocol in one diagram</h3>
+
+<pre><code>   Human                                     Agent
+    │  EdDSA secret                           │  model hash + operator EdDSA sig
+    ▼                                         ▼
+[HumanUniqueness]                       [AgentPolicy]
+  Groth16                                Groth16 + PLONK
+    │ humanProof, nullifier               │ agentProof, scope, expiry
+    │ humanMerkleRoot, nonceBinding       │ agentMerkleRoot, nullifier
+    └─────────────┬─────────────────┬─────┘
+                  │  sessionNonce   │  (fresh per handshake)
+                  ▼                 ▼
+              IdentityRegistry.sol (Base Sepolia)
+                  verifyHandshake(humanProof, agentProof, nonce)
+                       │
+                       ▼ pass/fail (one tx, atomic)</code></pre>
+
+<p><code>Delegation.circom</code> lives off to the side: a delegator runs it to issue
+a narrowed credential to a delegatee. The circuit enforces "narrow only,
+never expand."</p>
+
+<h3>4.2 Module map</h3>
+
+<table>
+  <thead><tr><th>Path</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><a href="circuits/"><code>circuits/</code></a></td><td>Circom 2 circuits + snarkjs (dev) / rapidsnark (prod) proving.</td></tr>
+    <tr><td><a href="contracts/"><code>contracts/</code></a></td><td>Hardhat — Solidity verifier contracts + <code>IdentityRegistry</code>.</td></tr>
+    <tr><td><a href="sdk/"><code>sdk/</code></a></td><td><code>@bolyra/sdk</code> — TypeScript public API.</td></tr>
+    <tr><td><a href="sdk-python/"><code>sdk-python/</code></a></td><td><code>bolyra</code> Python SDK — pure types + subprocess bridge to Node.</td></tr>
+    <tr><td><a href="integrations/"><code>integrations/</code></a></td><td>LangChain, CrewAI, OpenClaw, MCP, payment-protocols (x402).</td></tr>
+    <tr><td><a href="spec/"><code>spec/</code></a></td><td>DID method, IETF-style draft, conformance runner, test vectors.</td></tr>
+    <tr><td><a href="examples/"><code>examples/</code></a></td><td><code>mcp-demo</code>, <code>provider-mock</code>, <code>quickstart.ts</code>.</td></tr>
+    <tr><td><a href="docs/"><code>docs/</code></a></td><td>Public docs (quickstart, OWASP agentic mapping).</td></tr>
+    <tr><td><code>*-autoresearch/</code></td><td>Four independent research loops (discovery, differentiation, patent, protocol). Don't cross-pollinate.</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 Reading order (time-budgeted)</h3>
+
+<ol>
+  <li><a href="README.md"><code>README.md</code></a> — 10 min.</li>
+  <li><a href="CLAUDE.md"><code>CLAUDE.md</code></a> — 20 min. Architecture, commands, gotchas.</li>
+  <li><a href="sdk/QUICKSTART.md"><code>sdk/QUICKSTART.md</code></a> — 15 min. Hands-on.</li>
+  <li><a href="docs/quickstart.md"><code>docs/quickstart.md</code></a> — 10 min. Repo-level quickstart; overlaps with the SDK one.</li>
+  <li><a href="spec/draft-bolyra-mutual-zkp-auth-01.md"><code>spec/draft-bolyra-mutual-zkp-auth-01.md</code></a> §1–§4 — 30 min. Wire format and nonce binding.</li>
+  <li><a href="tasks/lessons.md"><code>tasks/lessons.md</code></a> — skim, 20 min. Reread when blocked.</li>
+</ol>
+
+<p>Total: ~2 hours of reading.</p>
+
+<h3>4.4 Your first PR</h3>
+
+<p>Browse <a href="tasks/todo.md"><code>tasks/todo.md</code></a> for current sprint items. Good
+starter tickets typically look like:</p>
+
+<ul>
+  <li>Doc fixes or clarifications.</li>
+  <li>Adding test vectors to <code>spec/test-vectors.json</code>.</li>
+  <li>Implementing one of the integration stubs in <code>integrations/</code>.</li>
+  <li>Filling in a missing type or test in <code>sdk/</code>.</li>
+</ul>
+
+<p><strong>PR workflow:</strong></p>
+<ol>
+  <li>Branch from <code>main</code>. Atomic commits — one logical change per commit.</li>
+  <li>Run the local test suite (<code>npm test</code>, plus area-specific tests).</li>
+  <li>If you touched TypeScript: <code>( cd sdk &amp;&amp; npm run typecheck )</code>. CI gates on it.</li>
+  <li><code>git commit -s -m "..."</code> for every commit.</li>
+  <li>Push, open PR with a clear motivation paragraph.</li>
+  <li>The DCO action verifies sign-offs; CI must go green.</li>
+  <li>The <code>/pre-ship</code> workspace command (when used) spawns reviewers based on the diff: <code>circuit-auditor</code>, <code>sdk-api-reviewer</code>, <code>protocol-reviewer</code>. Trust the gate — don't skip it.</li>
+</ol>
+
+<p>See <a href="CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> for the canonical workflow.</p>
+
+<p><strong>Acceptance:</strong> one PR open, DCO and CI green, reviewer assigned.</p>
+
+<hr>
+
+<h2 id="month-1">5. Month 1 — Pick an area to own</h2>
+
+<p>By Month 1 you should be able to own work end-to-end in one of the
+areas below. Pick the one closest to your background and use the
+matching appendix as a deep-dive.</p>
+
+<table>
+  <thead><tr><th>Area</th><th>Looks like</th><th>Appendix</th></tr></thead>
+  <tbody>
+    <tr><td>Circuits</td><td>New circuits, optimizing constraints, ceremony work, fuzzing inputs.</td><td><a href="#appendix-a">A</a></td></tr>
+    <tr><td>Smart contracts</td><td>Registry features, verifier regen, on-chain gas tuning, multichain.</td><td><a href="#appendix-b">B</a></td></tr>
+    <tr><td>SDK (TS / Python)</td><td>Public API shape, ergonomics, framework adapters, error model.</td><td><a href="#appendix-c">C</a></td></tr>
+    <tr><td>Integrations</td><td>LangChain/CrewAI/MCP/OpenClaw/x402 adapters, conformance tests.</td><td><a href="#appendix-d">D</a></td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2 id="appendix-a">Appendix A — Circuits deep-dive</h2>
+
+<p><strong>Stack:</strong> Circom 2, snarkjs (dev/test), rapidsnark (prod), Mocha tests.</p>
+
+<p><strong>Circuits:</strong></p>
+
+<table>
+  <thead><tr><th>Circuit</th><th>Proving system</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>HumanUniqueness</code></td><td>Groth16 only</td><td>Reuses public Semaphore v4 ceremony at depth 20. Don't regenerate it.</td></tr>
+    <tr><td><code>AgentPolicy</code></td><td>Groth16 + PLONK</td><td>Dual-build. Both <code>.zkey</code> ship.</td></tr>
+    <tr><td><code>Delegation</code></td><td>Groth16 + PLONK</td><td>Dual-build. Enforces one-way scope narrowing.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Trusted setup:</strong> <code>pot16.ptau</code> (Hermez Phase 1, 2<sup>16</sup> ≈ 65k constraints)
+is the universal SRS for project-specific Groth16 keys. If a circuit
+grows past that, bump to <code>pot17</code> and flag in PR review.</p>
+
+<p><strong>Test split:</strong></p>
+<ul>
+  <li><code>npm run test:circuits:fast</code> — witness-generation only, ~30 s. Default in CI.</li>
+  <li><code>FULL_PROOF=1 npm run test:circuits:slow</code> — full Groth16/PLONK, ~2 min. Gate on a label, not the default.</li>
+</ul>
+
+<p><strong>Required reading:</strong></p>
+<ul>
+  <li><a href="circuits/FORMAL-PROPERTIES.md"><code>circuits/FORMAL-PROPERTIES.md</code></a> — soundness, completeness, privacy properties in formal notation.</li>
+  <li><a href="circuits/CEREMONY.md"><code>circuits/CEREMONY.md</code></a> — trusted setup pipeline.</li>
+</ul>
+
+<p><strong>Top circuit gotchas:</strong></p>
+<ul>
+  <li>Solidity verifier must match current <code>.zkey</code>. After any circuit change, re-run <code>npm run compile:circuits</code> <em>and</em> <code>npm run compile:contracts</code>. Unit tests can pass against a stale verifier; the Hardhat <code>verifyProof</code> integration tests catch it.</li>
+  <li><code>rapidsnark</code> is production, <code>snarkjs</code> is dev/test. Don't ship snarkjs paths into production code.</li>
+  <li>After changing a dual-build circuit, verify both Groth16 and PLONK verifier contracts still match.</li>
+</ul>
+
+<hr>
+
+<h2 id="appendix-b">Appendix B — Contracts deep-dive</h2>
+
+<p><strong>Stack:</strong> Hardhat + ethers.js v6. Target chain: Base Sepolia (chain ID 84532).</p>
+
+<p><strong>Deployed addresses:</strong> see
+<a href="contracts/deployments/base-sepolia.json"><code>contracts/deployments/base-sepolia.json</code></a>.
+The registry is <code>IdentityRegistry</code>; verifier contracts are <code>Groth16Verifier</code>,
+<code>PlonkVerifier</code>, <code>DelegationPlonkVerifier</code>. Linked Poseidon library is
+<code>PoseidonT3</code>. Treat the JSON file as the source of truth — don't copy
+addresses into other docs.</p>
+
+<p><strong>Deploy commands:</strong></p>
+<pre><code>( cd contracts &amp;&amp; npm run deploy:local )           # local hardhat node
+( cd contracts &amp;&amp; npm run deploy:base-sepolia )    # testnet</code></pre>
+
+<p>Testnet deploy requires <code>BASE_SEPOLIA_RPC_URL</code> and <code>DEPLOYER_PRIVATE_KEY</code>
+in a <code>contracts/.env</code> file. Never commit <code>.env</code>.</p>
+
+<p><strong>Verifier regen checklist</strong> (after any circuit change):</p>
+<ol>
+  <li><code>npm run compile:circuits</code> — regenerates <code>.zkey</code>, <code>.vkey.json</code>.</li>
+  <li>Regenerate the Solidity verifier(s) from the new <code>vkey.json</code>.</li>
+  <li><code>npm run compile:contracts</code> — recompile.</li>
+  <li><code>npm run test:contracts</code> — confirm the verifier accepts a freshly generated proof.</li>
+  <li>If deploying, redeploy the verifier and update <code>IdentityRegistry</code> to point at the new address.</li>
+</ol>
+
+<hr>
+
+<h2 id="appendix-c">Appendix C — SDK deep-dive (TS + Python)</h2>
+
+<p><strong>TypeScript SDK</strong> (<code>sdk/</code>, <code>@bolyra/sdk</code>):</p>
+<ul>
+  <li>Public API: <code>createHumanIdentity(secret)</code>, <code>createAgentCredential(modelHash, operatorPrivKey, permissions, expiry)</code>, <code>proveHandshake(human, agent)</code>, <code>verifyHandshake(humanProof, agentProof, nonce)</code>.</li>
+  <li>Delegation API is v0.3 stub.</li>
+  <li>Treat any change to these signatures as breaking. Run the <code>sdk-api-reviewer</code> subagent (via <code>/pre-ship</code>) on SDK changes.</li>
+  <li>Strict TS, no <code>any</code> without an inline justification comment.</li>
+  <li><code>( cd sdk &amp;&amp; npm run typecheck )</code> is a CI gate. Run it before every push.</li>
+</ul>
+
+<p><strong>Python SDK</strong> (<code>sdk-python/</code>, <code>bolyra</code>):</p>
+<ul>
+  <li>Pure-Python types and validation only. All proving spawns the Node <code>@bolyra/sdk</code> as a subprocess (snarkjs is JS-only).</li>
+  <li>When adding a Python feature that needs proving, expose it through the subprocess bridge. <strong>Do not</strong> reimplement crypto in Python.</li>
+  <li>Tests: <code>( cd sdk-python &amp;&amp; pytest -v )</code>.</li>
+</ul>
+
+<p><strong>Permission model</strong> — 8-bit cumulative encoding, higher tiers imply
+lower. The full table is in the "Permissions Model" section of
+<a href="CLAUDE.md"><code>CLAUDE.md</code></a>. <code>validateCumulativeBitEncoding()</code> enforces
+the implication rules in the SDK; the <code>Delegation</code> circuit enforces them
+on-chain. Don't bypass either.</p>
+
+<hr>
+
+<h2 id="appendix-d">Appendix D — Integrations deep-dive</h2>
+
+<p>Adapters live under <a href="integrations/"><code>integrations/</code></a>:</p>
+<ul>
+  <li><code>langchain/</code> — LangChain tools (<code>BolyraAuthTool</code>, <code>BolyraDelegateTool</code>).</li>
+  <li><code>crewai/</code> — CrewAI agent wrappers.</li>
+  <li><code>openclaw/</code> — OpenClaw agent framework adapter. Also type-checked in CI (peer dep on <code>@bolyra/sdk</code>).</li>
+  <li><code>mcp/</code> — Model Context Protocol server. Built artifact: <code>examples/mcp-demo/dist/bolyra-proxy.js</code>, registered via <code>.mcp.json</code>. Requires <code>BOLYRA_RAPIDSNARK</code> env pointing at <code>circuits/build/rapidsnark_prover</code>.</li>
+  <li><code>payment-protocols/</code> — x402 v2 conformance. Has its own wire-format conformance suite.</li>
+</ul>
+
+<p><strong>Status:</strong> API shape is final; most implementations are stubs pending
+SDK v0.2 wiring. Good area for first contributions.</p>
+
+<p><strong>Conformance runner:</strong> <code>node spec/conformance-runner.js</code> against
+<code>spec/test-vectors.json</code>.</p>
+
+<hr>
+
+<h2 id="appendix-e">Appendix E — Culture &amp; workflow</h2>
+
+<p>These are workspace norms, not optional preferences:</p>
+<ul>
+  <li><strong>Plan first for non-trivial work</strong> (3+ steps or any architectural decision). Write the plan, get agreement, then execute.</li>
+  <li><strong>Test-first bug fixing.</strong> Write a failing reproducing test before the fix. The test stays in the suite.</li>
+  <li><strong>Verify before declaring done.</strong> Run tests, check output, prove correctness. Don't mark a task complete without evidence.</li>
+  <li><strong>Update <a href="tasks/lessons.md"><code>tasks/lessons.md</code></a> after corrections.</strong> Write the rule that prevents the same mistake. Lessons file is the long-memory of the project.</li>
+  <li><strong>Subagents for research and parallel work.</strong> Keeps the main context clean; one task per subagent for focused execution.</li>
+  <li><strong><code>/pre-ship</code> is mandatory for non-trivial PRs.</strong> It spawns <code>circuit-auditor</code>, <code>sdk-api-reviewer</code>, or <code>protocol-reviewer</code> based on what changed.</li>
+  <li><strong>Simplicity bias.</strong> Make the smallest change that solves the problem. Avoid premature abstraction; three similar lines beat a one-time helper.</li>
+</ul>
+
+<hr>
+
+<h2 id="appendix-f">Appendix F — Gotchas cheat-sheet (one page)</h2>
+
+<p>Distilled from <a href="CLAUDE.md"><code>CLAUDE.md</code></a> and
+<a href="tasks/lessons.md"><code>tasks/lessons.md</code></a>. One-liners; follow the link for
+full context.</p>
+
+<ul>
+  <li><strong>Every commit needs <code>git commit -s</code>.</strong> CI rejects unsigned. Fix with <code>git commit --amend -s --no-edit</code>.</li>
+  <li><strong>Repo is <code>bolyra/</code>, not <code>identityos/</code>.</strong> Legacy name survives only in historical patent drafts (<code>drafts/IDENTITYOS-PROV-001-*</code>).</li>
+  <li><strong>License is uniformly Apache-2.0.</strong> Anything saying "MIT" is stale — fix on sight.</li>
+  <li><strong>Per-workspace <code>npm install</code> is required.</strong> Root only orchestrates.</li>
+  <li><strong>Circuit + contract tests are SKIPPED in CI.</strong> Run them locally before push.</li>
+  <li><strong>Don't regenerate the Semaphore v4 ceremony.</strong> <code>HumanUniqueness</code> reuses the public ceremony at depth 20.</li>
+  <li><strong><code>pot16.ptau</code> caps at ~65k constraints.</strong> Bump to <code>pot17</code> if you outgrow it; flag in PR review.</li>
+  <li><strong>Solidity verifier must match the current <code>.zkey</code>.</strong> Regenerate the verifier after any circuit change.</li>
+  <li><strong><code>rapidsnark</code> is prod, <code>snarkjs</code> is dev/test.</strong> Don't ship snarkjs paths to production.</li>
+  <li><strong>Dual-build circuits ship both Groth16 and PLONK <code>.zkey</code>.</strong> Verify both verifiers after any change to <code>AgentPolicy</code> or <code>Delegation</code>.</li>
+  <li><strong>Scope narrowing in delegation is one-way.</strong> Enforced in <code>Delegation.circom</code>, not just the SDK. Don't add SDK-level shortcuts.</li>
+  <li><strong>Handshake nonce binding is non-negotiable.</strong> Every handshake commits to a fresh <code>sessionNonce</code>. Replaying without rebinding fails by design.</li>
+  <li><strong>Permission encoding is cumulative.</strong> Higher tiers imply lower. Don't bypass <code>validateCumulativeBitEncoding()</code> or the <code>Delegation</code> circuit.</li>
+  <li><strong>Python SDK is a thin shell.</strong> All proving spawns Node. Don't reimplement crypto in Python.</li>
+  <li><strong>TS SDK public API changes are breaking.</strong> Run <code>sdk-api-reviewer</code>.</li>
+  <li><strong>Run <code>( cd sdk &amp;&amp; npm run typecheck )</code> before pushing TS changes.</strong> CI gates on it.</li>
+  <li><strong>Don't mix winners across the four autoresearch loops.</strong> Scoring rubrics differ.</li>
+  <li><strong><code>.mcp.json</code> paths must be absolute and correct.</strong> <code>bolyra-fs</code> fails silently on a wrong path; needs <code>BOLYRA_RAPIDSNARK</code> env.</li>
+  <li><strong><code>settings.local.json</code> is per-user / gitignored.</strong> Don't paste cross-project permissions there.</li>
+</ul>
+
+<hr>
+
+<h2 id="appendix-g">Appendix G — Quick reference (one screen)</h2>
+
+<h3>Build &amp; test</h3>
+<pre><code>npm install                                    # root (orchestration)
+( cd sdk        &amp;&amp; npm install )
+( cd circuits   &amp;&amp; npm install )
+( cd contracts  &amp;&amp; npm install )
+( cd sdk-python &amp;&amp; pip install -e ".[dev]" )
+
+npm run compile:circuits                       # circuits/build/
+npm run compile:contracts                      # contracts artifacts
+
+npm test                                       # fast circuits + contracts
+npm run test:circuits:fast                     # witness-gen only
+FULL_PROOF=1 npm run test:circuits:slow        # full proofs
+npm run test:contracts                         # Hardhat
+( cd sdk        &amp;&amp; npm test )                  # Jest
+( cd sdk        &amp;&amp; npm run typecheck )         # CI gate
+( cd sdk-python &amp;&amp; pytest -v )</code></pre>
+
+<h3>Deploy (contracts)</h3>
+<pre><code>( cd contracts &amp;&amp; npm run deploy:local )
+( cd contracts &amp;&amp; npm run deploy:base-sepolia )    # needs .env</code></pre>
+
+<h3>Commit</h3>
+<pre><code>git commit -s -m "..."                         # DCO sign-off
+git commit -s -S -m "..."                      # DCO + GPG (upstream-bound)
+git commit --amend -s --no-edit                # fix missing sign-off</code></pre>
+
+<h3>Key files</h3>
+<ul>
+  <li><a href="README.md"><code>README.md</code></a>, <a href="CLAUDE.md"><code>CLAUDE.md</code></a>, <a href="CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a></li>
+  <li><a href="sdk/QUICKSTART.md"><code>sdk/QUICKSTART.md</code></a>, <a href="docs/quickstart.md"><code>docs/quickstart.md</code></a></li>
+  <li><a href="circuits/FORMAL-PROPERTIES.md"><code>circuits/FORMAL-PROPERTIES.md</code></a>, <a href="circuits/CEREMONY.md"><code>circuits/CEREMONY.md</code></a></li>
+  <li><a href="spec/draft-bolyra-mutual-zkp-auth-01.md"><code>spec/draft-bolyra-mutual-zkp-auth-01.md</code></a>, <a href="spec/did-method-bolyra.md"><code>spec/did-method-bolyra.md</code></a></li>
+  <li><a href="contracts/deployments/base-sepolia.json"><code>contracts/deployments/base-sepolia.json</code></a></li>
+  <li><a href="tasks/lessons.md"><code>tasks/lessons.md</code></a>, <a href="tasks/todo.md"><code>tasks/todo.md</code></a></li>
+  <li><a href="docs/owasp-agentic-mapping.md"><code>docs/owasp-agentic-mapping.md</code></a></li>
+</ul>
+
+<h3>External</h3>
+<ul>
+  <li>Website: <a href="https://bolyra.ai">https://bolyra.ai</a></li>
+  <li>npm: <code>@bolyra/sdk</code></li>
+  <li>PyPI: <code>bolyra</code></li>
+  <li>Chain: Base Sepolia (84532), RPC <code>https://sepolia.base.org</code></li>
+  <li>Repo: <code>github.com/bolyra/bolyra</code></li>
+</ul>
+
+<p class="footer-note">Found something missing or wrong? File a PR against this doc — it's
+the kind of starter contribution we welcome.</p>
+
+</main>
+</div>
+
+</body>
+</html>
