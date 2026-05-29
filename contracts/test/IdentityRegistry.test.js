@@ -312,7 +312,8 @@ describe("IdentityRegistry", function () {
     it("should reject delegation without prior handshake", async function () {
       // Session nonce has not been consumed by any handshake
       const proof = new Array(8).fill(0n);
-      const pubSignals = [111n, 42n, 222n, 333n, 444n];
+      // Canonical 6-element layout: [newScope, nullifier, delegateeRoot, prevScope, sessionNonce, currentTimestamp]
+      const pubSignals = [111n, 222n, 333n, 444n, 42n, 555n];
       const sessionNonce = 42n;
 
       await expect(
