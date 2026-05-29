@@ -130,6 +130,23 @@ export async function delegate(
     );
   }
 
+  // Sanity check: the previousScopeCommitment passed in must equal the
+  // identity-bound chain link Poseidon3(delegatorScope, delegatorCredCommitment,
+  // delegatorExpiry). The circuit will assert this; we precheck for a clean error.
+  // Ordered before artifact loading so CI environments without circuits still
+  // surface CHAIN_LINK_MISMATCH instead of CIRCUIT_ARTIFACT_NOT_FOUND.
+  const expectedPrev = await poseidon3(
+    input.delegator.permissionBitmask,
+    input.delegator.commitment,
+    input.delegator.expiryTimestamp,
+  );
+  if (expectedPrev !== input.previousScopeCommitment) {
+    throw new BolyraError(
+      `previousScopeCommitment does not match the delegator's identity-bound chain link. Got ${input.previousScopeCommitment}, expected ${expectedPrev} (= Poseidon3(scope, credCommitment, expiry) for this delegator). For hop 1, pass the agent's scopeCommitment output from proveHandshake.`,
+      'CHAIN_LINK_MISMATCH',
+    );
+  }
+
   const circuitDir = input.config?.circuitDir ?? DEFAULT_CIRCUIT_DIR;
   const backend = input.backend ?? 'auto';
   const currentTimestamp =
@@ -161,21 +178,6 @@ export async function delegate(
     input.delegateeExpiry,
   );
   const sig = await eddsaSign(input.delegatorOperatorPrivateKey, tokenHash);
-
-  // Sanity check: the previousScopeCommitment passed in must equal the
-  // identity-bound chain link Poseidon3(delegatorScope, delegatorCredCommitment,
-  // delegatorExpiry). The circuit will assert this; we precheck for a clean error.
-  const expectedPrev = await poseidon3(
-    input.delegator.permissionBitmask,
-    input.delegator.commitment,
-    input.delegator.expiryTimestamp,
-  );
-  if (expectedPrev !== input.previousScopeCommitment) {
-    throw new BolyraError(
-      `previousScopeCommitment does not match the delegator's identity-bound chain link. Got ${input.previousScopeCommitment}, expected ${expectedPrev} (= Poseidon3(scope, credCommitment, expiry) for this delegator). For hop 1, pass the agent's scopeCommitment output from proveHandshake.`,
-      'CHAIN_LINK_MISMATCH',
-    );
-  }
 
   const witnessInput: Record<string, unknown> = {
     delegatorScope: input.delegator.permissionBitmask.toString(),
