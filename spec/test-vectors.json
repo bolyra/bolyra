@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -602,6 +602,199 @@
         "result": "PASS",
         "humanNullifierDeterministic": true,
         "nullifiersDifferent": true
+      }
+    },
+    {
+      "id": "delegation-valid-two-hop",
+      "description": "v0.3 — Two-hop delegation chain narrowing 0xFF -> 0x0F -> 0x03; each hop is a proper subset",
+      "type": "delegation_chain",
+      "inputs": {
+        "hops": [
+          { "delegatorScope": "0xFF", "delegateeScope": "0x0F" },
+          { "delegatorScope": "0x0F", "delegateeScope": "0x03" }
+        ]
+      },
+      "expected": {
+        "result": "PASS",
+        "hopsCovered": 2
+      }
+    },
+    {
+      "id": "delegation-forged-token-signature",
+      "description": "v0.3 — Delegation token signed by attacker key but verified against delegator's pubkey must fail (Delegation.circom EdDSA sig check)",
+      "type": "signature_verification",
+      "inputs": {
+        "signerSecret": "99999",
+        "claimedSignerSecret": "11111",
+        "message": "424242",
+        "signedMessage": "424242"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "invalid_eddsa_signature",
+        "failsAt": "Delegation circuit: EdDSAPoseidonVerifier on delegationToken"
+      }
+    },
+    {
+      "id": "delegation-nullifier-distinct-per-nonce",
+      "description": "v0.3 — Same delegator/delegatee with different sessionNonce must produce different delegationNullifier (replay protection)",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x0F",
+        "delegateeScope": "0x07",
+        "delegatorCredCommitment": "111111",
+        "delegateeCredCommitment": "222222",
+        "sessionNonceA": "100",
+        "sessionNonceB": "101",
+        "verifyNullifierUniquePerNonce": true
+      },
+      "expected": {
+        "result": "PASS",
+        "nullifiersDifferent": true
+      }
+    },
+    {
+      "id": "delegation-prev-scope-commitment-formula",
+      "description": "v0.3 — previousScopeCommitment binds to delegator identity: Poseidon3(delegatorScope, delegatorCredCommitment, delegatorExpiry) must be deterministic",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x07",
+        "delegateeScope": "0x03",
+        "delegatorCredCommitment": "12345678",
+        "delegatorExpiry": "1800000000",
+        "delegateeExpiry": "1750000000",
+        "verifyPrevScopeCommitmentFormula": true
+      },
+      "expected": {
+        "result": "PASS",
+        "prevScopeCommitmentDeterministic": true
+      }
+    },
+    {
+      "id": "delegation-token-poseidon4-formula",
+      "description": "v0.3 — delegationToken = Poseidon4(previousScopeCommitment, delegateeCommitment, delegateeScope, delegateeExpiry) — deterministic and binds all 4 fields",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x07",
+        "delegateeScope": "0x03",
+        "previousScopeCommitment": "55555",
+        "delegateeCredCommitment": "66666",
+        "delegateeExpiry": "1750000000",
+        "verifyTokenPoseidon4": true
+      },
+      "expected": {
+        "result": "PASS",
+        "tokenDeterministic": true
+      }
+    },
+    {
+      "id": "delegation-new-scope-commitment-formula",
+      "description": "v0.3 — newScopeCommitment = Poseidon3(delegateeScope, delegateeCredCommitment, delegateeExpiry) — chain seed for next hop, identity-bound",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x07",
+        "delegateeScope": "0x03",
+        "delegateeCredCommitment": "77777",
+        "delegateeExpiry": "1750000000",
+        "verifyNewScopeCommitmentFormula": true
+      },
+      "expected": {
+        "result": "PASS",
+        "newScopeCommitmentDeterministic": true
+      }
+    },
+    {
+      "id": "delegation-merkle-root-single-leaf",
+      "description": "v0.3 — LeanIMT edge case: single-leaf agentTree root equals the leaf itself (length=0 path, all-zero siblings)",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x0F",
+        "delegateeScope": "0x07",
+        "delegateeCredCommitment": "8888",
+        "verifyMerkleRootSingleLeaf": true
+      },
+      "expected": {
+        "result": "PASS",
+        "rootEqualsLeaf": true
+      }
+    },
+    {
+      "id": "delegation-merkle-root-two-leaf",
+      "description": "v0.3 — LeanIMT two-leaf agentTree root equals Poseidon2(leaf0, leaf1) when delegatee is leaf at index=1",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x0F",
+        "delegateeScope": "0x07",
+        "leaf0": "111",
+        "leaf1": "222",
+        "verifyMerkleRootTwoLeaf": true
+      },
+      "expected": {
+        "result": "PASS",
+        "rootEqualsPoseidon2": true
+      }
+    },
+    {
+      "id": "delegation-public-signals-layout",
+      "description": "v0.3 — Delegation Groth16 proof exposes exactly 6 public signals in canonical order: [newScopeCommitment, delegationNullifier, delegateeMerkleRoot, previousScopeCommitment, sessionNonce, currentTimestamp]",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x0F",
+        "delegateeScope": "0x07",
+        "verifyPublicSignalsLayout": true,
+        "expectedSignals": [
+          "newScopeCommitment",
+          "delegationNullifier",
+          "delegateeMerkleRoot",
+          "previousScopeCommitment",
+          "sessionNonce",
+          "currentTimestamp"
+        ]
+      },
+      "expected": {
+        "result": "PASS",
+        "publicSignalsLayout": [
+          "newScopeCommitment",
+          "delegationNullifier",
+          "delegateeMerkleRoot",
+          "previousScopeCommitment",
+          "sessionNonce",
+          "currentTimestamp"
+        ]
+      }
+    },
+    {
+      "id": "delegation-narrow-financial-scope",
+      "description": "v0.3 — Drop FINANCIAL_UNLIMITED (bit 4) while keeping FINANCIAL_MEDIUM+SMALL (bits 2+3): delegator 0x1C -> delegatee 0x0C — valid subset and cumulative-encoding still holds",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x1C",
+        "delegateeScope": "0x0C",
+        "delegatorExpiry": "1800000000",
+        "delegateeExpiry": "1800000000"
+      },
+      "expected": {
+        "result": "PASS",
+        "scopeNarrowed": true,
+        "expiryNarrowed": false,
+        "cumulativeValid": true
+      }
+    },
+    {
+      "id": "delegation-narrow-keep-cumulative-invariant",
+      "description": "v0.3 — Even though delegator scope 0x1C (bits 2+3+4) is cumulative-valid, narrowing to 0x14 (bits 2+4 — missing bit 3) violates cumulative invariant on delegatee and the Delegation circuit must reject",
+      "type": "delegation",
+      "inputs": {
+        "delegatorScope": "0x1C",
+        "delegateeScope": "0x14",
+        "delegatorExpiry": "1800000000",
+        "delegateeExpiry": "1800000000",
+        "cumulativeViolationOnDelegatee": true
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "cumulative_bit_violation",
+        "failsAt": "Delegation circuit: cumulative bit invariant on delegateeScope (bit4 implies bit3, bit3 implies bit2)"
       }
     }
   ]
