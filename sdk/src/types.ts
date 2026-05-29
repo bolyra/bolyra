@@ -52,8 +52,22 @@ export interface DelegationResult {
   newScopeCommitment: bigint;
   /** Delegation nullifier (unique per delegation per session) */
   delegationNullifier: bigint;
+  /** Delegatee Merkle root — checked on-chain against agentRootExists (CIP-1) */
+  delegateeMerkleRoot: bigint;
   /** Hop number in the chain (0-indexed) */
   hopIndex: number;
+}
+
+/** Optional Merkle inclusion proof for the delegatee's enrollment in agentTree.
+ *  If omitted, delegate() defaults to the single-leaf pattern (depth 1, index 0,
+ *  20 zero siblings) — matches the conformance test layout. Real deployments
+ *  pass the actual proof against the live agentTree.
+ */
+export interface DelegateeMerkleProof {
+  length: number;
+  index: number;
+  /** Always length 20 (Delegation circuit MAX_DEPTH) */
+  siblings: bigint[];
 }
 
 /** Proof with public signals ready for on-chain verification */

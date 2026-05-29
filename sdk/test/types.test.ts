@@ -91,10 +91,12 @@ describe('Type shape contracts (compile-time + runtime guards)', () => {
     const result: DelegationResult = {
       newScopeCommitment: 1n,
       delegationNullifier: 2n,
+      delegateeMerkleRoot: 5n,
       hopIndex: 0,
     };
     expect(result.newScopeCommitment).toBe(1n);
     expect(result.delegationNullifier).toBe(2n);
+    expect(result.delegateeMerkleRoot).toBe(5n);
     expect(result.hopIndex).toBe(0);
   });
 

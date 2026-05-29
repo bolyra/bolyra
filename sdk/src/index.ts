@@ -4,6 +4,7 @@ export type {
   AgentCredential,
   HandshakeResult,
   DelegationResult,
+  DelegateeMerkleProof,
   Proof,
   BolyraConfig,
   OffchainVerificationResult,
@@ -40,8 +41,9 @@ export {
   verifyMerkleInclusion,
 } from './offchain';
 
-// Delegation (stubs — coming in v0.3)
+// Delegation (v0.3 — scope-narrowing one-way delegation, chain-linked on-chain)
 export { delegate, verifyDelegation } from './delegation';
+export type { DelegateInput } from './delegation';
 
 // Errors
 export {
