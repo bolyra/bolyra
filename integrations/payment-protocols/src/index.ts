@@ -30,6 +30,13 @@ export {
   getTimeWindowTiers,
 } from './spend-policy';
 
+// Stripe Agent Commerce Protocol (ACP)
+export {
+  bitmaskToStripeSpendingLimits,
+  authContextToStripeACPContext,
+  verifyStripeACPSpend,
+} from './stripe-acp';
+
 // Types
 export type {
   SpendPolicy,
@@ -45,4 +52,9 @@ export type {
   AP2AgentCredential,
   AP2DelegationRecord,
   PaymentVerificationConfig,
+  StripeACPSpendingTier,
+  StripeACPSpendingLimits,
+  BolyraVerifiedContext,
+  StripeACPContext,
+  StripeACPSpendDecision,
 } from './types';

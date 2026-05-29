@@ -186,6 +186,126 @@ export interface AP2DelegationRecord {
 }
 
 // ---------------------------------------------------------------------------
+// Stripe Agent Commerce Protocol (ACP) Types
+// ---------------------------------------------------------------------------
+
+/**
+ * Spending tier derived from Bolyra's cumulative FINANCIAL_* bits.
+ *
+ * Bolyra's permission bitmask (per CLAUDE.md, §"Permissions Model") encodes
+ * spending authority as cumulative bits:
+ *   - bit 2: FINANCIAL_SMALL      (< $100)
+ *   - bit 3: FINANCIAL_MEDIUM     (< $10K, implies bit 2)
+ *   - bit 4: FINANCIAL_UNLIMITED  (implies bits 2+3)
+ *
+ * The Stripe ACP adapter collapses these into a single tier label so a
+ * merchant integration can map directly to a Stripe PaymentIntent cap.
+ */
+export type StripeACPSpendingTier = 'none' | 'small' | 'medium' | 'unlimited';
+
+/**
+ * Spending limits derived from a Bolyra scope bitmask for use in Stripe ACP.
+ *
+ * `maxTransactionAmount` is in minor units (USD cents by default). `0` means
+ * either no cap (tier="unlimited") or no authority (tier="none") — disambiguate
+ * via the `tier` field, never by zero alone.
+ */
+export interface StripeACPSpendingLimits {
+  /** Per-transaction cap (minor units). 0 with tier="unlimited" means no cap. */
+  maxTransactionAmount: number;
+  /** Currency code (ISO 4217). */
+  currency: string;
+  /** Cumulative bit 2 — FINANCIAL_SMALL. */
+  financialSmall: boolean;
+  /** Cumulative bit 3 — FINANCIAL_MEDIUM. */
+  financialMedium: boolean;
+  /** Cumulative bit 4 — FINANCIAL_UNLIMITED. */
+  financialUnlimited: boolean;
+  /** Bit 5 — SIGN_ON_BEHALF, required for Stripe ACP `pi.confirm` on user's behalf. */
+  signOnBehalf: boolean;
+  /** Collapsed tier label for direct mapping to Stripe spend caps. */
+  tier: StripeACPSpendingTier;
+}
+
+/**
+ * Minimum subset of a verified Bolyra auth context that the Stripe ACP
+ * adapter needs. Mirrors `BolyraAuthContext` from `@bolyra/mcp` but is
+ * structurally typed so the adapter does not depend on the MCP integration.
+ *
+ * Callers should pass a context produced by `@bolyra/mcp`'s `verifyBundle`
+ * or by their own SDK-level verification. The Stripe adapter trusts the
+ * `verified` flag — it does not re-run ZKP verification.
+ */
+export interface BolyraVerifiedContext {
+  /** True if the source bundle (handshake + any delegation chain) verified. */
+  verified: boolean;
+  /** Trust score (0-100). */
+  score: number;
+  /** Root agent DID (did:bolyra:<network>:<rootCommitment>). */
+  did: string;
+  /**
+   * Effective permission bitmask. For a v=2 bundle with a delegation chain,
+   * this MUST be the leaf delegatee's scope (most-narrowed). For v=1, the root
+   * credential's bitmask.
+   */
+  permissionBitmask: bigint;
+  /** Number of delegation hops verified (0 = handshake only). */
+  chainDepth: number;
+  /**
+   * Effective acting credential commitment as a decimal string. For v=2 with
+   * a chain, this is the leaf delegateeCommitment.
+   */
+  effectiveCommitment: string;
+  /** Warnings from verification. */
+  warnings: string[];
+}
+
+/**
+ * Stripe ACP context — Bolyra's v=2 proof bundle reshaped for direct
+ * consumption by a Stripe Agent Commerce Protocol integration.
+ *
+ * Maps:
+ *   - leaf delegatee  → acting agent (the agent issuing the PaymentIntent)
+ *   - root credential → originating agent (the credential the human authorized)
+ *   - chain depth     → delegation depth (for risk scoring)
+ *   - FINANCIAL_*     → spending caps
+ *
+ * The Stripe ACP layer never sees the raw ZKPs or the human's identity.
+ */
+export interface StripeACPContext {
+  /** Acting agent DID — leaf of the delegation chain (or root for v=1). */
+  actingAgentDid: string;
+  /** Originating agent DID — root credential the human authorized. */
+  rootAgentDid: string;
+  /** Delegation depth: 0 = direct handshake, N = N-hop chain to the leaf. */
+  delegationDepth: number;
+  /** Spending limits the merchant should enforce. */
+  spendingLimits: StripeACPSpendingLimits;
+  /** Effective scope bitmask (decimal string for transport). */
+  effectiveScope: string;
+  /** Whether the underlying Bolyra bundle verified. */
+  verified: boolean;
+  /** Bolyra trust score (0-100). */
+  score: number;
+  /** Warnings from verification + spending-derivation. */
+  warnings: string[];
+}
+
+/**
+ * Result of checking a proposed Stripe charge against an ACP context.
+ */
+export interface StripeACPSpendDecision {
+  /** Whether the spend is authorized. */
+  allowed: boolean;
+  /** Human-readable reason when `allowed=false`. */
+  reason?: string;
+  /** The cap that was checked against (minor units). 0 with allowed=true means no cap. */
+  capChecked: number;
+  /** Tier label that was applied. */
+  tier: StripeACPSpendingTier;
+}
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
