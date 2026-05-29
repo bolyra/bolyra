@@ -18,82 +18,28 @@ import {
   verifyBundle,
   type BolyraMcpConfig,
 } from '@bolyra/mcp';
+import type { AgentCredential } from '@bolyra/sdk';
 import {
-  createHumanIdentity,
-  createAgentCredential,
-  Permission,
-  type AgentCredential,
-} from '@bolyra/sdk';
-import { DEMO_SDK_CONFIG } from './shared';
-
-// Distinct, stable demo secrets so the demo is reproducible across runs.
-const ROOT_HUMAN_SECRET =
-  0x0001020304050607080900010203040506070809000102030405060708090001n;
-const ROOT_OP_KEY =
-  0x1101020304050607080900010203040506070809000102030405060708090001n;
-const AGENT_A_OP_KEY =
-  0x2201020304050607080900010203040506070809000102030405060708090002n;
-const AGENT_B_OP_KEY =
-  0x3301020304050607080900010203040506070809000102030405060708090003n;
-
-const ROOT_MODEL = 0xa1n;
-const AGENT_A_MODEL = 0xa2n;
-const AGENT_B_MODEL = 0xa3n;
-
-const ROOT_EXPIRY = 4_102_444_800n; // 2100-01-01
-const AGENT_A_EXPIRY = ROOT_EXPIRY - 3600n;
-const AGENT_B_EXPIRY = AGENT_A_EXPIRY - 60n;
-
-// Cumulative-bit scope narrowing:
-//   root:    bits 0,1,2,3,4    (0b11111 = 0x1F) — read+write+financial up to UNLIMITED
-//   agent A: bits 0,1,2,3      (0b01111 = 0x0F) — drop FINANCIAL_UNLIMITED
-//   agent B: bits 0,1          (0b00011 = 0x03) — read+write only
-const ROOT_SCOPE: Permission[] = [
-  Permission.READ_DATA,
-  Permission.WRITE_DATA,
-  Permission.FINANCIAL_SMALL,
-  Permission.FINANCIAL_MEDIUM,
-  Permission.FINANCIAL_UNLIMITED,
-];
-const AGENT_A_SCOPE: Permission[] = [
-  Permission.READ_DATA,
-  Permission.WRITE_DATA,
-  Permission.FINANCIAL_SMALL,
-  Permission.FINANCIAL_MEDIUM,
-];
-const AGENT_B_SCOPE: Permission[] = [Permission.READ_DATA, Permission.WRITE_DATA];
+  DEMO_SDK_CONFIG,
+  loadDemoDelegationIdentities,
+} from './shared';
 
 async function main() {
   console.log('=== Bolyra v0.3 off-chain delegation demo ===\n');
 
-  // 1. Identities + credentials.
-  const human = await createHumanIdentity(ROOT_HUMAN_SECRET);
-  const rootCred = await createAgentCredential(
-    ROOT_MODEL,
-    ROOT_OP_KEY,
-    ROOT_SCOPE,
-    ROOT_EXPIRY,
-  );
-  // agentA's credential commitment MUST match what hop 0 grants — same
-  // (modelHash, operatorPubkey, scope, expiry) used in createAgentCredential.
-  const agentACred = await createAgentCredential(
-    AGENT_A_MODEL,
-    AGENT_A_OP_KEY,
-    AGENT_A_SCOPE,
-    AGENT_A_EXPIRY,
-  );
-  const agentBCred = await createAgentCredential(
-    AGENT_B_MODEL,
-    AGENT_B_OP_KEY,
-    AGENT_B_SCOPE,
-    AGENT_B_EXPIRY,
-  );
+  const {
+    human,
+    rootCred,
+    rootOpKey,
+    agentACred,
+    agentAOpKey,
+    agentBCred,
+  } = await loadDemoDelegationIdentities();
 
   console.log(`root cred commitment:    ${rootCred.commitment}`);
   console.log(`agent A cred commitment: ${agentACred.commitment}`);
   console.log(`agent B cred commitment: ${agentBCred.commitment}\n`);
 
-  // 2. Build the v=2 bundle: handshake bound to root + 2 delegation hops.
   console.log('Generating handshake + 2-hop delegation chain...');
   const t0 = Date.now();
   const auth = await attachDelegatedBolyraProof(
@@ -102,14 +48,14 @@ async function main() {
     [
       {
         delegator: rootCred,
-        delegatorOperatorPrivateKey: ROOT_OP_KEY,
+        delegatorOperatorPrivateKey: rootOpKey,
         delegateeCommitment: agentACred.commitment,
         delegateeScope: agentACred.permissionBitmask,
         delegateeExpiry: agentACred.expiryTimestamp,
       },
       {
         delegator: agentACred,
-        delegatorOperatorPrivateKey: AGENT_A_OP_KEY,
+        delegatorOperatorPrivateKey: agentAOpKey,
         delegateeCommitment: agentBCred.commitment,
         delegateeScope: agentBCred.permissionBitmask,
         delegateeExpiry: agentBCred.expiryTimestamp,
@@ -120,7 +66,6 @@ async function main() {
   const provingMs = Date.now() - t0;
   console.log(`Bundle generated in ${provingMs}ms (v=${auth.bundle.v}, chain depth ${auth.bundle.delegationChain?.length ?? 0})\n`);
 
-  // 3. Verifier side: register the credential, run verifyBundle.
   const registry = new Map<string, AgentCredential>();
   registry.set(rootCred.commitment.toString(), rootCred);
 
@@ -149,19 +94,17 @@ async function main() {
   if (ctx.warnings.length > 0) console.log(`warnings:            ${JSON.stringify(ctx.warnings)}`);
   if (ctx.reason) console.log(`reason:              ${ctx.reason}`);
 
-  // 4. Sanity assertions — exit non-zero if any of these fail so the demo
-  //    doubles as a smoke test.
-  const expectedLeafScope = agentBCred.permissionBitmask;
-  const expectedLeafCommit = agentBCred.commitment.toString();
   const ok =
     ctx.verified &&
     ctx.chainDepth === 2 &&
-    ctx.permissionBitmask === expectedLeafScope &&
-    ctx.effectiveCommitment === expectedLeafCommit;
+    ctx.permissionBitmask === agentBCred.permissionBitmask &&
+    ctx.effectiveCommitment === agentBCred.commitment.toString();
 
   console.log(`\nResult: ${ok ? 'PASS' : 'FAIL'}`);
   if (!ok) {
-    console.error(`Expected chainDepth=2, leaf scope=${expectedLeafScope}, leaf commitment=${expectedLeafCommit}`);
+    console.error(
+      `Expected chainDepth=2, leaf scope=${agentBCred.permissionBitmask}, leaf commitment=${agentBCred.commitment}`,
+    );
     process.exit(1);
   }
 }

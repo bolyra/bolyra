@@ -10,22 +10,46 @@
  *   Claude Desktop ──vanilla MCP──► bolyra-proxy ──MCP+_meta.bolyra──► server-fixed
  *
  * Env vars:
- *   BOLYRA_UPSTREAM_SCRIPT  Absolute path to upstream node script.
- *                           Defaults to ./server-fixed.js next to this file.
+ *   BOLYRA_UPSTREAM_SCRIPT   Absolute path to upstream node script.
+ *                            Defaults to ./server-fixed.js next to this file.
+ *   BOLYRA_DELEGATION_MODE   When set to "1"/"true"/"on", emits v=2 bundles
+ *                            carrying the demo 2-hop delegation chain
+ *                            (root → agentA → agentB). Otherwise the proxy
+ *                            emits the v=1 single-credential handshake.
  */
 
 import { spawn } from 'child_process';
 import * as path from 'path';
-import { attachBolyraProof } from '@bolyra/mcp';
-import { loadDemoIdentities, DEMO_SDK_CONFIG } from './shared';
+import { attachBolyraProof, attachDelegatedBolyraProof } from '@bolyra/mcp';
+import {
+  loadDemoIdentities,
+  loadDemoDelegationIdentities,
+  DEMO_SDK_CONFIG,
+} from './shared';
+
+function isDelegationModeOn(): boolean {
+  const v = process.env.BOLYRA_DELEGATION_MODE;
+  if (!v) return false;
+  return /^(1|true|on|yes)$/i.test(v);
+}
 
 async function main() {
   const upstreamScript =
     process.env.BOLYRA_UPSTREAM_SCRIPT ??
     path.resolve(__dirname, 'server-fixed.js');
 
+  const delegationMode = isDelegationModeOn();
+
   process.stderr.write('[bolyra-proxy] loading demo identities...\n');
-  const { human, credential } = await loadDemoIdentities();
+  const single = await loadDemoIdentities();
+  const chain = delegationMode ? await loadDemoDelegationIdentities() : null;
+  if (delegationMode) {
+    process.stderr.write(
+      `[bolyra-proxy] delegation mode ON — root=${chain!.rootCred.commitment} → A=${chain!.agentACred.commitment} → B=${chain!.agentBCred.commitment}\n`,
+    );
+  } else {
+    process.stderr.write('[bolyra-proxy] delegation mode OFF (v=1 handshake)\n');
+  }
   process.stderr.write(
     `[bolyra-proxy] spawning upstream: node ${upstreamScript}\n`,
   );
@@ -50,6 +74,33 @@ async function main() {
     child.stdin!.write(JSON.stringify(msg) + '\n');
   const writeHost = (msg: unknown) =>
     process.stdout.write(JSON.stringify(msg) + '\n');
+
+  async function buildAuth() {
+    if (delegationMode && chain) {
+      return attachDelegatedBolyraProof(
+        chain.human,
+        chain.rootCred,
+        [
+          {
+            delegator: chain.rootCred,
+            delegatorOperatorPrivateKey: chain.rootOpKey,
+            delegateeCommitment: chain.agentACred.commitment,
+            delegateeScope: chain.agentACred.permissionBitmask,
+            delegateeExpiry: chain.agentACred.expiryTimestamp,
+          },
+          {
+            delegator: chain.agentACred,
+            delegatorOperatorPrivateKey: chain.agentAOpKey,
+            delegateeCommitment: chain.agentBCred.commitment,
+            delegateeScope: chain.agentBCred.permissionBitmask,
+            delegateeExpiry: chain.agentBCred.expiryTimestamp,
+          },
+        ],
+        DEMO_SDK_CONFIG,
+      );
+    }
+    return attachBolyraProof(single.human, single.credential, DEMO_SDK_CONFIG);
+  }
 
   // Inbound: host → proxy → (maybe inject) → upstream.
   let hostBuf = '';
@@ -76,13 +127,11 @@ async function main() {
         const toolName = msg.params?.name ?? '<unknown>';
         try {
           const t0 = Date.now();
-          const auth = await attachBolyraProof(
-            human,
-            credential,
-            DEMO_SDK_CONFIG,
-          );
+          const auth = await buildAuth();
+          const v = auth.meta.bolyra.v;
+          const depth = auth.meta.bolyra.delegationChain?.length ?? 0;
           process.stderr.write(
-            `[bolyra-proxy] proof for ${toolName} in ${Date.now() - t0}ms\n`,
+            `[bolyra-proxy] proof for ${toolName} in ${Date.now() - t0}ms (v=${v}, depth=${depth})\n`,
           );
           msg.params = { ...(msg.params ?? {}) };
           msg.params._meta = {
