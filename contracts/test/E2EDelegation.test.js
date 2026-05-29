@@ -73,19 +73,13 @@ describe("E2E Delegation: Real Proofs → On-Chain Verification", function () {
     );
     const delegationVerifier = await DelegationVerifier.deploy();
 
-    const ModelBindingVerifier = await ethers.getContractFactory(
-      "contracts/ModelInstanceBindingVerifier.sol:ModelInstanceBindingGroth16Verifier"
-    );
-    const modelBindingVerifier = await ModelBindingVerifier.deploy();
-
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {
       libraries: { PoseidonT3: await poseidonT3.getAddress() },
     });
     registry = await IdentityRegistry.deploy(
       await groth16Verifier.getAddress(),
       await agentVerifier.getAddress(),
-      await delegationVerifier.getAddress(),
-      await modelBindingVerifier.getAddress()
+      await delegationVerifier.getAddress()
     );
   });
 
@@ -285,9 +279,9 @@ describe("E2E Delegation: Real Proofs → On-Chain Verification", function () {
     // ─── 7. Replay protection ───
     // Defense-in-depth: replaying the same proof must be rejected. The contract
     // trips ScopeChainMismatch FIRST because lastScopeCommitment[sessionNonce]
-    // was advanced by the successful first call; pubSignals[3] (old prevScope)
-    // no longer matches on-chain state. The nullifier check would also reject,
-    // but the chain check fires earlier. Both are valid rejections.
+    // was advanced by the successful first call; pubSignals[3] (prevScope, in the
+    // canonical 6-element layout) no longer matches on-chain state. The nullifier
+    // check would also reject, but the chain check fires earlier. Both are valid.
     await expect(
       registry.verifyDelegation(delegationProofSolidity, delegationPubSignals, sessionNonce)
     ).to.be.revertedWithCustomError(registry, "ScopeChainMismatch");

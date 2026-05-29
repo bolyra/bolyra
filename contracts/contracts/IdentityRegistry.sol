@@ -26,7 +26,7 @@ interface IDelegationGroth16Verifier {
         uint[2] calldata _pA,
         uint[2][2] calldata _pB,
         uint[2] calldata _pC,
-        uint[5] calldata _pubSignals
+        uint[6] calldata _pubSignals
     ) external view returns (bool);
 }
 
@@ -243,11 +243,18 @@ contract IdentityRegistry {
     ///      on-chain (not caller-supplied) per Attack 2 fix. Delegation requires
     ///      that a mutual handshake was previously verified for this sessionNonce.
     /// @param proof Groth16 proof for the Delegation circuit (flattened [pA[0], pA[1], pB[0][0], pB[0][1], pB[1][0], pB[1][1], pC[0], pC[1]]).
-    /// @param pubSignals [previousScopeCommitment, sessionNonce, newScopeCommitment, delegationNullifier, delegateeMerkleRoot]
+    /// @param pubSignals Canonical Delegation circuit layout (snarkjs convention — outputs first, then public inputs):
+    ///        [0] newScopeCommitment
+    ///        [1] delegationNullifier
+    ///        [2] delegateeMerkleRoot
+    ///        [3] previousScopeCommitment
+    ///        [4] sessionNonce
+    ///        [5] currentTimestamp
+    ///        This MUST match the SDK's `delegate()` output and `DelegationVerifier.verifyProof`.
     /// @param sessionNonce The session nonce (must match a previously-verified handshake).
     function verifyDelegation(
         uint256[8] calldata proof,
-        uint256[5] calldata pubSignals,
+        uint256[6] calldata pubSignals,
         uint256 sessionNonce
     ) external {
         // Attack 2 fix: Delegation requires that a handshake was verified for this nonce.
@@ -258,13 +265,13 @@ contract IdentityRegistry {
         // not from a caller-supplied parameter. lastScopeCommitment[sessionNonce] was seeded
         // by verifyHandshake with the agent's scopeCommitment output.
         uint256 expectedPreviousScopeCommitment = lastScopeCommitment[sessionNonce];
-        if (pubSignals[0] != expectedPreviousScopeCommitment) revert ScopeChainMismatch();
+        if (pubSignals[3] != expectedPreviousScopeCommitment) revert ScopeChainMismatch();
 
         // Verify sessionNonce in proof matches the argument
-        if (pubSignals[1] != sessionNonce) revert NonceMismatch();
+        if (pubSignals[4] != sessionNonce) revert NonceMismatch();
 
         // Delegation nullifier replay protection
-        uint256 delegationNullifier = pubSignals[3];
+        uint256 delegationNullifier = pubSignals[1];
         if (usedDelegationNullifiers[delegationNullifier]) revert DelegationNullifierReused();
         usedDelegationNullifiers[delegationNullifier] = true;
 
@@ -273,7 +280,7 @@ contract IdentityRegistry {
         if (delegationHopCount[sessionNonce] > MAX_DELEGATION_HOPS) revert MaxDelegationHopsExceeded();
 
         // CIP-1: Verify delegatee's Merkle root is a valid agent tree root
-        uint256 delegateeMerkleRoot = pubSignals[4];
+        uint256 delegateeMerkleRoot = pubSignals[2];
         if (!agentRootExists[delegateeMerkleRoot]) revert StaleAgentRoot();
 
         // Verify the delegation proof via the deployed Groth16 verifier
@@ -286,7 +293,7 @@ contract IdentityRegistry {
 
         // Attack 2 fix: Advance the on-chain chain state. The next delegation hop
         // must link to this newScopeCommitment, enforced from on-chain state.
-        uint256 newScopeCommitment = pubSignals[2];
+        uint256 newScopeCommitment = pubSignals[0];
         lastScopeCommitment[sessionNonce] = newScopeCommitment;
 
         emit DelegationVerified(delegationNullifier, newScopeCommitment, sessionNonce);
