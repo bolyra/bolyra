@@ -45,6 +45,9 @@ export {
 export { delegate, verifyDelegation } from './delegation';
 export type { DelegateInput } from './delegation';
 
+// Poseidon hashes (exposed for chain-link verification in integrations)
+export { poseidon2, poseidon3, poseidon4 } from './utils';
+
 // Errors
 export {
   BolyraError,

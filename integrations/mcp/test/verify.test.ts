@@ -9,6 +9,8 @@ import type { BolyraProofBundle, BolyraMcpConfig } from '../src/types';
 
 jest.mock('@bolyra/sdk', () => ({
   verifyHandshake: jest.fn(),
+  verifyDelegation: jest.fn(),
+  poseidon3: jest.fn(),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -60,9 +62,24 @@ describe('verifyBundle', () => {
   });
 
   it('rejects unknown bundle versions', async () => {
-    const ctx = await verifyBundle({ ...makeBundle(), v: 2 as any }, makeConfig());
+    const ctx = await verifyBundle({ ...makeBundle(), v: 999 as any }, makeConfig());
     expect(ctx.verified).toBe(false);
     expect(ctx.reason).toMatch(/Unsupported bundle version/);
+  });
+
+  it('rejects v=1 bundles that carry a delegationChain', async () => {
+    const ctx = await verifyBundle(
+      { ...makeBundle(), delegationChain: [{} as any] },
+      makeConfig(),
+    );
+    expect(ctx.verified).toBe(false);
+    expect(ctx.reason).toMatch(/v=1 cannot carry a delegationChain/);
+  });
+
+  it('reports chainDepth=0 and effectiveCommitment=root for v=1 bundles', async () => {
+    const ctx = await verifyBundle(makeBundle(), makeConfig());
+    expect(ctx.chainDepth).toBe(0);
+    expect(ctx.effectiveCommitment).toBe('12345');
   });
 
   it('rejects malformed nonce', async () => {
@@ -105,6 +122,84 @@ describe('verifyBundle', () => {
   });
 });
 
+describe('chain verification', () => {
+  // Build a v=2 bundle with N hops. Each hop's delegateeScope/etc are decimal
+  // strings; the mocked sdk lets us script which hops pass and which fail.
+  function makeChainBundle(hops: number): BolyraProofBundle {
+    return makeBundle({
+      v: 2,
+      delegationChain: Array.from({ length: hops }, (_, i) => ({
+        proof: { proof: {}, publicSignals: [`${1000 + i}`, '0', '0', '0', '0', '0'] } as any,
+        delegateeCommitment: `${50000 + i}`,
+        delegateeScope: i === hops - 1 ? '3' : '15', // leaf=0b11, mid=0b1111
+        delegateeExpiry: String(Math.floor(Date.now() / 1000) + 86400),
+        currentTimestamp: String(Math.floor(Date.now() / 1000)),
+      })),
+    });
+  }
+
+  beforeEach(() => {
+    sdk.verifyDelegation.mockReset();
+    sdk.poseidon3.mockReset();
+  });
+
+  it('verifies a 2-hop chain and reports leaf scope as effective bitmask', async () => {
+    sdk.verifyDelegation.mockResolvedValue({} as any);
+    // For each hop, poseidon3 returns the value the proof's publicSignals[0] claims.
+    sdk.poseidon3
+      .mockResolvedValueOnce(1000n) // hop 0 newScopeCommitment
+      .mockResolvedValueOnce(1001n); // hop 1 newScopeCommitment
+
+    const ctx = await verifyBundle(makeChainBundle(2), makeConfig());
+
+    expect(ctx.verified).toBe(true);
+    expect(ctx.chainDepth).toBe(2);
+    expect(ctx.permissionBitmask).toBe(3n);
+    expect(ctx.effectiveCommitment).toBe('50001');
+  });
+
+  it('rejects when a hop newScopeCommitment formula does not match', async () => {
+    sdk.verifyDelegation.mockResolvedValue({} as any);
+    sdk.poseidon3.mockResolvedValueOnce(9999n); // doesn't match publicSignals[0]=1000
+
+    const ctx = await verifyBundle(makeChainBundle(1), makeConfig());
+
+    expect(ctx.verified).toBe(false);
+    expect(ctx.warnings.some((w) => /newScopeCommitment mismatch/.test(w))).toBe(true);
+  });
+
+  it('rejects when verifyDelegation throws on a hop', async () => {
+    sdk.verifyDelegation.mockRejectedValue(new Error('bad signature'));
+
+    const ctx = await verifyBundle(makeChainBundle(1), makeConfig());
+
+    expect(ctx.verified).toBe(false);
+    expect(ctx.warnings.some((w) => /verification failed/.test(w))).toBe(true);
+  });
+
+  it('rejects expired hops', async () => {
+    sdk.verifyDelegation.mockResolvedValue({} as any);
+    sdk.poseidon3.mockResolvedValue(1000n);
+    const expired = makeBundle({
+      v: 2,
+      delegationChain: [
+        {
+          proof: { proof: {}, publicSignals: ['1000', '0', '0', '0', '0', '0'] } as any,
+          delegateeCommitment: '50000',
+          delegateeScope: '3',
+          delegateeExpiry: '100', // ancient
+          currentTimestamp: '1000', // newer than expiry
+        },
+      ],
+    });
+
+    const ctx = await verifyBundle(expired, makeConfig());
+
+    expect(ctx.verified).toBe(false);
+    expect(ctx.warnings.some((w) => /expired/.test(w))).toBe(true);
+  });
+});
+
 describe('checkToolPolicy', () => {
   const baseCtx = {
     verified: true,
@@ -112,6 +207,8 @@ describe('checkToolPolicy', () => {
     did: 'did:bolyra:base-sepolia:abc',
     permissionBitmask: 0b011n,
     warnings: [],
+    chainDepth: 0,
+    effectiveCommitment: '12345',
   };
 
   it('allows tools with no policy entry', () => {

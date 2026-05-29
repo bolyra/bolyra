@@ -17,23 +17,54 @@ import type {
 } from '@bolyra/sdk';
 
 /**
+ * One hop in a v0.3 delegation chain. Carries the Groth16 proof produced by
+ * `sdk.delegate()` plus the public inputs the verifier needs to recompute
+ * `newScopeCommitment = Poseidon3(scope, commitment, expiry)` and check it
+ * matches `publicSignals[0]` of the proof.
+ *
+ * All bigints are decimal strings for transport.
+ */
+export interface BolyraDelegationLink {
+  /** Groth16 proof from the Delegation circuit. */
+  proof: Proof;
+  /** Delegatee credential commitment as decimal string. */
+  delegateeCommitment: string;
+  /** Delegatee scope (permission bitmask) as decimal string. */
+  delegateeScope: string;
+  /** Delegatee expiry (unix seconds) as decimal string. */
+  delegateeExpiry: string;
+  /** currentTimestamp (unix seconds) bound into the proof, as decimal string. */
+  currentTimestamp: string;
+}
+
+/**
  * Wire format of a Bolyra proof bundle. This is what the client sends — either
  * base64-encoded inside `Authorization: Bolyra <base64-bundle>` (HTTP) or as
  * the value of `params._meta.bolyra` (stdio).
  *
  * All bigints are JSON-encoded as decimal strings to survive transport.
+ *
+ * v=1 is handshake-only. v=2 adds an optional `delegationChain` carrying the
+ * scope-narrowing hops from the root credential to the agent actually calling.
  */
 export interface BolyraProofBundle {
-  /** Schema version. Bump when the bundle shape changes. */
-  v: 1;
+  /** Schema version. v=1: handshake only. v=2: handshake + optional delegation chain. */
+  v: 1 | 2;
   /** Groth16 proof from the human's HumanUniqueness circuit. */
   humanProof: Proof;
-  /** Groth16 proof from the agent's AgentPolicy circuit. */
+  /** Groth16 proof from the agent's AgentPolicy circuit (root credential). */
   agentProof: Proof;
   /** Session nonce as decimal string. Verifier checks freshness. */
   nonce: string;
-  /** Agent credential commitment as decimal string. Used to look up the credential. */
+  /** Agent credential commitment as decimal string. Root credential — used to look up the credential. */
   credentialCommitment: string;
+  /**
+   * Optional delegation chain. When present, each link narrows scope from the
+   * previous hop. The last link's `delegateeCommitment` is the agent actually
+   * making the call; its `delegateeScope` is the effective permission bitmask.
+   * v=2 only.
+   */
+  delegationChain?: BolyraDelegationLink[];
 }
 
 /**
@@ -47,12 +78,26 @@ export interface BolyraAuthContext {
   score: number;
   /** did:bolyra:<network>:<commitment> — opaque agent identifier for logging/audit. */
   did: string;
-  /** Permission bitmask from the verified credential. Per-tool policies check against this. */
+  /**
+   * Effective permission bitmask. If the bundle carried a delegation chain,
+   * this is the leaf delegatee's scope (most-narrowed); otherwise it's the
+   * root credential's bitmask. Per-tool policies check against this.
+   */
   permissionBitmask: bigint;
   /** Human-readable warnings. Empty if all checks passed. */
   warnings: string[];
   /** Reason for failure when verified=false. Returned to the client as an MCP error. */
   reason?: string;
+  /**
+   * Number of delegation hops verified (0 = handshake only, N = N-hop chain).
+   * Useful for per-tool policies that want to refuse delegated calls.
+   */
+  chainDepth: number;
+  /**
+   * Effective acting commitment. With no chain, equals the root
+   * credentialCommitment; with a chain, equals the leaf delegateeCommitment.
+   */
+  effectiveCommitment: string;
 }
 
 /**
