@@ -63,6 +63,18 @@ The merchant never sees: the human's identity, the exact spend limit, the full v
 | Agent-to-agent delegation | Bolyra delegation chain with hop tracking |
 | Mandate signature | ZKP proof (Groth16 for human, PLONK for agent) |
 
+### Stripe Agent Commerce Protocol (ACP)
+
+| Stripe ACP Concept | Bolyra Equivalent |
+|---|---|
+| Acting agent | Leaf delegatee in the v=2 bundle's `delegationChain` |
+| Originating agent | Root credential the human authorized at handshake |
+| Delegation depth | `chainDepth` from the verified context |
+| Spending cap | Collapsed from cumulative `FINANCIAL_*` bits (2/3/4) on the leaf scope |
+| `sign_on_behalf` flag | Bit 5 of the leaf scope (for `pi.confirm` flows) |
+
+The narrowing wedge: a root agent with `FINANCIAL_UNLIMITED` can delegate down to a sub-agent with `FINANCIAL_SMALL` ($100 cap). Stripe ACP sees only the leaf's $100 cap, even though the root could have spent more.
+
 ## Usage
 
 ### Visa TAP Verification
@@ -113,6 +125,40 @@ const credential = await createAP2AgentCredential(
 const verification = await verifyAP2AgentCredential(credential);
 // verification.verified: boolean
 // verification.score: 0-100
+```
+
+### Stripe ACP — narrowing wedge
+
+```typescript
+import {
+  authContextToStripeACPContext,
+  verifyStripeACPSpend,
+} from '@bolyra/payment-protocols';
+import { verifyBundle } from '@bolyra/mcp';
+
+// 1. Verify the v=2 bundle once (handshake + delegation chain).
+const ctx = await verifyBundle(bundle, mcpConfig);
+
+// 2. Reshape into a Stripe ACP context. The leaf delegatee becomes the
+//    acting agent; the root credential the human authorized stays as the
+//    originating agent for audit.
+const acp = authContextToStripeACPContext(
+  ctx,
+  bundle.credentialCommitment, // root commitment
+  'base-sepolia',              // DID network
+  'USD',
+);
+
+// 3. Gate each PaymentIntent against the leaf-narrowed cap.
+const decision = verifyStripeACPSpend(acp, 5_000, 'USD'); // $50
+if (!decision.allowed) {
+  throw new Error(`Stripe ACP denied: ${decision.reason}`);
+}
+
+// Example: root had FINANCIAL_UNLIMITED, but the chain narrowed the leaf
+// to FINANCIAL_SMALL. Stripe sees a $100 cap, not the root's authority.
+//   decision.tier === 'small'
+//   decision.capChecked === 10_000  // $100 in cents
 ```
 
 ### Spend Policy Encoding
