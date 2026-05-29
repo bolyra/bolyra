@@ -3,6 +3,7 @@
 from bolyra.types import (
     AgentCredential,
     BolyraConfig,
+    DelegateeMerkleProof,
     DelegationResult,
     HandshakeResult,
     HumanIdentity,
@@ -16,6 +17,7 @@ from bolyra.identity import (
     validate_cumulative_bit_encoding,
 )
 from bolyra.handshake import prove_handshake, verify_handshake
+from bolyra.delegation import delegate, verify_delegation
 from bolyra.errors import (
     BolyraError,
     CircuitArtifactNotFoundError,
@@ -36,6 +38,7 @@ __all__ = [
     # Types
     "AgentCredential",
     "BolyraConfig",
+    "DelegateeMerkleProof",
     "DelegationResult",
     "HandshakeResult",
     "HumanIdentity",
@@ -49,6 +52,9 @@ __all__ = [
     # Handshake
     "prove_handshake",
     "verify_handshake",
+    # Delegation
+    "delegate",
+    "verify_delegation",
     # Errors
     "BolyraError",
     "CircuitArtifactNotFoundError",

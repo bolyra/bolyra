@@ -115,10 +115,12 @@ class TestDelegationResult:
         result = DelegationResult(
             new_scope_commitment=555,
             delegation_nullifier=666,
+            delegatee_merkle_root=777,
             hop_index=0,
         )
         assert result.hop_index == 0
         assert result.new_scope_commitment == 555
+        assert result.delegatee_merkle_root == 777
 
 
 class TestProof:

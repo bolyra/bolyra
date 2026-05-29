@@ -101,17 +101,39 @@ class HandshakeResult:
 
 
 @dataclass(frozen=True)
+class DelegateeMerkleProof:
+    """Inclusion proof of the delegatee in the agentTree.
+
+    Mirrors the TS SDK's ``DelegateeMerkleProof``. ``siblings`` must have
+    exactly ``MAX_DEPTH`` (= 20) entries; the TS bridge enforces this and
+    surfaces a structured error otherwise.
+
+    Attributes:
+        length: Active path length (0 if the delegatee is a single leaf).
+        index: Leaf index within the tree.
+        siblings: Path siblings (length-padded to 20 with zeros).
+    """
+
+    length: int
+    index: int
+    siblings: list[int]
+
+
+@dataclass(frozen=True)
 class DelegationResult:
     """Result of a delegation.
 
     Attributes:
         new_scope_commitment: New scope commitment for the next hop.
         delegation_nullifier: Unique per delegation per session.
+        delegatee_merkle_root: Root of the delegatee Merkle tree (matches
+            ``agentRootHistory`` on-chain).
         hop_index: Hop number in the chain (0-indexed).
     """
 
     new_scope_commitment: int
     delegation_nullifier: int
+    delegatee_merkle_root: int
     hop_index: int
 
 
