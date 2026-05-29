@@ -24,6 +24,29 @@ export async function poseidon2(a: bigint, b: bigint): Promise<bigint> {
   return _F.toObject(hash);
 }
 
+/** Poseidon hash with 3 inputs. Returns a bigint. */
+export async function poseidon3(
+  a: bigint,
+  b: bigint,
+  c: bigint,
+): Promise<bigint> {
+  await ensureCrypto();
+  const hash = _poseidon([a, b, c]);
+  return _F.toObject(hash);
+}
+
+/** Poseidon hash with 4 inputs. Returns a bigint. */
+export async function poseidon4(
+  a: bigint,
+  b: bigint,
+  c: bigint,
+  d: bigint,
+): Promise<bigint> {
+  await ensureCrypto();
+  const hash = _poseidon([a, b, c, d]);
+  return _F.toObject(hash);
+}
+
 /** Poseidon hash with 5 inputs. Returns a bigint. */
 export async function poseidon5(
   a: bigint,
