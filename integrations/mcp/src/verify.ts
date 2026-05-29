@@ -43,7 +43,7 @@ export async function verifyBundle(
   const maxProofAge = config.maxProofAge ?? DEFAULTS.maxProofAge;
 
   // Bundle shape sanity
-  if (bundle.v !== 1) {
+  if (bundle.v !== 1 && bundle.v !== 2) {
     return {
       verified: false,
       score: 0,
@@ -51,6 +51,20 @@ export async function verifyBundle(
       permissionBitmask: 0n,
       warnings: [],
       reason: `Unsupported bundle version: ${bundle.v}`,
+      chainDepth: 0,
+      effectiveCommitment: '',
+    };
+  }
+  if (bundle.v === 1 && bundle.delegationChain && bundle.delegationChain.length > 0) {
+    return {
+      verified: false,
+      score: 0,
+      did: '',
+      permissionBitmask: 0n,
+      warnings: [],
+      reason: 'Bundle v=1 cannot carry a delegationChain. Use v=2.',
+      chainDepth: 0,
+      effectiveCommitment: '',
     };
   }
 
@@ -67,6 +81,8 @@ export async function verifyBundle(
       permissionBitmask: 0n,
       warnings: [],
       reason: e instanceof Error ? e.message : String(e),
+      chainDepth: 0,
+      effectiveCommitment: '',
     };
   }
 
@@ -80,6 +96,8 @@ export async function verifyBundle(
       permissionBitmask: 0n,
       warnings: [],
       reason: `No credential found for commitment ${bundle.credentialCommitment}`,
+      chainDepth: 0,
+      effectiveCommitment: bundle.credentialCommitment,
     };
   }
 
@@ -101,11 +119,78 @@ export async function verifyBundle(
       permissionBitmask: credential.permissionBitmask,
       warnings: [],
       reason: `Proof verification threw: ${e instanceof Error ? e.message : String(e)}`,
+      chainDepth: 0,
+      effectiveCommitment: bundle.credentialCommitment,
     };
   }
 
+  // Walk the delegation chain (if present). Each hop must:
+  //   1. Bind prev = handshake.scopeCommitment (hop 0) or prior hop's newScopeCommitment.
+  //   2. Pass sdk.verifyDelegation — Groth16 verify + prev/nonce/currentTs binding.
+  //   3. Recompute Poseidon3(scope, commitment, expiry) and match publicSignals[0].
+  // On any failure we bail out with verified=false; warnings collect partial state.
+  const chainWarnings: string[] = [];
+  let chainOk = true;
+  let chainPermissionBitmask = credential.permissionBitmask;
+  let effectiveCommitment = bundle.credentialCommitment;
+  let chainDepth = 0;
+  if (bundle.delegationChain && bundle.delegationChain.length > 0) {
+    let expectedPrev = verifyResult.scopeCommitment;
+    for (let i = 0; i < bundle.delegationChain.length; i++) {
+      const link = bundle.delegationChain[i];
+      let dScope: bigint;
+      let dCommit: bigint;
+      let dExpiry: bigint;
+      let dTs: bigint;
+      try {
+        dScope = toBigInt(link.delegateeScope, `delegationChain[${i}].delegateeScope`);
+        dCommit = toBigInt(link.delegateeCommitment, `delegationChain[${i}].delegateeCommitment`);
+        dExpiry = toBigInt(link.delegateeExpiry, `delegationChain[${i}].delegateeExpiry`);
+        dTs = toBigInt(link.currentTimestamp, `delegationChain[${i}].currentTimestamp`);
+      } catch (e: unknown) {
+        chainOk = false;
+        chainWarnings.push(e instanceof Error ? e.message : String(e));
+        break;
+      }
+      try {
+        await sdk.verifyDelegation(link.proof, expectedPrev, nonce, dTs, config.sdkConfig);
+      } catch (e: unknown) {
+        chainOk = false;
+        chainWarnings.push(
+          `delegationChain[${i}] verification failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        break;
+      }
+      // Recompute newScopeCommitment = Poseidon3(scope, commitment, expiry) and
+      // confirm the proof's public output matches. This is what binds (scope,
+      // commitment, expiry) to the chain — without it a forged proof could
+      // claim any (scope, commitment, expiry) tuple.
+      const expectedNew = await sdk.poseidon3(dScope, dCommit, dExpiry);
+      const proofNew = BigInt(link.proof.publicSignals[0]);
+      if (expectedNew !== proofNew) {
+        chainOk = false;
+        chainWarnings.push(
+          `delegationChain[${i}] newScopeCommitment mismatch: Poseidon3(scope, commitment, expiry)=${expectedNew}, proof bound ${proofNew}`,
+        );
+        break;
+      }
+      // Expiry guard — circuit binds currentTimestamp but does not enforce it
+      // is < delegateeExpiry off-chain. Reject expired hops here so a leaked
+      // delegation cannot be replayed past its window.
+      if (dExpiry <= dTs) {
+        chainOk = false;
+        chainWarnings.push(`delegationChain[${i}] expired (expiry ${dExpiry} <= ts ${dTs})`);
+        break;
+      }
+      chainDepth = i + 1;
+      chainPermissionBitmask = dScope;
+      effectiveCommitment = link.delegateeCommitment;
+      expectedPrev = expectedNew;
+    }
+  }
+
   // Score the result. Same shape as @bolyra/openclaw for consistency.
-  const warnings: string[] = [];
+  const warnings: string[] = [...chainWarnings];
   let score = 0;
 
   if (verifyResult.verified) {
@@ -121,7 +206,9 @@ export async function verifyBundle(
     warnings.push(`Credential expired at ${credential.expiryTimestamp} (current: ${now})`);
   }
 
-  const hasBasicPermissions = (credential.permissionBitmask & 0b11n) !== 0n;
+  // Use the leaf scope when a chain narrowed the effective permissions; this
+  // ensures the read/write check sees what the agent is actually allowed to do.
+  const hasBasicPermissions = (chainPermissionBitmask & 0b11n) !== 0n;
   if (hasBasicPermissions) {
     score += 20;
   } else {
@@ -143,16 +230,18 @@ export async function verifyBundle(
     warnings.push('Scope commitment is zero — delegation chain not initialized');
   }
 
-  const passed = verifyResult.verified && score >= minScore;
+  const passed = verifyResult.verified && chainOk && score >= minScore;
   return {
     verified: passed,
     score,
     did: buildDid(network, commitment),
-    permissionBitmask: credential.permissionBitmask,
+    permissionBitmask: chainPermissionBitmask,
     warnings,
     reason: passed
       ? undefined
       : warnings[0] ?? 'Verification failed for unknown reason',
+    chainDepth,
+    effectiveCommitment,
   };
 }
 
