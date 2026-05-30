@@ -6,6 +6,8 @@
 //
 // Run:  node demo/demo.js   (from repo root, after `npm install` in delegation/)
 // Or:   npm install @bolyra/delegation && node demo.js  (from any clean dir)
+//
+// Requires Node 20+ (Web Crypto / globalThis.crypto for jose).
 
 // Resolve from the published package by default; fall back to local dist
 // when running inside this repo (so we can record without re-installing).
@@ -15,7 +17,10 @@ try {
 } catch {
   lib = require("../dist");
 }
-const { allow, verify, generateKeyPair, PERM } = lib;
+const { allow, present, verify, staticIssuerResolver } = lib;
+// jose is a transitive dependency of @bolyra/delegation — used here just to
+// mint the two Ed25519 keypairs (issuer + holder) the demo needs.
+const { generateKeyPair } = require("jose");
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const C = {
@@ -31,29 +36,40 @@ function divider() {
   console.log(C.dim("─".repeat(64)));
 }
 
+function freshNonce() {
+  return "n-" + Math.random().toString(36).slice(2, 10);
+}
+
 async function main() {
   console.log("");
   console.log(C.bold("@bolyra/delegation") + C.dim("  scoped delegation receipts for AI agents"));
   divider();
   await wait(1200);
 
+  // Setup: two Ed25519 keypairs — issuer (the human) and holder (the agent).
+  const issuer = await generateKeyPair("EdDSA", { crv: "Ed25519", extractable: true });
+  const holder = await generateKeyPair("EdDSA", { crv: "Ed25519", extractable: true });
+  const trustedIssuers = staticIssuerResolver({
+    "did:bolyra:alice": { k1: issuer.publicKey },
+  });
+
   // --- Step 1: human signs a scoped receipt --------------------------------
   console.log("");
   console.log(C.cyan("[1/3]") + " Human signs receipt: " + C.bold("agent_alice") + C.dim(" → ") + C.bold("purchase @ example.com, $50 cap, 1h"));
   await wait(600);
 
-  const human = await generateKeyPair();
   const receipt = await allow(
     {
-      agent: "agent_alice",
-      action: "purchase",
-      audience: "example.com",
-      permission: PERM.FINANCIAL_SMALL,
-      maxAmount: { amount: 50, currency: "USD" },
-      expiresIn: "1h",
+      iss: "did:bolyra:alice",
+      sub: "agent_alice",
+      aud: "example.com",
+      act: "purchase",
+      perm: "FINANCIAL_SMALL",
+      max: { amount: 50, currency: "USD" },
+      ttlSeconds: 3600,
+      agentPubKey: holder.publicKey,
     },
-    human.privateKey,
-    human.publicKey,
+    { privateKey: issuer.privateKey, kid: "k1" },
   );
   console.log("      " + C.green("✓") + " issued  " + C.dim(receipt.slice(0, 32) + "...."));
   await wait(1400);
@@ -62,32 +78,46 @@ async function main() {
   console.log("");
   console.log(C.cyan("[2/3]") + " Agent calls " + C.bold("purchase($25)"));
   await wait(600);
-  const ok = await verify(receipt, {
-    expectedAgent: "agent_alice",
-    expectedAction: "purchase",
-    expectedAudience: "example.com",
-    trustedIssuers: human.publicKey,
-    invocationAmount: { amount: 25, currency: "USD" },
+  const nonceA = freshNonce();
+  const presentedA = await present(receipt, holder.privateKey, {
+    audience: "example.com",
+    nonce: nonceA,
   });
-  console.log("      " + (ok.valid ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")));
+  const ok = await verify(presentedA, {
+    audience: "example.com",
+    trustedIssuers,
+    kbNonce: nonceA,
+    action: "purchase",
+    perm: "FINANCIAL_SMALL",
+    amount: 25,
+    currency: "USD",
+  });
+  console.log("      " + (ok.ok ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")));
   await wait(1600);
 
   // --- Step 3: over-cap rejection -----------------------------------------
   console.log("");
   console.log(C.cyan("[3/3]") + " Agent calls " + C.bold("purchase($75)") + C.dim(" — over the $50 cap"));
   await wait(600);
-  const overCap = await verify(receipt, {
-    expectedAgent: "agent_alice",
-    expectedAction: "purchase",
-    expectedAudience: "example.com",
-    trustedIssuers: human.publicKey,
-    invocationAmount: { amount: 75, currency: "USD" },
+  const nonceB = freshNonce();
+  const presentedB = await present(receipt, holder.privateKey, {
+    audience: "example.com",
+    nonce: nonceB,
+  });
+  const overCap = await verify(presentedB, {
+    audience: "example.com",
+    trustedIssuers,
+    kbNonce: nonceB,
+    action: "purchase",
+    perm: "FINANCIAL_SMALL",
+    amount: 75,
+    currency: "USD",
   });
   console.log(
     "      " +
-      (overCap.valid ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")) +
+      (overCap.ok ? C.green("✓ ALLOWED") : C.red("✗ REJECTED")) +
       "   " +
-      C.yellow(overCap.reason ?? "ok"),
+      C.yellow(overCap.ok ? "ok" : overCap.reason),
   );
   await wait(2000);
 

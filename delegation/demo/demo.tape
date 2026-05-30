@@ -19,7 +19,7 @@ Output demo.gif
 Set Shell  "zsh"
 Set FontSize 16
 Set Width 1100
-Set Height 720
+Set Height 540
 Set Theme "Dracula"
 Set TypingSpeed 55ms
 Set PlaybackSpeed 1.0
