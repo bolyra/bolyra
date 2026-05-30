@@ -1,13 +1,14 @@
 # Demo: `@bolyra/delegation`
 
-A 4-scene runnable demo + a vhs recording script. Output is a clean ~20s GIF you can drop into cold DMs, Discord posts, or the package README.
+A 3-scene runnable demo + a vhs recording script. Output is a clean ~14s GIF you can drop into cold DMs, Discord posts, or the package README.
+
+![@bolyra/delegation demo](./demo.gif)
 
 ## What it shows
 
 1. Human signs a scoped receipt (`agent_alice`, `purchase`, `example.com`, $50 cap, 1h)
 2. Agent invokes `purchase($25)` → ✓ ALLOWED
-3. Agent invokes `purchase($75)` → ✗ REJECTED (`amount_exceeds_cap`)
-4. Agent presents same receipt to `attacker.com` → ✗ REJECTED (`audience_mismatch`)
+3. Agent invokes `purchase($75)` → ✗ REJECTED (`AMOUNT_EXCEEDS_CAP`)
 
 ## Run it (no recording)
 
