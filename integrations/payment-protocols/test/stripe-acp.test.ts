@@ -23,6 +23,13 @@ import type { BolyraVerifiedContext, StripeACPContext } from '../src/types';
 const ROOT_COMMITMENT = '111111111111111111111111111';
 const LEAF_COMMITMENT = '999999999999999999999999999';
 
+function commitmentToDid(network: string, commitmentDecimal: string): string {
+  const hex = BigInt(commitmentDecimal).toString(16).padStart(64, '0');
+  return `did:bolyra:${network}:${hex}`;
+}
+
+const ROOT_DID = commitmentToDid('base-sepolia', ROOT_COMMITMENT);
+
 // Bolyra cumulative bits per CLAUDE.md §"Permissions Model"
 const BIT_READ = 0b00000001n;
 const BIT_WRITE = 0b00000010n;
@@ -35,7 +42,10 @@ function makeCtx(overrides: Partial<BolyraVerifiedContext> = {}): BolyraVerified
   return {
     verified: true,
     score: 100,
-    did: `did:bolyra:base-sepolia:${'0'.repeat(63)}1`,
+    // Codex P1-7 fix: `did` is now the trusted root anchor — the adapter
+    // copies it straight into rootAgentDid. Defaults to the canonical DID
+    // for ROOT_COMMITMENT so v=1 tests where acting == root still match.
+    did: ROOT_DID,
     permissionBitmask: BIT_READ | BIT_WRITE | BIT_FIN_SMALL,
     chainDepth: 0,
     effectiveCommitment: ROOT_COMMITMENT,
@@ -98,9 +108,9 @@ describe('bitmaskToStripeSpendingLimits', () => {
     expect(withoutSign.signOnBehalf).toBe(false);
   });
 
-  it('defaults currency to USD, honors override', () => {
-    expect(bitmaskToStripeSpendingLimits(BIT_FIN_SMALL).currency).toBe('USD');
-    expect(bitmaskToStripeSpendingLimits(BIT_FIN_SMALL, 'EUR').currency).toBe('EUR');
+  it('defaults currency to usd (lowercase to match Stripe), honors override', () => {
+    expect(bitmaskToStripeSpendingLimits(BIT_FIN_SMALL).currency).toBe('usd');
+    expect(bitmaskToStripeSpendingLimits(BIT_FIN_SMALL, 'EUR').currency).toBe('eur');
   });
 });
 
@@ -114,23 +124,25 @@ describe('authContextToStripeACPContext', () => {
       chainDepth: 0,
       effectiveCommitment: ROOT_COMMITMENT,
     });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     expect(acp.actingAgentDid).toBe(acp.rootAgentDid);
     expect(acp.delegationDepth).toBe(0);
     expect(acp.spendingLimits.tier).toBe('small');
     expect(acp.verified).toBe(true);
   });
 
-  it('maps a v=2 (2-hop chain) context — acting = leaf, root = root', () => {
+  it('maps a v=2 (2-hop chain) context — acting = leaf, root = ctx.did', () => {
     const ctx = makeCtx({
       chainDepth: 2,
       effectiveCommitment: LEAF_COMMITMENT,
       permissionBitmask: BIT_FIN_SMALL, // narrowed at the leaf
     });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     expect(acp.actingAgentDid).not.toBe(acp.rootAgentDid);
     expect(acp.actingAgentDid).toContain(BigInt(LEAF_COMMITMENT).toString(16));
-    expect(acp.rootAgentDid).toContain(BigInt(ROOT_COMMITMENT).toString(16));
+    // Codex P1-7 fix: rootAgentDid is ctx.did verbatim (not rebuilt from a
+    // caller-supplied commitment), so it must equal the trusted anchor.
+    expect(acp.rootAgentDid).toBe(ROOT_DID);
     expect(acp.delegationDepth).toBe(2);
     expect(acp.spendingLimits.tier).toBe('small');
   });
@@ -143,7 +155,7 @@ describe('authContextToStripeACPContext', () => {
       effectiveCommitment: LEAF_COMMITMENT,
       permissionBitmask: BIT_FIN_SMALL,
     });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     expect(acp.spendingLimits.tier).toBe('small');
     expect(acp.spendingLimits.maxTransactionAmount).toBe(10_000);
   });
@@ -153,7 +165,7 @@ describe('authContextToStripeACPContext', () => {
       verified: true,
       permissionBitmask: BIT_READ | BIT_WRITE,
     });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     expect(acp.warnings.some(w => w.includes('no FINANCIAL_'))).toBe(true);
   });
 
@@ -163,21 +175,100 @@ describe('authContextToStripeACPContext', () => {
       permissionBitmask: BIT_READ,
       warnings: ['ZKP failed'],
     });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     expect(acp.warnings).toEqual(['ZKP failed']);
   });
 
   it('honors network and currency overrides', () => {
     const ctx = makeCtx();
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT, 'base', 'EUR');
+    const acp = authContextToStripeACPContext(ctx, 'base', 'EUR');
     expect(acp.actingAgentDid.startsWith('did:bolyra:base:')).toBe(true);
-    expect(acp.spendingLimits.currency).toBe('EUR');
+    expect(acp.spendingLimits.currency).toBe('eur');
   });
 
   it('preserves warnings from the verified context', () => {
     const ctx = makeCtx({ warnings: ['nonce close to expiry'] });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     expect(acp.warnings).toContain('nonce close to expiry');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Runtime validation (Codex P1-3 / P1-4 / P1-8 / P2-8)
+// ---------------------------------------------------------------------------
+
+describe('authContextToStripeACPContext runtime validation', () => {
+  it('rejects a non-boolean verified field (e.g., the string "false")', () => {
+    const bad = makeCtx();
+    (bad as any).verified = 'false';
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/verified must be a boolean/);
+  });
+
+  it('rejects a negative bigint bitmask (would set all bits via bitwise AND)', () => {
+    const bad = makeCtx({ permissionBitmask: -1n });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/permissionBitmask/);
+  });
+
+  it('rejects a bitmask above 8 bits', () => {
+    const bad = makeCtx({ permissionBitmask: 0x1ffn });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/permissionBitmask/);
+  });
+
+  it('rejects a negative chainDepth', () => {
+    const bad = makeCtx({ chainDepth: -1 });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/chainDepth/);
+  });
+
+  it('rejects chainDepth above MAX_DELEGATION_HOPS (3)', () => {
+    const bad = makeCtx({ chainDepth: 4 });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/chainDepth/);
+  });
+
+  it('rejects a non-finite score', () => {
+    const bad = makeCtx({ score: Infinity });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/score/);
+  });
+
+  it('rejects a malformed effectiveCommitment ("abc")', () => {
+    const bad = makeCtx({ effectiveCommitment: 'abc' });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/effectiveCommitment/);
+  });
+
+  it('rejects a negative effectiveCommitment ("-1")', () => {
+    const bad = makeCtx({ effectiveCommitment: '-1' });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/effectiveCommitment/);
+  });
+
+  it('rejects an effectiveCommitment outside the BN254 field', () => {
+    const tooBig =
+      '21888242871839275222246405745257275088548364400416034343698204186575808495617';
+    const bad = makeCtx({ effectiveCommitment: tooBig });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/BN254/);
+  });
+
+  it('rejects a malformed did (missing did:bolyra prefix)', () => {
+    const bad = makeCtx({ did: 'urn:something:else' });
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/did/);
+  });
+
+  it('rejects a network with non-canonical characters', () => {
+    expect(() => authContextToStripeACPContext(makeCtx(), 'BAD NETWORK')).toThrow(/network/);
+  });
+
+  it('rejects a non-array warnings field', () => {
+    const bad = makeCtx();
+    (bad as any).warnings = 'not an array';
+    expect(() => authContextToStripeACPContext(bad)).toThrow(/warnings/);
+  });
+});
+
+describe('bitmaskToStripeSpendingLimits runtime validation', () => {
+  it('rejects negative bigints (would map to max authority via bitwise AND)', () => {
+    expect(() => bitmaskToStripeSpendingLimits(-1n)).toThrow(/bitmask/);
+  });
+
+  it('rejects bitmasks above 8 bits', () => {
+    expect(() => bitmaskToStripeSpendingLimits(0x100n)).toThrow(/bitmask/);
   });
 });
 
@@ -186,7 +277,7 @@ describe('authContextToStripeACPContext', () => {
 // ---------------------------------------------------------------------------
 
 function makeACP(overrides: Partial<StripeACPContext> = {}): StripeACPContext {
-  const base = authContextToStripeACPContext(makeCtx(), ROOT_COMMITMENT);
+  const base = authContextToStripeACPContext(makeCtx());
   return { ...base, ...overrides };
 }
 
@@ -210,7 +301,7 @@ describe('verifyStripeACPSpend', () => {
     const ctx = makeCtx({
       permissionBitmask: BIT_FIN_SMALL | BIT_FIN_MEDIUM | BIT_FIN_UNLIMITED,
     });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     const decision = verifyStripeACPSpend(acp, 999_999_999_99, 'USD');
     expect(decision.allowed).toBe(true);
     expect(decision.tier).toBe('unlimited');
@@ -218,7 +309,7 @@ describe('verifyStripeACPSpend', () => {
 
   it('denies any charge when tier=none', () => {
     const ctx = makeCtx({ permissionBitmask: BIT_READ | BIT_WRITE });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     const decision = verifyStripeACPSpend(acp, 1, 'USD');
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain('no FINANCIAL_');
@@ -239,10 +330,17 @@ describe('verifyStripeACPSpend', () => {
 
   it('denies when context did not verify', () => {
     const ctx = makeCtx({ verified: false });
-    const acp = authContextToStripeACPContext(ctx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(ctx);
     const decision = verifyStripeACPSpend(acp, 100, 'USD');
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain('did not verify');
+  });
+
+  it('Codex P2-5: USD (uppercase) matches lowercase ctx currency after normalize', () => {
+    const acp = makeACP(); // ctx default is now 'usd'
+    expect(acp.spendingLimits.currency).toBe('usd');
+    const decision = verifyStripeACPSpend(acp, 5_000, 'USD');
+    expect(decision.allowed).toBe(true);
   });
 });
 
@@ -261,7 +359,7 @@ describe('narrowing wedge: root UNLIMITED → hop1 MEDIUM → hop2 SMALL', () =>
       effectiveCommitment: LEAF_COMMITMENT,
       permissionBitmask: BIT_READ | BIT_WRITE | BIT_FIN_SMALL,
     });
-    const acp = authContextToStripeACPContext(leafCtx, ROOT_COMMITMENT);
+    const acp = authContextToStripeACPContext(leafCtx);
 
     // Acting != root, both DIDs surfaced for audit
     expect(acp.actingAgentDid).not.toBe(acp.rootAgentDid);

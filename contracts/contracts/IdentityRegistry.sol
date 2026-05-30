@@ -58,6 +58,7 @@ contract IdentityRegistry {
     error MaxDelegationHopsExceeded();    // Fix #5: max 3 hops per session
     error DelegationRequiresHandshake();  // Attack 2 fix: delegation must follow a verified handshake
     error HandshakeAlreadyHadDelegation(); // Attack 2 fix: can't re-init chain state
+    error DelegationTimestampStale();     // Codex P1-1: proof's currentTimestamp must be near block.timestamp
 
     // ============ EVENTS ============
 
@@ -114,6 +115,14 @@ contract IdentityRegistry {
     // Delegation replay protection and chain tracking (Fix #5)
     mapping(uint256 => bool) public usedDelegationNullifiers;
     uint256 public constant MAX_DELEGATION_HOPS = 3;
+    // Codex P1-1: max allowed skew between the proof's currentTimestamp signal
+    // and block.timestamp. The Delegation circuit proves the delegator/delegatee
+    // credentials were valid at the proof's currentTimestamp; we additionally
+    // require that timestamp to be "near now", otherwise an attacker could
+    // generate (or replay) a proof using a historical timestamp from before
+    // either credential's expiry. 5 minutes covers wall-clock skew and reorg
+    // tolerance without leaving a meaningful staleness window for expired creds.
+    uint256 public constant DELEGATION_TIMESTAMP_SKEW = 5 minutes;
     // sessionNonce => number of delegation hops verified so far
     mapping(uint256 => uint256) public delegationHopCount;
 
@@ -269,6 +278,16 @@ contract IdentityRegistry {
 
         // Verify sessionNonce in proof matches the argument
         if (pubSignals[4] != sessionNonce) revert NonceMismatch();
+
+        // Codex P1-1: enforce timestamp freshness. The circuit proves the
+        // delegator/delegatee credentials were valid at pubSignals[5]; this
+        // additional check binds pubSignals[5] to roughly "now", preventing
+        // historical-timestamp replays after credential expiry.
+        uint256 proofTimestamp = pubSignals[5];
+        if (
+            proofTimestamp + DELEGATION_TIMESTAMP_SKEW < block.timestamp ||
+            proofTimestamp > block.timestamp + DELEGATION_TIMESTAMP_SKEW
+        ) revert DelegationTimestampStale();
 
         // Delegation nullifier replay protection
         uint256 delegationNullifier = pubSignals[1];

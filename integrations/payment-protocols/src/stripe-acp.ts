@@ -50,6 +50,118 @@ const TIER_CAPS = {
   unlimited: 0,         // no cap
 } as const;
 
+// BN254 scalar field modulus — every Poseidon-hashed commitment lives in [0, p).
+const BN254_FIELD_MODULUS =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+// 8-bit permission bitmask domain (bits 0-7).
+const BITMASK_MAX = 0xffn;
+
+// Codex P1-1 / P2-5 alignment: ISO 4217 currencies are 3-letter; Stripe sends
+// them lowercase. Normalize both sides to lowercase before comparing.
+function normalizeCurrency(c: string): string {
+  return c.toLowerCase();
+}
+
+// ---------------------------------------------------------------------------
+// Runtime validation (Codex P1-3 / P1-4 / P1-8 / P2-8)
+// ---------------------------------------------------------------------------
+//
+// TypeScript interfaces are NOT a runtime trust boundary. The adapter
+// consumes BolyraVerifiedContext objects that may originate from JSON
+// deserialization, inter-process channels, or third-party verifiers — any
+// of which can produce a payload that "fits" the interface structurally
+// but carries adversarial values (negative bigints set every bit under
+// bitwise operations, "false" as a string is truthy, BigInt("abc") throws
+// at hash time, etc.). Validate at the adapter boundary, fail closed.
+
+function isPlainBoolean(v: unknown): v is boolean {
+  return typeof v === 'boolean';
+}
+
+function isFiniteNumberInRange(v: unknown, min: number, max: number): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+}
+
+function isDecimalString(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && /^[0-9]+$/.test(v);
+}
+
+function isWellFormedBolyraDid(v: unknown): v is string {
+  return (
+    typeof v === 'string' &&
+    /^did:bolyra:[a-z0-9-]+:[0-9a-f]{64}$/.test(v)
+  );
+}
+
+/**
+ * Assert a BolyraVerifiedContext is structurally and semantically safe to
+ * map into a Stripe ACP context. Throws with a precise message on any
+ * boundary violation. Pure function; no I/O.
+ *
+ * Rejects:
+ *   - non-boolean `verified` (e.g., the string "false")
+ *   - non-finite or out-of-range `score`
+ *   - malformed `did` (missing prefix, wrong network shape, non-hex tail)
+ *   - non-bigint, negative, or >8-bit `permissionBitmask`
+ *   - non-integer, negative, or >MAX_DELEGATION_HOPS `chainDepth`
+ *   - non-decimal-string `effectiveCommitment`, or value outside BN254
+ *   - non-array or non-string-element `warnings`
+ */
+function validateBolyraVerifiedContext(ctx: BolyraVerifiedContext): void {
+  if (!isPlainBoolean(ctx.verified)) {
+    throw new TypeError(
+      `BolyraVerifiedContext.verified must be a boolean (got ${typeof ctx.verified}: ${String(ctx.verified)})`,
+    );
+  }
+  if (!isFiniteNumberInRange(ctx.score, 0, 100)) {
+    throw new TypeError(
+      `BolyraVerifiedContext.score must be a finite number in [0,100] (got ${String(ctx.score)})`,
+    );
+  }
+  if (!isWellFormedBolyraDid(ctx.did)) {
+    throw new TypeError(
+      `BolyraVerifiedContext.did is not a well-formed did:bolyra:<network>:<64-hex> (got ${String(ctx.did)})`,
+    );
+  }
+  if (typeof ctx.permissionBitmask !== 'bigint') {
+    throw new TypeError(
+      `BolyraVerifiedContext.permissionBitmask must be a bigint (got ${typeof ctx.permissionBitmask})`,
+    );
+  }
+  if (ctx.permissionBitmask < 0n || ctx.permissionBitmask > BITMASK_MAX) {
+    throw new RangeError(
+      `BolyraVerifiedContext.permissionBitmask must be in [0,255] (got ${ctx.permissionBitmask.toString()})`,
+    );
+  }
+  if (
+    !Number.isInteger(ctx.chainDepth) ||
+    ctx.chainDepth < 0 ||
+    ctx.chainDepth > 3 /* MAX_DELEGATION_HOPS */
+  ) {
+    throw new RangeError(
+      `BolyraVerifiedContext.chainDepth must be an integer in [0,3] (got ${String(ctx.chainDepth)})`,
+    );
+  }
+  if (!isDecimalString(ctx.effectiveCommitment)) {
+    throw new TypeError(
+      `BolyraVerifiedContext.effectiveCommitment must be a non-empty decimal string (got ${String(ctx.effectiveCommitment)})`,
+    );
+  }
+  // BigInt() on a non-decimal string throws; isDecimalString already gated.
+  const commitmentBig = BigInt(ctx.effectiveCommitment);
+  if (commitmentBig < 0n || commitmentBig >= BN254_FIELD_MODULUS) {
+    throw new RangeError(
+      `BolyraVerifiedContext.effectiveCommitment outside BN254 field [0, p)`,
+    );
+  }
+  if (!Array.isArray(ctx.warnings) || !ctx.warnings.every((w) => typeof w === 'string')) {
+    throw new TypeError(
+      `BolyraVerifiedContext.warnings must be string[]`,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Bitmask → Spending limits
 // ---------------------------------------------------------------------------
@@ -62,8 +174,21 @@ const TIER_CAPS = {
  */
 export function bitmaskToStripeSpendingLimits(
   bitmask: bigint,
-  currency: string = 'USD',
+  currency: string = 'usd',
 ): StripeACPSpendingLimits {
+  // Codex P1-4 / P2-8 guard: a negative bigint sets every bit under bitwise
+  // AND, which would otherwise grant max authority. Out-of-domain values
+  // are an immediate fail-closed, not a silent zero.
+  if (typeof bitmask !== 'bigint') {
+    throw new TypeError(
+      `bitmaskToStripeSpendingLimits: bitmask must be a bigint (got ${typeof bitmask})`,
+    );
+  }
+  if (bitmask < 0n || bitmask > BITMASK_MAX) {
+    throw new RangeError(
+      `bitmaskToStripeSpendingLimits: bitmask must be in [0,255] (got ${bitmask.toString()})`,
+    );
+  }
   const financialSmall = (bitmask & BIT_FINANCIAL_SMALL) !== 0n;
   const financialMedium = (bitmask & BIT_FINANCIAL_MEDIUM) !== 0n;
   const financialUnlimited = (bitmask & BIT_FINANCIAL_UNLIMITED) !== 0n;
@@ -85,7 +210,7 @@ export function bitmaskToStripeSpendingLimits(
 
   return {
     maxTransactionAmount: TIER_CAPS[tier],
-    currency,
+    currency: normalizeCurrency(currency),
     financialSmall,
     financialMedium,
     financialUnlimited,
@@ -98,6 +223,9 @@ export function bitmaskToStripeSpendingLimits(
 // Verified context → ACP context
 // ---------------------------------------------------------------------------
 
+// Build a did:bolyra:<network>:<64-hex> from a verified commitment decimal.
+// Internal; only called on values that have already passed
+// validateBolyraVerifiedContext (so BigInt() is guaranteed safe).
 function buildDid(network: string, commitmentDecimal: string): string {
   const hex = BigInt(commitmentDecimal).toString(16).padStart(64, '0');
   return `did:bolyra:${network}:${hex}`;
@@ -108,21 +236,34 @@ function buildDid(network: string, commitmentDecimal: string): string {
  *
  * The caller is responsible for verification (via `@bolyra/mcp`'s
  * `verifyBundle` or direct SDK calls). The adapter trusts `ctx.verified`
- * and surfaces any pre-existing warnings.
+ * after running runtime validation on the structurally-typed input.
  *
- * @param ctx              Verified Bolyra context (leaf scope already collapsed)
- * @param rootCommitment   Root credential commitment as decimal string —
- *                         needed to compute the originating-agent DID when
- *                         a delegation chain is present.
- * @param network          DID network suffix (default "base-sepolia")
- * @param currency         ISO 4217 currency for the limits (default "USD")
+ * Codex P1-7 fix: `rootAgentDid` is derived from the verified `ctx.did`,
+ * NOT from a caller-supplied commitment. The caller cannot rebind the
+ * acting credential to an unrelated chain's root.
+ *
+ * @param ctx       Verified Bolyra context (leaf scope already collapsed).
+ *                  Must be produced by a trusted verifier; the adapter runs
+ *                  runtime validation but does NOT re-run ZKP verification.
+ * @param network   DID network suffix used to derive `actingAgentDid` from
+ *                  the leaf commitment (default "base-sepolia"). Should
+ *                  match the network embedded in `ctx.did`.
+ * @param currency  ISO 4217 currency for the limits (default "usd"). Stripe
+ *                  uses lowercase; the adapter normalizes both sides.
  */
 export function authContextToStripeACPContext(
   ctx: BolyraVerifiedContext,
-  rootCommitment: string,
   network: string = 'base-sepolia',
-  currency: string = 'USD',
+  currency: string = 'usd',
 ): StripeACPContext {
+  validateBolyraVerifiedContext(ctx);
+
+  if (typeof network !== 'string' || !/^[a-z0-9-]+$/.test(network)) {
+    throw new TypeError(
+      `authContextToStripeACPContext: network must match /^[a-z0-9-]+$/ (got ${String(network)})`,
+    );
+  }
+
   const warnings: string[] = [...ctx.warnings];
 
   const spendingLimits = bitmaskToStripeSpendingLimits(
@@ -138,10 +279,11 @@ export function authContextToStripeACPContext(
 
   // Acting agent = leaf delegatee (or root if no chain).
   const actingAgentDid = buildDid(network, ctx.effectiveCommitment);
-  // Root agent = the credential the human originally authorized. Always the
-  // bundle.credentialCommitment — passed in by the caller because the
-  // verified context only carries the leaf.
-  const rootAgentDid = buildDid(network, rootCommitment);
+  // Root agent = whichever DID the verifier already bound to the root
+  // credential. Trusting `ctx.did` (rather than a caller-supplied commitment)
+  // is what closes the Codex P1-7 hole: a caller cannot pass an allowlisted
+  // root B while the verified chain anchors to root A.
+  const rootAgentDid = ctx.did;
 
   return {
     actingAgentDid,
@@ -190,7 +332,10 @@ export function verifyStripeACPSpend(
       tier,
     };
   }
-  if (currency !== ctx.spendingLimits.currency) {
+  // Codex P2-5: Stripe sends lowercase currency codes. Normalize both sides
+  // before comparing so an "usd" charge against a "USD"-defaulted context
+  // isn't silently denied (or worse, treated as a different currency).
+  if (normalizeCurrency(currency) !== normalizeCurrency(ctx.spendingLimits.currency)) {
     return {
       allowed: false,
       reason: `Currency mismatch: ctx=${ctx.spendingLimits.currency}, requested=${currency}.`,
