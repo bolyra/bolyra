@@ -17,21 +17,33 @@ BUCKET="bolyra-ai-landing"
 DISTRIBUTION_ID="E28JZX72HEYVTP"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INDEX="$SCRIPT_DIR/index.html"
+PROTOCOL="$SCRIPT_DIR/402.html"
 
-if [ ! -f "$INDEX" ]; then
-  echo "ERROR: $INDEX not found" >&2
-  exit 1
-fi
+for f in "$INDEX" "$PROTOCOL"; do
+  if [ ! -f "$f" ]; then
+    echo "ERROR: $f not found" >&2
+    exit 1
+  fi
+done
 
 echo "→ uploading index.html to s3://$BUCKET/"
 aws s3 cp "$INDEX" "s3://$BUCKET/index.html" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
+echo "→ uploading 402.html to s3://$BUCKET/"
+aws s3 cp "$PROTOCOL" "s3://$BUCKET/402.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+# Also publish at /402 (no extension) so bolyra.ai/402 resolves directly.
+aws s3 cp "$PROTOCOL" "s3://$BUCKET/402" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" \
+  --paths "/index.html" "/" "/402.html" "/402" \
   --query 'Invalidation.Id' \
   --output text)
 
@@ -51,5 +63,6 @@ for _ in $(seq 1 20); do
   sleep 10
 done
 
-echo "→ live at https://bolyra.ai"
-curl -sI https://bolyra.ai | grep -iE "last-modified|etag" || true
+echo "→ live at https://bolyra.ai and https://bolyra.ai/402"
+curl -sI https://bolyra.ai      | grep -iE "last-modified|etag" || true
+curl -sI https://bolyra.ai/402  | grep -iE "last-modified|etag|content-type" || true
