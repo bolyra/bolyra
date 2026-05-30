@@ -40,29 +40,36 @@ jobs:
   openclaw-tests:
     name: OpenClaw integration — typecheck & test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: integrations/openclaw
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: integrations/openclaw/package-lock.json
 
-      - run: npm ci
-
-      # The openclaw package has a peer dep on @bolyra/sdk — install, build,
-      # and link from the local workspace so tests can resolve types + runtime.
-      - name: Link local @bolyra/sdk
+      # The integration's package.json pins @bolyra/sdk ^0.3.0 for publish-
+      # correctness, but during a release cohort the new SDK version isn't on
+      # npm yet, so `npm ci` would fail at registry resolution. Rewrite the
+      # dep to file:../../sdk in-CI, drop the stale lockfile, and install.
+      # This mutation is local to the runner — the committed package.json
+      # ships unchanged.
+      - name: Build local @bolyra/sdk
         run: |
-          cd ../../sdk && npm ci && npm run build && npm link
-          cd ../integrations/openclaw && npm link @bolyra/sdk
+          cd sdk
+          npm ci
+          npm run build
+
+      - name: Install integration with file:// SDK
+        working-directory: integrations/openclaw
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
 
       - run: npx tsc --noEmit
+        working-directory: integrations/openclaw
       - run: npm test
+        working-directory: integrations/openclaw
 
   conformance:
     name: Conformance test vectors
@@ -97,5 +104,9 @@ jobs:
 
       - name: Typecheck integrations/openclaw
         run: |
-          cd sdk && npm run build && npm link
-          cd ../integrations/openclaw && npm ci && npm link @bolyra/sdk && npx tsc --noEmit
+          cd sdk && npm run build
+          cd ../integrations/openclaw
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
+          npx tsc --noEmit

@@ -41,25 +41,48 @@ describe("Delegation Circuit", function () {
     };
   }
 
-  // Helper: create a delegation and sign it
+  // Helper: create a delegation and sign it.
+  //
+  // The circuit (since commit 68b7266) enforces:
+  //   - UC3.1: delegatorCredCommitment === Poseidon5(modelHash, Ax, Ay, scope, expiry)
+  //   - UC3.2: previousScopeCommitment === Poseidon3(scope, credCommitment, expiry)
+  //   - Liveness: currentTimestamp < delegateeExpiry
+  // So this helper computes delegatorCredCommitment and previousScopeCommitment by
+  // default and passes through delegatorModelHash + currentTimestamp. Tests that
+  // need to break a specific constraint override the resulting input field directly.
   function createDelegation({
     delegatorScope,
     delegateeScope,
     delegatorExpiry,
     delegateeExpiry,
-    delegatorCredCommitment = 99999n,
+    delegatorModelHash = 77777n,
     delegateeCredCommitment = 12345n,
     sessionNonce = 42n,
+    currentTimestamp = 1n,
     delegatorPrivKey = Buffer.from(
       "0001020304050607080900010203040506070809000102030405060708090001", "hex"
     ),
     delegateeMerkleProof = null,
+    // Optional override: lets the chain-test pre-pin agent A's commitment.
+    // When null, computed from Poseidon5 to satisfy the UC3.1 constraint.
+    delegatorCredCommitment: delegatorCredCommitmentOverride = null,
   }) {
     const delegatorPubKey = eddsa.prv2pub(delegatorPrivKey);
+    const Ax = F.toObject(delegatorPubKey[0]);
+    const Ay = F.toObject(delegatorPubKey[1]);
 
-    // Previous scope commitment = Poseidon(delegatorScope, delegatorCredCommitment)
-    // Identity-bound: scope + credential commitment (Fix #3)
-    const previousScopeCommitment = F.toObject(poseidon([delegatorScope, delegatorCredCommitment]));
+    // UC3.1: delegatorCredCommitment = Poseidon5(modelHash, Ax, Ay, scope, expiry)
+    const computedDelegatorCred = F.toObject(poseidon([
+      delegatorModelHash, Ax, Ay, delegatorScope, delegatorExpiry,
+    ]));
+    const delegatorCredCommitment = delegatorCredCommitmentOverride !== null
+      ? delegatorCredCommitmentOverride
+      : computedDelegatorCred;
+
+    // UC3.2: previousScopeCommitment = Poseidon3(delegatorScope, delegatorCredCommitment, delegatorExpiry)
+    const previousScopeCommitment = F.toObject(poseidon([
+      delegatorScope, delegatorCredCommitment, delegatorExpiry,
+    ]));
 
     // Delegation token = Poseidon4(prevScopeCommit, delegateeCredCommit, delegateeScope, delegateeExpiry)
     const tokenFe = poseidon([
@@ -80,8 +103,9 @@ describe("Delegation Circuit", function () {
       delegateeScope: delegateeScope.toString(),
       delegateeExpiry: delegateeExpiry.toString(),
       delegatorExpiry: delegatorExpiry.toString(),
-      delegatorPubkeyAx: F.toObject(delegatorPubKey[0]).toString(),
-      delegatorPubkeyAy: F.toObject(delegatorPubKey[1]).toString(),
+      delegatorModelHash: delegatorModelHash.toString(),
+      delegatorPubkeyAx: Ax.toString(),
+      delegatorPubkeyAy: Ay.toString(),
       sigR8x: F.toObject(sig.R8[0]).toString(),
       sigR8y: F.toObject(sig.R8[1]).toString(),
       sigS: sig.S.toString(),
@@ -89,6 +113,7 @@ describe("Delegation Circuit", function () {
       delegateeCredCommitment: delegateeCredCommitment.toString(),
       previousScopeCommitment: previousScopeCommitment.toString(),
       sessionNonce: sessionNonce.toString(),
+      currentTimestamp: currentTimestamp.toString(),
       ...merkleProof,
     };
   }
@@ -104,8 +129,9 @@ describe("Delegation Circuit", function () {
     const witness = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(witness);
 
-    // Output: newScopeCommitment = Poseidon(delegateeScope, delegateeCredCommitment)
-    const expectedNewCommitment = F.toObject(poseidon([0b00000011n, 12345n]));
+    // Output: newScopeCommitment = Poseidon3(delegateeScope, delegateeCredCommitment, delegateeExpiry)
+    // Identity-bound + expiry-bound per UC3.2.
+    const expectedNewCommitment = F.toObject(poseidon([0b00000011n, 12345n, 500000n]));
     expect(witness[1].toString()).to.equal(expectedNewCommitment.toString());
     console.log("  New scope commitment:", witness[1].toString().slice(0, 20) + "...");
     console.log("  Delegation nullifier:", witness[2].toString().slice(0, 20) + "...");
@@ -113,13 +139,26 @@ describe("Delegation Circuit", function () {
 
   it("should chain two delegations (scope commitment linking)", async function () {
     // Hop 1: delegator (0xFF) → agent A (0x0F)
-    // delegateeCredCommitment for agent A = 54321
-    const agentACredCommitment = 54321n;
+    // Agent A's credential commitment must satisfy UC3.1: Poseidon5(modelHash, Ax, Ay, scope, expiry)
+    // because hop 2 will use agent A as the delegator and the circuit re-derives it.
+    const hop2PrivKey = Buffer.from(
+      "0102030405060708090001020304050607080900010203040506070809000102", "hex"
+    );
+    const agentAPubKey = eddsa.prv2pub(hop2PrivKey);
+    const agentAAx = F.toObject(agentAPubKey[0]);
+    const agentAAy = F.toObject(agentAPubKey[1]);
+    const agentAModelHash = 88888n;
+    const agentAScope = 0b00001111n;
+    const agentAExpiry = 800000n;
+    const agentACredCommitment = F.toObject(poseidon([
+      agentAModelHash, agentAAx, agentAAy, agentAScope, agentAExpiry,
+    ]));
+
     const hop1 = createDelegation({
       delegatorScope: 0b11111111n,
-      delegateeScope: 0b00001111n,
+      delegateeScope: agentAScope,
       delegatorExpiry: 1000000n,
-      delegateeExpiry: 800000n,
+      delegateeExpiry: agentAExpiry,
       delegateeCredCommitment: agentACredCommitment,
     });
     const witness1 = await circuit.calculateWitness(hop1, true);
@@ -127,24 +166,20 @@ describe("Delegation Circuit", function () {
     const hop1ScopeCommitment = witness1[1]; // newScopeCommitment from hop 1
 
     // Hop 2: agent A (0x0F) → agent B (0x03)
-    // previousScopeCommitment must be hop1's output
-    // agent A is now the delegator, so delegatorCredCommitment = agentACredCommitment
-    const hop2PrivKey = Buffer.from(
-      "0102030405060708090001020304050607080900010203040506070809000102", "hex"
-    );
+    // Agent A is the delegator; helper computes its credCommitment from Poseidon5
+    // using the same modelHash/privkey/scope/expiry we pinned for hop 1's delegatee.
     const hop2 = createDelegation({
-      delegatorScope: 0b00001111n,       // agent A's scope
-      delegateeScope: 0b00000011n,       // agent B's scope (narrower)
-      delegatorExpiry: 800000n,
+      delegatorScope: agentAScope,        // agent A's scope
+      delegateeScope: 0b00000011n,        // agent B's scope (narrower)
+      delegatorExpiry: agentAExpiry,
       delegateeExpiry: 600000n,
-      delegatorCredCommitment: agentACredCommitment,  // agent A's cred (now delegator)
+      delegatorModelHash: agentAModelHash,
       delegatorPrivKey: hop2PrivKey,
     });
 
-    // Verify the identity-bound chain link:
-    // hop1 output = Poseidon(0x0F, agentACredCommitment)
-    // hop2 input previousScopeCommitment should match
-    const expectedLink = F.toObject(poseidon([0b00001111n, agentACredCommitment]));
+    // Identity-bound + expiry-bound chain link (UC3.2):
+    // hop1 output = Poseidon3(agentAScope, agentACredCommitment, agentAExpiry)
+    const expectedLink = F.toObject(poseidon([agentAScope, agentACredCommitment, agentAExpiry]));
     expect(hop1ScopeCommitment.toString()).to.equal(expectedLink.toString());
 
     // Override previousScopeCommitment to match hop1's output (should already match)
