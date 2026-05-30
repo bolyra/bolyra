@@ -67,10 +67,10 @@ for needle in "${FORBIDDEN[@]}"; do
 done
 
 # npm registry sanity — @bolyra/payment-protocols must resolve.
-echo "→ GET registry.npmjs.org/@bolyra/payment-protocols/0.3.0"
-NPM_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@bolyra/payment-protocols/0.3.0")
-[ "$NPM_STATUS" = "200" ] || fail "@bolyra/payment-protocols@0.3.0 returned HTTP $NPM_STATUS"
-pass "@bolyra/payment-protocols@0.3.0 resolves on npm"
+echo "→ GET registry.npmjs.org/@bolyra/payment-protocols/0.3.1"
+NPM_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@bolyra/payment-protocols/0.3.1")
+[ "$NPM_STATUS" = "200" ] || fail "@bolyra/payment-protocols@0.3.1 returned HTTP $NPM_STATUS"
+pass "@bolyra/payment-protocols@0.3.1 resolves on npm"
 
 # GitHub link sanity — the page CTAs must resolve for unauthenticated visitors.
 # GitHub returns 404 (not 403) for private repos, so this catches re-privatization too.

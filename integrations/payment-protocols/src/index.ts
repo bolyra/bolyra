@@ -38,6 +38,25 @@ export {
 } from './stripe-acp';
 export type { StripeACPOperation } from './stripe-acp';
 
+// Coinbase x402
+export {
+  createX402Authorization,
+  verifyX402Authorization,
+  serializePaymentRequired,
+  parsePaymentRequired,
+  X402_BOLYRA_CREDENTIAL_HEADER,
+  X402_BOLYRA_CHALLENGE_HEADER,
+  X402_PAYMENT_REQUIRED_HEADER,
+  X402_WIRE_VERSION,
+} from './x402';
+export type {
+  X402PaymentRequirements,
+  X402AuthorizationResult,
+  X402VerifyDecision,
+  X402CredentialResolver,
+  X402Config,
+} from './x402';
+
 // Types
 export type {
   SpendPolicy,
