@@ -31,6 +31,10 @@ describe("E2E Delegation: Real Proofs → On-Chain Verification", function () {
 
   let registry;
   let poseidon, babyJub, eddsa, F;
+  // Artifacts captured by the first (single-hop) test for reuse by the
+  // adversarial follow-ups (Codex P2-3 nullifier-only replay, P2-4 4th-hop
+  // boundary). Reusing avoids regenerating two more Groth16 proofs.
+  let sharedArtifacts = null;
 
   const HUMAN_WASM = path.join(__dirname, "../../circuits/build/HumanUniqueness_js/HumanUniqueness.wasm");
   const HUMAN_ZKEY = path.join(__dirname, "../../circuits/build/HumanUniqueness_final.zkey");
@@ -73,7 +77,12 @@ describe("E2E Delegation: Real Proofs → On-Chain Verification", function () {
     );
     const delegationVerifier = await DelegationVerifier.deploy();
 
-    const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", {
+    // Deploy TestableIdentityRegistry — strict superset of IdentityRegistry.
+    // Production tests still cover the real contract via IdentityRegistry.test.js;
+    // E2E here uses the testable variant so adversarial scenarios (Codex P2-3
+    // matching-prevScope replay, P2-4 4th-hop boundary) can rewind state
+    // without generating three real Groth16 proofs per scenario.
+    const IdentityRegistry = await ethers.getContractFactory("TestableIdentityRegistry", {
       libraries: { PoseidonT3: await poseidonT3.getAddress() },
     });
     registry = await IdentityRegistry.deploy(
@@ -286,6 +295,114 @@ describe("E2E Delegation: Real Proofs → On-Chain Verification", function () {
       registry.verifyDelegation(delegationProofSolidity, delegationPubSignals, sessionNonce)
     ).to.be.revertedWithCustomError(registry, "ScopeChainMismatch");
     console.log("  ✅ Replay correctly rejected (ScopeChainMismatch — chain advanced)");
+
+    // ─── 8. Hand off artifacts to adversarial follow-ups ───
+    sharedArtifacts = {
+      sessionNonce,
+      prevScopeCommitment: expectedScopeCommitment,
+      newScopeCommitment: delegationResult.newScopeCommitment,
+      delegationNullifier: delegationResult.delegationNullifier,
+      delegationProofSolidity,
+      delegationPubSignals,
+    };
+  });
+
+  // Codex P2-3 (HARDEN): the production replay test above fires
+  // ScopeChainMismatch before the nullifier guard ever runs. A regression
+  // that stops setting OR checking usedDelegationNullifiers would still
+  // pass that test. Isolate the nullifier guard by rewinding chain state to
+  // prevScope so it matches the proof, then assert replay trips
+  // DelegationNullifierReused before any other guard.
+  it("Codex P2-3: nullifier replay is rejected even when prevScope matches", async function () {
+    expect(sharedArtifacts, "first test must run before this one").to.not.be.null;
+    const {
+      sessionNonce,
+      prevScopeCommitment,
+      newScopeCommitment,
+      delegationNullifier,
+      delegationProofSolidity,
+      delegationPubSignals,
+    } = sharedArtifacts;
+
+    // 1. Rewind chain state to prevScope. Now the proof's pubSignals[3]
+    //    matches lastScopeCommitment again, so ScopeChainMismatch will NOT
+    //    fire on resubmit.
+    await registry.__test_setLastScopeCommitment(sessionNonce, prevScopeCommitment);
+    expect((await registry.lastScopeCommitment(sessionNonce)).toString())
+      .to.equal(prevScopeCommitment.toString());
+
+    // 2. Confirm the nullifier was actually marked used by the first call.
+    //    Codex's first concern was "regression that stops SETTING the
+    //    nullifier" — assert it was set.
+    expect(await registry.usedDelegationNullifiers(delegationNullifier)).to.equal(true);
+
+    // 3. Resubmit the identical proof. Now the chain-mismatch guard passes,
+    //    and the nullifier guard MUST fire next. Codex's second concern was
+    //    "regression that stops CHECKING the nullifier" — this assertion
+    //    pins that path.
+    await expect(
+      registry.verifyDelegation(delegationProofSolidity, delegationPubSignals, sessionNonce)
+    ).to.be.revertedWithCustomError(registry, "DelegationNullifierReused");
+
+    // 4. The revert must roll back all state mutations the resubmit attempted.
+    //    Chain state stays at prevScope (what we set), hop count stays where
+    //    it was (1 from the successful first call).
+    expect((await registry.lastScopeCommitment(sessionNonce)).toString())
+      .to.equal(prevScopeCommitment.toString());
+    expect((await registry.delegationHopCount(sessionNonce)).toString()).to.equal("1");
+
+    // 5. Restore chain state so subsequent tests inherit the post-success world.
+    await registry.__test_setLastScopeCommitment(sessionNonce, newScopeCommitment);
+  });
+
+  // Codex P2-4 (HARDEN): MAX_DELEGATION_HOPS is a security limit. The only
+  // way to catch off-by-one behavior is to test the boundary directly: the
+  // max-th hop is allowed, max+1 is rejected, and the rejected attempt does
+  // not mutate state.
+  it("Codex P2-4: a 4th-hop submission trips MaxDelegationHopsExceeded and rolls back state", async function () {
+    expect(sharedArtifacts, "first test must run before this one").to.not.be.null;
+    const {
+      sessionNonce,
+      prevScopeCommitment,
+      newScopeCommitment,
+      delegationNullifier,
+      delegationProofSolidity,
+      delegationPubSignals,
+    } = sharedArtifacts;
+
+    const MAX_HOPS = await registry.MAX_DELEGATION_HOPS();
+    expect(MAX_HOPS.toString()).to.equal("3");
+
+    // 1. Stage the boundary: rewind chain state to prevScope, clear the
+    //    nullifier (so the nullifier guard doesn't fire first), and set
+    //    hop count to MAX (3). Reusing the existing proof keeps this test
+    //    fast — we want to exercise the count guard, not regenerate three
+    //    independent delegation proofs.
+    await registry.__test_setLastScopeCommitment(sessionNonce, prevScopeCommitment);
+    await registry.__test_setUsedDelegationNullifier(delegationNullifier, false);
+    await registry.__test_setDelegationHopCount(sessionNonce, MAX_HOPS);
+
+    expect((await registry.delegationHopCount(sessionNonce)).toString())
+      .to.equal(MAX_HOPS.toString());
+
+    // 2. The next submit becomes hop 4 → MUST be rejected.
+    await expect(
+      registry.verifyDelegation(delegationProofSolidity, delegationPubSignals, sessionNonce)
+    ).to.be.revertedWithCustomError(registry, "MaxDelegationHopsExceeded");
+
+    // 3. Solidity revert semantics roll back EVERY mutation the call attempted:
+    //    hop count stays at 3, nullifier stays unused (we set it to false above),
+    //    chain state stays at prevScope.
+    expect((await registry.delegationHopCount(sessionNonce)).toString())
+      .to.equal(MAX_HOPS.toString());
+    expect(await registry.usedDelegationNullifiers(delegationNullifier)).to.equal(false);
+    expect((await registry.lastScopeCommitment(sessionNonce)).toString())
+      .to.equal(prevScopeCommitment.toString());
+
+    // 4. Restore post-success state.
+    await registry.__test_setUsedDelegationNullifier(delegationNullifier, true);
+    await registry.__test_setLastScopeCommitment(sessionNonce, newScopeCommitment);
+    await registry.__test_setDelegationHopCount(sessionNonce, 1);
   });
 
   it("should reject delegation without a prior handshake", async function () {

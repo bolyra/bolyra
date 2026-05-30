@@ -142,11 +142,12 @@ const ctx = await verifyBundle(bundle, mcpConfig);
 // 2. Reshape into a Stripe ACP context. The leaf delegatee becomes the
 //    acting agent; the root credential the human authorized stays as the
 //    originating agent for audit.
+// rootAgentDid comes from ctx.did (set by verifyBundle from the verified
+// credential commitment) — no caller-supplied root, no chain rebinding.
 const acp = authContextToStripeACPContext(
   ctx,
-  bundle.credentialCommitment, // root commitment
-  'base-sepolia',              // DID network
-  'USD',
+  'base-sepolia', // DID network for actingAgentDid (must match ctx.did's network)
+  'usd',          // ISO 4217 currency; lowercase per Stripe convention
 );
 
 // 3. Gate each PaymentIntent against the leaf-narrowed cap.

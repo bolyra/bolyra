@@ -58,6 +58,8 @@ contract IdentityRegistry {
     error MaxDelegationHopsExceeded();    // Fix #5: max 3 hops per session
     error DelegationRequiresHandshake();  // Attack 2 fix: delegation must follow a verified handshake
     error HandshakeAlreadyHadDelegation(); // Attack 2 fix: can't re-init chain state
+    error DelegationTimestampStale();     // Codex P1-1: proof's currentTimestamp must be near block.timestamp
+    error PubSignalsLengthMismatch();     // Codex P1-2: variable-length pubsig arrays must match the pinned layout
 
     // ============ EVENTS ============
 
@@ -114,6 +116,51 @@ contract IdentityRegistry {
     // Delegation replay protection and chain tracking (Fix #5)
     mapping(uint256 => bool) public usedDelegationNullifiers;
     uint256 public constant MAX_DELEGATION_HOPS = 3;
+
+    // ============ PUBLIC SIGNAL LAYOUT VERSIONS (Codex P1-2) ============
+    //
+    // The registry interprets each circuit's public signals positionally —
+    // e.g. `agentPubSignals[2]` is the scopeCommitment, `pubSignals[5]` is the
+    // delegation timestamp. If the SDK, circuit, or generated verifier ever
+    // reorders or resizes the signals while still emitting the same number of
+    // fields, the registry would silently interpret one field as another and
+    // a swapped layout could turn into replay bypass, stale-root acceptance,
+    // or chain-state corruption.
+    //
+    // Three layers of defense, smallest to largest blast radius:
+    //
+    //   1. LENGTH check — the two variable-length pubsig arrays in
+    //      verifyHandshake are required to equal the pinned LEN constants.
+    //      Catches the "removed a signal but stayed at 5" or "added a signal"
+    //      class of drift at zero gas cost beyond a comparison.
+    //
+    //   2. VERSION constant — bumped any time a layout changes. External
+    //      regression fixtures and the SDK pin against this number so a
+    //      mismatch surfaces at code-review and integration-test time, before
+    //      a malformed verifier ships.
+    //
+    //   3. (Documented) the layout itself — the NatSpec on each verify*
+    //      function lists the canonical field order. Updating the layout
+    //      without updating the comment AND bumping VERSION is a contract
+    //      violation, intentionally easy to spot in diff review.
+    //
+    // Bump _VERSION whenever the corresponding _LEN, layout order, or
+    // verifier vkey changes. Tests pin these values; failing those tests
+    // forces the bump (and updates the SDK that depends on them).
+    uint256 public constant HUMAN_PUBSIG_LEN = 5;
+    uint256 public constant AGENT_PUBSIG_LEN = 6;
+    uint256 public constant DELEGATION_PUBSIG_LEN = 6;
+    uint256 public constant HUMAN_PUBSIG_LAYOUT_VERSION = 1;
+    uint256 public constant AGENT_PUBSIG_LAYOUT_VERSION = 1;
+    uint256 public constant DELEGATION_PUBSIG_LAYOUT_VERSION = 1;
+    // Codex P1-1: max allowed skew between the proof's currentTimestamp signal
+    // and block.timestamp. The Delegation circuit proves the delegator/delegatee
+    // credentials were valid at the proof's currentTimestamp; we additionally
+    // require that timestamp to be "near now", otherwise an attacker could
+    // generate (or replay) a proof using a historical timestamp from before
+    // either credential's expiry. 5 minutes covers wall-clock skew and reorg
+    // tolerance without leaving a meaningful staleness window for expired creds.
+    uint256 public constant DELEGATION_TIMESTAMP_SKEW = 5 minutes;
     // sessionNonce => number of delegation hops verified so far
     mapping(uint256 => uint256) public delegationHopCount;
 
@@ -189,6 +236,12 @@ contract IdentityRegistry {
         uint256[] calldata agentPubSignals,
         uint256 sessionNonce
     ) external {
+        // Codex P1-2: pin variable-length pubsig arrays to the layout version.
+        // verifyDelegation already uses a fixed-size uint256[6] array, so the
+        // ABI enforces the length there at decode time.
+        if (humanPubSignals.length != HUMAN_PUBSIG_LEN) revert PubSignalsLengthMismatch();
+        if (agentPubSignals.length != AGENT_PUBSIG_LEN) revert PubSignalsLengthMismatch();
+
         // 1. Check nonce freshness
         if (usedNonces[sessionNonce]) revert NonceAlreadyUsed();
         usedNonces[sessionNonce] = true;
@@ -269,6 +322,16 @@ contract IdentityRegistry {
 
         // Verify sessionNonce in proof matches the argument
         if (pubSignals[4] != sessionNonce) revert NonceMismatch();
+
+        // Codex P1-1: enforce timestamp freshness. The circuit proves the
+        // delegator/delegatee credentials were valid at pubSignals[5]; this
+        // additional check binds pubSignals[5] to roughly "now", preventing
+        // historical-timestamp replays after credential expiry.
+        uint256 proofTimestamp = pubSignals[5];
+        if (
+            proofTimestamp + DELEGATION_TIMESTAMP_SKEW < block.timestamp ||
+            proofTimestamp > block.timestamp + DELEGATION_TIMESTAMP_SKEW
+        ) revert DelegationTimestampStale();
 
         // Delegation nullifier replay protection
         uint256 delegationNullifier = pubSignals[1];
