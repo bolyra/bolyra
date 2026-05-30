@@ -66,3 +66,15 @@ done
 echo "→ live at https://bolyra.ai and https://bolyra.ai/402"
 curl -sI https://bolyra.ai      | grep -iE "last-modified|etag" || true
 curl -sI https://bolyra.ai/402  | grep -iE "last-modified|etag|content-type" || true
+
+# Post-deploy gate. Asserts the live pages return 200 and that every npm
+# symbol the HTML advertises actually resolves on the published tarball.
+# Catches the 2026-05-30 class of regression (page references a function
+# that doesn't ship). Set BOLYRA_SKIP_VERIFY=1 to bypass — only for
+# emergency redeploys where verify.sh itself is broken.
+if [ "${BOLYRA_SKIP_VERIFY:-0}" = "1" ]; then
+  echo "→ BOLYRA_SKIP_VERIFY=1 set, skipping post-deploy verification"
+else
+  echo "→ running post-deploy verification"
+  bash "$SCRIPT_DIR/verify.sh"
+fi
