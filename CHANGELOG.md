@@ -1,0 +1,186 @@
+# Changelog
+
+All notable changes to Bolyra are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Bolyra is a **monorepo** — this changelog covers all published packages
+released together as a cohort:
+
+- `@bolyra/sdk` (npm — TypeScript SDK)
+- `@bolyra/mcp` (npm — MCP authentication middleware)
+- `@bolyra/payment-protocols` (npm — Stripe ACP / Visa TAP / AP2 adapters)
+- `@bolyra/openclaw` (npm — OpenClaw trust verification adapter)
+- `bolyra` (PyPI — Python SDK)
+
+Contract verifier addresses and circuit artifacts are versioned separately
+under `contracts/deployments/` and `circuits/build/`.
+
+## [0.3.0] — 2026-05-30
+
+The **delegation release**. Phase 1 (mutual handshake) was 0.2; Phase 2 adds
+one-way scope-narrowing delegation with on-chain replay protection, an
+end-to-end MCP delegation chain, and the first agentic-commerce wedge
+(Stripe Agent Commerce Protocol).
+
+### Added
+
+#### SDK (`@bolyra/sdk` 0.2.1 → 0.3.0)
+
+- **`delegate(rootCred, hops[])`** — Groth16 single-hop delegation proofs,
+  identity-bound via `Poseidon3(scope, credCommitment, expiry)` chain and
+  `Poseidon4` delegation tokens. Pre-flight scope / expiry / chain-link
+  rejections fire before paying for proving. (#7)
+- **`verifyDelegation(proof)`** — verifies a single delegation hop.
+- **`attachDelegatedBolyraProof(human, rootCred, hops[])`** — client helper
+  that runs handshake once and walks `delegate()` per hop, returning a
+  complete v=2 bundle. (#10)
+- Re-exported `poseidon2 / poseidon3 / poseidon4` for consumers that need to
+  reconstruct binding commitments.
+
+#### MCP (`@bolyra/mcp` 0.1.0 → 0.3.0)
+
+- **`BolyraProofBundle` v=2** — optional `delegationChain:
+  BolyraDelegationLink[]` so authority can flow root → agent A → agent B
+  end-to-end. v=1 single-credential handshake still accepted. (#10)
+- **`BolyraAuthContext.chainDepth` + `effectiveCommitment`** — visible to
+  per-tool policies.
+- **`permissionBitmask` now reflects the leaf delegatee's scope** when a
+  chain is present, so per-tool policies see what the calling agent can
+  actually do, not what the root granted.
+- **`verifyBundle` walks the chain** — per hop runs `verifyDelegation`,
+  recomputes `Poseidon3(scope, commitment, expiry)`, matches against
+  `publicSignals[0]`, rejects expired hops.
+- Standalone off-chain delegation demo (`npm run demo:delegation`) and
+  proxy delegation mode (`BOLYRA_DELEGATION_MODE=1`) in
+  `examples/mcp-demo`. (#11)
+
+#### Contracts
+
+- **`IdentityRegistry.verifyDelegation`** — accepts the canonical 6-public-
+  signal Delegation layout `[newScope, nullifier, delegateeRoot, prevScope,
+  sessionNonce, currentTimestamp]`. (#12)
+- **On-chain 2-hop delegation demo** (`npm run demo:delegation:onchain`):
+  handshake 538k gas, hop1 311k gas, hop2 294k gas, replay correctly
+  reverts `ScopeChainMismatch`. (#12)
+- **Public layout-version constants** — `HUMAN_PUBSIG_LAYOUT_VERSION`,
+  `AGENT_PUBSIG_LAYOUT_VERSION`, `DELEGATION_PUBSIG_LAYOUT_VERSION` — and
+  explicit `*_PUBSIG_LEN` length checks with a typed
+  `PubSignalsLengthMismatch` revert. (#15)
+
+#### Payment protocols (`@bolyra/payment-protocols` 0.1.0 → 0.3.0)
+
+- **Stripe Agent Commerce Protocol (ACP) wedge** — pure mapping over
+  `BolyraVerifiedContext`. Three exports: (#13)
+  - `bitmaskToStripeSpendingLimits(bitmask, currency?)` — collapses
+    cumulative bits 2/3/4 into Stripe spending tiers.
+  - `authContextToStripeACPContext(ctx, rootCommitment, network?, currency?)`
+    — maps leaf delegatee → `actingAgentDid`, root credential →
+    `rootAgentDid`, `chainDepth` → `delegationDepth`.
+  - `verifyStripeACPSpend(ctx, amount, currency, operation?)` — per-
+    PaymentIntent gate. `operation: 'authorize' | 'confirm'` (#15, P1-6).
+- LICENSE + NOTICE now ship in the published tarball (PR #6 patent-grant
+  audit fix-forward). (#15)
+
+#### Python SDK (`bolyra` 0.1.1 → 0.3.0)
+
+- **`delegate()` + `verify_delegation()`** via the existing subprocess
+  bridge to `@bolyra/sdk`. Python owns types + pre-flight; Node owns
+  proving. New `DelegateeMerkleProof` dataclass +
+  `delegatee_merkle_root` field on `DelegationResult`. 10 new tests,
+  65/65 total green. (#8)
+
+#### Spec
+
+- **11 v0.3 delegation conformance vectors** in `spec/test-vectors.json`
+  (vector format `0.2.0 → 0.3.0`, corpus 37 → 48): 2-hop chain, forged-
+  token EdDSA, nullifier-per-nonce, Poseidon3/4 binding formulas with
+  per-field sensitivity assertions, LeanIMT single- and two-leaf root
+  edges, canonical 6-element public-signals layout, financial scope
+  narrowing, cumulative-invariant FAIL on delegatee. (#9)
+
+### Changed
+
+- **Permission bitmask in `BolyraAuthContext` reflects the leaf** when a
+  delegation chain is present (was: root). Consumers that previously read
+  this field as "what authority the root granted" will see narrower bits
+  on delegated calls. v=1 bundles are unaffected. (#10)
+
+### Security
+
+The codex adversarial review surfaced 18 findings. All BLOCK + HARDEN
+buckets shipped in 0.3.0; DEFER bucket (P2-1 LeanIMT proof shape, P2-2
+Merkle proof builder, P2-7 correlation surface) is deferred to a
+follow-up release with no consumer impact.
+
+- **BLOCK bucket (#14)** — 4 P1 holes closed before any 0.3.0 surface
+  shipped.
+- **HARDEN bucket (#15)** — 8 defense-in-depth fixes:
+  - **P1-2** `IdentityRegistry`: explicit pubsig-length revert + public
+    layout-version constants at the ABI boundary.
+  - **P1-5** `bitmaskToStripeSpendingLimits` enforces cumulative-bit
+    shape — non-cumulative bitmasks (e.g. bit 4 without 2+3) collapse to
+    `tier='none'` instead of silently picking a tier.
+  - **P1-6** Stripe ACP `confirm` operation fails closed without
+    `SIGN_ON_BEHALF` (bit 5); `authorize` stays open.
+  - **P1-9** Stripe ACP boundary uses `>= cap` matching CLAUDE.md strict
+    `< $100` / `< $10K` semantics. `$100` exact and `$10K` exact reject.
+  - **P1-10** Bundle round-trip drift detection (string bitmask reject,
+    missing warnings reject) against a fixture pinned to
+    `@bolyra/mcp/src/types.ts`.
+  - **P2-3** Nullifier-replay test with matching `prevScope` proves the
+    `DelegationNullifierReused` guard fires and state rolls back.
+  - **P2-4** 4th-hop boundary test proves `MaxDelegationHopsExceeded`
+    fires at `hopCount == MAX (3)` and state rolls back.
+  - **P2-6** Stripe ACP amount integer-minor-units guard — rejects
+    non-finite, fractional, non-safe-integer, and non-positive amounts
+    before tier comparison.
+
+### Fixed
+
+- **Circuit unit tests** (`circuits/test/Delegation.test.js`) were silently
+  failing on `main` after the `68b7266` circuit hardening commit added the
+  UC3.1 (Poseidon5 delegator credential binding) and UC3.2 (Poseidon3
+  expiry-bound scope commitment) constraints plus `currentTimestamp`
+  liveness. The witness builder still constructed inputs against the
+  pre-hardening signal list and pre-hardening commitment formulas.
+  Updated the `createDelegation` helper to compute `delegatorCredCommitment`
+  via Poseidon5, `previousScopeCommitment` via Poseidon3, and to pass
+  `delegatorModelHash` + `currentTimestamp`. Chain test now derives
+  agent A's commitment from Poseidon5 so the hop-2 binding holds. CI
+  did not catch this regression because circuit unit tests aren't part
+  of the PR pipeline; contracts integration tests (which exercise the
+  same `.wasm` / `.zkey` artifacts) were always green and remain so.
+
+### Test infrastructure
+
+- New `contracts/contracts/test/TestableIdentityRegistry.sol` (owner-gated
+  test-only setters: `__test_setLastScopeCommitment`,
+  `__test_setDelegationHopCount`, `__test_setUsedDelegationNullifier`)
+  isolates guards that the production replay test can't reach because
+  `ScopeChainMismatch` fires first. Excluded from production deploy
+  scripts.
+
+### Migration notes
+
+- **MCP consumers**: bundle v=2 is a superset of v=1. If you store
+  `BolyraAuthContext.permissionBitmask` somewhere and use it for
+  authorization, audit: on a v=2 chain, this is now the **leaf**
+  bitmask, not the root. If you need the root, use
+  `effectiveCommitment` + the on-chain registry.
+- **Contract integrators**: `IdentityRegistry.verifyDelegation` and
+  `IDelegationGroth16Verifier.verifyProof` now take `uint[6]` pubSignals
+  (was `uint[5]`). Regenerate ABIs and pass the canonical layout
+  `[newScope, nullifier, delegateeRoot, prevScope, sessionNonce,
+  currentTimestamp]`.
+- **Integration peer deps**: `@bolyra/mcp`, `@bolyra/payment-protocols`,
+  and `@bolyra/openclaw` now require `@bolyra/sdk >=0.3.0`. Cohort
+  released together.
+
+## [0.2.x] — pre-2026-05-30
+
+Phase 1 — mutual handshake. See git history for per-PR detail; this
+file's release log starts at 0.3.0.
+
+[0.3.0]: https://github.com/bolyra/bolyra/releases/tag/v0.3.0
