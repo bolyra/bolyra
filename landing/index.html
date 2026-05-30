@@ -644,6 +644,41 @@
     </div>
   </section>
 
+  <!-- ZK handshake demo (v0.3.0) -->
+  <section id="zk-demo">
+    <div class="container">
+      <p class="section-label">Zero-knowledge upgrade &middot; v0.3.0 on npm</p>
+      <h2 class="section-title">Mutual ZKP handshake in ~140ms</h2>
+      <p class="section-subtitle">Same trust model, zero information leakage. The human proves uniqueness without revealing identity; the agent proves an operator-signed credential without revealing the credential. Both Groth16 proofs are bound to a session nonce, verified atomically. Flip one byte of a proof &mdash; the pairing check fails by construction.</p>
+      <div style="margin: 32px auto 40px; max-width: 920px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-elevated);">
+        <img src="https://raw.githubusercontent.com/bolyra/bolyra/main/sdk/demo/demo.gif?v=1" alt="@bolyra/sdk demo: Groth16 mutual handshake verifies in 138ms, tampered proof rejected as PROOF_INVALID" style="display: block; width: 100%; height: auto;">
+      </div>
+      <div class="code-block-wrapper">
+        <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
+        <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> {
+  <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
+  <span class="fn">proveHandshake</span>, <span class="fn">verifyHandshake</span>, Permission,
+} <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
+
+<span class="cm">// 1. Human + agent enroll once. Commitments go on-chain; secrets never leave.</span>
+<span class="kw">const</span> human <span class="op">=</span> <span class="kw">await</span> <span class="fn">createHumanIdentity</span>(humanSecret);
+<span class="kw">const</span> agent <span class="op">=</span> <span class="kw">await</span> <span class="fn">createAgentCredential</span>(
+  modelHash, operatorPrivKey,
+  [Permission.READ_DATA, Permission.FINANCIAL_SMALL],
+  <span class="fn">BigInt</span>(<span class="fn">Math.floor</span>(<span class="fn">Date.now</span>() <span class="op">/</span> <span class="num">1000</span>) <span class="op">+</span> <span class="num">86400</span>),
+);
+
+<span class="cm">// 2. Mutual handshake: both Groth16 proofs in parallel, bound to one nonce.</span>
+<span class="kw">const</span> { humanProof, agentProof, nonce } <span class="op">=</span> <span class="kw">await</span> <span class="fn">proveHandshake</span>(human, agent);
+
+<span class="cm">// 3. Verify off-chain or submit to IdentityRegistry.verifyHandshake() on Base.</span>
+<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verifyHandshake</span>(humanProof, agentProof, nonce);
+<span class="kw">if</span> (<span class="op">!</span>result.verified) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">'handshake rejected'</span>);</code></pre>
+      </div>
+      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Under the hood:</strong> <code>HumanUniqueness</code> reuses the public Semaphore v4 ceremony (depth 20, no project setup); <code>AgentPolicy</code> uses a project-specific Groth16 key over <code>pot16.ptau</code>. Production proving runs on rapidsnark (~200ms for both proofs in parallel). The verifier in the demo above is the same <code>snarkjs.groth16.verify</code> that the on-chain Solidity verifier was generated from.</p>
+    </div>
+  </section>
+
   <!-- Features -->
   <section id="features">
     <div class="container">
