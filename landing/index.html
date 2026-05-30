@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls. The human signs a scoped receipt; middleware verifies KB-JWT proof-of-possession, audience, expiry, amount cap, and status-list revocation before any side effect. v0.2 live on npm. Apache-2.0.">
+  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating in v0.3.0. The human signs a scoped receipt; middleware verifies KB-JWT proof-of-possession, audience, expiry, amount cap, and status-list revocation before any side effect. Apache-2.0.">
   <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="v0.2 live on npm: SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. ~30 lines from install to verified call. Roadmap: ZKP-wrapped receipts in v0.3.">
+  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.3.0 (sdk + mcp + payment-protocols + openclaw + Python SDK) live on npm and PyPI. ~30 lines from install to verified call.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -570,7 +570,7 @@
     <div class="container">
       <h1>Bolyra</h1>
       <p class="tagline">Verifiable delegated authority for AI agents. The human signs a scoped receipt; middleware verifies it before the agent calls a tool.</p>
-      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 96 conformance tests.</p>
+      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.3.0 shipped — mutual handshake, scope-narrowing delegation, Stripe ACP gating.</p>
       <div class="cta-group">
         <a href="https://www.npmjs.com/package/@bolyra/delegation" class="btn btn-primary">
           npm @bolyra/delegation
@@ -632,7 +632,7 @@
 });
 <span class="kw">if</span> (<span class="op">!</span>result.ok) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
       </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">Roadmap (v0.3):</strong> zero-knowledge wrapped receipts and one-way delegation-chain narrowing — same public API, same wire format, same circuit-compatible permission encoding.</p>
+      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade (v0.3.0 — shipped):</strong> zero-knowledge mutual handshake and one-way scope-narrowing delegation chains, same circuit-compatible permission encoding. <code>npm install @bolyra/sdk</code>.</p>
     </div>
   </section>
 
@@ -665,9 +665,9 @@
   <!-- Code Example -->
   <section id="sdk" class="code-section">
     <div class="container">
-      <p class="section-label">ZKP SDK · v0.3 preview</p>
+      <p class="section-label">ZKP SDK · v0.3.0 shipped</p>
       <h2 class="section-title">10 lines to mutual auth</h2>
-      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk</code>. Identity creation, credential issuance, parallel proof generation, and on-chain verification — without revealing operator, model, or scope to the relying party.</p>
+      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk@0.3.0</code>. Identity creation, credential issuance, parallel proof generation, on-chain verification, and one-way scope-narrowing delegation chains — without revealing operator, model, or scope to the relying party. Python bindings on PyPI as <code>bolyra==0.3.0</code>.</p>
       <div class="code-block-wrapper">
         <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
         <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> { <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
@@ -728,22 +728,27 @@
         <div class="feature-card">
           <div class="feature-icon mutual">MCP</div>
           <h3>MCP Middleware</h3>
-          <p>Drop-in auth for Model Context Protocol servers. One line wraps any McpServer with mutual ZKP handshake: <code>withBolyraAuthStdio(server, { resolveCredential, toolPolicy })</code>. ~217ms proofs via rapidsnark. Reference implementation in <code>integrations/mcp/</code> &mdash; npm release with v0.3.</p>
+          <p>Drop-in auth for Model Context Protocol servers. One line wraps any McpServer with mutual ZKP handshake plus v=2 delegation-chain bundles: <code>withBolyraAuthStdio(server, { resolveCredential, toolPolicy })</code>. ~217ms proofs via rapidsnark. <code>npm install @bolyra/mcp@0.3.0</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon delegation">$</div>
+          <h3>Payment Protocols</h3>
+          <p>Stripe Agent Commerce Protocol wedge. <code>verifyStripeACPSpend(ctx, amount, currency, 'authorize' | 'confirm')</code> gates PaymentIntents against the leaf delegatee's cumulative-bit scope. <code>confirm</code> fails closed without <code>SIGN_ON_BEHALF</code>; AP2 / Visa TAP adapters in the same package. <code>npm install @bolyra/payment-protocols@0.3.0</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon mutual">OC</div>
           <h3>OpenClaw Adapter</h3>
-          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw</code></p>
+          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw@0.3.0</code></p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon delegation">OC</div>
+          <div class="feature-icon delegation">&rarr;</div>
           <h3>Off-Chain Mode</h3>
           <p>Verify handshakes locally with zero gas. Batch sessions and post a single Merkle root on-chain. ~375x gas reduction at batch size 100.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon privacy">AI</div>
-          <h3>Agent Frameworks</h3>
-          <p>LangChain BolyraAuthTool and CrewAI delegation adapters. Python SDK on PyPI. Authenticate agents before sensitive operations in any framework.</p>
+          <h3>Agent Frameworks &amp; Python</h3>
+          <p>LangChain BolyraAuthTool and CrewAI delegation adapters. <code>pip install bolyra==0.3.0</code> — Python types + <code>delegate()</code> / <code>verify_delegation()</code> via subprocess bridge to <code>@bolyra/sdk</code>. Authenticate agents before sensitive operations in any framework.</p>
         </div>
       </div>
     </div>
@@ -845,7 +850,7 @@
           <div class="desc">Patent claims filed (US Provisional #64/043,898)</div>
         </div>
         <div class="number-card">
-          <div class="big">37</div>
+          <div class="big">48</div>
           <div class="desc">Conformance test vectors (all passing)</div>
         </div>
         <div class="number-card">
@@ -871,7 +876,7 @@
           <span class="std-badge ietf">IETF</span>
           <h3>Draft (preparing for submission)</h3>
           <p><code>draft-bolyra-mutual-zkp-auth-01</code></p>
-          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. Submission to IETF planned alongside the v0.3 release.</p>
+          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. v0.3.0 release locks the canonical 6-element Delegation public-signals layout for IETF submission.</p>
         </div>
         <div class="standard-card">
           <span class="std-badge w3c">W3C</span>
@@ -882,8 +887,8 @@
         <div class="standard-card">
           <span class="std-badge test">Conformance</span>
           <h3>Test Vectors</h3>
-          <p><code>37 vectors, all passing</code></p>
-          <p style="margin-top: 10px;">Comprehensive conformance suite: handshake, delegation, signature verification, Merkle inclusion, cumulative encoding, nonce reuse, boundary values.</p>
+          <p><code>48 vectors, all passing</code></p>
+          <p style="margin-top: 10px;">Conformance suite covers handshake, 2-hop delegation chain, forged-token EdDSA, nullifier-per-nonce, Poseidon3/4 binding sensitivity, LeanIMT root edges, canonical 6-element public-signals layout, financial scope narrowing, and cumulative-invariant rejection.</p>
         </div>
       </div>
     </div>
@@ -926,6 +931,8 @@
             <h4>Resources</h4>
             <ul>
               <li><a href="https://github.com/bolyra/bolyra">GitHub</a></li>
+              <li><a href="https://github.com/bolyra/bolyra/releases/tag/v0.3.0">v0.3.0 release</a></li>
+              <li><a href="https://github.com/bolyra/bolyra/blob/main/CHANGELOG.md">Changelog</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/spec">IETF Draft</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/sdk">SDK Documentation</a></li>
               <li><a href="#design-partners">Design Partners</a></li>
