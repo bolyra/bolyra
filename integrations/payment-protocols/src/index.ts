@@ -36,6 +36,7 @@ export {
   authContextToStripeACPContext,
   verifyStripeACPSpend,
 } from './stripe-acp';
+export type { StripeACPOperation } from './stripe-acp';
 
 // Types
 export type {

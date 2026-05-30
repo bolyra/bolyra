@@ -93,10 +93,40 @@ describe('bitmaskToStripeSpendingLimits', () => {
     expect(limits.financialUnlimited).toBe(true);
   });
 
-  it('picks highest tier when bits collide (bit 4 wins over 3 wins over 2)', () => {
-    // Highest-bit-wins even if implication is broken — circuit enforces cumulative shape.
-    expect(bitmaskToStripeSpendingLimits(BIT_FIN_UNLIMITED).tier).toBe('unlimited');
-    expect(bitmaskToStripeSpendingLimits(BIT_FIN_MEDIUM).tier).toBe('medium');
+  it('picks highest tier when cumulative bits are valid', () => {
+    // Bit 4 wins when 2+3+4 are all set; bit 3 wins when 2+3 are set.
+    expect(
+      bitmaskToStripeSpendingLimits(
+        BIT_FIN_SMALL | BIT_FIN_MEDIUM | BIT_FIN_UNLIMITED,
+      ).tier,
+    ).toBe('unlimited');
+    expect(
+      bitmaskToStripeSpendingLimits(BIT_FIN_SMALL | BIT_FIN_MEDIUM).tier,
+    ).toBe('medium');
+  });
+
+  // Codex P1-5 (HARDEN): non-cumulative bitmasks must collapse to "none"
+  // even if a higher tier bit is set. Defense-in-depth against a malformed
+  // proof bypassing the circuit's cumulative-shape enforcement.
+  it('collapses to "none" when UNLIMITED is set without MEDIUM+SMALL', () => {
+    const limits = bitmaskToStripeSpendingLimits(BIT_FIN_UNLIMITED);
+    expect(limits.tier).toBe('none');
+    expect(limits.maxTransactionAmount).toBe(0);
+  });
+
+  it('collapses to "none" when UNLIMITED+SMALL set without MEDIUM', () => {
+    const limits = bitmaskToStripeSpendingLimits(BIT_FIN_UNLIMITED | BIT_FIN_SMALL);
+    expect(limits.tier).toBe('none');
+  });
+
+  it('collapses to "none" when UNLIMITED+MEDIUM set without SMALL', () => {
+    const limits = bitmaskToStripeSpendingLimits(BIT_FIN_UNLIMITED | BIT_FIN_MEDIUM);
+    expect(limits.tier).toBe('none');
+  });
+
+  it('collapses to "none" when MEDIUM is set without SMALL', () => {
+    const limits = bitmaskToStripeSpendingLimits(BIT_FIN_MEDIUM);
+    expect(limits.tier).toBe('none');
   });
 
   it('surfaces SIGN_ON_BEHALF flag independent of tier', () => {
@@ -294,7 +324,81 @@ describe('verifyStripeACPSpend', () => {
     const acp = makeACP();
     const decision = verifyStripeACPSpend(acp, 20_000, 'USD');
     expect(decision.allowed).toBe(false);
-    expect(decision.reason).toContain('exceeds small-tier cap');
+    expect(decision.reason).toContain('small-tier cap');
+  });
+
+  // Codex P1-9 (HARDEN): the cap is STRICT — bit 2 means `< $100`, not `<= $100`.
+  it('denies the exact small-tier boundary ($100 against tier=small)', () => {
+    const acp = makeACP();
+    const decision = verifyStripeACPSpend(acp, 10_000, 'USD');
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('meets or exceeds');
+  });
+
+  it('denies the exact medium-tier boundary ($10K against tier=medium)', () => {
+    const ctx = makeCtx({ permissionBitmask: BIT_FIN_SMALL | BIT_FIN_MEDIUM });
+    const acp = authContextToStripeACPContext(ctx);
+    const decision = verifyStripeACPSpend(acp, 1_000_000, 'USD');
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('meets or exceeds');
+  });
+
+  it('allows one minor unit below the small-tier boundary ($99.99)', () => {
+    const acp = makeACP();
+    const decision = verifyStripeACPSpend(acp, 9_999, 'USD');
+    expect(decision.allowed).toBe(true);
+  });
+
+  // Codex P2-6 (HARDEN): amounts must be integer minor units.
+  it('denies fractional amounts (Stripe rejects non-integer minor units)', () => {
+    const acp = makeACP();
+    const decision = verifyStripeACPSpend(acp, 9_999.5, 'USD');
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('safe integer');
+  });
+
+  it('denies non-finite amounts (NaN, Infinity)', () => {
+    const acp = makeACP();
+    expect(verifyStripeACPSpend(acp, Number.NaN, 'USD').allowed).toBe(false);
+    expect(verifyStripeACPSpend(acp, Number.POSITIVE_INFINITY, 'USD').allowed).toBe(false);
+  });
+
+  it('denies amounts above MAX_SAFE_INTEGER', () => {
+    const ctx = makeCtx({
+      permissionBitmask: BIT_FIN_SMALL | BIT_FIN_MEDIUM | BIT_FIN_UNLIMITED,
+    });
+    const acp = authContextToStripeACPContext(ctx);
+    const decision = verifyStripeACPSpend(
+      acp,
+      Number.MAX_SAFE_INTEGER + 2, // not representable as integer
+      'USD',
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('safe integer');
+  });
+
+  // Codex P1-6 (HARDEN): pi.confirm operations require bit 5.
+  it('denies a confirm operation when SIGN_ON_BEHALF (bit 5) is not set', () => {
+    const acp = makeACP(); // default ctx has BIT_READ | BIT_WRITE | BIT_FIN_SMALL — no bit 5
+    expect(acp.spendingLimits.signOnBehalf).toBe(false);
+    const decision = verifyStripeACPSpend(acp, 5_000, 'USD', 'confirm');
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('SIGN_ON_BEHALF');
+  });
+
+  it('allows a confirm operation when SIGN_ON_BEHALF is set', () => {
+    const ctx = makeCtx({
+      permissionBitmask: BIT_READ | BIT_WRITE | BIT_FIN_SMALL | BIT_SIGN_ON_BEHALF,
+    });
+    const acp = authContextToStripeACPContext(ctx);
+    const decision = verifyStripeACPSpend(acp, 5_000, 'USD', 'confirm');
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('defaults operation to "authorize" — confirm gate does not fire', () => {
+    const acp = makeACP();
+    const decision = verifyStripeACPSpend(acp, 5_000, 'USD');
+    expect(decision.allowed).toBe(true);
   });
 
   it('allows arbitrarily large charges against UNLIMITED tier', () => {
@@ -375,5 +479,153 @@ describe('narrowing wedge: root UNLIMITED → hop1 MEDIUM → hop2 SMALL', () =>
     expect(overCap.allowed).toBe(false);
     expect(overCap.tier).toBe('small');
     expect(overCap.capChecked).toBe(10_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Codex P1-10 (HARDEN): real-bundle round-trip
+// ---------------------------------------------------------------------------
+//
+// The narrowing-wedge tests above feed the adapter a hand-rolled
+// BolyraVerifiedContext. Codex's concern: if `@bolyra/mcp`'s verifyBundle
+// emits a shape that doesn't match (bitmask as decimal string, omitted
+// warnings, extra fields, optional reason field present), production either
+// throws at runtime validation or crashes spreading `ctx.warnings`. The hand-
+// rolled fixture would still be green.
+//
+// This block pins the contract between BolyraAuthContext (the shape
+// verifyBundle returns, defined in `@bolyra/mcp/src/types.ts` as of v0.2.0)
+// and BolyraVerifiedContext (what the adapter consumes). The fixtures here
+// must mirror the verifyBundle return statement verbatim — bigint bitmask,
+// decimal-string effectiveCommitment, populated warnings, optional reason.
+// If verifyBundle's return shape ever drifts, these tests break before any
+// merchant integration silently grants max authority on a malformed payload.
+
+interface BolyraAuthContextShape {
+  verified: boolean;
+  score: number;
+  did: string;
+  permissionBitmask: bigint;
+  warnings: string[];
+  reason?: string;
+  chainDepth: number;
+  effectiveCommitment: string;
+}
+
+/**
+ * v=1 (no chain) success: the shape verifyBundle returns when a handshake-only
+ * bundle verifies against a credential with READ+WRITE+FIN_SMALL authority.
+ * Mirrors the `return { verified: passed, ... }` at verify.ts:234.
+ */
+function realBundleV1Success(): BolyraAuthContextShape {
+  return {
+    verified: true,
+    score: 95,
+    did: ROOT_DID,
+    permissionBitmask: BIT_READ | BIT_WRITE | BIT_FIN_SMALL,
+    warnings: [],
+    chainDepth: 0,
+    effectiveCommitment: ROOT_COMMITMENT,
+  };
+}
+
+/**
+ * v=2 (2-hop chain) success: leaf scope narrowed from a broader root. Warnings
+ * are populated to exercise the spread path in authContextToStripeACPContext.
+ */
+function realBundleV2Success(): BolyraAuthContextShape {
+  return {
+    verified: true,
+    score: 88,
+    did: ROOT_DID,
+    permissionBitmask: BIT_READ | BIT_FIN_SMALL, // leaf collapsed scope
+    warnings: ['Delegation chain depth 2; trust score reduced'],
+    chainDepth: 2,
+    effectiveCommitment: LEAF_COMMITMENT,
+  };
+}
+
+/**
+ * Failed verification: verifyBundle returns a fully-formed context with
+ * verified=false and a `reason`. The adapter must still accept the shape;
+ * downstream callers branch on `verified`.
+ */
+function realBundleFailure(): BolyraAuthContextShape {
+  return {
+    verified: false,
+    score: 0,
+    did: ROOT_DID,
+    permissionBitmask: 0n,
+    warnings: ['Agent proof verification failed', 'Score below floor'],
+    reason: 'Agent proof verification failed',
+    chainDepth: 0,
+    effectiveCommitment: ROOT_COMMITMENT,
+  };
+}
+
+describe('Codex P1-10: real-bundle round-trip through the Stripe adapter', () => {
+  it('accepts a v=1 BolyraAuthContext shape without throwing', () => {
+    const ctx = realBundleV1Success();
+    const acp = authContextToStripeACPContext(ctx);
+    expect(acp.verified).toBe(true);
+    expect(acp.score).toBe(95);
+    expect(acp.delegationDepth).toBe(0);
+    expect(acp.spendingLimits.tier).toBe('small');
+    expect(acp.spendingLimits.maxTransactionAmount).toBe(10_000);
+    expect(acp.actingAgentDid).toBe(acp.rootAgentDid); // v=1: acting == root
+  });
+
+  it('accepts a v=2 BolyraAuthContext shape with chain warnings', () => {
+    const ctx = realBundleV2Success();
+    const acp = authContextToStripeACPContext(ctx);
+    expect(acp.verified).toBe(true);
+    expect(acp.delegationDepth).toBe(2);
+    expect(acp.spendingLimits.tier).toBe('small');
+    expect(acp.actingAgentDid).not.toBe(acp.rootAgentDid); // v=2: chain narrowed
+    // Adapter MUST preserve verifier warnings (Codex P2-8 surface).
+    expect(acp.warnings).toContain('Delegation chain depth 2; trust score reduced');
+  });
+
+  it('accepts a failed BolyraAuthContext (reason field, verified=false)', () => {
+    const ctx = realBundleFailure();
+    // Adapter does not throw on verified=false — the round-trip must complete.
+    const acp = authContextToStripeACPContext(ctx);
+    expect(acp.verified).toBe(false);
+    expect(acp.spendingLimits.tier).toBe('none');
+    // verifyStripeACPSpend must deny everything when verified=false.
+    const decision = verifyStripeACPSpend(acp, 100, 'usd');
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('did not verify');
+  });
+
+  it('a v=2 success round-trips through the spend gate at the leaf cap', () => {
+    const ctx = realBundleV2Success();
+    const acp = authContextToStripeACPContext(ctx);
+    // Below cap: allowed.
+    expect(verifyStripeACPSpend(acp, 5_000, 'usd').allowed).toBe(true);
+    // Exact boundary ($100 against tier=small): denied per P1-9.
+    expect(verifyStripeACPSpend(acp, 10_000, 'usd').allowed).toBe(false);
+    // Above cap: denied.
+    expect(verifyStripeACPSpend(acp, 50_000, 'usd').allowed).toBe(false);
+  });
+
+  it('rejects a real-bundle-shaped context with a string bitmask (drift detection)', () => {
+    // If a future verifyBundle ever serializes permissionBitmask as a decimal
+    // string instead of bigint, the runtime guard MUST reject it. This test
+    // pins the shape contract; bumping verifyBundle to emit strings without
+    // updating BolyraVerifiedContext + the adapter must fail loudly.
+    const drifted = {
+      ...realBundleV1Success(),
+      permissionBitmask: '7' as unknown as bigint,
+    };
+    expect(() => authContextToStripeACPContext(drifted)).toThrow(/permissionBitmask/);
+  });
+
+  it('rejects a real-bundle-shaped context missing warnings (drift detection)', () => {
+    const drifted = realBundleV1Success() as Partial<BolyraVerifiedContext>;
+    delete (drifted as { warnings?: unknown }).warnings;
+    expect(() =>
+      authContextToStripeACPContext(drifted as BolyraVerifiedContext),
+    ).toThrow(/warnings/);
   });
 });

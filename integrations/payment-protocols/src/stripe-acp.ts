@@ -194,11 +194,20 @@ export function bitmaskToStripeSpendingLimits(
   const financialUnlimited = (bitmask & BIT_FINANCIAL_UNLIMITED) !== 0n;
   const signOnBehalf = (bitmask & BIT_SIGN_ON_BEHALF) !== 0n;
 
-  // Most-permissive wins. Cumulative-bit semantics (per CLAUDE.md): bit 4
-  // implies 2+3, bit 3 implies 2. We do not enforce the implication here —
-  // that is the circuit's job. We just pick the highest tier whose bit is set.
+  // Codex P1-5: enforce cumulative-bit semantics at the adapter boundary
+  // (defense-in-depth — the circuit enforces this on-chain). Per CLAUDE.md
+  // §"Permissions Model": bit 4 implies 2+3, bit 3 implies 2. A malformed
+  // bitmask with bit 4 alone (no 2/3) used to upgrade to "unlimited"; reject
+  // it here so a downstream caller never sees max authority from a
+  // structurally-broken proof. Highest-tier-wins ONLY when the implication
+  // holds; otherwise collapse to "none" with a warning.
   let tier: StripeACPSpendingTier;
-  if (financialUnlimited) {
+  const cumulativeViolation =
+    (financialUnlimited && !(financialMedium && financialSmall)) ||
+    (financialMedium && !financialSmall);
+  if (cumulativeViolation) {
+    tier = 'none';
+  } else if (financialUnlimited) {
     tier = 'unlimited';
   } else if (financialMedium) {
     tier = 'medium';
@@ -302,24 +311,40 @@ export function authContextToStripeACPContext(
 // ---------------------------------------------------------------------------
 
 /**
+ * Operation surface for a Stripe ACP charge.
+ *
+ *   "authorize" — creating a PaymentIntent on behalf of the user (does NOT
+ *                 require `SIGN_ON_BEHALF`).
+ *   "confirm"   — confirming an existing PaymentIntent on the user's behalf
+ *                 (REQUIRES `SIGN_ON_BEHALF` per CLAUDE.md §"Permissions Model"
+ *                 bit 5).
+ *
+ * Defaults to "authorize" for backward compatibility. The README documents
+ * "confirm" as the path that needs bit 5.
+ */
+export type StripeACPOperation = 'authorize' | 'confirm';
+
+/**
  * Decide whether a proposed Stripe charge is authorized by the ACP context.
  *
  * Rules:
  *   1. Context must be verified.
  *   2. Currency must match.
- *   3. Amount must be > 0.
+ *   3. Amount must be a positive safe integer in minor units (Stripe rejects
+ *      fractional or unsafe-integer cents).
  *   4. Tier must be "small" | "medium" | "unlimited" (not "none").
- *   5. For tiers other than "unlimited", amount must be <= the cap.
- *
- * Does NOT enforce SIGN_ON_BEHALF — callers that require it should check
- * `ctx.spendingLimits.signOnBehalf` themselves before calling, since the
- * requirement is endpoint-specific (e.g., `pi.confirm` needs it, `pi.create`
- * with manual confirmation may not).
+ *   5. For tiers other than "unlimited", amount must be STRICTLY LESS than
+ *      the cap. CLAUDE.md defines bit 2 as `< $100` and bit 3 as `< $10K`,
+ *      so $100 against tier=small or $10K against tier=medium is rejected.
+ *   6. If `operation === "confirm"`, the leaf scope must include
+ *      `SIGN_ON_BEHALF` (bit 5). `pi.confirm`-style paths fail closed
+ *      without it.
  */
 export function verifyStripeACPSpend(
   ctx: StripeACPContext,
   amount: number,
   currency: string,
+  operation: StripeACPOperation = 'authorize',
 ): StripeACPSpendDecision {
   const tier = ctx.spendingLimits.tier;
   const cap = ctx.spendingLimits.maxTransactionAmount;
@@ -343,10 +368,19 @@ export function verifyStripeACPSpend(
       tier,
     };
   }
-  if (!Number.isFinite(amount) || amount <= 0) {
+  // Codex P2-6 (HARDEN): Stripe amounts are integer minor units. 9999.5
+  // cents must NEVER authorize; values above MAX_SAFE_INTEGER round before
+  // comparison and can sneak past the cap. Require a finite, positive,
+  // safe-integer minor-unit amount.
+  if (
+    typeof amount !== 'number' ||
+    !Number.isInteger(amount) ||
+    !Number.isSafeInteger(amount) ||
+    amount <= 0
+  ) {
     return {
       allowed: false,
-      reason: `Invalid amount: ${amount}.`,
+      reason: `Invalid amount: ${amount} (must be a positive safe integer in minor units).`,
       capChecked: cap,
       tier,
     };
@@ -359,10 +393,27 @@ export function verifyStripeACPSpend(
       tier,
     };
   }
-  if (tier !== 'unlimited' && amount > cap) {
+  // Codex P1-9 (HARDEN): the bit semantics in CLAUDE.md are strict-less-than
+  // (`< $100`, `< $10K`). The previous `amount > cap` check allowed the
+  // boundary value through — a $100 charge against tier=small or a $10K
+  // charge against tier=medium. Reject `amount >= cap` for capped tiers.
+  if (tier !== 'unlimited' && amount >= cap) {
     return {
       allowed: false,
-      reason: `Amount ${amount} exceeds ${tier}-tier cap of ${cap} ${currency}.`,
+      reason: `Amount ${amount} meets or exceeds ${tier}-tier cap of ${cap} ${currency} (cap is strict).`,
+      capChecked: cap,
+      tier,
+    };
+  }
+  // Codex P1-6 (HARDEN): `pi.confirm` requires SIGN_ON_BEHALF (bit 5). The
+  // previous adapter exposed the flag but left enforcement to integrators —
+  // most treated `allowed: true` from this function as the final ACP
+  // decision. Fail closed when the leaf scope is missing bit 5 and the
+  // caller is asking about a confirm-class operation.
+  if (operation === 'confirm' && !ctx.spendingLimits.signOnBehalf) {
+    return {
+      allowed: false,
+      reason: 'Confirm operation requires SIGN_ON_BEHALF (bit 5) on the leaf scope.',
       capChecked: cap,
       tier,
     };
