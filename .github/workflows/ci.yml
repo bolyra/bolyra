@@ -110,3 +110,53 @@ jobs:
           rm -f package-lock.json
           npm install
           npx tsc --noEmit
+
+  dependency-audit:
+    name: Dependency audit — runtime deps only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      # Audit each published package's runtime dependencies. We use
+      # --omit=dev so we only gate on advisories reachable from shipped code;
+      # dev-only advisories (Hardhat toolchain, circom_tester, etc.) are
+      # tracked separately in SECURITY.md "Known accepted residual Dependabot
+      # alerts". --audit-level=high means low/moderate are reported but do
+      # not fail the build; high and critical fail.
+      #
+      # For the workspace packages that depend on file:../../sdk we still
+      # need a built SDK on disk so npm install can resolve.
+      - name: Build local @bolyra/sdk
+        run: cd sdk && npm ci && npm run build
+
+      - name: Audit @bolyra/sdk
+        working-directory: sdk
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit @bolyra/mcp
+        working-directory: integrations/mcp
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));if(p.dependencies&&p.dependencies['@bolyra/sdk'])p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install --package-lock-only
+          npm audit --omit=dev --audit-level=high
+
+      - name: Audit @bolyra/openclaw
+        working-directory: integrations/openclaw
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));if(p.dependencies&&p.dependencies['@bolyra/sdk'])p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install --package-lock-only
+          npm audit --omit=dev --audit-level=high
+
+      - name: Audit @bolyra/payment-protocols
+        working-directory: integrations/payment-protocols
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));if(p.dependencies&&p.dependencies['@bolyra/sdk'])p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install --package-lock-only
+          npm audit --omit=dev --audit-level=high

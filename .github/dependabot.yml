@@ -1,0 +1,50 @@
+# Dependabot configuration for bolyra/bolyra
+#
+# Strategy: weekly cadence instead of on-push so we batch updates instead of
+# getting a noise burst on every release. Grouped by production-vs-dev so
+# patch-level dev updates can be auto-PR'd while runtime updates get manual
+# review.
+#
+# Lockfile-level transitive vulnerabilities are addressed via per-package
+# `overrides` blocks in each manifest's package.json (see
+# tasks/dependabot-cleanup-plan.md). Dependabot will only PR direct deps.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/sdk"
+      - "/integrations/mcp"
+      - "/integrations/openclaw"
+      - "/integrations/payment-protocols"
+      - "/delegation"
+      - "/contracts"
+      - "/circuits"
+      - "/examples/mcp-demo"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - patch
+          - minor
+      development-dependencies:
+        dependency-type: development
+        update-types:
+          - patch
+          - minor
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(ci)"
