@@ -40,6 +40,16 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: scope
+    # Suppress recurring major-bump PRs that can't merge without out-of-scope work:
+    #   - chai 5+ is ESM-only; circuits/ tests use CommonJS require("chai").
+    #     Migrating to ESM is tracked separately. See PR #22 close-comment.
+    #   - hardhat 3.x requires a contracts/ migration plan. See SECURITY.md
+    #     "Known accepted residual" and PR #23.
+    ignore:
+      - dependency-name: "chai"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "hardhat"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
