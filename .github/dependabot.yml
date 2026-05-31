@@ -45,10 +45,23 @@ updates:
     #     Migrating to ESM is tracked separately. See PR #22 close-comment.
     #   - hardhat 3.x requires a contracts/ migration plan. See SECURITY.md
     #     "Known accepted residual" and PR #23.
+    #   - @nomicfoundation/hardhat-toolbox 6+ targets hardhat 3.x; gated on
+    #     the same migration. See PR #24 close-comment.
+    #   - typescript 6.x changes test-globals resolution; jest describe/it/expect
+    #     no longer auto-resolved without explicit "types": ["jest"] in every
+    #     tsconfig. Migration tracked separately. See PRs #26/#29/#31/#33/#36.
+    #   - jose 6.x is ESM-only; delegation/ tests use ts-jest CJS. Migration
+    #     tracked with the broader delegation/ ESM move. See PR #25.
     ignore:
       - dependency-name: "chai"
         update-types: ["version-update:semver-major"]
       - dependency-name: "hardhat"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@nomicfoundation/hardhat-toolbox"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jose"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
