@@ -9,6 +9,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIXTURES_DIR="$SCRIPT_DIR/fixtures"
+
 URL_402="https://bolyra.ai/402"
 URL_ROOT="https://bolyra.ai/"
 
@@ -109,6 +112,71 @@ for (const [pkg, syms] of Object.entries(expected)) {
 }
 process.exit(bad ? 1 : 0);
 ' ) || fail "advertised symbol(s) missing from published packages — see FAIL lines above"
+
+# Tamper-rejection runtime gate — the #zk-demo section of bolyra.ai claims
+# "flip one byte of a proof and the pairing check fails by construction".
+# Prove it: run snarkjs.groth16.verify against the pinned proof fixtures
+# under landing/fixtures/, using the vkeys shipped inside the published
+# @bolyra/payment-protocols tarball. Then mutate one hex digit of
+# agentProof.pi_a[0] and re-verify — the result MUST flip from true to
+# false. If a tamper is silently accepted, the cryptographic claim on the
+# landing is broken and we fail-fast before anyone trusts the site.
+echo "→ runtime tamper-rejection test (1-byte flip of agentProof.pi_a[0])"
+[ -f "$FIXTURES_DIR/humanProof.json" ] || fail "missing fixture: $FIXTURES_DIR/humanProof.json"
+[ -f "$FIXTURES_DIR/agentProof.json" ] || fail "missing fixture: $FIXTURES_DIR/agentProof.json"
+[ -f "$FIXTURES_DIR/nonce.txt" ]      || fail "missing fixture: $FIXTURES_DIR/nonce.txt"
+cp -R "$FIXTURES_DIR" "$WORKDIR/fixtures"
+
+( cd "$WORKDIR" && node -e '
+const fs = require("fs");
+const path = require("path");
+const sdk = require("@bolyra/sdk");
+
+const fixturesDir = path.join(process.cwd(), "fixtures");
+// @bolyra/payment-protocols ships HumanUniqueness_vkey.json and
+// AgentPolicy_groth16_vkey.json under vkeys/ — the same filenames the
+// SDK looks for when circuitDir is set.
+const vkeyDir     = path.join(process.cwd(), "node_modules/@bolyra/payment-protocols/vkeys");
+
+const humanProof = JSON.parse(fs.readFileSync(path.join(fixturesDir, "humanProof.json"), "utf8"));
+const agentProof = JSON.parse(fs.readFileSync(path.join(fixturesDir, "agentProof.json"), "utf8"));
+const nonce      = BigInt(fs.readFileSync(path.join(fixturesDir, "nonce.txt"), "utf8").trim());
+
+(async () => {
+  // Leg 1: unmodified proofs must verify.
+  const good = await sdk.verifyHandshake(humanProof, agentProof, nonce, { circuitDir: vkeyDir });
+  if (!good.verified) {
+    console.error("FAIL: pinned fixtures failed to verify against published vkeys (drift between @bolyra/sdk and @bolyra/payment-protocols vkeys?)");
+    process.exit(1);
+  }
+  console.log("OK:    unmodified handshake verifies");
+
+  // Leg 2: tamper agentProof.pi_a[0]. snarkjs decimal strings stay in
+  // Fp regardless of which digit we flip; mutating a LOW-order digit
+  // keeps the tampered value well-formed enough that the verifier
+  // runs the pairing check and returns verified=false, rather than
+  // throwing on a malformed encoding. We strictly assert
+  // verified===false here (NOT "threw OR false") so the gate
+  // distinguishes a real pairing rejection from an exception path.
+  const tampered = JSON.parse(JSON.stringify(agentProof));
+  const orig = tampered.proof.pi_a[0];
+  // Flip the last digit; wraps 0..9 -> (d+1)%10.
+  const lastDigit = parseInt(orig.slice(-1), 10);
+  tampered.proof.pi_a[0] = orig.slice(0, -1) + ((lastDigit + 1) % 10).toString();
+
+  const bad = await sdk.verifyHandshake(humanProof, tampered, nonce, { circuitDir: vkeyDir });
+  if (bad.verified !== false) {
+    console.error("FAIL: tampered agentProof.pi_a[0] was SILENTLY ACCEPTED (verified=" + bad.verified + ").");
+    console.error("       The landing #zk-demo claim is broken — block this deploy.");
+    process.exit(1);
+  }
+  console.log("OK:    tampered agentProof rejected (verified=false)");
+  // snarkjs/ffjavascript leave worker threads + open handles after
+  // groth16.verify. Without an explicit exit, node -e can sit idle
+  // and block deploy.sh on the implicit shell timeout.
+  process.exit(0);
+})().catch((e) => { console.error("FAIL: tamper test threw unexpectedly:", e); process.exit(1); });
+' ) || fail "tamper-rejection runtime gate failed"
 
 # GitHub link sanity — the page CTAs must resolve for unauthenticated visitors.
 # GitHub returns 404 (not 403) for private repos, so this catches re-privatization too.
