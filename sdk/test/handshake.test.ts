@@ -87,6 +87,22 @@ describe('verifyHandshake', () => {
     expect(result.verified).toBe(false);
   });
 
+  it('returns verified=false on malformed public signals (fail-closed)', async () => {
+    const nonce = 1234n;
+    const garbage = {
+      proof: {},
+      publicSignals: ['not-a-number', 'also-bad', 'still-bad', 'x', 'y', 'z'],
+    };
+    const result = await verifyHandshake(garbage, garbage, nonce, {
+      circuitDir: '/nonexistent/path',
+    });
+    expect(result.verified).toBe(false);
+    expect(result.sessionNonce).toBe(nonce);
+    expect(result.humanNullifier).toBe(0n);
+    expect(result.agentNullifier).toBe(0n);
+    expect(result.scopeCommitment).toBe(0n);
+  });
+
   it('throws when both nonces match but vkey files are absent', async () => {
     const nonce = 1234n;
     await expect(

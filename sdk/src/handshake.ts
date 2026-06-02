@@ -215,14 +215,28 @@ export async function verifyHandshake(
   // of what the caller passed, and the returned `sessionNonce` would
   // echo a value that was never cryptographically bound to the proof.
   // Refuse to claim verified=true whenever drift is detected.
-  const humanNonceCommitted = BigInt(humanProof.publicSignals[4]);
-  const agentNonceCommitted = BigInt(agentProof.publicSignals[5]);
+  //
+  // publicSignals are caller-supplied strings; a malformed entry would
+  // otherwise turn the fail-closed drift branch into a thrown
+  // exception. tryBigInt() yields `null` on parse failure, which is
+  // never equal to `nonce` (forcing the drift return) and is rendered
+  // as 0n in the returned nullifier/scope fields so the caller still
+  // gets a well-typed `HandshakeResult` with `verified: false`.
+  const tryBigInt = (s: string): bigint | null => {
+    try {
+      return BigInt(s);
+    } catch {
+      return null;
+    }
+  };
+  const humanNonceCommitted = tryBigInt(humanProof.publicSignals[4]);
+  const agentNonceCommitted = tryBigInt(agentProof.publicSignals[5]);
   if (humanNonceCommitted !== nonce || agentNonceCommitted !== nonce) {
     return {
-      humanNullifier: BigInt(humanProof.publicSignals[1]),
-      agentNullifier: BigInt(agentProof.publicSignals[1]),
+      humanNullifier: tryBigInt(humanProof.publicSignals[1]) ?? 0n,
+      agentNullifier: tryBigInt(agentProof.publicSignals[1]) ?? 0n,
       sessionNonce: nonce,
-      scopeCommitment: BigInt(agentProof.publicSignals[2]),
+      scopeCommitment: tryBigInt(agentProof.publicSignals[2]) ?? 0n,
       verified: false,
     };
   }
