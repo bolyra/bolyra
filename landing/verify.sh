@@ -151,26 +151,30 @@ const nonce      = BigInt(fs.readFileSync(path.join(fixturesDir, "nonce.txt"), "
   }
   console.log("OK:    unmodified handshake verifies");
 
-  // Leg 2: flip the first hex digit of agentProof.pi_a[0]. Any single-bit
-  // change in a Groth16 proof element invalidates the pairing check.
+  // Leg 2: tamper agentProof.pi_a[0]. snarkjs decimal strings stay in
+  // Fp regardless of which digit we flip; mutating a LOW-order digit
+  // keeps the tampered value well-formed enough that the verifier
+  // runs the pairing check and returns verified=false, rather than
+  // throwing on a malformed encoding. We strictly assert
+  // verified===false here (NOT "threw OR false") so the gate
+  // distinguishes a real pairing rejection from an exception path.
   const tampered = JSON.parse(JSON.stringify(agentProof));
   const orig = tampered.proof.pi_a[0];
-  tampered.proof.pi_a[0] = (orig[0] === "1" ? "2" : "1") + orig.slice(1);
+  // Flip the last digit; wraps 0..9 -> (d+1)%10.
+  const lastDigit = parseInt(orig.slice(-1), 10);
+  tampered.proof.pi_a[0] = orig.slice(0, -1) + ((lastDigit + 1) % 10).toString();
 
-  let rejected = false;
-  try {
-    const bad = await sdk.verifyHandshake(humanProof, tampered, nonce, { circuitDir: vkeyDir });
-    rejected = !bad.verified;
-  } catch (e) {
-    // A throw is also a valid rejection — the contract is "do not silently accept".
-    rejected = true;
-  }
-  if (!rejected) {
-    console.error("FAIL: 1-byte tamper of agentProof.pi_a[0] was SILENTLY ACCEPTED.");
+  const bad = await sdk.verifyHandshake(humanProof, tampered, nonce, { circuitDir: vkeyDir });
+  if (bad.verified !== false) {
+    console.error("FAIL: tampered agentProof.pi_a[0] was SILENTLY ACCEPTED (verified=" + bad.verified + ").");
     console.error("       The landing #zk-demo claim is broken — block this deploy.");
     process.exit(1);
   }
-  console.log("OK:    1-byte tamper of agentProof rejected");
+  console.log("OK:    tampered agentProof rejected (verified=false)");
+  // snarkjs/ffjavascript leave worker threads + open handles after
+  // groth16.verify. Without an explicit exit, node -e can sit idle
+  // and block deploy.sh on the implicit shell timeout.
+  process.exit(0);
 })().catch((e) => { console.error("FAIL: tamper test threw unexpectedly:", e); process.exit(1); });
 ' ) || fail "tamper-rejection runtime gate failed"
 
