@@ -1,0 +1,122 @@
+name: Release
+
+# Trusted-publishing workflow for the four @bolyra/* npm packages.
+#
+# Trigger: push of a per-package tag matching @bolyra/<pkg>@<version>.
+# Cohort releases (v0.x.0) are out of scope here — they can be added once
+# the cohort moves again. Per-package patches are the active pattern.
+#
+# Auth: no NPM_TOKEN. The job exchanges its GitHub Actions OIDC token for
+# a short-lived npm publish credential, which requires a Trusted Publisher
+# config on the npm package side (npmjs.com → package → Settings → Trusted
+# Publisher → Add: GitHub Actions / org=bolyra / repo=bolyra / workflow=
+# .github/workflows/release.yml / environment=npm-publish). Do this once
+# per package before the first OIDC publish; otherwise npm publish 401s.
+#
+# Provenance: --provenance attaches a signed SLSA attestation to the
+# tarball linking it back to this workflow run + the source commit.
+# Consumers can verify via `npm audit signatures`.
+
+on:
+  push:
+    tags:
+      - '@bolyra/sdk@*'
+      - '@bolyra/payment-protocols@*'
+      - '@bolyra/mcp@*'
+      - '@bolyra/openclaw@*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      id-token: write    # required for npm trusted publishing
+      contents: read
+
+    steps:
+      - name: Parse tag → package + version
+        id: tag
+        run: |
+          # Tag shape: @bolyra/<pkg>@<version>
+          REF="${GITHUB_REF#refs/tags/}"
+          if [[ ! "$REF" =~ ^@bolyra/([a-z-]+)@(.+)$ ]]; then
+            echo "ERROR: tag '$REF' does not match @bolyra/<pkg>@<version>" >&2
+            exit 1
+          fi
+          PKG="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
+
+          case "$PKG" in
+            sdk)                DIR=sdk ;;
+            payment-protocols)  DIR=integrations/payment-protocols ;;
+            mcp)                DIR=integrations/mcp ;;
+            openclaw)           DIR=integrations/openclaw ;;
+            *)                  echo "ERROR: unknown package '$PKG'" >&2; exit 1 ;;
+          esac
+
+          echo "pkg=$PKG"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dir=$DIR"         >> "$GITHUB_OUTPUT"
+          echo "Releasing @bolyra/$PKG@$VERSION from $DIR"
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package.json version matches tag
+        working-directory: ${{ steps.tag.outputs.dir }}
+        run: |
+          PJ_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PJ_VERSION" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "ERROR: tag version ${{ steps.tag.outputs.version }} does not match package.json version $PJ_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Install
+        working-directory: ${{ steps.tag.outputs.dir }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (if build script exists)
+        working-directory: ${{ steps.tag.outputs.dir }}
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then
+            npm run build
+          else
+            echo "(no build script — skipping)"
+          fi
+
+      - name: Test (if test script exists)
+        working-directory: ${{ steps.tag.outputs.dir }}
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            npm test
+          else
+            echo "(no test script — skipping)"
+          fi
+
+      - name: Publish with provenance
+        working-directory: ${{ steps.tag.outputs.dir }}
+        run: npm publish --provenance --access public
+
+      - name: Verify on registry
+        run: |
+          # Give npm CDN ~10s to surface the new version.
+          for i in 1 2 3 4 5 6; do
+            FOUND=$(npm view "@bolyra/${{ steps.tag.outputs.pkg }}@${{ steps.tag.outputs.version }}" version 2>/dev/null || true)
+            if [ "$FOUND" = "${{ steps.tag.outputs.version }}" ]; then
+              echo "✓ @bolyra/${{ steps.tag.outputs.pkg }}@${{ steps.tag.outputs.version }} resolves on registry"
+              exit 0
+            fi
+            echo "registry CDN lag (attempt $i/6) — sleeping 5s"
+            sleep 5
+          done
+          echo "ERROR: published but not yet resolvable on registry" >&2
+          exit 1
