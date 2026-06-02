@@ -624,6 +624,9 @@
 }, { privateKey: issuer.privateKey, kid: <span class="str">'k1'</span> });
 
 <span class="cm">// 2. Agent presents the receipt with a fresh server nonce (KB-JWT binding).</span>
+<span class="cm">//    `serverNonce` is the 32-byte random the merchant returned on its prior</span>
+<span class="cm">//    HTTP 402 response (`Bolyra-Challenge` header) — see /402 for the flow.</span>
+<span class="kw">const</span> serverNonce <span class="op">=</span> <span class="fn">crypto</span>.<span class="fn">randomUUID</span>();   <span class="cm">// in production: read from 402 response</span>
 <span class="kw">const</span> presented <span class="op">=</span> <span class="kw">await</span> <span class="fn">present</span>(receipt, holder.privateKey, {
   audience: <span class="str">'https://merchant.example'</span>,
   nonce:    serverNonce,
@@ -659,6 +662,13 @@
   <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
   <span class="fn">proveHandshake</span>, <span class="fn">verifyHandshake</span>, Permission,
 } <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
+
+<span class="cm">// 0. Fixtures — replace with your production values.</span>
+<span class="cm">//    secret: BN254-safe scalar; modelHash: Poseidon hash of the AI model id;</span>
+<span class="cm">//    operatorPrivKey: EdDSA-on-Baby-Jubjub private key held by the AI operator.</span>
+<span class="kw">const</span> humanSecret     <span class="op">=</span> <span class="num">12345678901234567890n</span>;
+<span class="kw">const</span> modelHash       <span class="op">=</span> <span class="num">0xabc1234567890n</span>;
+<span class="kw">const</span> operatorPrivKey <span class="op">=</span> <span class="str">'0x' </span><span class="op">+</span> <span class="str">'11'</span>.<span class="fn">repeat</span>(<span class="num">32</span>);
 
 <span class="cm">// 1. Human + agent enroll once. Commitments go on-chain; secrets never leave.</span>
 <span class="kw">const</span> human <span class="op">=</span> <span class="kw">await</span> <span class="fn">createHumanIdentity</span>(humanSecret);
@@ -714,7 +724,13 @@
       <div class="code-block-wrapper">
         <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
         <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> { <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
-         <span class="type">Permission</span>, <span class="fn">proveHandshake</span> } <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
+         <span class="type">Permission</span>, <span class="fn">proveHandshake</span>, <span class="fn">verifyHandshake</span> } <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
+
+<span class="cm">// Fixtures — replace with your production values.</span>
+<span class="kw">const</span> secretScalar    <span class="op">=</span> <span class="num">12345678901234567890n</span>;
+<span class="kw">const</span> modelHash       <span class="op">=</span> <span class="num">0xabc1234567890n</span>;
+<span class="kw">const</span> operatorKey     <span class="op">=</span> <span class="str">'0x' </span><span class="op">+</span> <span class="str">'11'</span>.<span class="fn">repeat</span>(<span class="num">32</span>);
+<span class="kw">const</span> expiryTimestamp <span class="op">=</span> <span class="fn">BigInt</span>(<span class="fn">Math.floor</span>(<span class="fn">Date.now</span>() <span class="op">/</span> <span class="num">1000</span>) <span class="op">+</span> <span class="num">86400</span>);
 
 <span class="cm">// Human creates identity (EdDSA keypair + Poseidon commitment)</span>
 <span class="kw">const</span> human <span class="op">=</span> <span class="kw">await</span> <span class="fn">createHumanIdentity</span>(secretScalar);
@@ -729,8 +745,8 @@
 <span class="cm">// Mutual handshake — both Groth16 proofs generated in parallel (&lt;200ms with rapidsnark)</span>
 <span class="kw">const</span> { humanProof, agentProof, nonce } <span class="op">=</span> <span class="kw">await</span> <span class="fn">proveHandshake</span>(human, agent);
 
-<span class="cm">// Verify on-chain (Base L2, ~590k gas, ~$0.15)</span>
-<span class="kw">await</span> registry.<span class="fn">verifyHandshake</span>(humanProof, agentProof, nonce);</code></pre>
+<span class="cm">// Verify off-chain (or submit to IdentityRegistry.verifyHandshake on Base L2 for ~590k gas)</span>
+<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verifyHandshake</span>(humanProof, agentProof, nonce);</code></pre>
       </div>
     </div>
   </section>
