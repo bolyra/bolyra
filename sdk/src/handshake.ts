@@ -171,7 +171,11 @@ export async function verifyHandshake(
   nonce: bigint,
   config?: BolyraConfig,
 ): Promise<HandshakeResult> {
-  const circuitDir = config?.circuitDir ?? DEFAULT_CIRCUIT_DIR;
+  // Resolve relative paths against process.cwd() so callers can pass
+  // `./demo` or any project-relative location without hitting the
+  // cryptic "Cannot find module 'demo/HumanUniqueness_vkey.json'"
+  // require() error.
+  const circuitDir = path.resolve(config?.circuitDir ?? DEFAULT_CIRCUIT_DIR);
 
   // Validate proof structure before verification
   if (!humanProof || !humanProof.proof || !Array.isArray(humanProof.publicSignals)) {
@@ -186,17 +190,55 @@ export async function verifyHandshake(
         'Ensure you are passing the proof object returned by proveHandshake().'
     );
   }
-  if (humanProof.publicSignals.length < 2) {
+  // HumanUniqueness publicSignals layout (length 5):
+  //   [0] humanMerkleRoot   [1] nullifierHash   [2] nonceBinding
+  //   [3] scope             [4] sessionNonce
+  if (humanProof.publicSignals.length < 5) {
     throw new VerificationError(
-      `humanProof has ${humanProof.publicSignals.length} public signals, expected at least 2. ` +
+      `humanProof has ${humanProof.publicSignals.length} public signals, expected at least 5. ` +
         'The proof may have been generated with an incompatible circuit version.'
     );
   }
-  if (agentProof.publicSignals.length < 3) {
+  // AgentPolicy publicSignals layout (length 6):
+  //   [0] agentMerkleRoot   [1] nullifierHash   [2] scopeCommitment
+  //   [3] requiredScopeMask [4] currentTimestamp [5] sessionNonce
+  if (agentProof.publicSignals.length < 6) {
     throw new VerificationError(
-      `agentProof has ${agentProof.publicSignals.length} public signals, expected at least 3. ` +
+      `agentProof has ${agentProof.publicSignals.length} public signals, expected at least 6. ` +
         'The proof may have been generated with an incompatible circuit version.'
     );
+  }
+
+  // Bind the nonce argument to the nonce that each circuit committed
+  // to. Without this, the `nonce` parameter is decorative: snarkjs
+  // verifies the proof against its embedded publicSignals regardless
+  // of what the caller passed, and the returned `sessionNonce` would
+  // echo a value that was never cryptographically bound to the proof.
+  // Refuse to claim verified=true whenever drift is detected.
+  //
+  // publicSignals are caller-supplied strings; a malformed entry would
+  // otherwise turn the fail-closed drift branch into a thrown
+  // exception. tryBigInt() yields `null` on parse failure, which is
+  // never equal to `nonce` (forcing the drift return) and is rendered
+  // as 0n in the returned nullifier/scope fields so the caller still
+  // gets a well-typed `HandshakeResult` with `verified: false`.
+  const tryBigInt = (s: string): bigint | null => {
+    try {
+      return BigInt(s);
+    } catch {
+      return null;
+    }
+  };
+  const humanNonceCommitted = tryBigInt(humanProof.publicSignals[4]);
+  const agentNonceCommitted = tryBigInt(agentProof.publicSignals[5]);
+  if (humanNonceCommitted !== nonce || agentNonceCommitted !== nonce) {
+    return {
+      humanNullifier: tryBigInt(humanProof.publicSignals[1]) ?? 0n,
+      agentNullifier: tryBigInt(agentProof.publicSignals[1]) ?? 0n,
+      sessionNonce: nonce,
+      scopeCommitment: tryBigInt(agentProof.publicSignals[2]) ?? 0n,
+      verified: false,
+    };
   }
 
   // Verify vkey files exist

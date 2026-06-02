@@ -40,13 +40,78 @@ describe('proveHandshake', () => {
 });
 
 describe('verifyHandshake', () => {
-  it('requires valid proof objects with publicSignals', async () => {
-    const mockProof = { proof: {}, publicSignals: ['0', '1', '2'] };
-    // Will fail because vkey files don't exist at default path in test
+  // HumanUniqueness publicSignals layout (length 5):
+  //   [0] humanMerkleRoot [1] nullifierHash [2] nonceBinding
+  //   [3] scope           [4] sessionNonce
+  const makeHumanProof = (sessionNonce: string) => ({
+    proof: {},
+    publicSignals: ['10', '11', '12', '13', sessionNonce],
+  });
+  // AgentPolicy publicSignals layout (length 6):
+  //   [0] agentMerkleRoot [1] nullifierHash [2] scopeCommitment
+  //   [3] requiredScopeMask [4] currentTimestamp [5] sessionNonce
+  const makeAgentProof = (sessionNonce: string) => ({
+    proof: {},
+    publicSignals: ['20', '21', '22', '23', '24', sessionNonce],
+  });
+
+  it('rejects proofs with too few public signals', async () => {
+    const shortProof = { proof: {}, publicSignals: ['0', '1', '2'] };
     await expect(
-      verifyHandshake(mockProof, mockProof, 1n, {
+      verifyHandshake(shortProof, shortProof, 1n, {
         circuitDir: '/nonexistent/path',
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/public signals/);
+  });
+
+  it('returns verified=false when human sessionNonce does not match arg', async () => {
+    const nonce = 1234n;
+    const result = await verifyHandshake(
+      makeHumanProof('9999'), // committed nonce != 1234
+      makeAgentProof(nonce.toString()),
+      nonce,
+      { circuitDir: '/nonexistent/path' },
+    );
+    expect(result.verified).toBe(false);
+    expect(result.sessionNonce).toBe(nonce);
+  });
+
+  it('returns verified=false when agent sessionNonce does not match arg', async () => {
+    const nonce = 1234n;
+    const result = await verifyHandshake(
+      makeHumanProof(nonce.toString()),
+      makeAgentProof('9999'), // committed nonce != 1234
+      nonce,
+      { circuitDir: '/nonexistent/path' },
+    );
+    expect(result.verified).toBe(false);
+  });
+
+  it('returns verified=false on malformed public signals (fail-closed)', async () => {
+    const nonce = 1234n;
+    const garbage = {
+      proof: {},
+      publicSignals: ['not-a-number', 'also-bad', 'still-bad', 'x', 'y', 'z'],
+    };
+    const result = await verifyHandshake(garbage, garbage, nonce, {
+      circuitDir: '/nonexistent/path',
+    });
+    expect(result.verified).toBe(false);
+    expect(result.sessionNonce).toBe(nonce);
+    expect(result.humanNullifier).toBe(0n);
+    expect(result.agentNullifier).toBe(0n);
+    expect(result.scopeCommitment).toBe(0n);
+  });
+
+  it('throws when both nonces match but vkey files are absent', async () => {
+    const nonce = 1234n;
+    await expect(
+      verifyHandshake(
+        makeHumanProof(nonce.toString()),
+        makeAgentProof(nonce.toString()),
+        nonce,
+        { circuitDir: '/nonexistent/path' },
+      ),
+    ).rejects.toThrow(/vkey/i);
   });
 });
