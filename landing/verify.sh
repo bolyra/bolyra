@@ -82,7 +82,7 @@ pass "@bolyra/payment-protocols@0.3.1 resolves on npm"
 # preceding 14h X402 outage is what motivated this check (verify.sh saw the
 # string in HTML, but createX402Authorization was missing from 0.3.0).
 echo "→ runtime symbol resolution against published packages"
-SDK_VERSION="0.3.0"
+SDK_VERSION="0.3.1"
 PP_VERSION="0.3.1"
 WORKDIR=$(mktemp -d /tmp/bolyra-verify.XXXXXX)
 trap 'rm -rf "$WORKDIR" "$TMP"' EXIT

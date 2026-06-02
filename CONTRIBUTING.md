@@ -110,6 +110,51 @@ rights pool.
 - Circom: keep circuit constraints minimal; document any new public input.
 - Tests: write a failing test before fixing a bug.
 
+## Signing commits and tags
+
+DCO sign-off (the `Signed-off-by:` trailer) is a legal attestation, not a
+cryptographic signature. Separate from DCO, contributors may cryptographically
+sign their commits and maintainers must sign release tags. Both use the same
+SSH key configuration.
+
+### One-time setup (SSH signing)
+
+```bash
+# Tell git to sign with SSH instead of GPG
+git config --global gpg.format ssh
+
+# Point at your SSH public key (any key already on your GitHub account works)
+git config --global user.signingkey ~/.ssh/id_ed25519.pub
+
+# Auto-sign tags (maintainers — required for release tags)
+git config --global tag.gpgsign true
+
+# Optional: auto-sign every commit (contributors — recommended)
+git config --global commit.gpgsign true
+```
+
+Then upload the same public key to GitHub a second time as a **signing key**:
+Settings → SSH and GPG keys → New SSH key → Key type "Signing Key". The same
+key can be registered for both authentication and signing — they're separate
+entries. Once registered, GitHub displays a "Verified" badge next to your
+commits and tags.
+
+### Verifying signatures locally
+
+```bash
+echo "$(git config user.email) $(cat ~/.ssh/id_ed25519.pub | cut -d' ' -f1-2)" >> ~/.ssh/allowed_signers
+git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
+```
+
+Then `git log --show-signature` and `git tag -v <tag>` will show signature
+status.
+
+### Release tags (maintainer policy)
+
+All cohort releases (`v0.x.0`) and per-package patches
+(`@bolyra/<pkg>@0.x.N`) must carry a verified signature. Force-pushing or
+rewriting a published signed tag is prohibited.
+
 ## Reporting security issues
 
 Do not file public issues for security vulnerabilities. See `SECURITY.md` for
