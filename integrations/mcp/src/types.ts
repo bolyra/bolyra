@@ -65,6 +65,8 @@ export interface BolyraProofBundle {
    * v=2 only.
    */
   delegationChain?: BolyraDelegationLink[];
+  /** Present and true only in dev-mode bundles. Not a security boundary. */
+  _dev?: boolean;
 }
 
 /**
@@ -121,12 +123,14 @@ export interface BolyraMcpConfig {
    * the handshake itself verified — no extra permission check.
    */
   toolPolicy?: ToolPermissionPolicy;
+  /** Enable dev mode — mock verification, no circuit artifacts needed. */
+  devMode?: boolean;
   /**
    * Resolves a credential commitment (decimal string) to the AgentCredential
    * the verifier should check against. Backed by your credential registry —
    * a database, the on-chain registry, an in-memory map for tests.
    */
-  resolveCredential: (
+  resolveCredential?: (
     credentialCommitment: string,
   ) => Promise<AgentCredential | null>;
   /** SDK config passthrough (rpc/registry/circuit dirs). */
