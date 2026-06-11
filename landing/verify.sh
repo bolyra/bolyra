@@ -42,7 +42,7 @@ declare -a NEEDLES=(
   "@bolyra/payment-protocols"
   "createX402Authorization"
   "verifyX402Authorization"
-  "48 vectors"
+  "49 vectors"
   'role="tablist"'
   'aria-selected'
 )
