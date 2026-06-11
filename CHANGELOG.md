@@ -17,6 +17,54 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.5.0] — 2026-06-11
+
+The **unified commerce authorization** release. One API answers whether
+a commerce intent is authorized across all payment rails.
+
+### Cohort version state after this release
+
+| Package | npm / PyPI version | Notes |
+|---|---|---|
+| `@bolyra/sdk` | 0.4.0 | unchanged |
+| `@bolyra/mcp` | 0.4.0 | unchanged |
+| `@bolyra/payment-protocols` | 0.5.0 | commerce authorization layer, x402 hardening |
+| `@bolyra/openclaw` | 0.3.0 | unchanged |
+| `bolyra` (PyPI) | 0.3.0 | unchanged |
+
+### Added
+
+#### Payment Protocols (`@bolyra/payment-protocols` 0.3.1 → 0.5.0)
+
+- **`authorizeCommerceIntent(input)`** — unified commerce authorization
+  across all payment rails. Accepts a `CommerceIntent` (amount, currency,
+  merchant, rail, operation) plus the rail-specific adapter result. Returns
+  a uniform `CommerceAuthorizationDecision` with `allowed`, `did`, `score`,
+  `grade`, `warnings`, and an unsigned `CommerceAuthorizationReceipt`.
+- **Stripe ACP** and **x402** fully wired. **Visa TAP** and **Google AP2**
+  stubbed fail-closed with clear reason string.
+- `CommerceAuthorizationReceipt` — deterministic unsigned receipt for
+  logging and audit (signed receipts deferred to v0.6.0).
+
+### Fixed
+
+- **x402: credential resolution is now a hard gate.** Previously an
+  unresolved credential scored 80/100 and passed the default minScore:70
+  threshold. Now `credentialResolved` must be `true` for `verified` to be
+  `true`. This is a **breaking change** for consumers that relied on the
+  old behavior.
+- **x402: currency match is now checked.** `verifyX402Authorization()`
+  now compares `requirements.asset` against `bundle.spendPolicy.currency`
+  (case-insensitive). Mismatches deny with a clear warning.
+- `X402VerifyDecision` gains `credentialResolved: boolean` and
+  `currency: string` fields.
+
+### Migration
+
+- `@bolyra/sdk` dep bumped from `^0.3.0` to `^0.4.0`.
+- `X402VerifyDecision` has 2 new required fields — update any code that
+  constructs or destructures this type.
+
 ## [0.4.0] — 2026-06-10
 
 The **dev-mode release**. Adds a complete zero-friction developer path — no circuit artifacts, no trusted setup, instant local iteration — while tightening several correctness issues found during the v0.3 integration work.
