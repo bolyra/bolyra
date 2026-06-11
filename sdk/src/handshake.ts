@@ -14,6 +14,11 @@ import { proveGroth16, ProverBackend } from './prover';
 // Default paths to circuit artifacts (relative to package root)
 const DEFAULT_CIRCUIT_DIR = path.join(__dirname, '../../circuits/build');
 
+/** Default nonce: Unix seconds (not milliseconds). */
+export function defaultNonce(): bigint {
+  return BigInt(Math.floor(Date.now() / 1000));
+}
+
 /**
  * Generate a mutual handshake proof (human + agent).
  * Both proofs can be generated in parallel for wall-clock optimization.
@@ -44,7 +49,7 @@ export async function proveHandshake(
   },
 ): Promise<{ humanProof: Proof; agentProof: Proof; nonce: bigint }> {
   const scope = options?.scope ?? 1n;
-  const nonce = options?.nonce ?? BigInt(Date.now());
+  const nonce = options?.nonce ?? defaultNonce();
   const circuitDir = options?.config?.circuitDir ?? DEFAULT_CIRCUIT_DIR;
   const backend = options?.backend ?? 'auto';
 

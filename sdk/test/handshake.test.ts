@@ -1,4 +1,4 @@
-import { proveHandshake, verifyHandshake } from '../src/handshake';
+import { proveHandshake, verifyHandshake, defaultNonce } from '../src/handshake';
 import { ProofGenerationError } from '../src/errors';
 import { HumanIdentity, AgentCredential } from '../src/types';
 
@@ -16,6 +16,18 @@ const mockAgent: AgentCredential = {
   signature: { R8: { x: 1n, y: 2n }, S: 3n },
   commitment: 400n,
 };
+
+describe('proveHandshake nonce unit', () => {
+  it('defaultNonce returns Unix seconds, not milliseconds', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const nonce = defaultNonce();
+    // Must be within 2 seconds of current Unix time
+    expect(Number(nonce)).toBeGreaterThanOrEqual(now - 2);
+    expect(Number(nonce)).toBeLessThanOrEqual(now + 2);
+    // Must NOT be in milliseconds (13+ digits)
+    expect(nonce.toString().length).toBeLessThanOrEqual(10);
+  });
+});
 
 describe('proveHandshake', () => {
   it('throws ProofGenerationError when circuit artifacts are missing', async () => {
