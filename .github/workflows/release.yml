@@ -104,6 +104,10 @@ jobs:
 
       - name: Publish with provenance
         working-directory: ${{ steps.tag.outputs.dir }}
+        # Unset NODE_AUTH_TOKEN so npm uses OIDC trusted publishing
+        # instead of the GitHub token that setup-node auto-injects.
+        env:
+          NODE_AUTH_TOKEN: ''
         run: npm publish --provenance --access public
 
       - name: Verify on registry
