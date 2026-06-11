@@ -12,7 +12,13 @@ import type {
   BolyraProofBundle,
   BolyraClientAuth,
   BolyraDelegationLink,
+  Proof,
 } from './types';
+
+export interface AttachProofOptions {
+  devMode?: boolean;
+  sdkConfig?: BolyraConfig;
+}
 
 /**
  * One delegation hop the caller wants the helper to produce a proof for.
@@ -56,13 +62,50 @@ export interface DelegationHopSpec {
 export async function attachBolyraProof(
   human: HumanIdentity,
   credential: AgentCredential,
-  sdkConfig?: BolyraConfig,
+  options?: AttachProofOptions,
 ): Promise<BolyraClientAuth> {
+  // Dev mode: skip real ZKP proving — return mock proofs.
+  if (options?.devMode) {
+    const nonce = BigInt(Math.floor(Date.now() / 1000));
+    const mockProofStrings = Array.from({ length: 8 }, () =>
+      BigInt(Math.floor(Math.random() * 2 ** 32)).toString(),
+    );
+    const humanProof: Proof = {
+      proof: mockProofStrings as any,
+      publicSignals: ['0', '0', '0', '0', nonce.toString()],
+    };
+    const agentProof: Proof = {
+      proof: mockProofStrings as any,
+      publicSignals: [
+        '0',
+        '0',
+        credential.commitment.toString(),
+        credential.permissionBitmask.toString(),
+        credential.expiryTimestamp.toString(),
+        nonce.toString(),
+      ],
+    };
+    const bundle: BolyraProofBundle = {
+      v: 1,
+      humanProof,
+      agentProof,
+      nonce: nonce.toString(),
+      credentialCommitment: credential.commitment.toString(),
+      _dev: true,
+    };
+    const encoded = Buffer.from(JSON.stringify(bundle), 'utf8').toString('base64');
+    return {
+      headers: { Authorization: `Bolyra ${encoded}` },
+      meta: { bolyra: bundle },
+      bundle,
+    };
+  }
+
   const sdk = await import('@bolyra/sdk');
   const { humanProof, agentProof, nonce } = await sdk.proveHandshake(
     human,
     credential,
-    { config: sdkConfig },
+    { config: options?.sdkConfig },
   );
 
   const bundle: BolyraProofBundle = {
@@ -114,14 +157,20 @@ export async function attachDelegatedBolyraProof(
   human: HumanIdentity,
   rootCredential: AgentCredential,
   hops: DelegationHopSpec[],
-  sdkConfig?: BolyraConfig,
+  options?: AttachProofOptions,
 ): Promise<BolyraClientAuth> {
   if (hops.length === 0) {
     // No delegation requested — fall back to handshake-only bundle.
-    return attachBolyraProof(human, rootCredential, sdkConfig);
+    return attachBolyraProof(human, rootCredential, options);
+  }
+
+  // Dev mode: skip delegation proving — return a v=1 bundle (no chain).
+  if (options?.devMode) {
+    return attachBolyraProof(human, rootCredential, options);
   }
 
   const sdk = await import('@bolyra/sdk');
+  const sdkConfig = options?.sdkConfig;
   const { humanProof, agentProof, nonce } = await sdk.proveHandshake(
     human,
     rootCredential,
