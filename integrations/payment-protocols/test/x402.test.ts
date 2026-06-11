@@ -132,4 +132,49 @@ describe('verifyX402Authorization', () => {
     expect(r.score).toBeLessThanOrEqual(40);
     expect(r.verified).toBe(false);
   });
+
+  test('unresolved credential → verified false + credentialResolved false', async () => {
+    const r = await verifyX402Authorization(
+      makeBundle({ spendPolicy: { maxTransactionAmount: 50_000, currency: 'USDC' } }),
+      REQS,
+      resolveNone,
+    );
+    expect(r.verified).toBe(false);
+    expect(r.credentialResolved).toBe(false);
+    expect(r.warnings.some((w) => /unresolved did/.test(w))).toBe(true);
+  });
+
+  test('currency mismatch → verified false + warning', async () => {
+    const r = await verifyX402Authorization(
+      makeBundle({ spendPolicy: { maxTransactionAmount: 50_000, currency: 'DAI' } }),
+      REQS, // asset='USDC'
+      resolveSome,
+    );
+    expect(r.verified).toBe(false);
+    expect(r.warnings.some((w) => /currency mismatch/.test(w))).toBe(true);
+  });
+
+  test('happy path: credentialResolved is true when resolver returns a credential', async () => {
+    const r = await verifyX402Authorization(
+      makeBundle({ spendPolicy: { maxTransactionAmount: 50_000, currency: 'USDC' } }),
+      REQS,
+      resolveSome,
+    );
+    expect(r.credentialResolved).toBe(true);
+  });
+
+  test('currency field is populated from the bundle spend policy', async () => {
+    const r = await verifyX402Authorization(
+      makeBundle({ spendPolicy: { maxTransactionAmount: 50_000, currency: 'USDC' } }),
+      REQS,
+      resolveSome,
+    );
+    expect(r.currency).toBe('USDC');
+  });
+
+  test('rejection helper returns credentialResolved false and empty currency', async () => {
+    const r = await verifyX402Authorization('!!!not-valid!!!', REQS, resolveNone);
+    expect(r.credentialResolved).toBe(false);
+    expect(r.currency).toBe('');
+  });
 });

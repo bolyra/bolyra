@@ -102,6 +102,10 @@ export interface X402VerifyDecision {
   sessionNonce: bigint;
   /** Soft signals (resolver miss, policy gaps, ZK errors) collected during verify. */
   warnings: string[];
+  /** Whether the credential was resolved via the resolver. */
+  credentialResolved: boolean;
+  /** Currency/asset from the bundle's spend policy. */
+  currency: string;
 }
 
 /**
@@ -366,13 +370,21 @@ export async function verifyX402Authorization(
     );
   }
 
+  // Step 5 — currency match
+  const currencyMatch = requirements.asset.toLowerCase() === bundle.spendPolicy.currency.toLowerCase();
+  if (!currencyMatch) {
+    warnings.push(
+      `currency mismatch: required ${requirements.asset}, bundle offers ${bundle.spendPolicy.currency}`,
+    );
+  }
+
   // Score composition
   let score = 0;
   if (zkVerified) score += 60;
   if (credentialResolved) score += 20;
   if (policyFit) score += 20;
 
-  const verified = zkVerified && policyFit && score >= cfg.minScore;
+  const verified = zkVerified && credentialResolved && policyFit && currencyMatch && score >= cfg.minScore;
 
   return {
     verified,
@@ -382,6 +394,8 @@ export async function verifyX402Authorization(
     scopeCommitment,
     sessionNonce,
     warnings,
+    credentialResolved,
+    currency: bundle.spendPolicy.currency,
   };
 
   function rejection(reason: string): X402VerifyDecision {
@@ -393,6 +407,8 @@ export async function verifyX402Authorization(
       scopeCommitment: 0n,
       sessionNonce: 0n,
       warnings: [reason],
+      credentialResolved: false,
+      currency: '',
     };
   }
 }
