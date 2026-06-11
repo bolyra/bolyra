@@ -303,10 +303,11 @@ function verifyDevBundle(
     return failCtx(e instanceof Error ? e.message : String(e));
   }
 
-  // Extract credential fields from agent proof public signals.
+  // Production signal layout: [3] = requiredScopeMask (same as permissionBitmask).
+  // Expiry is a private circuit input — not in public signals. In dev mode
+  // we skip the expiry check (synthetic credential, always valid).
   const agentSignals = bundle.agentProof.publicSignals;
   const permissionBitmask = agentSignals[3] ? BigInt(agentSignals[3]) : 0n;
-  const expiryTimestamp = agentSignals[4] ? BigInt(agentSignals[4]) : 0n;
 
   const warnings: string[] = [];
   let score = 0;
@@ -314,13 +315,9 @@ function verifyDevBundle(
   // "ZKP passes" — in dev mode we always grant this.
   score += 40;
 
-  // Expiry check.
+  // Expiry: dev credentials are always valid (expiry is not in public signals).
   const now = BigInt(Math.floor(Date.now() / 1000));
-  if (expiryTimestamp > now) {
-    score += 20;
-  } else {
-    warnings.push(`Credential expired at ${expiryTimestamp} (current: ${now})`);
-  }
+  score += 20;
 
   // Permission check.
   let effectivePermissions = permissionBitmask;

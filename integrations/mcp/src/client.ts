@@ -74,15 +74,19 @@ export async function attachBolyraProof(
       proof: mockProofStrings as any,
       publicSignals: ['0', '0', '0', '0', nonce.toString()],
     };
+    // Production AgentPolicy signal layout per spec:
+    // [0] agentMerkleRoot, [1] nullifierHash, [2] scopeCommitment,
+    // [3] requiredScopeMask, [4] currentTimestamp, [5] sessionNonce
+    const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
     const agentProof: Proof = {
       proof: mockProofStrings as any,
       publicSignals: [
-        '0',
-        '0',
-        credential.commitment.toString(),
-        credential.permissionBitmask.toString(),
-        credential.expiryTimestamp.toString(),
-        nonce.toString(),
+        '0',                                          // agentMerkleRoot
+        '0',                                          // nullifierHash
+        credential.commitment.toString(),             // scopeCommitment
+        credential.permissionBitmask.toString(),      // requiredScopeMask
+        currentTimestamp.toString(),                   // currentTimestamp
+        nonce.toString(),                             // sessionNonce
       ],
     };
     const bundle: BolyraProofBundle = {
