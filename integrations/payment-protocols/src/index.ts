@@ -57,6 +57,16 @@ export type {
   X402Config,
 } from './x402';
 
+// Commerce Authorization Layer
+export { authorizeCommerceIntent } from './commerce-intent';
+export type {
+  CommerceRail,
+  CommerceIntent,
+  CommerceAuthorizationInput,
+  CommerceAuthorizationDecision,
+  CommerceAuthorizationReceipt,
+} from './commerce-intent';
+
 // Types
 export type {
   SpendPolicy,
