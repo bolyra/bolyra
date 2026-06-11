@@ -40,6 +40,13 @@ export function withBolyraAuthStdio<T extends McpServerLike>(
   server: T,
   config: BolyraMcpConfig,
 ): T {
+  if (!config.devMode && !config.resolveCredential) {
+    throw new Error(
+      '@bolyra/mcp: resolveCredential is required when devMode is not enabled. ' +
+      'Provide a credential resolver or set devMode: true for testing.',
+    );
+  }
+
   // Snapshot whatever handler the McpServer already installed for tools/call.
   // The high-level McpServer registers one when you call registerTool() — it
   // dispatches by tool name. We need to call into that after auth succeeds.

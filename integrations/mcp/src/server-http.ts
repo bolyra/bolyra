@@ -61,6 +61,13 @@ export function bolyraAuthMiddleware(config: BolyraMcpHttpConfig) {
   const scheme = config.authScheme ?? DEFAULT_SCHEME;
   const schemePrefix = `${scheme} `;
 
+  if (!config.devMode && !config.resolveCredential) {
+    throw new Error(
+      '@bolyra/mcp: resolveCredential is required when devMode is not enabled. ' +
+      'Provide a credential resolver or set devMode: true for testing.',
+    );
+  }
+
   return async (req: HttpReq, res: HttpRes, next: Next): Promise<void> => {
     // Only gate JSON-RPC tool calls. initialize / tools/list / notifications
     // are part of discovery and travel unauthenticated, mirroring how OAuth
