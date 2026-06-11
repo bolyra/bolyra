@@ -71,7 +71,7 @@ const registry = new ethers.Contract(
 const tx = await registry.verifyHandshake(
   formatGroth16Proof(humanProof),
   humanProof.publicSignals,
-  formatPlonkProof(agentProof),
+  formatGroth16Proof(agentProof),
   agentProof.publicSignals,
   nonce,
 );
@@ -89,7 +89,7 @@ console.log('TX:', tx.hash);
 ## Next Steps
 
 - [Full API Reference](./README.md)
-- [IETF Protocol Specification](../spec/draft-bolyra-mutual-zkp-auth-00.md)
+- [IETF Protocol Specification](../spec/draft-bolyra-mutual-zkp-auth-01.md)
 - [LangChain Integration](../integrations/langchain/README.md)
 - [Base Sepolia Deployment](../contracts/deployments/base-sepolia.json)
 
@@ -98,6 +98,6 @@ console.log('TX:', tx.hash);
 | Contract | Address |
 |----------|---------|
 | IdentityRegistry | `0x2781dF8b6381462d881C833Fb703d68c661c9577` |
-| Groth16Verifier | `0x5467FCbebeEff1824F4589Dd64ab01Cf9ccd46bE` |
-| PlonkVerifier | `0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db` |
-| DelegationVerifier | `0x285D2E315AdD9c82337d8a4BDF567AB3a9215B93` |
+| HumanGroth16Verifier | `0x5467FCbebeEff1824F4589Dd64ab01Cf9ccd46bE` |
+| AgentGroth16Verifier | `0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db` |
+| DelegationGroth16Verifier | `0x285D2E315AdD9c82337d8a4BDF567AB3a9215B93` |

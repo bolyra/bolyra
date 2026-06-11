@@ -17,6 +17,56 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.4.0] — 2026-06-10
+
+The **dev-mode release**. Adds a complete zero-friction developer path — no circuit artifacts, no trusted setup, instant local iteration — while tightening several correctness issues found during the v0.3 integration work.
+
+### Cohort version state after this release
+
+| Package | npm / PyPI version | Notes |
+|---|---|---|
+| `@bolyra/sdk` | 0.4.0 | dev mode, signal alignment, nonce fix |
+| `@bolyra/mcp` | 0.4.0 | dev mode server/client, HTTP auth context fix |
+| `@bolyra/payment-protocols` | 0.3.1 | unchanged |
+| `@bolyra/openclaw` | 0.3.0 | unchanged |
+| `bolyra` (PyPI) | 0.3.0 | unchanged |
+
+### Added
+
+#### SDK (`@bolyra/sdk` 0.3.1 → 0.4.0)
+
+- **`createDevIdentities(options?)`** — returns fixed-seed `{ human, agent, operatorKey }` without requiring circuit artifacts. All values are deterministic. Logs a one-time `console.warn` on first call. Options: `permissionBitmask` (default 0b11111111), `expiryTimestamp` (default 2099-12-31). (#42)
+- **Mock proving in `attachBolyraProof`** — pass `devMode: true` to skip real Groth16 proving and emit a mock bundle (`_dev: true`). The bundle carries the commitment so server-side policy checks still fire. (#42)
+
+#### MCP (`@bolyra/mcp` 0.3.0 → 0.4.0)
+
+- **`devMode` config flag** — when set, `withBolyraAuthStdio` and `bolyraAuthMiddleware` accept mock bundles (`_dev: true`) and skip ZKP verification. `resolveCredential` is also optional in dev mode. Safe to leave on in local development; never enable in production. (#42)
+- **Protected file server example** (`integrations/mcp/examples/protected-file-server/`) — complete stdio server + client pair using dev mode. Demonstrates per-tool `READ_DATA` / `WRITE_DATA` gating with `createDevIdentities`. (#43)
+- **Integration test** (`integrations/mcp/test/dev-mode-e2e.test.ts`) — subprocess end-to-end: spawns the protected-file-server process, exercises tool calls with valid and permission-denied bundles, asserts correct pass/reject behavior. (#44)
+
+### Fixed
+
+#### SDK (`@bolyra/sdk`)
+
+- **Nonce unit mismatch** — `proveHandshake` was passing `Date.now()` (milliseconds) as the session nonce into the circuit, but `verifyHandshake` compared it against a seconds-based freshness window. The nonce is now `BigInt(Math.floor(Date.now() / 1000))` — unix seconds — matching the circuit's `currentTimestamp` input and the verifier's `maxProofAge` window. Handshakes generated before this fix will fail the freshness check. (#45)
+- **Signal layout alignment** — `verifyHandshake` public-signal index constants updated to match the hardened circuit layout shipped in v0.3.0 (`currentTimestamp` at index 5 for Agent, `sessionNonce` at index 4 for Human). Previous indexing was off by one after the UC3.2 constraint was added. (#46)
+- **Spec alignment: Groth16 REQUIRED** — `formatPlonkProof` removed from the public API. The AgentPolicy and Delegation circuits ship both `.zkey` artifacts, but the on-chain `IdentityRegistry` and the IETF spec (§4.2, draft-bolyra-mutual-zkp-auth-01) mandate Groth16 for all on-chain verification. `formatGroth16Proof` is the only exported formatter. Callers using `formatPlonkProof` must migrate. (#47)
+
+#### MCP (`@bolyra/mcp`)
+
+- **HTTP auth context not attached on success** — `bolyraAuthMiddleware` was calling `next()` after a successful verification but not writing `req.bolyra` before yielding, so downstream handlers saw `undefined`. Fixed by attaching `req.bolyra = ctx` before `next()`. (#48)
+
+### Documentation
+
+- **`sdk/QUICKSTART.md`** — `formatPlonkProof` → `formatGroth16Proof` in the on-chain example; verifier names updated to match `contracts/deployments/base-sepolia.json` (`HumanGroth16Verifier`, `AgentGroth16Verifier`, `DelegationGroth16Verifier`); spec link updated to `-01.md`.
+- **`integrations/mcp/README.md`** — full rewrite leading with the dev-mode quickstart, API reference for all exports, production configuration guide, transport comparison table, and link to the protected-file-server example.
+
+### Migration notes
+
+- **`formatPlonkProof` removed**: use `formatGroth16Proof` for both the human and agent proofs in `registry.verifyHandshake()` calls.
+- **Nonce unit change**: any stored or cached nonces from `proveHandshake` before 0.4.0 are in milliseconds and will fail the freshness check. Regenerate — do not cache nonces across versions.
+- **Verifier contract name change** (docs only): the deployed contracts are unchanged. The names `PlonkVerifier` and `Groth16Verifier` in older docs referred to `AgentGroth16Verifier` and `HumanGroth16Verifier` respectively — now corrected in all documentation.
+
 ## [@bolyra/sdk 0.3.1] — 2026-06-02
 
 Single-package hotfix; cohort otherwise unchanged.

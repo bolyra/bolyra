@@ -1,129 +1,182 @@
-# @bolyra/mcp
+# @bolyra/mcp — ZKP authentication for MCP servers
 
-> Bolyra ZKP authentication middleware for [Model Context Protocol](https://modelcontextprotocol.io/) servers.
+Drop-in middleware that adds mutual zero-knowledge proof authentication to any Model Context Protocol server. One wrapper call, no changes to your tool handlers. Works over stdio and HTTP.
 
-Adds a mutual zero-knowledge proof of human-delegated agent identity to any MCP server, over **stdio** or **HTTP**. Drop-in: one wrapper line, no changes to your tool handlers.
+## Quick start (dev mode)
 
-## What this fixes
-
-MCP servers today have no caller-identity story for stdio (the trust boundary is "whoever spawned the process") and an under-adopted OAuth 2.1 story for HTTP. Either way, an MCP server cannot answer:
-
-- "Did a real human authorize this agent to call me?"
-- "Does this agent's permission scope cover this specific tool?"
-- "Can I prove the call chain without learning who the operator is?"
-
-Bolyra answers all three with a single Groth16 mutual handshake (~100ms server-side).
-
-## Two transports, two right answers
-
-| Transport | Where the proof lives | Spec alignment |
-|---|---|---|
-| HTTP / SSE / Streamable-HTTP | `Authorization: Bolyra <base64-bundle>` | OAuth 2.1 resource-server pattern, custom auth scheme per RFC 7235 |
-| stdio | `params._meta.bolyra` | Spec defines no stdio auth; `_meta` is the only protocol-level surface |
-
-Both reduce to the same `BolyraAuthContext` on the request. Tool handlers don't care which transport delivered it.
-
-## Install
+Dev mode uses mock proofs — no circuit artifacts, no trusted setup, instant startup. Use it to build and test your server before wiring real ZKP verification.
 
 ```bash
 npm install @bolyra/mcp @bolyra/sdk @modelcontextprotocol/sdk
 ```
 
-## Stdio server (Claude Desktop, Cursor, Cline)
-
 ```ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { withBolyraAuthStdio } from '@bolyra/mcp';
+import { createDevIdentities, attachBolyraProof } from '@bolyra/sdk';
 import { z } from 'zod';
 
-const server = new McpServer({ name: 'fs-server', version: '1.0.0' });
+// Server
+const server = new McpServer({ name: 'my-server', version: '1.0.0' });
 
-// Register tools as usual
 server.registerTool(
   'read_file',
   { description: 'Read a file', inputSchema: z.object({ path: z.string() }) },
-  async ({ path }) => ({ content: [{ type: 'text', text: await readFile(path) }] }),
+  async ({ path }) => ({ content: [{ type: 'text', text: 'file contents...' }] }),
 );
 
-// Then wrap with Bolyra (BEFORE connecting the transport)
 withBolyraAuthStdio(server, {
-  resolveCredential: async (commitment) => myRegistry.get(commitment),
-  toolPolicy: {
-    read_file: 0b01n,    // requires READ_DATA bit
-    write_file: 0b10n,   // requires WRITE_DATA bit
-  },
+  devMode: true,
+  toolPolicy: { read_file: 0b01n, write_file: 0b11n },
 });
 
 await server.connect(new StdioServerTransport());
 ```
 
-Calls without a valid proof bundle in `params._meta.bolyra` get back:
-
-```json
-{ "isError": true, "content": [{ "type": "text", "text": "Bolyra auth required: missing proof bundle in params._meta.bolyra" }] }
-```
-
-## HTTP server (Express / Connect)
+Client side:
 
 ```ts
-import express from 'express';
-import { bolyraAuthMiddleware } from '@bolyra/mcp';
-import { createMyMcpHttpHandler } from './my-mcp-http';
+import { createDevIdentities, attachBolyraProof } from '@bolyra/sdk';
 
-const app = express();
-app.use(express.json());
+const { human, agent } = await createDevIdentities();
+const auth = await attachBolyraProof(human, agent, { devMode: true });
 
-app.use('/mcp', bolyraAuthMiddleware({
+// stdio
+await client.callTool({ name: 'read_file', arguments: { path: '/tmp/x' }, _meta: auth.meta });
+// HTTP
+await fetch('/mcp', { headers: { ...auth.headers }, ... });
+```
+
+## How it works
+
+Every `tools/call` request must carry a **proof bundle**: a pair of Groth16 proofs (one from the human's circuit, one from the agent's) bound to a shared session nonce.
+
+The server side:
+
+1. Extracts the bundle from `params._meta.bolyra` (stdio) or the `Authorization: Bolyra <base64>` header (HTTP).
+2. Verifies the handshake — both proofs, nonce freshness, score floor.
+3. Checks the tool's permission policy against the agent's effective bitmask.
+4. Attaches a `BolyraAuthContext` to the request for downstream handlers.
+5. Rejects with an MCP error if any step fails.
+
+Discovery calls (`initialize`, `tools/list`) pass through unauthenticated.
+
+**Delegation chains** (v=2 bundles) narrow scope from root credential to leaf agent across multiple hops. The effective bitmask seen by tool policies is always the leaf's — the most-restricted scope.
+
+## API reference
+
+### Server — stdio
+
+```ts
+withBolyraAuthStdio(server: McpServer, config: BolyraMcpConfig): void
+```
+
+Wraps an `McpServer` instance. Must be called before `server.connect(transport)`.
+
+### Server — HTTP
+
+```ts
+bolyraAuthMiddleware(config: BolyraMcpHttpConfig): express.RequestHandler
+```
+
+Express middleware. Mount before your MCP HTTP handler. Rejects unauthenticated `tools/call` requests with HTTP 401.
+
+### Client helpers
+
+```ts
+attachBolyraProof(
+  human: HumanIdentity,
+  agent: AgentCredential,
+  options?: AttachProofOptions,
+): Promise<BolyraClientAuth>
+```
+
+Runs a handshake and returns `{ headers, meta, bundle }`. Pass `options.devMode = true` to skip real proving and emit a mock bundle.
+
+```ts
+attachDelegatedBolyraProof(
+  human: HumanIdentity,
+  rootCred: AgentCredential,
+  hops: DelegationHopSpec[],
+  options?: AttachProofOptions,
+): Promise<BolyraClientAuth>
+```
+
+Like `attachBolyraProof` but walks a delegation chain and returns a v=2 bundle.
+
+### Verification
+
+```ts
+verifyBundle(bundle: BolyraProofBundle, config: BolyraMcpConfig): Promise<BolyraAuthContext>
+```
+
+Verify a bundle directly — useful for custom transports or offline verification.
+
+```ts
+checkToolPolicy(
+  toolName: string,
+  ctx: BolyraAuthContext,
+  policy: ToolPermissionPolicy,
+): { allowed: boolean; reason?: string }
+```
+
+Check a `BolyraAuthContext` against a tool's required bitmask.
+
+### Dev identities (re-exported from SDK)
+
+```ts
+createDevIdentities(options?: DevIdentityOptions): Promise<DevIdentities>
+```
+
+Returns fixed-seed `{ human, agent, operatorKey }` — deterministic, no circuit artifacts required. Logs a warning on first call. Never use in production.
+
+## Production configuration
+
+Swap `devMode: true` for a real `resolveCredential` resolver and point the SDK at your circuit artifacts:
+
+```ts
+withBolyraAuthStdio(server, {
   resolveCredential: async (commitment) => myRegistry.get(commitment),
-  toolPolicy: { read_file: 0b01n, write_file: 0b10n },
-}));
-
-app.use('/mcp', createMyMcpHttpHandler());
-
-app.listen(3000);
+  toolPolicy: { read_file: 0b01n, write_file: 0b11n },
+  sdkConfig: {
+    circuitDir: '/path/to/circuits/build',
+    rpcUrl: 'https://sepolia.base.org',
+    registryAddress: '0x2781dF8b6381462d881C833Fb703d68c661c9577',
+  },
+});
 ```
 
-Discovery requests (`initialize`, `tools/list`) pass through unauthenticated, matching how OAuth resource servers expose `.well-known/*` without auth. Only `tools/call` is gated.
-
-## Client side (works for both transports)
-
-```ts
-import { attachBolyraProof } from '@bolyra/mcp';
-import { createHumanIdentity, createAgentCredential } from '@bolyra/sdk';
-
-const human = await createHumanIdentity(mySecret);
-const credential = await createAgentCredential(human, /* ... */);
-
-const auth = await attachBolyraProof(human, credential);
-// auth.headers.Authorization → "Bolyra eyJ2I..."
-// auth.meta.bolyra → { v: 1, humanProof, agentProof, nonce, credentialCommitment }
-
-// Stdio:
-await client.callTool({ name: 'read_file', arguments: { path: '...' }, _meta: auth.meta });
-// HTTP:
-await fetch('/mcp', { headers: { ...auth.headers, 'content-type': 'application/json' }, ... });
-```
-
-## Configuration
+Full config interface:
 
 ```ts
 interface BolyraMcpConfig {
-  network?: string;                  // default 'base-sepolia' — only affects DID format
-  minScore?: number;                 // default 70 — score floor for verified=true
-  maxProofAge?: number;              // default 300s — nonce freshness window
-  toolPolicy?: ToolPermissionPolicy; // tool name → required permission bitmask
-  resolveCredential: (commitment: string) => Promise<AgentCredential | null>;
-  sdkConfig?: BolyraConfig;          // rpc/registry/circuit dirs
+  network?: string;          // DID network label (default: 'base-sepolia')
+  minScore?: number;         // Minimum score floor 0–100 (default: 70)
+  maxProofAge?: number;      // Nonce freshness window in seconds (default: 300)
+  toolPolicy?: ToolPermissionPolicy;
+  devMode?: boolean;         // Mock verification — dev/test only
+  resolveCredential?: (commitment: string) => Promise<AgentCredential | null>;
+  sdkConfig?: BolyraConfig;
 }
 ```
 
-The HTTP variant also accepts `authScheme` (default `"Bolyra"`).
+The HTTP variant adds `authScheme?: string` (default `"Bolyra"`).
 
-## Performance
+## Transport guide
 
-A single mutual handshake verification is dominated by the Groth16 verify cost (~5–10ms native, ~30–60ms snarkjs). The proof generation itself is client-side (~100ms with rapidsnark). End-to-end overhead per tool call: ~110ms p50 with the full pipeline, comfortably under the perceptible-latency floor for interactive agent workflows.
+| Transport | Bundle location | Notes |
+|---|---|---|
+| stdio (Claude Desktop, Cursor, Cline) | `params._meta.bolyra` | MCP spec defines no stdio auth surface; `_meta` is the only protocol-level field |
+| HTTP / SSE / Streamable-HTTP | `Authorization: Bolyra <base64-bundle>` | Custom auth scheme per RFC 7235; aligns with OAuth 2.1 resource-server pattern |
 
-## License
+Both produce the same `BolyraAuthContext` on the server side. Tool handlers don't need to know which transport was used.
 
-MIT.
+## Example
+
+See [`examples/protected-file-server/`](./examples/protected-file-server/) for a complete stdio server + client pair using dev mode. Run it with:
+
+```bash
+cd integrations/mcp
+npm run example:protected-file-server
+```
