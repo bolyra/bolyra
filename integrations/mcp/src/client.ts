@@ -21,6 +21,24 @@ export interface AttachProofOptions {
 }
 
 /**
+ * Detect whether the third argument is a raw BolyraConfig (back-compat) or
+ * the current AttachProofOptions shape. If it looks like a raw config (has
+ * circuitDir / rpcUrl / etc. but not devMode or sdkConfig at top level),
+ * wrap it as `{ sdkConfig: input }`.
+ */
+export function normalizeOptions(
+  input?: AttachProofOptions | BolyraConfig,
+): AttachProofOptions {
+  if (!input) return {};
+  // AttachProofOptions has devMode or sdkConfig at top level
+  if ('devMode' in input || 'sdkConfig' in input) {
+    return input as AttachProofOptions;
+  }
+  // Otherwise treat as raw BolyraConfig
+  return { sdkConfig: input as BolyraConfig };
+}
+
+/**
  * One delegation hop the caller wants the helper to produce a proof for.
  * Hops are walked in order: hop 0's delegator is the root credential, hop N's
  * delegator must be the previous hop's delegatee (with matching scope/expiry
@@ -62,10 +80,13 @@ export interface DelegationHopSpec {
 export async function attachBolyraProof(
   human: HumanIdentity,
   credential: AgentCredential,
-  options?: AttachProofOptions,
+  options?: AttachProofOptions | BolyraConfig,
 ): Promise<BolyraClientAuth> {
+  // Back-compat: if options looks like a raw BolyraConfig, wrap it
+  const opts = normalizeOptions(options);
+
   // Dev mode: skip real ZKP proving — return mock proofs.
-  if (options?.devMode) {
+  if (opts.devMode) {
     const nonce = BigInt(Math.floor(Date.now() / 1000));
     const mockProofStrings = Array.from({ length: 8 }, () =>
       BigInt(Math.floor(Math.random() * 2 ** 32)).toString(),
@@ -109,7 +130,7 @@ export async function attachBolyraProof(
   const { humanProof, agentProof, nonce } = await sdk.proveHandshake(
     human,
     credential,
-    { config: options?.sdkConfig },
+    { config: opts.sdkConfig },
   );
 
   const bundle: BolyraProofBundle = {
@@ -161,20 +182,53 @@ export async function attachDelegatedBolyraProof(
   human: HumanIdentity,
   rootCredential: AgentCredential,
   hops: DelegationHopSpec[],
-  options?: AttachProofOptions,
+  options?: AttachProofOptions | BolyraConfig,
 ): Promise<BolyraClientAuth> {
+  // Back-compat: if options looks like a raw BolyraConfig, wrap it
+  const opts = normalizeOptions(options);
+
   if (hops.length === 0) {
     // No delegation requested — fall back to handshake-only bundle.
-    return attachBolyraProof(human, rootCredential, options);
+    return attachBolyraProof(human, rootCredential, opts);
   }
 
-  // Dev mode: skip delegation proving — return a v=1 bundle (no chain).
-  if (options?.devMode) {
-    return attachBolyraProof(human, rootCredential, options);
+  // Dev mode: build a v=2 bundle with placeholder delegation links
+  // preserving each hop's scope/commitment/expiry so permission-narrowing
+  // behavior matches production.
+  if (opts.devMode) {
+    const base = await attachBolyraProof(human, rootCredential, { devMode: true });
+
+    if (hops.length === 0) return base;
+
+    const mockProofStrings = Array.from({ length: 8 }, () =>
+      BigInt(Math.floor(Math.random() * 2 ** 32)).toString(),
+    );
+
+    const delegationChain: BolyraDelegationLink[] = hops.map((hop) => ({
+      proof: { proof: mockProofStrings, publicSignals: ['0', '0', '0', '0', '0', '0'] } as any,
+      delegateeCommitment: hop.delegateeCommitment.toString(),
+      delegateeScope: hop.delegateeScope.toString(),
+      delegateeExpiry: hop.delegateeExpiry.toString(),
+      currentTimestamp: BigInt(Math.floor(Date.now() / 1000)).toString(),
+    }));
+
+    const bundle: BolyraProofBundle = {
+      ...base.bundle,
+      v: 2,
+      delegationChain,
+      _dev: true,
+    };
+
+    const encoded = Buffer.from(JSON.stringify(bundle), 'utf8').toString('base64');
+    return {
+      headers: { Authorization: `Bolyra ${encoded}` },
+      meta: { bolyra: bundle },
+      bundle,
+    };
   }
 
   const sdk = await import('@bolyra/sdk');
-  const sdkConfig = options?.sdkConfig;
+  const sdkConfig = opts.sdkConfig;
   const { humanProof, agentProof, nonce } = await sdk.proveHandshake(
     human,
     rootCredential,

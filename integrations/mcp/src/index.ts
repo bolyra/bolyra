@@ -8,7 +8,7 @@
 
 export { withBolyraAuthStdio } from './server-stdio';
 export { bolyraAuthMiddleware } from './server-http';
-export { attachBolyraProof, attachDelegatedBolyraProof } from './client';
+export { attachBolyraProof, attachDelegatedBolyraProof, normalizeOptions } from './client';
 export type { DelegationHopSpec, AttachProofOptions } from './client';
 export { verifyBundle, checkToolPolicy } from './verify';
 
