@@ -1,8 +1,8 @@
 # IETF Outreach Email — draft-klrc-aiagent-auth-01
 
-**Status:** Ready to send. Updated 2026-06-11 with v0.4.0/v0.5.0 references.
+**Status:** Ready to send. Codex-reviewed 2026-06-11.
 
-**Author addresses (verified 2026-05-09 from IETF datatracker, draft-klrc-aiagent-auth-01):**
+**Author addresses (verified 2026-05-09 from IETF datatracker):**
 
 - Pieter Kasselman <pieter@defakto.security> — Defakto Security
 - Jeff Lombardo <jeffsec@amazon.com> — AWS
@@ -10,35 +10,34 @@
 - Brian Campbell <bcampbell@pingidentity.com> — Ping Identity
 - Nick Steele <steele@openai.com> — OpenAI
 
-**Attach:** `drafts/ietf-mapping-1pager.md` (rendered to PDF or inline)
+**Attach on request:** `drafts/ietf-mapping-1pager.md` (offer to send, don't lead with it)
 
 ---
 
 **To:** pieter@defakto.security, jeffsec@amazon.com, yrosomakho@zscaler.com, bcampbell@pingidentity.com, steele@openai.com
 **Cc:** viswa@bolyra.ai
-**Subject:** ZKP privacy layer for draft-klrc-aiagent-auth-01 — directional compatibility check
+**Subject:** ZKP privacy layer for draft-klrc-aiagent-auth-01
 
 Hello,
 
-I built Bolyra, a zero-knowledge proof protocol for mutual human-AI agent authentication. Two releases shipped this week that overlap with the authorization semantics in your draft:
+I'm working on Bolyra, a zero-knowledge protocol for mutual human/AI-agent authentication and scoped delegation. I'm writing because parts of it may be relevant to draft-klrc-aiagent-auth-01, especially around privacy-preserving agent binding and delegated authorization.
 
-- **v0.4.0** — MCP dev mode. Any Model Context Protocol server gets ZKP-verified agent identity in 60 seconds, zero circuit artifacts. Per-tool permission gating via cumulative-bit bitmask. (`npm install @bolyra/mcp`)
+Recent implementation work:
 
-- **v0.5.0** — Unified commerce authorization. One API (`authorizeCommerceIntent`) answers whether an agent purchase is authorized across Stripe ACP, x402, Visa TAP, and Google AP2. The agent proves it has the right permissions without revealing its credential to the payment rail.
+- `@bolyra/mcp` v0.4.0 adds MCP HTTP/stdio middleware, dev-mode proof bundles for local testing without circuit artifacts, and per-tool permission gating via `checkToolPolicy`.
+- `@bolyra/payment-protocols` v0.5.0 adds `authorizeCommerceIntent`, a unified commerce authorization API. Stripe ACP and x402 are wired; Visa TAP and Google AP2 currently fail closed while preserving the same decision/receipt shape.
 
-The protocol specification is at `spec/draft-bolyra-mutual-zkp-auth-01.md` in the repo. 49 conformance tests pass across circuits and contracts.
+My concrete question: would a ZKP receipt/delegation layer like this be directionally useful as an extension point or companion draft to the KLRC OAuth-based flow?
 
-**My question:** Are Bolyra's receipt/delegation/payment authorization primitives directionally compatible with where you think the KLRC draft should go? I have a 4-page mapping that shows where ZKP fills the AS-blind and model-instance-binding gaps in the current OAuth-based flow. Happy to share it if useful.
+I have a short mapping showing how Bolyra could address AS-minimization and model/agent-binding concerns without changing the core OAuth flow. I'm happy to send it, or to open a GitHub issue/PR if that is the better venue.
 
-If a 20-minute call would help, I am available. Written feedback equally welcome. If neither, treat this as an FYI.
+GitHub: https://github.com/bolyra/bolyra
+Spec: https://github.com/bolyra/bolyra/blob/main/spec/draft-bolyra-mutual-zkp-auth-01.md
+MCP example: https://github.com/bolyra/bolyra/tree/main/integrations/mcp/examples/protected-file-server
 
-- GitHub: https://github.com/bolyra/bolyra
-- Landing: https://bolyra.ai
-- MCP example: https://github.com/bolyra/bolyra/tree/main/integrations/mcp/examples/protected-file-server
-
-Thank you for the work on this draft.
+Thank you for the work on the draft.
 
 Viswanadha Pratap Kondoju
-Bolyra (ZKProva Inc.)
+Bolyra / ZKProva Inc.
 viswa@bolyra.ai
 https://bolyra.ai
