@@ -82,7 +82,7 @@ pass "@bolyra/payment-protocols@0.3.1 resolves on npm"
 # preceding 14h X402 outage is what motivated this check (verify.sh saw the
 # string in HTML, but createX402Authorization was missing from 0.3.0).
 echo "→ runtime symbol resolution against published packages"
-SDK_VERSION="0.3.1"
+SDK_VERSION="0.4.0"
 PP_VERSION="0.3.1"
 WORKDIR=$(mktemp -d /tmp/bolyra-verify.XXXXXX)
 trap 'rm -rf "$WORKDIR" "$TMP"' EXIT
@@ -98,7 +98,7 @@ trap 'rm -rf "$WORKDIR" "$TMP"' EXIT
 const sdk = require("@bolyra/sdk");
 const pp  = require("@bolyra/payment-protocols");
 const expected = {
-  "@bolyra/sdk": ["createHumanIdentity","createAgentCredential","proveHandshake","verifyHandshake"],
+  "@bolyra/sdk": ["createHumanIdentity","createAgentCredential","proveHandshake","verifyHandshake","createDevIdentities"],
   "@bolyra/payment-protocols": ["createX402Authorization","verifyX402Authorization","verifyStripeACPSpend"],
 };
 const mods = { "@bolyra/sdk": sdk, "@bolyra/payment-protocols": pp };
