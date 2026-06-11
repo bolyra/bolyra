@@ -29,22 +29,12 @@ interface McpServerLike {
 }
 
 /**
- * Wrap an MCP server (stdio transport) so every `tools/call` requires a valid
- * Bolyra proof bundle in `params._meta.bolyra`.
+ * Wrap an MCP server (stdio transport) so every `tools/call` requires
+ * a valid Bolyra proof bundle in `params._meta.bolyra`.
  *
- * Returns the same server reference (mutated). The user-supplied tool handlers
- * registered via `server.registerTool(...)` are NOT touched — the gate sits at
- * the protocol layer below them via `setRequestHandler('tools/call', ...)`.
- *
- * IMPORTANT: call this BEFORE any user `registerTool` calls, because
- * setRequestHandler for the same method is last-write-wins in the MCP SDK.
- * If you need to register tools after wrapping, use `wrap()` style:
- *
- *   const server = new McpServer({...});
- *   server.registerTool('read_file', ..., handler);
- *   withBolyraAuthStdio(server, config); // ← call after registration
- *
- * The wrapper captures the previously-registered handler and chains.
+ * Call this AFTER registering tools via `server.registerTool(...)`.
+ * The wrapper captures the previously-registered tools/call handler
+ * and chains auth verification before it.
  */
 export function withBolyraAuthStdio<T extends McpServerLike>(
   server: T,

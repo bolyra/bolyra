@@ -106,6 +106,7 @@ export function bolyraAuthMiddleware(config: BolyraMcpHttpConfig) {
     }
 
     req.bolyra = authCtx;
+    (req as any).auth = { bolyra: authCtx };
     next();
   };
 }

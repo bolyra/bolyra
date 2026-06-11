@@ -15,6 +15,20 @@ const DEFAULTS = {
   maxProofAge: 300,
 };
 
+/** Build a failed BolyraAuthContext with a reason string (DRY helper). */
+function failCtx(reason: string): BolyraAuthContext {
+  return {
+    verified: false,
+    score: 0,
+    did: '',
+    permissionBitmask: 0n,
+    warnings: [],
+    reason,
+    chainDepth: 0,
+    effectiveCommitment: '',
+  };
+}
+
 /** Decimal-string → bigint, with NaN guard. */
 function toBigInt(value: string, field: string): bigint {
   if (!/^\d+$/.test(value)) {
@@ -38,6 +52,27 @@ export async function verifyBundle(
   bundle: BolyraProofBundle,
   config: BolyraMcpConfig,
 ): Promise<BolyraAuthContext> {
+  // Dev mode: skip real ZKP verification
+  if (config.devMode) {
+    if (!bundle._dev) {
+      return failCtx('Dev server received non-dev bundle. Client must set devMode: true.');
+    }
+    return verifyDevBundle(bundle, config);
+  }
+
+  // Production mode: reject dev bundles
+  if (bundle._dev) {
+    return failCtx('Production server received dev bundle. Remove _dev from client.');
+  }
+
+  // Production mode: require resolveCredential
+  if (!config.resolveCredential) {
+    throw new Error(
+      '@bolyra/mcp: resolveCredential is required in production mode. ' +
+      'Set devMode: true for testing without a credential registry.',
+    );
+  }
+
   const network = config.network ?? DEFAULTS.network;
   const minScore = config.minScore ?? DEFAULTS.minScore;
   const maxProofAge = config.maxProofAge ?? DEFAULTS.maxProofAge;
@@ -87,7 +122,8 @@ export async function verifyBundle(
   }
 
   // Look up the credential the bundle is claiming to authenticate as.
-  const credential = await config.resolveCredential(bundle.credentialCommitment);
+  // resolveCredential is guaranteed non-null here — the guard above throws if missing.
+  const credential = await config.resolveCredential!(bundle.credentialCommitment);
   if (!credential) {
     return {
       verified: false,
@@ -240,6 +276,99 @@ export async function verifyBundle(
     reason: passed
       ? undefined
       : warnings[0] ?? 'Verification failed for unknown reason',
+    chainDepth,
+    effectiveCommitment,
+  };
+}
+
+/**
+ * Dev-mode verification: no real ZKP checks, but validates bundle shape,
+ * nonce freshness, expiry, permissions, and delegation chain structure.
+ * Scores identically to production (40+20+20+10+10 = 100).
+ */
+function verifyDevBundle(
+  bundle: BolyraProofBundle,
+  config: BolyraMcpConfig,
+): BolyraAuthContext {
+  const network = config.network ?? DEFAULTS.network;
+  const minScore = config.minScore ?? DEFAULTS.minScore;
+  const maxProofAge = config.maxProofAge ?? DEFAULTS.maxProofAge;
+
+  let nonce: bigint;
+  let commitment: bigint;
+  try {
+    nonce = toBigInt(bundle.nonce, 'nonce');
+    commitment = toBigInt(bundle.credentialCommitment, 'credentialCommitment');
+  } catch (e: unknown) {
+    return failCtx(e instanceof Error ? e.message : String(e));
+  }
+
+  // Extract credential fields from agent proof public signals.
+  const agentSignals = bundle.agentProof.publicSignals;
+  const permissionBitmask = agentSignals[3] ? BigInt(agentSignals[3]) : 0n;
+  const expiryTimestamp = agentSignals[4] ? BigInt(agentSignals[4]) : 0n;
+
+  const warnings: string[] = [];
+  let score = 0;
+
+  // "ZKP passes" — in dev mode we always grant this.
+  score += 40;
+
+  // Expiry check.
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  if (expiryTimestamp > now) {
+    score += 20;
+  } else {
+    warnings.push(`Credential expired at ${expiryTimestamp} (current: ${now})`);
+  }
+
+  // Permission check.
+  let effectivePermissions = permissionBitmask;
+  let effectiveCommitment = bundle.credentialCommitment;
+  let chainDepth = 0;
+
+  // Walk delegation chain shape (no crypto — just extract leaf scope/commitment).
+  if (bundle.delegationChain && bundle.delegationChain.length > 0) {
+    for (let i = 0; i < bundle.delegationChain.length; i++) {
+      const link = bundle.delegationChain[i];
+      try {
+        effectivePermissions = toBigInt(link.delegateeScope, `delegationChain[${i}].delegateeScope`);
+        effectiveCommitment = link.delegateeCommitment;
+        chainDepth = i + 1;
+      } catch (e: unknown) {
+        warnings.push(e instanceof Error ? e.message : String(e));
+        break;
+      }
+    }
+  }
+
+  const hasBasicPermissions = (effectivePermissions & 0b11n) !== 0n;
+  if (hasBasicPermissions) {
+    score += 20;
+  } else {
+    warnings.push('Agent has no read/write permissions');
+  }
+
+  // Nonce freshness check.
+  const nonceAgeSec = Number(now - nonce);
+  if (nonceAgeSec >= 0 && nonceAgeSec < maxProofAge) {
+    score += 10;
+  } else {
+    warnings.push(`Session nonce stale (${nonceAgeSec}s old, max ${maxProofAge}s)`);
+  }
+
+  // Scope commitment — in dev mode, always grant since we don't have real poseidon output.
+  score += 10;
+
+  const passed = score >= minScore;
+  const devDid = `did:bolyra:dev:${commitment.toString(16).padStart(64, '0')}`;
+  return {
+    verified: passed,
+    score,
+    did: devDid,
+    permissionBitmask: effectivePermissions,
+    warnings,
+    reason: passed ? undefined : warnings[0] ?? 'Dev verification failed for unknown reason',
     chainDepth,
     effectiveCommitment,
   };
