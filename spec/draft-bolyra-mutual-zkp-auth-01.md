@@ -148,20 +148,26 @@ prime field and maintain equivalent collision resistance.
 
 ## Proving Systems
 
-The protocol uses a mixed proving system architecture:
+The protocol uses Groth16 as the REQUIRED proving system for all
+circuits. Implementations MAY additionally support PLONK with universal
+setup as an OPTIONAL alternative for the AgentPolicy and Delegation
+circuits, but MUST NOT require it.
 
-- Human Identity Circuit (HumanUniqueness): Groth16. This enables reuse
-  of the Semaphore v4 Powers of Tau Phase 1 ceremony, requiring only a
-  circuit-specific Phase 2.
+- Human Identity Circuit (HumanUniqueness): Groth16 (REQUIRED). This
+  enables reuse of the Semaphore v4 Powers of Tau Phase 1 ceremony,
+  requiring only a circuit-specific Phase 2.
 
-- Agent Credential Circuit (AgentPolicy): PLONK with universal setup.
-  No circuit-specific ceremony is required.
+- Agent Credential Circuit (AgentPolicy): Groth16 (REQUIRED). Uses a
+  project-specific Phase 2 ceremony against pot16.ptau (2^16 constraints).
+  PLONK with universal setup is OPTIONAL for deployments that prefer to
+  avoid per-circuit ceremonies.
 
-- Delegation Circuit (Delegation): PLONK with universal setup. No
-  circuit-specific ceremony is required.
+- Delegation Circuit (Delegation): Groth16 (REQUIRED). Same ceremony
+  rationale as AgentPolicy. PLONK is OPTIONAL.
 
-The on-chain registry MUST support distinct verifier contract interfaces
-for Groth16 and PLONK proof types.
+The on-chain registry MUST support the Groth16 verifier contract
+interface. Registries that additionally support PLONK MUST use distinct
+verifier contract addresses for each proving system.
 
 # Mutual Handshake Protocol
 
@@ -183,7 +189,7 @@ transaction.
    - A scope-bound nullifier for Sybil detection
    - A nonce binding tying the proof to the session
 
-3. The AI agent concurrently generates a PLONK zero-knowledge proof proving:
+3. The AI agent concurrently generates a Groth16 zero-knowledge proof proving:
    - Their credential commitment is a leaf in the agent Merkle tree
    - An operator EdDSA signature over the credential commitment
    - Permission bitmask satisfies the required scope policy
@@ -204,8 +210,8 @@ transaction.
    c. Human nullifier not in the revocation mapping.
    d. Human Merkle root validity (against the human root history buffer).
    e. Agent Merkle root validity (against the agent root history buffer).
-   f. Groth16 proof validity (human) via the deployed Groth16 verifier.
-   g. PLONK proof validity (agent) via the deployed PLONK verifier.
+   f. Groth16 proof validity (human) via the deployed human Groth16 verifier.
+   g. Groth16 proof validity (agent) via the deployed agent Groth16 verifier.
 
 6. On success, the registry MUST:
    a. Record the nonce as used
@@ -318,7 +324,7 @@ The circuit MUST enforce the following constraints:
 
 ### Agent Public Signal Layout
 
-The PLONK verifier MUST receive exactly 6 public signals in this order:
+The Groth16 verifier MUST receive exactly 6 public signals in this order:
 
 | Index | Signal | Description |
 |-------|--------|-------------|
@@ -418,15 +424,17 @@ The circuit MUST enforce the following constraints:
 
 ### Delegation Public Signal Layout
 
-The delegation PLONK verifier MUST receive exactly 5 public signals:
+The delegation Groth16 verifier MUST receive exactly 6 public signals
+in this order (snarkjs convention — outputs first, then public inputs):
 
 | Index | Signal | Description |
 |-------|--------|-------------|
-| 0 | previousScopeCommitment | Chain-linking input |
-| 1 | sessionNonce | Session binding (public input) |
-| 2 | newScopeCommitment | New chain-linking output |
-| 3 | delegationNullifier | Replay-prevention nullifier |
-| 4 | delegateeMerkleRoot | Delegatee enrollment proof |
+| 0 | newScopeCommitment | New chain-linking output |
+| 1 | delegationNullifier | Replay-prevention nullifier |
+| 2 | delegateeMerkleRoot | Delegatee enrollment proof |
+| 3 | previousScopeCommitment | Chain-linking input (public input) |
+| 4 | sessionNonce | Session binding (public input) |
+| 5 | currentTimestamp | Proof-time freshness (public input) |
 
 ## On-Chain Delegation Verification
 
@@ -460,7 +468,7 @@ steps in order:
    the agent root history buffer. If not, the registry MUST revert
    with StaleAgentRoot.
 
-8. Verifying the PLONK proof via the deployed delegation verifier.
+8. Verifying the Groth16 proof via the deployed delegation verifier.
 
 9. Writing the new scope commitment (pubSignals[2]) to the
    lastScopeCommitment mapping, advancing the chain state.
