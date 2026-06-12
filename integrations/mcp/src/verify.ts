@@ -160,6 +160,25 @@ export async function verifyBundle(
     };
   }
 
+  // Validate Merkle roots if validator is configured
+  if (config.validateRoots) {
+    const humanRoot = BigInt(bundle.humanProof.publicSignals[0]);
+    const agentRoot = BigInt(bundle.agentProof.publicSignals[0]);
+    const rootsValid = await config.validateRoots(humanRoot, agentRoot);
+    if (!rootsValid) {
+      return {
+        verified: false,
+        score: 0,
+        did: buildDid(network, commitment),
+        permissionBitmask: 0n,
+        warnings: ['Merkle roots not recognized by the registry — proof may be against a private tree'],
+        reason: 'Human or agent Merkle root validation failed',
+        chainDepth: 0,
+        effectiveCommitment: bundle.credentialCommitment,
+      };
+    }
+  }
+
   // Bind proof to claimed credential: recompute scopeCommitment from the
   // resolved credential and compare to the proof's output. Without this an
   // attacker can generate a valid proof for credential A (attacker-owned),
@@ -251,6 +270,9 @@ export async function verifyBundle(
 
   // Score the result. Same shape as @bolyra/openclaw for consistency.
   const warnings: string[] = [...chainWarnings];
+  if (!config.validateRoots) {
+    warnings.push('No root validator configured — Merkle root provenance not verified');
+  }
   let score = 0;
 
   if (verifyResult.verified) {

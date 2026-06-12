@@ -133,6 +133,13 @@ export interface BolyraMcpConfig {
   resolveCredential?: (
     credentialCommitment: string,
   ) => Promise<AgentCredential | null>;
+  /**
+   * Optional callback to validate that the human and agent Merkle roots
+   * from the proof are known/valid. Without this, proofs against private
+   * trees are accepted. For production, implement this against the
+   * on-chain IdentityRegistry or a cached root set.
+   */
+  validateRoots?: (humanRoot: bigint, agentRoot: bigint) => Promise<boolean>;
   /** SDK config passthrough (rpc/registry/circuit dirs). */
   sdkConfig?: BolyraConfig;
   /**

@@ -19,8 +19,8 @@ const sdk = require('@bolyra/sdk');
 function makeBundle(overrides: Partial<BolyraProofBundle> = {}): BolyraProofBundle {
   return {
     v: 1,
-    humanProof: { pi_a: [], pi_b: [], pi_c: [], protocol: 'groth16', curve: 'bn128' } as any,
-    agentProof: { pi_a: [], pi_b: [], pi_c: [], protocol: 'groth16', curve: 'bn128' } as any,
+    humanProof: { pi_a: [], pi_b: [], pi_c: [], protocol: 'groth16', curve: 'bn128', publicSignals: ['100', '200', '300'] } as any,
+    agentProof: { pi_a: [], pi_b: [], pi_c: [], protocol: 'groth16', curve: 'bn128', publicSignals: ['400', '500', '600', '7'] } as any,
     nonce: String(Math.floor(Date.now() / 1000)),
     credentialCommitment: '12345',
     ...overrides,
@@ -61,7 +61,8 @@ describe('verifyBundle', () => {
     const ctx = await verifyBundle(makeBundle(), makeConfig());
     expect(ctx.verified).toBe(true);
     expect(ctx.score).toBe(100);
-    expect(ctx.warnings).toHaveLength(0);
+    // Warning about missing root validator is expected when validateRoots is not configured
+    expect(ctx.warnings).toEqual(['No root validator configured — Merkle root provenance not verified']);
     expect(ctx.did).toMatch(/^did:bolyra:base-sepolia:/);
   });
 
@@ -250,6 +251,39 @@ describe('chain verification', () => {
 
     expect(ctx.verified).toBe(false);
     expect(ctx.warnings.some((w) => /expired/.test(w))).toBe(true);
+  });
+});
+
+describe('Merkle root validation (C2)', () => {
+  it('rejects when validateRoots returns false', async () => {
+    const config = makeConfig({
+      validateRoots: jest.fn(async () => false),
+    });
+    const ctx = await verifyBundle(makeBundle(), config);
+    expect(ctx.verified).toBe(false);
+    expect(ctx.reason).toMatch(/root validation failed/);
+    expect(ctx.warnings).toEqual(
+      expect.arrayContaining([expect.stringMatching(/private tree/)]),
+    );
+  });
+
+  it('proceeds normally when validateRoots returns true', async () => {
+    const config = makeConfig({
+      validateRoots: jest.fn(async () => true),
+    });
+    const ctx = await verifyBundle(makeBundle(), config);
+    expect(ctx.verified).toBe(true);
+    expect(ctx.score).toBe(100);
+    // No root provenance warning when validator is configured and passes
+    expect(ctx.warnings.some((w) => /root provenance/.test(w))).toBe(false);
+  });
+
+  it('warns when no validateRoots is configured', async () => {
+    const ctx = await verifyBundle(makeBundle(), makeConfig());
+    expect(ctx.verified).toBe(true);
+    expect(ctx.warnings).toEqual(
+      expect.arrayContaining([expect.stringMatching(/No root validator configured/)]),
+    );
   });
 });
 
