@@ -60,6 +60,7 @@ contract IdentityRegistry {
     error HandshakeAlreadyHadDelegation(); // Attack 2 fix: can't re-init chain state
     error DelegationTimestampStale();     // Codex P1-1: proof's currentTimestamp must be near block.timestamp
     error PubSignalsLengthMismatch();     // Codex P1-2: variable-length pubsig arrays must match the pinned layout
+    error AgentTimestampStale();          // Agent proof's currentTimestamp must be near block.timestamp
 
     // ============ EVENTS ============
 
@@ -280,6 +281,16 @@ contract IdentityRegistry {
         // 7. Verify Groth16 proof (agent) — auto-generated verifier contract:
         //   snarkjs zkey export solidityverifier AgentPolicy_final.zkey AgentVerifier.sol
         if (!_verifyAgentProof(agentProof, agentPubSignals)) revert InvalidAgentProof();
+
+        // 8. Enforce agent timestamp freshness. agentPubSignals[4] = currentTimestamp
+        //    from the AgentPolicy circuit. Without this check, an attacker with an
+        //    expired credential can set currentTimestamp to a historical value before
+        //    expiry and generate a valid proof. Same skew as delegation.
+        uint256 agentTimestamp = agentPubSignals[4];
+        if (
+            agentTimestamp + DELEGATION_TIMESTAMP_SKEW < block.timestamp ||
+            agentTimestamp > block.timestamp + DELEGATION_TIMESTAMP_SKEW
+        ) revert AgentTimestampStale();
 
         // Attack 2 fix: seed the on-chain delegation chain state with the agent's scope commitment.
         // agentPubSignals[2] = scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment)
