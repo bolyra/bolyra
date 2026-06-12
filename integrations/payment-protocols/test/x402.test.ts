@@ -75,14 +75,16 @@ describe('PAYMENT-REQUIRED round-trip', () => {
 
 describe('verifyX402Authorization', () => {
   const resolveNone = async () => null;
-  const resolveSome = async () => ({
+  /** Resolve with a given permission bitmask (default: 7n = bits 0+1+2 = READ+WRITE+FINANCIAL_SMALL). */
+  const resolveWithBitmask = (bitmask: bigint) => async () => ({
     modelHash: 0n,
     operatorPublicKey: { x: 0n, y: 0n },
-    permissionBitmask: 7n,
+    permissionBitmask: bitmask,
     expiryTimestamp: 0n,
     signature: { R8: { x: 0n, y: 0n }, S: 0n },
     commitment: 0n,
   });
+  const resolveSome = resolveWithBitmask(7n); // FINANCIAL_SMALL (bit 2) + READ + WRITE
 
   test('rejects malformed base64url', async () => {
     const r = await verifyX402Authorization('!!!not-valid!!!', REQS, resolveNone);
@@ -116,14 +118,16 @@ describe('verifyX402Authorization', () => {
     expect(r.did).toBe('did:bolyra:base-sepolia:0xdeadbeef');
   });
 
-  test('flags over-cap spend even when other gates would pass', async () => {
+  test('flags over-cap spend when credential bitmask cap is exceeded', async () => {
+    // resolveSome has bitmask=7n → FINANCIAL_SMALL → derived cap = 10_000 cents ($100).
+    // Request amount=50_000 ($500) exceeds that cap.
     const r = await verifyX402Authorization(
-      makeBundle({ spendPolicy: { maxTransactionAmount: 100, currency: 'USD' } }),
-      REQS, // amount=10_000 > cap=100
+      makeBundle({ spendPolicy: { maxTransactionAmount: 999_999, currency: 'USDC' } }),
+      { ...REQS, amount: 50_000 }, // $500 > $100 derived cap
       resolveSome,
     );
     expect(r.verified).toBe(false);
-    expect(r.warnings.some((w) => /exceeds spend cap/.test(w))).toBe(true);
+    expect(r.warnings.some((w) => /exceeds derived spend cap/.test(w))).toBe(true);
   });
 
   test('score composition: stub-ZK fails (no +60), resolver hits (+20), policy fits (+20) → 40', async () => {
@@ -176,5 +180,70 @@ describe('verifyX402Authorization', () => {
     const r = await verifyX402Authorization('!!!not-valid!!!', REQS, resolveNone);
     expect(r.credentialResolved).toBe(false);
     expect(r.currency).toBe('');
+  });
+
+  // -----------------------------------------------------------------------
+  // SECURITY: spend cap derived from credential bitmask, not wire bundle
+  // -----------------------------------------------------------------------
+
+  test('SECURITY: FINANCIAL_SMALL credential with inflated wire bundle cap → denied if amount > $100', async () => {
+    // Attacker sets wire bundle maxTransactionAmount = 999_999_999 but credential
+    // only has FINANCIAL_SMALL (bit 2 → $100 / 10_000 cents cap).
+    const r = await verifyX402Authorization(
+      makeBundle({
+        spendPolicy: { maxTransactionAmount: 999_999_999, currency: 'USDC' },
+        scopeBitmask: '4', // bit 2 = FINANCIAL_SMALL
+      }),
+      { ...REQS, amount: 50_000 }, // $500 — exceeds $100 cap
+      resolveWithBitmask(4n), // FINANCIAL_SMALL only
+    );
+    expect(r.verified).toBe(false);
+    expect(r.warnings.some((w) => /exceeds derived spend cap/.test(w))).toBe(true);
+  });
+
+  test('SECURITY: FINANCIAL_MEDIUM credential, amount within range → allowed (policy fit)', async () => {
+    // Credential has FINANCIAL_MEDIUM (bits 2+3 → $10K / 1_000_000 cents).
+    // Amount is 50_000 cents ($500) which is within range.
+    const r = await verifyX402Authorization(
+      makeBundle({
+        spendPolicy: { maxTransactionAmount: 1_000_000, currency: 'USDC' },
+        scopeBitmask: '12', // bits 2+3 = FINANCIAL_SMALL + FINANCIAL_MEDIUM
+      }),
+      { ...REQS, amount: 50_000 },
+      resolveWithBitmask(12n), // bits 2+3
+    );
+    // ZK will fail (stub proofs) but policyFit should be true.
+    // Check that the spend-cap warning is NOT present.
+    expect(r.warnings.some((w) => /exceeds derived spend cap/.test(w))).toBe(false);
+    expect(r.warnings.some((w) => /no FINANCIAL/.test(w))).toBe(false);
+  });
+
+  test('SECURITY: credential with no financial bits → denied regardless of wire bundle claim', async () => {
+    // Credential only has READ_DATA + WRITE_DATA (bits 0+1 = 3n), no FINANCIAL_* bits.
+    // Wire bundle claims unlimited.
+    const r = await verifyX402Authorization(
+      makeBundle({
+        spendPolicy: { maxTransactionAmount: 999_999_999, currency: 'USDC' },
+        scopeBitmask: '3', // bits 0+1 only
+      }),
+      { ...REQS, amount: 100 }, // even a tiny amount
+      resolveWithBitmask(3n), // no financial bits
+    );
+    expect(r.verified).toBe(false);
+    expect(r.warnings.some((w) => /no FINANCIAL/.test(w))).toBe(true);
+  });
+
+  test('SECURITY: cumulative-bit violation (bit 4 without 2+3) → denied', async () => {
+    // Malformed bitmask: FINANCIAL_UNLIMITED (bit 4 = 16) without bits 2+3.
+    const r = await verifyX402Authorization(
+      makeBundle({
+        spendPolicy: { maxTransactionAmount: 999_999_999, currency: 'USDC' },
+        scopeBitmask: '16',
+      }),
+      { ...REQS, amount: 100 },
+      resolveWithBitmask(16n), // bit 4 only — cumulative violation
+    );
+    expect(r.verified).toBe(false);
+    expect(r.warnings.some((w) => /no FINANCIAL/.test(w))).toBe(true);
   });
 });

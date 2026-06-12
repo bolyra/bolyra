@@ -174,6 +174,40 @@ function didFromAgent(network: string, agentCommitment: bigint): string {
   return `did:bolyra:${network}:0x${hex.padStart(64, '0')}`;
 }
 
+// ---------------------------------------------------------------------------
+// Bitmask → spend cap (mirrors stripe-acp.ts TIER_CAPS / bit layout)
+// ---------------------------------------------------------------------------
+
+const BIT_FINANCIAL_SMALL = 1n << 2n;     // bit 2: < $100
+const BIT_FINANCIAL_MEDIUM = 1n << 3n;    // bit 3: < $10K
+const BIT_FINANCIAL_UNLIMITED = 1n << 4n; // bit 4: unlimited
+
+/**
+ * Derive the per-transaction spend cap (in minor units / cents) from a
+ * credential's permission bitmask.
+ *
+ * Returns `Infinity` for FINANCIAL_UNLIMITED, `0` when no financial bits are
+ * set (deny), and the tier cap otherwise. Enforces cumulative-bit semantics
+ * (bit 4 implies 2+3, bit 3 implies 2) — a malformed bitmask with a higher
+ * tier but missing implied bits collapses to 0 (deny).
+ */
+function deriveSpendCap(bitmask: bigint): number {
+  const small = (bitmask & BIT_FINANCIAL_SMALL) !== 0n;
+  const medium = (bitmask & BIT_FINANCIAL_MEDIUM) !== 0n;
+  const unlimited = (bitmask & BIT_FINANCIAL_UNLIMITED) !== 0n;
+
+  // Enforce cumulative-bit implication (defense-in-depth — circuit also enforces)
+  const cumulativeViolation =
+    (unlimited && !(medium && small)) ||
+    (medium && !small);
+  if (cumulativeViolation) return 0;
+
+  if (unlimited) return Infinity;
+  if (medium) return 1_000_000;   // $10K in cents
+  if (small) return 10_000;       // $100 in cents
+  return 0;                       // no financial authority
+}
+
 interface WireBundle {
   v: typeof X402_WIRE_VERSION;
   did: string;
@@ -353,21 +387,36 @@ export async function verifyX402Authorization(
 
   // Step 3 — DID resolves to a known credential
   let credentialResolved = false;
+  let resolvedBitmask: bigint | null = null;
   try {
     const credential = await resolveCredential(bundle.did);
     credentialResolved = credential != null;
-    if (!credentialResolved) warnings.push(`unresolved did: ${bundle.did}`);
+    if (credential) {
+      resolvedBitmask = credential.permissionBitmask;
+    } else {
+      warnings.push(`unresolved did: ${bundle.did}`);
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     warnings.push(`resolveCredential threw: ${msg}`);
   }
 
   // Step 4 — spend-policy fit
-  const policyFit = requirements.amount <= bundle.spendPolicy.maxTransactionAmount;
+  // SECURITY: derive the spend cap from the resolved credential's permission
+  // bitmask, NOT from the client-submitted wire bundle. The wire bundle's
+  // spendPolicy is advisory metadata only — an attacker could set any value.
+  const derivedCap = resolvedBitmask != null ? deriveSpendCap(resolvedBitmask) : 0;
+  const policyFit = derivedCap > 0 && requirements.amount <= derivedCap;
   if (!policyFit) {
-    warnings.push(
-      `amount ${requirements.amount} ${requirements.asset} exceeds spend cap ${bundle.spendPolicy.maxTransactionAmount} ${bundle.spendPolicy.currency}`,
-    );
+    if (resolvedBitmask == null) {
+      warnings.push('spend cap could not be derived: credential not resolved');
+    } else if (derivedCap === 0) {
+      warnings.push('credential has no FINANCIAL_* authority (derived cap = 0)');
+    } else {
+      warnings.push(
+        `amount ${requirements.amount} ${requirements.asset} exceeds derived spend cap ${derivedCap} (wire bundle claimed ${bundle.spendPolicy.maxTransactionAmount} ${bundle.spendPolicy.currency})`,
+      );
+    }
   }
 
   // Step 5 — currency match
