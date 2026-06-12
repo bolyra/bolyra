@@ -8,7 +8,7 @@ Unified zero-knowledge proof identity protocol for humans and AI agents.
 
 ## What this is
 
-Bolyra is a mutual zero-knowledge proof authentication protocol. Humans prove uniqueness via a Semaphore v4-style enrollment circuit; AI agents prove EdDSA-signed credentials with cumulative-bit permissions; a delegation circuit narrows scope one-way. A handshake binds a Groth16 (human) and PLONK (agent) proof to a shared session nonce, verified atomically on-chain.
+Bolyra is a mutual zero-knowledge proof authentication protocol. Humans prove uniqueness via a Semaphore v4-style enrollment circuit; AI agents prove EdDSA-signed credentials with cumulative-bit permissions; a delegation circuit narrows scope one-way. A handshake binds a Groth16 (human) and Groth16 (agent) proof to a shared session nonce, verified atomically on-chain.
 
 ## Repository layout
 

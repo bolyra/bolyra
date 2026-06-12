@@ -68,8 +68,8 @@ Permissions use cumulative bit encoding — higher tiers imply lower ones:
 | `validateCumulativeBitEncoding()` | v0.1 |
 | `proveHandshake()`            | v0.2   |
 | `verifyHandshake()`           | v0.2   |
-| `delegate()`                  | v0.3 (stub) |
-| `verifyDelegation()`          | v0.3 (stub) |
+| `delegate()`                  | v0.3        |
+| `verifyDelegation()`          | v0.3        |
 
 ## License
 
