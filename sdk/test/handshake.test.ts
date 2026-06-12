@@ -18,14 +18,22 @@ const mockAgent: AgentCredential = {
 };
 
 describe('proveHandshake nonce unit', () => {
-  it('defaultNonce returns Unix seconds, not milliseconds', () => {
-    const now = Math.floor(Date.now() / 1000);
+  it('defaultNonce embeds Unix seconds in upper bits with random entropy', () => {
+    const now = BigInt(Math.floor(Date.now() / 1000));
     const nonce = defaultNonce();
-    // Must be within 2 seconds of current Unix time
-    expect(Number(nonce)).toBeGreaterThanOrEqual(now - 2);
-    expect(Number(nonce)).toBeLessThanOrEqual(now + 2);
-    // Must NOT be in milliseconds (13+ digits)
-    expect(nonce.toString().length).toBeLessThanOrEqual(10);
+    // Upper bits (>> 64) must be within 2 seconds of current Unix time
+    const ts = nonce >> 64n;
+    expect(ts).toBeGreaterThanOrEqual(now - 2n);
+    expect(ts).toBeLessThanOrEqual(now + 2n);
+    // Lower 64 bits are random entropy — must not be zero (astronomically unlikely)
+    const entropy = nonce & ((1n << 64n) - 1n);
+    expect(entropy).not.toBe(0n);
+  });
+
+  it('defaultNonce produces distinct values on consecutive calls', () => {
+    const a = defaultNonce();
+    const b = defaultNonce();
+    expect(a).not.toBe(b);
   });
 });
 

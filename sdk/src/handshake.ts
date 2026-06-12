@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import * as snarkjs from 'snarkjs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -14,9 +15,19 @@ import { proveGroth16, ProverBackend } from './prover';
 // Default paths to circuit artifacts (relative to package root)
 const DEFAULT_CIRCUIT_DIR = path.join(__dirname, '../../circuits/build');
 
-/** Default nonce: Unix seconds (not milliseconds). */
+/**
+ * Cryptographically unpredictable nonce that embeds a Unix-seconds timestamp
+ * in the upper bits so the MCP verifier can still check freshness.
+ *
+ * Layout (fits in uint256):
+ *   nonce = (unix_seconds << 64) | random_64_bits
+ *
+ * Extract timestamp: `nonce >> 64n`
+ */
 export function defaultNonce(): bigint {
-  return BigInt(Math.floor(Date.now() / 1000));
+  const ts = BigInt(Math.floor(Date.now() / 1000));
+  const rand = BigInt('0x' + randomBytes(8).toString('hex'));
+  return (ts << 64n) | rand;
 }
 
 /**
