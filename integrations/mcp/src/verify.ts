@@ -179,6 +179,14 @@ export async function verifyBundle(
     }
   }
 
+  // Nonce replay check
+  if (config.nonceStore) {
+    const isFresh = await config.nonceStore.markIfFresh(bundle.nonce, maxProofAge);
+    if (!isFresh) {
+      return failCtx('Nonce already used — proof replay rejected');
+    }
+  }
+
   // Bind proof to claimed credential: recompute scopeCommitment from the
   // resolved credential and compare to the proof's output. Without this an
   // attacker can generate a valid proof for credential A (attacker-owned),

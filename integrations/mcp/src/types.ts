@@ -110,6 +110,15 @@ export interface BolyraAuthContext {
  */
 export type ToolPermissionPolicy = Record<string, bigint>;
 
+/**
+ * Nonce store for replay protection. Tracks used nonces so the same
+ * proof bundle cannot be replayed within maxProofAge.
+ */
+export interface NonceStore {
+  /** Check if nonce was already used. If not, mark it as used. Returns true if fresh. */
+  markIfFresh(nonce: string, ttlSeconds: number): Promise<boolean>;
+}
+
 /** Configuration shared by both server wrappers. */
 export interface BolyraMcpConfig {
   /** Network identifier for DID construction (default: "base-sepolia"). */
@@ -140,6 +149,12 @@ export interface BolyraMcpConfig {
    * on-chain IdentityRegistry or a cached root set.
    */
   validateRoots?: (humanRoot: bigint, agentRoot: bigint) => Promise<boolean>;
+  /**
+   * Nonce store for replay protection. When provided, each proof nonce
+   * is checked for prior use and rejected if replayed. Defaults to no
+   * replay protection if not set.
+   */
+  nonceStore?: NonceStore;
   /** SDK config passthrough (rpc/registry/circuit dirs). */
   sdkConfig?: BolyraConfig;
   /**

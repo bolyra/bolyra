@@ -5,7 +5,8 @@
  */
 
 import { verifyBundle, checkToolPolicy } from '../src/verify';
-import type { BolyraProofBundle, BolyraMcpConfig } from '../src/types';
+import { MemoryNonceStore } from '../src/nonce-store';
+import type { BolyraProofBundle, BolyraMcpConfig, NonceStore } from '../src/types';
 
 jest.mock('@bolyra/sdk', () => ({
   verifyHandshake: jest.fn(),
@@ -284,6 +285,51 @@ describe('Merkle root validation (C2)', () => {
     expect(ctx.warnings).toEqual(
       expect.arrayContaining([expect.stringMatching(/No root validator configured/)]),
     );
+  });
+});
+
+describe('nonce replay protection (H1)', () => {
+  it('rejects replayed nonce when NonceStore is configured', async () => {
+    const store = new MemoryNonceStore();
+    const nonce = String(Math.floor(Date.now() / 1000));
+    const bundle = makeBundle({ nonce });
+    const config = makeConfig({ nonceStore: store });
+
+    const ctx1 = await verifyBundle(bundle, config);
+    expect(ctx1.verified).toBe(true);
+
+    const ctx2 = await verifyBundle(bundle, config);
+    expect(ctx2.verified).toBe(false);
+    expect(ctx2.reason).toMatch(/replay/);
+  });
+
+  it('allows duplicate nonces when no NonceStore is configured (backward compat)', async () => {
+    const nonce = String(Math.floor(Date.now() / 1000));
+    const bundle = makeBundle({ nonce });
+    const config = makeConfig();
+
+    const ctx1 = await verifyBundle(bundle, config);
+    expect(ctx1.verified).toBe(true);
+
+    const ctx2 = await verifyBundle(bundle, config);
+    expect(ctx2.verified).toBe(true);
+  });
+});
+
+describe('MemoryNonceStore', () => {
+  it('marks a nonce as fresh on first use and stale on second', async () => {
+    const store = new MemoryNonceStore();
+    expect(await store.markIfFresh('abc', 60)).toBe(true);
+    expect(await store.markIfFresh('abc', 60)).toBe(false);
+  });
+
+  it('cleans up expired nonces', async () => {
+    const store = new MemoryNonceStore();
+    // Mark with a very short TTL
+    expect(await store.markIfFresh('expired-nonce', 0)).toBe(true);
+    // The entry is already expired (ttl=0 means expiry = Date.now() + 0)
+    // Next call should clean it up and allow re-use
+    expect(await store.markIfFresh('expired-nonce', 60)).toBe(true);
   });
 });
 

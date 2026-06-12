@@ -11,6 +11,7 @@ export { bolyraAuthMiddleware } from './server-http';
 export { attachBolyraProof, attachDelegatedBolyraProof, normalizeOptions } from './client';
 export type { DelegationHopSpec, AttachProofOptions } from './client';
 export { verifyBundle, checkToolPolicy } from './verify';
+export { MemoryNonceStore } from './nonce-store';
 
 export type {
   BolyraProofBundle,
@@ -20,4 +21,5 @@ export type {
   BolyraMcpHttpConfig,
   BolyraClientAuth,
   ToolPermissionPolicy,
+  NonceStore,
 } from './types';
