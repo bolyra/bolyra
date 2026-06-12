@@ -69,6 +69,19 @@ export function bolyraAuthMiddleware(config: BolyraMcpHttpConfig) {
   }
 
   return async (req: HttpReq, res: HttpRes, next: Next): Promise<void> => {
+    // Reject JSON-RPC batch requests (arrays). MCP doesn't use batching,
+    // and array bodies would bypass extractJsonRpcMethod which reads
+    // body.method (only exists on single-request objects). Without this,
+    // an attacker could wrap tools/call in a batch array to skip auth.
+    if (Array.isArray(req.body)) {
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: { code: -32600, message: 'JSON-RPC batch requests are not supported' },
+        id: null,
+      });
+      return;
+    }
+
     // Only gate JSON-RPC tool calls. initialize / tools/list / notifications
     // are part of discovery and travel unauthenticated, mirroring how OAuth
     // resource servers expose .well-known/* without auth.
