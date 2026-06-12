@@ -71,6 +71,56 @@ jobs:
       - run: npm test
         working-directory: integrations/openclaw
 
+  mcp-tests:
+    name: MCP integration — typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Build local @bolyra/sdk
+        run: cd sdk && npm ci && npm run build
+
+      - name: Install MCP integration with file:// SDK
+        working-directory: integrations/mcp
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
+
+      - run: npx tsc --noEmit
+        working-directory: integrations/mcp
+      - run: npm test -- --testPathIgnorePatterns='e2e'
+        working-directory: integrations/mcp
+
+  payment-protocols-tests:
+    name: Payment Protocols — typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Build local @bolyra/sdk
+        run: cd sdk && npm ci && npm run build
+
+      - name: Install payment-protocols with file:// SDK
+        working-directory: integrations/payment-protocols
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
+
+      - run: npx tsc --noEmit
+        working-directory: integrations/payment-protocols
+      - run: npm test
+        working-directory: integrations/payment-protocols
+
   conformance:
     name: Conformance test vectors
     runs-on: ubuntu-latest
@@ -106,6 +156,22 @@ jobs:
         run: |
           cd sdk && npm run build
           cd ../integrations/openclaw
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
+          npx tsc --noEmit
+
+      - name: Typecheck integrations/mcp
+        run: |
+          cd integrations/mcp
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
+          npx tsc --noEmit
+
+      - name: Typecheck integrations/payment-protocols
+        run: |
+          cd integrations/payment-protocols
           node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
           rm -f package-lock.json
           npm install
