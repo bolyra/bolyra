@@ -244,6 +244,14 @@ contract IdentityRegistry {
         if (agentPubSignals.length != AGENT_PUBSIG_LEN) revert PubSignalsLengthMismatch();
 
         // 1. Check nonce freshness
+        // KNOWN RISK (H6): Nonces are not bound to msg.sender. A mempool
+        // observer can front-run by submitting their own verifyHandshake
+        // with the same nonce (if they have any enrolled identity), causing
+        // the legitimate tx to revert with NonceAlreadyUsed. Mitigation
+        // options: (a) use private mempools (Flashbots Protect), (b) use
+        // unpredictable nonces (handled by SDK defaultNonce entropy), or
+        // (c) bind nonce to msg.sender (requires interface change). Option
+        // (c) is deferred to a future contract version.
         if (usedNonces[sessionNonce]) revert NonceAlreadyUsed();
         usedNonces[sessionNonce] = true;
 
