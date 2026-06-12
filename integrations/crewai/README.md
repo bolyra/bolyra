@@ -1,5 +1,7 @@
 # Bolyra CrewAI Integration
 
+> **Status: API Stub** — Type contracts and tool shapes are defined, but `_run()` returns a placeholder. Full implementation requires the `@bolyra/sdk` subprocess bridge, which is not yet shipped. Do not use in production.
+
 Mutual ZKP authentication and delegation tools for CrewAI multi-agent workflows.
 
 ## Install

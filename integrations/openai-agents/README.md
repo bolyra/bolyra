@@ -1,5 +1,7 @@
 # Bolyra Delegation × OpenAI Agents SDK
 
+> **Status: Example Only** — Contains a delegation example (`delegation-example.ts`) but no agent authentication implementation. This is a placeholder for future work.
+
 Example: gate an OpenAI Agents SDK tool call with a `@bolyra/delegation` receipt. The human signs a scoped receipt (e.g. "agent_alice may purchase up to $50 from example.com for the next hour"); a middleware-style wrapper verifies the receipt before the tool runs.
 
 ## Run
