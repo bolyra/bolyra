@@ -43,6 +43,7 @@ function makeConfig(overrides: Partial<BolyraMcpConfig> = {}): BolyraMcpConfig {
 
 beforeEach(() => {
   sdk.verifyHandshake.mockReset();
+  sdk.poseidon3.mockReset();
   sdk.verifyHandshake.mockResolvedValue({
     humanNullifier: 1n,
     agentNullifier: 2n,
@@ -50,6 +51,9 @@ beforeEach(() => {
     scopeCommitment: 999n,
     verified: true,
   });
+  // Default: poseidon3(credential fields) matches the mocked scopeCommitment
+  // so the binding check passes for happy-path tests.
+  sdk.poseidon3.mockResolvedValue(999n);
 });
 
 describe('verifyBundle', () => {
@@ -120,6 +124,48 @@ describe('verifyBundle', () => {
     expect(ctx.verified).toBe(false);
     expect(ctx.reason).toMatch(/rpc unreachable/);
   });
+
+  it('rejects when proof scopeCommitment does not match resolved credential (credential substitution)', async () => {
+    // Credential A (attacker-owned): commitment 11111, scopeCommitment 999
+    // Credential B (privileged): commitment 22222, scopeCommitment 888
+    // Attack: proof was generated for A (scopeCommitment=999), but bundle
+    // claims credentialCommitment=22222 (credential B).
+    const credentialB = {
+      modelHash: 1n,
+      operatorPublicKey: { x: 1n, y: 2n },
+      permissionBitmask: 0b11111111n, // privileged
+      expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + 86400),
+      signature: { R8: { x: 1n, y: 2n }, S: 3n },
+      commitment: 22222n,
+    };
+
+    const config = makeConfig({
+      resolveCredential: jest.fn(async () => credentialB as any),
+    });
+
+    // verifyHandshake returns scopeCommitment=999 (from credential A's proof)
+    sdk.verifyHandshake.mockResolvedValue({
+      humanNullifier: 1n,
+      agentNullifier: 2n,
+      sessionNonce: BigInt(Math.floor(Date.now() / 1000)),
+      scopeCommitment: 999n,
+      verified: true,
+    });
+
+    // poseidon3(B.permissionBitmask, B.commitment, B.expiryTimestamp) → 888
+    // This does NOT match the proof's scopeCommitment of 999.
+    sdk.poseidon3.mockResolvedValue(888n);
+
+    const bundle = makeBundle({ credentialCommitment: '22222' });
+    const ctx = await verifyBundle(bundle, config);
+
+    expect(ctx.verified).toBe(false);
+    expect(ctx.reason).toMatch(/not bound to the claimed credential/);
+    expect(ctx.warnings).toEqual(
+      expect.arrayContaining([expect.stringMatching(/credential substitution/)]),
+    );
+    expect(ctx.permissionBitmask).toBe(0n);
+  });
 });
 
 describe('chain verification', () => {
@@ -145,8 +191,10 @@ describe('chain verification', () => {
 
   it('verifies a 2-hop chain and reports leaf scope as effective bitmask', async () => {
     sdk.verifyDelegation.mockResolvedValue({} as any);
-    // For each hop, poseidon3 returns the value the proof's publicSignals[0] claims.
+    // First call: binding check (credential → scopeCommitment must match proof output).
+    // Subsequent calls: per-hop newScopeCommitment recomputation.
     sdk.poseidon3
+      .mockResolvedValueOnce(999n)  // binding check (matches verifyHandshake mock)
       .mockResolvedValueOnce(1000n) // hop 0 newScopeCommitment
       .mockResolvedValueOnce(1001n); // hop 1 newScopeCommitment
 
@@ -160,7 +208,9 @@ describe('chain verification', () => {
 
   it('rejects when a hop newScopeCommitment formula does not match', async () => {
     sdk.verifyDelegation.mockResolvedValue({} as any);
-    sdk.poseidon3.mockResolvedValueOnce(9999n); // doesn't match publicSignals[0]=1000
+    sdk.poseidon3
+      .mockResolvedValueOnce(999n)   // binding check passes
+      .mockResolvedValueOnce(9999n); // doesn't match publicSignals[0]=1000
 
     const ctx = await verifyBundle(makeChainBundle(1), makeConfig());
 
@@ -169,6 +219,7 @@ describe('chain verification', () => {
   });
 
   it('rejects when verifyDelegation throws on a hop', async () => {
+    sdk.poseidon3.mockResolvedValueOnce(999n); // binding check passes
     sdk.verifyDelegation.mockRejectedValue(new Error('bad signature'));
 
     const ctx = await verifyBundle(makeChainBundle(1), makeConfig());
@@ -179,7 +230,9 @@ describe('chain verification', () => {
 
   it('rejects expired hops', async () => {
     sdk.verifyDelegation.mockResolvedValue({} as any);
-    sdk.poseidon3.mockResolvedValue(1000n);
+    sdk.poseidon3
+      .mockResolvedValueOnce(999n)   // binding check passes
+      .mockResolvedValue(1000n);     // chain hop recomputation
     const expired = makeBundle({
       v: 2,
       delegationChain: [

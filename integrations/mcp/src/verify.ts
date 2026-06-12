@@ -160,6 +160,30 @@ export async function verifyBundle(
     };
   }
 
+  // Bind proof to claimed credential: recompute scopeCommitment from the
+  // resolved credential and compare to the proof's output. Without this an
+  // attacker can generate a valid proof for credential A (attacker-owned),
+  // set bundle.credentialCommitment to credential B (privileged), and the
+  // server would resolve B, verify the proof (valid for A), and grant B's
+  // permissions.
+  const expectedScope = await sdk.poseidon3(
+    credential.permissionBitmask,
+    credential.commitment,
+    credential.expiryTimestamp,
+  );
+  if (expectedScope !== verifyResult.scopeCommitment) {
+    return {
+      verified: false,
+      score: 0,
+      did: buildDid(network, commitment),
+      permissionBitmask: 0n,
+      warnings: ['Proof scopeCommitment does not match resolved credential — possible credential substitution attack'],
+      reason: 'Proof is not bound to the claimed credential',
+      chainDepth: 0,
+      effectiveCommitment: bundle.credentialCommitment,
+    };
+  }
+
   // Walk the delegation chain (if present). Each hop must:
   //   1. Bind prev = handshake.scopeCommitment (hop 0) or prior hop's newScopeCommitment.
   //   2. Pass sdk.verifyDelegation — Groth16 verify + prev/nonce/currentTs binding.
