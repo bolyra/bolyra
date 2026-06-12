@@ -211,6 +211,23 @@ export async function verifyBundle(
     };
   }
 
+  // Enforce max delegation chain depth — mirrors IdentityRegistry.sol MAX_DELEGATION_HOPS=3.
+  // Without this an attacker can submit 100+ hops for CPU exhaustion or to exploit
+  // logic bugs in deep chains, since the contract never sees the off-chain bundle.
+  const MAX_DELEGATION_HOPS = 3;
+  if (bundle.delegationChain && bundle.delegationChain.length > MAX_DELEGATION_HOPS) {
+    return {
+      verified: false,
+      score: 0,
+      did: buildDid(network, commitment),
+      permissionBitmask: 0n,
+      warnings: [`Delegation chain exceeds max hops (${bundle.delegationChain.length} > ${MAX_DELEGATION_HOPS})`],
+      reason: `Delegation chain too deep (max ${MAX_DELEGATION_HOPS} hops)`,
+      chainDepth: 0,
+      effectiveCommitment: bundle.credentialCommitment,
+    };
+  }
+
   // Walk the delegation chain (if present). Each hop must:
   //   1. Bind prev = handshake.scopeCommitment (hop 0) or prior hop's newScopeCommitment.
   //   2. Pass sdk.verifyDelegation — Groth16 verify + prev/nonce/currentTs binding.
@@ -305,9 +322,10 @@ export async function verifyBundle(
     warnings.push('Agent has no read/write permissions');
   }
 
-  // Nonce is unix-seconds; sessionNonce on the verified result mirrors what
-  // was bound into the proof. Stale nonce → fail freshness check.
-  const nonceAgeSec = Number(now - nonce);
+  // Nonce layout: (unix_seconds << 64) | random_entropy.
+  // Extract the timestamp from the upper bits for freshness check.
+  const nonceTs = nonce >> 64n;
+  const nonceAgeSec = Number(now - nonceTs);
   if (nonceAgeSec >= 0 && nonceAgeSec < maxProofAge) {
     score += 10;
   } else {
@@ -378,6 +396,22 @@ function verifyDevBundle(
   let effectiveCommitment = bundle.credentialCommitment;
   let chainDepth = 0;
 
+  // Enforce max delegation chain depth — same limit as production path.
+  const MAX_DELEGATION_HOPS = 3;
+  if (bundle.delegationChain && bundle.delegationChain.length > MAX_DELEGATION_HOPS) {
+    const devDid = `did:bolyra:dev:${commitment.toString(16).padStart(64, '0')}`;
+    return {
+      verified: false,
+      score: 0,
+      did: devDid,
+      permissionBitmask: 0n,
+      warnings: [`Delegation chain exceeds max hops (${bundle.delegationChain.length} > ${MAX_DELEGATION_HOPS})`],
+      reason: `Delegation chain too deep (max ${MAX_DELEGATION_HOPS} hops)`,
+      chainDepth: 0,
+      effectiveCommitment: bundle.credentialCommitment,
+    };
+  }
+
   // Walk delegation chain shape (no crypto — just extract leaf scope/commitment).
   if (bundle.delegationChain && bundle.delegationChain.length > 0) {
     for (let i = 0; i < bundle.delegationChain.length; i++) {
@@ -400,8 +434,10 @@ function verifyDevBundle(
     warnings.push('Agent has no read/write permissions');
   }
 
-  // Nonce freshness check.
-  const nonceAgeSec = Number(now - nonce);
+  // Nonce layout: (unix_seconds << 64) | random_entropy.
+  // Extract the timestamp from the upper bits for freshness check.
+  const nonceTs = nonce >> 64n;
+  const nonceAgeSec = Number(now - nonceTs);
   if (nonceAgeSec >= 0 && nonceAgeSec < maxProofAge) {
     score += 10;
   } else {

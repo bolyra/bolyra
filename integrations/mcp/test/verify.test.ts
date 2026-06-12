@@ -17,12 +17,19 @@ jest.mock('@bolyra/sdk', () => ({
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const sdk = require('@bolyra/sdk');
 
+/** Build a nonce in the new (ts << 64) | entropy format. */
+function makeNonce(): string {
+  const ts = BigInt(Math.floor(Date.now() / 1000));
+  // Use a fixed entropy suffix for deterministic tests
+  return String((ts << 64n) | 0xdeadbeefcafe1234n);
+}
+
 function makeBundle(overrides: Partial<BolyraProofBundle> = {}): BolyraProofBundle {
   return {
     v: 1,
     humanProof: { pi_a: [], pi_b: [], pi_c: [], protocol: 'groth16', curve: 'bn128', publicSignals: ['100', '200', '300'] } as any,
     agentProof: { pi_a: [], pi_b: [], pi_c: [], protocol: 'groth16', curve: 'bn128', publicSignals: ['400', '500', '600', '7'] } as any,
-    nonce: String(Math.floor(Date.now() / 1000)),
+    nonce: makeNonce(),
     credentialCommitment: '12345',
     ...overrides,
   };
@@ -115,7 +122,8 @@ describe('verifyBundle', () => {
   });
 
   it('rejects stale nonce', async () => {
-    const oldNonce = String(Math.floor(Date.now() / 1000) - 600);
+    const oldTs = BigInt(Math.floor(Date.now() / 1000) - 600);
+    const oldNonce = String((oldTs << 64n) | 0xdeadbeefcafe1234n);
     const ctx = await verifyBundle(makeBundle({ nonce: oldNonce }), makeConfig({ maxProofAge: 300 }));
     expect(ctx.warnings.some((w) => /stale/i.test(w))).toBe(true);
   });
@@ -230,6 +238,26 @@ describe('chain verification', () => {
     expect(ctx.warnings.some((w) => /verification failed/.test(w))).toBe(true);
   });
 
+  it('rejects chains with more than MAX_DELEGATION_HOPS (4 hops) before walking them', async () => {
+    // poseidon3 must return 999n so the credential binding check passes and
+    // the chain length guard is the thing that fires, not the binding check.
+    sdk.poseidon3.mockResolvedValueOnce(999n); // binding check passes
+    const ctx = await verifyBundle(makeChainBundle(4), makeConfig());
+    expect(ctx.verified).toBe(false);
+    expect(ctx.reason).toMatch(/too deep/);
+    expect(ctx.warnings.some((w) => /exceeds max hops/.test(w))).toBe(true);
+    expect(sdk.verifyDelegation).not.toHaveBeenCalled();
+  });
+
+  it('rejects chains with 100 hops before walking them', async () => {
+    sdk.poseidon3.mockResolvedValueOnce(999n); // binding check passes
+    const ctx = await verifyBundle(makeChainBundle(100), makeConfig());
+    expect(ctx.verified).toBe(false);
+    expect(ctx.reason).toMatch(/too deep/);
+    expect(ctx.warnings[0]).toMatch(/100 > 3/);
+    expect(sdk.verifyDelegation).not.toHaveBeenCalled();
+  });
+
   it('rejects expired hops', async () => {
     sdk.verifyDelegation.mockResolvedValue({} as any);
     sdk.poseidon3
@@ -291,7 +319,7 @@ describe('Merkle root validation (C2)', () => {
 describe('nonce replay protection (H1)', () => {
   it('rejects replayed nonce when NonceStore is configured', async () => {
     const store = new MemoryNonceStore();
-    const nonce = String(Math.floor(Date.now() / 1000));
+    const nonce = makeNonce();
     const bundle = makeBundle({ nonce });
     const config = makeConfig({ nonceStore: store });
 
@@ -304,7 +332,7 @@ describe('nonce replay protection (H1)', () => {
   });
 
   it('allows duplicate nonces when no NonceStore is configured (backward compat)', async () => {
-    const nonce = String(Math.floor(Date.now() / 1000));
+    const nonce = makeNonce();
     const bundle = makeBundle({ nonce });
     const config = makeConfig();
 
