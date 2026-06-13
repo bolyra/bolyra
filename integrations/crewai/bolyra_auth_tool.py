@@ -122,6 +122,23 @@ class BolyraAuthTool:
             result = verify_handshake(human_proof, agent_proof, nonce)
 
             if result.verified:
+                # P1-1: Enforce required_permissions against agent bitmask
+                # (CrewAI _run takes scope only; check self.permissions)
+                from bolyra.identity import permissions_to_bitmask
+                required_bitmask = permissions_to_bitmask(perm_enums)
+                agent_bitmask = agent.permission_bitmask
+                if (required_bitmask & agent_bitmask) != required_bitmask:
+                    missing_bits = required_bitmask & ~agent_bitmask
+                    missing_names = [
+                        p.name.lower() for p in Permission
+                        if (1 << int(p)) & missing_bits
+                    ]
+                    return (
+                        f"Bolyra authentication FAILED: agent lacks required permissions: "
+                        f"{missing_names}. Agent bitmask: {agent_bitmask}, "
+                        f"required: {required_bitmask}."
+                    )
+
                 return (
                     f"Bolyra authentication VERIFIED with scope '{scope}'. "
                     f"Permissions: {', '.join(self.permissions)}. "

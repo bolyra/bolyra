@@ -172,6 +172,41 @@ class BolyraAuthTool:
             )
             result = verify_handshake(human_proof, agent_proof, nonce)
 
+            # P1-1: Enforce required_permissions against agent bitmask
+            if result.verified:
+                req_perm_strings = input.get("required_permissions", ["read_data"])
+                req_perm_enums = []
+                for rp in req_perm_strings:
+                    rp_key = rp.strip().lower()
+                    if rp_key not in _perm_map:
+                        return {
+                            "verified": False,
+                            "status": "error",
+                            "message": f"Unknown required permission: '{rp}'. "
+                                       f"Valid: {list(_perm_map.keys())}",
+                            "tool": "bolyra_authenticate",
+                        }
+                    req_perm_enums.append(_perm_map[rp_key])
+
+                from bolyra.identity import permissions_to_bitmask
+                required_bitmask = permissions_to_bitmask(req_perm_enums)
+                agent_bitmask = agent.permission_bitmask
+                if (required_bitmask & agent_bitmask) != required_bitmask:
+                    missing_bits = required_bitmask & ~agent_bitmask
+                    missing_names = [
+                        p.name.lower() for p in Permission
+                        if (1 << int(p)) & missing_bits
+                    ]
+                    return {
+                        "verified": False,
+                        "status": "insufficient_permissions",
+                        "message": (
+                            f"Agent lacks required permissions: {missing_names}. "
+                            f"Agent bitmask: {agent_bitmask}, required: {required_bitmask}."
+                        ),
+                        "tool": "bolyra_authenticate",
+                    }
+
             return {
                 "verified": result.verified,
                 "status": "ok" if result.verified else "verification_failed",

@@ -126,22 +126,42 @@ class BolyraDelegateTool:
 
             delegatee_scope = permissions_to_bitmask(delegatee_perms)
 
-            # Get delegator credential (dev mode for now)
-            _human, delegator, operator_key_int = create_dev_identities()
+            # P2-1: Use consistent identity mode -- don't mix dev/production
+            import hashlib
+            import time
 
             if self.operator_key is not None:
+                # Production: create a real agent credential with the operator key
+                from bolyra.identity import create_agent_credential
                 operator_key_int = int(self.operator_key, 16)
+                model_hash_int = int(
+                    hashlib.sha256(b"delegation-agent").hexdigest()[:16], 16
+                )
+                agent_perm_enums = []
+                for p_str in self.agent_permissions:
+                    key = p_str.strip().lower()
+                    if key in _perm_map:
+                        agent_perm_enums.append(_perm_map[key])
+                expiry = int(time.time()) + 86400
+                delegator = create_agent_credential(
+                    model_hash_int, operator_key_int, agent_perm_enums, expiry
+                )
+            else:
+                # Dev mode: use dev identities entirely
+                _human, delegator, operator_key_int = create_dev_identities()
 
             session_nonce = int(input.get("session_nonce", "0"))
             scope_commitment = int(input.get("scope_commitment", "0"))
             delegatee_commitment = int(input.get("delegatee_id", "0"), 16) if input.get("delegatee_id", "").startswith("0x") else int(input.get("delegatee_id", "0"))
             expiry_seconds = input.get("expiry_seconds", 3600)
 
-            import time
             delegatee_expiry = min(
                 int(time.time()) + expiry_seconds,
                 delegator.expiry_timestamp,
             )
+
+            # P1-2: Capture timestamp BEFORE delegate() and reuse for verify
+            current_timestamp = int(time.time())
 
             proof, result = delegate(
                 delegator=delegator,
@@ -151,10 +171,10 @@ class BolyraDelegateTool:
                 delegatee_expiry=delegatee_expiry,
                 previous_scope_commitment=scope_commitment,
                 session_nonce=session_nonce,
+                current_timestamp=current_timestamp,
             )
 
-            # Verify the delegation proof
-            current_timestamp = int(time.time())
+            # Verify using the SAME timestamp bound into the proof
             delegation_result = verify_delegation(
                 proof=proof,
                 previous_scope_commitment=scope_commitment,
