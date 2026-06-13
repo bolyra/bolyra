@@ -250,12 +250,14 @@ jobs:
 
       - uses: actions/checkout@v6
         with:
-          sparse-checkout: .github/smoke-test.mjs
+          sparse-checkout: .github/smoke-test.cjs
           path: repo
 
       - name: Run smoke test
         working-directory: /tmp/bolyra-smoke
-        run: node $GITHUB_WORKSPACE/repo/.github/smoke-test.mjs
+        run: |
+          cp $GITHUB_WORKSPACE/repo/.github/smoke-test.cjs ./smoke-test.cjs
+          node smoke-test.cjs
 
       - uses: actions/setup-python@v5
         with:

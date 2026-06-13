@@ -1,6 +1,7 @@
-// Fresh-install smoke test: verifies published packages work
-import { createDevIdentities } from '@bolyra/sdk';
-import { createAuthReceipt, signReceipt, verifyReceipt } from '@bolyra/receipts';
+// Fresh-install smoke test: verifies published packages work from npm
+// Runs in /tmp/bolyra-smoke where packages are installed from registry
+const { createDevIdentities } = require('@bolyra/sdk');
+const { createAuthReceipt, signReceipt, verifyReceipt } = require('@bolyra/receipts');
 
 async function main() {
   console.log('1. Creating dev identities...');
