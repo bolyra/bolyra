@@ -28,11 +28,11 @@ Requires compiled circuit artifacts (`npm run compile:circuits` from repo root).
 
 ## What's real
 
-- **Credential lookup** -- resolveCredential maps commitment to AgentCredential
-- **Nonce replay protection** -- MemoryNonceStore rejects replayed proof bundles
+- **Credential lookup** -- resolveCredential maps commitment to AgentCredential (`--production` only; `--dev` bypasses)
+- **Nonce replay protection** -- MemoryNonceStore rejects replayed proof bundles (`--production` only; `--dev` bypasses)
 - **Proof-to-credential binding** -- verifier checks proof matches resolved credential
 - **Root validation** -- validateRoots callback (mock: accepts all)
-- **Tool policy** -- per-tool permission bitmask enforcement
+- **Tool permission gating** -- per-tool permission bitmask enforcement (both modes)
 
 ## What's mocked
 

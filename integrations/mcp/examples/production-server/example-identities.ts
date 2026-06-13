@@ -4,6 +4,11 @@
  * Uses createDevIdentities() from @bolyra/sdk to produce deterministic
  * human + agent pairs. The server seeds the credential store with the
  * agent credential; the client uses both for proof generation.
+ *
+ * WARNING: These are PUBLIC fixed-seed dev identities from createDevIdentities().
+ * Their secrets are well-known. In production, load real enrolled credentials
+ * from your credential database — NEVER use dev identities.
+ * This is a mock swap point, same as the credential store and root validator.
  */
 
 import { createDevIdentities } from '@bolyra/sdk';

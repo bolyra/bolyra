@@ -73,24 +73,27 @@ async function main(): Promise<void> {
     ? { devMode: true as const }
     : { sdkConfig };
 
-  const fullAuth = await attachBolyraProof(human, agent, proofOpts);
-  console.log(`  proof generated (${mode} mode)`);
-
   // -- list_files ----------------------------------------------------------
+  // Generate a fresh proof for each call: in production mode the NonceStore
+  // rejects a reused nonce, so one proof bundle cannot cover multiple calls.
   label('Step 2: list_files (requires READ_DATA bit 0) -- expect success');
+  const auth1 = await attachBolyraProof(human, agent, proofOpts);
+  console.log(`  proof generated (${mode} mode)`);
   const listResult = await client.callTool({
     name: 'list_files',
     arguments: {},
-    _meta: { bolyra: fullAuth.meta.bolyra },
+    _meta: { bolyra: auth1.meta.bolyra },
   });
   printResult(listResult as any);
 
   // -- read_file -----------------------------------------------------------
   label('Step 3: read_file hello.txt (requires READ_DATA bit 0) -- expect success');
+  const auth2 = await attachBolyraProof(human, agent, proofOpts);
+  console.log(`  proof generated (${mode} mode)`);
   const readResult = await client.callTool({
     name: 'read_file',
     arguments: { name: 'hello.txt' },
-    _meta: { bolyra: fullAuth.meta.bolyra },
+    _meta: { bolyra: auth2.meta.bolyra },
   });
   printResult(readResult as any);
 
@@ -101,7 +104,7 @@ async function main(): Promise<void> {
   });
   console.log('  permissionBitmask: 0b00000001 (READ_DATA only)');
 
-  const readOnlyAuth = await attachBolyraProof(roHuman, roAgent, proofOpts);
+  const auth3 = await attachBolyraProof(roHuman, roAgent, proofOpts);
   console.log(`  proof generated (${mode} mode)`);
 
   // -- write_file with read-only creds -------------------------------------
@@ -109,7 +112,7 @@ async function main(): Promise<void> {
   const writeResult = await client.callTool({
     name: 'write_file',
     arguments: { name: 'secret.txt', content: 'this should be blocked' },
-    _meta: { bolyra: readOnlyAuth.meta.bolyra },
+    _meta: { bolyra: auth3.meta.bolyra },
   });
   printResult(writeResult as any);
 
