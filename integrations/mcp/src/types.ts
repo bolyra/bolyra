@@ -113,12 +113,7 @@ export interface ToolPolicy {
   minScore?: number;
   /** Maximum delegation chain depth allowed (0 = direct only). */
   maxChainDepth?: number;
-  /**
-   * Whether to generate a signed receipt for this tool's decisions.
-   * 'always' = allow + deny, 'deny-only' = only denials, 'never' = skip.
-   * Default: inherits from receiptSigner presence.
-   */
-  receipt?: 'always' | 'deny-only' | 'never';
+  // Per-tool receipt policy deferred — wire when there's a real consumer.
 }
 
 /** Per-tool policy map. Backward compatible: bigint values are treated as requireBitmask-only. */
