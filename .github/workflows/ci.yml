@@ -164,10 +164,13 @@ jobs:
           npm install
           npx tsc --noEmit
 
+      - name: Build local @bolyra/receipts (for MCP typecheck)
+        run: cd integrations/receipts && npm install && npm run build
+
       - name: Typecheck integrations/mcp
         run: |
           cd integrations/mcp
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';p.dependencies['@bolyra/receipts']='file:../receipts';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
           rm -f package-lock.json
           npm install
           npx tsc --noEmit
