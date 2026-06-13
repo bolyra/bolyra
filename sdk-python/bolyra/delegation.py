@@ -14,18 +14,10 @@ implies 2) are enforced on the delegatee scope by the circuit.
 from __future__ import annotations
 
 import json
-import subprocess
 import time
-from pathlib import Path
-from typing import Any
 
-from bolyra.errors import (
-    BolyraError,
-    ConfigurationError,
-    ProofGenerationError,
-    ScopeEscalationError,
-    VerificationError,
-)
+from bolyra._bridge import resolve_node_sdk, run_node_script
+from bolyra.errors import BolyraError, ScopeEscalationError, VerificationError
 from bolyra.types import (
     AgentCredential,
     BolyraConfig,
@@ -36,69 +28,6 @@ from bolyra.types import (
 
 # Delegation circuit MAX_DEPTH -- must match circuits/src/Delegation.circom.
 DELEGATION_MAX_DEPTH = 20
-
-
-def _resolve_node_sdk(config: BolyraConfig | None) -> Path:
-    """Resolve the path to the Bolyra Node.js SDK (mirrors handshake module)."""
-    if config and config.node_sdk_path:
-        p = Path(config.node_sdk_path)
-    else:
-        p = Path(__file__).resolve().parent.parent.parent / "sdk"
-    if not (p / "package.json").exists():
-        raise ConfigurationError(
-            "node_sdk_path",
-            f"Bolyra Node.js SDK not found at {p}. "
-            "Install @bolyra/sdk or set config.node_sdk_path.",
-        )
-    return p
-
-
-def _run_node_script(script: str, sdk_path: Path, op: str) -> dict[str, Any]:
-    """Run a Node.js script and return parsed JSON output.
-
-    ``op`` is the operation name used in ProofGenerationError ("delegation"
-    or "delegation_verify").
-    """
-    try:
-        result = subprocess.run(
-            ["node", "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            cwd=str(sdk_path),
-        )
-    except FileNotFoundError:
-        raise ConfigurationError(
-            "node",
-            "Node.js not found on PATH. Install Node.js >= 18 to use proof generation.",
-        )
-    except subprocess.TimeoutExpired:
-        raise ProofGenerationError(op, "Node.js subprocess timed out after 120s")
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        # Try to surface a typed BolyraError if the TS bridge emitted one.
-        try:
-            payload = json.loads(stderr.splitlines()[-1])
-            if isinstance(payload, dict) and "code" in payload:
-                code = payload["code"]
-                msg = payload.get("message", stderr)
-                if code == "SCOPE_ESCALATION":
-                    raise ScopeEscalationError(
-                        payload.get("details", {}).get("delegator_scope", 0),
-                        payload.get("details", {}).get("delegatee_scope", 0),
-                    )
-                if code == "VERIFICATION_FAILED":
-                    raise VerificationError(msg)
-                raise BolyraError(msg, code, payload.get("details"))
-        except (json.JSONDecodeError, IndexError, KeyError):
-            pass
-        raise ProofGenerationError(op, f"Node.js subprocess failed: {stderr}")
-
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        raise ProofGenerationError(op, f"Failed to parse Node.js output as JSON: {e}")
 
 
 def delegate(
@@ -178,7 +107,7 @@ def delegate(
     )
     siblings_literal = "[" + ",".join(f"{s}n" for s in merkle.siblings) + "]"
 
-    sdk_path = _resolve_node_sdk(config)
+    sdk_path = resolve_node_sdk(config)
 
     script = f"""
 const {{ delegate }} = require('./dist/index.js');
@@ -228,7 +157,7 @@ main().catch(e => {{
 }});
 """
 
-    data = _run_node_script(script, sdk_path, op="delegation")
+    data = run_node_script(script, sdk_path, op="delegation")
     proof = Proof(
         proof=data["proof"]["proof"],
         public_signals=data["proof"]["publicSignals"],
@@ -285,7 +214,7 @@ def verify_delegation(
             f"Delegation proof has {len(proof.public_signals)} public signals, expected 6."
         )
 
-    sdk_path = _resolve_node_sdk(config)
+    sdk_path = resolve_node_sdk(config)
 
     proof_json = json.dumps(proof.proof)
     signals_json = json.dumps(proof.public_signals)
@@ -320,7 +249,7 @@ main().catch(e => {{
 }});
 """
 
-    data = _run_node_script(script, sdk_path, op="delegation_verify")
+    data = run_node_script(script, sdk_path, op="delegation_verify")
     return DelegationResult(
         new_scope_commitment=int(data["newScopeCommitment"]),
         delegation_nullifier=int(data["delegationNullifier"]),

@@ -1,5 +1,7 @@
-"""Tests for bolyra.identity — permission bitmask, cumulative encoding, validation."""
+"""Tests for bolyra.identity — permission bitmask, cumulative encoding, validation,
+and subprocess bridge to the Node.js SDK for identity creation."""
 
+import shutil
 import time
 
 import pytest
@@ -7,12 +9,24 @@ import pytest
 from bolyra.errors import InvalidPermissionError, InvalidSecretError
 from bolyra.identity import (
     BN254_FIELD_ORDER,
+    create_agent_credential,
+    create_dev_identities,
+    create_human_identity,
     permissions_to_bitmask,
     validate_cumulative_bit_encoding,
     validate_human_secret,
     validate_agent_expiry,
 )
-from bolyra.types import Permission
+from bolyra.types import (
+    AgentCredential,
+    EdDSASignature,
+    HumanIdentity,
+    Permission,
+    Point,
+)
+
+# Skip condition: Node.js must be on PATH for subprocess bridge tests
+_has_node = shutil.which("node") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +241,101 @@ class TestErrorHierarchy:
 
         err = VerificationError("bad proof")
         assert err.code == "VERIFICATION_FAILED"
+
+
+# ---------------------------------------------------------------------------
+# Subprocess bridge tests — require Node.js + built SDK
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _has_node, reason="Node.js not available on PATH")
+class TestCreateHumanIdentity:
+    def test_returns_human_identity(self):
+        human = create_human_identity(42)
+        assert isinstance(human, HumanIdentity)
+        assert human.secret == 42
+        assert isinstance(human.public_key, Point)
+        assert human.public_key.x > 0
+        assert human.public_key.y > 0
+        assert human.commitment > 0
+
+    def test_deterministic(self):
+        """Same secret should produce the same identity."""
+        h1 = create_human_identity(12345)
+        h2 = create_human_identity(12345)
+        assert h1.public_key == h2.public_key
+        assert h1.commitment == h2.commitment
+
+    def test_different_secrets_differ(self):
+        h1 = create_human_identity(42)
+        h2 = create_human_identity(43)
+        assert h1.commitment != h2.commitment
+
+    def test_validation_still_runs(self):
+        with pytest.raises(InvalidSecretError, match="non-zero"):
+            create_human_identity(0)
+
+
+@pytest.mark.skipif(not _has_node, reason="Node.js not available on PATH")
+class TestCreateAgentCredential:
+    def test_returns_agent_credential(self):
+        model_hash = 0xB017A00DEF0000000000000000000001
+        operator_key = 0xDEADBEEFCAFEBABE_DEADBEEFCAFEBABE_0001020304050607_08090A0B0C0D0E0F
+        expiry = int(time.time()) + 86400
+        permissions = [Permission.READ_DATA, Permission.WRITE_DATA]
+
+        agent = create_agent_credential(
+            model_hash, operator_key, permissions, expiry
+        )
+        assert isinstance(agent, AgentCredential)
+        assert agent.model_hash == model_hash
+        assert isinstance(agent.operator_public_key, Point)
+        assert agent.permission_bitmask == 0b11
+        assert agent.expiry_timestamp == expiry
+        assert isinstance(agent.signature, EdDSASignature)
+        assert isinstance(agent.signature.r8, Point)
+        assert agent.signature.s > 0
+        assert agent.commitment > 0
+
+    def test_validation_still_runs_expiry(self):
+        with pytest.raises(InvalidPermissionError, match="not in the future"):
+            create_agent_credential(
+                0x1234, 0xABCD, [Permission.READ_DATA], 0
+            )
+
+    def test_validation_still_runs_cumulative(self):
+        expiry = int(time.time()) + 86400
+        with pytest.raises(InvalidPermissionError, match="FINANCIAL_MEDIUM.*FINANCIAL_SMALL"):
+            create_agent_credential(
+                0x1234, 0xABCD, [Permission.FINANCIAL_MEDIUM], expiry
+            )
+
+
+@pytest.mark.skipif(not _has_node, reason="Node.js not available on PATH")
+class TestCreateDevIdentities:
+    def test_returns_tuple(self):
+        human, agent, operator_key = create_dev_identities()
+        assert isinstance(human, HumanIdentity)
+        assert isinstance(agent, AgentCredential)
+        assert isinstance(operator_key, int)
+        assert operator_key > 0
+
+    def test_deterministic(self):
+        """Dev identities use fixed seeds; should be deterministic."""
+        h1, a1, k1 = create_dev_identities()
+        h2, a2, k2 = create_dev_identities()
+        assert h1.commitment == h2.commitment
+        assert a1.commitment == a2.commitment
+        assert k1 == k2
+
+    def test_all_permissions_by_default(self):
+        _, agent, _ = create_dev_identities()
+        assert agent.permission_bitmask == 0xFF
+
+    def test_custom_bitmask(self):
+        _, agent, _ = create_dev_identities(permission_bitmask=0b11)
+        assert agent.permission_bitmask == 0b11
+
+    def test_human_and_agent_commitments_differ(self):
+        human, agent, _ = create_dev_identities()
+        assert human.commitment != agent.commitment

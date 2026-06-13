@@ -24,12 +24,9 @@ Python dataclasses. The Node.js bridge is an implementation detail.
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
-from pathlib import Path
 from typing import Any
 
-from bolyra.errors import ConfigurationError, ProofGenerationError, VerificationError
+from bolyra._bridge import resolve_node_sdk, run_node_script
 from bolyra.types import (
     AgentCredential,
     BolyraConfig,
@@ -37,53 +34,6 @@ from bolyra.types import (
     HumanIdentity,
     Proof,
 )
-
-
-def _resolve_node_sdk(config: BolyraConfig | None) -> Path:
-    """Resolve the path to the Bolyra Node.js SDK."""
-    if config and config.node_sdk_path:
-        p = Path(config.node_sdk_path)
-    else:
-        # Default: sibling directory ../sdk relative to sdk-python
-        p = Path(__file__).resolve().parent.parent.parent / "sdk"
-    if not (p / "package.json").exists():
-        raise ConfigurationError(
-            "node_sdk_path",
-            f"Bolyra Node.js SDK not found at {p}. "
-            "Install @bolyra/sdk or set config.node_sdk_path.",
-        )
-    return p
-
-
-def _run_node_script(script: str, sdk_path: Path) -> dict[str, Any]:
-    """Run a Node.js script in the SDK directory and return parsed JSON output."""
-    try:
-        result = subprocess.run(
-            ["node", "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            cwd=str(sdk_path),
-        )
-    except FileNotFoundError:
-        raise ConfigurationError(
-            "node",
-            "Node.js not found on PATH. Install Node.js >= 18 to use proof generation.",
-        )
-    except subprocess.TimeoutExpired:
-        raise ProofGenerationError("handshake", "Node.js subprocess timed out after 120s")
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        raise ProofGenerationError("handshake", f"Node.js subprocess failed: {stderr}")
-
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        raise ProofGenerationError(
-            "handshake",
-            f"Failed to parse Node.js output as JSON: {e}",
-        )
 
 
 def prove_handshake(
@@ -118,7 +68,7 @@ def prove_handshake(
     if nonce is None:
         nonce = int(time.time() * 1000)
 
-    sdk_path = _resolve_node_sdk(config)
+    sdk_path = resolve_node_sdk(config)
 
     # Build a Node.js script that imports the SDK and generates proofs
     script = f"""
@@ -158,7 +108,7 @@ async function main() {{
 main().catch(e => {{ console.error(e.message); process.exit(1); }});
 """
 
-    data = _run_node_script(script, sdk_path)
+    data = run_node_script(script, sdk_path, op="handshake")
 
     human_proof = Proof(
         proof=data["humanProof"]["proof"],
@@ -195,7 +145,7 @@ def verify_handshake(
         ConfigurationError: If Node.js SDK is not found.
         VerificationError: If verification fails.
     """
-    sdk_path = _resolve_node_sdk(config)
+    sdk_path = resolve_node_sdk(config)
 
     human_proof_json = json.dumps(human_proof.proof)
     human_signals_json = json.dumps(human_proof.public_signals)
@@ -223,7 +173,7 @@ async function main() {{
 main().catch(e => {{ console.error(e.message); process.exit(1); }});
 """
 
-    data = _run_node_script(script, sdk_path)
+    data = run_node_script(script, sdk_path, op="handshake_verify")
 
     return HandshakeResult(
         human_nullifier=int(data["humanNullifier"]),

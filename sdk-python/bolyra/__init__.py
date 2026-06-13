@@ -12,6 +12,7 @@ from bolyra.types import (
 from bolyra.identity import (
     BN254_FIELD_ORDER,
     create_agent_credential,
+    create_dev_identities,
     create_human_identity,
     permissions_to_bitmask,
     validate_cumulative_bit_encoding,
@@ -46,6 +47,7 @@ __all__ = [
     # Identity
     "BN254_FIELD_ORDER",
     "create_agent_credential",
+    "create_dev_identities",
     "create_human_identity",
     "permissions_to_bitmask",
     "validate_cumulative_bit_encoding",
