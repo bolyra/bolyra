@@ -112,7 +112,9 @@ function validateSchema(): boolean {
   if (errors.length) { failCheck(`Schema: ${errors.join(', ')}`); return false; }
 
   if (p.v !== 1) errors.push('payload.v !== 1');
-  if (p.kind !== 'bolyra.auth') errors.push('payload.kind !== "bolyra.auth"');
+  if (p.kind !== 'bolyra.auth' && p.kind !== 'bolyra.commerce') {
+    errors.push('payload.kind must be "bolyra.auth" or "bolyra.commerce"');
+  }
   if (typeof p.issuedAt !== 'number') errors.push('payload.issuedAt not a number');
   if (typeof p.issuer !== 'string' || !p.issuer) errors.push('payload.issuer missing');
   if (typeof p.keyId !== 'string' || !p.keyId) errors.push('payload.keyId missing');
@@ -144,6 +146,22 @@ function validateSchema(): boolean {
   } else {
     for (const k of ['bundleVersion', 'nonce', 'humanProofHash', 'agentProofHash', 'publicSignalsHash'] as const) {
       if (!(k in p.proof)) errors.push(`proof.${k} missing`);
+    }
+  }
+
+  // commerce fields (required when kind === 'bolyra.commerce')
+  if (p.kind === 'bolyra.commerce') {
+    const c = (p as any).commerce;
+    if (!c) {
+      errors.push('commerce fields missing for bolyra.commerce receipt');
+    } else {
+      if (typeof c.rail !== 'string' || !c.rail) errors.push('commerce.rail missing or not a string');
+      if (typeof c.amount !== 'number') errors.push('commerce.amount not a number');
+      if (typeof c.currency !== 'string' || !c.currency) errors.push('commerce.currency missing or not a string');
+      if (typeof c.merchant !== 'string') errors.push('commerce.merchant not a string');
+      if (typeof c.intentHash !== 'string' || !/^[0-9a-fA-F]{64}$/.test(c.intentHash)) {
+        errors.push('commerce.intentHash must be a 64-char hex string');
+      }
     }
   }
 

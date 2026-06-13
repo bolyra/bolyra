@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { canonicalize } from './canonical';
-import type { AuthReceiptInput, ReceiptPayload } from './types';
+import type { AuthReceiptInput, CommerceReceiptInput, ReceiptPayload } from './types';
 
 function sha256Hex(data: string): string {
   const encoder = new TextEncoder();
@@ -48,5 +48,17 @@ export function createAuthReceipt(
       publicSignalsHash,
       ...(delegationChainHash !== undefined && { delegationChainHash }),
     },
+  };
+}
+
+export function createCommerceReceipt(
+  input: CommerceReceiptInput,
+  config: { issuer: string; keyId: string },
+): ReceiptPayload {
+  const base = createAuthReceipt(input, config);
+  return {
+    ...base,
+    kind: 'bolyra.commerce',
+    commerce: input.commerce,
   };
 }

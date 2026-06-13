@@ -1,6 +1,6 @@
 export interface ReceiptPayload {
   v: 1;
-  kind: 'bolyra.auth';
+  kind: 'bolyra.auth' | 'bolyra.commerce';
   /** Unix seconds when the decision was made. */
   issuedAt: number;
   /** Server identifier. */
@@ -39,6 +39,9 @@ export interface ReceiptPayload {
     /** SHA-256 of canonical JSON of delegationChain (if v=2). */
     delegationChainHash?: string;
   };
+
+  /** Present only when kind === 'bolyra.commerce'. */
+  commerce?: CommerceFields;
 }
 
 export interface SignedReceipt {
@@ -64,6 +67,14 @@ export interface ReceiptSignerConfig {
   privateKey: string;
 }
 
+export interface CommerceFields {
+  rail: string;
+  amount: number;
+  currency: string;
+  merchant: string;
+  intentHash: string;
+}
+
 export interface AuthReceiptInput {
   /** From BolyraAuthContext or equivalent. */
   rootDid: string;
@@ -83,4 +94,8 @@ export interface AuthReceiptInput {
   bundleVersion: 1 | 2;
   nonce: string;
   delegationChain?: unknown[];
+}
+
+export interface CommerceReceiptInput extends AuthReceiptInput {
+  commerce: CommerceFields;
 }

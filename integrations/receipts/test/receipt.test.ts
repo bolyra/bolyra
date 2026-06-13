@@ -1,5 +1,6 @@
-import { createAuthReceipt } from '../src/receipt';
-import type { AuthReceiptInput } from '../src/types';
+import { createAuthReceipt, createCommerceReceipt } from '../src/receipt';
+import { signReceipt, verifyReceipt } from '../src/sign';
+import type { AuthReceiptInput, CommerceReceiptInput, ReceiptSignerConfig } from '../src/types';
 
 function makeInput(overrides: Partial<AuthReceiptInput> = {}): AuthReceiptInput {
   return {
@@ -70,5 +71,65 @@ describe('createAuthReceipt', () => {
     const payload = createAuthReceipt(input, config);
 
     expect(payload.decision.reasonCode).toBe('PERMISSION_DENIED');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createCommerceReceipt
+// ---------------------------------------------------------------------------
+
+const TEST_PRIVATE_KEY = '0x' + '01'.repeat(32);
+const TEST_SIGNER_CONFIG: ReceiptSignerConfig = {
+  issuer: 'test-server',
+  keyId: 'key-1',
+  privateKey: TEST_PRIVATE_KEY,
+};
+
+function makeCommerceInput(
+  overrides: Partial<CommerceReceiptInput> = {},
+): CommerceReceiptInput {
+  return {
+    ...makeInput(),
+    commerce: {
+      rail: 'x402',
+      amount: 5000,
+      currency: 'USDC',
+      merchant: 'merchant-001',
+      intentHash: 'a'.repeat(64),
+    },
+    ...overrides,
+  };
+}
+
+describe('createCommerceReceipt', () => {
+  const config = { issuer: 'test-server', keyId: 'key-1' };
+
+  it('returns payload with kind=bolyra.commerce', () => {
+    const payload = createCommerceReceipt(makeCommerceInput(), config);
+
+    expect(payload.kind).toBe('bolyra.commerce');
+    expect(payload.v).toBe(1);
+    expect(payload.issuer).toBe('test-server');
+  });
+
+  it('includes commerce fields in payload', () => {
+    const payload = createCommerceReceipt(makeCommerceInput(), config);
+
+    expect(payload.commerce).toBeDefined();
+    expect(payload.commerce!.rail).toBe('x402');
+    expect(payload.commerce!.amount).toBe(5000);
+    expect(payload.commerce!.currency).toBe('USDC');
+    expect(payload.commerce!.merchant).toBe('merchant-001');
+    expect(payload.commerce!.intentHash).toBe('a'.repeat(64));
+  });
+
+  it('sign + verify round-trip works for commerce receipts', () => {
+    const payload = createCommerceReceipt(makeCommerceInput(), config);
+    const receipt = signReceipt(payload, TEST_SIGNER_CONFIG);
+
+    expect(receipt.payload.kind).toBe('bolyra.commerce');
+    expect(receipt.payload.commerce).toBeDefined();
+    expect(verifyReceipt(receipt)).toBe(true);
+    expect(verifyReceipt(receipt, receipt.signature.signer)).toBe(true);
   });
 });
