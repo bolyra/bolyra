@@ -17,6 +17,44 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.6.0] — 2026-06-13
+
+The **signed receipts** release. Every MCP verification decision
+produces a cryptographically signed, auditable receipt.
+
+### Cohort version state after this release
+
+| Package | npm / PyPI version | Notes |
+|---|---|---|
+| `@bolyra/receipts` | 0.6.0 | NEW — signed receipt primitives |
+| `@bolyra/mcp` | 0.6.0 | receipt integration |
+| `@bolyra/sdk` | 0.4.0 | unchanged |
+| `@bolyra/payment-protocols` | 0.5.0 | unchanged |
+| `@bolyra/openclaw` | 0.3.0 | unchanged |
+| `bolyra` (PyPI) | 0.4.0 | unchanged |
+
+### Added
+
+#### Receipts (`@bolyra/receipts` — NEW)
+
+- **`@bolyra/receipts`** — new package for signed authorization receipts
+- `createAuthReceipt()` — builds a `ReceiptPayload` from verification context
+- `signReceipt()` — secp256k1 signature with keccak256 hash, EVM-compatible 65-byte `r||s||v`
+- `verifyReceipt()` — recovers signer address, validates payload hash and claimed signer
+- `hashPayload()` — canonical JSON with sorted keys → keccak256
+- `canonicalize()` — deterministic JSON serialization
+
+#### MCP (`@bolyra/mcp` 0.4.0 → 0.6.0)
+
+- **`receiptSigner`** config option — when set, `verifyBundle()` attaches a
+  `SignedReceipt` to `BolyraAuthContext`. Covers production verification
+  decisions (both allow and deny). Skipped in dev mode.
+
+### Security
+
+- `verifyReceipt()` checks recovered address matches the claimed
+  `receipt.signature.signer`. Prevents forged signer metadata.
+
 ## [0.5.0] — 2026-06-11
 
 The **unified commerce authorization** release. One API answers whether
