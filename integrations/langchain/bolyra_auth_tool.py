@@ -144,7 +144,9 @@ class BolyraAuthTool:
             use_dev = self.operator_key is None and self.human_secret is None
 
             if use_dev:
-                human, agent, _op_key = create_dev_identities()
+                from bolyra.identity import permissions_to_bitmask
+                bitmask = permissions_to_bitmask(perm_enums)
+                human, agent, _op_key = create_dev_identities(permission_bitmask=bitmask)
             else:
                 # Production: create identities from provided keys
                 model_hash_int = int(

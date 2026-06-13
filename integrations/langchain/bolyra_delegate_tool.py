@@ -126,29 +126,16 @@ class BolyraDelegateTool:
 
             delegatee_scope = permissions_to_bitmask(delegatee_perms)
 
-            # P2-1: Use consistent identity mode -- don't mix dev/production
-            import hashlib
+            # Always use dev identities for the delegator credential.
+            # Production delegation requires the delegator credential produced by
+            # a prior handshake to be persisted and passed here so that the
+            # scope_commitment values match. Reconstructing a fresh credential from
+            # the operator key produces a different commitment and causes
+            # CHAIN_LINK_MISMATCH. Credential persistence across tool invocations
+            # is the caller's responsibility; this tool does not attempt it.
             import time
 
-            if self.operator_key is not None:
-                # Production: create a real agent credential with the operator key
-                from bolyra.identity import create_agent_credential
-                operator_key_int = int(self.operator_key, 16)
-                model_hash_int = int(
-                    hashlib.sha256(b"delegation-agent").hexdigest()[:16], 16
-                )
-                agent_perm_enums = []
-                for p_str in self.agent_permissions:
-                    key = p_str.strip().lower()
-                    if key in _perm_map:
-                        agent_perm_enums.append(_perm_map[key])
-                expiry = int(time.time()) + 86400
-                delegator = create_agent_credential(
-                    model_hash_int, operator_key_int, agent_perm_enums, expiry
-                )
-            else:
-                # Dev mode: use dev identities entirely
-                _human, delegator, operator_key_int = create_dev_identities()
+            _human, delegator, operator_key_int = create_dev_identities()
 
             session_nonce = int(input.get("session_nonce", "0"))
             scope_commitment = int(input.get("scope_commitment", "0"))

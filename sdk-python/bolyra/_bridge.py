@@ -7,6 +7,7 @@ All modules that need to shell out to the Node.js SDK import from here.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ def resolve_node_sdk(config: Any | None) -> Path:
     """
     if config and config.node_sdk_path:
         p = Path(config.node_sdk_path)
+    elif os.environ.get("BOLYRA_NODE_SDK_PATH"):
+        p = Path(os.environ["BOLYRA_NODE_SDK_PATH"])
     else:
         # Default: sibling directory ../sdk relative to sdk-python
         p = Path(__file__).resolve().parent.parent.parent / "sdk"
