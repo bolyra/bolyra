@@ -10,7 +10,7 @@ function sha256Hex(data: string): string {
 
 export function createAuthReceipt(
   input: AuthReceiptInput,
-  config: { issuer: string; keyId: string },
+  config: { issuer: string; keyId: string; issuedAt?: number },
 ): ReceiptPayload {
   const humanProofHash = sha256Hex(canonicalize(input.humanProof.proof));
   const agentProofHash = sha256Hex(canonicalize(input.agentProof.proof));
@@ -24,7 +24,7 @@ export function createAuthReceipt(
   return {
     v: 1,
     kind: 'bolyra.auth',
-    issuedAt: Math.floor(Date.now() / 1000),
+    issuedAt: config.issuedAt ?? Math.floor(Date.now() / 1000),
     issuer: config.issuer,
     keyId: config.keyId,
     subject: {

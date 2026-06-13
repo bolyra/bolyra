@@ -149,7 +149,10 @@ function validateSchema(): boolean {
     }
   }
 
-  // commerce fields (required when kind === 'bolyra.commerce')
+  // commerce fields: required for bolyra.commerce, forbidden for bolyra.auth
+  if (p.kind === 'bolyra.auth' && (p as any).commerce) {
+    errors.push('auth receipt must not contain commerce fields');
+  }
   if (p.kind === 'bolyra.commerce') {
     const c = (p as any).commerce;
     if (!c) {

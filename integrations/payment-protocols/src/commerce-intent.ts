@@ -313,6 +313,7 @@ export function authorizeCommerceIntent(
       }, {
         issuer: options.receiptSigner.issuer,
         keyId: options.receiptSigner.keyId,
+        issuedAt,
       });
       decision.signedReceipt = signReceipt(payload, options.receiptSigner);
     } catch {
