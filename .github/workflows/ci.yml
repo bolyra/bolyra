@@ -84,10 +84,13 @@ jobs:
       - name: Build local @bolyra/sdk
         run: cd sdk && npm ci && npm run build
 
-      - name: Install MCP integration with file:// SDK
+      - name: Build local @bolyra/receipts
+        run: cd integrations/receipts && npm install && npm run build
+
+      - name: Install MCP integration with file:// SDK + receipts
         working-directory: integrations/mcp
         run: |
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';p.dependencies['@bolyra/receipts']='file:../receipts';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
           rm -f package-lock.json
           npm install
 

@@ -109,13 +109,18 @@ export function verifyReceipt(
 
     const recoveredAddress = deriveAddress(recovered.toRawBytes(false));
 
-    // Check signer
-    if (expectedSigner) {
-      const expected = expectedSigner.toLowerCase();
-      const actual = recoveredAddress.toLowerCase();
-      if (expected !== actual) {
-        return false;
-      }
+    // Always check recovered address matches the claimed signer in the receipt.
+    // Without this, an attacker can change receipt.signature.signer to any
+    // address and verifyReceipt still returns true.
+    const claimedSigner = receipt.signature.signer.toLowerCase();
+    const actual = recoveredAddress.toLowerCase();
+    if (claimedSigner !== actual) {
+      return false;
+    }
+
+    // Optional: also check against an externally expected signer
+    if (expectedSigner && expectedSigner.toLowerCase() !== actual) {
+      return false;
     }
 
     return true;
