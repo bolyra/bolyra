@@ -13,7 +13,8 @@ const TEST_CONFIG: ReceiptSignerConfig = {
   privateKey: TEST_PRIVATE_KEY,
 };
 
-const CLI_PATH = path.resolve(__dirname, '..', 'dist', 'verify-cli.js');
+// Use tsx to run the TypeScript source directly, avoiding dependency on untracked dist/
+const CLI_PATH = path.resolve(__dirname, '..', 'src', 'verify-cli.ts');
 
 function makeInput(): AuthReceiptInput {
   return {
@@ -43,7 +44,7 @@ function writeTempReceipt(data: unknown): string {
 
 function runCli(args: string): { stdout: string; exitCode: number } {
   try {
-    const stdout = execSync(`node ${CLI_PATH} ${args}`, {
+    const stdout = execSync(`npx tsx ${CLI_PATH} ${args}`, {
       encoding: 'utf-8',
       timeout: 10_000,
     });
@@ -131,7 +132,7 @@ describe('verify-cli', () => {
   it('supports --stdin', () => {
     const json = JSON.stringify(validReceipt);
     try {
-      const stdout = execSync(`echo '${json.replace(/'/g, "'\\''")}' | node ${CLI_PATH} --stdin`, {
+      const stdout = execSync(`echo '${json.replace(/'/g, "'\\''")}' | npx tsx ${CLI_PATH} --stdin`, {
         encoding: 'utf-8',
         shell: '/bin/bash',
         timeout: 10_000,

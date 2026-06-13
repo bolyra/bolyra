@@ -122,7 +122,9 @@ function validateSchema(): boolean {
     errors.push('payload.subject missing');
   } else {
     for (const k of ['rootDid', 'actingDid', 'credentialCommitment', 'effectiveCommitment'] as const) {
-      if (!(k in p.subject)) errors.push(`payload.subject.${k} missing`);
+      if (typeof (p.subject as any)[k] !== 'string' || !(p.subject as any)[k]) {
+        errors.push(`payload.subject.${k} missing or not a string`);
+      }
     }
   }
 
@@ -132,7 +134,7 @@ function validateSchema(): boolean {
   } else {
     if (typeof p.decision.allowed !== 'boolean') errors.push('decision.allowed not boolean');
     if (typeof p.decision.score !== 'number') errors.push('decision.score not a number');
-    if (!('permissionBitmask' in p.decision)) errors.push('decision.permissionBitmask missing');
+    if (typeof p.decision.permissionBitmask !== 'string' || !p.decision.permissionBitmask) errors.push('decision.permissionBitmask missing or not a string');
     if (typeof p.decision.chainDepth !== 'number') errors.push('decision.chainDepth not a number');
   }
 
