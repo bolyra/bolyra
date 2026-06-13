@@ -114,11 +114,11 @@ export function bolyraAuthMiddleware(config: BolyraMcpHttpConfig) {
 
     const toolName = extractToolName(req.body);
     if (toolName) {
-      const policyErr = checkToolPolicy(toolName, authCtx, config);
-      if (policyErr) {
+      const policyDecision = checkToolPolicy(toolName, authCtx, config);
+      if (!policyDecision.allowed) {
         res.status(403).json({
           jsonrpc: '2.0',
-          error: { code: -32001, message: `Bolyra policy denied: ${policyErr}` },
+          error: { code: -32001, message: `Bolyra policy denied: ${policyDecision.reason}` },
           id: req.body?.id ?? null,
         });
         return;

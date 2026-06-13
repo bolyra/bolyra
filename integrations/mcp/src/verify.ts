@@ -8,6 +8,8 @@ import type {
   BolyraProofBundle,
   BolyraAuthContext,
   BolyraMcpConfig,
+  ToolPolicy,
+  ToolPolicyDecision,
 } from './types';
 
 const DEFAULTS = {
@@ -463,19 +465,58 @@ function verifyDevBundle(
   };
 }
 
-/** Per-tool permission gate. Returns null if allowed, error string if denied. */
+/** Per-tool policy gate. Returns a structured decision. */
 export function checkToolPolicy(
   toolName: string,
   authCtx: BolyraAuthContext,
   config: BolyraMcpConfig,
-): string | null {
-  const required = config.toolPolicy?.[toolName];
-  if (required === undefined) return null;
-  // AND-cover: every required bit must be set in the granted bitmask.
-  if ((authCtx.permissionBitmask & required) !== required) {
-    return `Tool "${toolName}" requires permissions ${required.toString(2)}b, agent has ${authCtx.permissionBitmask.toString(2)}b`;
+): ToolPolicyDecision {
+  const raw = config.toolPolicy?.[toolName];
+  if (raw === undefined) return { allowed: true, toolName };
+
+  // Backward compat: bigint = requireBitmask only
+  const policy: ToolPolicy =
+    typeof raw === 'bigint' ? { requireBitmask: raw } : raw;
+
+  // Check bitmask
+  if (policy.requireBitmask !== undefined) {
+    if (
+      (authCtx.permissionBitmask & policy.requireBitmask) !==
+      policy.requireBitmask
+    ) {
+      return {
+        allowed: false,
+        toolName,
+        reason: `Tool "${toolName}" requires permissions ${policy.requireBitmask.toString(2)}b, agent has ${authCtx.permissionBitmask.toString(2)}b`,
+        failedCheck: 'bitmask',
+      };
+    }
   }
-  return null;
+
+  // Check score
+  if (policy.minScore !== undefined && authCtx.score < policy.minScore) {
+    return {
+      allowed: false,
+      toolName,
+      reason: `Tool "${toolName}" requires score >= ${policy.minScore}, agent has ${authCtx.score}`,
+      failedCheck: 'score',
+    };
+  }
+
+  // Check chain depth
+  if (
+    policy.maxChainDepth !== undefined &&
+    authCtx.chainDepth > policy.maxChainDepth
+  ) {
+    return {
+      allowed: false,
+      toolName,
+      reason: `Tool "${toolName}" requires chain depth <= ${policy.maxChainDepth}, agent has ${authCtx.chainDepth}`,
+      failedCheck: 'chainDepth',
+    };
+  }
+
+  return { allowed: true, toolName };
 }
 
 /**

@@ -364,26 +364,126 @@ describe('MemoryNonceStore', () => {
 describe('checkToolPolicy', () => {
   const baseCtx = {
     verified: true,
-    score: 100,
+    score: 85,
     did: 'did:bolyra:base-sepolia:abc',
     permissionBitmask: 0b011n,
     warnings: [],
-    chainDepth: 0,
+    chainDepth: 1,
     effectiveCommitment: '12345',
   };
 
+  // --- Backward compat: bigint policies still work ---
+
   it('allows tools with no policy entry', () => {
-    expect(checkToolPolicy('any_tool', baseCtx, makeConfig())).toBeNull();
+    const decision = checkToolPolicy('any_tool', baseCtx, makeConfig());
+    expect(decision.allowed).toBe(true);
+    expect(decision.toolName).toBe('any_tool');
+    expect(decision.failedCheck).toBeUndefined();
   });
 
-  it('allows tools whose required bits are covered', () => {
+  it('allows tools whose required bits are covered (bigint compat)', () => {
     const config = makeConfig({ toolPolicy: { read_file: 0b001n } });
-    expect(checkToolPolicy('read_file', baseCtx, config)).toBeNull();
+    const decision = checkToolPolicy('read_file', baseCtx, config);
+    expect(decision.allowed).toBe(true);
   });
 
-  it('denies tools whose required bits exceed granted', () => {
+  it('denies tools whose required bits exceed granted (bigint compat)', () => {
     const config = makeConfig({ toolPolicy: { delete_file: 0b100n } });
-    const result = checkToolPolicy('delete_file', baseCtx, config);
-    expect(result).toMatch(/requires permissions/);
+    const decision = checkToolPolicy('delete_file', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toMatch(/requires permissions/);
+    expect(decision.failedCheck).toBe('bitmask');
+  });
+
+  // --- Structured policy: requireBitmask ---
+
+  it('structured: allows when bitmask is covered', () => {
+    const config = makeConfig({ toolPolicy: { read_file: { requireBitmask: 0b001n } } });
+    const decision = checkToolPolicy('read_file', baseCtx, config);
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('structured: denies when bitmask is not covered', () => {
+    const config = makeConfig({ toolPolicy: { admin: { requireBitmask: 0b100n } } });
+    const decision = checkToolPolicy('admin', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.failedCheck).toBe('bitmask');
+  });
+
+  // --- Structured policy: minScore ---
+
+  it('structured: allows when score >= threshold', () => {
+    const config = makeConfig({ toolPolicy: { tool_a: { minScore: 80 } } });
+    const decision = checkToolPolicy('tool_a', baseCtx, config);
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('structured: denies when score < threshold', () => {
+    const config = makeConfig({ toolPolicy: { tool_a: { minScore: 90 } } });
+    const decision = checkToolPolicy('tool_a', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.failedCheck).toBe('score');
+    expect(decision.reason).toMatch(/score >= 90/);
+  });
+
+  // --- Structured policy: maxChainDepth ---
+
+  it('structured: allows when chainDepth <= maxChainDepth', () => {
+    const config = makeConfig({ toolPolicy: { tool_b: { maxChainDepth: 2 } } });
+    const decision = checkToolPolicy('tool_b', baseCtx, config);
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('structured: denies when chainDepth > maxChainDepth', () => {
+    const config = makeConfig({ toolPolicy: { tool_b: { maxChainDepth: 0 } } });
+    const decision = checkToolPolicy('tool_b', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.failedCheck).toBe('chainDepth');
+    expect(decision.reason).toMatch(/chain depth <= 0/);
+  });
+
+  // --- Combined: all three checks in one policy ---
+
+  it('structured: combined policy passes when all checks pass', () => {
+    const config = makeConfig({
+      toolPolicy: {
+        sensitive: { requireBitmask: 0b001n, minScore: 80, maxChainDepth: 2 },
+      },
+    });
+    const decision = checkToolPolicy('sensitive', baseCtx, config);
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('structured: combined policy fails on first failing check (bitmask)', () => {
+    const config = makeConfig({
+      toolPolicy: {
+        sensitive: { requireBitmask: 0b100n, minScore: 80, maxChainDepth: 2 },
+      },
+    });
+    const decision = checkToolPolicy('sensitive', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.failedCheck).toBe('bitmask');
+  });
+
+  it('structured: combined policy fails on score when bitmask passes', () => {
+    const config = makeConfig({
+      toolPolicy: {
+        sensitive: { requireBitmask: 0b001n, minScore: 95, maxChainDepth: 2 },
+      },
+    });
+    const decision = checkToolPolicy('sensitive', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.failedCheck).toBe('score');
+  });
+
+  it('structured: combined policy fails on chainDepth when bitmask+score pass', () => {
+    const config = makeConfig({
+      toolPolicy: {
+        sensitive: { requireBitmask: 0b001n, minScore: 80, maxChainDepth: 0 },
+      },
+    });
+    const decision = checkToolPolicy('sensitive', baseCtx, config);
+    expect(decision.allowed).toBe(false);
+    expect(decision.failedCheck).toBe('chainDepth');
   });
 });

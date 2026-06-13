@@ -105,11 +105,41 @@ export interface BolyraAuthContext {
   receipt?: SignedReceipt;
 }
 
+/** Structured per-tool enforcement policy. */
+export interface ToolPolicy {
+  /** Required permission bitmask (AND-cover check). */
+  requireBitmask?: bigint;
+  /** Minimum verification score (0-100). */
+  minScore?: number;
+  /** Maximum delegation chain depth allowed (0 = direct only). */
+  maxChainDepth?: number;
+  /**
+   * Whether to generate a signed receipt for this tool's decisions.
+   * 'always' = allow + deny, 'deny-only' = only denials, 'never' = skip.
+   * Default: inherits from receiptSigner presence.
+   */
+  receipt?: 'always' | 'deny-only' | 'never';
+}
+
+/** Per-tool policy map. Backward compatible: bigint values are treated as requireBitmask-only. */
+export type ToolPolicyMap = Record<string, ToolPolicy | bigint>;
+
+/** Structured result of a per-tool policy check. */
+export interface ToolPolicyDecision {
+  allowed: boolean;
+  toolName: string;
+  reason?: string;
+  /** Which check failed. */
+  failedCheck?: 'bitmask' | 'score' | 'chainDepth';
+}
+
 /**
  * Per-tool permission policy. If a tool name is in the map, the caller's
  * permission bitmask must AND-cover `requireBitmask` for the call to succeed.
  *
  * Example: { "write_file": 0b10n, "delete_file": 0b110n }
+ *
+ * @deprecated Use {@link ToolPolicyMap} instead for structured per-tool policies.
  */
 export type ToolPermissionPolicy = Record<string, bigint>;
 
@@ -134,7 +164,7 @@ export interface BolyraMcpConfig {
    * Per-tool permission requirements. Tools not in the map require only that
    * the handshake itself verified — no extra permission check.
    */
-  toolPolicy?: ToolPermissionPolicy;
+  toolPolicy?: ToolPolicyMap;
   /** Enable dev mode — mock verification, no circuit artifacts needed. */
   devMode?: boolean;
   /**

@@ -74,9 +74,9 @@ export function withBolyraAuthStdio<T extends McpServerLike>(
     }
 
     const toolName: string = request?.params?.name ?? '';
-    const policyErr = checkToolPolicy(toolName, authCtx, config);
-    if (policyErr) {
-      return mcpError(`Bolyra policy denied: ${policyErr}`);
+    const policyDecision = checkToolPolicy(toolName, authCtx, config);
+    if (!policyDecision.allowed) {
+      return mcpError(`Bolyra policy denied: ${policyDecision.reason}`);
     }
 
     // Hand off to the user's handler with the auth context attached.
