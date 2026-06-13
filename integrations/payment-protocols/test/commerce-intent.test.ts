@@ -13,8 +13,11 @@ import { authorizeCommerceIntent } from '../src/commerce-intent';
 import type {
   CommerceAuthorizationInput,
   CommerceAuthorizationDecision,
+  CommerceAuthorizationOptions,
+  CommerceReceiptEvidence,
   CommerceIntent,
 } from '../src/commerce-intent';
+import type { ReceiptSignerConfig } from '@bolyra/receipts';
 import type {
   StripeACPSpendDecision,
   StripeACPContext,
@@ -322,5 +325,85 @@ describe('cross-rail properties', () => {
     // Different timestamp → different receipt ID
     const d3 = authorizeCommerceIntent(input, { issuedAt: FIXED_TIME + 1 });
     expect(d3.receipt.id).not.toBe(d1.receipt.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Signed commerce receipts
+// ---------------------------------------------------------------------------
+
+const TEST_PRIVATE_KEY = '0x' + '01'.repeat(32);
+
+const TEST_SIGNER: ReceiptSignerConfig = {
+  issuer: 'test-server',
+  keyId: 'key-1',
+  privateKey: TEST_PRIVATE_KEY,
+};
+
+const TEST_EVIDENCE: CommerceReceiptEvidence = {
+  rootDid: 'did:bolyra:root123',
+  credentialCommitment: '0xabc',
+  effectiveCommitment: '0xdef',
+  permissionBitmask: '255',
+  chainDepth: 0,
+  humanProof: { proof: { pi_a: [1, 2], pi_b: [[3, 4], [5, 6]], pi_c: [7, 8] } },
+  agentProof: { proof: { pi_a: [9, 10], pi_b: [[11, 12], [13, 14]], pi_c: [15, 16] } },
+  humanPublicSignals: ['111', '222'],
+  agentPublicSignals: ['333', '444'],
+  bundleVersion: 1,
+  nonce: '12345',
+};
+
+describe('signed commerce receipts', () => {
+  it('12. authorizeCommerceIntent with receiptSigner + receiptEvidence produces signedReceipt', () => {
+    const input: CommerceAuthorizationInput = {
+      intent: { ...intent('x402', 'USDC'), rail: 'x402' },
+      adapterResult: makeX402Decision(),
+    };
+    const options: CommerceAuthorizationOptions = {
+      issuedAt: FIXED_TIME,
+      receiptSigner: TEST_SIGNER,
+      receiptEvidence: TEST_EVIDENCE,
+    };
+    const d = authorizeCommerceIntent(input, options);
+
+    expect(d.signedReceipt).toBeDefined();
+    expect(d.signedReceipt!.payload.kind).toBe('bolyra.commerce');
+    expect(d.signedReceipt!.payload.commerce).toBeDefined();
+    expect(d.signedReceipt!.payload.commerce!.rail).toBe('x402');
+    expect(d.signedReceipt!.payload.commerce!.amount).toBe(5_000);
+    expect(d.signedReceipt!.payload.commerce!.currency).toBe('USDC');
+    expect(d.signedReceipt!.payload.commerce!.merchant).toBe('merchant-001');
+    expect(d.signedReceipt!.signature.alg).toBe('ES256K');
+  });
+
+  it('13. authorizeCommerceIntent without signer produces no signedReceipt', () => {
+    const input: CommerceAuthorizationInput = {
+      intent: { ...intent('x402', 'USDC'), rail: 'x402' },
+      adapterResult: makeX402Decision(),
+    };
+    const d = authorizeCommerceIntent(input, { issuedAt: FIXED_TIME });
+
+    expect(d.signedReceipt).toBeUndefined();
+  });
+
+  it('14. signedReceipt has correct commerce fields matching intent', () => {
+    const input: CommerceAuthorizationInput = {
+      intent: { ...intent('stripe-acp'), rail: 'stripe-acp' },
+      spendDecision: makeStripeSpendDecision(),
+      acpContext: makeStripeACPContext(),
+    };
+    const options: CommerceAuthorizationOptions = {
+      issuedAt: FIXED_TIME,
+      receiptSigner: TEST_SIGNER,
+      receiptEvidence: TEST_EVIDENCE,
+    };
+    const d = authorizeCommerceIntent(input, options);
+
+    expect(d.signedReceipt).toBeDefined();
+    expect(d.signedReceipt!.payload.kind).toBe('bolyra.commerce');
+    expect(d.signedReceipt!.payload.commerce!.rail).toBe('stripe-acp');
+    expect(d.signedReceipt!.payload.commerce!.merchant).toBe('merchant-001');
+    expect(d.signedReceipt!.payload.commerce!.intentHash).toBe(d.receipt.intentHash);
   });
 });

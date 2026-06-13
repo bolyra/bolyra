@@ -17,6 +17,7 @@ import type {
   TAPVerificationResult,
 } from './types';
 import type { X402VerifyDecision } from './x402';
+import type { SignedReceipt, ReceiptSignerConfig } from '@bolyra/receipts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,6 +76,31 @@ export interface CommerceAuthorizationDecision {
   warnings: string[];
   /** Deterministic receipt for logging. */
   receipt: CommerceAuthorizationReceipt;
+  /** Signed receipt (present when receiptSigner + receiptEvidence are provided). */
+  signedReceipt?: SignedReceipt;
+}
+
+/** Options for commerce authorization. */
+export interface CommerceAuthorizationOptions {
+  issuedAt?: number;
+  receiptSigner?: ReceiptSignerConfig;
+  receiptEvidence?: CommerceReceiptEvidence;
+}
+
+/** Evidence needed to build a signed commerce receipt. */
+export interface CommerceReceiptEvidence {
+  rootDid: string;
+  credentialCommitment: string;
+  effectiveCommitment: string;
+  permissionBitmask: string;
+  chainDepth: number;
+  humanProof: { proof: unknown };
+  agentProof: { proof: unknown };
+  humanPublicSignals: string[];
+  agentPublicSignals: string[];
+  bundleVersion: 1 | 2;
+  nonce: string;
+  delegationChain?: unknown[];
 }
 
 /** Unsigned deterministic receipt for audit logging. */
@@ -239,24 +265,60 @@ function stubDenial(
  */
 export function authorizeCommerceIntent(
   input: CommerceAuthorizationInput,
-  options?: { issuedAt?: number },
+  options?: CommerceAuthorizationOptions,
 ): CommerceAuthorizationDecision {
   const issuedAt = options?.issuedAt ?? Math.floor(Date.now() / 1000);
 
+  let decision: CommerceAuthorizationDecision;
+
   switch (input.intent.rail) {
     case 'stripe-acp':
-      return authorizeStripe(
+      decision = authorizeStripe(
         input as Extract<CommerceAuthorizationInput, { intent: { rail: 'stripe-acp' } }>,
         issuedAt,
       );
+      break;
     case 'x402':
-      return authorizeX402(
+      decision = authorizeX402(
         input as Extract<CommerceAuthorizationInput, { intent: { rail: 'x402' } }>,
         issuedAt,
       );
+      break;
     case 'visa-tap':
-      return stubDenial(input, issuedAt);
+      decision = stubDenial(input, issuedAt);
+      break;
     case 'google-ap2':
-      return stubDenial(input, issuedAt);
+      decision = stubDenial(input, issuedAt);
+      break;
   }
+
+  if (options?.receiptSigner && options?.receiptEvidence) {
+    try {
+      // Lazy require to avoid ESM issues with @noble/* (same pattern as MCP)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createCommerceReceipt, signReceipt } = require('@bolyra/receipts');
+      const payload = createCommerceReceipt({
+        ...options.receiptEvidence,
+        actingDid: decision.did,
+        allowed: decision.allowed,
+        reasonCode: decision.reason,
+        score: decision.score,
+        commerce: {
+          rail: input.intent.rail,
+          amount: input.intent.amount,
+          currency: input.intent.currency,
+          merchant: input.intent.merchant,
+          intentHash: decision.receipt.intentHash,
+        },
+      }, {
+        issuer: options.receiptSigner.issuer,
+        keyId: options.receiptSigner.keyId,
+      });
+      decision.signedReceipt = signReceipt(payload, options.receiptSigner);
+    } catch {
+      // Receipt signing failure should not break authorization
+    }
+  }
+
+  return decision;
 }

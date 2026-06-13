@@ -65,6 +65,8 @@ export type {
   CommerceAuthorizationInput,
   CommerceAuthorizationDecision,
   CommerceAuthorizationReceipt,
+  CommerceAuthorizationOptions,
+  CommerceReceiptEvidence,
 } from './commerce-intent';
 
 // Types
