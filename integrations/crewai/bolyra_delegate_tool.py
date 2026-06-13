@@ -18,6 +18,7 @@ Usage with CrewAI:
 """
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 
@@ -39,19 +40,24 @@ class BolyraDelegateTool:
     def __init__(
         self,
         agent_permissions: Optional[list[str]] = None,
+        operator_key: Optional[str] = None,
     ):
         """Initialize with the agent's current permission set.
 
         Args:
             agent_permissions: Permissions this agent holds and can delegate from
+            operator_key: Hex-encoded operator private key for signing delegations.
+                If None, dev identities are used.
         """
         self.agent_permissions = agent_permissions or ["read_data"]
+        self.operator_key = operator_key
 
     def _run(
         self,
         delegatee_id: str,
         permissions: str,
         session_nonce: str,
+        scope_commitment: str = "0",
         expiry_seconds: int = 3600,
     ) -> str:
         """Execute scoped delegation (CrewAI calls _run).
@@ -60,6 +66,7 @@ class BolyraDelegateTool:
             delegatee_id: Credential commitment of the target agent
             permissions: Comma-separated permission flags to delegate
             session_nonce: Nonce from a prior successful handshake
+            scope_commitment: Scope commitment from the prior handshake
             expiry_seconds: Delegation validity duration
 
         Returns:
@@ -74,8 +81,73 @@ class BolyraDelegateTool:
                 f"{', '.join(invalid)}"
             )
 
-        return (
-            f"Bolyra delegation to '{delegatee_id}' with permissions "
-            f"[{', '.join(requested)}], expiry {expiry_seconds}s. "
-            f"Status: not_implemented -- delegation coming in @bolyra/sdk v0.3"
-        )
+        try:
+            from bolyra.delegation import delegate, verify_delegation
+            from bolyra.identity import (
+                create_dev_identities,
+                permissions_to_bitmask,
+            )
+            from bolyra.types import Permission
+
+            # Map permission strings to Permission enums
+            _perm_map = {p.name.lower(): p for p in Permission}
+            delegatee_perms = []
+            for p_str in requested:
+                key = p_str.strip().lower()
+                if key not in _perm_map:
+                    return f"Delegation failed: unknown permission '{p_str}'"
+                delegatee_perms.append(_perm_map[key])
+
+            delegatee_scope = permissions_to_bitmask(delegatee_perms)
+
+            # Get delegator credential (dev mode)
+            _human, delegator, operator_key_int = create_dev_identities()
+
+            if self.operator_key is not None:
+                operator_key_int = int(self.operator_key, 16)
+
+            nonce_int = int(session_nonce)
+            scope_commitment_int = int(scope_commitment)
+            delegatee_commitment = int(delegatee_id, 16) if delegatee_id.startswith("0x") else int(delegatee_id)
+
+            delegatee_expiry = min(
+                int(time.time()) + expiry_seconds,
+                delegator.expiry_timestamp,
+            )
+
+            proof, result = delegate(
+                delegator=delegator,
+                delegator_operator_private_key=operator_key_int,
+                delegatee_commitment=delegatee_commitment,
+                delegatee_scope=delegatee_scope,
+                delegatee_expiry=delegatee_expiry,
+                previous_scope_commitment=scope_commitment_int,
+                session_nonce=nonce_int,
+            )
+
+            # Verify
+            current_timestamp = int(time.time())
+            delegation_result = verify_delegation(
+                proof=proof,
+                previous_scope_commitment=scope_commitment_int,
+                session_nonce=nonce_int,
+                current_timestamp=current_timestamp,
+            )
+
+            return (
+                f"Bolyra delegation VERIFIED to '{delegatee_id}' with permissions "
+                f"[{', '.join(requested)}], expiry {expiry_seconds}s. "
+                f"New scope commitment: {delegation_result.new_scope_commitment}. "
+                f"Delegation nullifier: {delegation_result.delegation_nullifier}."
+            )
+
+        except ImportError as e:
+            return (
+                f"Delegation failed: Python SDK not installed ({e}). "
+                "Install with: pip install bolyra"
+            )
+        except Exception as e:
+            return (
+                f"Delegation failed: {e}. "
+                "Ensure Node.js >= 18 and @bolyra/sdk are installed."
+            )

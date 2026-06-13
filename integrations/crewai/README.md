@@ -1,6 +1,6 @@
 # Bolyra CrewAI Integration
 
-> **Status: API Stub** — Type contracts and tool shapes are defined, but `_run()` returns a placeholder. Full implementation requires the `@bolyra/sdk` subprocess bridge, which is not yet shipped. Do not use in production.
+> **Status: Working** — Requires Node.js >= 18 and `@bolyra/sdk` installed. Uses the Python SDK's subprocess bridge for ZKP proof generation.
 
 Mutual ZKP authentication and delegation tools for CrewAI multi-agent workflows.
 
@@ -16,6 +16,7 @@ npm install @bolyra/sdk && npx bolyra setup  # circuit artifacts
 ```python
 from bolyra.integrations.crewai import BolyraAuthTool, BolyraDelegateTool
 
+# Dev mode (uses fixed-seed dev identities -- never for production):
 auth = BolyraAuthTool(permissions=["read_data", "write_data"])
 delegate = BolyraDelegateTool(agent_permissions=["read_data", "write_data"])
 
@@ -26,4 +27,4 @@ agent = Agent(
 )
 ```
 
-CrewAI tools use `_run()` interface. Currently stubs pending `@bolyra/sdk` v0.2 circuit wiring.
+CrewAI tools use the `_run()` interface. Errors from missing Node.js or SDK are returned as human-readable strings (never crash the CrewAI agent).
