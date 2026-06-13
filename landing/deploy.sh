@@ -18,8 +18,9 @@ DISTRIBUTION_ID="E28JZX72HEYVTP"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INDEX="$SCRIPT_DIR/index.html"
 PROTOCOL="$SCRIPT_DIR/402.html"
+BLOG="$SCRIPT_DIR/blog.html"
 
-for f in "$INDEX" "$PROTOCOL"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
@@ -40,10 +41,18 @@ aws s3 cp "$PROTOCOL" "s3://$BUCKET/402" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
+echo "→ uploading blog.html to s3://$BUCKET/"
+aws s3 cp "$BLOG" "s3://$BUCKET/blog.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$BLOG" "s3://$BUCKET/blog" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" \
   --query 'Invalidation.Id' \
   --output text)
 
