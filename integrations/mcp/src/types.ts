@@ -15,6 +15,7 @@ import type {
   Proof,
   BolyraConfig,
 } from '@bolyra/sdk';
+import type { ReceiptSignerConfig, SignedReceipt } from '@bolyra/receipts';
 
 /**
  * One hop in a v0.3 delegation chain. Carries the Groth16 proof produced by
@@ -100,6 +101,8 @@ export interface BolyraAuthContext {
    * credentialCommitment; with a chain, equals the leaf delegateeCommitment.
    */
   effectiveCommitment: string;
+  /** Signed receipt when receiptSigner is configured. */
+  receipt?: SignedReceipt;
 }
 
 /**
@@ -155,6 +158,8 @@ export interface BolyraMcpConfig {
    * replay protection if not set.
    */
   nonceStore?: NonceStore;
+  /** Optional receipt signer. When set, every verification decision produces a signed receipt. */
+  receiptSigner?: ReceiptSignerConfig;
   /** SDK config passthrough (rpc/registry/circuit dirs). */
   sdkConfig?: BolyraConfig;
   /**
@@ -184,3 +189,5 @@ export interface BolyraClientAuth {
 
 /** Re-export the SDK types callers will need. */
 export type { HumanIdentity, AgentCredential, Proof, BolyraConfig };
+/** Re-export receipt types for callers that configure receiptSigner. */
+export type { ReceiptSignerConfig, SignedReceipt };

@@ -22,4 +22,6 @@ export type {
   BolyraClientAuth,
   ToolPermissionPolicy,
   NonceStore,
+  ReceiptSignerConfig,
+  SignedReceipt,
 } from './types';

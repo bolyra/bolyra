@@ -1,6 +1,7 @@
 /**
  * Shared verification logic — used by both stdio and HTTP wrappers.
- * Lazy-imports @bolyra/sdk to avoid pulling crypto deps at module load.
+ * Lazy-imports @bolyra/sdk and @bolyra/receipts to avoid pulling crypto
+ * deps (ESM-only @noble/*) at module load time.
  */
 
 import type {
@@ -339,7 +340,7 @@ export async function verifyBundle(
   }
 
   const passed = verifyResult.verified && chainOk && score >= minScore;
-  return {
+  const ctx: BolyraAuthContext = {
     verified: passed,
     score,
     did: buildDid(network, commitment),
@@ -351,6 +352,7 @@ export async function verifyBundle(
     chainDepth,
     effectiveCommitment,
   };
+  return attachReceipt(ctx, bundle, config);
 }
 
 /**
@@ -474,4 +476,55 @@ export function checkToolPolicy(
     return `Tool "${toolName}" requires permissions ${required.toString(2)}b, agent has ${authCtx.permissionBitmask.toString(2)}b`;
   }
   return null;
+}
+
+/**
+ * Attach a signed receipt to a BolyraAuthContext when receiptSigner is
+ * configured. Only called on the final production verification result —
+ * early returns (malformed bundle, dev mode) do not get receipts.
+ *
+ * Receipt signing failure is swallowed: it must never break verification.
+ */
+async function attachReceipt(
+  ctx: BolyraAuthContext,
+  bundle: BolyraProofBundle,
+  config: BolyraMcpConfig,
+): Promise<BolyraAuthContext> {
+  if (!config.receiptSigner) return ctx;
+
+  try {
+    const { createAuthReceipt, signReceipt } = await import('@bolyra/receipts');
+    type AuthReceiptInput = import('@bolyra/receipts').AuthReceiptInput;
+
+    const input: AuthReceiptInput = {
+      rootDid: ctx.did,
+      actingDid: ctx.chainDepth > 0
+        ? `did:bolyra:${config.network ?? 'base-sepolia'}:${BigInt(ctx.effectiveCommitment).toString(16).padStart(64, '0')}`
+        : ctx.did,
+      credentialCommitment: bundle.credentialCommitment,
+      effectiveCommitment: ctx.effectiveCommitment,
+      allowed: ctx.verified,
+      reasonCode: ctx.reason,
+      score: ctx.score,
+      permissionBitmask: ctx.permissionBitmask.toString(),
+      chainDepth: ctx.chainDepth,
+      humanProof: bundle.humanProof,
+      agentProof: bundle.agentProof,
+      humanPublicSignals: bundle.humanProof.publicSignals,
+      agentPublicSignals: bundle.agentProof.publicSignals,
+      bundleVersion: bundle.v,
+      nonce: bundle.nonce,
+      delegationChain: bundle.delegationChain,
+    };
+
+    const payload = createAuthReceipt(input, {
+      issuer: config.receiptSigner.issuer,
+      keyId: config.receiptSigner.keyId,
+    });
+    const receipt = signReceipt(payload, config.receiptSigner);
+    return { ...ctx, receipt };
+  } catch {
+    // Receipt signing failure should not break verification
+    return ctx;
+  }
 }
