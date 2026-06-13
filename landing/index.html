@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.4.0: dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.6.0: signed auth receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. Apache-2.0.">
+  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.4.0: dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.7.0: auth + commerce receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. Apache-2.0.">
   <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.6.0 (sdk + mcp + receipts) live on npm. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. ~30 lines from install to verified call. v0.6.0: cryptographically signed verification receipts via @bolyra/receipts.">
+  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.7.0 (receipts + payment-protocols) live on npm. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. ~30 lines from install to verified call. v0.7.0: auth + commerce receipts — cryptographically signed via @bolyra/receipts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -572,7 +572,7 @@
     <div class="container">
       <h1>Bolyra</h1>
       <p class="tagline">Verifiable delegated authority for AI agents. The human signs a scoped receipt; middleware verifies it before the agent calls a tool.</p>
-      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.6.0 shipped — mutual handshake, scope-narrowing delegation, MCP dev mode, Stripe ACP gating, and signed verification receipts via <code style="font-size: 0.9em;">@bolyra/receipts</code>.</p>
+      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.7.0 shipped — mutual handshake, scope-narrowing delegation, MCP dev mode, Stripe ACP gating, and auth + commerce receipts via <code style="font-size: 0.9em;">@bolyra/receipts</code>.</p>
       <div class="cta-group">
         <a href="https://www.npmjs.com/package/@bolyra/sdk" class="btn btn-primary">
           npm @bolyra/sdk
@@ -587,7 +587,7 @@
       </div>
       <p class="install-hint">
         <code>npm install @bolyra/sdk @bolyra/mcp @bolyra/receipts @bolyra/payment-protocols</code>
-        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.6.0 live</span>
+        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.7.0 live</span>
       </p>
       <p class="install-hint" style="margin-top: 10px;">
         Prefer SD-JWT today? <code>npm install @bolyra/delegation</code>
@@ -644,7 +644,7 @@
 });
 <span class="kw">if</span> (<span class="op">!</span>result.ok) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
       </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade path:</strong> v0.4.0 dev mode → v0.5.0 commerce → v0.6.0 receipts. Zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, MCP dev mode, and signed verification receipts. <code>npm install @bolyra/sdk</code>.</p>
+      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade path:</strong> v0.4.0 dev mode → v0.6.0 auth receipts → v0.7.0 commerce receipts. Zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, MCP dev mode, and signed auth + commerce receipts. <code>npm install @bolyra/sdk</code>.</p>
     </div>
   </section>
 
@@ -793,12 +793,12 @@
         <div class="feature-card">
           <div class="feature-icon delegation">R</div>
           <h3>Signed Receipts</h3>
-          <p><strong style="color: var(--green);">NEW in v0.6.0:</strong> Every verification decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. Audit-grade evidence for compliance. <code>npm install @bolyra/receipts@0.6.0</code>.</p>
+          <p><strong style="color: var(--green);">v0.7.0:</strong> Auth + commerce receipts. Every verification and payment authorization decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. <code>bolyra-receipt-verify</code> CLI included. <code>npm install @bolyra/receipts@0.7.0</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">$</div>
           <h3>Payment Protocols</h3>
-          <p>Stripe Agent Commerce Protocol wedge. <code>verifyStripeACPSpend(ctx, amount, currency, 'authorize' | 'confirm')</code> gates PaymentIntents against the leaf delegatee's cumulative-bit scope. <code>confirm</code> fails closed without <code>SIGN_ON_BEHALF</code>. <strong>v0.5.0</strong> adds <code>authorizeCommerceIntent</code> as the new unified API across payment rails. Note: Visa TAP and Google AP2 adapters are stub-only in v0.5.0. <code>npm install @bolyra/payment-protocols@0.5.0</code>.</p>
+          <p>Stripe Agent Commerce Protocol wedge. <code>verifyStripeACPSpend(ctx, amount, currency, 'authorize' | 'confirm')</code> gates PaymentIntents against the leaf delegatee's cumulative-bit scope. <code>confirm</code> fails closed without <code>SIGN_ON_BEHALF</code>. <strong>v0.7.0</strong> adds <code>authorizeCommerceIntent</code> as the unified API across payment rails, with signed commerce receipts on every authorization. Note: Visa TAP and Google AP2 adapters are stub-only. <code>npm install @bolyra/payment-protocols@0.7.0</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon mutual">OC</div>
@@ -996,7 +996,7 @@
             <h4>Resources</h4>
             <ul>
               <li><a href="https://github.com/bolyra/bolyra">GitHub</a></li>
-              <li><a href="https://github.com/bolyra/bolyra/releases/tag/v0.6.0">v0.6.0 release</a></li>
+              <li><a href="https://github.com/bolyra/bolyra/releases/tag/v0.7.0">v0.7.0 release</a></li>
               <li><a href="https://github.com/bolyra/bolyra/blob/main/CHANGELOG.md">Changelog</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/spec">IETF Draft</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/sdk">SDK Documentation</a></li>
