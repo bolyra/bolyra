@@ -232,3 +232,42 @@ jobs:
           rm -f package-lock.json
           npm install --package-lock-only
           npm audit --omit=dev --audit-level=high
+
+  smoke-test:
+    name: Smoke test — fresh install from npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Create temp project and install from npm
+        run: |
+          mkdir /tmp/bolyra-smoke
+          cd /tmp/bolyra-smoke
+          npm init -y
+          npm install @bolyra/sdk @bolyra/receipts
+
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/smoke-test.mjs
+          path: repo
+
+      - name: Run smoke test
+        working-directory: /tmp/bolyra-smoke
+        run: node $GITHUB_WORKSPACE/repo/.github/smoke-test.mjs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Python SDK smoke test
+        run: |
+          pip install bolyra
+          python3 -c "
+          from bolyra.types import HumanIdentity, AgentCredential, Permission
+          from bolyra.identity import permissions_to_bitmask, validate_cumulative_bit_encoding
+          bitmask = permissions_to_bitmask([Permission.READ_DATA, Permission.WRITE_DATA])
+          validate_cumulative_bit_encoding(bitmask)
+          print(f'✓ Python SDK: bitmask={bitmask}, types import OK')
+          "
