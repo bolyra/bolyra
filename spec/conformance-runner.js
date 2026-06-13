@@ -9,10 +9,65 @@
  *   node spec/conformance-runner.js
  *   node spec/conformance-runner.js --vector valid-handshake-basic
  *   node spec/conformance-runner.js --type delegation
+ *   node spec/conformance-runner.js --report [path]
  */
 
 const fs = require('fs');
 const path = require('path');
+
+function generateReport(vectors, results) {
+    const specVersion = vectors.version;
+    const generated = new Date().toISOString();
+
+    const total = results.length;
+    const passed = results.filter(r => r.status === 'PASS').length;
+    const failed = results.filter(r => r.status === 'FAIL').length;
+    const skipped = results.filter(r => r.status === 'SKIP').length;
+
+    // Group by type/category
+    const categories = {};
+    for (const r of results) {
+        if (!categories[r.type]) categories[r.type] = [];
+        categories[r.type].push(r);
+    }
+
+    // Pretty-print category name
+    const categoryLabel = t => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    // Status icon
+    const statusIcon = s => s === 'PASS' ? '✓ PASS' : s === 'FAIL' ? '✗ FAIL' : '– SKIP';
+
+    let md = `# Bolyra Protocol Conformance Report\n\n`;
+    md += `**Generated:** ${generated}\n`;
+    md += `**Spec version:** ${specVersion}\n`;
+    md += `**Runner:** spec/conformance-runner.js\n\n`;
+
+    md += `## Summary\n\n`;
+    md += `| Metric | Count |\n`;
+    md += `|--------|-------|\n`;
+    md += `| Total vectors | ${total} |\n`;
+    md += `| Passed | ${passed} |\n`;
+    md += `| Failed | ${failed} |\n`;
+    md += `| Skipped | ${skipped} |\n\n`;
+
+    md += `## Results by Category\n\n`;
+    for (const [type, items] of Object.entries(categories)) {
+        md += `### ${categoryLabel(type)} (${items.length} vector${items.length !== 1 ? 's' : ''})\n\n`;
+        md += `| # | Vector ID | Expected | Status |\n`;
+        md += `|---|-----------|----------|--------|\n`;
+        items.forEach((r, i) => {
+            md += `| ${i + 1} | ${r.id} | ${r.expected} | ${statusIcon(r.status)} |\n`;
+        });
+        md += `\n`;
+    }
+
+    md += `## References\n\n`;
+    md += `- [Protocol Specification](draft-bolyra-mutual-zkp-auth-01.md)\n`;
+    md += `- [DID Method](did-method-bolyra.md)\n`;
+    md += `- [Test Vectors](test-vectors.json)\n`;
+
+    return md;
+}
 
 // Use circomlibjs from circuits/node_modules
 const MODULE_PATH = path.join(__dirname, '../circuits/node_modules');
@@ -52,29 +107,53 @@ async function main() {
     let failed = 0;
     let skipped = 0;
 
+    const results = [];
+
     for (const vector of selectedVectors) {
         process.stdout.write(`  ${vector.id}: `);
 
+        let status;
         try {
             const result = await runVector(vector, { poseidon, eddsa, babyJub, F });
 
             if (result.skipped) {
                 console.log(`SKIP -- ${result.reason}`);
                 skipped++;
+                status = 'SKIP';
             } else if (result.pass) {
                 console.log('PASS');
                 passed++;
+                status = 'PASS';
             } else {
                 console.log(`FAIL -- ${result.reason}`);
                 failed++;
+                status = 'FAIL';
             }
         } catch (err) {
             console.log(`ERROR -- ${err.message}`);
             failed++;
+            status = 'FAIL';
         }
+
+        results.push({
+            id: vector.id,
+            type: vector.type,
+            expected: vector.expected.result,
+            status,
+        });
     }
 
     console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped`);
+
+    // Generate markdown report if --report flag is present
+    const reportFlag = process.argv.indexOf('--report');
+    if (reportFlag !== -1) {
+        const reportPath = process.argv[reportFlag + 1] || 'spec/CONFORMANCE.md';
+        const report = generateReport(vectors, results);
+        fs.writeFileSync(reportPath, report, 'utf-8');
+        console.log(`\nReport written to ${reportPath}`);
+    }
+
     process.exit(failed > 0 ? 1 : 0);
 }
 

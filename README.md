@@ -37,6 +37,17 @@ npm test                              # circuits fast + contracts
 FULL_PROOF=1 npm run test:circuits:slow  # full Groth16/PLONK proving (~2 min)
 ```
 
+## Protocol Conformance
+
+48 executable test vectors verify the implementation matches the protocol specification.
+CI runs them on every PR. See [`spec/CONFORMANCE.md`](spec/CONFORMANCE.md) for the
+current generated report.
+
+```bash
+npm run conformance          # run vectors
+npm run conformance:report   # generate spec/CONFORMANCE.md
+```
+
 ## Contributing
 
 This project requires a Developer Certificate of Origin (DCO) sign-off on every commit. Use `git commit -s`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details.
