@@ -17,6 +17,41 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.0] — 2026-06-13
+
+The **commerce receipts** release. Every commerce authorization
+decision can produce a cryptographically signed receipt.
+
+### Cohort version state after this release
+
+| Package | npm / PyPI version | Notes |
+|---|---|---|
+| `@bolyra/receipts` | 0.7.0 | commerce receipt kind + createCommerceReceipt |
+| `@bolyra/payment-protocols` | 0.7.0 | signed commerce receipts |
+| `@bolyra/mcp` | 0.6.0 | unchanged |
+| `@bolyra/sdk` | 0.4.0 | unchanged |
+| `@bolyra/openclaw` | 0.3.1 | unchanged |
+| `bolyra` (PyPI) | 0.4.0 | unchanged |
+
+### Added
+
+#### Receipts (`@bolyra/receipts` 0.6.0 → 0.7.0)
+
+- **`createCommerceReceipt()`** — builds a `ReceiptPayload` with
+  `kind: 'bolyra.commerce'` and commerce fields (rail, amount,
+  currency, merchant, intentHash).
+- **CLI** accepts `bolyra.commerce` receipts and validates commerce
+  fields. Rejects `commerce` fields on `bolyra.auth` receipts.
+- `createAuthReceipt()` now accepts optional `issuedAt` for timestamp
+  alignment with upstream authorization decisions.
+
+#### Payment Protocols (`@bolyra/payment-protocols` 0.5.0 → 0.7.0)
+
+- **`signedReceipt`** on `CommerceAuthorizationDecision` — when
+  `receiptSigner` and `receiptEvidence` are provided in options,
+  `authorizeCommerceIntent()` produces a `SignedReceipt` with
+  commerce-specific fields.
+
 ## [0.6.0] — 2026-06-13
 
 The **signed receipts** release. Every MCP verification decision
