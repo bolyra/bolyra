@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.4.0: dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. Apache-2.0.">
+  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.4.0: dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.6.0: signed auth receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. Apache-2.0.">
   <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.4.0 (sdk + mcp with dev mode) live on npm. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. ~30 lines from install to verified call.">
+  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.6.0 (sdk + mcp + receipts) live on npm. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. ~30 lines from install to verified call. v0.6.0: cryptographically signed verification receipts via @bolyra/receipts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -561,6 +561,7 @@
         <li><a href="#standards">Standards</a></li>
         <li><a href="/402">HTTP 402</a></li>
         <li><a href="#design-partners">Partners</a></li>
+        <li><a href="/blog">Blog</a></li>
         <li><a href="https://github.com/bolyra/bolyra">GitHub</a></li>
       </ul>
     </div>
@@ -571,7 +572,7 @@
     <div class="container">
       <h1>Bolyra</h1>
       <p class="tagline">Verifiable delegated authority for AI agents. The human signs a scoped receipt; middleware verifies it before the agent calls a tool.</p>
-      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.4.0 shipped — mutual handshake, scope-narrowing delegation, MCP dev mode, Stripe ACP gating.</p>
+      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.6.0 shipped — mutual handshake, scope-narrowing delegation, MCP dev mode, Stripe ACP gating, and signed verification receipts via <code style="font-size: 0.9em;">@bolyra/receipts</code>.</p>
       <div class="cta-group">
         <a href="https://www.npmjs.com/package/@bolyra/sdk" class="btn btn-primary">
           npm @bolyra/sdk
@@ -585,8 +586,8 @@
         </a>
       </div>
       <p class="install-hint">
-        <code>npm install @bolyra/sdk @bolyra/mcp @bolyra/payment-protocols</code>
-        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.4.0 live</span>
+        <code>npm install @bolyra/sdk @bolyra/mcp @bolyra/receipts @bolyra/payment-protocols</code>
+        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.6.0 live</span>
       </p>
       <p class="install-hint" style="margin-top: 10px;">
         Prefer SD-JWT today? <code>npm install @bolyra/delegation</code>
@@ -643,7 +644,7 @@
 });
 <span class="kw">if</span> (<span class="op">!</span>result.ok) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
       </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade (v0.4.0 — shipped):</strong> zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, and MCP dev mode for 60-second quickstart. <code>npm install @bolyra/sdk</code>.</p>
+      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade path:</strong> v0.4.0 dev mode → v0.5.0 commerce → v0.6.0 receipts. Zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, MCP dev mode, and signed verification receipts. <code>npm install @bolyra/sdk</code>.</p>
     </div>
   </section>
 
@@ -694,7 +695,7 @@
     <div class="container">
       <p class="section-label">Protocol</p>
       <h2 class="section-title">The full protocol</h2>
-      <p class="section-subtitle">Receipts are the on-ramp. The full Bolyra protocol is a complete authentication primitive for the human-AI boundary: three capabilities, zero information leakage. Same wire format and permission encoding as <code>@bolyra/delegation</code> — the v0.3 upgrade is drop-in.</p>
+      <p class="section-subtitle">Receipts are the on-ramp. The full Bolyra protocol is a complete authentication primitive for the human-AI boundary: three capabilities, zero information leakage. Same wire format and permission encoding as <code>@bolyra/delegation</code> — the upgrade is drop-in.</p>
       <div class="features-grid">
         <div class="feature-card">
           <div class="feature-icon mutual">ZK</div>
@@ -720,7 +721,7 @@
     <div class="container">
       <p class="section-label">ZKP SDK · v0.4.0 shipped</p>
       <h2 class="section-title">10 lines to mutual auth</h2>
-      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk@0.4.0</code>. Identity creation, credential issuance, parallel proof generation, on-chain verification, and one-way scope-narrowing delegation chains — without revealing operator, model, or scope to the relying party. <strong>Dev mode:</strong> <code>createDevIdentities()</code> for instant testing without circuit artifacts. Python bindings on PyPI as <code>bolyra==0.3.0</code>.</p>
+      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk@0.4.0</code>. Identity creation, credential issuance, parallel proof generation, on-chain verification, and one-way scope-narrowing delegation chains — without revealing operator, model, or scope to the relying party. <strong>Dev mode:</strong> <code>createDevIdentities()</code> for instant testing without circuit artifacts. Python bindings on PyPI as <code>bolyra==0.4.0</code>.</p>
       <div class="code-block-wrapper">
         <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
         <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> { <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
@@ -787,7 +788,12 @@
         <div class="feature-card">
           <div class="feature-icon mutual">MCP</div>
           <h3>MCP Middleware</h3>
-          <p><strong style="color: var(--green);">NEW in v0.4.0:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy })</code>. Per-tool permission gating, delegation chain support, stdio + HTTP transports. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.4.0</code>.</p>
+          <p><strong style="color: var(--green);">v0.6.0:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy, receiptSigner })</code>. Per-tool permission gating, delegation chain support, signed verification receipts, stdio + HTTP transports. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.6.0</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon delegation">R</div>
+          <h3>Signed Receipts</h3>
+          <p><strong style="color: var(--green);">NEW in v0.6.0:</strong> Every verification decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. Audit-grade evidence for compliance. <code>npm install @bolyra/receipts@0.6.0</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">$</div>
@@ -909,7 +915,7 @@
           <div class="desc">Patent claims filed (US Provisional #64/043,898)</div>
         </div>
         <div class="number-card">
-          <div class="big">48</div>
+          <div class="big">49</div>
           <div class="desc">Conformance test vectors (all passing)</div>
         </div>
         <div class="number-card">
@@ -990,11 +996,12 @@
             <h4>Resources</h4>
             <ul>
               <li><a href="https://github.com/bolyra/bolyra">GitHub</a></li>
-              <li><a href="https://github.com/bolyra/bolyra/releases/tag/v0.4.0">v0.4.0 release</a></li>
+              <li><a href="https://github.com/bolyra/bolyra/releases/tag/v0.6.0">v0.6.0 release</a></li>
               <li><a href="https://github.com/bolyra/bolyra/blob/main/CHANGELOG.md">Changelog</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/spec">IETF Draft</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/sdk">SDK Documentation</a></li>
               <li><a href="#design-partners">Design Partners</a></li>
+              <li><a href="/blog">Blog</a></li>
             </ul>
           </div>
           <div class="footer-col">
