@@ -33,6 +33,9 @@ class BolyraDelegateInput(BaseModel):
     session_nonce: str = Field(
         description="Session nonce from a prior successful handshake",
     )
+    scope_commitment: str = Field(
+        description="Scope commitment from the prior handshake result",
+    )
 
 
 class BolyraDelegateTool:
@@ -40,8 +43,8 @@ class BolyraDelegateTool:
 
     Delegates a subset of this agent's permissions to another agent
     with cryptographic scope narrowing. Requires a prior successful
-    mutual handshake (the session_nonce binds delegation to an
-    authenticated session).
+    mutual handshake (the session_nonce and scope_commitment bind
+    delegation to an authenticated session).
 
     Example::
 
@@ -55,6 +58,7 @@ class BolyraDelegateTool:
             "delegatee_id": "0xabc123...",
             "permissions": ["read_data"],
             "session_nonce": "nonce-from-handshake",
+            "scope_commitment": "commitment-from-handshake",
         })
     """
 
@@ -69,13 +73,17 @@ class BolyraDelegateTool:
     def __init__(
         self,
         agent_permissions: Optional[list[str]] = None,
+        operator_key: Optional[str] = None,
     ):
         """Initialize with the agent's current permission set.
 
         Args:
             agent_permissions: Permissions this agent holds and can delegate from
+            operator_key: Hex-encoded operator private key for signing delegations.
+                If None, dev identities are used to obtain the key.
         """
         self.agent_permissions = agent_permissions or ["read_data"]
+        self.operator_key = operator_key
 
     def invoke(self, input: dict[str, Any]) -> dict[str, Any]:
         """Execute scoped delegation.
@@ -94,16 +102,98 @@ class BolyraDelegateTool:
                 "tool": "bolyra_delegate",
             }
 
-        return {
-            "delegated": False,
-            "status": "not_implemented",
-            "message": "Delegation coming in @bolyra/sdk v0.3",
-            "delegatee_id": input.get("delegatee_id", ""),
-            "permissions": requested,
-            "expiry_seconds": input.get("expiry_seconds", 3600),
-            "tool": "bolyra_delegate",
-            "protocol_version": "0.2.0",
-        }
+        try:
+            from bolyra.delegation import delegate, verify_delegation
+            from bolyra.identity import (
+                create_dev_identities,
+                permissions_to_bitmask,
+            )
+            from bolyra.types import Permission
+
+            # Map permission strings to Permission enums
+            _perm_map = {p.name.lower(): p for p in Permission}
+            delegatee_perms = []
+            for p_str in requested:
+                key = p_str.strip().lower()
+                if key not in _perm_map:
+                    return {
+                        "delegated": False,
+                        "status": "error",
+                        "message": f"Unknown permission: '{p_str}'",
+                        "tool": "bolyra_delegate",
+                    }
+                delegatee_perms.append(_perm_map[key])
+
+            delegatee_scope = permissions_to_bitmask(delegatee_perms)
+
+            # Get delegator credential (dev mode for now)
+            _human, delegator, operator_key_int = create_dev_identities()
+
+            if self.operator_key is not None:
+                operator_key_int = int(self.operator_key, 16)
+
+            session_nonce = int(input.get("session_nonce", "0"))
+            scope_commitment = int(input.get("scope_commitment", "0"))
+            delegatee_commitment = int(input.get("delegatee_id", "0"), 16) if input.get("delegatee_id", "").startswith("0x") else int(input.get("delegatee_id", "0"))
+            expiry_seconds = input.get("expiry_seconds", 3600)
+
+            import time
+            delegatee_expiry = min(
+                int(time.time()) + expiry_seconds,
+                delegator.expiry_timestamp,
+            )
+
+            proof, result = delegate(
+                delegator=delegator,
+                delegator_operator_private_key=operator_key_int,
+                delegatee_commitment=delegatee_commitment,
+                delegatee_scope=delegatee_scope,
+                delegatee_expiry=delegatee_expiry,
+                previous_scope_commitment=scope_commitment,
+                session_nonce=session_nonce,
+            )
+
+            # Verify the delegation proof
+            current_timestamp = int(time.time())
+            delegation_result = verify_delegation(
+                proof=proof,
+                previous_scope_commitment=scope_commitment,
+                session_nonce=session_nonce,
+                current_timestamp=current_timestamp,
+            )
+
+            return {
+                "delegated": True,
+                "status": "ok",
+                "delegatee_id": input.get("delegatee_id", ""),
+                "permissions": requested,
+                "expiry_seconds": expiry_seconds,
+                "new_scope_commitment": str(delegation_result.new_scope_commitment),
+                "delegation_nullifier": str(delegation_result.delegation_nullifier),
+                "tool": "bolyra_delegate",
+                "protocol_version": "0.3.0",
+            }
+
+        except ImportError as e:
+            return {
+                "delegated": False,
+                "status": "error",
+                "message": (
+                    f"Bolyra Python SDK not installed: {e}. "
+                    "Install with: pip install bolyra"
+                ),
+                "tool": "bolyra_delegate",
+            }
+        except Exception as e:
+            return {
+                "delegated": False,
+                "status": "error",
+                "message": (
+                    f"Bolyra delegation failed: {e}. "
+                    "Ensure Node.js >= 18 and @bolyra/sdk are installed."
+                ),
+                "tool": "bolyra_delegate",
+            }
 
     async def ainvoke(self, input: dict[str, Any]) -> dict[str, Any]:
         """Async version of invoke."""

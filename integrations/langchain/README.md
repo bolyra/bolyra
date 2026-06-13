@@ -1,6 +1,6 @@
 # Bolyra LangChain Integration
 
-> **Status: API Stub** — Type contracts and tool shapes are defined, but `_run()` returns a placeholder. Full implementation requires the `@bolyra/sdk` subprocess bridge, which is not yet shipped. Do not use in production.
+> **Status: Working** — Requires Node.js >= 18 and `@bolyra/sdk` installed. Uses the Python SDK's subprocess bridge for ZKP proof generation.
 
 Mutual ZKP authentication and delegation tools for LangChain agents.
 
@@ -16,11 +16,27 @@ npm install @bolyra/sdk && npx bolyra setup  # circuit artifacts
 ```python
 from bolyra.integrations.langchain import BolyraAuthTool, BolyraDelegateTool
 
-auth = BolyraAuthTool(agent_model_hash="gpt-4o", permissions=["read_data"])
+# Dev mode (uses fixed-seed dev identities -- never for production):
+auth = BolyraAuthTool()
 result = auth.invoke({"scope": "my-app", "required_permissions": ["read_data"]})
 
+# Production mode:
+auth = BolyraAuthTool(
+    agent_model_hash="gpt-4o",
+    operator_key="0xdeadbeef...",
+    permissions=["read_data", "write_data"],
+    human_secret=12345,
+)
+result = auth.invoke({"scope": "my-app", "required_permissions": ["read_data"]})
+
+# Delegation (after successful handshake):
 delegate = BolyraDelegateTool(agent_permissions=["read_data", "write_data"])
-result = delegate.invoke({"delegatee_id": "0xabc...", "permissions": ["read_data"], "session_nonce": "nonce"})
+result = delegate.invoke({
+    "delegatee_id": "0xabc...",
+    "permissions": ["read_data"],
+    "session_nonce": "nonce-from-handshake",
+    "scope_commitment": "commitment-from-handshake",
+})
 ```
 
-Both tools support async via `ainvoke()`. Currently stubs pending `@bolyra/sdk` v0.2 circuit wiring.
+Both tools support async via `ainvoke()`. Errors from missing Node.js or SDK are returned as structured dicts (never crash the LangChain agent).
