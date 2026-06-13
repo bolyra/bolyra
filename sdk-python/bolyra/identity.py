@@ -131,6 +131,7 @@ def create_human_identity(
         ConfigurationError: If the Node.js SDK is not found.
         ProofGenerationError: If the Node.js subprocess fails.
     """
+    secret = int(secret)  # Normalize before embedding in JS
     validate_human_secret(secret)
     sdk_path = resolve_node_sdk(config)
 
@@ -183,9 +184,20 @@ def create_agent_credential(
     validate_agent_expiry(expiry_timestamp)
     bitmask = permissions_to_bitmask(permissions)
     validate_cumulative_bit_encoding(bitmask)
+
+    # Validate inputs before embedding in JS script (injection prevention)
+    model_hash = int(model_hash)
+    operator_private_key = int(operator_private_key)
+    expiry_timestamp = int(expiry_timestamp)
+
+    if operator_private_key < 0 or operator_private_key >= 2**256:
+        raise InvalidSecretError(
+            "operator_private_key must be in range [0, 2^256) for a 32-byte key"
+        )
+
     sdk_path = resolve_node_sdk(config)
 
-    # Convert int private key to 32-byte hex for JS Buffer.from(hex, 'hex')
+    # Convert int private key to exactly 32-byte hex for JS Buffer.from(hex, 'hex')
     key_hex = format(operator_private_key, '064x')
 
     # Build permission array for TS SDK (which expects Permission[] enum values)
