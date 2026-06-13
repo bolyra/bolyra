@@ -135,7 +135,15 @@ class BolyraDelegateTool:
             # is the caller's responsibility; this tool does not attempt it.
             import time
 
-            _human, delegator, operator_key_int = create_dev_identities()
+            # Use the same permission bitmask as the auth tool to avoid
+            # CHAIN_LINK_MISMATCH when scope_commitment was produced by
+            # a restricted-permission dev credential.
+            from bolyra.identity import permissions_to_bitmask
+            perm_enums = [Permission[p.upper()] for p in self.agent_permissions]
+            bitmask = permissions_to_bitmask(perm_enums)
+            _human, delegator, operator_key_int = create_dev_identities(
+                permission_bitmask=bitmask,
+            )
 
             session_nonce = int(input.get("session_nonce", "0"))
             scope_commitment = int(input.get("scope_commitment", "0"))
