@@ -36,7 +36,7 @@ include "../node_modules/@zk-kit/binary-merkle-root.circom/src/binary-merkle-roo
 //   substitution defense requires hardware attestation (TEE) and is OUT
 //   OF SCOPE — closing that gap is a "Bolyra + TEE" companion track.
 //
-// Constraint budget (~23,100; -450 vs pre-hardening: removed Poseidon3 depAuth):
+// Constraint budget (~35,000 actual; original estimate of 23,100 was understated):
 //   - Range checks (Num2Bits(64) x 3): 192
 //   - Poseidon5 (credentialCommitment): 600
 //   - Poseidon2 (providerKeyCommitment): 300
@@ -159,6 +159,13 @@ template ModelInstanceBinding(AGENT_DEPTH, PROVIDER_DEPTH) {
     providerKeyHash.inputs[1] <== providerPubkeyAy;
     providerKeyCommitment <== providerKeyHash.out;
 
+    // Bound provider proof length to prevent zero-root bypass.
+    // BinaryMerkleRoot outputs 0 when depth > MAX_DEPTH.
+    component providerDepthCheck = LessThan(8);
+    providerDepthCheck.in[0] <== providerMerkleProofLength;
+    providerDepthCheck.in[1] <== PROVIDER_DEPTH + 1;
+    providerDepthCheck.out === 1;
+
     component providerMerkle = BinaryMerkleRoot(PROVIDER_DEPTH);
     providerMerkle.leaf <== providerKeyCommitment;
     providerMerkle.depth <== providerMerkleProofLength;
@@ -196,6 +203,12 @@ template ModelInstanceBinding(AGENT_DEPTH, PROVIDER_DEPTH) {
     operatorSigVerify.M <== credentialCommitment;
 
     // ============ STEP 5: Agent Merkle membership ============
+
+    // Bound agent proof length to prevent zero-root bypass.
+    component agentDepthCheck = LessThan(8);
+    agentDepthCheck.in[0] <== merkleProofLength;
+    agentDepthCheck.in[1] <== AGENT_DEPTH + 1;
+    agentDepthCheck.out === 1;
 
     component agentMerkle = BinaryMerkleRoot(AGENT_DEPTH);
     agentMerkle.leaf <== credentialCommitment;

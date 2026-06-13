@@ -310,6 +310,45 @@ describe("ModelInstanceBinding Circuit (C7)", function () {
     }
   });
 
+  it("prevents operator from extending expiry (Phase 2)", async function () {
+    // Same logic as permission self-grant: provider sig binds the full
+    // credentialCommitment which includes expiryTimestamp. Extending
+    // expiry changes the commitment, invalidating the provider sig.
+    const input = buildValidInput({ expiryTimestamp: 2000000000n });
+
+    const opPub = pubFromPriv(OPERATOR_PRIV);
+    const extendedExpiry = 9999999999n;
+    const extendedCred = poseidon([
+      input.modelHash,
+      opPub.Ax,
+      opPub.Ay,
+      input.permissionBitmask,
+      extendedExpiry,
+    ]);
+    const extendedOpSig = eddsa.signPoseidon(OPERATOR_PRIV, extendedCred);
+
+    const tampered = { ...input };
+    tampered.expiryTimestamp = extendedExpiry;
+    tampered.operatorSigR8x = F.toObject(extendedOpSig.R8[0]);
+    tampered.operatorSigR8y = F.toObject(extendedOpSig.R8[1]);
+    tampered.operatorSigS = extendedOpSig.S;
+
+    // Rebuild agent tree leaf
+    const tamperedAgentTree = buildTree([F.toObject(extendedCred)], 0, 20);
+    tampered.merkleProofLength = tamperedAgentTree.depth;
+    tampered.merkleProofIndex = tamperedAgentTree.index;
+    tampered.merkleProofSiblings = tamperedAgentTree.siblings;
+
+    try {
+      await circuit.calculateWitness(tampered, true);
+      expect.fail(
+        "Should have rejected expiry extension — provider sig binds expiryTimestamp"
+      );
+    } catch (err) {
+      expect(err.message).to.match(/Assert Failed|signature|verify/i);
+    }
+  });
+
   it("prevents cross-operator attestation reuse", async function () {
     // An attacker steals a provider attestation issued for operator A but tries
     // to use it under operator B's credential. The credential commitment binds
