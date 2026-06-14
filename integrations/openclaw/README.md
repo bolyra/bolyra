@@ -2,7 +2,7 @@
 
 OpenClaw trust verification adapter for [Bolyra](https://bolyra.ai) — ZKP-native agent authentication.
 
-Maps Bolyra's mutual ZKP handshake (Groth16 + PLONK) to OpenClaw's `TrustVerificationResult` interface, providing cryptographic agent identity verification at every OpenClaw verification point.
+Maps Bolyra's mutual ZKP handshake (Groth16) to OpenClaw's `TrustVerificationResult` interface, providing cryptographic agent identity verification at every OpenClaw verification point.
 
 ## Install
 

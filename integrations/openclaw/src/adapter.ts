@@ -89,7 +89,9 @@ export function computeTrustScore(
   }
 
   // Nonce freshness (10 pts)
-  const nonceAge = Number(now - handshake.sessionNonce / 1000n);
+  // Nonce layout: (unix_seconds << 64) | random_entropy
+  const nonceTs = handshake.sessionNonce >> 64n;
+  const nonceAge = Number(now - nonceTs);
   if (nonceAge < maxProofAge) {
     score += 10;
   } else {
