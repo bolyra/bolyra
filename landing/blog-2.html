@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Auth Works in Dev. Then Production Asks: Who Is This User? — Bolyra</title>
+  <meta name="description" content="Local demos prove plumbing. Production needs attribution. Five questions dev mode can't answer: agent identity, human delegation, per-tool policy, replay protection, and audit receipts.">
+  <meta property="og:title" content="MCP Auth Works in Dev. Then Production Asks: Who Is This User? — Bolyra">
+  <meta property="og:description" content="5 production questions dev mode can't answer: agent identity, human delegation, per-tool policy, replay protection, audit receipts.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://bolyra.ai/blog-2">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --text-muted: #888;
+      --accent: #6366f1; --accent-hover: #818cf8;
+      --green: #4ade80; --border: #222; --max-width: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 56px;
+    }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+
+    /* Article */
+    article { padding: 100px 0 80px; }
+    article h1 {
+      font-size: 2.2rem; font-weight: 800; line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 40px; }
+    article h2 {
+      font-size: 1.4rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    article h3 {
+      font-size: 1.1rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px;
+    }
+    article p { margin-bottom: 16px; }
+    article ul, article ol { margin-bottom: 16px; padding-left: 24px; }
+    article li { margin-bottom: 6px; }
+
+    /* Code */
+    code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px;
+    }
+    pre {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; overflow-x: auto; margin-bottom: 24px; line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+
+    /* Diff highlighting */
+    .diff-add { color: var(--green); }
+    .diff-remove { color: #f87171; }
+
+    /* CTA */
+    .cta-box {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; margin-top: 48px; text-align: center;
+    }
+    .cta-box a {
+      display: inline-block; background: var(--accent); color: #fff;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600;
+      margin-top: 12px; transition: background 0.2s;
+    }
+    .cta-box a:hover { background: var(--accent-hover); color: #fff; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 0;
+      color: var(--text-muted); font-size: 0.85rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <nav><div class="container">
+    <a href="/" class="logo">Bolyra</a>
+    <a href="/">Home</a>
+  </div></nav>
+
+  <article class="container">
+    <h1>MCP Auth Works in Dev. Then Production Asks: Who Is This User?</h1>
+    <p class="meta">June 14, 2026 &middot; Viswanadha Pratap Kondoju</p>
+
+    <h2>The demo works</h2>
+
+    <p>Your MCP server starts.</p>
+
+    <p>The agent calls a tool.</p>
+
+    <p>The local auth path says yes.</p>
+
+    <h2>Then production asks 5 questions your demo can't answer</h2>
+
+    <p>Local demos prove plumbing. Production needs attribution.</p>
+
+    <p>Not "did the request include something auth-shaped?" but: who is acting, who authorized them, what are they allowed to do, has this proof already been spent, and can you prove the decision later?</p>
+
+    <h3>1. Who is this agent?</h3>
+
+    <p>In dev, the caller is whatever script you just ran.</p>
+
+    <p>In production, the caller needs a stable identity tied to a credential commitment, so your server can resolve the agent before trusting the proof.</p>
+
+    <p>Bolyra one-liner:</p>
+
+<pre><code>resolveCredential: (commitment) =&gt; credentialStore.resolve(commitment),</code></pre>
+
+    <p>That turns an opaque proof bundle into an agent credential your server can verify, score, log, and map to a DID like <code>did:bolyra:&lt;network&gt;:&lt;commitment&gt;</code>.</p>
+
+    <h3>2. Did a human authorize this?</h3>
+
+    <p>A production agent is usually not the root actor. It is acting through delegated authority.</p>
+
+    <p>Bolyra proof bundles carry the human proof and, in v2, an optional <code>delegationChain</code>. After verification, the MCP auth context tells you how many delegation hops were checked.</p>
+
+    <p>Bolyra one-liner:</p>
+
+<pre><code>const delegated = auth.chainDepth &gt; 0;</code></pre>
+
+    <p>That is the difference between "an agent showed up" and "an agent showed up through a verified human-to-agent delegation path."</p>
+
+    <h3>3. What tools can they use?</h3>
+
+    <p>Your demo probably has one happy path.</p>
+
+    <p>Production has tools with different blast radius. Reading a file is not writing a file. Listing resources is not deleting data. Auth has to narrow at the tool boundary, not just at server entry.</p>
+
+    <p>Bolyra one-liner:</p>
+
+<pre><code>toolPolicy: { list_files: 1n, read_file: 1n, write_file: 2n },</code></pre>
+
+    <p>The wrapper checks the caller's effective permission bitmask before the tool runs. Tools outside the map only require a verified handshake; sensitive tools get explicit policy.</p>
+
+    <h3>4. Has this proof been used before?</h3>
+
+    <p>A valid proof is not enough if an attacker can replay it.</p>
+
+    <p>Production needs nonce freshness. Use <code>MemoryNonceStore</code> for single-process, Redis for multi-instance.</p>
+
+    <p>Bolyra one-liner:</p>
+
+<pre><code>nonceStore: new MemoryNonceStore(),</code></pre>
+
+    <p>The important part is the contract: mark the nonce once, reject it the second time.</p>
+
+    <h3>5. Can I prove what happened?</h3>
+
+    <p>Logs are useful until someone asks for a signed artifact.</p>
+
+    <p>Bolyra can attach a signed auth receipt to the verification decision when a receipt signer is configured. That gives you a portable record of who was checked, what decision was made, and who signed that decision.</p>
+
+    <p>Bolyra one-liner:</p>
+
+<pre><code>receiptSigner: { issuer: 'my-mcp-server', keyId: 'prod-001', privateKey: process.env.RECEIPT_PRIVATE_KEY! },</code></pre>
+
+    <p>Now audit is not just "search the logs and hope." It is a signed receipt your system can verify later.</p>
+
+    <h2>The production shape</h2>
+
+    <p>The production example wires the real pieces together:</p>
+
+<pre><code>withBolyraAuthStdio(mcpServer.server, {
+  devMode: mode === 'dev',
+  resolveCredential: (commitment) =&gt; credentialStore.resolve(commitment),
+  validateRoots: createMockRootValidator(),
+  nonceStore: new MemoryNonceStore(),
+  toolPolicy: {
+    list_files: 1n,
+    read_file: 1n,
+    write_file: 2n,
+  },
+  ...(sdkConfig ? { sdkConfig } : {}),
+});</code></pre>
+
+    <p>The demo proves the tool call works. Production proves who authorized it.</p>
+
+    <p style="margin-top: 32px; text-align: center;"><a href="/blog">Previous: What breaks when you leave dev mode</a></p>
+
+    <div class="cta-box">
+      <p>See the full production example with credential store, nonce replay protection, and root validation.</p>
+      <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp/examples/production-server">View on GitHub</a>
+    </div>
+  </article>
+
+  <footer><div class="container">
+    &copy; 2026 ZKProva Inc. &middot; <a href="/">bolyra.ai</a> &middot; <a href="https://github.com/bolyra/bolyra">GitHub</a> &middot; <a href="mailto:viswa@bolyra.ai">viswa@bolyra.ai</a>
+  </div></footer>
+</body>
+</html>
