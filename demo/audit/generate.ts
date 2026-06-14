@@ -195,7 +195,7 @@ for (let i = 0; i < TOTAL; i++) {
     permissions = stripped.toString(2).padStart(8, "0");
   }
   if (slot.kind === "anomaly") {
-    // Force unusual hour
+    // Force unusual hour for some; others are volume/escalation/PII anomalies
     ts.setUTCHours(randInt(1, 4));
     ts.setUTCMinutes(randInt(0, 59));
   }
@@ -235,13 +235,36 @@ for (let i = 0; i < TOTAL; i++) {
     ...(!isAllowed && denialInfo(slot.kind)),
   };
 
-  // Collect anomaly descriptions
+  // Collect anomaly descriptions — varied by agent+tool
   if (slot.kind === "anomaly") {
     const hour = ts.getUTCHours().toString().padStart(2, "0");
     const min = ts.getUTCMinutes().toString().padStart(2, "0");
-    anomalyDescriptions.push(
-      `${agent.name} attempted ${tool} at ${hour}:${min} UTC -- DENIED (outside business hours)`
-    );
+    const anomalyIndex = anomalyDescriptions.length;
+    let desc: string;
+    if (anomalyIndex === 0) {
+      desc = `attempted ${tool} at ${hour}:${min} UTC — unusual hour`;
+    } else if (anomalyIndex === 1) {
+      desc = `47 lookup_ticket calls in 5 minutes — volume spike`;
+    } else if (anomalyIndex === 2) {
+      desc = `attempted charge_card without FINANCIAL_MEDIUM — escalation attempt`;
+    } else if (anomalyIndex === 3) {
+      desc = `accessed customer PII via export_transactions — flagged for review`;
+    } else if (anomalyIndex === 4) {
+      desc = `delegation chain depth 3 — maximum reached`;
+    } else if (agent.name === "data-export-agent") {
+      desc = `accessed customer PII via ${tool} — flagged for review`;
+    } else if (agent.name === "support-triage-agent" && tool === "lookup_ticket") {
+      desc = `${randInt(30, 60)} ${tool} calls in 5 minutes — volume spike`;
+    } else if (agent.name === "billing-ops-agent") {
+      desc = `attempted ${tool} without FINANCIAL_MEDIUM — escalation attempt`;
+    } else if (anomalyIndex % 3 === 0) {
+      desc = `attempted ${tool} at ${hour}:${min} UTC — unusual hour`;
+    } else if (anomalyIndex % 3 === 1) {
+      desc = `delegation chain depth ${randInt(3, 5)} — maximum reached`;
+    } else {
+      desc = `${randInt(20, 55)} ${tool} calls in 5 minutes — volume spike`;
+    }
+    anomalyDescriptions.push(`${agent.name}: ${desc}`);
   }
 
   records.push(record);
@@ -290,7 +313,7 @@ const agentStats = agents.map((a) => {
     calls: agentRecords.length,
     allowed: agentAllowed,
     denied: agentDenied,
-    spend: agentSpend,
+    spend: agentSpend > 0 ? agentSpend : null,
     topTool,
   };
 });
@@ -318,10 +341,23 @@ const output = {
   records,
 };
 
-const outPath = join(dirname(fileURLToPath(import.meta.url)), "data.json");
+const dir = dirname(fileURLToPath(import.meta.url));
+const outPath = join(dir, "data.json");
 writeFileSync(outPath, JSON.stringify(output, null, 2));
 
+// Also embed data into index.html so it works without a server (file://)
+import { readFileSync } from "fs";
+const htmlPath = join(dir, "index.html");
+let html = readFileSync(htmlPath, "utf-8");
+const dataScript = `<script>var BOLYRA_AUDIT_DATA = ${JSON.stringify(output)};</script>`;
+// Remove any previous embedded data
+html = html.replace(/<script>var BOLYRA_AUDIT_DATA\s*=[\s\S]*?<\/script>\n?/g, "");
+// Insert before closing </head>
+html = html.replace("</head>", `${dataScript}\n</head>`);
+writeFileSync(htmlPath, html);
+
 console.log(`Generated ${totalCalls} audit records -> ${outPath}`);
+console.log(`Embedded data into index.html (works with file://)`);
 console.log(
   `  Allowed: ${allowed}  Denied: ${denied}  Spend: ${output.summary.totalSpendFormatted}  Anomalies: ${anomalyCount}`
 );

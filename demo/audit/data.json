@@ -4,126 +4,126 @@
     "signedReceipts": 1000,
     "allowed": 850,
     "denied": 150,
-    "totalSpendCents": 17042,
-    "totalSpendFormatted": "$170.42",
+    "totalSpendCents": 15512,
+    "totalSpendFormatted": "$155.12",
     "anomalies": 15
   },
   "agentStats": [
     {
       "name": "sales-research-agent",
-      "calls": 199,
-      "allowed": 164,
-      "denied": 35,
-      "spend": 435,
+      "calls": 208,
+      "allowed": 171,
+      "denied": 37,
+      "spend": 479,
       "topTool": "enrich_lead"
     },
     {
       "name": "support-triage-agent",
-      "calls": 376,
-      "allowed": 330,
-      "denied": 46,
-      "spend": 0,
+      "calls": 380,
+      "allowed": 331,
+      "denied": 49,
+      "spend": null,
       "topTool": "escalate_ticket"
     },
     {
       "name": "billing-ops-agent",
-      "calls": 168,
-      "allowed": 137,
+      "calls": 158,
+      "allowed": 127,
       "denied": 31,
-      "spend": 16607,
+      "spend": 15033,
       "topTool": "charge_card"
     },
     {
       "name": "code-review-agent",
-      "calls": 157,
-      "allowed": 137,
-      "denied": 20,
-      "spend": 0,
-      "topTool": "read_file"
+      "calls": 154,
+      "allowed": 136,
+      "denied": 18,
+      "spend": null,
+      "topTool": "run_tests"
     },
     {
       "name": "data-export-agent",
       "calls": 100,
-      "allowed": 82,
-      "denied": 18,
-      "spend": 0,
+      "allowed": 85,
+      "denied": 15,
+      "spend": null,
       "topTool": "export_transactions"
     }
   ],
   "toolStats": {
     "process_refund": {
-      "allowed": 44,
-      "denied": 8
-    },
-    "lookup_ticket": {
-      "allowed": 96,
-      "denied": 12
-    },
-    "escalate_ticket": {
-      "allowed": 127,
-      "denied": 18
-    },
-    "search_kb": {
-      "allowed": 107,
-      "denied": 16
-    },
-    "enrich_lead": {
-      "allowed": 66,
-      "denied": 14
-    },
-    "search_contacts": {
-      "allowed": 49,
+      "allowed": 42,
       "denied": 7
     },
+    "lookup_ticket": {
+      "allowed": 90,
+      "denied": 10
+    },
+    "escalate_ticket": {
+      "allowed": 133,
+      "denied": 22
+    },
+    "search_kb": {
+      "allowed": 108,
+      "denied": 17
+    },
+    "enrich_lead": {
+      "allowed": 65,
+      "denied": 13
+    },
+    "run_tests": {
+      "allowed": 50,
+      "denied": 8
+    },
+    "search_contacts": {
+      "allowed": 53,
+      "denied": 8
+    },
     "write_file": {
-      "allowed": 42,
+      "allowed": 38,
       "denied": 3
     },
     "send_email": {
-      "allowed": 49,
-      "denied": 14
+      "allowed": 53,
+      "denied": 16
     },
     "read_file": {
       "allowed": 48,
-      "denied": 9
+      "denied": 7
     },
     "charge_card": {
-      "allowed": 56,
-      "denied": 9
+      "allowed": 51,
+      "denied": 10
     },
     "create_invoice": {
-      "allowed": 37,
+      "allowed": 34,
       "denied": 14
     },
     "export_customers": {
-      "allowed": 34,
+      "allowed": 37,
       "denied": 8
     },
     "export_transactions": {
       "allowed": 48,
-      "denied": 10
-    },
-    "run_tests": {
-      "allowed": 47,
-      "denied": 8
+      "denied": 7
     }
   },
   "anomalyDescriptions": [
-    "data-export-agent attempted export_customers at 04:27 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted lookup_ticket at 03:28 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted escalate_ticket at 01:37 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted search_kb at 04:11 UTC -- DENIED (outside business hours)",
-    "billing-ops-agent attempted process_refund at 03:51 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted lookup_ticket at 01:07 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted search_kb at 01:57 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted search_kb at 01:01 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted lookup_ticket at 01:39 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted lookup_ticket at 01:20 UTC -- DENIED (outside business hours)",
-    "billing-ops-agent attempted process_refund at 03:25 UTC -- DENIED (outside business hours)",
-    "billing-ops-agent attempted charge_card at 01:18 UTC -- DENIED (outside business hours)",
-    "support-triage-agent attempted escalate_ticket at 04:37 UTC -- DENIED (outside business hours)",
-    "sales-research-agent attempted send_email at 03:32 UTC -- DENIED (outside business hours)",
-    "data-export-agent attempted export_transactions at 03:52 UTC -- DENIED (outside business hours)"
+    "data-export-agent: attempted export_customers at 04:27 UTC — unusual hour",
+    "support-triage-agent: 47 lookup_ticket calls in 5 minutes — volume spike",
+    "support-triage-agent: attempted charge_card without FINANCIAL_MEDIUM — escalation attempt",
+    "support-triage-agent: accessed customer PII via export_transactions — flagged for review",
+    "billing-ops-agent: delegation chain depth 3 — maximum reached",
+    "support-triage-agent: 55 lookup_ticket calls in 5 minutes — volume spike",
+    "support-triage-agent: attempted search_kb at 01:57 UTC — unusual hour",
+    "support-triage-agent: delegation chain depth 3 — maximum reached",
+    "support-triage-agent: 36 search_kb calls in 5 minutes — volume spike",
+    "support-triage-agent: 41 lookup_ticket calls in 5 minutes — volume spike",
+    "sales-research-agent: delegation chain depth 3 — maximum reached",
+    "billing-ops-agent: attempted charge_card without FINANCIAL_MEDIUM — escalation attempt",
+    "support-triage-agent: attempted escalate_ticket at 04:37 UTC — unusual hour",
+    "sales-research-agent: delegation chain depth 4 — maximum reached",
+    "data-export-agent: accessed customer PII via export_transactions — flagged for review"
   ],
   "records": [
     {
@@ -195,21 +195,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0776",
-      "timestamp": "2026-05-14T21:12:17.940Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "denied",
-      "score": 94,
-      "permissions": "00000001",
-      "chainDepth": 2,
-      "receiptHash": "e140fd27354da5bc96044b0eeab925843a651b5a7f034786de0c4114d3aec2b9",
-      "signatureValid": true,
-      "reason": "delegation depth exceeded",
-      "failedCheck": "chainDepth"
-    },
-    {
       "id": "audit-0199",
       "timestamp": "2026-05-14T21:43:16.913Z",
       "agent": "sales-research-agent",
@@ -223,6 +208,32 @@
       "signatureValid": true,
       "reason": "trust score below threshold",
       "failedCheck": "score"
+    },
+    {
+      "id": "audit-0793",
+      "timestamp": "2026-05-14T22:08:38.820Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 96,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "50b34742a597b1e2b7f7f0127920d41c1eef3cfc60bc7110ef5c93e0624ae350",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0682",
+      "timestamp": "2026-05-14T22:18:41.182Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "run_tests",
+      "decision": "allowed",
+      "score": 95,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "5d06f109515a213d90b3aa2abaaaef730380f939f66273ab99f99c92d114d66c",
+      "signatureValid": true
     },
     {
       "id": "audit-0993",
@@ -366,33 +377,6 @@
       "cost": 87
     },
     {
-      "id": "audit-0779",
-      "timestamp": "2026-05-15T06:38:45.367Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "allowed",
-      "score": 88,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "0e20c11f6c9366dd64525993c0318983c6d6daaba6e49c1991a3835e55e3f905",
-      "signatureValid": true,
-      "cost": 5
-    },
-    {
-      "id": "audit-0788",
-      "timestamp": "2026-05-15T06:44:19.444Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 85,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "d24f5b8bf8e59da47df5763070c7b48fb258c106d5e7eb28ecc00811a370dd13",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0877",
       "timestamp": "2026-05-15T08:12:42.854Z",
       "agent": "data-export-agent",
@@ -446,19 +430,6 @@
       "signatureValid": true,
       "reason": "trust score below threshold",
       "failedCheck": "score"
-    },
-    {
-      "id": "audit-0812",
-      "timestamp": "2026-05-15T10:45:12.839Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 92,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "31413fc0b340e91b08ba55e2fedfd7c07a91cc6f95c3a3969479b0ad2c38188a",
-      "signatureValid": true
     },
     {
       "id": "audit-0291",
@@ -527,20 +498,6 @@
       "chainDepth": 1,
       "receiptHash": "289253ad5f312bd0471fa25db8b0c029d21ca84f0b5b5506673ce9da45c57f13",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0798",
-      "timestamp": "2026-05-15T13:34:43.388Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
-      "decision": "allowed",
-      "score": 73,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "788bd4b66e6ae8d33692e4600e1ea60f4800a5060749a9312654b61f5b0dcaff",
-      "signatureValid": true,
-      "cost": 105
     },
     {
       "id": "audit-0360",
@@ -803,6 +760,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0706",
+      "timestamp": "2026-05-16T02:12:23.399Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 92,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "33388ac957536e28ab827a87000166443a9fb4d132839ac00713c49dd4312911",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0579",
       "timestamp": "2026-05-16T02:16:31.601Z",
       "agent": "support-triage-agent",
@@ -856,22 +826,6 @@
       "chainDepth": 0,
       "receiptHash": "1562d314afed44037c62500beed5b88c5d6f3008cc54d8675b81aebd82e83c9e",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0678",
-      "timestamp": "2026-05-16T04:08:26.755Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_customers",
-      "decision": "denied",
-      "score": 67,
-      "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "bd33dff0867bfdf708b769edc459b7c1c45127cbc10ca29c217cbc86e89d98e5",
-      "signatureValid": true,
-      "cost": 788,
-      "reason": "spend limit exceeded",
-      "failedCheck": "budget"
     },
     {
       "id": "audit-0095",
@@ -940,6 +894,22 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0717",
+      "timestamp": "2026-05-16T06:55:34.120Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "create_invoice",
+      "decision": "denied",
+      "score": 81,
+      "permissions": "00001011",
+      "chainDepth": 3,
+      "receiptHash": "fc9ea99ed5968bbbb288adfbd723683ae87f23b2388b8121017ae6d92972cd75",
+      "signatureValid": true,
+      "cost": 146,
+      "reason": "insufficient permissions",
+      "failedCheck": "bitmask"
+    },
+    {
       "id": "audit-0320",
       "timestamp": "2026-05-16T06:56:30.928Z",
       "agent": "billing-ops-agent",
@@ -967,19 +937,6 @@
       "signatureValid": true,
       "reason": "insufficient permissions",
       "failedCheck": "bitmask"
-    },
-    {
-      "id": "audit-0943",
-      "timestamp": "2026-05-16T07:34:50.235Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 93,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "d78cf578bdb5ba758e27a894e0575d4c8dd83cca27cc5e9c6905f79506dcf6f9",
-      "signatureValid": true
     },
     {
       "id": "audit-0895",
@@ -1019,6 +976,19 @@
       "permissions": "00000011",
       "chainDepth": 0,
       "receiptHash": "c63d7ebc9ef9ad4544cd8a442670011cbe41c7a95e3880dd80678dbbb5739881",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0773",
+      "timestamp": "2026-05-16T10:29:32.949Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 90,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "af6a85e1768c25d0f9e55a5a009b8ec878e9d7eacf8dc5a7ec6500b5df753b7b",
       "signatureValid": true
     },
     {
@@ -1190,6 +1160,19 @@
       "cost": 232
     },
     {
+      "id": "audit-0782",
+      "timestamp": "2026-05-16T19:44:33.529Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 88,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "e5fc266359603737c965567a169c2b905585d235e9a18e6111d3eae089d6d32d",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0739",
       "timestamp": "2026-05-16T20:01:22.308Z",
       "agent": "sales-research-agent",
@@ -1230,20 +1213,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0707",
-      "timestamp": "2026-05-16T22:18:46.604Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
-      "decision": "allowed",
-      "score": 78,
-      "permissions": "00001111",
-      "chainDepth": 2,
-      "receiptHash": "1ec6b812e039f22b4dfde9515da85ea4a9d94258e5288256f987799fe1b41a4b",
-      "signatureValid": true,
-      "cost": 54
-    },
-    {
       "id": "audit-0239",
       "timestamp": "2026-05-16T23:31:57.964Z",
       "agent": "support-triage-agent",
@@ -1280,6 +1249,19 @@
       "permissions": "00000011",
       "chainDepth": 4,
       "receiptHash": "29b953515ac7f7752ad568b5ffb3b30bf47b8201210d0097793ac7b950d3fa63",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0781",
+      "timestamp": "2026-05-17T00:35:27.977Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "63b8e70b510b18998a229e482311cce748f7df0951f8e8577c9b60ba71b6b4ee",
       "signatureValid": true
     },
     {
@@ -1325,6 +1307,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0675",
+      "timestamp": "2026-05-17T01:56:15.915Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 89,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "08dc2d5de490ae0d2a70b219660e81c1abe43b76f309c02da4c6b12888f240e6",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0965",
       "timestamp": "2026-05-17T01:56:37.309Z",
       "agent": "data-export-agent",
@@ -1350,6 +1345,35 @@
       "receiptHash": "d898d1afcef8a1d263bc68a07e888c02455a80d4baa3025721719791f9beaad6",
       "signatureValid": true,
       "cost": 53
+    },
+    {
+      "id": "audit-0352",
+      "timestamp": "2026-05-17T02:15:31.070Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "denied",
+      "score": 86,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "93af0021aa03bdcd66c74416856000208ed0cdbf998e321321e584eaf242edb5",
+      "signatureValid": true,
+      "cost": 848,
+      "reason": "spend limit exceeded",
+      "failedCheck": "budget"
+    },
+    {
+      "id": "audit-0702",
+      "timestamp": "2026-05-17T02:42:15.270Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 89,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "39836053d8ce3e6d9eec96ddddaa110c20a9e4092204c65ce80c6c34c1bf3e43",
+      "signatureValid": true
     },
     {
       "id": "audit-0841",
@@ -1379,6 +1403,21 @@
       "signatureValid": true,
       "reason": "anomaly detected",
       "failedCheck": "anomaly"
+    },
+    {
+      "id": "audit-0343",
+      "timestamp": "2026-05-17T04:13:00.136Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "denied",
+      "score": 41,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "5034ff9b663581fbd5998a4152d15ae81a26a4fe5fb27b81cb6d7e2782ca1aa9",
+      "signatureValid": true,
+      "reason": "trust score below threshold",
+      "failedCheck": "score"
     },
     {
       "id": "audit-0438",
@@ -1422,17 +1461,19 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0805",
-      "timestamp": "2026-05-17T09:55:28.347Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 92,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "4a10d3c938a3460d29ea592f33d6f30c491bea6b57b0b38582003d89ef7ed117",
-      "signatureValid": true
+      "id": "audit-0700",
+      "timestamp": "2026-05-17T09:51:10.454Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "denied",
+      "score": 46,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "70bc882ab8f7e9428b0c09dd0563cb1745e969d0f7e3f334abfa0faaa83f2c3e",
+      "signatureValid": true,
+      "reason": "trust score below threshold",
+      "failedCheck": "score"
     },
     {
       "id": "audit-0930",
@@ -1475,19 +1516,6 @@
       "cost": 6
     },
     {
-      "id": "audit-0773",
-      "timestamp": "2026-05-17T12:03:01.656Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 89,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "07eaf6a85e1768c25d0f9e55a5a009b8ec878e9d7eacf8dc5a7ec6500b5df753",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0888",
       "timestamp": "2026-05-17T12:28:28.395Z",
       "agent": "sales-research-agent",
@@ -1511,6 +1539,19 @@
       "permissions": "00000011",
       "chainDepth": 2,
       "receiptHash": "0273299bce3f2fa3e5b0999fdc90725ef1462c9b36829d314acfb48584217da1",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0718",
+      "timestamp": "2026-05-17T15:30:27.945Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 79,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "ca677a2f063c39d747d8916c12550e53a13a823e2efdd2638adedb540aa78467",
       "signatureValid": true
     },
     {
@@ -1634,20 +1675,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0947",
-      "timestamp": "2026-05-17T21:39:25.155Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 73,
-      "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "8c87dd2d5631aa9c6b0917ed4a46ade8e06e3480c54eeb06298a73971edc83c2",
-      "signatureValid": true,
-      "cost": 233
-    },
-    {
       "id": "audit-0516",
       "timestamp": "2026-05-17T22:04:33.361Z",
       "agent": "support-triage-agent",
@@ -1659,6 +1686,22 @@
       "chainDepth": 1,
       "receiptHash": "499b4ae50a110c2d3c852f84101a0a79a1500644973dc7ad4d89811c132879bf",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0816",
+      "timestamp": "2026-05-17T22:29:17.573Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "charge_card",
+      "decision": "denied",
+      "score": 84,
+      "permissions": "00001111",
+      "chainDepth": 0,
+      "receiptHash": "dbe14861dbab04cdba94ad42ec980c01d4df1171ebc64637efde9c1b2b89413c",
+      "signatureValid": true,
+      "cost": 336,
+      "reason": "spend limit exceeded",
+      "failedCheck": "budget"
     },
     {
       "id": "audit-0760",
@@ -1839,6 +1882,20 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0712",
+      "timestamp": "2026-05-18T10:47:23.709Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "process_refund",
+      "decision": "allowed",
+      "score": 77,
+      "permissions": "00001111",
+      "chainDepth": 2,
+      "receiptHash": "4315d0f4ae13f30a8453c2df1e10f8f7b7b0afe9e36adc009ade039b01ca8711",
+      "signatureValid": true,
+      "cost": 60
+    },
+    {
       "id": "audit-0324",
       "timestamp": "2026-05-18T10:50:57.549Z",
       "agent": "code-review-agent",
@@ -1852,19 +1909,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0672",
-      "timestamp": "2026-05-18T11:30:09.112Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 96,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "30f3ec28df6c24df1323b1adbee08c63ff64e8348d9935966ea90c8e3f984d11",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0478",
       "timestamp": "2026-05-18T11:35:19.490Z",
       "agent": "support-triage-agent",
@@ -1875,19 +1919,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "47366643083b21c75bdf011661b7fe1a9fbe4135c09212cc4c91d125bcfb186d",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0804",
-      "timestamp": "2026-05-18T11:35:56.718Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 83,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "9e3331e173c62982679b5b1da7e301ecc708a7cc69f3869b2b1b8da6dd36137e",
       "signatureValid": true
     },
     {
@@ -1983,20 +2014,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0721",
-      "timestamp": "2026-05-18T14:44:17.175Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "allowed",
-      "score": 93,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "dec8c6b2577a1b53551588d7ee3dd80da0710b78247f79db75f218429390d164",
-      "signatureValid": true,
-      "cost": 5
-    },
-    {
       "id": "audit-0831",
       "timestamp": "2026-05-18T15:22:50.935Z",
       "agent": "support-triage-agent",
@@ -2010,6 +2027,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0811",
+      "timestamp": "2026-05-18T15:37:42.883Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 92,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "e9f2fb4a0ef06bca240d5e1e5587322ce32ed91640bf0b70563a9fc2d6c21e38",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0863",
       "timestamp": "2026-05-18T16:03:30.815Z",
       "agent": "sales-research-agent",
@@ -2020,6 +2050,19 @@
       "permissions": "00000011",
       "chainDepth": 2,
       "receiptHash": "c34a67064485b28881ec4fb0c1bc4feac79e6241f4cd63257543ed152f34f254",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0807",
+      "timestamp": "2026-05-18T16:39:07.474Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "write_file",
+      "decision": "allowed",
+      "score": 97,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "c51170ab9185177a2580091462364ed403f4e6111e73fc0b5c6e8bead270b22a",
       "signatureValid": true
     },
     {
@@ -2060,6 +2103,19 @@
       "permissions": "00000011",
       "chainDepth": 0,
       "receiptHash": "a839908bf5d4884944f16e24fa5e347709e5be8c250c246eeccde4a35229ca68",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0705",
+      "timestamp": "2026-05-18T19:31:34.946Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "allowed",
+      "score": 96,
+      "permissions": "00000011",
+      "chainDepth": 3,
+      "receiptHash": "d8378f0349b5f24f8301ec4a921396fb4a876e22f73fe6c33a79a6163b661ce9",
       "signatureValid": true
     },
     {
@@ -2195,19 +2251,6 @@
       "receiptHash": "a906d0c72b362119b4907bcfab16cfbfc20d0496980066622ce38962aecc6ec0",
       "signatureValid": true,
       "cost": 14
-    },
-    {
-      "id": "audit-0718",
-      "timestamp": "2026-05-19T02:11:36.547Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 82,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "28ca677a2f063c39d747d8916c12550e53a13a823e2efdd2638adedb540aa784",
-      "signatureValid": true
     },
     {
       "id": "audit-0042",
@@ -2359,19 +2402,6 @@
       "failedCheck": "score"
     },
     {
-      "id": "audit-0803",
-      "timestamp": "2026-05-19T09:30:40.516Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_customers",
-      "decision": "allowed",
-      "score": 70,
-      "permissions": "10000001",
-      "chainDepth": 0,
-      "receiptHash": "712794263a5ebf98cd615ea5a3b0d7be59b2ddbab146453724ac6090d7e1a071",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0527",
       "timestamp": "2026-05-19T11:03:16.813Z",
       "agent": "support-triage-agent",
@@ -2452,18 +2482,18 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0691",
-      "timestamp": "2026-05-19T15:36:42.362Z",
+      "id": "audit-0790",
+      "timestamp": "2026-05-19T14:47:14.201Z",
       "agent": "billing-ops-agent",
       "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
+      "tool": "create_invoice",
       "decision": "allowed",
-      "score": 85,
+      "score": 84,
       "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "ccadb526e2271dbb04c2950f9f74ce14f3c8f71731d1268a7a421f92092234a6",
+      "chainDepth": 1,
+      "receiptHash": "5cc51ff2cd13e17ffe9c5acfc165544c01d93dd5d382837c8a168806259b38d9",
       "signatureValid": true,
-      "cost": 286
+      "cost": 136
     },
     {
       "id": "audit-0024",
@@ -2476,19 +2506,6 @@
       "permissions": "00000011",
       "chainDepth": 2,
       "receiptHash": "b84002b3f47671d154136f8118c4ad5e3eea0027c72c6604b40a8d77431e9b00",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0705",
-      "timestamp": "2026-05-19T17:28:57.873Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 89,
-      "permissions": "00000011",
-      "chainDepth": 3,
-      "receiptHash": "42bad8378f0349b5f24f8301ec4a921396fb4a876e22f73fe6c33a79a6163b66",
       "signatureValid": true
     },
     {
@@ -2533,19 +2550,6 @@
       "failedCheck": "chainDepth"
     },
     {
-      "id": "audit-0694",
-      "timestamp": "2026-05-19T19:43:39.093Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 92,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "d7c29d95acdad7c7e1f39347510b456b19e36555274f5c7bc4795cde0a66d197",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0373",
       "timestamp": "2026-05-19T20:33:14.906Z",
       "agent": "code-review-agent",
@@ -2557,6 +2561,20 @@
       "chainDepth": 1,
       "receiptHash": "1590a47f25cc4b87b7507c9dc6d50ac940619e10d20f13994d0e1bad90a2bc5d",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0701",
+      "timestamp": "2026-05-19T21:10:23.273Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "process_refund",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00001111",
+      "chainDepth": 3,
+      "receiptHash": "7992763a3af3ed73e7cc5cb239b40aa8bcd1edf7f4e314136f2e3ee1520f6b9f",
+      "signatureValid": true,
+      "cost": 40
     },
     {
       "id": "audit-0931",
@@ -2616,6 +2634,19 @@
       "failedCheck": "score"
     },
     {
+      "id": "audit-0797",
+      "timestamp": "2026-05-20T00:13:23.051Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 97,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "e0682df8018935cafebd80c7c8ab3be5c9c7adfa4b6d2489e045aebbe9728a00",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0049",
       "timestamp": "2026-05-20T00:19:36.391Z",
       "agent": "billing-ops-agent",
@@ -2628,19 +2659,6 @@
       "receiptHash": "616cb6c70397d40847848434b656bea6f6809dafba6e62e998030a2ef7ea11d4",
       "signatureValid": true,
       "cost": 132
-    },
-    {
-      "id": "audit-0785",
-      "timestamp": "2026-05-20T00:33:03.580Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 100,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "a80a6a1490abf81be425e415110c2e8b144e861488e425acc258f5685162f031",
-      "signatureValid": true
     },
     {
       "id": "audit-0273",
@@ -2700,6 +2718,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0690",
+      "timestamp": "2026-05-20T03:39:11.480Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "allowed",
+      "score": 97,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "7dc0435758bef2434807a447e066f580c67cfb8e0db693e59dab5455bce6148a",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0033",
       "timestamp": "2026-05-20T03:40:39.024Z",
       "agent": "sales-research-agent",
@@ -2713,16 +2744,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0692",
-      "timestamp": "2026-05-20T04:03:46.923Z",
+      "id": "audit-0947",
+      "timestamp": "2026-05-20T05:01:27.809Z",
       "agent": "code-review-agent",
       "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
       "tool": "read_file",
       "decision": "allowed",
-      "score": 88,
+      "score": 97,
       "permissions": "00000011",
-      "chainDepth": 4,
-      "receiptHash": "5420214cc688100489bc40dfc4ed9cea696f771cc614f8ad593b3d1f5a898d68",
+      "chainDepth": 3,
+      "receiptHash": "8c87dd2d5631aa9c6b0917ed4a46ade8e06e3480c54eeb06298a73971edc83c2",
       "signatureValid": true
     },
     {
@@ -2755,19 +2786,6 @@
       "failedCheck": "bitmask"
     },
     {
-      "id": "audit-0709",
-      "timestamp": "2026-05-20T09:01:14.050Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 87,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "5bc5a3975f65b29ca0692e0f172e899a7b95a0043a1c440f217cf1bf0bf181c5",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0932",
       "timestamp": "2026-05-20T09:03:57.509Z",
       "agent": "code-review-agent",
@@ -2791,6 +2809,32 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "4e90e3a7fe17a2a4220c3d699ab13b27e98045e2ce693c86db8083726f210d4e",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0707",
+      "timestamp": "2026-05-20T09:54:18.187Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 83,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "c6b812e039f22b4dfde9515da85ea4a9d94258e5288256f987799fe1b41a4b51",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0766",
+      "timestamp": "2026-05-20T10:46:13.668Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_transactions",
+      "decision": "allowed",
+      "score": 75,
+      "permissions": "10000001",
+      "chainDepth": 0,
+      "receiptHash": "1fd20ebf63e635892e8e25f95171896d4cbd187b8f4d6a6eb834a446bdc0c0cd",
       "signatureValid": true
     },
     {
@@ -2876,19 +2920,6 @@
       "cost": 318
     },
     {
-      "id": "audit-0667",
-      "timestamp": "2026-05-20T13:47:59.954Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_customers",
-      "decision": "allowed",
-      "score": 71,
-      "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "9d1e1d07e67789fd84ffb9c540c57157fe9663705e0587a0703c746514eab757",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0868",
       "timestamp": "2026-05-20T14:00:32.072Z",
       "agent": "sales-research-agent",
@@ -2944,32 +2975,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "873b02a56e0e3a73fda47edd4e75a5fc36b37a10a3bd65e0ae5d37e4406e4d46",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0787",
-      "timestamp": "2026-05-20T16:25:51.030Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 93,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "1098e15715ab59c50cb45a67385df9f34ed71de7a9170ac5ae3e42e0c66fe4fe",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0771",
-      "timestamp": "2026-05-20T16:38:20.413Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 97,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "97683533ae705e9038ff1a25ed5683c50ce8f5d2ef0b47d933a868cde1b33bb3",
       "signatureValid": true
     },
     {
@@ -3065,19 +3070,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0680",
-      "timestamp": "2026-05-20T21:55:45.278Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 83,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "2e52872b32b0487110bb572fcf1866072dee6472a00443b5be45b9fd46a52cf5",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0554",
       "timestamp": "2026-05-20T22:00:29.871Z",
       "agent": "billing-ops-agent",
@@ -3090,6 +3082,19 @@
       "receiptHash": "d7365ff7c182e02ab629ce9cbce002565e6801c26bf21dbf83252914c9daaf17",
       "signatureValid": true,
       "cost": 157
+    },
+    {
+      "id": "audit-0687",
+      "timestamp": "2026-05-20T22:25:04.782Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "allowed",
+      "score": 84,
+      "permissions": "00000011",
+      "chainDepth": 4,
+      "receiptHash": "ba0a033aba5aeabc8a8114d606fd6ae29a58988f506a50de1e4c011c79848386",
+      "signatureValid": true
     },
     {
       "id": "audit-0028",
@@ -3132,19 +3137,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0781",
-      "timestamp": "2026-05-20T23:27:43.337Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 95,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "613063b8e70b510b18998a229e482311cce748f7df0951f8e8577c9b60ba71b6",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0322",
       "timestamp": "2026-05-21T00:32:08.134Z",
       "agent": "code-review-agent",
@@ -3158,16 +3150,29 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0673",
-      "timestamp": "2026-05-21T02:10:31.289Z",
+      "id": "audit-0796",
+      "timestamp": "2026-05-21T00:54:30.114Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "allowed",
+      "score": 67,
+      "permissions": "10000001",
+      "chainDepth": 1,
+      "receiptHash": "84224218cf4ceaf1e53604a1b0d3038bc9c416b47d2b0432b9eb6fd5c2ddba45",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0800",
+      "timestamp": "2026-05-21T00:54:35.816Z",
       "agent": "support-triage-agent",
       "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
       "tool": "escalate_ticket",
       "decision": "allowed",
-      "score": 89,
+      "score": 82,
       "permissions": "00000001",
       "chainDepth": 1,
-      "receiptHash": "a9d18f4f75adf76ae80007dafa8f3630bf255dd36404345873d5edd0c9d153a5",
+      "receiptHash": "a0f8bf6491a925fbea906cd52558bdee2ba9ab577414c379b37937c138b59517",
       "signatureValid": true
     },
     {
@@ -3268,22 +3273,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0720",
-      "timestamp": "2026-05-21T05:31:46.632Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "denied",
-      "score": 39,
-      "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "2fd9f1324f87af1853cb3710f2b42895010b25db729d4b0812f7bff27f00aa6d",
-      "signatureValid": true,
-      "cost": 115,
-      "reason": "trust score below threshold",
-      "failedCheck": "score"
-    },
-    {
       "id": "audit-0354",
       "timestamp": "2026-05-21T06:29:38.466Z",
       "agent": "support-triage-agent",
@@ -3294,6 +3283,19 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "734e85e45b37f0634e0bafec621ce3a67742a526ad09eef77b5f8f72965d035e",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0347",
+      "timestamp": "2026-05-21T06:33:14.775Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 88,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "bd1e659463aa2ad692927746cd7850e3abad5eb559f230181c21f3e523641933",
       "signatureValid": true
     },
     {
@@ -3333,19 +3335,6 @@
       "permissions": "00000011",
       "chainDepth": 1,
       "receiptHash": "d8d5b9d8dcda152b906fc14cd2edd57603340ab00db6271939f7759ced1a27b8",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0688",
-      "timestamp": "2026-05-21T08:17:07.868Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 84,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "bb31ba0164c0c44a87bc6434f40399d924f628048287610cbde22fbe3203aeab",
       "signatureValid": true
     },
     {
@@ -3414,6 +3403,19 @@
       "permissions": "00000011",
       "chainDepth": 1,
       "receiptHash": "89e872d4566b598cdbc6f7733c7324c26ecc61627159c188b14e5448873b0b7e",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0805",
+      "timestamp": "2026-05-21T12:47:16.946Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 81,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "10d3c938a3460d29ea592f33d6f30c491bea6b57b0b38582003d89ef7ed11753",
       "signatureValid": true
     },
     {
@@ -3548,47 +3550,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0351",
-      "timestamp": "2026-05-21T21:26:34.321Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 84,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "c2338931223368097bf15a2e0c48217cab94f1476ece2be6366b106f09cb1996",
-      "signatureValid": true,
-      "cost": 350
-    },
-    {
-      "id": "audit-0813",
-      "timestamp": "2026-05-21T21:27:45.772Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
-      "decision": "allowed",
-      "score": 82,
-      "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "5bb786c8cabb40a2f48a5de92854b7b79ea0beeedd3135bf728a37f1face983e",
-      "signatureValid": true,
-      "cost": 83
-    },
-    {
-      "id": "audit-0711",
-      "timestamp": "2026-05-21T23:07:17.958Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 99,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "202041111b38cce66e9894b6309d2d6cdc0ae1d614ee75cc9687b2b3a7ddbefd",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0007",
       "timestamp": "2026-05-21T23:55:57.171Z",
       "agent": "support-triage-agent",
@@ -3643,6 +3604,19 @@
       "permissions": "00000011",
       "chainDepth": 4,
       "receiptHash": "64290c104bde097a03c615268425625d595ba82f7398c847e77357466239f88b",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0806",
+      "timestamp": "2026-05-22T01:59:24.572Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 89,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "5de0cf412b1c44550dc2d06e6542bf8212bd59229b979ca37f430da7142b3ad7",
       "signatureValid": true
     },
     {
@@ -3740,29 +3714,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0708",
-      "timestamp": "2026-05-22T05:39:54.806Z",
+      "id": "audit-0693",
+      "timestamp": "2026-05-22T07:33:32.796Z",
       "agent": "support-triage-agent",
       "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
+      "tool": "escalate_ticket",
       "decision": "allowed",
-      "score": 92,
+      "score": 98,
       "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "381bf5c735dfdcafa0bb23c937ea92c3001b2b7b0e3a0fb3c4db1ada2fd1fa42",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0715",
-      "timestamp": "2026-05-22T06:26:08.715Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 100,
-      "permissions": "00000011",
-      "chainDepth": 4,
-      "receiptHash": "d34f28f3280dc279cd6b5cb8fae8d14a95e7cb0221bed245017088ebffa65bb5",
+      "chainDepth": 0,
+      "receiptHash": "6cacefc1146fa9c0da3ad301f43b7cec9b00db0d3b729b610e56a958adbe2416",
       "signatureValid": true
     },
     {
@@ -3833,19 +3794,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0765",
-      "timestamp": "2026-05-22T11:16:28.305Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 84,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "30975b370d3a095baaa69368bbb95fba6be2b71bd1bd57dfa8baa47a44728fca",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0307",
       "timestamp": "2026-05-22T12:37:05.240Z",
       "agent": "support-triage-agent",
@@ -3887,19 +3835,6 @@
       "failedCheck": "score"
     },
     {
-      "id": "audit-0806",
-      "timestamp": "2026-05-22T14:11:47.660Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 94,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "7f5de0cf412b1c44550dc2d06e6542bf8212bd59229b979ca37f430da7142b3a",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0918",
       "timestamp": "2026-05-22T14:18:42.770Z",
       "agent": "support-triage-agent",
@@ -3924,6 +3859,20 @@
       "chainDepth": 1,
       "receiptHash": "65eecfbef54cf6ad98e7abe53a8fb7c5736614db8ad3269677df09497e036c6f",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0663",
+      "timestamp": "2026-05-22T14:31:51.688Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "create_invoice",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00001111",
+      "chainDepth": 0,
+      "receiptHash": "cd5df3af35b7d1282fc99624dd447d1cdda47998af8870614996d89edfb9cc9b",
+      "signatureValid": true,
+      "cost": 81
     },
     {
       "id": "audit-0103",
@@ -3967,6 +3916,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0681",
+      "timestamp": "2026-05-22T17:51:24.469Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "allowed",
+      "score": 71,
+      "permissions": "10000001",
+      "chainDepth": 1,
+      "receiptHash": "daeb10cacf44dc6485d7028f2e0beec99b69953fc89d21bda8d40e7f695caee4",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0439",
       "timestamp": "2026-05-22T17:51:35.774Z",
       "agent": "code-review-agent",
@@ -3978,6 +3940,22 @@
       "chainDepth": 3,
       "receiptHash": "d12d460cfedbdb5f9846d69fbc23ea882ab55e77e26283593daeb70d28f37c59",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0776",
+      "timestamp": "2026-05-22T18:31:43.298Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "charge_card",
+      "decision": "denied",
+      "score": 85,
+      "permissions": "00001111",
+      "chainDepth": 4,
+      "receiptHash": "fd27354da5bc96044b0eeab925843a651b5a7f034786de0c4114d3aec2b979aa",
+      "signatureValid": true,
+      "cost": 35,
+      "reason": "delegation depth exceeded",
+      "failedCheck": "chainDepth"
     },
     {
       "id": "audit-0954",
@@ -4018,59 +3996,6 @@
       "chainDepth": 1,
       "receiptHash": "ae9e8800b299e3a8fcf91876cfde090331392bc3dcbb167b2d3a5b0a3575a755",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0682",
-      "timestamp": "2026-05-23T00:16:53.848Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
-      "decision": "allowed",
-      "score": 74,
-      "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "0a15d06f109515a213d90b3aa2abaaaef730380f939f66273ab99f99c92d114d",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0703",
-      "timestamp": "2026-05-23T01:34:08.796Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 85,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "3effe3ff137739fc9397ac41e86fb49eb9f258ac4b5967139272810389de2da6",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0663",
-      "timestamp": "2026-05-23T01:40:25.707Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 86,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "05cd5df3af35b7d1282fc99624dd447d1cdda47998af8870614996d89edfb9cc",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0797",
-      "timestamp": "2026-05-23T01:56:21.971Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 76,
-      "permissions": "00001111",
-      "chainDepth": 1,
-      "receiptHash": "2e1e0682df8018935cafebd80c7c8ab3be5c9c7adfa4b6d2489e045aebbe9728",
-      "signatureValid": true,
-      "cost": 137
     },
     {
       "id": "audit-0819",
@@ -4305,30 +4230,16 @@
       "cost": 242
     },
     {
-      "id": "audit-0346",
-      "timestamp": "2026-05-23T14:33:58.069Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
+      "id": "audit-0670",
+      "timestamp": "2026-05-23T13:59:14.908Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "run_tests",
       "decision": "allowed",
-      "score": 74,
-      "permissions": "00001111",
-      "chainDepth": 1,
-      "receiptHash": "dd70b6d338edfcb127b28854c29127e123b2e36f1e566a0ab1baf5805c10e8eb",
-      "signatureValid": true,
-      "cost": 26
-    },
-    {
-      "id": "audit-0815",
-      "timestamp": "2026-05-23T14:44:40.068Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 91,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "5c5c6686a09852ec5b7e5df12c31cf5fbbe30cc3fd93e286807e5b82874939d1",
+      "score": 92,
+      "permissions": "00000011",
+      "chainDepth": 3,
+      "receiptHash": "12f18353c949209044613d2bc687074b33611122e29f1f0c834a0502e7e77a1e",
       "signatureValid": true
     },
     {
@@ -4399,21 +4310,6 @@
       "cost": 11
     },
     {
-      "id": "audit-0342",
-      "timestamp": "2026-05-23T19:54:35.288Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "denied",
-      "score": 98,
-      "permissions": "00000001",
-      "chainDepth": 3,
-      "receiptHash": "a3f8d2296a94f19ec3248230d92312edc7e1ef2598d6eb7237ee162c20f67923",
-      "signatureValid": true,
-      "reason": "delegation depth exceeded",
-      "failedCheck": "chainDepth"
-    },
-    {
       "id": "audit-0363",
       "timestamp": "2026-05-23T20:23:21.563Z",
       "agent": "sales-research-agent",
@@ -4440,21 +4336,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0770",
-      "timestamp": "2026-05-23T22:33:25.226Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "denied",
-      "score": 97,
-      "permissions": "00000000",
-      "chainDepth": 1,
-      "receiptHash": "3ed03757d06b2a988766b1ea359148891c0ee393a80e1f425041ae3c61fe5f32",
-      "signatureValid": true,
-      "reason": "insufficient permissions",
-      "failedCheck": "bitmask"
-    },
-    {
       "id": "audit-0280",
       "timestamp": "2026-05-23T22:43:22.390Z",
       "agent": "code-review-agent",
@@ -4468,16 +4349,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0764",
-      "timestamp": "2026-05-23T23:50:37.446Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
+      "id": "audit-0788",
+      "timestamp": "2026-05-23T22:52:01.827Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
       "decision": "allowed",
-      "score": 92,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "824cd59bab74cab974749a95e7892b4a46db09e5978b798836ddd5c2a56c0f37",
+      "score": 100,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "b8bf8e59da47df5763070c7b48fb258c106d5e7eb28ecc00811a370dd138c700",
       "signatureValid": true
     },
     {
@@ -4493,34 +4374,6 @@
       "receiptHash": "e6dd5f82b7031e5ffe31f70f3aa71fd68553fb7fd2b31a2f2b09d0451480922a",
       "signatureValid": true,
       "cost": 117
-    },
-    {
-      "id": "audit-0689",
-      "timestamp": "2026-05-24T01:39:50.071Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "denied",
-      "score": 89,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "6099ab1a638eac8dbdad360c1c68057c89e04a30e4cfd36aa510defb7c795c58",
-      "signatureValid": true,
-      "reason": "anomaly detected",
-      "failedCheck": "anomaly"
-    },
-    {
-      "id": "audit-0793",
-      "timestamp": "2026-05-24T01:42:54.470Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 100,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "34b0dd50b34742a597b1e2b7f7f0127920d41c1eef3cfc60bc7110ef5c93e062",
-      "signatureValid": true
     },
     {
       "id": "audit-0300",
@@ -4644,19 +4497,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0716",
-      "timestamp": "2026-05-24T05:43:38.224Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 89,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "be3b7a68c65ee84fffaa27d2a8d5a1de7b788b0cc4bb6e20eb43f2eb17e13f06",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0726",
       "timestamp": "2026-05-24T07:19:45.796Z",
       "agent": "support-triage-agent",
@@ -4668,22 +4508,6 @@
       "chainDepth": 0,
       "receiptHash": "84920631921e4681ca5b074891d6a4ad0bd9dad8e3d95588b5494fb52da182b4",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0700",
-      "timestamp": "2026-05-24T08:01:45.061Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "denied",
-      "score": 27,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "0ce70bc882ab8f7e9428b0c09dd0563cb1745e969d0f7e3f334abfa0faaa83f2",
-      "signatureValid": true,
-      "cost": 58,
-      "reason": "trust score below threshold",
-      "failedCheck": "score"
     },
     {
       "id": "audit-0887",
@@ -4725,29 +4549,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0710",
-      "timestamp": "2026-05-24T12:26:54.152Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 90,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "734433183ae2cc31f6415c7afe21fb7bc423f55d6ffadbdd91f0b4a90e2dcd35",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0698",
-      "timestamp": "2026-05-24T14:29:25.264Z",
+      "id": "audit-0685",
+      "timestamp": "2026-05-24T11:40:23.226Z",
       "agent": "code-review-agent",
       "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
       "tool": "read_file",
       "decision": "allowed",
-      "score": 87,
+      "score": 88,
       "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "b52316e7e7f6a8fed8b3906c0be5f840c64bbeeffe9c18423c2c63d4841220d3",
+      "chainDepth": 0,
+      "receiptHash": "7b11a62d123d87cd6157e2185be48a73049bedbb1ad9c2124d018eac7e38b79e",
       "signatureValid": true
     },
     {
@@ -4830,17 +4641,32 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0345",
-      "timestamp": "2026-05-24T17:46:03.559Z",
+      "id": "audit-0711",
+      "timestamp": "2026-05-24T16:57:24.269Z",
       "agent": "support-triage-agent",
       "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
       "tool": "escalate_ticket",
       "decision": "allowed",
-      "score": 96,
+      "score": 84,
       "permissions": "00000001",
       "chainDepth": 0,
-      "receiptHash": "aed63abcc9ea42b301b99a060f2f366f36b482c6d5ed87975b15349fa6d6d5a8",
+      "receiptHash": "2041111b38cce66e9894b6309d2d6cdc0ae1d614ee75cc9687b2b3a7ddbefd2a",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0792",
+      "timestamp": "2026-05-24T17:47:51.484Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "denied",
+      "score": 31,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "a5062467ee16e986d36a975e8c29375678681768a46f5a95241e30e105c84f53",
+      "signatureValid": true,
+      "reason": "trust score below threshold",
+      "failedCheck": "score"
     },
     {
       "id": "audit-0975",
@@ -4892,6 +4718,19 @@
       "permissions": "00000011",
       "chainDepth": 1,
       "receiptHash": "1dfc0aae655b9bb133483b15f9303c171609091ee1072ad3060b9224339c07d1",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0698",
+      "timestamp": "2026-05-24T21:01:51.540Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 84,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "16e7e7f6a8fed8b3906c0be5f840c64bbeeffe9c18423c2c63d4841220d308c5",
       "signatureValid": true
     },
     {
@@ -5021,6 +4860,20 @@
       "failedCheck": "budget"
     },
     {
+      "id": "audit-0813",
+      "timestamp": "2026-05-25T04:14:10.147Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "charge_card",
+      "decision": "allowed",
+      "score": 75,
+      "permissions": "00001111",
+      "chainDepth": 2,
+      "receiptHash": "786c8cabb40a2f48a5de92854b7b79ea0beeedd3135bf728a37f1face983e96b",
+      "signatureValid": true,
+      "cost": 257
+    },
+    {
       "id": "audit-0129",
       "timestamp": "2026-05-25T04:44:04.757Z",
       "agent": "sales-research-agent",
@@ -5098,6 +4951,19 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "d5712916b3476281ece22145aaea9c4d0275529c2ed973a73213a80cb7c5f2bd",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0684",
+      "timestamp": "2026-05-25T07:38:37.253Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 93,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "7335c6b48570ec980c42cd19fe30a1f0a96eb46ee78001bea2ca1de0fa5ac04c",
       "signatureValid": true
     },
     {
@@ -5276,6 +5142,21 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0342",
+      "timestamp": "2026-05-25T15:59:21.367Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "denied",
+      "score": 73,
+      "permissions": "10000001",
+      "chainDepth": 4,
+      "receiptHash": "8d2296a94f19ec3248230d92312edc7e1ef2598d6eb7237ee162c20f67923d0b",
+      "signatureValid": true,
+      "reason": "delegation depth exceeded",
+      "failedCheck": "chainDepth"
+    },
+    {
       "id": "audit-0085",
       "timestamp": "2026-05-25T16:26:58.432Z",
       "agent": "code-review-agent",
@@ -5423,6 +5304,21 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0944",
+      "timestamp": "2026-05-26T00:36:00.845Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "denied",
+      "score": 76,
+      "permissions": "10000001",
+      "chainDepth": 0,
+      "receiptHash": "791cf9c0ac2427b74b329ccb52219534a1c06a816b72fd36a786dcadd7d507fc",
+      "signatureValid": true,
+      "reason": "insufficient permissions",
+      "failedCheck": "bitmask"
+    },
+    {
       "id": "audit-0171",
       "timestamp": "2026-05-26T01:03:55.220Z",
       "agent": "sales-research-agent",
@@ -5451,6 +5347,19 @@
       "cost": 5,
       "reason": "spend limit exceeded",
       "failedCheck": "budget"
+    },
+    {
+      "id": "audit-0777",
+      "timestamp": "2026-05-26T01:48:14.050Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "allowed",
+      "score": 70,
+      "permissions": "10000001",
+      "chainDepth": 1,
+      "receiptHash": "8efbac92cabf6636edd51b316d882aa00666c2e2027c6f7c8b0414434d296cff",
+      "signatureValid": true
     },
     {
       "id": "audit-0155",
@@ -5572,32 +5481,6 @@
       "permissions": "00000011",
       "chainDepth": 1,
       "receiptHash": "e0a9973c04643a6811331532c752a89aa7b94a36ae4037e3d2540fd6f028bd4c",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0809",
-      "timestamp": "2026-05-26T04:51:47.871Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 90,
-      "permissions": "00000011",
-      "chainDepth": 3,
-      "receiptHash": "792075c2eb594490c149b9961d52dc5528b2b16cfd66866502a97b67b1ca4d12",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0693",
-      "timestamp": "2026-05-26T05:21:12.848Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "run_tests",
-      "decision": "allowed",
-      "score": 97,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "f06cacefc1146fa9c0da3ad301f43b7cec9b00db0d3b729b610e56a958adbe24",
       "signatureValid": true
     },
     {
@@ -5820,6 +5703,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0818",
+      "timestamp": "2026-05-26T15:58:30.919Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "run_tests",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 4,
+      "receiptHash": "0947e0f182ffd45fb36d8ab7b7954b0a46ebb5eead1b122672723c0bcd15e73a",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0333",
       "timestamp": "2026-05-26T16:31:28.202Z",
       "agent": "support-triage-agent",
@@ -5869,6 +5765,19 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "a6345fcb5095745c2527dd0293bd64bb9417d35a07248b8dc702f9d8cc5dd49d",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0677",
+      "timestamp": "2026-05-26T20:29:21.898Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 89,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "bfb2d742f9f0ceb3ca2e82a5da95f148e5c713b0d4492d9090dea4066634f504",
       "signatureValid": true
     },
     {
@@ -5926,6 +5835,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0769",
+      "timestamp": "2026-05-27T01:49:33.290Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "49faaf0ea95bbeb969286428cf950606af152d543d13af2f9692b0a3b5541e62",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0188",
       "timestamp": "2026-05-27T01:50:26.544Z",
       "agent": "support-triage-agent",
@@ -5980,19 +5902,6 @@
       "receiptHash": "17301068647344a653548a36b50dcc226667c4d81539ee8dacd62cbe24194d17",
       "signatureValid": true,
       "cost": 9
-    },
-    {
-      "id": "audit-0769",
-      "timestamp": "2026-05-27T03:45:49.627Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 87,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "9449faaf0ea95bbeb969286428cf950606af152d543d13af2f9692b0a3b5541e",
-      "signatureValid": true
     },
     {
       "id": "audit-0590",
@@ -6192,6 +6101,20 @@
       "cost": 231
     },
     {
+      "id": "audit-0765",
+      "timestamp": "2026-05-27T15:29:13.801Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "create_invoice",
+      "decision": "allowed",
+      "score": 73,
+      "permissions": "00001111",
+      "chainDepth": 0,
+      "receiptHash": "975b370d3a095baaa69368bbb95fba6be2b71bd1bd57dfa8baa47a44728fca2d",
+      "signatureValid": true,
+      "cost": 26
+    },
+    {
       "id": "audit-0037",
       "timestamp": "2026-05-27T15:42:29.303Z",
       "agent": "support-triage-agent",
@@ -6228,19 +6151,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "99a83910e8eb27e50456c5fc126d8c58fb3a2ebf368f9572a976ee616f950d2e",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0696",
-      "timestamp": "2026-05-27T18:26:29.788Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 88,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "f475735013d6113dc8459d495d8d3c724dcc3625a390d86556534539d83dfcb3",
       "signatureValid": true
     },
     {
@@ -6350,6 +6260,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0345",
+      "timestamp": "2026-05-27T23:11:21.992Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 92,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "d63abcc9ea42b301b99a060f2f366f36b482c6d5ed87975b15349fa6d6d5a880",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0066",
       "timestamp": "2026-05-27T23:50:03.487Z",
       "agent": "support-triage-agent",
@@ -6360,19 +6283,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "2a47429e9a82a62bfb2b9b5603ab2db4413332d54feda10db1a19f5358b7579b",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0789",
-      "timestamp": "2026-05-28T00:00:52.159Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 82,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "ff8ffa1b51b1eaddf42a30fb48169fdd17e5125b24ed14bb45d962681bbfad5d",
       "signatureValid": true
     },
     {
@@ -6402,29 +6312,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0768",
-      "timestamp": "2026-05-28T01:40:19.211Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 99,
-      "permissions": "00000011",
-      "chainDepth": 3,
-      "receiptHash": "3bac89a49a2d69b4d7b2cd04c2ed14ecae4c0e2356b0ede3ad25d0ea644a4801",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0784",
-      "timestamp": "2026-05-28T02:08:14.090Z",
+      "id": "audit-0679",
+      "timestamp": "2026-05-28T01:51:26.101Z",
       "agent": "data-export-agent",
       "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
+      "tool": "export_customers",
       "decision": "allowed",
-      "score": 70,
+      "score": 65,
       "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "4dc45ca8d06c2009a276e4b3f3e3fb3aa1816ffce1468e031a57a0d24d05079f",
+      "chainDepth": 0,
+      "receiptHash": "a5db91348ed4f684f6da1c61478cff9e958d7bfdd4f1d7f99de661a03fae6131",
       "signatureValid": true
     },
     {
@@ -6495,19 +6392,6 @@
       "cost": 176
     },
     {
-      "id": "audit-0811",
-      "timestamp": "2026-05-28T05:25:10.286Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 92,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "a5e9f2fb4a0ef06bca240d5e1e5587322ce32ed91640bf0b70563a9fc2d6c21e",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0752",
       "timestamp": "2026-05-28T05:33:55.645Z",
       "agent": "code-review-agent",
@@ -6518,6 +6402,19 @@
       "permissions": "00000011",
       "chainDepth": 0,
       "receiptHash": "f015e2b2371d411f15560b1fcc7ae7b89ddd60520fd241ae3030073b5b209bd2",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0803",
+      "timestamp": "2026-05-28T05:58:49.821Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "2794263a5ebf98cd615ea5a3b0d7be59b2ddbab146453724ac6090d7e1a07161",
       "signatureValid": true
     },
     {
@@ -6534,18 +6431,18 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0690",
-      "timestamp": "2026-05-28T06:06:31.134Z",
+      "id": "audit-0671",
+      "timestamp": "2026-05-28T06:09:59.949Z",
       "agent": "billing-ops-agent",
       "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "process_refund",
+      "tool": "charge_card",
       "decision": "allowed",
-      "score": 82,
+      "score": 84,
       "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "c67dc0435758bef2434807a447e066f580c67cfb8e0db693e59dab5455bce614",
+      "chainDepth": 1,
+      "receiptHash": "b06108fed4d6676b7d9610c371eaf29f07d3a277c3a549a99d504a11be443633",
       "signatureValid": true,
-      "cost": 26
+      "cost": 261
     },
     {
       "id": "audit-0149",
@@ -6644,6 +6541,34 @@
       "failedCheck": "bitmask"
     },
     {
+      "id": "audit-0774",
+      "timestamp": "2026-05-28T14:54:53.394Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_transactions",
+      "decision": "allowed",
+      "score": 65,
+      "permissions": "10000001",
+      "chainDepth": 0,
+      "receiptHash": "8ebb0d1177c45417893826febc6d3ab70155f4753c4d095bbe5c2298b38f118a",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0817",
+      "timestamp": "2026-05-28T15:50:54.378Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "denied",
+      "score": 23,
+      "permissions": "00000011",
+      "chainDepth": 4,
+      "receiptHash": "b41d9414bdeb87bc10aa1f6a8b95bf24912d99895905eebc4e8d7add34f833d9",
+      "signatureValid": true,
+      "reason": "trust score below threshold",
+      "failedCheck": "score"
+    },
+    {
       "id": "audit-0398",
       "timestamp": "2026-05-28T16:13:55.750Z",
       "agent": "support-triage-agent",
@@ -6721,20 +6646,6 @@
       "receiptHash": "54f6f1c1a958deb971d8cd9ec504951217f3e992259a8cf3453f26e63ce0579b",
       "signatureValid": true,
       "cost": 15
-    },
-    {
-      "id": "audit-0664",
-      "timestamp": "2026-05-28T19:02:36.122Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 82,
-      "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "e72859dd5d5581c342a68c592d625f1dc51ae1459f0ff2b0f7e98d9af7b5b6de",
-      "signatureValid": true,
-      "cost": 229
     },
     {
       "id": "audit-0461",
@@ -6836,6 +6747,19 @@
       "failedCheck": "bitmask"
     },
     {
+      "id": "audit-0798",
+      "timestamp": "2026-05-28T21:49:03.541Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 84,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "8bd4b66e6ae8d33692e4600e1ea60f4800a5060749a9312654b61f5b0dcaff8f",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0539",
       "timestamp": "2026-05-28T21:57:36.158Z",
       "agent": "code-review-agent",
@@ -6846,19 +6770,6 @@
       "permissions": "00000011",
       "chainDepth": 2,
       "receiptHash": "fd4dbb25658d413c958d1e189c8cbb7932d38f762bc7cc977e97fd5e2a4f0aaf",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0677",
-      "timestamp": "2026-05-28T21:57:46.651Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 88,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "4678bfb2d742f9f0ceb3ca2e82a5da95f148e5c713b0d4492d9090dea4066634",
       "signatureValid": true
     },
     {
@@ -6873,6 +6784,22 @@
       "chainDepth": 0,
       "receiptHash": "fab6c9f15ea9e8ef6b63c93e29d68032d7abb99806a660b1989f6efbe2e98628",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0697",
+      "timestamp": "2026-05-28T23:25:07.494Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "denied",
+      "score": 92,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "16ceffa46625262bc9918271c0c019e30b4db0259ccd8c054138064d1bebe053",
+      "signatureValid": true,
+      "cost": 4,
+      "reason": "insufficient permissions",
+      "failedCheck": "bitmask"
     },
     {
       "id": "audit-0653",
@@ -6900,6 +6827,19 @@
       "receiptHash": "3f1cd5d166044ba9c7f8f94a013f0b16ea7ab589efe58056cda432f119063dd0",
       "signatureValid": true,
       "cost": 7
+    },
+    {
+      "id": "audit-0346",
+      "timestamp": "2026-05-29T03:22:39.171Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 82,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "d70b6d338edfcb127b28854c29127e123b2e36f1e566a0ab1baf5805c10e8eb4",
+      "signatureValid": true
     },
     {
       "id": "audit-0977",
@@ -6955,21 +6895,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0944",
-      "timestamp": "2026-05-29T05:56:38.573Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "run_tests",
-      "decision": "denied",
-      "score": 90,
-      "permissions": "00000001",
-      "chainDepth": 4,
-      "receiptHash": "9791cf9c0ac2427b74b329ccb52219534a1c06a816b72fd36a786dcadd7d507f",
-      "signatureValid": true,
-      "reason": "insufficient permissions",
-      "failedCheck": "bitmask"
-    },
-    {
       "id": "audit-0237",
       "timestamp": "2026-05-29T06:10:27.227Z",
       "agent": "sales-research-agent",
@@ -7009,6 +6934,33 @@
       "chainDepth": 0,
       "receiptHash": "633c35c369354f14811eb323b71f259ab3631ccd1007e94980a95e301fd0b2f7",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0810",
+      "timestamp": "2026-05-29T08:29:19.117Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 83,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "7d290ed3930693d98582fdd399b3cc072050194460d7889034d0ab9790596b39",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0341",
+      "timestamp": "2026-05-29T09:21:25.654Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "charge_card",
+      "decision": "allowed",
+      "score": 84,
+      "permissions": "00001111",
+      "chainDepth": 2,
+      "receiptHash": "8e4985a090f9bedc4d87d3eff589fbd8f3b5d4a5cad63f3c6a4c3f17d13ee684",
+      "signatureValid": true,
+      "cost": 227
     },
     {
       "id": "audit-0761",
@@ -7067,17 +7019,18 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0810",
-      "timestamp": "2026-05-29T11:08:25.038Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
+      "id": "audit-0694",
+      "timestamp": "2026-05-29T11:12:50.645Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
       "decision": "allowed",
-      "score": 86,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "1b7d290ed3930693d98582fdd399b3cc072050194460d7889034d0ab9790596b",
-      "signatureValid": true
+      "score": 90,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "29d95acdad7c7e1f39347510b456b19e36555274f5c7bc4795cde0a66d19760b",
+      "signatureValid": true,
+      "cost": 13
     },
     {
       "id": "audit-0173",
@@ -7131,6 +7084,19 @@
       "permissions": "10000001",
       "chainDepth": 0,
       "receiptHash": "8d24d95959bd9554d9aa6e9038069bea6bb0f6fed49ee330941e0437f7dfd12c",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0714",
+      "timestamp": "2026-05-29T15:12:31.517Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "run_tests",
+      "decision": "allowed",
+      "score": 99,
+      "permissions": "00000011",
+      "chainDepth": 3,
+      "receiptHash": "6c01ea9581e5aa7d0a04ff1d4aa2f92462742b69a0892ffd90a614f18f3487c6",
       "signatureValid": true
     },
     {
@@ -7217,6 +7183,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0699",
+      "timestamp": "2026-05-29T17:37:22.593Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "write_file",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00000011",
+      "chainDepth": 4,
+      "receiptHash": "583518e0c42b885606044ef420066652983c263ed6cba6190336dc9c7479ab50",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0118",
       "timestamp": "2026-05-29T19:37:30.878Z",
       "agent": "billing-ops-agent",
@@ -7245,21 +7224,6 @@
       "cost": 329
     },
     {
-      "id": "audit-0792",
-      "timestamp": "2026-05-29T19:53:57.179Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "search_contacts",
-      "decision": "denied",
-      "score": 30,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "6f5226a5062467ee16e986d36a975e8c29375678681768a46f5a95241e30e105",
-      "signatureValid": true,
-      "reason": "trust score below threshold",
-      "failedCheck": "score"
-    },
-    {
       "id": "audit-0509",
       "timestamp": "2026-05-29T20:11:23.616Z",
       "agent": "code-review-agent",
@@ -7270,6 +7234,19 @@
       "permissions": "00000011",
       "chainDepth": 2,
       "receiptHash": "00c9840abdd131c8317345afa7986452f88ee91080fac56cc5b65fc9fe1cd784",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0780",
+      "timestamp": "2026-05-29T20:14:31.003Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "4be4691876361974345bd4e3dd8381c36f7f6846ac0ec6999145676f6835d33a",
       "signatureValid": true
     },
     {
@@ -7284,34 +7261,6 @@
       "chainDepth": 0,
       "receiptHash": "becb18d24979aa8c2c8ae02e50babf982218513d8488bb3a79ee4cca68ef8c25",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0350",
-      "timestamp": "2026-05-29T20:36:42.525Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 97,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "48bb53ab49275f56b9fbbea768e484591c5d1157cee5eab03311be047245c59d",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0791",
-      "timestamp": "2026-05-29T21:47:04.032Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "denied",
-      "score": 98,
-      "permissions": "00000011",
-      "chainDepth": 7,
-      "receiptHash": "dd02cb4bcc1c7bbf3e35ba94b6089ed4772bd419989c20bf3247ed5716cde691",
-      "signatureValid": true,
-      "reason": "delegation depth exceeded",
-      "failedCheck": "chainDepth"
     },
     {
       "id": "audit-0864",
@@ -7339,20 +7288,6 @@
       "receiptHash": "6a014f7f9fa2801423280dd208aef0db903692dbb4b7fabae659d6e74d3c908e",
       "signatureValid": true,
       "cost": 37
-    },
-    {
-      "id": "audit-0799",
-      "timestamp": "2026-05-29T22:47:02.436Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 81,
-      "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "29d677fc9d7b43e95ebb6d03f65b0f39e4ec3520c81d5a850f552f66897083e8",
-      "signatureValid": true,
-      "cost": 33
     },
     {
       "id": "audit-0493",
@@ -7420,6 +7355,34 @@
       "permissions": "10000001",
       "chainDepth": 1,
       "receiptHash": "93ca4132638ab9a507c659f52a31b00b75a9f6dc5991091a8e07d3d0a197ed54",
+      "signatureValid": true,
+      "reason": "insufficient permissions",
+      "failedCheck": "bitmask"
+    },
+    {
+      "id": "audit-0713",
+      "timestamp": "2026-05-30T01:31:56.927Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "allowed",
+      "score": 95,
+      "permissions": "00000011",
+      "chainDepth": 3,
+      "receiptHash": "212f975fc3ddfa5f6ebdff0b2e652a92469c8b39038eef82c97bc8744c58007b",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0704",
+      "timestamp": "2026-05-30T02:05:30.945Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "denied",
+      "score": 83,
+      "permissions": "00000000",
+      "chainDepth": 0,
+      "receiptHash": "df034dbed16419265f15e1fb8307f1e0fbb70817055199acd69e31d7b49bd325",
       "signatureValid": true,
       "reason": "insufficient permissions",
       "failedCheck": "bitmask"
@@ -7612,6 +7575,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0789",
+      "timestamp": "2026-05-30T11:14:39.661Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_transactions",
+      "decision": "allowed",
+      "score": 78,
+      "permissions": "10000001",
+      "chainDepth": 1,
+      "receiptHash": "a1b51b1eaddf42a30fb48169fdd17e5125b24ed14bb45d962681bbfad5d9ad1d",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0167",
       "timestamp": "2026-05-30T11:22:29.906Z",
       "agent": "support-triage-agent",
@@ -7690,6 +7666,19 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "746010202b23be567ee43e378074451a92aa744e6d3bbdc8681f99e6b718fda3",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0785",
+      "timestamp": "2026-05-30T12:36:45.174Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 77,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "6a1490abf81be425e415110c2e8b144e861488e425acc258f5685162f031fcc3",
       "signatureValid": true
     },
     {
@@ -7814,6 +7803,19 @@
       "cost": 8
     },
     {
+      "id": "audit-0683",
+      "timestamp": "2026-05-30T17:38:53.333Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 86,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "e869fe68dfd5de545bac8f0d48aca39e9fcb413c71e3eee3ecf2f4489ceb016d",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0988",
       "timestamp": "2026-05-30T20:39:50.389Z",
       "agent": "billing-ops-agent",
@@ -7855,19 +7857,6 @@
       "cost": 43
     },
     {
-      "id": "audit-0808",
-      "timestamp": "2026-05-30T22:51:09.002Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 80,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "f001c33ea902e5389efdc270f5429f5e1dae752a9c5668de126fa0a7a85a49e0",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0067",
       "timestamp": "2026-05-30T23:40:47.973Z",
       "agent": "sales-research-agent",
@@ -7906,19 +7895,6 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "5f0521b285d07cd0dba2be2628eb32e6757e73ad648afa7afae8857484c02b09",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0719",
-      "timestamp": "2026-05-31T01:39:08.347Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 97,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "6437359b837f07688cdc4b405029a757deacef98b853af0969c9dceef57020c3",
       "signatureValid": true
     },
     {
@@ -8007,20 +7983,6 @@
       "failedCheck": "anomaly"
     },
     {
-      "id": "audit-0795",
-      "timestamp": "2026-05-31T05:00:19.307Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
-      "decision": "allowed",
-      "score": 80,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "15f61f859210b27c31971d8e6d9c8c2376848f651d94f3af2996dc1f73806e03",
-      "signatureValid": true,
-      "cost": 133
-    },
-    {
       "id": "audit-0203",
       "timestamp": "2026-05-31T05:21:02.426Z",
       "agent": "billing-ops-agent",
@@ -8061,19 +8023,17 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0704",
-      "timestamp": "2026-05-31T07:02:00.714Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_customers",
-      "decision": "denied",
-      "score": 69,
-      "permissions": "10000001",
-      "chainDepth": 0,
-      "receiptHash": "8061df034dbed16419265f15e1fb8307f1e0fbb70817055199acd69e31d7b49b",
-      "signatureValid": true,
-      "reason": "insufficient permissions",
-      "failedCheck": "bitmask"
+      "id": "audit-0667",
+      "timestamp": "2026-05-31T07:49:30.954Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 90,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "d1e1d07e67789fd84ffb9c540c57157fe9663705e0587a0703c746514eab7570",
+      "signatureValid": true
     },
     {
       "id": "audit-0032",
@@ -8168,19 +8128,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "e397a90f22932cc61e1b0efabb7c91cea81b943bd334a14909535e4b1f0ddedb",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0665",
-      "timestamp": "2026-05-31T13:51:40.351Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 99,
-      "permissions": "00000011",
-      "chainDepth": 3,
-      "receiptHash": "02a89dd309a2b2af8cdae1f99d7b319f5b5b174979a5fb0b830b79c98bdaac30",
       "signatureValid": true
     },
     {
@@ -8341,46 +8288,49 @@
       "cost": 78
     },
     {
-      "id": "audit-0674",
-      "timestamp": "2026-06-01T03:03:04.267Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "search_contacts",
-      "decision": "allowed",
-      "score": 77,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "913a4da00f53228e60ab487a595326fe12f91bf0d312adea06f3d30176748310",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0772",
-      "timestamp": "2026-06-01T03:25:08.375Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "process_refund",
+      "id": "audit-0689",
+      "timestamp": "2026-06-01T02:02:58.855Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
       "decision": "denied",
-      "score": 72,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "ae700d4afa436e2847bd6e6035802541aa422afa4a6ade5c2e27492b8e99d82f",
+      "score": 85,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "99ab1a638eac8dbdad360c1c68057c89e04a30e4cfd36aa510defb7c795c5896",
       "signatureValid": true,
-      "cost": 66,
       "reason": "anomaly detected",
       "failedCheck": "anomaly"
     },
     {
-      "id": "audit-0946",
-      "timestamp": "2026-06-01T04:55:48.546Z",
+      "id": "audit-0772",
+      "timestamp": "2026-06-01T03:56:34.771Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "denied",
+      "score": 84,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "700d4afa436e2847bd6e6035802541aa422afa4a6ade5c2e27492b8e99d82f5f",
+      "signatureValid": true,
+      "reason": "anomaly detected",
+      "failedCheck": "anomaly"
+    },
+    {
+      "id": "audit-0770",
+      "timestamp": "2026-06-01T05:01:17.500Z",
       "agent": "support-triage-agent",
       "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 97,
+      "tool": "escalate_ticket",
+      "decision": "denied",
+      "score": 84,
       "permissions": "00000001",
       "chainDepth": 0,
-      "receiptHash": "1fafca0d3f2656323fbfa88d236b874b3f86df50289ffd07148ce0377287adf8",
-      "signatureValid": true
+      "receiptHash": "d03757d06b2a988766b1ea359148891c0ee393a80e1f425041ae3c61fe5f3289",
+      "signatureValid": true,
+      "reason": "insufficient permissions",
+      "failedCheck": "bitmask"
     },
     {
       "id": "audit-0358",
@@ -8419,6 +8369,19 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "cd6c4430b4b40589a71848b71636c8c8313b5f874c5739afb2d0dfb070ca3b77",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0716",
+      "timestamp": "2026-06-01T07:52:04.765Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 94,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "3b7a68c65ee84fffaa27d2a8d5a1de7b788b0cc4bb6e20eb43f2eb17e13f06b5",
       "signatureValid": true
     },
     {
@@ -8474,6 +8437,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0787",
+      "timestamp": "2026-06-01T08:50:39.048Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "15715ab59c50cb45a67385df9f34ed71de7a9170ac5ae3e42e0c66fe4fe43036",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0610",
       "timestamp": "2026-06-01T08:51:33.013Z",
       "agent": "sales-research-agent",
@@ -8526,6 +8502,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0688",
+      "timestamp": "2026-06-01T12:39:36.943Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 93,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "31ba0164c0c44a87bc6434f40399d924f628048287610cbde22fbe3203aeab74",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0591",
       "timestamp": "2026-06-01T12:41:53.094Z",
       "agent": "sales-research-agent",
@@ -8538,6 +8527,33 @@
       "receiptHash": "0dbe08c3fa33a7af409012b6e17775a57fb7e41f7b0970aba6ef2c7f866ef669",
       "signatureValid": true,
       "cost": 13
+    },
+    {
+      "id": "audit-0764",
+      "timestamp": "2026-06-01T12:52:03.517Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "allowed",
+      "score": 64,
+      "permissions": "10000001",
+      "chainDepth": 1,
+      "receiptHash": "24cd59bab74cab974749a95e7892b4a46db09e5978b798836ddd5c2a56c0f370",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0674",
+      "timestamp": "2026-06-01T13:39:01.956Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 78,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "4da00f53228e60ab487a595326fe12f91bf0d312adea06f3d3017674831040ba",
+      "signatureValid": true,
+      "cost": 11
     },
     {
       "id": "audit-0305",
@@ -8625,18 +8641,18 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0344",
-      "timestamp": "2026-06-01T18:22:18.514Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "process_refund",
+      "id": "audit-0771",
+      "timestamp": "2026-06-01T18:30:14.620Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
       "decision": "allowed",
-      "score": 84,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "df4e221d7c8ef0d4f449e7c19c31857cc795eb70e092bb7e617d3c5bf462af5a",
+      "score": 87,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "83533ae705e9038ff1a25ed5683c50ce8f5d2ef0b47d933a868cde1b33bb3959",
       "signatureValid": true,
-      "cost": 85
+      "cost": 8
     },
     {
       "id": "audit-0414",
@@ -8718,6 +8734,19 @@
       "cost": 18
     },
     {
+      "id": "audit-0686",
+      "timestamp": "2026-06-02T00:49:53.249Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "dce7eb063fd54ed1852faa8b69dd9aa3247db1c88e6974db7206ad6fb2819a6a",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0641",
       "timestamp": "2026-06-02T01:00:04.183Z",
       "agent": "support-triage-agent",
@@ -8741,19 +8770,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "24f716b071aecea67f457759928b5102f753bba8a24d0214fb12e4d9cf81def9",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0702",
-      "timestamp": "2026-06-02T01:34:44.704Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 98,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "817f39836053d8ce3e6d9eec96ddddaa110c20a9e4092204c65ce80c6c34c1bf",
       "signatureValid": true
     },
     {
@@ -8783,6 +8799,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0719",
+      "timestamp": "2026-06-02T06:06:30.855Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 88,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "37359b837f07688cdc4b405029a757deacef98b853af0969c9dceef57020c3bb",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0101",
       "timestamp": "2026-06-02T07:13:18.236Z",
       "agent": "code-review-agent",
@@ -8809,6 +8838,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0775",
+      "timestamp": "2026-06-02T11:05:28.798Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 94,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "830b655e87ea1a0a8c211dca6b2e16b160fcd5f1308510685652128c6a9fd8e0",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0183",
       "timestamp": "2026-06-02T12:06:33.209Z",
       "agent": "support-triage-agent",
@@ -8820,22 +8862,6 @@
       "chainDepth": 0,
       "receiptHash": "22dae54f6f3102968a168b4c21f2d22012b1aea5a5057ee38df05045dde327c9",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0717",
-      "timestamp": "2026-06-02T12:39:40.620Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
-      "decision": "denied",
-      "score": 73,
-      "permissions": "00001011",
-      "chainDepth": 0,
-      "receiptHash": "8bfc9ea99ed5968bbbb288adfbd723683ae87f23b2388b8121017ae6d92972cd",
-      "signatureValid": true,
-      "cost": 187,
-      "reason": "insufficient permissions",
-      "failedCheck": "bitmask"
     },
     {
       "id": "audit-0074",
@@ -8890,19 +8916,6 @@
       "signatureValid": true,
       "reason": "insufficient permissions",
       "failedCheck": "bitmask"
-    },
-    {
-      "id": "audit-0341",
-      "timestamp": "2026-06-02T14:55:28.985Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 97,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "db98e4985a090f9bedc4d87d3eff589fbd8f3b5d4a5cad63f3c6a4c3f17d13ee",
-      "signatureValid": true
     },
     {
       "id": "audit-0997",
@@ -8987,31 +9000,19 @@
       "failedCheck": "chainDepth"
     },
     {
-      "id": "audit-0777",
-      "timestamp": "2026-06-02T22:00:40.237Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 93,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "068f8efbac92cabf6636edd51b316d882aa00666c2e2027c6f7c8b0414434d29",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0687",
-      "timestamp": "2026-06-02T23:24:55.251Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "process_refund",
-      "decision": "allowed",
-      "score": 85,
-      "permissions": "00001111",
-      "chainDepth": 0,
-      "receiptHash": "0dba0a033aba5aeabc8a8114d606fd6ae29a58988f506a50de1e4c011c798483",
+      "id": "audit-0669",
+      "timestamp": "2026-06-02T23:57:19.623Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "run_tests",
+      "decision": "denied",
+      "score": 22,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "edfd1709d3b275ed1d17e0a2ee6e840d8333f57b29b15ac7bee61de9020d5a8f",
       "signatureValid": true,
-      "cost": 28
+      "reason": "trust score below threshold",
+      "failedCheck": "score"
     },
     {
       "id": "audit-0160",
@@ -9053,21 +9054,6 @@
       "signatureValid": true,
       "reason": "anomaly detected",
       "failedCheck": "anomaly"
-    },
-    {
-      "id": "audit-0697",
-      "timestamp": "2026-06-03T02:15:56.049Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
-      "decision": "denied",
-      "score": 64,
-      "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "e1d116ceffa46625262bc9918271c0c019e30b4db0259ccd8c054138064d1beb",
-      "signatureValid": true,
-      "reason": "insufficient permissions",
-      "failedCheck": "bitmask"
     },
     {
       "id": "audit-0432",
@@ -9193,19 +9179,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0945",
-      "timestamp": "2026-06-03T06:14:41.615Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 96,
-      "permissions": "00000011",
-      "chainDepth": 4,
-      "receiptHash": "153554ba3d70da9e8446ebdec2f98e4677709301cbba24e16dae27d77b4ae5e2",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0364",
       "timestamp": "2026-06-03T06:29:23.283Z",
       "agent": "data-export-agent",
@@ -9245,16 +9218,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0666",
-      "timestamp": "2026-06-03T08:26:22.926Z",
+      "id": "audit-0809",
+      "timestamp": "2026-06-03T08:19:50.082Z",
       "agent": "support-triage-agent",
       "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
+      "tool": "search_kb",
       "decision": "allowed",
-      "score": 94,
+      "score": 90,
       "permissions": "00000001",
       "chainDepth": 1,
-      "receiptHash": "4b0ba3f93532feea7f0be6a0da7ba974cf2ac9ddc9a20c1dbfd5d00230161eec",
+      "receiptHash": "2075c2eb594490c149b9961d52dc5528b2b16cfd66866502a97b67b1ca4d125a",
       "signatureValid": true
     },
     {
@@ -9285,19 +9258,6 @@
       "cost": 10
     },
     {
-      "id": "audit-0775",
-      "timestamp": "2026-06-03T11:13:49.612Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 85,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "ab6830b655e87ea1a0a8c211dca6b2e16b160fcd5f1308510685652128c6a9fd",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0335",
       "timestamp": "2026-06-03T13:00:50.196Z",
       "agent": "support-triage-agent",
@@ -9309,22 +9269,6 @@
       "chainDepth": 0,
       "receiptHash": "a94084bf1b5d322af0969373588e320ca7a7eb32d0a984a0917cf58130d027df",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0816",
-      "timestamp": "2026-06-03T13:25:51.775Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "denied",
-      "score": 98,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "2fdbe14861dbab04cdba94ad42ec980c01d4df1171ebc64637efde9c1b2b8941",
-      "signatureValid": true,
-      "cost": 1094,
-      "reason": "spend limit exceeded",
-      "failedCheck": "budget"
     },
     {
       "id": "audit-0609",
@@ -9384,6 +9328,19 @@
       "cost": 7
     },
     {
+      "id": "audit-0349",
+      "timestamp": "2026-06-03T15:06:08.376Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 93,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "61ab2a297ccabe27136b012a7c22e1734ead440a722fe3ab0e03a6e651ad5576",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0260",
       "timestamp": "2026-06-03T16:10:51.274Z",
       "agent": "data-export-agent",
@@ -9410,6 +9367,20 @@
       "chainDepth": 4,
       "receiptHash": "e24a2dc488565495e7ef7f8822b6a6a03c31a230d43a9589cefae4a817e6dace",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0339",
+      "timestamp": "2026-06-03T18:38:43.052Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 84,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "96c9013040c79f29dacfc69f1cf7fa62f9badecdcc85c1dd0ed0054408128573",
+      "signatureValid": true,
+      "cost": 4
     },
     {
       "id": "audit-0422",
@@ -9451,16 +9422,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0671",
-      "timestamp": "2026-06-03T22:47:10.127Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
+      "id": "audit-0695",
+      "timestamp": "2026-06-03T22:46:18.030Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "write_file",
       "decision": "allowed",
-      "score": 69,
-      "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "4bb06108fed4d6676b7d9610c371eaf29f07d3a277c3a549a99d504a11be4436",
+      "score": 100,
+      "permissions": "00000011",
+      "chainDepth": 3,
+      "receiptHash": "2352b4a4ac4a5334d7b110944b10681beb767fb1c2c220aa635317e9eca10496",
       "signatureValid": true
     },
     {
@@ -9533,6 +9504,19 @@
       "receiptHash": "6344afab75f028caccb154266561f01ac7a8dbeb3aa9b1283910368c8d40a109",
       "signatureValid": true,
       "cost": 64
+    },
+    {
+      "id": "audit-0673",
+      "timestamp": "2026-06-04T06:28:29.570Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "18f4f75adf76ae80007dafa8f3630bf255dd36404345873d5edd0c9d153a5209",
+      "signatureValid": true
     },
     {
       "id": "audit-0911",
@@ -9655,20 +9639,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0712",
-      "timestamp": "2026-06-04T12:37:59.210Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "allowed",
-      "score": 84,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "884315d0f4ae13f30a8453c2df1e10f8f7b7b0afe9e36adc009ade039b01ca87",
-      "signatureValid": true,
-      "cost": 8
-    },
-    {
       "id": "audit-0854",
       "timestamp": "2026-06-04T12:44:41.251Z",
       "agent": "billing-ops-agent",
@@ -9681,6 +9651,20 @@
       "receiptHash": "50c0533a494e362de13e2f269bd46427718183963a2f13ed216836990d15e25c",
       "signatureValid": true,
       "cost": 54
+    },
+    {
+      "id": "audit-0778",
+      "timestamp": "2026-06-04T14:05:24.730Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 93,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "24ec22e21189052959e6961ea7eca3c16a6ccedc5ecd15323a40b3b82022f0bb",
+      "signatureValid": true,
+      "cost": 8
     },
     {
       "id": "audit-0619",
@@ -9709,6 +9693,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0808",
+      "timestamp": "2026-06-04T15:28:37.128Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 98,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "01c33ea902e5389efdc270f5429f5e1dae752a9c5668de126fa0a7a85a49e0b6",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0498",
       "timestamp": "2026-06-04T16:27:57.227Z",
       "agent": "code-review-agent",
@@ -9722,16 +9719,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0675",
-      "timestamp": "2026-06-04T18:42:39.780Z",
+      "id": "audit-0768",
+      "timestamp": "2026-06-04T16:35:42.869Z",
       "agent": "support-triage-agent",
       "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
+      "tool": "escalate_ticket",
       "decision": "allowed",
-      "score": 92,
+      "score": 85,
       "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "517408dc2d5de490ae0d2a70b219660e81c1abe43b76f309c02da4c6b12888f2",
+      "chainDepth": 1,
+      "receiptHash": "ac89a49a2d69b4d7b2cd04c2ed14ecae4c0e2356b0ede3ad25d0ea644a48011a",
       "signatureValid": true
     },
     {
@@ -9778,6 +9775,19 @@
       "failedCheck": "budget"
     },
     {
+      "id": "audit-0943",
+      "timestamp": "2026-06-04T20:54:58.721Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "78cf578bdb5ba758e27a894e0575d4c8dd83cca27cc5e9c6905f79506dcf6f9e",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0170",
       "timestamp": "2026-06-04T21:03:30.433Z",
       "agent": "billing-ops-agent",
@@ -9815,6 +9825,33 @@
       "permissions": "00000011",
       "chainDepth": 1,
       "receiptHash": "44a1ff4293943b6e77110403a34f54977c50f066593543409588a5388373612e",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0812",
+      "timestamp": "2026-06-04T23:09:00.669Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 80,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "13fc0b340e91b08ba55e2fedfd7c07a91cc6f95c3a3969479b0ad2c38188aa13",
+      "signatureValid": true,
+      "cost": 6
+    },
+    {
+      "id": "audit-0814",
+      "timestamp": "2026-06-05T00:00:09.345Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "5cd249ab566a1e36e90e2eb823f58a9958c43b4b05d0b3bf0090d5c05dfc154b",
       "signatureValid": true
     },
     {
@@ -9915,6 +9952,48 @@
       "cost": 14
     },
     {
+      "id": "audit-0678",
+      "timestamp": "2026-06-05T03:08:48.586Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "denied",
+      "score": 95,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "dff0867bfdf708b769edc459b7c1c45127cbc10ca29c217cbc86e89d98e516e3",
+      "signatureValid": true,
+      "cost": 660,
+      "reason": "spend limit exceeded",
+      "failedCheck": "budget"
+    },
+    {
+      "id": "audit-0945",
+      "timestamp": "2026-06-05T04:20:46.710Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 96,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "53554ba3d70da9e8446ebdec2f98e4677709301cbba24e16dae27d77b4ae5e24",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0668",
+      "timestamp": "2026-06-05T04:36:59.057Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 86,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "18c1f5683a2fda219c7f92b8950807daaac6ef83b9b1cf1ae25b58a2881ddc7f",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0297",
       "timestamp": "2026-06-05T05:17:31.203Z",
       "agent": "sales-research-agent",
@@ -9970,19 +10049,6 @@
       "failedCheck": "score"
     },
     {
-      "id": "audit-0774",
-      "timestamp": "2026-06-05T09:12:01.751Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 99,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "7338ebb0d1177c45417893826febc6d3ab70155f4753c4d095bbe5c2298b38f1",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0399",
       "timestamp": "2026-06-05T09:38:48.215Z",
       "agent": "billing-ops-agent",
@@ -9995,6 +10061,20 @@
       "receiptHash": "01891baf6683c676ce4669985c18830c50ff9db15c913a4edd4431a94a9a4448",
       "signatureValid": true,
       "cost": 29
+    },
+    {
+      "id": "audit-0767",
+      "timestamp": "2026-06-05T09:44:34.409Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "5cd492cd3fee6b00f2cb35c0ebc0c8aca4c5a568cf57290aa46c3a24741721c5",
+      "signatureValid": true,
+      "cost": 7
     },
     {
       "id": "audit-0827",
@@ -10103,20 +10183,6 @@
       "chainDepth": 0,
       "receiptHash": "9790f6fce65d1e35a6d89c979b1aeb48d72867c4a2c69869aea09256efab767b",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0814",
-      "timestamp": "2026-06-05T17:18:48.929Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "process_refund",
-      "decision": "allowed",
-      "score": 71,
-      "permissions": "00001111",
-      "chainDepth": 1,
-      "receiptHash": "dc5cd249ab566a1e36e90e2eb823f58a9958c43b4b05d0b3bf0090d5c05dfc15",
-      "signatureValid": true,
-      "cost": 74
     },
     {
       "id": "audit-0370",
@@ -10229,21 +10295,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0343",
-      "timestamp": "2026-06-05T22:44:05.516Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "denied",
-      "score": 22,
-      "permissions": "00000011",
-      "chainDepth": 4,
-      "receiptHash": "0bb5034ff9b663581fbd5998a4152d15ae81a26a4fe5fb27b81cb6d7e2782ca1",
-      "signatureValid": true,
-      "reason": "trust score below threshold",
-      "failedCheck": "score"
-    },
-    {
       "id": "audit-0040",
       "timestamp": "2026-06-05T22:49:43.976Z",
       "agent": "support-triage-agent",
@@ -10309,19 +10360,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0695",
-      "timestamp": "2026-06-06T02:16:24.400Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 96,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "afb2352b4a4ac4a5334d7b110944b10681beb767fb1c2c220aa635317e9eca10",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0036",
       "timestamp": "2026-06-06T05:13:00.160Z",
       "agent": "billing-ops-agent",
@@ -10334,6 +10372,19 @@
       "receiptHash": "5ccc4160dc9ff84ed0ac499e994a546c399983ed93dc3fc9c423e4b3d2ff37eb",
       "signatureValid": true,
       "cost": 249
+    },
+    {
+      "id": "audit-0794",
+      "timestamp": "2026-06-06T05:22:28.620Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 86,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "2950a33942697ae1eeec16602e2849bf049464021124c30811527285d7a3890a",
+      "signatureValid": true
     },
     {
       "id": "audit-0825",
@@ -10389,19 +10440,6 @@
       "cost": 330
     },
     {
-      "id": "audit-0685",
-      "timestamp": "2026-06-06T07:58:48.534Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "search_contacts",
-      "decision": "allowed",
-      "score": 91,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "5327b11a62d123d87cd6157e2185be48a73049bedbb1ad9c2124d018eac7e38b",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0005",
       "timestamp": "2026-06-06T10:16:26.205Z",
       "agent": "code-review-agent",
@@ -10441,19 +10479,6 @@
       "signatureValid": true,
       "reason": "insufficient permissions",
       "failedCheck": "bitmask"
-    },
-    {
-      "id": "audit-0668",
-      "timestamp": "2026-06-06T12:39:18.556Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 89,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "e18c1f5683a2fda219c7f92b8950807daaac6ef83b9b1cf1ae25b58a2881ddc7",
-      "signatureValid": true
     },
     {
       "id": "audit-0268",
@@ -10505,6 +10530,19 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "3867f22614446950291acd0bdac391d33d6c47842d8ece7869488ae30b962eb8",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0666",
+      "timestamp": "2026-06-06T14:20:00.721Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "b0ba3f93532feea7f0be6a0da7ba974cf2ac9ddc9a20c1dbfd5d00230161eecf",
       "signatureValid": true
     },
     {
@@ -10574,32 +10612,6 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "1ca4dc23924d35ace7239f2d77b336959a7304f90dcb6715b503042dac2ab00e",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0807",
-      "timestamp": "2026-06-06T18:47:38.058Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "write_file",
-      "decision": "allowed",
-      "score": 92,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "c1c51170ab9185177a2580091462364ed403f4e6111e73fc0b5c6e8bead270b2",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0349",
-      "timestamp": "2026-06-06T18:58:55.654Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "search_contacts",
-      "decision": "allowed",
-      "score": 88,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "e61ab2a297ccabe27136b012a7c22e1734ead440a722fe3ab0e03a6e651ad557",
       "signatureValid": true
     },
     {
@@ -10681,19 +10693,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0699",
-      "timestamp": "2026-06-06T22:41:32.819Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 82,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "681e583518e0c42b885606044ef420066652983c263ed6cba6190336dc9c7479",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0583",
       "timestamp": "2026-06-06T23:02:37.491Z",
       "agent": "support-triage-agent",
@@ -10760,6 +10759,19 @@
       "cost": 170
     },
     {
+      "id": "audit-0709",
+      "timestamp": "2026-06-07T02:57:33.062Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 82,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "c5a3975f65b29ca0692e0f172e899a7b95a0043a1c440f217cf1bf0bf181c58b",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0871",
       "timestamp": "2026-06-07T03:05:20.299Z",
       "agent": "sales-research-agent",
@@ -10783,19 +10795,6 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "151b26b5df9529d7321a69a03fac7277b5e4af28455fb305cb061b8762cece05",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0683",
-      "timestamp": "2026-06-07T04:54:20.188Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 84,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "88be869fe68dfd5de545bac8f0d48aca39e9fcb413c71e3eee3ecf2f4489ceb0",
       "signatureValid": true
     },
     {
@@ -10849,19 +10848,6 @@
       "permissions": "00000011",
       "chainDepth": 1,
       "receiptHash": "80aa4d15d47a251342d7925ca59786e56926c276bc05e48ccd862066d272a94b",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0347",
-      "timestamp": "2026-06-07T08:39:30.542Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 85,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "9bd1e659463aa2ad692927746cd7850e3abad5eb559f230181c21f3e52364193",
       "signatureValid": true
     },
     {
@@ -10920,32 +10906,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0800",
-      "timestamp": "2026-06-07T09:59:39.166Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 85,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "fa0f8bf6491a925fbea906cd52558bdee2ba9ab577414c379b37937c138b5951",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0767",
-      "timestamp": "2026-06-07T12:35:43.414Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 96,
-      "permissions": "00000011",
-      "chainDepth": 4,
-      "receiptHash": "165cd492cd3fee6b00f2cb35c0ebc0c8aca4c5a568cf57290aa46c3a24741721",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0753",
       "timestamp": "2026-06-07T12:49:24.378Z",
       "agent": "code-review-agent",
@@ -10999,19 +10959,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0713",
-      "timestamp": "2026-06-07T17:31:48.808Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "search_contacts",
-      "decision": "allowed",
-      "score": 81,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "b9212f975fc3ddfa5f6ebdff0b2e652a92469c8b39038eef82c97bc8744c5800",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0575",
       "timestamp": "2026-06-07T17:38:34.916Z",
       "agent": "sales-research-agent",
@@ -11022,6 +10969,19 @@
       "permissions": "00000011",
       "chainDepth": 0,
       "receiptHash": "5d4b443e38215725c06f5cb38fa21d3a117efc4f10663c7d7cb1c6af4bd4b6b1",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0799",
+      "timestamp": "2026-06-07T17:52:52.857Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 82,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "9d677fc9d7b43e95ebb6d03f65b0f39e4ec3520c81d5a850f552f66897083e86",
       "signatureValid": true
     },
     {
@@ -11052,35 +11012,6 @@
       "cost": 804,
       "reason": "spend limit exceeded",
       "failedCheck": "budget"
-    },
-    {
-      "id": "audit-0681",
-      "timestamp": "2026-06-07T19:56:48.262Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "allowed",
-      "score": 91,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "499daeb10cacf44dc6485d7028f2e0beec99b69953fc89d21bda8d40e7f695ca",
-      "signatureValid": true,
-      "cost": 4
-    },
-    {
-      "id": "audit-0786",
-      "timestamp": "2026-06-07T19:56:53.505Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
-      "decision": "denied",
-      "score": 65,
-      "permissions": "10000001",
-      "chainDepth": 4,
-      "receiptHash": "ddbb39d1bc086e5f29186cef78249404ca24a5b4c33d86204eb093f4f9ea2793",
-      "signatureValid": true,
-      "reason": "delegation depth exceeded",
-      "failedCheck": "chainDepth"
     },
     {
       "id": "audit-0210",
@@ -11149,6 +11080,20 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0672",
+      "timestamp": "2026-06-08T00:21:40.035Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 80,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "3ec28df6c24df1323b1adbee08c63ff64e8348d9935966ea90c8e3f984d113c3",
+      "signatureValid": true,
+      "cost": 15
+    },
+    {
       "id": "audit-0624",
       "timestamp": "2026-06-08T00:23:59.260Z",
       "agent": "support-triage-agent",
@@ -11159,19 +11104,6 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "cc538364091b636dfc19002d7cf76a37c9ca18249d2b40929c5fa54268261f55",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0783",
-      "timestamp": "2026-06-08T02:41:17.682Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "search_contacts",
-      "decision": "allowed",
-      "score": 79,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "e5368be970a666b64ddbf2aefd788bf8c2954ac13be50a4fc9a5754f63e4a448",
       "signatureValid": true
     },
     {
@@ -11294,20 +11226,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0818",
-      "timestamp": "2026-06-08T07:34:57.803Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 76,
-      "permissions": "00001111",
-      "chainDepth": 1,
-      "receiptHash": "0947e0f182ffd45fb36d8ab7b7954b0a46ebb5eead1b122672723c0bcd15e73a",
-      "signatureValid": true,
-      "cost": 324
-    },
-    {
       "id": "audit-0194",
       "timestamp": "2026-06-08T08:21:52.270Z",
       "agent": "billing-ops-agent",
@@ -11352,19 +11270,6 @@
       "cost": 57
     },
     {
-      "id": "audit-0684",
-      "timestamp": "2026-06-08T09:07:17.934Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 79,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "5f87335c6b48570ec980c42cd19fe30a1f0a96eb46ee78001bea2ca1de0fa5ac",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0567",
       "timestamp": "2026-06-08T10:05:07.993Z",
       "agent": "code-review-agent",
@@ -11375,6 +11280,19 @@
       "permissions": "00000011",
       "chainDepth": 2,
       "receiptHash": "2222a7b09e3b8b771d6d2aa320bb816ca2f0c354f3eea4fc20e708c846c5feeb",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0348",
+      "timestamp": "2026-06-08T12:25:37.611Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 96,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "6fda414da719962b073f3664d4feb006585460bccdc331e71d37b2801e83c663",
       "signatureValid": true
     },
     {
@@ -11391,6 +11309,19 @@
       "signatureValid": true,
       "reason": "delegation depth exceeded",
       "failedCheck": "chainDepth"
+    },
+    {
+      "id": "audit-0344",
+      "timestamp": "2026-06-08T13:20:17.096Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "allowed",
+      "score": 98,
+      "permissions": "00000011",
+      "chainDepth": 4,
+      "receiptHash": "4e221d7c8ef0d4f449e7c19c31857cc795eb70e092bb7e617d3c5bf462af5a7e",
+      "signatureValid": true
     },
     {
       "id": "audit-0165",
@@ -11420,17 +11351,20 @@
       "cost": 5
     },
     {
-      "id": "audit-0780",
-      "timestamp": "2026-06-08T18:32:38.555Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_customers",
-      "decision": "allowed",
-      "score": 65,
-      "permissions": "10000001",
-      "chainDepth": 0,
-      "receiptHash": "78d24be4691876361974345bd4e3dd8381c36f7f6846ac0ec6999145676f6835",
-      "signatureValid": true
+      "id": "audit-0802",
+      "timestamp": "2026-06-08T19:29:51.573Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "denied",
+      "score": 91,
+      "permissions": "00000010",
+      "chainDepth": 1,
+      "receiptHash": "2d8447c6415a60ffdc043aa9d989b21cdcbd6fe412658794b1981c7f8c9816f6",
+      "signatureValid": true,
+      "cost": 11,
+      "reason": "insufficient permissions",
+      "failedCheck": "bitmask"
     },
     {
       "id": "audit-0586",
@@ -11444,6 +11378,20 @@
       "chainDepth": 1,
       "receiptHash": "853998450ffe3388f2c74b93414866f9c07db7cec866296fbd32f8ef66341f08",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0351",
+      "timestamp": "2026-06-08T20:12:39.939Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "create_invoice",
+      "decision": "allowed",
+      "score": 72,
+      "permissions": "00001111",
+      "chainDepth": 3,
+      "receiptHash": "2338931223368097bf15a2e0c48217cab94f1476ece2be6366b106f09cb19962",
+      "signatureValid": true,
+      "cost": 166
     },
     {
       "id": "audit-0331",
@@ -11625,20 +11573,6 @@
       "cost": 41
     },
     {
-      "id": "audit-0790",
-      "timestamp": "2026-06-09T05:55:23.668Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "charge_card",
-      "decision": "allowed",
-      "score": 71,
-      "permissions": "00001111",
-      "chainDepth": 3,
-      "receiptHash": "22d6a5cc51ff2cd13e17ffe9c5acfc165544c01d93dd5d382837c8a168806259",
-      "signatureValid": true,
-      "cost": 263
-    },
-    {
       "id": "audit-0206",
       "timestamp": "2026-06-09T05:56:33.641Z",
       "agent": "code-review-agent",
@@ -11662,6 +11596,32 @@
       "permissions": "00000001",
       "chainDepth": 1,
       "receiptHash": "02b14d8ebcf5bacec693d09512736045fb634bc64e9aaed70ae62e58cbc86ab8",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0710",
+      "timestamp": "2026-06-09T06:48:39.617Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 90,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "4433183ae2cc31f6415c7afe21fb7bc423f55d6ffadbdd91f0b4a90e2dcd35c4",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0784",
+      "timestamp": "2026-06-09T07:06:39.259Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_customers",
+      "decision": "allowed",
+      "score": 75,
+      "permissions": "10000001",
+      "chainDepth": 0,
+      "receiptHash": "5ca8d06c2009a276e4b3f3e3fb3aa1816ffce1468e031a57a0d24d05079fe52f",
       "signatureValid": true
     },
     {
@@ -11690,6 +11650,22 @@
       "chainDepth": 0,
       "receiptHash": "d3e061afd98b7b38ef4535609805bf2dab6d7ea7307e08894b365856fad71fb9",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0791",
+      "timestamp": "2026-06-09T09:26:04.904Z",
+      "agent": "billing-ops-agent",
+      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
+      "tool": "charge_card",
+      "decision": "denied",
+      "score": 70,
+      "permissions": "00001111",
+      "chainDepth": 6,
+      "receiptHash": "4bcc1c7bbf3e35ba94b6089ed4772bd419989c20bf3247ed5716cde691218755",
+      "signatureValid": true,
+      "cost": 254,
+      "reason": "delegation depth exceeded",
+      "failedCheck": "chainDepth"
     },
     {
       "id": "audit-0648",
@@ -11788,32 +11764,6 @@
       "cost": 94
     },
     {
-      "id": "audit-0670",
-      "timestamp": "2026-06-09T13:45:49.786Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
-      "decision": "allowed",
-      "score": 67,
-      "permissions": "10000001",
-      "chainDepth": 0,
-      "receiptHash": "c12f18353c949209044613d2bc687074b33611122e29f1f0c834a0502e7e77a1",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0714",
-      "timestamp": "2026-06-09T13:51:00.265Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
-      "decision": "allowed",
-      "score": 93,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "eb6c01ea9581e5aa7d0a04ff1d4aa2f92462742b69a0892ffd90a614f18f3487",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0395",
       "timestamp": "2026-06-09T14:36:11.367Z",
       "agent": "support-triage-agent",
@@ -11838,6 +11788,22 @@
       "chainDepth": 0,
       "receiptHash": "1abbaa8f4ac52558bad9f7bf6f60070f5f7d44ac6542cc6da2dd264baaa09ff3",
       "signatureValid": true
+    },
+    {
+      "id": "audit-0786",
+      "timestamp": "2026-06-09T16:33:05.241Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "denied",
+      "score": 91,
+      "permissions": "00000011",
+      "chainDepth": 5,
+      "receiptHash": "9d1bc086e5f29186cef78249404ca24a5b4c33d86204eb093f4f9ea27934d3aa",
+      "signatureValid": true,
+      "cost": 5,
+      "reason": "delegation depth exceeded",
+      "failedCheck": "chainDepth"
     },
     {
       "id": "audit-0530",
@@ -11915,35 +11881,6 @@
       "permissions": "00000011",
       "chainDepth": 4,
       "receiptHash": "72d60dde6d5894ec030bc413422d0cea3d605f33a3c0bc2c2f24e4b2440bcc94",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0352",
-      "timestamp": "2026-06-09T22:44:26.042Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "denied",
-      "score": 78,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "93af0021aa03bdcd66c74416856000208ed0cdbf998e321321e584eaf242edb5",
-      "signatureValid": true,
-      "cost": 140,
-      "reason": "spend limit exceeded",
-      "failedCheck": "budget"
-    },
-    {
-      "id": "audit-0679",
-      "timestamp": "2026-06-09T23:13:48.989Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "enrich_lead",
-      "decision": "allowed",
-      "score": 80,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "0722a5db91348ed4f684f6da1c61478cff9e958d7bfdd4f1d7f99de661a03fae",
       "signatureValid": true
     },
     {
@@ -12040,16 +11977,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0339",
-      "timestamp": "2026-06-10T03:35:24.740Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
+      "id": "audit-0340",
+      "timestamp": "2026-06-10T03:38:20.673Z",
+      "agent": "data-export-agent",
+      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
+      "tool": "export_transactions",
       "decision": "allowed",
-      "score": 95,
-      "permissions": "00000011",
-      "chainDepth": 2,
-      "receiptHash": "c196c9013040c79f29dacfc69f1cf7fa62f9badecdcc85c1dd0ed00544081285",
+      "score": 73,
+      "permissions": "10000001",
+      "chainDepth": 1,
+      "receiptHash": "523985b93ddd07630aea6dc1940d60b6ad11ba21fe4eb3656046bfad3e216832",
       "signatureValid": true
     },
     {
@@ -12190,19 +12127,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0686",
-      "timestamp": "2026-06-10T10:00:03.553Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "search_kb",
-      "decision": "allowed",
-      "score": 88,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "98fdce7eb063fd54ed1852faa8b69dd9aa3247db1c88e6974db7206ad6fb2819",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0845",
       "timestamp": "2026-06-10T11:26:46.092Z",
       "agent": "support-triage-agent",
@@ -12241,22 +12165,6 @@
       "receiptHash": "03ff7208ad1847d02af99ab5c6261498a51a5bcb329c2c49fab588e1017e6234",
       "signatureValid": true,
       "cost": 14
-    },
-    {
-      "id": "audit-0817",
-      "timestamp": "2026-06-10T13:31:35.798Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "denied",
-      "score": 37,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "1b41d9414bdeb87bc10aa1f6a8b95bf24912d99895905eebc4e8d7add34f833d",
-      "signatureValid": true,
-      "cost": 13,
-      "reason": "trust score below threshold",
-      "failedCheck": "score"
     },
     {
       "id": "audit-0361",
@@ -12314,16 +12222,16 @@
       "failedCheck": "bitmask"
     },
     {
-      "id": "audit-0794",
-      "timestamp": "2026-06-10T15:39:14.402Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
+      "id": "audit-0680",
+      "timestamp": "2026-06-10T15:30:54.684Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
       "decision": "allowed",
-      "score": 86,
-      "permissions": "00000001",
+      "score": 89,
+      "permissions": "00000011",
       "chainDepth": 0,
-      "receiptHash": "068c4a2950a33942697ae1eeec16602e2849bf049464021124c30811527285d7",
+      "receiptHash": "872b32b0487110bb572fcf1866072dee6472a00443b5be45b9fd46a52cf51ecd",
       "signatureValid": true
     },
     {
@@ -12369,6 +12277,20 @@
       "failedCheck": "chainDepth"
     },
     {
+      "id": "audit-0783",
+      "timestamp": "2026-06-10T18:25:56.433Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 82,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "8be970a666b64ddbf2aefd788bf8c2954ac13be50a4fc9a5754f63e4a448fe77",
+      "signatureValid": true,
+      "cost": 8
+    },
+    {
       "id": "audit-0142",
       "timestamp": "2026-06-10T19:27:55.025Z",
       "agent": "sales-research-agent",
@@ -12392,6 +12314,19 @@
       "permissions": "10000001",
       "chainDepth": 0,
       "receiptHash": "a24783f8f354604e052dac96b6ec119b589748ae88d137fae9143453c0a5bd03",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0350",
+      "timestamp": "2026-06-10T20:55:11.226Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 97,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "8bb53ab49275f56b9fbbea768e484591c5d1157cee5eab03311be047245c59db",
       "signatureValid": true
     },
     {
@@ -12422,6 +12357,19 @@
       "cost": 309
     },
     {
+      "id": "audit-0804",
+      "timestamp": "2026-06-10T23:33:20.338Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 86,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "3331e173c62982679b5b1da7e301ecc708a7cc69f3869b2b1b8da6dd36137e89",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0917",
       "timestamp": "2026-06-10T23:51:45.542Z",
       "agent": "code-review-agent",
@@ -12432,6 +12380,19 @@
       "permissions": "00000011",
       "chainDepth": 3,
       "receiptHash": "573ed5c71e6a83946a02b9e3a8da74a6b60f29a625a1efb25cf305b98bf4931b",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0946",
+      "timestamp": "2026-06-11T00:41:52.598Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 88,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "fafca0d3f2656323fbfa88d236b874b3f86df50289ffd07148ce0377287adf8a",
       "signatureValid": true
     },
     {
@@ -12462,20 +12423,6 @@
       "cost": 55
     },
     {
-      "id": "audit-0766",
-      "timestamp": "2026-06-11T01:50:59.815Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "allowed",
-      "score": 87,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "31fd20ebf63e635892e8e25f95171896d4cbd187b8f4d6a6eb834a446bdc0c0c",
-      "signatureValid": true,
-      "cost": 13
-    },
-    {
       "id": "audit-0580",
       "timestamp": "2026-06-11T02:08:30.995Z",
       "agent": "billing-ops-agent",
@@ -12490,18 +12437,30 @@
       "cost": 31
     },
     {
-      "id": "audit-0782",
-      "timestamp": "2026-06-11T03:33:45.152Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
+      "id": "audit-0779",
+      "timestamp": "2026-06-11T03:38:00.922Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
       "decision": "allowed",
       "score": 84,
-      "permissions": "00001111",
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "c11f6c9366dd64525993c0318983c6d6daaba6e49c1991a3835e55e3f905e5d3",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0703",
+      "timestamp": "2026-06-11T03:49:14.895Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "lookup_ticket",
+      "decision": "allowed",
+      "score": 98,
+      "permissions": "00000001",
       "chainDepth": 1,
-      "receiptHash": "159e5fc266359603737c965567a169c2b905585d235e9a18e6111d3eae089d6d",
-      "signatureValid": true,
-      "cost": 167
+      "receiptHash": "e3ff137739fc9397ac41e86fb49eb9f258ac4b5967139272810389de2da6e086",
+      "signatureValid": true
     },
     {
       "id": "audit-0757",
@@ -12586,6 +12545,19 @@
       "signatureValid": true
     },
     {
+      "id": "audit-0665",
+      "timestamp": "2026-06-11T07:53:23.256Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
+      "decision": "allowed",
+      "score": 90,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "2a89dd309a2b2af8cdae1f99d7b319f5b5b174979a5fb0b830b79c98bdaac308",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0429",
       "timestamp": "2026-06-11T07:57:57.144Z",
       "agent": "data-export-agent",
@@ -12622,19 +12594,6 @@
       "permissions": "10000001",
       "chainDepth": 0,
       "receiptHash": "8bea5b05fc00e6f132511795e7f5a557384e63dbb36c1073c546c058ab023f29",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0348",
-      "timestamp": "2026-06-11T11:34:22.871Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 96,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "66fda414da719962b073f3664d4feb006585460bccdc331e71d37b2801e83c66",
       "signatureValid": true
     },
     {
@@ -12678,20 +12637,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0706",
-      "timestamp": "2026-06-11T14:00:24.914Z",
-      "agent": "sales-research-agent",
-      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
-      "tool": "send_email",
-      "decision": "allowed",
-      "score": 87,
-      "permissions": "00000011",
-      "chainDepth": 0,
-      "receiptHash": "09733388ac957536e28ab827a87000166443a9fb4d132839ac00713c49dd4312",
-      "signatureValid": true,
-      "cost": 14
-    },
-    {
       "id": "audit-0842",
       "timestamp": "2026-06-11T15:36:30.792Z",
       "agent": "support-triage-agent",
@@ -12703,22 +12648,6 @@
       "chainDepth": 0,
       "receiptHash": "68dc439d3d6c07db6494e88bac152fc7e22d7807b8572b11c842e9bc95d2680e",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0676",
-      "timestamp": "2026-06-11T16:00:59.306Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "denied",
-      "score": 88,
-      "permissions": "00000001",
-      "chainDepth": 0,
-      "receiptHash": "fd9ee79fafa7a235433ee1508dce468e5ebfff948594fbe5da686556a96e8dcd",
-      "signatureValid": true,
-      "cost": 816,
-      "reason": "spend limit exceeded",
-      "failedCheck": "budget"
     },
     {
       "id": "audit-0759",
@@ -12759,19 +12688,6 @@
       "permissions": "00000011",
       "chainDepth": 0,
       "receiptHash": "0ca73989129e1aca94372d5419a6aee67c8c7bb397df955bf33abb122ee748de",
-      "signatureValid": true
-    },
-    {
-      "id": "audit-0701",
-      "timestamp": "2026-06-11T18:26:58.925Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "allowed",
-      "score": 94,
-      "permissions": "00000011",
-      "chainDepth": 1,
-      "receiptHash": "2ef57992763a3af3ed73e7cc5cb239b40aa8bcd1edf7f4e314136f2e3ee1520f",
       "signatureValid": true
     },
     {
@@ -12828,6 +12744,32 @@
       "permissions": "10000001",
       "chainDepth": 1,
       "receiptHash": "a74c6af1fe7ed1f59fbb8d074074d70542cf88a92750a43f8304bbe6e6f2c398",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0692",
+      "timestamp": "2026-06-11T21:00:09.058Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "search_contacts",
+      "decision": "allowed",
+      "score": 82,
+      "permissions": "00000011",
+      "chainDepth": 0,
+      "receiptHash": "20214cc688100489bc40dfc4ed9cea696f771cc614f8ad593b3d1f5a898d68db",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0708",
+      "timestamp": "2026-06-11T21:18:23.606Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "1bf5c735dfdcafa0bb23c937ea92c3001b2b7b0e3a0fb3c4db1ada2fd1fa424d",
       "signatureValid": true
     },
     {
@@ -13063,19 +13005,6 @@
       "failedCheck": "score"
     },
     {
-      "id": "audit-0340",
-      "timestamp": "2026-06-12T05:26:42.805Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 90,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "a9523985b93ddd07630aea6dc1940d60b6ad11ba21fe4eb3656046bfad3e2168",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0029",
       "timestamp": "2026-06-12T05:33:47.633Z",
       "agent": "data-export-agent",
@@ -13159,6 +13088,35 @@
       "failedCheck": "chainDepth"
     },
     {
+      "id": "audit-0676",
+      "timestamp": "2026-06-12T09:05:22.789Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "denied",
+      "score": 96,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "e79fafa7a235433ee1508dce468e5ebfff948594fbe5da686556a96e8dcd6875",
+      "signatureValid": true,
+      "cost": 1151,
+      "reason": "spend limit exceeded",
+      "failedCheck": "budget"
+    },
+    {
+      "id": "audit-0696",
+      "timestamp": "2026-06-12T10:05:36.115Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 86,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "5735013d6113dc8459d495d8d3c724dcc3625a390d86556534539d83dfcb3f8a",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0598",
       "timestamp": "2026-06-12T10:09:09.752Z",
       "agent": "code-review-agent",
@@ -13170,20 +13128,6 @@
       "chainDepth": 2,
       "receiptHash": "b3e74657540b08d28349a46c642cb48768e0b834d14ec18930d3d839a1d43713",
       "signatureValid": true
-    },
-    {
-      "id": "audit-0796",
-      "timestamp": "2026-06-12T10:13:58.994Z",
-      "agent": "billing-ops-agent",
-      "agentDid": "did:bolyra:agent:0x3c4d5e6f7a8b",
-      "tool": "create_invoice",
-      "decision": "allowed",
-      "score": 73,
-      "permissions": "00001111",
-      "chainDepth": 2,
-      "receiptHash": "435f84224218cf4ceaf1e53604a1b0d3038bc9c416b47d2b0432b9eb6fd5c2dd",
-      "signatureValid": true,
-      "cost": 192
     },
     {
       "id": "audit-0121",
@@ -13199,21 +13143,6 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0669",
-      "timestamp": "2026-06-12T11:22:07.326Z",
-      "agent": "data-export-agent",
-      "agentDid": "did:bolyra:agent:0x5e6f7a8b9c0d",
-      "tool": "export_transactions",
-      "decision": "denied",
-      "score": 32,
-      "permissions": "10000001",
-      "chainDepth": 1,
-      "receiptHash": "1edfd1709d3b275ed1d17e0a2ee6e840d8333f57b29b15ac7bee61de9020d5a8",
-      "signatureValid": true,
-      "reason": "trust score below threshold",
-      "failedCheck": "score"
-    },
-    {
       "id": "audit-0758",
       "timestamp": "2026-06-12T11:36:03.339Z",
       "agent": "sales-research-agent",
@@ -13227,16 +13156,16 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0778",
-      "timestamp": "2026-06-12T12:25:55.452Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "escalate_ticket",
+      "id": "audit-0795",
+      "timestamp": "2026-06-12T13:17:03.837Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "enrich_lead",
       "decision": "allowed",
-      "score": 98,
-      "permissions": "00000001",
+      "score": 84,
+      "permissions": "00000011",
       "chainDepth": 0,
-      "receiptHash": "fbfd724ec22e21189052959e6961ea7eca3c16a6ccedc5ecd15323a40b3b8202",
+      "receiptHash": "f859210b27c31971d8e6d9c8c2376848f651d94f3af2996dc1f73806e03a4f39",
       "signatureValid": true
     },
     {
@@ -13266,6 +13195,19 @@
       "permissions": "10000001",
       "chainDepth": 0,
       "receiptHash": "6c1c2b49b59097d23ff916bf0cca82f0003de36069d253766b86472310050dfa",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0815",
+      "timestamp": "2026-06-12T15:50:17.395Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "search_kb",
+      "decision": "allowed",
+      "score": 87,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "5c6686a09852ec5b7e5df12c31cf5fbbe30cc3fd93e286807e5b82874939d179",
       "signatureValid": true
     },
     {
@@ -13335,6 +13277,21 @@
       "permissions": "00000011",
       "chainDepth": 4,
       "receiptHash": "ab8091ddb52971ed757afd587680de0fa41ca0f5f84d821289746a1507024d5f",
+      "signatureValid": true,
+      "reason": "trust score below threshold",
+      "failedCheck": "score"
+    },
+    {
+      "id": "audit-0720",
+      "timestamp": "2026-06-12T20:36:30.693Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "denied",
+      "score": 25,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "fd9f1324f87af1853cb3710f2b42895010b25db729d4b0812f7bff27f00aa6d2",
       "signatureValid": true,
       "reason": "trust score below threshold",
       "failedCheck": "score"
@@ -13448,19 +13405,6 @@
       "failedCheck": "score"
     },
     {
-      "id": "audit-0801",
-      "timestamp": "2026-06-13T00:46:06.834Z",
-      "agent": "support-triage-agent",
-      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
-      "tool": "lookup_ticket",
-      "decision": "allowed",
-      "score": 98,
-      "permissions": "00000001",
-      "chainDepth": 1,
-      "receiptHash": "c4e688707d4d39c5b0f09af4fe9d2b4ec59e668f1bd8d2bb6e0814f1144ebf7f",
-      "signatureValid": true
-    },
-    {
       "id": "audit-0111",
       "timestamp": "2026-06-13T00:50:22.251Z",
       "agent": "sales-research-agent",
@@ -13498,6 +13442,19 @@
       "permissions": "10000001",
       "chainDepth": 1,
       "receiptHash": "66ea44090125940bbe09670af2c00153367450291bd7a65a93fecae2813146a3",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0664",
+      "timestamp": "2026-06-13T01:24:49.611Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 92,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "72859dd5d5581c342a68c592d625f1dc51ae1459f0ff2b0f7e98d9af7b5b6dec",
       "signatureValid": true
     },
     {
@@ -13570,6 +13527,19 @@
       "failedCheck": "score"
     },
     {
+      "id": "audit-0801",
+      "timestamp": "2026-06-13T07:22:55.867Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 92,
+      "permissions": "00000001",
+      "chainDepth": 1,
+      "receiptHash": "4e688707d4d39c5b0f09af4fe9d2b4ec59e668f1bd8d2bb6e0814f1144ebf7fd",
+      "signatureValid": true
+    },
+    {
       "id": "audit-0729",
       "timestamp": "2026-06-13T08:06:20.377Z",
       "agent": "code-review-agent",
@@ -13622,19 +13592,18 @@
       "signatureValid": true
     },
     {
-      "id": "audit-0802",
-      "timestamp": "2026-06-13T12:48:09.490Z",
-      "agent": "code-review-agent",
-      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
-      "tool": "read_file",
-      "decision": "denied",
-      "score": 98,
-      "permissions": "00000001",
-      "chainDepth": 4,
-      "receiptHash": "3a2d8447c6415a60ffdc043aa9d989b21cdcbd6fe412658794b1981c7f8c9816",
+      "id": "audit-0691",
+      "timestamp": "2026-06-13T11:37:05.817Z",
+      "agent": "sales-research-agent",
+      "agentDid": "did:bolyra:agent:0x1a2b3c4d5e6f",
+      "tool": "send_email",
+      "decision": "allowed",
+      "score": 90,
+      "permissions": "00000011",
+      "chainDepth": 2,
+      "receiptHash": "adb526e2271dbb04c2950f9f74ce14f3c8f71731d1268a7a421f92092234a6d2",
       "signatureValid": true,
-      "reason": "insufficient permissions",
-      "failedCheck": "bitmask"
+      "cost": 13
     },
     {
       "id": "audit-0500",
@@ -13651,6 +13620,19 @@
       "cost": 208,
       "reason": "spend limit exceeded",
       "failedCheck": "budget"
+    },
+    {
+      "id": "audit-0721",
+      "timestamp": "2026-06-13T14:47:50.157Z",
+      "agent": "code-review-agent",
+      "agentDid": "did:bolyra:agent:0x4d5e6f7a8b9c",
+      "tool": "read_file",
+      "decision": "allowed",
+      "score": 85,
+      "permissions": "00000011",
+      "chainDepth": 1,
+      "receiptHash": "dec8c6b2577a1b53551588d7ee3dd80da0710b78247f79db75f218429390d164",
+      "signatureValid": true
     },
     {
       "id": "audit-0537",
@@ -13677,6 +13659,19 @@
       "permissions": "00000001",
       "chainDepth": 0,
       "receiptHash": "8e7be3bb152fca97090cc1bf483f7d30007f47069020ac7f9e751702f5d43409",
+      "signatureValid": true
+    },
+    {
+      "id": "audit-0715",
+      "timestamp": "2026-06-13T16:54:50.684Z",
+      "agent": "support-triage-agent",
+      "agentDid": "did:bolyra:agent:0x2b3c4d5e6f7a",
+      "tool": "escalate_ticket",
+      "decision": "allowed",
+      "score": 96,
+      "permissions": "00000001",
+      "chainDepth": 0,
+      "receiptHash": "4f28f3280dc279cd6b5cb8fae8d14a95e7cb0221bed245017088ebffa65bb54f",
       "signatureValid": true
     }
   ]
