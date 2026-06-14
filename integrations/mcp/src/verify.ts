@@ -362,10 +362,10 @@ export async function verifyBundle(
  * nonce freshness, expiry, permissions, and delegation chain structure.
  * Scores identically to production (40+20+20+10+10 = 100).
  */
-function verifyDevBundle(
+async function verifyDevBundle(
   bundle: BolyraProofBundle,
   config: BolyraMcpConfig,
-): BolyraAuthContext {
+): Promise<BolyraAuthContext> {
   const network = config.network ?? DEFAULTS.network;
   const minScore = config.minScore ?? DEFAULTS.minScore;
   const maxProofAge = config.maxProofAge ?? DEFAULTS.maxProofAge;
@@ -446,6 +446,14 @@ function verifyDevBundle(
     score += 10;
   } else {
     warnings.push(`Session nonce stale (${nonceAgeSec}s old, max ${maxProofAge}s)`);
+  }
+
+  // Nonce replay protection — also applies in dev mode when nonceStore is configured.
+  if (config.nonceStore) {
+    const isFresh = await config.nonceStore.markIfFresh(bundle.nonce, maxProofAge);
+    if (!isFresh) {
+      return failCtx('Nonce already used — proof replay rejected');
+    }
   }
 
   // Scope commitment — in dev mode, always grant since we don't have real poseidon output.
