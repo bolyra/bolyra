@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What breaks when you leave dev mode — Bolyra</title>
+  <meta name="description" content="Dev mode skips 4 things that matter in production: credential resolution, Merkle root validation, nonce replay protection, and proof-to-credential binding. Here is what to do about each one.">
+  <meta property="og:title" content="What breaks when you leave dev mode — Bolyra">
+  <meta property="og:description" content="Dev mode skips 4 production checks. Here is the config diff and the fix for each one.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://bolyra.ai/blog">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --text-muted: #888;
+      --accent: #6366f1; --accent-hover: #818cf8;
+      --green: #4ade80; --border: #222; --max-width: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 56px;
+    }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+
+    /* Article */
+    article { padding: 100px 0 80px; }
+    article h1 {
+      font-size: 2.2rem; font-weight: 800; line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 40px; }
+    article h2 {
+      font-size: 1.4rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    article p { margin-bottom: 16px; }
+    article ul, article ol { margin-bottom: 16px; padding-left: 24px; }
+    article li { margin-bottom: 6px; }
+
+    /* Code */
+    code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px;
+    }
+    pre {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; overflow-x: auto; margin-bottom: 24px; line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+
+    /* Diff highlighting */
+    .diff-add { color: var(--green); }
+    .diff-remove { color: #f87171; }
+
+    /* CTA */
+    .cta-box {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; margin-top: 48px; text-align: center;
+    }
+    .cta-box a {
+      display: inline-block; background: var(--accent); color: #fff;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600;
+      margin-top: 12px; transition: background 0.2s;
+    }
+    .cta-box a:hover { background: var(--accent-hover); color: #fff; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 0;
+      color: var(--text-muted); font-size: 0.85rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <nav><div class="container">
+    <a href="/" class="logo">Bolyra</a>
+    <a href="/">Home</a>
+  </div></nav>
+
+  <article class="container">
+    <h1>What breaks when you leave dev mode</h1>
+    <p class="meta">June 13, 2026 &middot; Viswanadha Pratap Kondoju</p>
+
+    <p>Dev mode is great for trying Bolyra. It gives you instant mock proofs, no circuit artifacts, and a short path to seeing <code>@bolyra/mcp</code> gate a tool call.</p>
+
+    <p>It also skips four things that matter in production:</p>
+    <ol>
+      <li><code>resolveCredential</code>: who is this agent?</li>
+      <li><code>validateRoots</code>: is this proof against a real Merkle tree?</li>
+      <li><code>nonceStore</code>: was this proof already used?</li>
+      <li>proof-to-credential binding: does this proof match the claimed credential?</li>
+    </ol>
+
+    <p>Here is the TypeScript config difference:</p>
+
+<pre><code><span class="diff-remove">// Dev mode — what you start with:</span>
+<span class="diff-remove">withBolyraAuthStdio(server, {</span>
+<span class="diff-remove">  devMode: true,</span>
+<span class="diff-remove">  toolPolicy: { list_files: 1n, read_file: 1n, write_file: 2n },</span>
+<span class="diff-remove">});</span>
+
+<span class="diff-add">// Production — what you need:</span>
+<span class="diff-add">const credentialStore = new InMemoryCredentialStore([agent]);</span>
+<span class="diff-add">const sdkConfig = { circuitDir: process.env.BOLYRA_CIRCUIT_DIR };</span>
+<span class="diff-add"></span>
+<span class="diff-add">withBolyraAuthStdio(server, {</span>
+<span class="diff-add">  devMode: false,</span>
+<span class="diff-add">  resolveCredential: (commitment) =&gt; credentialStore.resolve(commitment),</span>
+<span class="diff-add">  validateRoots: createMockRootValidator(),</span>
+<span class="diff-add">  nonceStore: new MemoryNonceStore(),</span>
+<span class="diff-add">  toolPolicy: { list_files: 1n, read_file: 1n, write_file: 2n },</span>
+<span class="diff-add">  sdkConfig,</span>
+<span class="diff-add">});</span></code></pre>
+
+    <h2>1. <code>resolveCredential</code>: who is this agent?</h2>
+
+    <p>In dev mode, the verifier accepts a dev bundle and reads mock public signals. It does not look up the agent credential from your registry.</p>
+
+    <p>Production mode is different. <code>@bolyra/mcp</code> refuses to start without <code>resolveCredential</code> when <code>devMode</code> is not enabled &mdash; it throws at setup time, not on the first request. Once running, unresolved commitments fail the request.</p>
+
+    <p>The production example keeps this deliberately small:</p>
+
+<pre><code>export class InMemoryCredentialStore {
+  private credentials = new Map&lt;string, AgentCredential&gt;();
+
+  constructor(seed: AgentCredential[]) {
+    for (const cred of seed) {
+      this.credentials.set(cred.commitment.toString(), cred);
+    }
+  }
+
+  async resolve(commitment: string): Promise&lt;AgentCredential | null&gt; {
+    return this.credentials.get(commitment) ?? null;
+  }
+}</code></pre>
+
+    <p>That is enough for the example. In real production, replace the map with Postgres, DynamoDB, or your on-chain credential registry.</p>
+
+    <h2>2. <code>validateRoots</code>: is this proof against a real Merkle tree?</h2>
+
+    <p>A Groth16 proof can be valid while still proving membership against a root your server should not trust.</p>
+
+    <p>That is why <code>BolyraMcpConfig</code> has <code>validateRoots</code>. The verifier extracts:</p>
+
+<pre><code>const humanRoot = BigInt(bundle.humanProof.publicSignals[0]);
+const agentRoot = BigInt(bundle.agentProof.publicSignals[0]);</code></pre>
+
+    <p>Then it calls your validator. If it returns <code>false</code>, the request fails with root validation errors.</p>
+
+    <p>The example uses a mock:</p>
+
+<pre><code>export function createMockRootValidator() {
+  return async (humanRoot: bigint, agentRoot: bigint): Promise&lt;boolean&gt; =&gt; {
+    void humanRoot;
+    void agentRoot;
+    return true;
+  };
+}</code></pre>
+
+    <p>That is production-shaped, not production-complete. The real version should check the on-chain <code>IdentityRegistry</code>, for example <code>humanRootExists(humanRoot)</code> and <code>agentRootExists(agentRoot)</code>.</p>
+
+    <h2>3. <code>nonceStore</code>: was this proof already used?</h2>
+
+    <p>Dev mode checks nonce freshness from the timestamp embedded in the nonce. It does not remember whether the same proof bundle was already submitted.</p>
+
+    <p>Production should reject replay.</p>
+
+<pre><code>import { MemoryNonceStore } from '@bolyra/mcp';
+
+withBolyraAuthStdio(server, {
+  resolveCredential: (commitment) =&gt; credentialStore.resolve(commitment),
+  validateRoots: createMockRootValidator(),
+  <span class="diff-add">nonceStore: new MemoryNonceStore(),</span>
+});</code></pre>
+
+    <p><code>MemoryNonceStore</code> does exactly one thing:</p>
+
+<pre><code>async markIfFresh(nonce: string, ttlSeconds: number): Promise&lt;boolean&gt; {
+  this.cleanup();
+  if (this.used.has(nonce)) return false;
+  this.used.set(nonce, Date.now() + ttlSeconds * 1000);
+  return true;
+}</code></pre>
+
+    <p>That is fine for a single-process MCP server. If you run multiple instances, put this behind Redis or a database with TTL semantics. Otherwise, instance A and instance B will not share replay state.</p>
+
+    <h2>4. Proof-to-credential binding</h2>
+
+    <p>This is the subtle one.</p>
+
+    <p>A request carries <code>credentialCommitment</code>. The server resolves that commitment to an <code>AgentCredential</code>, then verifies the ZK handshake.</p>
+
+    <p>Production verification also recomputes the scope commitment from the resolved credential:</p>
+
+<pre><code>const expectedScope = await sdk.poseidon3(
+  credential.permissionBitmask,
+  credential.commitment,
+  credential.expiryTimestamp,
+);
+
+if (expectedScope !== verifyResult.scopeCommitment) {
+  return {
+    verified: false,
+    reason: 'Proof is not bound to the claimed credential',
+  };
+}</code></pre>
+
+    <p>That check prevents credential substitution: a caller cannot prove against credential A, set <code>credentialCommitment</code> to privileged credential B, and inherit B's permissions.</p>
+
+    <p>There is no separate config flag for this. Once the verifier has the resolved credential, <code>@bolyra/mcp</code> performs the binding check automatically.</p>
+
+    <h2>Bonus: delegation chains</h2>
+
+    <p>If your agent uses v=2 bundles with delegation hops, production mode also verifies each delegation proof, recomputes each hop's scope commitment, checks delegatee expiry, and enforces a maximum chain depth of 3 hops. Dev mode only checks chain shape and extracts the leaf scope. That means a delegation chain that works in dev mode might fail in production if the proofs are invalid or the scope narrowing is incorrect.</p>
+
+    <h2>The short version</h2>
+
+    <p>Dev mode answers: "Can I wire Bolyra into my MCP server?"</p>
+
+    <p>Production should answer:</p>
+    <ul>
+      <li>Does this commitment map to a real agent credential?</li>
+      <li>Are the proof roots recognized?</li>
+      <li>Has this nonce already been used?</li>
+      <li>Does the proof actually bind to the credential being claimed?</li>
+    </ul>
+
+    <p>The production example shows the smallest complete shape: credential resolver, root validator hook, nonce store, tool policy, and circuit config.</p>
+
+    <p style="margin-top: 32px; text-align: center;"><a href="/blog-2">Next: MCP Auth Works in Dev. Then Production Asks: Who Is This User?</a></p>
+
+    <div class="cta-box">
+      <p>See the full production example with credential store, nonce replay protection, and root validation.</p>
+      <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp/examples/production-server">View on GitHub</a>
+    </div>
+  </article>
+
+  <footer><div class="container">
+    &copy; 2026 ZKProva Inc. &middot; <a href="/">bolyra.ai</a> &middot; <a href="https://github.com/bolyra/bolyra">GitHub</a> &middot; <a href="mailto:viswa@bolyra.ai">viswa@bolyra.ai</a>
+  </div></footer>
+</body>
+</html>
