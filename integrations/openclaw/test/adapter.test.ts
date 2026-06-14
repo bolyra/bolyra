@@ -11,7 +11,8 @@ function makeHandshake(overrides: Partial<HandshakeResult> = {}): HandshakeResul
   return {
     humanNullifier: 123n,
     agentNullifier: 456n,
-    sessionNonce: BigInt(Math.floor(Date.now())),
+    // Nonce layout: (unix_seconds << 64) | random_entropy
+    sessionNonce: (BigInt(Math.floor(Date.now() / 1000)) << 64n) | 42n,
     scopeCommitment: 999n,
     verified: true,
     ...overrides,
