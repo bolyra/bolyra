@@ -52,6 +52,10 @@ export { poseidon2, poseidon3, poseidon4 } from './utils';
 export { createDevIdentities } from './dev';
 export type { DevIdentities, DevIdentityOptions } from './dev';
 
+// Registry resolver (credential registry API client)
+export { createRegistryResolver } from './registry';
+export type { RegistryConfig } from './registry';
+
 // Errors
 export {
   BolyraError,
