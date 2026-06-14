@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bolyra Production Auth - Audit Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg2: #111111;
+    --bg3: #1a1a1a;
+    --accent: #6366f1;
+    --accent-dim: #4f46e5;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --border: #222;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  /* Header */
+  .header { text-align: center; padding: 48px 0 16px; }
+  .header h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--accent) 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header .subtitle { color: var(--text-dim); font-size: 0.85rem; }
+  .tagline {
+    margin: 24px auto 40px;
+    padding: 12px 24px;
+    background: var(--bg2);
+    border: 1px solid var(--accent-dim);
+    border-radius: var(--radius);
+    display: inline-block;
+    font-size: 0.8rem;
+    color: var(--accent);
+  }
+
+  /* Summary cards */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+  }
+  .card .value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .card .label { color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card.green .value { color: var(--green); }
+  .card.red .value { color: var(--red); }
+  .card.accent .value { color: var(--accent); }
+  .card.yellow .value { color: var(--yellow); }
+
+  /* Section */
+  .section { margin-bottom: 40px; }
+  .section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+
+  /* Tool bars */
+  .tool-bars { display: flex; flex-direction: column; gap: 8px; }
+  .tool-row { display: flex; align-items: center; gap: 12px; }
+  .tool-name { width: 180px; text-align: right; font-size: 0.75rem; color: var(--text-dim); flex-shrink: 0; }
+  .bar-container {
+    flex: 1;
+    height: 24px;
+    background: var(--bg3);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+  }
+  .bar-allowed { background: var(--green); height: 100%; transition: width 0.6s ease; }
+  .bar-denied { background: var(--red); height: 100%; transition: width 0.6s ease; }
+  .bar-label { font-size: 0.65rem; color: var(--text-dim); width: 60px; text-align: right; flex-shrink: 0; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--bg2);
+    border-bottom: 2px solid var(--accent-dim);
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.65rem;
+  }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  tr:hover { background: var(--bg2); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .badge-allowed { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+  .badge-denied { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+
+  .hash {
+    font-family: 'SF Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent);
+    cursor: default;
+  }
+
+  /* Anomalies */
+  .anomaly-list { list-style: none; }
+  .anomaly-list li {
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    background: var(--bg2);
+    border-left: 3px solid var(--red);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 0.75rem;
+  }
+  .anomaly-list li.warn { border-left-color: var(--yellow); }
+
+  /* Receipt explorer */
+  .explorer-wrap {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .explorer-wrap::-webkit-scrollbar { width: 6px; }
+  .explorer-wrap::-webkit-scrollbar-track { background: var(--bg); }
+  .explorer-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 40px 0 24px;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: repeat(3, 1fr); }
+    .tool-name { width: 120px; }
+  }
+  @media (max-width: 600px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Bolyra Production Auth &mdash; Audit Dashboard</h1>
+    <div class="subtitle" id="subtitle">Loading...</div>
+  </div>
+  <div style="text-align: center;">
+    <div class="tagline">Without Bolyra, you have logs. With Bolyra, you have signed evidence.</div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="section">
+    <h2>Tools by Outcome</h2>
+    <div class="tool-bars" id="tool-bars"></div>
+  </div>
+
+  <div class="section">
+    <h2>Agent Breakdown</h2>
+    <table id="agent-table">
+      <thead>
+        <tr><th>Agent</th><th>Calls</th><th>Allowed</th><th>Denied</th><th>Spend</th><th>Top Tool</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Recent Anomalies</h2>
+    <ul class="anomaly-list" id="anomalies"></ul>
+  </div>
+
+  <div class="section">
+    <h2>Receipt Explorer (last 20)</h2>
+    <div class="explorer-wrap">
+      <table id="receipt-table">
+        <thead>
+          <tr><th>Time</th><th>Agent</th><th>Tool</th><th>Decision</th><th>Cost</th><th>Receipt</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generated by Bolyra Production Auth &middot;
+    <a href="https://bolyra.ai" target="_blank">bolyra.ai</a> &middot;
+    All receipts cryptographically signed with secp256k1
+  </div>
+</div>
+
+<script>
+(async function() {
+  let data;
+  try {
+    const resp = await fetch('data.json');
+    data = await resp.json();
+  } catch(e) {
+    document.getElementById('subtitle').textContent = 'Error loading data.json - run: npx tsx generate.ts';
+    return;
+  }
+
+  const { summary, agentStats, toolStats, anomalyDescriptions, records } = data;
+
+  // Subtitle
+  document.getElementById('subtitle').textContent =
+    `${summary.totalCalls.toLocaleString()} agent tool calls \u00b7 30 days \u00b7 ${agentStats.length} agents`;
+
+  // Cards
+  const cardDefs = [
+    { label: 'Total Calls',     value: summary.totalCalls.toLocaleString(), cls: 'accent' },
+    { label: 'Signed Receipts', value: `${summary.signedReceipts.toLocaleString()} (100%)`, cls: 'accent' },
+    { label: 'Allowed',         value: summary.allowed.toLocaleString(), cls: 'green' },
+    { label: 'Denied',          value: summary.denied.toLocaleString(), cls: 'red' },
+    { label: 'Total Spend',     value: summary.totalSpendFormatted, cls: 'green' },
+    { label: 'Anomalies',       value: summary.anomalies.toString(), cls: 'yellow' },
+  ];
+  const cardsEl = document.getElementById('cards');
+  cardDefs.forEach(c => {
+    const div = document.createElement('div');
+    div.className = `card ${c.cls}`;
+    div.innerHTML = `<div class="value">${c.value}</div><div class="label">${c.label}</div>`;
+    cardsEl.appendChild(div);
+  });
+
+  // Tool bars
+  const barsEl = document.getElementById('tool-bars');
+  const tools = Object.entries(toolStats).sort((a,b) => (b[1].allowed+b[1].denied) - (a[1].allowed+a[1].denied));
+  const maxTotal = Math.max(...tools.map(([,v]) => v.allowed + v.denied));
+  tools.forEach(([name, stats]) => {
+    const total = stats.allowed + stats.denied;
+    const pctAllowed = (stats.allowed / total * 100).toFixed(1);
+    const pctDenied = (stats.denied / total * 100).toFixed(1);
+    const barWidth = (total / maxTotal * 100).toFixed(1);
+    const row = document.createElement('div');
+    row.className = 'tool-row';
+    row.innerHTML = `
+      <div class="tool-name">${name}</div>
+      <div class="bar-container" style="max-width: ${barWidth}%">
+        <div class="bar-allowed" style="width: ${pctAllowed}%"></div>
+        <div class="bar-denied" style="width: ${pctDenied}%"></div>
+      </div>
+      <div class="bar-label">${total}</div>`;
+    barsEl.appendChild(row);
+  });
+
+  // Agent table
+  const tbody = document.querySelector('#agent-table tbody');
+  agentStats.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${a.name}</td>
+      <td>${a.calls}</td>
+      <td style="color: var(--green)">${a.allowed}</td>
+      <td style="color: var(--red)">${a.denied}</td>
+      <td>$${(a.spend / 100).toFixed(2)}</td>
+      <td style="color: var(--text-dim)">${a.topTool}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Anomalies
+  const anomList = document.getElementById('anomalies');
+  anomalyDescriptions.forEach((desc, i) => {
+    const li = document.createElement('li');
+    const isDenied = desc.includes('DENIED');
+    li.className = isDenied ? '' : 'warn';
+    const icon = isDenied ? '\u{1F534}' : '\u{1F7E1}';
+    li.textContent = `${icon} ${desc}`;
+    anomList.appendChild(li);
+  });
+
+  // Receipt explorer (last 20)
+  const receiptBody = document.querySelector('#receipt-table tbody');
+  const last20 = records.slice(-20).reverse();
+  last20.forEach(r => {
+    const tr = document.createElement('tr');
+    const time = new Date(r.timestamp);
+    const timeStr = time.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    const badge = r.decision === 'allowed'
+      ? '<span class="badge badge-allowed">allowed</span>'
+      : '<span class="badge badge-denied">denied</span>';
+    const cost = r.cost !== undefined ? `$${(r.cost / 100).toFixed(2)}` : '\u2014';
+    const hash = r.receiptHash.slice(0, 12) + '\u2026';
+    tr.innerHTML = `
+      <td style="white-space:nowrap; font-size:0.65rem">${timeStr}</td>
+      <td>${r.agent}</td>
+      <td>${r.tool}</td>
+      <td>${badge}</td>
+      <td>${cost}</td>
+      <td><span class="hash" title="${r.receiptHash}">${hash}</span></td>`;
+    receiptBody.appendChild(tr);
+  });
+})();
+</script>
+</body>
+</html>
