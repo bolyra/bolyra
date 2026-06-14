@@ -1,34 +1,57 @@
-# @bolyra/mcp — ZKP authentication for MCP servers
+# @bolyra/mcp
 
-Drop-in middleware that adds mutual zero-knowledge proof authentication to any Model Context Protocol server. One wrapper call, no changes to your tool handlers. Works over stdio and HTTP.
+Gate MCP tool calls so only authorized agents can call sensitive tools.
 
-## Quick start (dev mode)
-
-Dev mode uses mock proofs — no circuit artifacts, no trusted setup, instant startup. Use it to build and test your server before wiring real ZKP verification.
+## Quick Start (60 seconds)
 
 ```bash
 npm install @bolyra/mcp @bolyra/sdk @modelcontextprotocol/sdk
 ```
 
+```typescript
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { withBolyraAuthStdio } from '@bolyra/mcp';
+
+const server = new McpServer({ name: 'my-server', version: '1.0.0' });
+
+server.tool('read_file', { path: { type: 'string' } }, async (args) => ({
+  content: [{ type: 'text', text: `Reading ${args.path}` }],
+}));
+
+withBolyraAuthStdio(server.server, {
+  devMode: true,
+  toolPolicy: {
+    // 1n = READ_DATA, 2n = WRITE_DATA (BigInt — add 'n' suffix)
+    read_file: 1n,
+  },
+});
+```
+
+That's it. Every `tools/call` now requires a valid Bolyra proof bundle.
+
+## Dev mode (full example)
+
+Dev mode uses mock proofs — no circuit artifacts, no trusted setup, instant startup. Use it to build and test your server before wiring real ZKP verification.
+
 ```ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { withBolyraAuthStdio } from '@bolyra/mcp';
-import { createDevIdentities, attachBolyraProof } from '@bolyra/sdk';
-import { z } from 'zod';
 
 // Server
 const server = new McpServer({ name: 'my-server', version: '1.0.0' });
 
-server.registerTool(
-  'read_file',
-  { description: 'Read a file', inputSchema: z.object({ path: z.string() }) },
-  async ({ path }) => ({ content: [{ type: 'text', text: 'file contents...' }] }),
-);
+server.tool('read_file', { path: { type: 'string' } }, async (args) => ({
+  content: [{ type: 'text', text: 'file contents...' }],
+}));
 
-withBolyraAuthStdio(server, {
+withBolyraAuthStdio(server.server, {
   devMode: true,
-  toolPolicy: { read_file: 0b01n, write_file: 0b11n },
+  toolPolicy: {
+    // 1n = READ_DATA, 2n = WRITE_DATA (BigInt — add 'n' suffix)
+    read_file: 1n,
+    write_file: 2n,
+  },
 });
 
 await server.connect(new StdioServerTransport());
@@ -138,7 +161,11 @@ Swap `devMode: true` for a real `resolveCredential` resolver and point the SDK a
 ```ts
 withBolyraAuthStdio(server, {
   resolveCredential: async (commitment) => myRegistry.get(commitment),
-  toolPolicy: { read_file: 0b01n, write_file: 0b11n },
+  toolPolicy: {
+    // 1n = READ_DATA, 2n = WRITE_DATA (BigInt — add 'n' suffix)
+    read_file: 1n,
+    write_file: 2n,
+  },
   sdkConfig: {
     circuitDir: '/path/to/circuits/build',
     rpcUrl: 'https://sepolia.base.org',

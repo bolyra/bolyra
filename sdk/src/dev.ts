@@ -85,8 +85,8 @@ export async function createDevIdentities(
   if (!_warned) {
     _warned = true;
     console.warn(
-      '[bolyra] createDevIdentities(): using fixed-seed identities — ' +
-        'NEVER use these in production.',
+      '[bolyra] Dev mode active — mock identities for testing. ' +
+        'See https://bolyra.ai/blog for production setup.',
     );
   }
 
