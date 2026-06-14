@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.4.0: dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.7.0: auth + commerce receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. Apache-2.0.">
+  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.5.1: ZKP SDK with dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.7.0: auth + commerce receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. Apache-2.0.">
   <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.7.0 (receipts + payment-protocols) live on npm. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. ~30 lines from install to verified call. v0.7.0: auth + commerce receipts — cryptographically signed via @bolyra/receipts.">
+  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.7.0 (receipts + payment-protocols) live on npm. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. ~30 lines from install to verified call. @bolyra/sdk@0.5.1, @bolyra/mcp@0.6.3, @bolyra/openclaw@0.3.2. v0.7.0: auth + commerce receipts — cryptographically signed via @bolyra/receipts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -599,7 +599,7 @@
   <!-- Available today -->
   <section id="today">
     <div class="container">
-      <p class="section-label">Available today &middot; v0.2.2 on npm</p>
+      <p class="section-label">Available today &middot; delegation v0.2.2 on npm</p>
       <h2 class="section-title">SD-JWT receipts for agent tool calls</h2>
       <p class="section-subtitle">~30 lines from <code>npm install</code> to a verified call. The human issues a scoped SD-JWT receipt; the agent presents it with a fresh KB-JWT (proof of holder-key possession); middleware verifies before any side effect. Rejects wrong audience, expired receipt, amount-over-cap, currency mismatch, revoked status, or replayed nonce &mdash; each with a crisp, switchable failure reason.</p>
       <div style="margin: 32px auto 40px; max-width: 920px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-elevated);">
@@ -644,14 +644,14 @@
 });
 <span class="kw">if</span> (<span class="op">!</span>result.ok) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
       </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade path:</strong> v0.4.0 dev mode → v0.6.0 auth receipts → v0.7.0 commerce receipts. Zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, MCP dev mode, and signed auth + commerce receipts. <code>npm install @bolyra/sdk</code>.</p>
+      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade path:</strong> v0.5.1 SDK + v0.6.3 MCP dev mode → v0.7.0 auth + commerce receipts. Zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, MCP dev mode, and signed auth + commerce receipts. <code>npm install @bolyra/sdk</code>.</p>
     </div>
   </section>
 
-  <!-- ZK handshake demo (v0.4.0) -->
+  <!-- ZK handshake demo (v0.5.1) -->
   <section id="zk-demo">
     <div class="container">
-      <p class="section-label">Zero-knowledge upgrade &middot; v0.4.0 on npm</p>
+      <p class="section-label">Zero-knowledge upgrade &middot; v0.5.1 on npm</p>
       <h2 class="section-title">Mutual ZKP handshake in ~140ms</h2>
       <p class="section-subtitle">Same trust model, zero information leakage. The human proves uniqueness without revealing identity; the agent proves an operator-signed credential without revealing the credential. Both Groth16 proofs are bound to a session nonce, verified atomically. Flip one byte of a proof &mdash; the pairing check fails by construction.</p>
       <div style="margin: 32px auto 40px; max-width: 920px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-elevated);">
@@ -719,9 +719,9 @@
   <!-- Code Example -->
   <section id="sdk" class="code-section">
     <div class="container">
-      <p class="section-label">ZKP SDK · v0.4.0 shipped</p>
+      <p class="section-label">ZKP SDK · v0.5.1 shipped</p>
       <h2 class="section-title">10 lines to mutual auth</h2>
-      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk@0.4.0</code>. Identity creation, credential issuance, parallel proof generation, on-chain verification, and one-way scope-narrowing delegation chains — without revealing operator, model, or scope to the relying party. <strong>Dev mode:</strong> <code>createDevIdentities()</code> for instant testing without circuit artifacts. Python bindings on PyPI as <code>bolyra==0.4.0</code>.</p>
+      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk@0.5.1</code>. Identity creation, credential issuance, parallel proof generation, on-chain verification, and one-way scope-narrowing delegation chains — without revealing operator, model, or scope to the relying party. <strong>Dev mode:</strong> <code>createDevIdentities()</code> for instant testing without circuit artifacts. Python bindings on PyPI as <code>bolyra==0.4.0</code>.</p>
       <div class="code-block-wrapper">
         <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
         <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> { <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
@@ -788,7 +788,7 @@
         <div class="feature-card">
           <div class="feature-icon mutual">MCP</div>
           <h3>MCP Middleware</h3>
-          <p><strong style="color: var(--green);">v0.6.0:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy, receiptSigner })</code>. Per-tool permission gating, delegation chain support, signed verification receipts, stdio + HTTP transports. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.6.0</code>.</p>
+          <p><strong style="color: var(--green);">v0.6.3:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy, receiptSigner })</code>. Per-tool permission gating, delegation chain support, signed verification receipts, stdio + HTTP transports. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.6.3</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">R</div>
@@ -803,7 +803,7 @@
         <div class="feature-card">
           <div class="feature-icon mutual">OC</div>
           <h3>OpenClaw Adapter</h3>
-          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw@0.3.0</code></p>
+          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw@0.3.2</code></p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">&rarr;</div>
@@ -941,7 +941,7 @@
           <span class="std-badge ietf">IETF</span>
           <h3>Draft (preparing for submission)</h3>
           <p><code>draft-bolyra-mutual-zkp-auth-01</code></p>
-          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. v0.4.0 spec aligns all circuits to Groth16 (REQUIRED), PLONK (OPTIONAL). Canonical 6-element Delegation public-signals layout locked for IETF submission.</p>
+          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. v0.5.1 SDK aligns all circuits to Groth16 (REQUIRED), PLONK (OPTIONAL). Canonical 6-element Delegation public-signals layout locked for IETF submission.</p>
         </div>
         <div class="standard-card">
           <span class="std-badge w3c">W3C</span>
