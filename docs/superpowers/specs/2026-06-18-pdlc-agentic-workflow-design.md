@@ -313,9 +313,6 @@ Requires these skills/tools:
 - `/review` skill (Claude Code built-in diff review)
 - `codex review` (Codex CLI independent review — see `/codex` skill)
 
-Requires these skills:
-- Orchestrator (inline diff review)
-
 ## Success Criteria
 
 1. A feature described conversationally reaches npm within a single session (or across 2 sessions for complex features)
