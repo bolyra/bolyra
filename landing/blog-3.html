@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your MCP Server Doesn't Need Auth Code. It Needs a Gateway. — Bolyra</title>
+  <meta name="description" content="MCP auth belongs in front of your server, not inside it. @bolyra/gateway is a reverse proxy that verifies agent credentials, enforces per-tool permissions, prevents replay, and emits signed audit receipts. One command. Zero auth code in your server.">
+  <meta property="og:title" content="Your MCP Server Doesn't Need Auth Code. It Needs a Gateway. — Bolyra">
+  <meta property="og:description" content="MCP auth belongs in front of your server, not inside it. One command, zero auth code in your server.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://bolyra.ai/blog-3">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --text-muted: #888;
+      --accent: #6366f1; --accent-hover: #818cf8;
+      --green: #4ade80; --border: #222; --max-width: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 56px;
+    }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+
+    /* Article */
+    article { padding: 100px 0 80px; }
+    article h1 {
+      font-size: 2.2rem; font-weight: 800; line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 40px; }
+    article h2 {
+      font-size: 1.4rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    article h3 {
+      font-size: 1.1rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px;
+    }
+    article p { margin-bottom: 16px; }
+    article ul, article ol { margin-bottom: 16px; padding-left: 24px; }
+    article li { margin-bottom: 6px; }
+
+    /* Code */
+    code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px;
+    }
+    pre {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; overflow-x: auto; margin-bottom: 24px; line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+
+    /* Diagram */
+    .diagram {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 24px; margin: 24px 0;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 0.85rem; line-height: 1.8; text-align: center;
+      color: var(--text-muted);
+    }
+    .diagram .highlight { color: var(--green); font-weight: 700; }
+    .diagram .label { color: var(--accent); }
+
+    /* CTA */
+    .cta-box {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; margin-top: 48px; text-align: center;
+    }
+    .cta-box a {
+      display: inline-block; background: var(--accent); color: #fff;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600;
+      margin-top: 12px; transition: background 0.2s;
+    }
+    .cta-box a:hover { background: var(--accent-hover); color: #fff; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 0;
+      color: var(--text-muted); font-size: 0.85rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <nav><div class="container">
+    <a href="/" class="logo">Bolyra</a>
+    <a href="/blog">Blog</a>
+  </div></nav>
+
+  <article class="container">
+    <h1>Your MCP Server Doesn't Need Auth Code. It Needs a Gateway.</h1>
+    <p class="meta">June 18, 2026 &middot; Viswanadha Pratap Kondoju</p>
+
+    <h2>The pattern is old. The problem is new.</h2>
+
+    <p>nginx sits in front of your web server. It terminates TLS, checks headers, enforces rate limits. Your app never sees the raw connection.</p>
+
+    <p>API gateways sit in front of your microservices. They validate JWTs, route traffic, collect metrics. Your service code stays clean.</p>
+
+    <p>MCP servers have no equivalent. Auth happens inside the tool handler, or it doesn't happen at all.</p>
+
+    <h2>What that looks like today</h2>
+
+    <p>You build an MCP server. It exposes tools. An agent calls those tools over stdio or HTTP.</p>
+
+    <p>If you want auth, you have two options:</p>
+
+    <ol>
+      <li>Import a middleware library and wire it into your server code</li>
+      <li>Skip auth and hope the transport layer is enough</li>
+    </ol>
+
+    <p>Option 1 means your server needs to understand proof bundles, permission bitmasks, nonce stores, and receipt signing. Option 2 means any agent that can reach the transport can call any tool.</p>
+
+    <p>Neither is what you want.</p>
+
+    <h2>Auth in front, not inside</h2>
+
+    <p>What you want is a proxy that intercepts requests before they reach your server. The proxy handles verification. Your server handles tools.</p>
+
+    <div class="diagram">
+      <span class="label">Agent</span> &rarr; <span class="highlight">@bolyra/gateway</span> &rarr; <span class="label">Your MCP Server</span><br><br>
+      verifyBundle() &middot; checkToolPolicy() &middot; rejectReplay() &middot; emitReceipt()
+    </div>
+
+    <p>The gateway verifies agent credentials using ZKP proof bundles. It checks per-tool permission policies. It rejects replayed nonces. It emits a signed audit receipt for every decision, allow and deny. Then it forwards the request with <code>X-Bolyra-*</code> headers that tell your server who passed verification.</p>
+
+    <p>Your server reads headers. It never imports a crypto library.</p>
+
+    <h2>One command</h2>
+
+<pre><code>npx @bolyra/gateway --target http://localhost:3000/mcp</code></pre>
+
+    <p>That starts a reverse proxy on port 4000. Every <code>tools/call</code> request gets verified before it reaches your server. Everything else (<code>initialize</code>, <code>ping</code>) passes through.</p>
+
+    <p>Add a config file for per-tool policies:</p>
+
+<pre><code># gateway.yaml
+target: http://localhost:3000/mcp
+toolPolicy:
+  read_file: 1    # READ_DATA
+  write_file: 2   # WRITE_DATA
+  delete_file: 2  # WRITE_DATA
+  transfer: 16    # FINANCIAL_UNLIMITED
+receipts:
+  file: ./receipts/
+hmac:
+  secret: ${GATEWAY_HMAC_SECRET}</code></pre>
+
+    <p>Now <code>read_file</code> requires a credential with at least <code>READ_DATA</code> permission. <code>transfer</code> requires <code>FINANCIAL_UNLIMITED</code>. Every verification decision writes a signed receipt to <code>./receipts/</code>. The HMAC secret signs <code>X-Bolyra-*</code> headers so your upstream can verify they came from the gateway, not a forged client.</p>
+
+    <h2>What the gateway decides</h2>
+
+    <p>For every <code>tools/call</code> request:</p>
+
+    <ol>
+      <li><strong>Credential verification.</strong> The proof bundle is verified via <code>verifyBundle()</code>. Agent identity, delegation chain, scope commitment, expiry. If any check fails: 401.</li>
+      <li><strong>Tool policy.</strong> The agent's effective permission bitmask is checked against the tool's required permission. If the agent lacks the bits: 403.</li>
+      <li><strong>Replay protection.</strong> The session nonce is checked against the nonce store. If it's been seen before: 403.</li>
+      <li><strong>Receipt.</strong> A signed receipt records the decision. Allow or deny. Timestamped, signed with ES256K.</li>
+    </ol>
+
+    <p>For non-tool methods (<code>initialize</code>, <code>notifications/initialized</code>, <code>ping</code>): pass through without auth. These are handshake and keepalive, not actions.</p>
+
+    <p>For everything else (<code>resources/read</code>, <code>prompts/get</code>): auth is required but no tool policy is checked. You get identity verification without tool-level gating.</p>
+
+    <h2>What your server sees</h2>
+
+    <p>After the gateway verifies a request, it injects headers:</p>
+
+<pre><code>X-Bolyra-Verified: true
+X-Bolyra-DID: did:bolyra:base-sepolia:0x1a2b...
+X-Bolyra-Permissions: 3
+X-Bolyra-Score: 85
+X-Bolyra-HMAC: sha256=a1b2c3...</code></pre>
+
+    <p>Your server reads <code>X-Bolyra-Verified</code> and <code>X-Bolyra-Permissions</code>. No SDK import. No proof parsing. No nonce tracking. Just headers.</p>
+
+    <p>The HMAC proves the headers came from the gateway. Without it, a client that bypasses the proxy could forge <code>X-Bolyra-Verified: true</code>. With it, your server can verify the signature in one line.</p>
+
+    <h2>Why not just use middleware?</h2>
+
+    <p>Middleware works. <code>@bolyra/mcp</code> ships <code>withBolyraAuthStdio()</code> and it's the right choice if you want auth wired directly into your server process.</p>
+
+    <p>The gateway is for a different situation:</p>
+
+    <ul>
+      <li><strong>You didn't write the MCP server.</strong> You're running someone else's server and want to add auth without forking it.</li>
+      <li><strong>You have multiple MCP servers.</strong> One gateway, one policy file, N servers behind it.</li>
+      <li><strong>You want separation of concerns.</strong> Auth decisions in one process, tool logic in another. Different deploy cadence, different failure domain.</li>
+      <li><strong>You want audit receipts without touching server code.</strong> The gateway emits receipts for every decision. Your server never calls a receipt API.</li>
+    </ul>
+
+    <p>Middleware and gateway are not competing. The gateway uses the same <code>verifyBundle()</code> and <code>checkToolPolicy()</code> from <code>@bolyra/mcp</code>. Same verification, different deployment topology.</p>
+
+    <h2>For library users</h2>
+
+    <p>If you do want the gateway logic inside your process, import the middleware:</p>
+
+<pre><code>import { createGatewayMiddleware } from '@bolyra/gateway';
+
+const middleware = createGatewayMiddleware({
+  toolPolicy: { read_file: 1n, write_file: 2n },
+  receipts: { stdout: true },
+});
+
+app.use('/mcp', middleware, mcpHandler);</code></pre>
+
+    <p>Same verification pipeline. Express, Hono, Fastify, or any framework that takes <code>(req, res, next)</code>.</p>
+
+    <h2>The shape of the thing</h2>
+
+    <p><a href="/blog-2">Last time</a> we asked: who is this agent, did a human authorize it, what tools can it use, has this proof been seen before, can you prove what happened?</p>
+
+    <p>The gateway answers all five without touching your server code.</p>
+
+    <p>Agent identity: verified via the proof bundle's credential commitment. Human delegation: checked through the delegation chain. Tool permissions: enforced by the tool policy map. Replay: blocked by the nonce store. Audit: signed receipts on every decision.</p>
+
+    <p>Your server stays clean. The gateway handles the rest.</p>
+
+<pre><code>npx @bolyra/gateway --target http://localhost:3000/mcp</code></pre>
+
+    <p style="margin-top: 32px; text-align: center;"><a href="/blog-2">&larr; Previous: MCP Auth Works in Dev. Then Production Asks: Who Is This User?</a></p>
+
+    <div class="cta-box">
+      <p>See the gateway source, config reference, and architecture docs.</p>
+      <a href="https://github.com/bolyra/bolyra/tree/main/integrations/gateway">View on GitHub</a>
+    </div>
+  </article>
+
+  <footer><div class="container">
+    &copy; 2026 ZKProva Inc. &middot; <a href="/">bolyra.ai</a> &middot; <a href="https://github.com/bolyra/bolyra">GitHub</a> &middot; <a href="mailto:viswa@bolyra.ai">viswa@bolyra.ai</a>
+  </div></footer>
+</body>
+</html>
