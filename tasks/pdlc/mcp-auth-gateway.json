@@ -1,134 +1,54 @@
 {
   "id": "pdlc-2026-06-18-mcp-auth-gateway",
   "feature": "Bolyra MCP Auth Gateway — hosted verification proxy for production MCP servers",
-  "status": "active",
-  "stage": "REVIEW",
+  "status": "complete",
+  "stage": "POST-SHIP",
   "mode": "standard",
   "created": "2026-06-18T03:35:00Z",
-  "updated": "2026-06-18T06:15:00Z",
+  "updated": "2026-06-18T04:55:00Z",
   "spec": "docs/superpowers/specs/2026-06-18-mcp-auth-gateway-design.md",
   "plan": "docs/superpowers/plans/2026-06-18-mcp-auth-gateway.md",
   "gates": {
     "spec": { "status": "approved", "approvedAt": "2026-06-18T04:25:00Z" },
     "plan": { "status": "approved", "approvedAt": "2026-06-18T05:00:00Z" },
-    "ship": { "status": "pending" },
-    "post_ship": { "status": "pending" }
+    "ship": { "status": "approved", "approvedAt": "2026-06-18T04:45:00Z" },
+    "post_ship": { "status": "approved", "approvedAt": "2026-06-18T04:55:00Z" }
   },
   "tasks": [
-    {
-      "id": 1,
-      "description": "Package scaffolding: package.json, tsconfig.json, jest.config.js, types.ts, empty index.ts",
-      "type": "parallel",
-      "depends_on": [],
-      "status": "complete",
-      "size": "S",
-      "tests": "tsc --noEmit: pass",
-      "files_changed": ["integrations/gateway/package.json", "integrations/gateway/tsconfig.json", "integrations/gateway/jest.config.js", "integrations/gateway/src/types.ts", "integrations/gateway/src/index.ts"]
-    },
-    {
-      "id": 2,
-      "description": "Config loader: YAML/JSON parsing, env var substitution, CLI flag merge, validation",
-      "type": "parallel",
-      "depends_on": [],
-      "status": "complete",
-      "size": "M",
-      "tests": "16 passing",
-      "files_changed": ["integrations/gateway/src/config.ts", "integrations/gateway/test/config.test.ts"]
-    },
-    {
-      "id": 3,
-      "description": "Header injection: X-Bolyra-* headers from BolyraAuthContext, optional HMAC signing",
-      "type": "parallel",
-      "depends_on": [],
-      "status": "complete",
-      "size": "S",
-      "tests": "10 passing",
-      "files_changed": ["integrations/gateway/src/headers.ts", "integrations/gateway/test/headers.test.ts"]
-    },
-    {
-      "id": 4,
-      "description": "Receipt writer: file (day-rotated), stdout (NDJSON), webhook output modes",
-      "type": "parallel",
-      "depends_on": [],
-      "status": "complete",
-      "size": "M",
-      "tests": "5 passing",
-      "files_changed": ["integrations/gateway/src/receipts.ts", "integrations/gateway/test/receipts.test.ts"]
-    },
-    {
-      "id": 5,
-      "description": "Health check endpoint: /healthz with upstream reachability probe",
-      "type": "parallel",
-      "depends_on": [],
-      "status": "complete",
-      "size": "S",
-      "tests": "3 passing",
-      "files_changed": ["integrations/gateway/src/health.ts", "integrations/gateway/test/health.test.ts"]
-    },
-    {
-      "id": 6,
-      "description": "Auth middleware: extract Bolyra auth header, call verifyBundle + checkToolPolicy, produce 401/403 JSON-RPC errors",
-      "type": "sequential",
-      "depends_on": [1],
-      "status": "complete",
-      "size": "M",
-      "tests": "11 passing",
-      "files_changed": ["integrations/gateway/src/middleware.ts", "integrations/gateway/test/middleware.test.ts"]
-    },
-    {
-      "id": 7,
-      "description": "Reverse proxy core: HTTP forwarding, method routing, 502 handling, X-Bolyra-* injection",
-      "type": "sequential",
-      "depends_on": [1, 3, 5, 6],
-      "status": "complete",
-      "size": "L",
-      "tests": "8 passing",
-      "files_changed": ["integrations/gateway/src/proxy.ts", "integrations/gateway/test/proxy.test.ts"]
-    },
-    {
-      "id": 8,
-      "description": "CLI entry point: parseArgs, config merge, startup banner",
-      "type": "sequential",
-      "depends_on": [2, 7, 4],
-      "status": "complete",
-      "size": "M",
-      "tests": "tsc --noEmit: pass",
-      "files_changed": ["integrations/gateway/src/cli.ts"]
-    },
-    {
-      "id": 9,
-      "description": "Library exports: finalize index.ts, update package.json bin/files",
-      "type": "sequential",
-      "depends_on": [1, 2, 3, 4, 5, 6, 7, 8],
-      "status": "complete",
-      "size": "S",
-      "tests": "npm run build: pass, dist/ produced",
-      "files_changed": ["integrations/gateway/src/index.ts", "integrations/gateway/package.json"]
-    },
-    {
-      "id": 10,
-      "description": "Integration tests: e2e with mock upstream, dev-mode auth, receipts",
-      "type": "sequential",
-      "depends_on": [9],
-      "status": "complete",
-      "size": "M",
-      "tests": "7 passing",
-      "files_changed": ["integrations/gateway/test/integration.test.ts"]
-    },
-    {
-      "id": 11,
-      "description": "Documentation: README with quickstart, config reference, library API",
-      "type": "sequential",
-      "depends_on": [9],
-      "status": "complete",
-      "size": "S",
-      "tests": "README exists: pass",
-      "files_changed": ["integrations/gateway/README.md"]
-    }
+    { "id": 1, "description": "Package scaffolding", "status": "complete", "size": "S" },
+    { "id": 2, "description": "Config loader", "status": "complete", "size": "M" },
+    { "id": 3, "description": "Header injection", "status": "complete", "size": "S" },
+    { "id": 4, "description": "Receipt writer", "status": "complete", "size": "M" },
+    { "id": 5, "description": "Health check endpoint", "status": "complete", "size": "S" },
+    { "id": 6, "description": "Auth middleware", "status": "complete", "size": "M" },
+    { "id": 7, "description": "Reverse proxy core", "status": "complete", "size": "L" },
+    { "id": 8, "description": "CLI entry point", "status": "complete", "size": "M" },
+    { "id": 9, "description": "Library exports", "status": "complete", "size": "S" },
+    { "id": 10, "description": "Integration tests", "status": "complete", "size": "M" },
+    { "id": 11, "description": "Documentation", "status": "complete", "size": "S" }
   ],
-  "reviews": {},
-  "release": {},
-  "commits": ["ddc6bc0"],
+  "reviews": {
+    "security": {
+      "date": "2026-06-18",
+      "findings": { "critical": 2, "high": 4, "medium": 3, "low": 3 },
+      "status": "all_fixed",
+      "commit": "5be4d34"
+    },
+    "sdk_guardian": {
+      "date": "2026-06-18",
+      "findings": { "critical": 1, "high": 4, "medium": 3, "low": 4 },
+      "status": "all_fixed",
+      "commit": "5be4d34"
+    }
+  },
+  "release": {
+    "npm": "@bolyra/gateway@0.1.0",
+    "pr": "https://github.com/bolyra/bolyra/pull/50",
+    "tag": "@bolyra/gateway@0.1.0",
+    "landing_page": "https://bolyra.ai (ecosystem section updated)",
+    "blog": "https://bolyra.ai/blog-3"
+  },
+  "commits": ["ddc6bc0", "5be4d34", "74dbc90", "88aa39b", "093540b"],
   "intake_context": {
     "source": "Codex recommendation (2026-06-18)",
     "description": "Hosted verification proxy that sits in front of any production MCP server.",
