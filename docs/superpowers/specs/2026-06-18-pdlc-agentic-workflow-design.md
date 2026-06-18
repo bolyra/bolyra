@@ -60,7 +60,7 @@ Orchestrator presents the task list with complexity estimates (S/M/L) and parall
 Orchestrator fans out tasks to subagents in git worktrees.
 
 **Worktree lifecycle:**
-1. Create: `git worktree add /tmp/bolyra-task-N -b pdlc/task-N`
+1. Create: `git worktree add ~/Projects/bolyra/.worktrees/task-N -b pdlc/task-N`
 2. Dispatch subagent with `isolation: "worktree"` containing: spec excerpt, task description, file paths, test commands, DCO sign-off requirement
 3. Subagent implements, runs tests, commits with `Signed-off-by:`
 4. Subagent returns: branch name, commit SHAs, test results, files changed
@@ -102,7 +102,7 @@ Orchestrator dispatches review agents against implementation diffs:
 | `bolyra-sdk-guardian` | API surface, version consistency, cross-package compat | Always |
 | `bolyra-security` | Targeted audit on changed attack surfaces | Always (scoped to changed files) |
 | `circuit-zkp-reviewer` | Circuit constraints, trusted setup | `circuits/` or `contracts/` in diff |
-| `superpowers:code-reviewer` | Diff review against plan | Always |
+| Orchestrator (inline diff review) | Diff review against plan | Always |
 | Conformance runner | `npm run conformance` | Always |
 | Full test suite | `npm test` | Always |
 
@@ -119,9 +119,10 @@ If review agents disagree, orchestrator surfaces both opinions with its own reco
 ### Stage 6: RELEASE
 
 Orchestrator merges task branches:
-1. Sequential rebase of task branches into `pdlc/{feature}` (linear history)
-2. If merge conflicts arise between parallel tasks, orchestrator resolves or flags to user
-3. Squash-merge to main
+1. Sequential rebase of task branches into `pdlc/{feature}` in task-ID order (linear history)
+2. If merge conflicts arise between parallel tasks: trivial conflicts (import statements, adjacent lines) are auto-resolved; non-trivial conflicts are flagged to user
+3. If conflict resolution changes code, REVIEW stage re-runs on the merged result
+4. Squash-merge to main
 
 Then delegates to `bolyra-release`:
 - Version bump (patch for fixes, minor for features, major for breaking)
@@ -157,7 +158,7 @@ User acknowledges. Pipeline complete.
 | REVIEW | `bolyra-sdk-guardian` | API + compat review | Pass/fail + findings |
 | REVIEW | `bolyra-security` | Security audit | Pass/fail + findings |
 | REVIEW | `circuit-zkp-reviewer` (conditional) | Circuit audit | Pass/fail + findings |
-| REVIEW | `superpowers:code-reviewer` | Diff vs plan | Pass/fail + findings |
+| REVIEW | Orchestrator (inline diff review) | Diff vs plan | Pass/fail + findings |
 | RELEASE | `bolyra-release` | Publish pipeline | Published packages |
 | POST-SHIP | `gtm-outbound` (conditional) | Outbound draft | Draft in `.viswa/agent/drafts/` |
 | POST-SHIP | `bolyra-standards` | Conformance update | Updated `spec/CONFORMANCE.md` |
@@ -172,17 +173,18 @@ Each pipeline run persists to `~/Projects/bolyra/tasks/pdlc/{feature-slug}.json`
 {
   "id": "pdlc-{date}-{slug}",
   "feature": "Human-readable description",
-  "stage": "INTAKE|SPEC|PLAN|IMPLEMENT|REVIEW|RELEASE|POST_SHIP|COMPLETE",
+  "status": "active|rejected|complete",
+  "stage": "INTAKE|SPEC|PLAN|IMPLEMENT|REVIEW|RELEASE|POST_SHIP",
   "mode": "standard|hotfix",
   "created": "ISO-8601",
   "updated": "ISO-8601",
-  "spec": "path to spec doc",
-  "plan": "path to plan doc",
+  "spec": "path to spec doc (null in hotfix mode)",
+  "plan": "path to plan doc (null in hotfix mode)",
   "gates": {
     "spec": { "status": "pending|approved|revised|rejected", "at": "ISO-8601" },
     "plan": { "status": "pending|approved|revised|rejected", "at": "ISO-8601" },
     "ship": { "status": "pending|approved|revised|rejected", "at": "ISO-8601" },
-    "post_ship": { "status": "pending|acknowledged", "at": "ISO-8601" }
+    "post_ship": { "status": "pending|acknowledged", "at": "ISO-8601" }  // note: "acknowledged" (not "approved") — post-ship is confirmation, not approval
   },
   "tasks": [
     {
@@ -219,7 +221,9 @@ Each pipeline run persists to `~/Projects/bolyra/tasks/pdlc/{feature-slug}.json`
 
 - **Resume:** "resume {feature}" or "status" reads state file, reports current stage, picks up
 - **Multiple pipelines:** Multiple features can be in flight simultaneously. "list pipelines" shows all active `tasks/pdlc/*.json`
-- **Cleanup:** After Gate 4, state file gets `"completed": true`, worktree branches deleted. File stays as historical record.
+- **Cleanup:** After Gate 4, state file status changes to `"complete"`, worktree branches deleted. File stays as historical record.
+- **Rejection:** When a pipeline is rejected at any gate, status changes to `"rejected"`. State file stays on disk. "list pipelines" distinguishes active from rejected from complete.
+- **Staleness:** Pipelines inactive for >7 days should be reviewed for relevance before resuming. The orchestrator warns on resume if the pipeline has been idle that long.
 
 ## Orchestrator Agent
 
@@ -298,8 +302,12 @@ Requires these agents to exist (all created 2026-06-18):
 - `circuit-zkp-reviewer`
 - `gtm-outbound`
 
+The orchestrator agent definition (`bolyra-pdlc`) is a separate deliverable built from this spec.
+
+No external skills required. The orchestrator handles diff-vs-plan review inline.
+
 Requires these skills:
-- `superpowers:code-reviewer`
+- Orchestrator (inline diff review)
 
 ## Success Criteria
 
