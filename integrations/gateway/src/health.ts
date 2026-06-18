@@ -10,7 +10,8 @@ import * as https from 'https';
 import type { ServerResponse } from 'http';
 import type { GatewayConfig, GatewayRequest } from './types';
 
-const VERSION = '0.1.0';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const VERSION: string = (require('../package.json') as { version: string }).version;
 const PROBE_TIMEOUT = 2000; // 2 seconds
 
 /**
@@ -36,14 +37,9 @@ export function createHealthHandler(
 
     const body = JSON.stringify({
       status,
-      gateway: '@bolyra/gateway',
       version: VERSION,
       uptime,
-      target: config.target,
-      targetReachable,
-      mode: config.devMode ? 'dev' : 'production',
-      receiptsEnabled: config.receipts.enabled,
-      nonceStore: config.nonce.store,
+      upstream: targetReachable ? 'reachable' : 'unreachable',
     });
 
     res.writeHead(httpStatus, {

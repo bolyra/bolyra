@@ -16,7 +16,8 @@ import { createReceiptWriter } from './receipts';
 import { MemoryNonceStore } from '@bolyra/mcp';
 import type { CliFlags } from './config';
 
-const VERSION = '0.1.0';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const VERSION: string = (require('../package.json') as { version: string }).version;
 
 const HELP = `
 @bolyra/gateway v${VERSION}
@@ -106,6 +107,11 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   } catch (err) {
     console.error(`Configuration error: ${(err as Error).message}`);
     process.exit(1);
+  }
+
+  // Warn if HMAC is not configured in production mode
+  if (!config.devMode && !config.hmac) {
+    console.warn('[gateway] WARNING: HMAC signing not configured. X-Bolyra-* headers sent to upstream will be unsigned. Set hmac.secret in your config for production deployments.');
   }
 
   // Create receipt writer

@@ -111,15 +111,33 @@ describe('reverse proxy', () => {
     });
   });
 
-  it('forwards non-tools/call methods without auth', async () => {
+  it('forwards auth-exempt methods (initialize, ping) without auth', async () => {
     const { status, body } = await proxyRequest(gatewayPort, {
-      body: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+      body: { jsonrpc: '2.0', id: 1, method: 'initialize' },
     });
     expect(status).toBe(200);
     expect(body.result).toBeDefined();
     expect(lastUpstreamReq).not.toBeNull();
     // Authorization header should be stripped
     expect(lastUpstreamReq!.headers['authorization']).toBeUndefined();
+  });
+
+  it('requires auth for non-exempt methods like tools/list', async () => {
+    const { status, body } = await proxyRequest(gatewayPort, {
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+    });
+    expect(status).toBe(401);
+    expect(body.error.code).toBe(-32000);
+  });
+
+  it('forwards non-exempt methods with valid auth', async () => {
+    const { status, body } = await proxyRequest(gatewayPort, {
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+      headers: { Authorization: `Bolyra ${makeDevBundle()}` },
+    });
+    expect(status).toBe(200);
+    expect(body.result).toBeDefined();
+    expect(lastUpstreamReq).not.toBeNull();
   });
 
   it('gates tools/call — returns 401 without auth', async () => {
@@ -161,7 +179,6 @@ describe('reverse proxy', () => {
       path: '/healthz',
     });
     expect(status).toBe(200);
-    expect(body.gateway).toBe('@bolyra/gateway');
     expect(body.version).toBe('0.1.0');
     // The health probe sends a HEAD to upstream, which is expected.
     // But the original request body should NOT be forwarded.
@@ -187,7 +204,7 @@ describe('reverse proxy', () => {
 
     try {
       const { status, body } = await proxyRequest(deadPort, {
-        body: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+        body: { jsonrpc: '2.0', id: 1, method: 'initialize' },
       });
       expect(status).toBe(502);
       expect(body.error.message).toContain('Bad Gateway');

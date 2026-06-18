@@ -59,12 +59,8 @@ describe('health check', () => {
 
       expect(status).toBe(200);
       expect(body.status).toBe('ok');
-      expect(body.gateway).toBe('@bolyra/gateway');
       expect(body.version).toBe('0.1.0');
-      expect(body.targetReachable).toBe(true);
-      expect(body.mode).toBe('production');
-      expect(body.receiptsEnabled).toBe(true);
-      expect(body.nonceStore).toBe('memory');
+      expect(body.upstream).toBe('reachable');
       expect(typeof body.uptime).toBe('number');
     } finally {
       upstream.close();
@@ -78,7 +74,7 @@ describe('health check', () => {
 
     expect(status).toBe(503);
     expect(body.status).toBe('degraded');
-    expect(body.targetReachable).toBe(false);
+    expect(body.upstream).toBe('unreachable');
   });
 
   it('shows dev mode when configured', async () => {
@@ -86,6 +82,8 @@ describe('health check', () => {
     const handler = createHealthHandler(config);
     const { body } = await makeRequest(handler);
 
-    expect(body.mode).toBe('dev');
+    // M1: health endpoint no longer exposes mode, target, or internal config
+    expect(body.status).toBeDefined();
+    expect(body.version).toBeDefined();
   });
 });

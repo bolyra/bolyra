@@ -42,9 +42,11 @@ function createFileWriter(baseDir: string): ReceiptWriter {
       const now = new Date();
       const dateDir = now.toISOString().split('T')[0]; // YYYY-MM-DD
       const timestamp = now.toISOString().replace(/[:.]/g, '-');
-      const receiptId = (data as { receiptId?: string }).receiptId ??
+      const rawReceiptId = (data as { receiptId?: string }).receiptId ??
         (data as { payload?: { receiptId?: string } }).payload?.receiptId ??
         `unknown-${Date.now()}`;
+      // Sanitize: strip path traversal and non-safe characters
+      const receiptId = path.basename(rawReceiptId).replace(/[^a-zA-Z0-9\-_]/g, '_');
       const dir = path.join(baseDir, dateDir);
       fs.mkdirSync(dir, { recursive: true });
       const filePath = path.join(dir, `${timestamp}-${receiptId}.json`);

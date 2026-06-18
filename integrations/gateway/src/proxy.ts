@@ -4,8 +4,9 @@
  * HTTP reverse proxy using native Node.js http/https.request.
  * Routes requests based on JSON-RPC method:
  * - GET {healthPath} -> health handler
- * - JSON-RPC method != "tools/call" -> forward without auth
- * - JSON-RPC method == "tools/call" -> auth middleware, then forward
+ * - Auth-exempt methods (initialize, notifications/initialized, ping) -> forward without auth
+ * - All other methods -> auth middleware (verifyBundle), then forward
+ * - tools/call -> additionally checks per-tool policy (checkToolPolicy)
  */
 
 import * as http from 'http';
@@ -54,7 +55,7 @@ export function createGatewayProxy(options: GatewayProxyOptions): http.Server {
       }
 
       // Read the full body for JSON-RPC parsing
-      const rawBody = await readBody(req);
+      const rawBody = await readBody(req, config.maxBodySize);
       req.rawBody = rawBody;
 
       // Parse JSON-RPC body
@@ -77,32 +78,46 @@ export function createGatewayProxy(options: GatewayProxyOptions): http.Server {
         }
       }
 
-      // Determine if this is a tools/call that needs auth
-      const isToolsCall = jsonRpcBody?.method === 'tools/call';
+      // Methods exempt from auth (initialization handshake + keep-alive)
+      const AUTH_EXEMPT_METHODS = new Set(['initialize', 'notifications/initialized', 'ping']);
+      const method = jsonRpcBody?.method;
+      const isAuthExempt = !method || AUTH_EXEMPT_METHODS.has(method);
+      const isToolsCall = method === 'tools/call';
 
-      if (isToolsCall) {
-        // Extract tool name for policy check
-        const toolName = extractToolName(jsonRpcBody as unknown as Record<string, unknown>);
+      if (!isAuthExempt) {
+        // Extract tool name for policy check (only meaningful for tools/call)
+        const toolName = isToolsCall
+          ? extractToolName(jsonRpcBody as unknown as Record<string, unknown>)
+          : undefined;
 
-        // Run auth middleware
-        const authorized = await authMiddleware(req, res, toolName);
+        // Run auth middleware (verifyBundle for all; checkToolPolicy only for tools/call)
+        const authorized = await authMiddleware(req, res, isToolsCall ? toolName : undefined);
         if (!authorized) {
           // Middleware already sent response
-          // Write denial receipt
-          writeReceiptForDenial(receiptWriter, jsonRpcBody, toolName);
+          if (isToolsCall) {
+            writeReceiptForDenial(receiptWriter, jsonRpcBody, toolName);
+          }
           return;
         }
 
-        // Write allow receipt
-        writeReceiptForAllow(receiptWriter, req.bolyra!, jsonRpcBody, toolName);
+        // Write allow receipt for tools/call
+        if (isToolsCall) {
+          writeReceiptForAllow(receiptWriter, req.bolyra!, jsonRpcBody, toolName);
+        }
       }
 
       // Forward request to upstream
       await forwardRequest(req, res, targetUrl, isTargetHttps, config);
     } catch (err) {
-      console.error('[gateway] unhandled error:', err);
-      if (!res.headersSent) {
-        sendJsonRpcError(res, 502, req.jsonRpcBody?.id ?? null, -32603, 'Internal gateway error');
+      if ((err as any)?.statusCode === 413) {
+        if (!res.headersSent) {
+          sendJsonRpcError(res, 413, null, -32600, 'Request body too large');
+        }
+      } else {
+        console.error('[gateway] unhandled error:', err);
+        if (!res.headersSent) {
+          sendJsonRpcError(res, 502, req.jsonRpcBody?.id ?? null, -32603, 'Internal gateway error');
+        }
       }
     }
   });
@@ -110,11 +125,20 @@ export function createGatewayProxy(options: GatewayProxyOptions): http.Server {
   return server;
 }
 
-/** Read the full request body into a buffer. */
-function readBody(req: http.IncomingMessage): Promise<Buffer> {
+/** Read the full request body into a buffer, enforcing a size limit. */
+function readBody(req: http.IncomingMessage, maxBodySize: number = 1_048_576): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxBodySize) {
+        req.destroy(new Error('Request body too large'));
+        reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
@@ -133,6 +157,13 @@ function forwardRequest(
     const forwardHeaders: Record<string, string | string[] | undefined> = { ...req.headers };
     delete forwardHeaders['authorization']; // Consumed by gateway
     delete forwardHeaders['host']; // Will be rewritten
+
+    // Strip ALL incoming X-Bolyra-* headers to prevent spoofing
+    for (const key of Object.keys(forwardHeaders)) {
+      if (/^x-bolyra-/i.test(key)) {
+        delete forwardHeaders[key];
+      }
+    }
     forwardHeaders['host'] = targetUrl.host;
 
     // Inject X-Bolyra-* headers for authenticated requests
@@ -177,7 +208,7 @@ function forwardRequest(
     proxyReq.on('error', (err) => {
       console.error('[gateway] upstream error:', err.message);
       if (!res.headersSent) {
-        sendJsonRpcError(res, 502, req.jsonRpcBody?.id ?? null, -32000, `Bad Gateway: upstream connection failed (${err.message})`);
+        sendJsonRpcError(res, 502, req.jsonRpcBody?.id ?? null, -32000, 'Bad Gateway: upstream connection failed');
       }
       resolve();
     });

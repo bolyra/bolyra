@@ -110,6 +110,20 @@ export function validateConfig(config: Partial<GatewayConfig>): asserts config i
     errors.push('"nonce.store" must be "memory" (Redis adapter deferred to v0.2)');
   }
 
+  // HMAC secret validation
+  if (config.hmac) {
+    if (!config.hmac.secret || typeof config.hmac.secret !== 'string') {
+      errors.push('"hmac.secret" is required and must be a non-empty string');
+    } else {
+      if (config.hmac.secret.includes('${')) {
+        errors.push('"hmac.secret" contains unresolved environment variable reference');
+      }
+      if (config.hmac.secret.replace(/[^0-9a-fA-F]/g, '').length < 32) {
+        errors.push('"hmac.secret" must be at least 32 hex characters (16 bytes of entropy)');
+      }
+    }
+  }
+
   if (errors.length > 0) {
     throw new ConfigValidationError(errors);
   }

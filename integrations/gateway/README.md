@@ -84,7 +84,7 @@ devMode: false
 
 # Credential resolution
 credentials:
-  source: registry
+  type: registry
   registryAddress: "0x..."
   rpcUrl: "https://base-sepolia.g.alchemy.com/v2/..."
 

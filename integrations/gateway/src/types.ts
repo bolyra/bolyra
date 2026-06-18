@@ -81,6 +81,8 @@ export interface GatewayConfig {
   hmac?: HmacConfig;
   /** Minimum verification score. */
   minScore?: number;
+  /** Maximum request body size in bytes (default: 1_048_576 = 1 MB). */
+  maxBodySize?: number;
 }
 
 /** Options for creating gateway middleware (library usage). */

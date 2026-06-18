@@ -196,16 +196,36 @@ describe('integration: full gateway lifecycle', () => {
     expect(upstreamRequests.length).toBe(0);
   });
 
-  test('4. non-tools/call method forwarded without auth', async () => {
+  test('4. auth-exempt method (initialize) forwarded without auth', async () => {
+    const { status, body } = await request(gatewayPort, {
+      body: { jsonrpc: '2.0', id: 4, method: 'initialize' },
+    });
+
+    expect(status).toBe(200);
+    expect(upstreamRequests.length).toBe(1);
+    // No Authorization header forwarded (was not present)
+    expect(upstreamRequests[0].headers['authorization']).toBeUndefined();
+  });
+
+  test('4b. non-exempt method (tools/list) requires auth', async () => {
     const { status, body } = await request(gatewayPort, {
       body: { jsonrpc: '2.0', id: 4, method: 'tools/list' },
+    });
+
+    expect(status).toBe(401);
+    expect(body.error.code).toBe(-32000);
+    expect(upstreamRequests.length).toBe(0);
+  });
+
+  test('4c. non-exempt method (tools/list) forwarded with valid auth', async () => {
+    const { status, body } = await request(gatewayPort, {
+      body: { jsonrpc: '2.0', id: 4, method: 'tools/list' },
+      headers: { Authorization: `Bolyra ${makeDevBundle()}` },
     });
 
     expect(status).toBe(200);
     expect(body.result.tools).toBeDefined();
     expect(upstreamRequests.length).toBe(1);
-    // No Authorization header forwarded (was not present)
-    expect(upstreamRequests[0].headers['authorization']).toBeUndefined();
   });
 
   test('5. upstream down: 502 JSON-RPC error', async () => {
@@ -228,7 +248,7 @@ describe('integration: full gateway lifecycle', () => {
 
     try {
       const { status, body } = await request(deadPort, {
-        body: { jsonrpc: '2.0', id: 5, method: 'tools/list' },
+        body: { jsonrpc: '2.0', id: 5, method: 'initialize' },
       });
       expect(status).toBe(502);
       expect(body.error.message).toContain('Bad Gateway');
@@ -245,10 +265,8 @@ describe('integration: full gateway lifecycle', () => {
 
     expect(status).toBe(200);
     expect(body.status).toBe('ok');
-    expect(body.gateway).toBe('@bolyra/gateway');
     expect(body.version).toBe('0.1.0');
-    expect(body.mode).toBe('dev');
-    expect(body.targetReachable).toBe(true);
+    expect(body.upstream).toBe('reachable');
   });
 
   test('7. X-Bolyra-* headers present on proxied request', async () => {
