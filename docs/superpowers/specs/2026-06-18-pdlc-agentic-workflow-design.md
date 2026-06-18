@@ -97,14 +97,17 @@ Rules:
 
 Orchestrator dispatches review agents against implementation diffs:
 
-| Agent | Scope | Fires When |
-|-------|-------|------------|
+| Reviewer | Scope | Fires When |
+|----------|-------|------------|
 | `bolyra-sdk-guardian` | API surface, version consistency, cross-package compat | Always |
 | `bolyra-security` | Targeted audit on changed attack surfaces | Always (scoped to changed files) |
 | `circuit-zkp-reviewer` | Circuit constraints, trusted setup | `circuits/` or `contracts/` in diff |
-| Orchestrator (inline diff review) | Diff review against plan | Always |
+| Claude Code review (`/review` skill) | Structural diff review: SQL safety, trust boundaries, side effects | Always |
+| Codex CLI review (`codex review`) | Independent second opinion: adversarial, different model | Always |
 | Conformance runner | `npm run conformance` | Always |
 | Full test suite | `npm test` | Always |
+
+**Dual code review rationale:** Claude Code and Codex use different models and review heuristics. Running both catches issues that either alone would miss. Claude Code's `/review` skill analyzes the diff against the base branch. Codex review runs independently with its own pass/fail gate. If either flags an issue, it surfaces at Gate 3.
 
 ### Gate 3: Ship Approval
 
@@ -158,7 +161,8 @@ User acknowledges. Pipeline complete.
 | REVIEW | `bolyra-sdk-guardian` | API + compat review | Pass/fail + findings |
 | REVIEW | `bolyra-security` | Security audit | Pass/fail + findings |
 | REVIEW | `circuit-zkp-reviewer` (conditional) | Circuit audit | Pass/fail + findings |
-| REVIEW | Orchestrator (inline diff review) | Diff vs plan | Pass/fail + findings |
+| REVIEW | Claude Code `/review` | Structural diff review | Pass/fail + findings |
+| REVIEW | Codex CLI `codex review` | Independent adversarial review | Pass/fail + findings |
 | RELEASE | `bolyra-release` | Publish pipeline | Published packages |
 | POST-SHIP | `gtm-outbound` (conditional) | Outbound draft | Draft in `.viswa/agent/drafts/` |
 | POST-SHIP | `bolyra-standards` | Conformance update | Updated `spec/CONFORMANCE.md` |
@@ -203,7 +207,8 @@ Each pipeline run persists to `~/Projects/bolyra/tasks/pdlc/{feature-slug}.json`
     "sdk_guardian": { "status": "pass|fail", "findings": [] },
     "security": { "status": "pass|fail", "findings": [] },
     "circuit": { "status": "pass|fail|skipped", "findings": [] },
-    "code_review": { "status": "pass|fail", "findings": [] },
+    "claude_review": { "status": "pass|fail", "findings": [] },
+    "codex_review": { "status": "pass|fail", "findings": [] },
     "conformance": { "status": "pass|fail" },
     "tests": { "status": "pass|fail", "count": 0 }
   },
@@ -304,7 +309,9 @@ Requires these agents to exist (all created 2026-06-18):
 
 The orchestrator agent definition (`bolyra-pdlc`) is a separate deliverable built from this spec.
 
-No external skills required. The orchestrator handles diff-vs-plan review inline.
+Requires these skills/tools:
+- `/review` skill (Claude Code built-in diff review)
+- `codex review` (Codex CLI independent review — see `/codex` skill)
 
 Requires these skills:
 - Orchestrator (inline diff review)
