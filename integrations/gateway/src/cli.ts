@@ -116,17 +116,27 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     console.warn('[gateway] WARNING: HMAC signing not configured. X-Bolyra-* headers sent to upstream will be unsigned. Set hmac.secret in your config for production deployments.');
   }
 
+  // Warn if Redis is using unencrypted connection in production
+  if (!config.devMode && config.nonce.store === 'redis' && config.nonce.redis?.url?.startsWith('redis://')) {
+    console.warn('[gateway] WARNING: Redis URL uses unencrypted redis:// -- consider rediss:// for production');
+  }
+
   // Create receipt writer
   const receiptWriter = createReceiptWriter(config.receipts);
 
   // Create nonce store based on config
-  const nonceStore: NonceStore = config.nonce.store === 'redis'
-    ? new RedisNonceStore({
-        url: config.nonce.redis!.url,
-        keyPrefix: config.nonce.redis?.keyPrefix,
-        connectTimeout: config.nonce.redis?.connectTimeout,
-      })
-    : new MemoryNonceStore();
+  let nonceStore: NonceStore;
+  if (config.nonce.store === 'redis') {
+    const redisUrl = config.nonce.redis?.url;
+    if (!redisUrl) throw new Error('Redis URL is required when nonce.store is redis');
+    nonceStore = new RedisNonceStore({
+      url: redisUrl,
+      keyPrefix: config.nonce.redis?.keyPrefix,
+      connectTimeout: config.nonce.redis?.connectTimeout,
+    });
+  } else {
+    nonceStore = new MemoryNonceStore();
+  }
 
   // Create and start the proxy
   const server = createGatewayProxy({
@@ -143,7 +153,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   const shutdown = async () => {
     console.log('\n[gateway] Shutting down...');
     if (nonceStore instanceof RedisNonceStore) {
-      await nonceStore.close();
+      try { await nonceStore.close(); } catch { /* already disconnected */ }
     }
     server.close(() => {
       process.exit(0);
@@ -152,6 +162,16 @@ export function main(argv: string[] = process.argv.slice(2)): void {
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+}
+
+/** Redact credentials from a URL for safe logging. */
+function redactUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) parsed.password = '***';
+    if (parsed.username) parsed.username = '***';
+    return parsed.toString();
+  } catch { return '(invalid url)'; }
 }
 
 /** Print the startup banner. */
@@ -165,7 +185,7 @@ function printBanner(config: { target: string; port: number; devMode: boolean; n
         : `${config.receipts.dir ?? './receipts/'} (file)`;
 
   const nonceInfo = config.nonce.store === 'redis'
-    ? `redis (${config.nonce.redis?.url ?? 'unknown'})`
+    ? `redis (${redactUrl(config.nonce.redis?.url ?? 'unknown')})`
     : 'memory';
 
   console.log(`
