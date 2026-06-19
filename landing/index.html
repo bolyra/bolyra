@@ -594,6 +594,10 @@
         Prefer SD-JWT today? <code>npm install @bolyra/delegation</code>
         <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--accent);">v0.2.2</span>
       </p>
+      <p class="install-hint" style="margin-top: 10px;">
+        Python / LangChain? <code>pip install bolyra-langchain</code>
+        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.1.0</span>
+      </p>
     </div>
   </section>
 
@@ -817,9 +821,14 @@
           <p>Verify handshakes locally with zero gas. Batch sessions and post a single Merkle root on-chain. ~375x gas reduction at batch size 100.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon privacy">AI</div>
-          <h3>Agent Frameworks &amp; Python</h3>
-          <p>Agent framework adapters (LangChain, CrewAI) are API stubs — type contracts are defined but proof generation requires the <code>@bolyra/sdk</code> subprocess bridge, which is not yet shipped. Python SDK (<code>pip install bolyra</code>) provides types and validation only. Full agent framework support is planned for a future release.</p>
+          <div class="feature-icon privacy">LC</div>
+          <h3>LangChain Adapter</h3>
+          <p><strong style="color: var(--green);">v0.1.0:</strong> Three proper <code>BaseTool</code> subclasses for LangChain agents. <code>BolyraAuthTool</code> (ZKP mutual handshake), <code>BolyraDelegateTool</code> (ZKP delegation), <code>BolyraSDJWTTool</code> (pure-Python SD-JWT delegation, no Node.js required). Session manager for auth-then-delegate chains. Dev mode with auto-generated credentials. <code>pip install bolyra-langchain</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon privacy">PY</div>
+          <h3>Python SDK</h3>
+          <p><strong style="color: var(--green);">v0.5.0:</strong> Types, validation, and subprocess bridge to the Node SDK for ZKP proving. <strong>New:</strong> pure-Python SD-JWT delegation module (<code>allow()</code>, <code>present()</code>, <code>verify()</code>) matching the TypeScript wire format exactly. Ed25519 + PyJWT. <code>pip install bolyra</code>.</p>
         </div>
       </div>
     </div>
