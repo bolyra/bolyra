@@ -209,7 +209,7 @@ class BolyraAuthTool(BaseTool):
         run_manager: AsyncCallbackManagerForToolRun | None = None,
     ) -> dict[str, Any]:
         """Async version -- runs sync in executor to avoid blocking."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None, self._run, scope, required_permissions, counterparty_type, None
+            None, self._run, scope, required_permissions, counterparty_type, run_manager
         )

@@ -8,6 +8,7 @@ the Bolyra SDK.
 from __future__ import annotations
 
 import asyncio
+import warnings
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -31,6 +32,13 @@ class BolyraSDJWTInput(BaseModel):
     permission: str = Field(default="READ_DATA", description="Permission label")
     max_amount: float | None = Field(default=None, description="Cap per invocation")
     currency: str = Field(default="USD", description="Currency for max_amount")
+    nonce: str | None = Field(
+        default=None,
+        description=(
+            "Verifier challenge nonce. Required in production mode. "
+            "In dev mode, a random nonce is generated if omitted."
+        ),
+    )
 
 
 class BolyraSDJWTTool(BaseTool):
@@ -40,8 +48,16 @@ class BolyraSDJWTTool(BaseTool):
     a specific action. Lighter weight than ZKP auth -- no circuit proving
     required. Use for tool authorization in trusted environments.
 
+    Security note: The raw SD-JWT receipt is a bearer credential and is
+    never returned in the tool output (which flows through the LLM
+    context). Instead, the receipt is stored in an internal vault and
+    only a receipt reference (JTI) is returned. Use ``get_receipt(jti)``
+    for out-of-band retrieval.
+
     Dev mode: when no issuer_key is provided, auto-generates test
-    credentials using Ed25519.
+    credentials using Ed25519. Also auto-generates a nonce with a
+    warning. In production (dev_mode=False), a verifier-supplied nonce
+    is required.
 
     Example::
 
@@ -63,7 +79,15 @@ class BolyraSDJWTTool(BaseTool):
             issuer_kid="my-key-1",
             issuer_id="did:example:issuer",
             agent_id="agent-alice",
+            dev_mode=False,
         )
+        result = tool.invoke({
+            "action": "checkout.charge",
+            "audience": "stripe.example.com",
+            "nonce": "verifier-challenge-nonce-here",
+        })
+        # Retrieve the raw receipt out-of-band:
+        receipt = tool.get_receipt(result["receipt_jti"])
     """
 
     name: str = "bolyra_authorize"
@@ -85,6 +109,23 @@ class BolyraSDJWTTool(BaseTool):
     agent_private_key: Any = None
     agent_public_key: Any = None
     ttl_seconds: int = 300
+    dev_mode: bool = True
+
+    # Internal vault: maps JTI -> raw presented SD-JWT.
+    # Never expose this dict to the LLM context.
+    _receipt_vault: dict[str, str] = {}
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        # Instance-level vault (not shared across instances)
+        self._receipt_vault = {}
+
+    def get_receipt(self, jti: str) -> str | None:
+        """Retrieve a raw SD-JWT receipt by JTI for out-of-band use.
+
+        Returns None if the JTI is not found in the vault.
+        """
+        return self._receipt_vault.get(jti)
 
     def _ensure_keys(self) -> None:
         """Auto-generate dev keys if none provided."""
@@ -104,6 +145,7 @@ class BolyraSDJWTTool(BaseTool):
         permission: str = "READ_DATA",
         max_amount: float | None = None,
         currency: str = "USD",
+        nonce: str | None = None,
         run_manager: CallbackManagerForToolRun | None = None,
     ) -> dict[str, Any]:
         """Issue an SD-JWT delegation receipt."""
@@ -114,6 +156,25 @@ class BolyraSDJWTTool(BaseTool):
             from bolyra.sd_jwt import AllowOptions, PresentOptions, allow, present
 
             self._ensure_keys()
+
+            # --- C2: nonce handling ---
+            if nonce is None:
+                if not self.dev_mode:
+                    return SDJWTResult(
+                        success=False, status="error",
+                        message=(
+                            "Nonce is required in production mode. "
+                            "The nonce must come from the verifier. "
+                            "Set dev_mode=True for auto-generated nonces."
+                        ),
+                    ).to_dict()
+                import uuid
+                nonce = str(uuid.uuid4())
+                warnings.warn(
+                    "BolyraSDJWTTool: auto-generated nonce in dev mode. "
+                    "In production, the nonce must come from the verifier.",
+                    stacklevel=2,
+                )
 
             max_cap = None
             if max_amount is not None:
@@ -132,20 +193,28 @@ class BolyraSDJWTTool(BaseTool):
 
             receipt = allow(opts, self.issuer_private_key, self.issuer_kid)
 
-            # Auto-present with a generated nonce for immediate use
-            import uuid
-            nonce = str(uuid.uuid4())
             presented = present(
                 receipt, self.agent_private_key,
                 PresentOptions(nonce=nonce, audience=audience),
             )
 
+            # Extract JTI and expiry from the issued receipt for the result
+            from bolyra.sd_jwt import _decode_jws_payload
+            jws_part = presented.split("~")[0]
+            payload = _decode_jws_payload(jws_part)
+            jti = payload.get("jti", "")
+            expiry = payload.get("exp", 0)
+
+            # --- C1: vault the receipt, never return it in tool output ---
+            self._receipt_vault[jti] = presented
+
             return SDJWTResult(
                 success=True, status="ok",
-                receipt=presented,
+                receipt_jti=jti,
                 action=action,
                 audience=audience,
                 permission=permission,
+                expiry=expiry,
             ).to_dict()
 
         except ImportError as e:
@@ -166,10 +235,12 @@ class BolyraSDJWTTool(BaseTool):
         permission: str = "READ_DATA",
         max_amount: float | None = None,
         currency: str = "USD",
+        nonce: str | None = None,
         run_manager: AsyncCallbackManagerForToolRun | None = None,
     ) -> dict[str, Any]:
         """Async version."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None, self._run, action, audience, permission, max_amount, currency, None
+            None, self._run, action, audience, permission,
+            max_amount, currency, nonce, run_manager
         )

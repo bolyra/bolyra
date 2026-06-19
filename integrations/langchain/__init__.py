@@ -13,7 +13,6 @@ try:
         BolyraSDJWTTool,
         BolyraSDJWTInput,
         BolyraSession,
-        BolyraCallbackHandler,
     )
 
     __all__ = [
@@ -24,7 +23,6 @@ try:
         "BolyraSDJWTTool",
         "BolyraSDJWTInput",
         "BolyraSession",
-        "BolyraCallbackHandler",
     ]
 except ImportError:
     # langchain-core not installed -- imports will fail at use time

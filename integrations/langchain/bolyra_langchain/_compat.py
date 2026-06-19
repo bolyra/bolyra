@@ -19,15 +19,6 @@ except ImportError:
     CallbackManagerForToolRun = None  # type: ignore[assignment, misc]
     AsyncCallbackManagerForToolRun = None  # type: ignore[assignment, misc]
 
-try:
-    from langchain_core.callbacks import BaseCallbackHandler
-
-    CALLBACKS_AVAILABLE = True
-except ImportError:
-    BaseCallbackHandler = object  # type: ignore[assignment, misc]
-    CALLBACKS_AVAILABLE = False
-
-
 def check_langchain_available() -> None:
     """Raise ImportError if langchain-core is not installed."""
     if not LANGCHAIN_AVAILABLE:

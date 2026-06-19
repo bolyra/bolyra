@@ -2,7 +2,7 @@
 
 LangChain tools for Bolyra mutual ZKP authentication and SD-JWT delegation.
 
-**Status:** Production-ready. Three tools as proper `BaseTool` subclasses.
+**Status:** Alpha / Developer preview. Three tools as proper `BaseTool` subclasses.
 
 ## Install
 
@@ -113,19 +113,6 @@ When no keys are provided, tools auto-generate test credentials:
 
 Dev mode is never for production. In production, provide explicit operator keys, human secrets, or issuer keys.
 
-## Callbacks
-
-```python
-from bolyra_langchain import BolyraCallbackHandler
-
-class MyHandler(BolyraCallbackHandler):
-    def on_bolyra_auth_complete(self, result, **kwargs):
-        print(f"Auth: verified={result.get('verified')}")
-
-    def on_bolyra_sd_jwt_complete(self, result, **kwargs):
-        print(f"SD-JWT: success={result.get('success')}")
-```
-
 ## Non-Monorepo Setup
 
 If using `bolyra` from PyPI (not the monorepo), set the Node.js SDK path:
@@ -153,7 +140,6 @@ integrations/langchain/
     delegate_tool.py          # BolyraDelegateTool(BaseTool)
     sd_jwt_tool.py            # BolyraSDJWTTool(BaseTool)
     session.py                # BolyraSession
-    callbacks.py              # BolyraCallbackHandler
     types.py                  # AuthResult, DelegationResult, SDJWTResult
     _compat.py                # LangChain version shims
   tests/

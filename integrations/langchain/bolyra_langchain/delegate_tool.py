@@ -192,8 +192,8 @@ class BolyraDelegateTool(BaseTool):
         run_manager: AsyncCallbackManagerForToolRun | None = None,
     ) -> dict[str, Any]:
         """Async version -- runs sync in executor."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self._run, delegatee_id, permissions, expiry_seconds,
-            session_nonce, scope_commitment, None
+            session_nonce, scope_commitment, run_manager
         )

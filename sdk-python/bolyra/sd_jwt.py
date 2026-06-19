@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import time
 import uuid
@@ -33,9 +34,6 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
-)
-from cryptography.hazmat.primitives.asymmetric.utils import (
-    decode_dss_signature,
 )
 from cryptography.hazmat.primitives import serialization
 
@@ -485,19 +483,22 @@ def _verify_kb_jwt(
     except (InvalidSignature, Exception):
         return "KB_INVALID_SIGNATURE"
 
-    # Check audience
-    if kb_payload.get("aud") != opts.expected_audience:
+    # Check audience (constant-time to prevent timing side-channels)
+    kb_aud = kb_payload.get("aud", "")
+    if not hmac.compare_digest(str(kb_aud), str(opts.expected_audience)):
         return "KB_WRONG_AUDIENCE"
 
-    # Check nonce
-    if kb_payload.get("nonce") != opts.expected_nonce:
+    # Check nonce (constant-time)
+    kb_nonce = kb_payload.get("nonce", "")
+    if not hmac.compare_digest(str(kb_nonce), str(opts.expected_nonce)):
         return "KB_WRONG_NONCE"
 
-    # Check sd_hash
+    # Check sd_hash (constant-time)
     expected_hash = _b64url_encode(
         hashlib.sha256(f"{issuer_jws}~".encode()).digest()
     )
-    if kb_payload.get("sd_hash") != expected_hash:
+    kb_sd_hash = kb_payload.get("sd_hash", "")
+    if not hmac.compare_digest(str(kb_sd_hash), expected_hash):
         return "KB_WRONG_SD_HASH"
 
     # Check iat

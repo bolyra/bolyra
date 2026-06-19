@@ -87,9 +87,11 @@ class SDJWTResult:
     success: bool
     status: str
     receipt: str = ""
+    receipt_jti: str = ""
     action: str = ""
     audience: str = ""
     permission: str = ""
+    expiry: int = 0
     tool: str = "bolyra_authorize"
     message: str = ""
 
@@ -101,10 +103,11 @@ class SDJWTResult:
         }
         if self.success:
             d.update({
-                "receipt": self.receipt,
+                "receipt_jti": self.receipt_jti,
                 "action": self.action,
                 "audience": self.audience,
                 "permission": self.permission,
+                "expiry": self.expiry,
             })
         if self.message:
             d["message"] = self.message
