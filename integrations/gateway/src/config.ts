@@ -106,8 +106,18 @@ export function validateConfig(config: Partial<GatewayConfig>): asserts config i
     }
   }
 
-  if (config.nonce?.store !== undefined && config.nonce.store !== 'memory') {
-    errors.push('"nonce.store" must be "memory" (Redis adapter deferred to v0.2)');
+  if (config.nonce?.store !== undefined) {
+    const validStores = ['memory', 'redis'];
+    if (!validStores.includes(config.nonce.store)) {
+      errors.push(`"nonce.store" must be one of: ${validStores.join(', ')}`);
+    }
+    if (config.nonce.store === 'redis') {
+      if (!config.nonce.redis?.url) {
+        errors.push('"nonce.redis.url" is required when nonce.store is "redis"');
+      } else if (config.nonce.redis.url.includes('${')) {
+        errors.push('"nonce.redis.url" contains unresolved environment variable reference');
+      }
+    }
   }
 
   // HMAC secret validation

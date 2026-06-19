@@ -13,7 +13,9 @@ import { parseArgs } from 'node:util';
 import { loadConfig } from './config';
 import { createGatewayProxy } from './proxy';
 import { createReceiptWriter } from './receipts';
+import { RedisNonceStore } from './redis-nonce-store';
 import { MemoryNonceStore } from '@bolyra/mcp';
+import type { NonceStore } from '@bolyra/mcp';
 import type { CliFlags } from './config';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -117,8 +119,14 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   // Create receipt writer
   const receiptWriter = createReceiptWriter(config.receipts);
 
-  // Create nonce store
-  const nonceStore = new MemoryNonceStore();
+  // Create nonce store based on config
+  const nonceStore: NonceStore = config.nonce.store === 'redis'
+    ? new RedisNonceStore({
+        url: config.nonce.redis!.url,
+        keyPrefix: config.nonce.redis?.keyPrefix,
+        connectTimeout: config.nonce.redis?.connectTimeout,
+      })
+    : new MemoryNonceStore();
 
   // Create and start the proxy
   const server = createGatewayProxy({
@@ -132,8 +140,11 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   });
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     console.log('\n[gateway] Shutting down...');
+    if (nonceStore instanceof RedisNonceStore) {
+      await nonceStore.close();
+    }
     server.close(() => {
       process.exit(0);
     });
@@ -144,7 +155,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
 }
 
 /** Print the startup banner. */
-function printBanner(config: { target: string; port: number; devMode: boolean; receipts: { enabled: boolean; output: string; dir?: string }; network: string }): void {
+function printBanner(config: { target: string; port: number; devMode: boolean; nonce: { store: string; redis?: { url: string } }; receipts: { enabled: boolean; output: string; dir?: string }; network: string }): void {
   const receiptInfo = !config.receipts.enabled
     ? 'disabled'
     : config.receipts.output === 'stdout'
@@ -153,11 +164,16 @@ function printBanner(config: { target: string; port: number; devMode: boolean; r
         ? 'webhook'
         : `${config.receipts.dir ?? './receipts/'} (file)`;
 
+  const nonceInfo = config.nonce.store === 'redis'
+    ? `redis (${config.nonce.redis?.url ?? 'unknown'})`
+    : 'memory';
+
   console.log(`
 @bolyra/gateway v${VERSION}
   Mode:     ${config.devMode ? 'dev' : 'production'}
   Target:   ${config.target}
   Port:     ${config.port}
+  Nonce:    ${nonceInfo}
   Receipts: ${receiptInfo}
   Network:  ${config.network}
 `);

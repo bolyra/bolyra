@@ -32,10 +32,22 @@ export interface ReceiptOutputConfig {
   };
 }
 
+/** Redis nonce store sub-configuration. */
+export interface RedisNonceConfig {
+  /** Redis connection URL (e.g., redis://localhost:6379). */
+  url: string;
+  /** Key prefix to namespace nonces (default: "bolyra:nonce:"). */
+  keyPrefix?: string;
+  /** Connection timeout in ms (default: 5000). */
+  connectTimeout?: number;
+}
+
 /** Nonce store configuration. */
 export interface NonceConfig {
-  store: 'memory';
+  store: 'memory' | 'redis';
   maxProofAge?: number;
+  /** Redis configuration — required when store is 'redis'. */
+  redis?: RedisNonceConfig;
 }
 
 /** Health check configuration. */

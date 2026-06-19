@@ -101,8 +101,13 @@ tools:
 
 # Nonce replay protection
 nonce:
-  store: memory             # "memory" only in v0.1
+  store: memory             # "memory" (default) or "redis"
   maxProofAge: 300          # seconds
+  # Redis config (required when store: redis)
+  # redis:
+  #   url: ${REDIS_URL}           # required
+  #   keyPrefix: "bolyra:nonce:"  # optional, default shown
+  #   connectTimeout: 5000        # optional, ms
 
 # Receipt signing
 receipts:
@@ -170,6 +175,35 @@ const middleware = createGatewayMiddleware({ config });
 | `createReceiptWriter(config)` | Create pluggable receipt output |
 | `createHealthHandler(config)` | Create /healthz endpoint handler |
 | `extractToolName(body)` | Extract tool name from JSON-RPC body |
+| `RedisNonceStore` | Redis-backed NonceStore for multi-instance deployments |
+
+## Redis Nonce Store (v0.2.0+)
+
+For multi-instance deployments, use Redis for shared nonce replay protection:
+
+```yaml
+# gateway.yaml
+nonce:
+  store: redis
+  maxProofAge: 300
+  redis:
+    url: ${REDIS_URL}
+    keyPrefix: "bolyra:nonce:"   # optional
+```
+
+Library usage:
+
+```typescript
+import { createGatewayMiddleware, RedisNonceStore } from '@bolyra/gateway';
+
+const store = new RedisNonceStore({ url: 'redis://localhost:6379' });
+const middleware = createGatewayMiddleware({ config, nonceStore: store });
+
+// Graceful shutdown
+process.on('SIGTERM', () => store.close());
+```
+
+**Fail-closed behavior:** If Redis is unreachable, the gateway returns HTTP 500, never passes requests through. Monitor Redis availability as a critical dependency.
 
 ## X-Bolyra-* Headers
 

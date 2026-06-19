@@ -265,7 +265,7 @@ describe('integration: full gateway lifecycle', () => {
 
     expect(status).toBe(200);
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('0.1.0');
+    expect(body.version).toBe('0.2.0');
     expect(body.upstream).toBe('reachable');
   });
 

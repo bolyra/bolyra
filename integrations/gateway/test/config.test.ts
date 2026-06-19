@@ -118,6 +118,56 @@ devMode: true
       } as Partial<GatewayConfig>;
       expect(() => validateConfig(config)).toThrow('webhook.url');
     });
+
+    it('passes valid redis nonce config', () => {
+      const config: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'redis', maxProofAge: 300, redis: { url: 'redis://localhost:6379' } },
+        receipts: { enabled: true, output: 'file', dir: './receipts/' },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('throws on redis store without redis.url', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'redis' as const },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('nonce.redis.url');
+    });
+
+    it('throws on redis.url with unresolved env var', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'redis' as const, redis: { url: '${REDIS_URL}' } },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('unresolved environment variable');
+    });
+
+    it('throws on unknown nonce store type', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'postgres' as any },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"nonce.store" must be one of');
+    });
+
+    it('continues to accept memory store (regression)', () => {
+      const config: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'memory', maxProofAge: 300 },
+        receipts: { enabled: true, output: 'file', dir: './receipts/' },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(config)).not.toThrow();
+    });
   });
 
   describe('mergeCliFlags', () => {
