@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bolyra-langchain"
+version = "0.1.0"
+description = "LangChain tools for Bolyra mutual ZKP authentication and SD-JWT delegation"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [{ name = "Bolyra", email = "sdk@bolyra.ai" }]
+keywords = ["bolyra", "langchain", "zkp", "identity", "ai-agents", "delegation", "sd-jwt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+    "Framework :: LangChain",
+]
+dependencies = [
+    "bolyra>=0.4.0",
+    "langchain-core>=0.2.0",
+    "PyJWT[crypto]>=2.8.0",
+]
+
+[project.urls]
+Homepage = "https://bolyra.ai"
+Repository = "https://github.com/bolyra/bolyra"
+Issues = "https://github.com/bolyra/bolyra/issues"
+Documentation = "https://github.com/bolyra/bolyra#readme"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

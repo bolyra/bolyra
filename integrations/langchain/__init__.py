@@ -1,11 +1,31 @@
-"""Bolyra LangChain integration — mutual ZKP auth and delegation tools."""
+"""Bolyra LangChain integration.
 
-from integrations.langchain.bolyra_auth_tool import BolyraAuthTool, BolyraAuthInput
-from integrations.langchain.bolyra_delegate_tool import BolyraDelegateTool, BolyraDelegateInput
+The actual package code is in bolyra_langchain/. This file provides
+backward-compatible imports for code that used the old flat module layout.
+"""
 
-__all__ = [
-    "BolyraAuthTool",
-    "BolyraAuthInput",
-    "BolyraDelegateTool",
-    "BolyraDelegateInput",
-]
+try:
+    from bolyra_langchain import (
+        BolyraAuthTool,
+        BolyraAuthInput,
+        BolyraDelegateTool,
+        BolyraDelegateInput,
+        BolyraSDJWTTool,
+        BolyraSDJWTInput,
+        BolyraSession,
+        BolyraCallbackHandler,
+    )
+
+    __all__ = [
+        "BolyraAuthTool",
+        "BolyraAuthInput",
+        "BolyraDelegateTool",
+        "BolyraDelegateInput",
+        "BolyraSDJWTTool",
+        "BolyraSDJWTInput",
+        "BolyraSession",
+        "BolyraCallbackHandler",
+    ]
+except ImportError:
+    # langchain-core not installed -- imports will fail at use time
+    pass

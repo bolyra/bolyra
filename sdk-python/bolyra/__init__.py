@@ -19,6 +19,16 @@ from bolyra.identity import (
 )
 from bolyra.handshake import prove_handshake, verify_handshake
 from bolyra.delegation import delegate, verify_delegation
+from bolyra.sd_jwt import (
+    AllowOptions as SDJWTAllowOptions,
+    PresentOptions as SDJWTPresentOptions,
+    VerifyOptions as SDJWTVerifyOptions,
+    VerifyResult as SDJWTVerifyResult,
+    allow as sd_jwt_allow,
+    present as sd_jwt_present,
+    verify as sd_jwt_verify,
+    generate_ed25519_keypair,
+)
 from bolyra.errors import (
     BolyraError,
     CircuitArtifactNotFoundError,
@@ -57,6 +67,15 @@ __all__ = [
     # Delegation
     "delegate",
     "verify_delegation",
+    # SD-JWT
+    "SDJWTAllowOptions",
+    "SDJWTPresentOptions",
+    "SDJWTVerifyOptions",
+    "SDJWTVerifyResult",
+    "sd_jwt_allow",
+    "sd_jwt_present",
+    "sd_jwt_verify",
+    "generate_ed25519_keypair",
     # Errors
     "BolyraError",
     "CircuitArtifactNotFoundError",
