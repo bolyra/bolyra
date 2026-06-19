@@ -1,0 +1,8 @@
+# .dockerignore -- minimize Docker build context
+# Since Dockerfile.gateway uses npm install (not monorepo copy),
+# we exclude nearly everything. Only the Dockerfile itself is needed.
+
+*
+
+# Allow the Dockerfile (needed for COPY if we ever switch to monorepo build)
+!Dockerfile.gateway

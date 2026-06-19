@@ -1,0 +1,40 @@
+# Dockerfile.gateway -- Multi-stage build for @bolyra/gateway
+# Installs the published npm package (not a monorepo build).
+#
+# Build:  docker build -f Dockerfile.gateway -t bolyra-gateway .
+# Run:    docker run --rm -p 4100:4100 bolyra-gateway --target http://upstream:3000/mcp --dev
+
+# --- Stage 1: Install production dependencies ---
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+ARG GATEWAY_VERSION=latest
+RUN npm install --production @bolyra/gateway@${GATEWAY_VERSION}
+
+# --- Stage 2: Runtime ---
+FROM node:22-alpine
+
+# Create non-root user
+RUN addgroup -g 1001 bolyra && \
+    adduser -u 1001 -G bolyra -s /bin/sh -D bolyra
+
+WORKDIR /app
+
+# Copy installed node_modules from builder
+COPY --from=builder /app/node_modules/ ./node_modules/
+
+# Create config and receipts directories
+RUN mkdir -p /etc/bolyra /app/receipts && \
+    chown -R bolyra:bolyra /app /app/receipts
+
+USER bolyra
+
+EXPOSE 4100
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD wget -qO- http://localhost:4100/healthz || exit 1
+
+# The bin entry "bolyra-gateway" points to dist/cli.js inside the package
+ENTRYPOINT ["node", "node_modules/@bolyra/gateway/dist/cli.js"]
+CMD ["--config", "/etc/bolyra/gateway.yaml"]

@@ -264,6 +264,69 @@ The gateway is the **trust boundary**. Agents present proof bundles; the gateway
 
 Higher tiers imply lower (e.g., FINANCIAL_MEDIUM implies FINANCIAL_SMALL).
 
+## Docker
+
+Run the gateway as a container with zero Node.js setup required.
+
+### Pull from GHCR
+
+```bash
+docker pull ghcr.io/bolyra/gateway:latest
+```
+
+### Quick Start
+
+```bash
+# Dev mode -- mock verification, no config file needed
+docker run --rm -p 4100:4100 ghcr.io/bolyra/gateway \
+  --target http://host.docker.internal:3000/mcp --dev
+```
+
+### Production
+
+```bash
+# Mount config file + set env vars
+docker run -d \
+  -v $(pwd)/gateway.yaml:/etc/bolyra/gateway.yaml:ro \
+  -e REDIS_URL=redis://redis:6379 \
+  -e BOLYRA_RECEIPT_KEY=hex-encoded-key \
+  -p 4100:4100 \
+  ghcr.io/bolyra/gateway
+```
+
+### Build Locally
+
+```bash
+# From repo root
+docker build -f Dockerfile.gateway -t bolyra-gateway:local .
+
+# Run with local build
+docker run --rm -p 4100:4100 bolyra-gateway:local \
+  --target http://host.docker.internal:3000/mcp --dev
+
+# Verify health
+curl http://localhost:4100/healthz
+```
+
+### Override Port
+
+```bash
+docker run --rm -p 8080:8080 ghcr.io/bolyra/gateway \
+  --target http://upstream:3000/mcp --port 8080 --dev
+```
+
+### Image Details
+
+- **Base:** `node:22-alpine`
+- **User:** `bolyra` (UID 1001, non-root)
+- **Port:** 4100 (default)
+- **Healthcheck:** `GET /healthz` every 30s
+- **Config mount:** `/etc/bolyra/gateway.yaml`
+- **Receipt dir:** `/app/receipts/` (writable)
+- **Architectures:** `linux/amd64`, `linux/arm64`
+
+CLI flags passed after the image name override config file values. See [CLI Reference](#cli-reference) above.
+
 ## License
 
 Apache-2.0

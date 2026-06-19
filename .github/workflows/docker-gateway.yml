@@ -1,0 +1,74 @@
+name: Docker Gateway
+
+on:
+  push:
+    tags:
+      - 'gateway-v*'
+  pull_request:
+    paths:
+      - 'integrations/gateway/**'
+      - 'Dockerfile.gateway'
+      - '.github/workflows/docker-gateway.yml'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/gateway-v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/gateway-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.gateway
+          platforms: linux/amd64,linux/arm64
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: |
+            ghcr.io/bolyra/gateway:${{ steps.version.outputs.version }}
+            ghcr.io/bolyra/gateway:latest
+          build-args: |
+            GATEWAY_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        if: success()
+        run: |
+          # Build single-platform for smoke test (multi-arch already tested above)
+          docker build -f Dockerfile.gateway -t bolyra-gateway-smoke .
+          docker run --rm -d -p 4100:4100 --name gw-smoke \
+            bolyra-gateway-smoke --target http://localhost:9999/mcp --dev
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4100/healthz || true)
+          docker stop gw-smoke || true
+          # 200 = healthy (upstream reachable), 503 = degraded (upstream unreachable)
+          # Both confirm the gateway process started and /healthz responds.
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "503" ]; then
+            echo "Smoke test failed: /healthz returned $STATUS (expected 200 or 503)"
+            exit 1
+          fi
+          echo "Smoke test passed: /healthz returned $STATUS"
