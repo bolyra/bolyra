@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bolyra MCP Dev Mode — Authenticated Server in 60 Seconds</title>
+<meta name="description" content="30-second animated video: MCP dev mode. Zero circuit artifacts. Authenticated MCP server in 60 seconds with withBolyraAuthStdio. Per-tool gating, signed receipts, delegation chains.">
+<meta property="og:title" content="Bolyra MCP Dev Mode">
+<meta property="og:description" content="Authenticated MCP server in 60 seconds. Zero circuit artifacts. Dev mode is the real protocol.">
+<meta property="og:type" content="video.other">
+<meta property="og:url" content="https://bolyra.ai/video-devmode">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+<script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0c10; overflow: hidden; }
+  #video-root { position: fixed; inset: 0; }
+</style>
+</head>
+<body>
+<div id="video-root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+// ═══════════════════════════════════════════════════════════════════════════
+// animations.jsx — Reusable animation framework
+// ═══════════════════════════════════════════════════════════════════════════
+
+const Easing = {
+  linear: (t) => t,
+  easeInQuad:    (t) => t * t,
+  easeOutQuad:   (t) => t * (2 - t),
+  easeInOutQuad: (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
+  easeInCubic:    (t) => t * t * t,
+  easeOutCubic:   (t) => (--t) * t * t + 1,
+  easeInOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1),
+  easeInQuart:    (t) => t * t * t * t,
+  easeOutQuart:   (t) => 1 - (--t) * t * t * t,
+  easeInOutQuart: (t) => (t < 0.5 ? 8 * t * t * t * t : 1 - 8 * (--t) * t * t * t),
+  easeInExpo:  (t) => (t === 0 ? 0 : Math.pow(2, 10 * (t - 1))),
+  easeOutExpo: (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+  easeInOutExpo: (t) => {
+    if (t === 0) return 0; if (t === 1) return 1;
+    if (t < 0.5) return 0.5 * Math.pow(2, 20 * t - 10);
+    return 1 - 0.5 * Math.pow(2, -20 * t + 10);
+  },
+  easeInSine:    (t) => 1 - Math.cos((t * Math.PI) / 2),
+  easeOutSine:   (t) => Math.sin((t * Math.PI) / 2),
+  easeInOutSine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+  easeOutBack: (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  easeInBack: (t) => { const c1 = 1.70158, c3 = c1 + 1; return c3 * t * t * t - c1 * t * t; },
+  easeInOutBack: (t) => { const c1 = 1.70158, c2 = c1 * 1.525; return t < 0.5 ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2 : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2; },
+  easeOutElastic: (t) => { const c4 = (2 * Math.PI) / 3; if (t === 0) return 0; if (t === 1) return 1; return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1; },
+};
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+function interpolate(input, output, ease = Easing.linear) {
+  return (t) => {
+    if (t <= input[0]) return output[0];
+    if (t >= input[input.length - 1]) return output[output.length - 1];
+    for (let i = 0; i < input.length - 1; i++) {
+      if (t >= input[i] && t <= input[i + 1]) {
+        const span = input[i + 1] - input[i];
+        const local = span === 0 ? 0 : (t - input[i]) / span;
+        const easeFn = Array.isArray(ease) ? (ease[i] || Easing.linear) : ease;
+        return output[i] + (output[i + 1] - output[i]) * easeFn(local);
+      }
+    }
+    return output[output.length - 1];
+  };
+}
+
+function animate({ from = 0, to = 1, start = 0, end = 1, ease = Easing.easeInOutCubic }) {
+  return (t) => { if (t <= start) return from; if (t >= end) return to; return from + (to - from) * ease((t - start) / (end - start)); };
+}
+
+const TimelineContext = React.createContext({ time: 0, duration: 10, playing: false });
+const useTime = () => React.useContext(TimelineContext).time;
+const useTimeline = () => React.useContext(TimelineContext);
+const SpriteContext = React.createContext({ localTime: 0, progress: 0, duration: 0 });
+const useSprite = () => React.useContext(SpriteContext);
+
+function Sprite({ start = 0, end = Infinity, children, keepMounted = false }) {
+  const { time } = useTimeline();
+  const visible = time >= start && time <= end;
+  if (!visible && !keepMounted) return null;
+  const duration = end - start;
+  const localTime = Math.max(0, time - start);
+  const progress = duration > 0 && isFinite(duration) ? clamp(localTime / duration, 0, 1) : 0;
+  const value = { localTime, progress, duration, visible };
+  return (<SpriteContext.Provider value={value}>{typeof children === 'function' ? children(value) : children}</SpriteContext.Provider>);
+}
+
+function IconButton({ children, onClick, title }) {
+  const [hover, setHover] = React.useState(false);
+  return (<button onClick={onClick} title={title} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#f6f4ef', cursor: 'pointer', padding: 0, transition: 'background 120ms' }}>{children}</button>);
+}
+
+function PlaybackBar({ time, duration, playing, onPlayPause, onReset, onSeek, onHover }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const timeFromEvent = React.useCallback((e) => { const rect = trackRef.current.getBoundingClientRect(); return clamp((e.clientX - rect.left) / rect.width, 0, 1) * duration; }, [duration]);
+  const onTrackMove = (e) => { if (!trackRef.current) return; const t = timeFromEvent(e); if (dragging) onSeek(t); else onHover(t); };
+  const onTrackLeave = () => { if (!dragging) onHover(null); };
+  const onTrackDown = (e) => { setDragging(true); onSeek(timeFromEvent(e)); onHover(null); };
+  React.useEffect(() => { if (!dragging) return; const onUp = () => setDragging(false); const onMove = (e) => { if (trackRef.current) onSeek(timeFromEvent(e)); }; window.addEventListener('mouseup', onUp); window.addEventListener('mousemove', onMove); return () => { window.removeEventListener('mouseup', onUp); window.removeEventListener('mousemove', onMove); }; }, [dragging, timeFromEvent, onSeek]);
+  const pct = duration > 0 ? (time / duration) * 100 : 0;
+  const fmt = (t) => { const total = Math.max(0, t); const m = Math.floor(total / 60); const s = Math.floor(total % 60); const cs = Math.floor((total * 100) % 100); return `${String(m).padStart(1, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`; };
+  const mono = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', background: 'rgba(20,20,20,0.92)', borderTop: '1px solid rgba(255,255,255,0.08)', width: '100%', maxWidth: 680, alignSelf: 'center', borderRadius: 8, color: '#f6f4ef', userSelect: 'none', flexShrink: 0 }}>
+      <IconButton onClick={onReset} title="Return to start (0)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2v10M12 2L5 7l7 5V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/></svg></IconButton>
+      <IconButton onClick={onPlayPause} title="Play/pause (space)">{playing ? (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="2" width="3" height="10" fill="currentColor"/><rect x="8" y="2" width="3" height="10" fill="currentColor"/></svg>) : (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2l9 5-9 5V2z" fill="currentColor"/></svg>)}</IconButton>
+      <div style={{ fontFamily: mono, fontSize: 12, fontVariantNumeric: 'tabular-nums', width: 64, textAlign: 'right', color: '#f6f4ef' }}>{fmt(time)}</div>
+      <div ref={trackRef} onMouseMove={onTrackMove} onMouseLeave={onTrackLeave} onMouseDown={onTrackDown} style={{ flex: 1, height: 22, position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }}/>
+        <div style={{ position: 'absolute', left: 0, width: `${pct}%`, height: 4, background: 'oklch(72% 0.12 250)', borderRadius: 2 }}/>
+        <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', width: 12, height: 12, marginLeft: -6, marginTop: -6, background: '#fff', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.4)' }}/>
+      </div>
+      <div style={{ fontFamily: mono, fontSize: 12, fontVariantNumeric: 'tabular-nums', width: 64, textAlign: 'left', color: 'rgba(246,244,239,0.55)' }}>{fmt(duration)}</div>
+    </div>
+  );
+}
+
+function Stage({ width = 1280, height = 720, duration = 10, background = '#f6f4ef', fps = 60, loop = true, autoplay = true, persistKey = 'animstage', children }) {
+  const [time, setTime] = React.useState(() => { try { const v = parseFloat(localStorage.getItem(persistKey + ':t') || '0'); return isFinite(v) ? clamp(v, 0, duration) : 0; } catch { return 0; } });
+  const [playing, setPlaying] = React.useState(autoplay);
+  const [hoverTime, setHoverTime] = React.useState(null);
+  const [scale, setScale] = React.useState(1);
+  const stageRef = React.useRef(null);
+  const rafRef = React.useRef(null);
+  const lastTsRef = React.useRef(null);
+  React.useEffect(() => { try { localStorage.setItem(persistKey + ':t', String(time)); } catch {} }, [time, persistKey]);
+  React.useEffect(() => { if (!stageRef.current) return; const el = stageRef.current; const measure = () => { const barH = 44; const s = Math.min(el.clientWidth / width, (el.clientHeight - barH) / height); setScale(Math.max(0.05, s)); }; measure(); const ro = new ResizeObserver(measure); ro.observe(el); window.addEventListener('resize', measure); return () => { ro.disconnect(); window.removeEventListener('resize', measure); }; }, [width, height]);
+  React.useEffect(() => { if (!playing) { lastTsRef.current = null; return; } const step = (ts) => { if (lastTsRef.current == null) lastTsRef.current = ts; const dt = (ts - lastTsRef.current) / 1000; lastTsRef.current = ts; setTime((t) => { let next = t + dt; if (next >= duration) { if (loop) next = next % duration; else { next = duration; setPlaying(false); } } return next; }); rafRef.current = requestAnimationFrame(step); }; rafRef.current = requestAnimationFrame(step); return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); lastTsRef.current = null; }; }, [playing, duration, loop]);
+  React.useEffect(() => { const onKey = (e) => { if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; if (e.code === 'Space') { e.preventDefault(); setPlaying(p => !p); } else if (e.code === 'ArrowLeft') { setTime(t => clamp(t - (e.shiftKey ? 1 : 0.1), 0, duration)); } else if (e.code === 'ArrowRight') { setTime(t => clamp(t + (e.shiftKey ? 1 : 0.1), 0, duration)); } else if (e.key === '0' || e.code === 'Home') { setTime(0); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [duration]);
+  const displayTime = hoverTime != null ? hoverTime : time;
+  const ctxValue = React.useMemo(() => ({ time: displayTime, duration, playing, setTime, setPlaying }), [displayTime, duration, playing]);
+  return (
+    <div ref={stageRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#0a0a0a' }}>
+      <div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', minHeight: 0 }}>
+        <div style={{ width, height, background, position: 'relative', transform: `scale(${scale})`, transformOrigin: 'center', flexShrink: 0, boxShadow: '0 20px 60px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+          <TimelineContext.Provider value={ctxValue}>{children}</TimelineContext.Provider>
+        </div>
+      </div>
+      <PlaybackBar time={displayTime} actualTime={time} duration={duration} playing={playing} onPlayPause={() => setPlaying(p => !p)} onReset={() => setTime(0)} onSeek={(t) => setTime(t)} onHover={(t) => setHoverTime(t)} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// system.jsx — Palette, type, and shared visual primitives
+// ═══════════════════════════════════════════════════════════════════════════
+
+const C = {
+  bg: '#0a0c10', ink: '#eef1f5', inkDim: 'rgba(238,241,245,0.56)', inkFaint: 'rgba(238,241,245,0.30)', inkGhost: 'rgba(238,241,245,0.12)',
+  brand: 'oklch(72% 0.15 256)', brandSoft: 'oklch(72% 0.15 256 / 0.16)', brandLine: 'oklch(72% 0.15 256 / 0.5)',
+  ok: 'oklch(78% 0.17 156)', okSoft: 'oklch(78% 0.17 156 / 0.16)',
+  bad: 'oklch(67% 0.20 24)', badSoft: 'oklch(67% 0.20 24 / 0.16)',
+  panel: 'rgba(255,255,255,0.035)', panelStrong: 'rgba(255,255,255,0.06)',
+  border: 'rgba(255,255,255,0.10)', borderStrong: 'rgba(255,255,255,0.18)',
+};
+const DISPLAY = "'Space Grotesk', system-ui, sans-serif";
+const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
+
+function fadeAt(localTime, duration, fin = 0.4, fout = 0.4) {
+  if (localTime < 0) return 0;
+  if (localTime < fin) return clamp(localTime / fin, 0, 1);
+  if (localTime > duration - fout) return clamp((duration - localTime) / fout, 0, 1);
+  return 1;
+}
+
+function Backdrop({ glowX = 960, glowY = 540, glowColor = C.brand, glowStrength = 0.0 }) {
+  const time = useTime();
+  const drift = (time * 6) % 64;
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: C.bg, overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', inset: -64, backgroundImage: `linear-gradient(${C.inkGhost} 1px, transparent 1px), linear-gradient(90deg, ${C.inkGhost} 1px, transparent 1px)`, backgroundSize: '64px 64px', transform: `translate(${drift}px, ${drift * 0.5}px)`, opacity: 0.5, maskImage: 'radial-gradient(ellipse 75% 70% at 50% 50%, #000 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 75% 70% at 50% 50%, #000 55%, transparent 100%)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle 640px at ${glowX}px ${glowY}px, oklch(72% 0.15 256 / ${0.13 + glowStrength}), transparent 70%)` }} />
+      <div style={{ position: 'absolute', inset: 0, boxShadow: 'inset 0 0 320px rgba(0,0,0,0.7)' }} />
+    </div>
+  );
+}
+
+function Kicker({ children, color = C.brand, style }) { return (<div style={{ fontFamily: MONO, fontSize: 22, letterSpacing: '0.32em', whiteSpace: 'nowrap', textTransform: 'uppercase', color, fontWeight: 500, ...style }}>{children}</div>); }
+
+function Caption({ t, dur, kicker, title, sub, x = 960, y = 880, align = 'center' }) {
+  const o = fadeAt(t, dur, 0.5, 0.4);
+  const rise = (1 - clamp(t / 0.6, 0, 1)) * 22;
+  return (
+    <div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%, ${rise}px)`, opacity: o, textAlign: align, width: 1300, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+      {kicker && <Kicker>{kicker}</Kicker>}
+      {title && <div style={{ fontFamily: DISPLAY, fontSize: 58, fontWeight: 600, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.05 }}>{title}</div>}
+      {sub && <div style={{ fontFamily: MONO, fontSize: 26, color: C.inkDim, fontWeight: 400, letterSpacing: '0.01em' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function AgentChip({ x, y, label, state = 'idle', appear = 1, dim = false }) {
+  const rogue = state === 'rogue'; const accent = rogue ? C.bad : C.brand; const s = 0.7 + 0.3 * appear;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${s})`, opacity: (dim ? 0.4 : 1) * appear, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px 14px 16px', background: C.panel, border: `1px solid ${rogue ? C.badSoft : C.border}`, borderRadius: 14, width: 300, boxSizing: 'border-box', backdropFilter: 'blur(2px)' }}>
+    <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: rogue ? C.badSoft : C.brandSoft, border: `1px solid ${accent.replace(')', ' / 0.5)')}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 12, height: 12, borderRadius: 3, background: accent }} /></div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><div style={{ fontFamily: MONO, fontSize: 19, color: C.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div><div style={{ fontFamily: MONO, fontSize: 13, color: rogue ? C.bad : C.inkFaint, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{rogue ? 'unverified' : 'agent'}</div></div>
+  </div>);
+}
+
+function ServerNode({ x, y, appear = 1, guarded = false, breach = 0 }) {
+  const tools = [{ name: 'search()', risk: false }, { name: 'fetch()', risk: false }, { name: 'charge()', risk: true }, { name: 'delete()', risk: true }];
+  const s = 0.85 + 0.15 * appear;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${s})`, opacity: appear, width: 320, background: C.panelStrong, border: `1px solid ${guarded ? C.brandLine : C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: guarded ? `0 0 0 1px ${C.brandSoft}, 0 24px 60px rgba(0,0,0,0.5)` : '0 24px 60px rgba(0,0,0,0.5)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.025)' }}>
+      <div style={{ width: 10, height: 10, borderRadius: 5, background: breach > 0.5 ? C.bad : (guarded ? C.ok : C.inkDim), boxShadow: `0 0 12px ${breach > 0.5 ? C.bad : (guarded ? C.ok : 'transparent')}` }} />
+      <div style={{ fontFamily: MONO, fontSize: 19, color: C.ink, letterSpacing: '0.04em', fontWeight: 500 }}>MCP&nbsp;SERVER</div>
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>{tools.map((tool, i) => (<div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 22px', borderBottom: i < tools.length - 1 ? `1px solid ${C.inkGhost}` : 'none' }}><span style={{ fontFamily: MONO, fontSize: 20, color: tool.risk ? C.ink : C.inkDim, fontWeight: tool.risk ? 500 : 400 }}>{tool.name}</span><span style={{ fontFamily: MONO, fontSize: 13, letterSpacing: '0.08em', color: guarded ? C.ok : (tool.risk ? C.bad : C.inkFaint) }}>{guarded ? 'GATED' : (tool.risk ? 'OPEN' : 'open')}</span></div>))}</div>
+  </div>);
+}
+
+function ShieldGlyph({ color = C.brand, size = 44 }) { return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.4 7.5 10 4.3-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" stroke={color} strokeWidth="1.6" strokeLinejoin="round" fill={color.replace(')', ' / 0.12)')} /><path d="M8.6 12.2l2.4 2.4 4.4-4.6" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>); }
+
+function Gate({ x, y, h = 560, appear = 1, pulse = 0 }) {
+  const drop = (1 - appear) * -120;
+  const glow = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(pulse * Math.PI * 2));
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%,-50%)', opacity: appear }}>
+    <div style={{ position: 'absolute', left: '50%', top: drop, transform: 'translate(-50%,-50%)', width: 8, height: h, borderRadius: 4, background: `linear-gradient(${C.brand}, ${C.brandLine})`, boxShadow: `0 0 ${18 + glow * 26}px ${C.brand.replace(')', ' / ' + (0.4 + glow * 0.4) + ')')}` }} />
+    <div style={{ position: 'absolute', left: '50%', top: drop, transform: 'translate(-50%,-50%)', width: 110, height: 110, borderRadius: 26, background: C.bg, border: `2px solid ${C.brand}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 ${20 + glow * 30}px ${C.brandSoft}, inset 0 0 30px ${C.brandSoft}` }}><ShieldGlyph color={C.brand} size={50} /></div>
+  </div>);
+}
+
+function Packet({ x, y, label, color = C.brand, scale = 1, opacity = 1 }) {
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${scale})`, opacity, display: 'flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 9, background: color.replace(')', ' / 0.14)'), border: `1px solid ${color.replace(')', ' / 0.55)')}`, whiteSpace: 'nowrap', backdropFilter: 'blur(2px)' }}>
+    <div style={{ width: 8, height: 8, borderRadius: 4, background: color, boxShadow: `0 0 10px ${color}` }} />
+    <span style={{ fontFamily: MONO, fontSize: 16, color: C.ink, fontWeight: 500 }}>{label}</span>
+  </div>);
+}
+
+function Stamp({ x, y, kind = 'ok', appear = 1 }) {
+  const ok = kind === 'ok'; const color = ok ? C.ok : C.bad;
+  const s = appear < 0.5 ? (1.6 - 1.2 * Easing.easeOutBack(clamp(appear / 0.5, 0, 1))) : 1;
+  const rot = ok ? -8 : 7;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) rotate(${rot}deg) scale(${s})`, opacity: clamp(appear / 0.3, 0, 1), display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', borderRadius: 12, background: ok ? C.okSoft : C.badSoft, border: `2px solid ${color}` }}>
+    {ok ? <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke={color} strokeWidth="2.6" strokeLinecap="round" /></svg>}
+    <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 600, letterSpacing: '0.1em', color }}>{ok ? 'VERIFIED' : 'REJECTED'}</span>
+  </div>);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// scenes_devmode.jsx — MCP dev mode: 60 seconds to authenticated server
+// ═══════════════════════════════════════════════════════════════════════════
+
+// scenes_devmode.jsx — MCP dev mode: authenticated MCP server in 60 seconds, zero circuit artifacts.
+// Reuses system.jsx: C, MONO, DISPLAY, fadeAt, Backdrop, Caption, Kicker, ShieldGlyph.
+
+const KW = C.brand, STR = C.ok, FN = 'oklch(78% 0.13 300)', CMT = C.inkFaint, PNC = C.inkDim, IDN = C.ink;
+const tk = (text, color = IDN) => ({ text, color });
+
+function DvPill({ text, color = C.inkDim, bg, border }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, whiteSpace: 'nowrap',
+      background: bg || 'rgba(255,255,255,0.04)', border: `1px solid ${border || C.border}`,
+      fontFamily: MONO, fontSize: 15, letterSpacing: '0.06em', color, fontWeight: 500 }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: color, boxShadow: `0 0 8px ${color}` }} />{text}
+    </span>
+  );
+}
+
+// code window with line-by-line reveal
+function CodeBlock({ x, y, width = 1000, appear = 1, reveal = 1, lines, filename = 'server.ts', highlightLine = -1 }) {
+  const a = Easing.easeOutCubic(clamp(appear, 0, 1));
+  const total = lines.length;
+  const shown = reveal * total;
+  return (
+    <div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) translateY(${(1 - a) * 24}px)`, opacity: a,
+      width, boxSizing: 'border-box', background: 'rgba(11,14,19,0.94)', border: `1px solid ${C.borderStrong}`, borderRadius: 16, overflow: 'hidden',
+      boxShadow: '0 30px 70px rgba(0,0,0,0.55)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 22px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.025)' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <span style={{ width: 13, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.14)' }} />
+          <span style={{ width: 13, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.14)' }} />
+          <span style={{ width: 13, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.14)' }} />
+        </div>
+        <span style={{ fontFamily: MONO, fontSize: 16, color: C.inkDim, letterSpacing: '0.04em' }}>{filename}</span>
+      </div>
+      <div style={{ padding: '24px 30px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {lines.map((ln, i) => {
+          const op = clamp(shown - i, 0, 1);
+          const hl = i === highlightLine;
+          return (
+            <div key={i} style={{ minHeight: 34, display: 'flex', alignItems: 'center', opacity: op, transform: `translateX(${(1 - op) * -10}px)`,
+              background: hl ? C.brandSoft : 'transparent', borderRadius: 6, margin: hl ? '0 -10px' : 0, padding: hl ? '2px 10px' : 0 }}>
+              <span style={{ fontFamily: MONO, fontSize: 25, lineHeight: 1.35, whiteSpace: 'pre' }}>
+                {ln.map((seg, j) => <span key={j} style={{ color: seg.color }}>{seg.text}</span>)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ToolRow({ name, online, appear = 1 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 22px', opacity: clamp(appear, 0, 1),
+      borderBottom: `1px solid ${C.inkGhost}` }}>
+      <span style={{ fontFamily: MONO, fontSize: 20, color: online ? C.ink : C.inkFaint }}>{name}</span>
+      <span style={{ fontFamily: MONO, fontSize: 13, letterSpacing: '0.08em', whiteSpace: 'nowrap', color: online ? C.ok : C.inkFaint }}>{online ? 'GATED ✓' : '…'}</span>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SCENE 1 — PROBLEM
+function DvProblem({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.4);
+  const steps = ['generate .ptau', 'trusted setup ceremony', 'compile circuits', 'export .zkey artifacts', 'wire verifier keys'];
+  const push = interpolate([0, dur], [1.0, 1.04], Easing.easeInOutSine)(t);
+  return (
+    <div style={{ position: 'absolute', inset: 0, opacity: o, transform: `scale(${push})`, transformOrigin: 'center' }}>
+      <Caption t={t} dur={dur} y={104} kicker="THE PROBLEM" title="Auth on an MCP server is a setup ceremony." sub="…before you authenticate a single tool call." />
+      <div style={{ position: 'absolute', left: 960, top: 590, transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', gap: 16, width: 700 }}>
+        {steps.map((s, i) => {
+          const ap = clamp((t - (0.8 + i * 0.45)) / 0.4, 0, 1);
+          return (
+            <div key={i} style={{ opacity: ap, transform: `translateX(${(1 - ap) * -16}px)`, display: 'flex', alignItems: 'center', gap: 16,
+              padding: '16px 22px', borderRadius: 12, background: C.panel, border: `1px solid ${C.border}` }}>
+              <span style={{ fontFamily: MONO, fontSize: 18, color: C.inkFaint, width: 24 }}>{String(i + 1).padStart(2, '0')}</span>
+              <span style={{ fontFamily: MONO, fontSize: 24, color: C.inkDim, whiteSpace: 'nowrap' }}>{s}</span>
+              <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 15, color: C.bad, letterSpacing: '0.06em' }}>{t > 3.2 ? 'hours' : ''}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// SCENE 2 — THE WRAP
+function DvWrap({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.4);
+  const reveal = clamp((t - 0.6) / 2.6, 0, 1);
+  const hl = t > 3.6;
+  const lines = [
+    [tk('import ', KW), tk('{ withBolyraAuthStdio } ', IDN), tk('from ', KW), tk("'@bolyra/mcp'", STR), tk(';', PNC)],
+    [],
+    [tk('const ', KW), tk('server ', IDN), tk('= ', PNC), tk('new ', KW), tk('McpServer', IDN), tk('({ … });', PNC)],
+    [],
+    [tk('withBolyraAuthStdio', FN), tk('(server, {', PNC)],
+    [tk('  devMode: ', IDN), tk('true', KW), tk(',', PNC), tk('       // zero circuit artifacts', CMT)],
+    [tk('  toolPolicy', IDN), tk(',', PNC)],
+    [tk('  receiptSigner', IDN), tk(',', PNC)],
+    [tk('});', PNC)],
+  ];
+  return (
+    <div style={{ position: 'absolute', inset: 0, opacity: o }}>
+      <Caption t={t} dur={dur} y={104} kicker="ONE WRAPPER" title="Wrap your server. That's the integration." />
+      <CodeBlock x={960} y={580} width={1040} appear={1} reveal={reveal} lines={lines} filename="server.ts" highlightLine={hl ? 5 : -1} />
+    </div>
+  );
+}
+
+// SCENE 3 — 60 SECONDS
+function DvSixty({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.4);
+  const secs = Math.round(interpolate([0.6, 2.6], [0, 52], Easing.easeOutCubic)(clamp(t, 0, 2.6)));
+  const tools = ['search()', 'fetch()', 'charge()', 'delete()'];
+  const ready = t > 3.0;
+  return (
+    <div style={{ position: 'absolute', inset: 0, opacity: o }}>
+      <Caption t={t} dur={dur} y={104} kicker="ZERO ARTIFACTS" title="Authenticated in 60 seconds." />
+
+      {/* timer */}
+      <div style={{ position: 'absolute', left: 560, top: 560, transform: 'translate(-50%,-50%)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 12, whiteSpace: 'nowrap', fontFamily: DISPLAY, fontSize: 150, fontWeight: 700, color: ready ? C.ok : C.ink, letterSpacing: '-0.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+          {secs}<span style={{ fontFamily: MONO, fontSize: 46, fontWeight: 500, color: C.inkDim }}>s</span>
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 22, color: C.inkDim, whiteSpace: 'nowrap' }}>npm install → authenticated server</div>
+        <div style={{ opacity: clamp((t - 3.2) / 0.4, 0, 1) }}><DvPill text="createDevIdentities() · no .zkey, no .ptau" color={C.ok} bg={C.okSoft} border={C.ok.replace(')', ' / 0.5)')} /></div>
+      </div>
+
+      {/* server panel booting */}
+      <div style={{ position: 'absolute', left: 1360, top: 560, transform: 'translate(-50%,-50%)', width: 380,
+        background: C.panelStrong, border: `1px solid ${ready ? C.brandLine : C.border}`, borderRadius: 18, overflow: 'hidden',
+        boxShadow: ready ? `0 0 0 1px ${C.brandSoft}, 0 24px 60px rgba(0,0,0,0.5)` : '0 24px 60px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.025)' }}>
+          <span style={{ width: 10, height: 10, borderRadius: 5, background: ready ? C.ok : C.inkFaint, boxShadow: ready ? `0 0 12px ${C.ok}` : 'none' }} />
+          <span style={{ fontFamily: MONO, fontSize: 19, color: C.ink, letterSpacing: '0.04em', fontWeight: 500 }}>MCP&nbsp;SERVER</span>
+          <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 13, color: ready ? C.ok : C.inkFaint, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ready ? 'AUTH ON' : 'booting…'}</span>
+        </div>
+        {tools.map((name, i) => <ToolRow key={i} name={name} online={t > 1.4 + i * 0.45} appear={clamp((t - (0.8 + i * 0.3)) / 0.4, 0, 1)} />)}
+      </div>
+    </div>
+  );
+}
+
+// SCENE 4 — NOT A MOCK
+function DvReal({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.4);
+  const feats = [
+    ['Per-tool gating', 'every call checked against policy'],
+    ['Signed receipts', 'audit evidence from line one'],
+    ['Delegation chains', 'scope-narrowing, built in'],
+    ['stdio + HTTP', 'wherever your server runs'],
+  ];
+  return (
+    <div style={{ position: 'absolute', inset: 0, opacity: o }}>
+      <Caption t={t} dur={dur} y={104} kicker="NOT A MOCK" title="Dev mode is the real protocol." sub="Flip devMode off for production — same API, real ZKPs." />
+      <div style={{ position: 'absolute', left: 960, top: 600, transform: 'translate(-50%,-50%)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22, width: 1180 }}>
+        {feats.map((f, i) => {
+          const ap = clamp((t - (0.7 + i * 0.4)) / 0.5, 0, 1);
+          return (
+            <div key={i} style={{ opacity: ap, transform: `translateY(${(1 - ap) * 16}px)`, display: 'flex', alignItems: 'flex-start', gap: 16,
+              padding: '24px 26px', borderRadius: 14, background: C.panel, border: `1px solid ${C.border}` }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ marginTop: 2, flexShrink: 0 }}><path d="M5 12.5l4.5 4.5L19 7" stroke={C.ok} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontFamily: MONO, fontSize: 24, color: C.ink, fontWeight: 500, whiteSpace: 'nowrap' }}>{f[0]}</span>
+                <span style={{ fontFamily: MONO, fontSize: 17, color: C.inkFaint }}>{f[1]}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// SCENE 5 — CTA
+function DvCTA({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.3);
+  const rise = (1 - Easing.easeOutCubic(clamp(t / 0.7, 0, 1))) * 26;
+  const statsIn = clamp((t - 0.7) / 0.6, 0, 1);
+  const cmdIn = clamp((t - 1.2) / 0.6, 0, 1);
+  return (
+    <div style={{ position: 'absolute', inset: 0, opacity: o, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ transform: `translateY(${rise}px)`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+          <ShieldGlyph color={C.brand} size={66} />
+          <div style={{ fontFamily: DISPLAY, fontSize: 100, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em' }}>Bolyra</div>
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 28, color: C.inkDim, whiteSpace: 'nowrap', textAlign: 'center' }}>
+          MCP dev mode — <span style={{ color: C.brand }}>v0.6.3</span> live now on npm
+        </div>
+        <div style={{ display: 'flex', gap: 14, opacity: statsIn, transform: `translateY(${(1 - statsIn) * 12}px)` }}>
+          <DvPill text="authed in 60s" color={C.brand} bg={C.brandSoft} border={C.brandLine} />
+          <DvPill text="zero circuit artifacts" color={C.inkDim} />
+          <DvPill text="stdio + HTTP" color={C.inkDim} />
+        </div>
+        <div style={{ opacity: cmdIn, transform: `translateY(${(1 - cmdIn) * 14}px)`, marginTop: 6, padding: '18px 30px', borderRadius: 12,
+          background: 'rgba(14,18,24,0.85)', border: `1px solid ${C.borderStrong}`, fontFamily: MONO, fontSize: 25, color: C.ink, whiteSpace: 'nowrap' }}>
+          <span style={{ color: C.ok }}>$</span> npm i <span style={{ color: C.brand }}>@bolyra/mcp</span>
+        </div>
+        <div style={{ marginTop: 2, fontFamily: MONO, fontSize: 18, color: C.inkFaint, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+          Apache-2.0 · runnable example included · bolyra.ai
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DURATION = 30;
+
+function Video() {
+  return (
+    <Stage width={1920} height={1080} duration={DURATION} background="#0a0c10" persistKey="bolyra-dev">
+      <Backdrop glowX={962} glowY={540} />
+      <Sprite start={0} end={5.0}>{({ localTime }) => <DvProblem t={localTime} dur={5.0} />}</Sprite>
+      <Sprite start={4.9} end={11.6}>{({ localTime }) => <DvWrap t={localTime} dur={6.7} />}</Sprite>
+      <Sprite start={11.4} end={17.6}>{({ localTime }) => <DvSixty t={localTime} dur={6.2} />}</Sprite>
+      <Sprite start={17.4} end={23.4}>{({ localTime }) => <DvReal t={localTime} dur={6.0} />}</Sprite>
+      <Sprite start={23.2} end={30}>{({ localTime }) => <DvCTA t={localTime} dur={6.8} />}</Sprite>
+    </Stage>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('video-root')).render(<Video />);
+</script>
+</body>
+</html>
