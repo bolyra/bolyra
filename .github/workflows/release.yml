@@ -27,6 +27,7 @@ on:
       - '@bolyra/receipts@*'
       - '@bolyra/gateway@*'
       - 'bolyra-python@*'
+      - 'bolyra-langchain@*'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -197,6 +198,70 @@ jobs:
             FOUND=$(pip index versions bolyra 2>/dev/null | grep -o "${{ steps.tag.outputs.version }}" || true)
             if [ -n "$FOUND" ]; then
               echo "✓ bolyra==${{ steps.tag.outputs.version }} resolves on PyPI"
+              exit 0
+            fi
+            echo "PyPI CDN lag (attempt $i/6) — sleeping 10s"
+            sleep 10
+          done
+          echo "ERROR: published but not yet resolvable on PyPI" >&2
+          exit 1
+
+  # ── PyPI publish (LangChain adapter) ─────────────────────────────
+  # Trigger: push of tag matching bolyra-langchain@<version>
+  # Auth: OIDC trusted publishing (no TWINE_PASSWORD / PYPI_TOKEN).
+  # Requires Trusted Publisher on pypi.org:
+  #   package=bolyra-langchain, owner=bolyra, repo=bolyra,
+  #   workflow=release.yml, environment=pypi-publish
+  publish-langchain:
+    name: Publish bolyra-langchain (PyPI) ${{ github.ref_name }}
+    if: startsWith(github.ref, 'refs/tags/bolyra-langchain@')
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Parse tag → version
+        id: tag
+        run: |
+          REF="${GITHUB_REF#refs/tags/bolyra-langchain@}"
+          echo "version=$REF" >> "$GITHUB_OUTPUT"
+          echo "Publishing bolyra-langchain==$REF to PyPI"
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Verify pyproject.toml version matches tag
+        working-directory: integrations/langchain
+        run: |
+          PJ_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$PJ_VERSION" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "ERROR: tag version ${{ steps.tag.outputs.version }} does not match pyproject.toml version $PJ_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build
+        working-directory: integrations/langchain
+        run: python3 -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: integrations/langchain/dist/
+
+      - name: Verify on PyPI
+        run: |
+          for i in 1 2 3 4 5 6; do
+            FOUND=$(pip index versions bolyra-langchain 2>/dev/null | grep -o "${{ steps.tag.outputs.version }}" || true)
+            if [ -n "$FOUND" ]; then
+              echo "✓ bolyra-langchain==${{ steps.tag.outputs.version }} resolves on PyPI"
               exit 0
             fi
             echo "PyPI CDN lag (attempt $i/6) — sleeping 10s"
