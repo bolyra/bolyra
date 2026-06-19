@@ -22,8 +22,9 @@ BLOG="$SCRIPT_DIR/blog.html"
 BLOG1="$SCRIPT_DIR/blog-1.html"
 BLOG2="$SCRIPT_DIR/blog-2.html"
 BLOG3="$SCRIPT_DIR/blog-3.html"
+VIDEO="$SCRIPT_DIR/video.html"
 
-for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$VIDEO"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
@@ -76,10 +77,18 @@ aws s3 cp "$BLOG3" "s3://$BUCKET/blog-3" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
+echo "→ uploading video.html to s3://$BUCKET/"
+aws s3 cp "$VIDEO" "s3://$BUCKET/video.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$VIDEO" "s3://$BUCKET/video" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/video.html" "/video" \
   --query 'Invalidation.Id' \
   --output text)
 

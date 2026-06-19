@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bolyra Gateway Launch Video</title>
+<meta name="description" content="31-second animated launch video for @bolyra/gateway — MCP auth reverse proxy. Interactive: play, pause, scrub.">
+<meta property="og:title" content="Bolyra Gateway Launch Video">
+<meta property="og:description" content="Put a gate in front of any MCP server. Credentials verified. Replays rejected. Signed audit receipts.">
+<meta property="og:type" content="video.other">
+<meta property="og:url" content="https://bolyra.ai/video">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+<script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0c10; overflow: hidden; }
+  #video-root { position: fixed; inset: 0; }
+</style>
+</head>
+<body>
+<div id="video-root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+// ═══════════════════════════════════════════════════════════════════════════
+// animations.jsx — Reusable animation framework
+// ═══════════════════════════════════════════════════════════════════════════
+
+const Easing = {
+  linear: (t) => t,
+  easeInQuad:    (t) => t * t,
+  easeOutQuad:   (t) => t * (2 - t),
+  easeInOutQuad: (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
+  easeInCubic:    (t) => t * t * t,
+  easeOutCubic:   (t) => (--t) * t * t + 1,
+  easeInOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1),
+  easeInQuart:    (t) => t * t * t * t,
+  easeOutQuart:   (t) => 1 - (--t) * t * t * t,
+  easeInOutQuart: (t) => (t < 0.5 ? 8 * t * t * t * t : 1 - 8 * (--t) * t * t * t),
+  easeInExpo:  (t) => (t === 0 ? 0 : Math.pow(2, 10 * (t - 1))),
+  easeOutExpo: (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+  easeInOutExpo: (t) => {
+    if (t === 0) return 0; if (t === 1) return 1;
+    if (t < 0.5) return 0.5 * Math.pow(2, 20 * t - 10);
+    return 1 - 0.5 * Math.pow(2, -20 * t + 10);
+  },
+  easeInSine:    (t) => 1 - Math.cos((t * Math.PI) / 2),
+  easeOutSine:   (t) => Math.sin((t * Math.PI) / 2),
+  easeInOutSine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+  easeOutBack: (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  easeInBack: (t) => { const c1 = 1.70158, c3 = c1 + 1; return c3 * t * t * t - c1 * t * t; },
+  easeInOutBack: (t) => { const c1 = 1.70158, c2 = c1 * 1.525; return t < 0.5 ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2 : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2; },
+  easeOutElastic: (t) => { const c4 = (2 * Math.PI) / 3; if (t === 0) return 0; if (t === 1) return 1; return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1; },
+};
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+function interpolate(input, output, ease = Easing.linear) {
+  return (t) => {
+    if (t <= input[0]) return output[0];
+    if (t >= input[input.length - 1]) return output[output.length - 1];
+    for (let i = 0; i < input.length - 1; i++) {
+      if (t >= input[i] && t <= input[i + 1]) {
+        const span = input[i + 1] - input[i];
+        const local = span === 0 ? 0 : (t - input[i]) / span;
+        const easeFn = Array.isArray(ease) ? (ease[i] || Easing.linear) : ease;
+        return output[i] + (output[i + 1] - output[i]) * easeFn(local);
+      }
+    }
+    return output[output.length - 1];
+  };
+}
+
+function animate({ from = 0, to = 1, start = 0, end = 1, ease = Easing.easeInOutCubic }) {
+  return (t) => { if (t <= start) return from; if (t >= end) return to; return from + (to - from) * ease((t - start) / (end - start)); };
+}
+
+const TimelineContext = React.createContext({ time: 0, duration: 10, playing: false });
+const useTime = () => React.useContext(TimelineContext).time;
+const useTimeline = () => React.useContext(TimelineContext);
+const SpriteContext = React.createContext({ localTime: 0, progress: 0, duration: 0 });
+const useSprite = () => React.useContext(SpriteContext);
+
+function Sprite({ start = 0, end = Infinity, children, keepMounted = false }) {
+  const { time } = useTimeline();
+  const visible = time >= start && time <= end;
+  if (!visible && !keepMounted) return null;
+  const duration = end - start;
+  const localTime = Math.max(0, time - start);
+  const progress = duration > 0 && isFinite(duration) ? clamp(localTime / duration, 0, 1) : 0;
+  const value = { localTime, progress, duration, visible };
+  return (<SpriteContext.Provider value={value}>{typeof children === 'function' ? children(value) : children}</SpriteContext.Provider>);
+}
+
+function IconButton({ children, onClick, title }) {
+  const [hover, setHover] = React.useState(false);
+  return (<button onClick={onClick} title={title} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#f6f4ef', cursor: 'pointer', padding: 0, transition: 'background 120ms' }}>{children}</button>);
+}
+
+function PlaybackBar({ time, duration, playing, onPlayPause, onReset, onSeek, onHover }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const timeFromEvent = React.useCallback((e) => { const rect = trackRef.current.getBoundingClientRect(); return clamp((e.clientX - rect.left) / rect.width, 0, 1) * duration; }, [duration]);
+  const onTrackMove = (e) => { if (!trackRef.current) return; const t = timeFromEvent(e); if (dragging) onSeek(t); else onHover(t); };
+  const onTrackLeave = () => { if (!dragging) onHover(null); };
+  const onTrackDown = (e) => { setDragging(true); onSeek(timeFromEvent(e)); onHover(null); };
+  React.useEffect(() => { if (!dragging) return; const onUp = () => setDragging(false); const onMove = (e) => { if (trackRef.current) onSeek(timeFromEvent(e)); }; window.addEventListener('mouseup', onUp); window.addEventListener('mousemove', onMove); return () => { window.removeEventListener('mouseup', onUp); window.removeEventListener('mousemove', onMove); }; }, [dragging, timeFromEvent, onSeek]);
+  const pct = duration > 0 ? (time / duration) * 100 : 0;
+  const fmt = (t) => { const total = Math.max(0, t); const m = Math.floor(total / 60); const s = Math.floor(total % 60); const cs = Math.floor((total * 100) % 100); return `${String(m).padStart(1, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`; };
+  const mono = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', background: 'rgba(20,20,20,0.92)', borderTop: '1px solid rgba(255,255,255,0.08)', width: '100%', maxWidth: 680, alignSelf: 'center', borderRadius: 8, color: '#f6f4ef', userSelect: 'none', flexShrink: 0 }}>
+      <IconButton onClick={onReset} title="Return to start (0)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2v10M12 2L5 7l7 5V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/></svg></IconButton>
+      <IconButton onClick={onPlayPause} title="Play/pause (space)">{playing ? (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="2" width="3" height="10" fill="currentColor"/><rect x="8" y="2" width="3" height="10" fill="currentColor"/></svg>) : (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2l9 5-9 5V2z" fill="currentColor"/></svg>)}</IconButton>
+      <div style={{ fontFamily: mono, fontSize: 12, fontVariantNumeric: 'tabular-nums', width: 64, textAlign: 'right', color: '#f6f4ef' }}>{fmt(time)}</div>
+      <div ref={trackRef} onMouseMove={onTrackMove} onMouseLeave={onTrackLeave} onMouseDown={onTrackDown} style={{ flex: 1, height: 22, position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }}/>
+        <div style={{ position: 'absolute', left: 0, width: `${pct}%`, height: 4, background: 'oklch(72% 0.12 250)', borderRadius: 2 }}/>
+        <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', width: 12, height: 12, marginLeft: -6, marginTop: -6, background: '#fff', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.4)' }}/>
+      </div>
+      <div style={{ fontFamily: mono, fontSize: 12, fontVariantNumeric: 'tabular-nums', width: 64, textAlign: 'left', color: 'rgba(246,244,239,0.55)' }}>{fmt(duration)}</div>
+    </div>
+  );
+}
+
+function Stage({ width = 1280, height = 720, duration = 10, background = '#f6f4ef', fps = 60, loop = true, autoplay = true, persistKey = 'animstage', children }) {
+  const [time, setTime] = React.useState(() => { try { const v = parseFloat(localStorage.getItem(persistKey + ':t') || '0'); return isFinite(v) ? clamp(v, 0, duration) : 0; } catch { return 0; } });
+  const [playing, setPlaying] = React.useState(autoplay);
+  const [hoverTime, setHoverTime] = React.useState(null);
+  const [scale, setScale] = React.useState(1);
+  const stageRef = React.useRef(null);
+  const rafRef = React.useRef(null);
+  const lastTsRef = React.useRef(null);
+  React.useEffect(() => { try { localStorage.setItem(persistKey + ':t', String(time)); } catch {} }, [time, persistKey]);
+  React.useEffect(() => { if (!stageRef.current) return; const el = stageRef.current; const measure = () => { const barH = 44; const s = Math.min(el.clientWidth / width, (el.clientHeight - barH) / height); setScale(Math.max(0.05, s)); }; measure(); const ro = new ResizeObserver(measure); ro.observe(el); window.addEventListener('resize', measure); return () => { ro.disconnect(); window.removeEventListener('resize', measure); }; }, [width, height]);
+  React.useEffect(() => { if (!playing) { lastTsRef.current = null; return; } const step = (ts) => { if (lastTsRef.current == null) lastTsRef.current = ts; const dt = (ts - lastTsRef.current) / 1000; lastTsRef.current = ts; setTime((t) => { let next = t + dt; if (next >= duration) { if (loop) next = next % duration; else { next = duration; setPlaying(false); } } return next; }); rafRef.current = requestAnimationFrame(step); }; rafRef.current = requestAnimationFrame(step); return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); lastTsRef.current = null; }; }, [playing, duration, loop]);
+  React.useEffect(() => { const onKey = (e) => { if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; if (e.code === 'Space') { e.preventDefault(); setPlaying(p => !p); } else if (e.code === 'ArrowLeft') { setTime(t => clamp(t - (e.shiftKey ? 1 : 0.1), 0, duration)); } else if (e.code === 'ArrowRight') { setTime(t => clamp(t + (e.shiftKey ? 1 : 0.1), 0, duration)); } else if (e.key === '0' || e.code === 'Home') { setTime(0); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [duration]);
+  const displayTime = hoverTime != null ? hoverTime : time;
+  const ctxValue = React.useMemo(() => ({ time: displayTime, duration, playing, setTime, setPlaying }), [displayTime, duration, playing]);
+  return (
+    <div ref={stageRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#0a0a0a' }}>
+      <div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', minHeight: 0 }}>
+        <div style={{ width, height, background, position: 'relative', transform: `scale(${scale})`, transformOrigin: 'center', flexShrink: 0, boxShadow: '0 20px 60px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+          <TimelineContext.Provider value={ctxValue}>{children}</TimelineContext.Provider>
+        </div>
+      </div>
+      <PlaybackBar time={displayTime} actualTime={time} duration={duration} playing={playing} onPlayPause={() => setPlaying(p => !p)} onReset={() => setTime(0)} onSeek={(t) => setTime(t)} onHover={(t) => setHoverTime(t)} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// system.jsx — Palette, type, and shared visual primitives
+// ═══════════════════════════════════════════════════════════════════════════
+
+const C = {
+  bg: '#0a0c10', ink: '#eef1f5', inkDim: 'rgba(238,241,245,0.56)', inkFaint: 'rgba(238,241,245,0.30)', inkGhost: 'rgba(238,241,245,0.12)',
+  brand: 'oklch(72% 0.15 256)', brandSoft: 'oklch(72% 0.15 256 / 0.16)', brandLine: 'oklch(72% 0.15 256 / 0.5)',
+  ok: 'oklch(78% 0.17 156)', okSoft: 'oklch(78% 0.17 156 / 0.16)',
+  bad: 'oklch(67% 0.20 24)', badSoft: 'oklch(67% 0.20 24 / 0.16)',
+  panel: 'rgba(255,255,255,0.035)', panelStrong: 'rgba(255,255,255,0.06)',
+  border: 'rgba(255,255,255,0.10)', borderStrong: 'rgba(255,255,255,0.18)',
+};
+const DISPLAY = "'Space Grotesk', system-ui, sans-serif";
+const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
+
+function fadeAt(localTime, duration, fin = 0.4, fout = 0.4) {
+  if (localTime < 0) return 0;
+  if (localTime < fin) return clamp(localTime / fin, 0, 1);
+  if (localTime > duration - fout) return clamp((duration - localTime) / fout, 0, 1);
+  return 1;
+}
+
+function Backdrop({ glowX = 960, glowY = 540, glowColor = C.brand, glowStrength = 0.0 }) {
+  const time = useTime();
+  const drift = (time * 6) % 64;
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: C.bg, overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', inset: -64, backgroundImage: `linear-gradient(${C.inkGhost} 1px, transparent 1px), linear-gradient(90deg, ${C.inkGhost} 1px, transparent 1px)`, backgroundSize: '64px 64px', transform: `translate(${drift}px, ${drift * 0.5}px)`, opacity: 0.5, maskImage: 'radial-gradient(ellipse 75% 70% at 50% 50%, #000 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 75% 70% at 50% 50%, #000 55%, transparent 100%)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle 640px at ${glowX}px ${glowY}px, oklch(72% 0.15 256 / ${0.13 + glowStrength}), transparent 70%)` }} />
+      <div style={{ position: 'absolute', inset: 0, boxShadow: 'inset 0 0 320px rgba(0,0,0,0.7)' }} />
+    </div>
+  );
+}
+
+function Kicker({ children, color = C.brand, style }) { return (<div style={{ fontFamily: MONO, fontSize: 22, letterSpacing: '0.32em', whiteSpace: 'nowrap', textTransform: 'uppercase', color, fontWeight: 500, ...style }}>{children}</div>); }
+
+function Caption({ t, dur, kicker, title, sub, x = 960, y = 880, align = 'center' }) {
+  const o = fadeAt(t, dur, 0.5, 0.4);
+  const rise = (1 - clamp(t / 0.6, 0, 1)) * 22;
+  return (
+    <div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%, ${rise}px)`, opacity: o, textAlign: align, width: 1300, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+      {kicker && <Kicker>{kicker}</Kicker>}
+      {title && <div style={{ fontFamily: DISPLAY, fontSize: 58, fontWeight: 600, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.05 }}>{title}</div>}
+      {sub && <div style={{ fontFamily: MONO, fontSize: 26, color: C.inkDim, fontWeight: 400, letterSpacing: '0.01em' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function AgentChip({ x, y, label, state = 'idle', appear = 1, dim = false }) {
+  const rogue = state === 'rogue'; const accent = rogue ? C.bad : C.brand; const s = 0.7 + 0.3 * appear;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${s})`, opacity: (dim ? 0.4 : 1) * appear, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px 14px 16px', background: C.panel, border: `1px solid ${rogue ? C.badSoft : C.border}`, borderRadius: 14, width: 300, boxSizing: 'border-box', backdropFilter: 'blur(2px)' }}>
+    <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: rogue ? C.badSoft : C.brandSoft, border: `1px solid ${accent.replace(')', ' / 0.5)')}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 12, height: 12, borderRadius: 3, background: accent }} /></div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><div style={{ fontFamily: MONO, fontSize: 19, color: C.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div><div style={{ fontFamily: MONO, fontSize: 13, color: rogue ? C.bad : C.inkFaint, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{rogue ? 'unverified' : 'agent'}</div></div>
+  </div>);
+}
+
+function ServerNode({ x, y, appear = 1, guarded = false, breach = 0 }) {
+  const tools = [{ name: 'search()', risk: false }, { name: 'fetch()', risk: false }, { name: 'charge()', risk: true }, { name: 'delete()', risk: true }];
+  const s = 0.85 + 0.15 * appear;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${s})`, opacity: appear, width: 320, background: C.panelStrong, border: `1px solid ${guarded ? C.brandLine : C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: guarded ? `0 0 0 1px ${C.brandSoft}, 0 24px 60px rgba(0,0,0,0.5)` : '0 24px 60px rgba(0,0,0,0.5)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.025)' }}>
+      <div style={{ width: 10, height: 10, borderRadius: 5, background: breach > 0.5 ? C.bad : (guarded ? C.ok : C.inkDim), boxShadow: `0 0 12px ${breach > 0.5 ? C.bad : (guarded ? C.ok : 'transparent')}` }} />
+      <div style={{ fontFamily: MONO, fontSize: 19, color: C.ink, letterSpacing: '0.04em', fontWeight: 500 }}>MCP&nbsp;SERVER</div>
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>{tools.map((tool, i) => (<div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 22px', borderBottom: i < tools.length - 1 ? `1px solid ${C.inkGhost}` : 'none' }}><span style={{ fontFamily: MONO, fontSize: 20, color: tool.risk ? C.ink : C.inkDim, fontWeight: tool.risk ? 500 : 400 }}>{tool.name}</span><span style={{ fontFamily: MONO, fontSize: 13, letterSpacing: '0.08em', color: guarded ? C.ok : (tool.risk ? C.bad : C.inkFaint) }}>{guarded ? 'GATED' : (tool.risk ? 'OPEN' : 'open')}</span></div>))}</div>
+  </div>);
+}
+
+function ShieldGlyph({ color = C.brand, size = 44 }) { return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.4 7.5 10 4.3-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" stroke={color} strokeWidth="1.6" strokeLinejoin="round" fill={color.replace(')', ' / 0.12)')} /><path d="M8.6 12.2l2.4 2.4 4.4-4.6" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>); }
+
+function Gate({ x, y, h = 560, appear = 1, pulse = 0 }) {
+  const drop = (1 - appear) * -120;
+  const glow = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(pulse * Math.PI * 2));
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%,-50%)', opacity: appear }}>
+    <div style={{ position: 'absolute', left: '50%', top: drop, transform: 'translate(-50%,-50%)', width: 8, height: h, borderRadius: 4, background: `linear-gradient(${C.brand}, ${C.brandLine})`, boxShadow: `0 0 ${18 + glow * 26}px ${C.brand.replace(')', ' / ' + (0.4 + glow * 0.4) + ')')}` }} />
+    <div style={{ position: 'absolute', left: '50%', top: drop, transform: 'translate(-50%,-50%)', width: 110, height: 110, borderRadius: 26, background: C.bg, border: `2px solid ${C.brand}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 ${20 + glow * 30}px ${C.brandSoft}, inset 0 0 30px ${C.brandSoft}` }}><ShieldGlyph color={C.brand} size={50} /></div>
+  </div>);
+}
+
+function Packet({ x, y, label, color = C.brand, scale = 1, opacity = 1 }) {
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${scale})`, opacity, display: 'flex', alignItems: 'center', gap: 9, padding: '8px 14px', borderRadius: 9, background: color.replace(')', ' / 0.14)'), border: `1px solid ${color.replace(')', ' / 0.55)')}`, whiteSpace: 'nowrap', backdropFilter: 'blur(2px)' }}>
+    <div style={{ width: 8, height: 8, borderRadius: 4, background: color, boxShadow: `0 0 10px ${color}` }} />
+    <span style={{ fontFamily: MONO, fontSize: 16, color: C.ink, fontWeight: 500 }}>{label}</span>
+  </div>);
+}
+
+function Stamp({ x, y, kind = 'ok', appear = 1 }) {
+  const ok = kind === 'ok'; const color = ok ? C.ok : C.bad;
+  const s = appear < 0.5 ? (1.6 - 1.2 * Easing.easeOutBack(clamp(appear / 0.5, 0, 1))) : 1;
+  const rot = ok ? -8 : 7;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) rotate(${rot}deg) scale(${s})`, opacity: clamp(appear / 0.3, 0, 1), display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', borderRadius: 12, background: ok ? C.okSoft : C.badSoft, border: `2px solid ${color}` }}>
+    {ok ? <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke={color} strokeWidth="2.6" strokeLinecap="round" /></svg>}
+    <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 600, letterSpacing: '0.1em', color }}>{ok ? 'VERIFIED' : 'REJECTED'}</span>
+  </div>);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// scenes_hero.jsx — Hero diagram
+// ═══════════════════════════════════════════════════════════════════════════
+
+const LANE = { x: 360, y0: 384, y1: 540, y2: 696 };
+const GATE_X = 962; const SRV_X = 1486; const SRV_LEFT = 1330; const AGENT_RIGHT = 512;
+
+function TerminalCommand({ t, start, x = 960, y = 902, width = 1180 }) {
+  const cmd = 'npx @bolyra/gateway --target http://localhost:3000/mcp';
+  const local = t - start; const o = clamp(local / 0.5, 0, 1);
+  if (o <= 0) return null;
+  const typeDur = 1.9; const chars = Math.round(clamp(local / typeDur, 0, 1) * cmd.length);
+  const shown = cmd.slice(0, chars); const done = chars >= cmd.length;
+  const blink = Math.floor(useTime() * 1.6) % 2 === 0;
+  const rise = (1 - clamp(local / 0.45, 0, 1)) * 16;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) translateY(${rise}px)`, opacity: o, width, boxSizing: 'border-box', background: 'rgba(10,13,18,0.82)', border: `1px solid ${C.borderStrong}`, borderRadius: 14, padding: '20px 26px', display: 'flex', alignItems: 'center', gap: 18, boxShadow: '0 24px 60px rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}><span style={{ width: 13, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.14)' }} /><span style={{ width: 13, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.14)' }} /><span style={{ width: 13, height: 13, borderRadius: 7, background: 'rgba(255,255,255,0.14)' }} /></div>
+    <div style={{ fontFamily: MONO, fontSize: 27, color: C.ink, fontWeight: 500, whiteSpace: 'nowrap', letterSpacing: '0.005em' }}><span style={{ color: C.ok }}>$</span>&nbsp;<span>npx </span><span style={{ color: C.brand }}>{shown.slice(4) ? '@bolyra/gateway' : ''}</span><span style={{ color: C.inkDim }}>{shown.slice(19)}</span><span style={{ opacity: (done ? blink : true) ? 1 : 0, color: C.brand }}>▍</span></div>
+  </div>);
+}
+
+function renderRequest(req, t) {
+  const age = t - req.launchT; const y = req.y;
+  if (age < 0) return null;
+  if (req.mode === 'direct') {
+    const life = 1.5; if (age > life + 0.3) return null;
+    const p = clamp(age / life, 0, 1); const x = AGENT_RIGHT + (SRV_LEFT - AGENT_RIGHT) * Easing.easeInOutQuad(p);
+    const op = clamp(age / 0.2, 0, 1) * (age > life ? clamp((life + 0.3 - age) / 0.3, 0, 1) : 1);
+    return <Packet key={req.id} x={x} y={y} label={req.label} color={req.kind === 'rogue' ? C.bad : C.brand} opacity={op} />;
+  }
+  const segIn = 0.85; const stampAt = segIn + 0.05; const els = [];
+  if (age <= segIn) { const p = clamp(age / segIn, 0, 1); const x = AGENT_RIGHT + (GATE_X - 96 - AGENT_RIGHT) * Easing.easeInOutQuad(p); els.push(<Packet key={req.id} x={x} y={y} label={req.label} color={req.kind === 'rogue' ? C.bad : C.brand} opacity={clamp(age / 0.18, 0, 1)} />); }
+  else {
+    const sAge = age - stampAt;
+    if (sAge > 0 && sAge < 1.4) els.push(<Stamp key={req.id + '-stamp'} x={GATE_X} y={y - 50} kind={req.kind === 'rogue' ? 'bad' : 'ok'} appear={clamp(sAge / 0.3, 0, 1)} />);
+    if (req.kind === 'valid') { const p = clamp((age - segIn - 0.35) / 0.95, 0, 1); if (p > 0) { const x = (GATE_X + 70) + (SRV_LEFT - GATE_X - 70) * Easing.easeInOutQuad(p); els.push(<Packet key={req.id + '-ok'} x={x} y={y} label="200 OK" color={C.ok} opacity={p > 0.85 ? clamp((1 - p) / 0.15, 0, 1) : 1} />); } }
+    else { const p = clamp((age - segIn - 0.35) / 0.9, 0, 1); if (p > 0) { const x = (GATE_X - 96) - ((GATE_X - 96) - AGENT_RIGHT - 40) * Easing.easeInQuad(p); els.push(<Packet key={req.id + '-rej'} x={x} y={y - 4} label="403" color={C.bad} opacity={clamp((1 - p) / 0.4, 0, 1)} />); } }
+  }
+  return <React.Fragment key={req.id}>{els}</React.Fragment>;
+}
+
+function HeroDiagram({ t }) {
+  const gateAppear = clamp((t - 5.3) / 1.0, 0, 1); const gateOn = gateAppear > 0.05; const gA = Easing.easeOutBack(gateAppear); const guarded = t > 6.3;
+  const elemAppear = Easing.easeOutCubic(clamp((t - 0.2) / 0.9, 0, 1));
+  const breach = (t > 3.35 && t < 4.9) ? clamp((t - 3.35) / 0.25, 0, 1) * clamp((4.9 - t) / 0.6, 0, 1) : 0;
+  const s = interpolate([0, 18], [1.0, 1.07], Easing.easeInOutSine)(t);
+  const fx = interpolate([0, 5, 10, 18], [960, 1000, 980, 1120], Easing.easeInOutSine)(t);
+  const tx = 960 - fx * s, ty = 540 - 540 * s;
+  const reqs = [
+    { id: 'p1a', launchT: 1.3, y: LANE.y0, kind: 'valid', mode: 'direct', label: 'search()' },
+    { id: 'p1b', launchT: 1.75, y: LANE.y1, kind: 'valid', mode: 'direct', label: 'fetch()' },
+    { id: 'p1c', launchT: 2.2, y: LANE.y2, kind: 'rogue', mode: 'direct', label: 'delete()' },
+    { id: 'p1d', launchT: 3.0, y: LANE.y0, kind: 'rogue', mode: 'direct', label: 'charge()' },
+    { id: 'g1', launchT: 10.6, y: LANE.y0, kind: 'valid', mode: 'gated', label: 'search() + receipt' },
+    { id: 'g2', launchT: 11.5, y: LANE.y2, kind: 'rogue', mode: 'gated', label: 'delete() (no cred)' },
+    { id: 'g3', launchT: 12.7, y: LANE.y1, kind: 'valid', mode: 'gated', label: 'charge() + receipt' },
+    { id: 'g4', launchT: 14.0, y: LANE.y0, kind: 'rogue', mode: 'gated', label: 'replayed nonce' },
+    { id: 'g5', launchT: 15.1, y: LANE.y2, kind: 'valid', mode: 'gated', label: 'fetch() + receipt' },
+  ];
+  return (<div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${tx}px, ${ty}px) scale(${s})` }}>
+    {[LANE.y0, LANE.y1, LANE.y2].map((y, i) => (<div key={i} style={{ position: 'absolute', left: AGENT_RIGHT, top: y, width: SRV_LEFT - AGENT_RIGHT, height: 2, transform: 'translateY(-50%)', opacity: 0.5 * elemAppear, background: `repeating-linear-gradient(90deg, ${C.inkGhost} 0 12px, transparent 12px 22px)` }} />))}
+    <AgentChip x={LANE.x} y={LANE.y0} label="agent-alice" state="idle" appear={elemAppear} />
+    <AgentChip x={LANE.x} y={LANE.y1} label="agent-bob" state="idle" appear={elemAppear} />
+    <AgentChip x={LANE.x} y={LANE.y2} label="agent-x" state="rogue" appear={elemAppear} />
+    {gateOn && (<><Gate x={GATE_X} y={540} h={470} appear={gA} pulse={(t * 0.5) % 1} /><div style={{ position: 'absolute', left: GATE_X, top: 250, transform: 'translate(-50%,-50%)', opacity: clamp((t - 6.0) / 0.6, 0, 1), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><div style={{ fontFamily: MONO, fontSize: 24, color: C.brand, fontWeight: 600, letterSpacing: '0.02em' }}>@bolyra/gateway</div><div style={{ fontFamily: MONO, fontSize: 14, color: C.inkFaint, letterSpacing: '0.22em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>auth reverse proxy</div></div></>)}
+    <ServerNode x={SRV_X} y={540} appear={elemAppear} guarded={guarded} breach={breach} />
+    {reqs.map((r) => renderRequest(r, t))}
+  </div>);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// scenes_more.jsx — Receipts, Redis, CTA
+// ═══════════════════════════════════════════════════════════════════════════
+
+function Field({ k, v }) { return (<div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontFamily: MONO, fontSize: 12, color: C.inkFaint, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{k}</span><span style={{ fontFamily: MONO, fontSize: 18, color: C.ink, fontWeight: 500, whiteSpace: 'nowrap' }}>{v}</span></div>); }
+
+function ReceiptCard({ x, y, appear, data, width = 660 }) {
+  const a = Easing.easeOutCubic(clamp(appear, 0, 1)); const slide = (1 - a) * 40;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) translateY(${slide}px)`, opacity: a, width, boxSizing: 'border-box', background: 'rgba(14,18,24,0.9)', border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.ok}`, borderRadius: 14, padding: '20px 26px', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke={C.ok} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg><span style={{ fontFamily: MONO, fontSize: 20, color: C.ink, fontWeight: 600, letterSpacing: '0.04em' }}>{data.id}</span></div><span style={{ fontFamily: MONO, fontSize: 15, color: C.inkFaint, letterSpacing: '0.1em' }}>{data.ts}</span></div>
+    <div style={{ display: 'flex', gap: 40 }}><Field k="action" v={data.action} /><Field k="perm" v={data.perm} /><Field k="amount" v={data.amount} /></div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 6, borderTop: `1px solid ${C.inkGhost}` }}><span style={{ fontFamily: MONO, fontSize: 13, color: C.inkFaint, letterSpacing: '0.08em', textTransform: 'uppercase' }}>sig</span><span style={{ fontFamily: MONO, fontSize: 16, color: C.brand, whiteSpace: 'nowrap' }}>{data.sig}</span></div>
+  </div>);
+}
+
+function ReceiptsScene({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.5);
+  const receipts = [
+    { id: 'rcpt_9f2c', ts: '12:04:51', action: 'checkout.charge', perm: 'FINANCIAL_SMALL', amount: '$25 USD', sig: '0x4af9...e1b' },
+    { id: 'rcpt_a7d1', ts: '12:04:52', action: 'data.fetch', perm: 'READ_DATA', amount: '\u2014', sig: '0x18c2...9fa' },
+    { id: 'rcpt_b330', ts: '12:04:53', action: 'checkout.charge', perm: 'FINANCIAL_SMALL', amount: '$12 USD', sig: '0x7e05...2cd' },
+  ];
+  const push = interpolate([0, dur], [1.0, 1.05], Easing.easeInOutSine)(t);
+  return (<div style={{ position: 'absolute', inset: 0, opacity: o, transform: `scale(${push})`, transformOrigin: 'center' }}>
+    <div style={{ position: 'absolute', left: 150, top: 380, display: 'flex', flexDirection: 'column', gap: 22, width: 560 }}>
+      <Kicker>{'> AUDIT TRAIL'}</Kicker>
+      <div style={{ fontFamily: DISPLAY, fontSize: 70, fontWeight: 600, color: C.ink, letterSpacing: '-0.025em', lineHeight: 1.02 }}>A signed receipt<br />for every call.</div>
+      <div style={{ fontFamily: MONO, fontSize: 24, color: C.inkDim, lineHeight: 1.5 }}>secp256k1 &middot; keccak256 &middot; EVM-compatible<br />audit-grade evidence, generated automatically.</div>
+    </div>
+    {receipts.map((r, i) => (<ReceiptCard key={r.id} x={1340} y={336 + i * 168} data={r} appear={clamp((t - (0.7 + i * 0.55)) / 0.6, 0, 1)} />))}
+  </div>);
+}
+
+function RedisStore({ x, y, w = 260, seen = false }) {
+  const c = seen ? C.brand : C.inkDim;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%,-50%)', width: w }}>
+    <div style={{ width: w, height: 150, borderRadius: '50% / 22%', background: C.panelStrong, border: `1px solid ${C.borderStrong}`, position: 'relative', boxShadow: seen ? `0 0 30px ${C.brandSoft}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6 }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: w, height: 34, borderRadius: '50%', border: `1px solid ${C.borderStrong}`, background: C.bg, boxSizing: 'border-box' }} />
+      <div style={{ fontFamily: MONO, fontSize: 22, color: C.ink, fontWeight: 600, zIndex: 1, marginTop: 8 }}>RedisNonceStore</div>
+      <div style={{ fontFamily: MONO, fontSize: 14, color: c, letterSpacing: '0.12em', zIndex: 1 }}>{seen ? 'nonce 0x9f2c \u00b7 SEEN' : 'shared nonce log'}</div>
+    </div>
+  </div>);
+}
+
+function MiniGateway({ x, y, label, status = 'idle' }) {
+  const ring = status === 'accept' ? C.ok : status === 'reject' ? C.bad : C.border;
+  return (<div style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%,-50%)', width: 230, padding: '20px 18px', boxSizing: 'border-box', background: C.panel, border: `1px solid ${ring}`, borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, boxShadow: status !== 'idle' ? `0 0 26px ${(status === 'accept' ? C.okSoft : C.badSoft)}` : 'none' }}>
+    <ShieldGlyph color={status === 'reject' ? C.bad : status === 'accept' ? C.ok : C.brand} size={38} />
+    <div style={{ fontFamily: MONO, fontSize: 18, color: C.ink, fontWeight: 500 }}>{label}</div>
+    <div style={{ fontFamily: MONO, fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase', color: status === 'accept' ? C.ok : status === 'reject' ? C.bad : C.inkFaint, whiteSpace: 'nowrap' }}>{status === 'accept' ? 'stored \u2713' : status === 'reject' ? 'replay \u2717' : 'ready'}</div>
+  </div>);
+}
+
+function RedisScene({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.5);
+  const g1status = t > 1.4 ? 'accept' : 'idle'; const g3status = t > 3.2 ? 'reject' : 'idle'; const seen = t > 1.6;
+  const gx = [620, 960, 1300], gy = 462, redisY = 786;
+  const tokA = clamp((t - 0.6) / 0.8, 0, 1); const tokC = clamp((t - 2.4) / 0.8, 0, 1);
+  return (<div style={{ position: 'absolute', inset: 0, opacity: o }}>
+    <div style={{ position: 'absolute', left: 960, top: 150, transform: 'translateX(-50%)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, padding: '8px 18px', borderRadius: 999, border: `1px solid ${C.brandLine}`, background: C.brandSoft }}><span style={{ width: 9, height: 9, borderRadius: 5, background: C.brand, boxShadow: `0 0 10px ${C.brand}` }} /><span style={{ fontFamily: MONO, fontSize: 18, letterSpacing: '0.18em', color: C.brand, fontWeight: 600, whiteSpace: 'nowrap' }}>NEW IN v0.2.0</span></div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 52, fontWeight: 600, color: C.ink, letterSpacing: '-0.02em', maxWidth: 1200, whiteSpace: 'nowrap' }}>Replay protection across every instance</div>
+    </div>
+    <svg style={{ position: 'absolute', inset: 0 }} width="1920" height="1080">{gx.map((x, i) => (<line key={i} x1={x} y1={gy + 60} x2={960} y2={redisY - 60} stroke={C.inkGhost} strokeWidth="2" strokeDasharray="6 8" />))}</svg>
+    <MiniGateway x={gx[0]} y={gy} label="gateway-1" status={g1status} />
+    <MiniGateway x={gx[1]} y={gy} label="gateway-2" status="idle" />
+    <MiniGateway x={gx[2]} y={gy} label="gateway-3" status={g3status} />
+    {tokA > 0 && tokA < 1 && <Packet x={gx[0]} y={gy - 120 + (redisY - gy) * 0.5 * tokA} label="nonce 0x9f2c" color={C.brand} opacity={1} />}
+    {tokC > 0 && tokC < 1 && <Packet x={gx[2]} y={gy - 120 + 90 * tokC} label="replay 0x9f2c" color={C.bad} opacity={1} />}
+    <RedisStore x={960} y={redisY} seen={seen} />
+    <div style={{ position: 'absolute', left: 960, top: 880, transform: 'translateX(-50%)', textAlign: 'center', opacity: clamp((t - 3.4) / 0.5, 0, 1) }}><div style={{ fontFamily: MONO, fontSize: 24, color: C.inkDim }}>Same nonce, different instance \u2014 <span style={{ color: C.bad }}>rejected</span>. No replay slips through a load balancer.</div></div>
+  </div>);
+}
+
+function CTAScene({ t, dur }) {
+  const o = fadeAt(t, dur, 0.5, 0.3); const rise = (1 - Easing.easeOutCubic(clamp(t / 0.7, 0, 1))) * 26; const cmdIn = clamp((t - 0.9) / 0.6, 0, 1);
+  return (<div style={{ position: 'absolute', inset: 0, opacity: o, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0 }}>
+    <div style={{ transform: `translateY(${rise}px)`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 30 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}><ShieldGlyph color={C.brand} size={68} /><div style={{ fontFamily: DISPLAY, fontSize: 104, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em' }}>Bolyra</div></div>
+      <div style={{ fontFamily: MONO, fontSize: 30, color: C.inkDim, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}><span style={{ color: C.brand }}>@bolyra/gateway</span> v0.2.0 \u2014 live now on npm</div>
+      <div style={{ opacity: cmdIn, transform: `translateY(${(1 - cmdIn) * 14}px)`, marginTop: 8, padding: '18px 30px', borderRadius: 12, background: 'rgba(14,18,24,0.85)', border: `1px solid ${C.borderStrong}`, fontFamily: MONO, fontSize: 27, color: C.ink, whiteSpace: 'nowrap' }}><span style={{ color: C.ok }}>$</span>&nbsp;npx <span style={{ color: C.brand }}>@bolyra/gateway</span> <span style={{ color: C.inkDim }}>--target &lt;your-mcp&gt;</span></div>
+      <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 18, color: C.inkFaint, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Apache-2.0 &middot; zero circuit artifacts &middot; bolyra.ai</div>
+    </div>
+  </div>);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main — compose all scenes
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DURATION = 31;
+
+function Cap(props) {
+  return (<Sprite start={props.start} end={props.end}>{({ localTime }) => (<Caption t={localTime} dur={props.end - props.start} y={104} kicker={props.kicker} title={props.title} sub={props.sub} />)}</Sprite>);
+}
+
+function Video() {
+  return (
+    <Stage width={1920} height={1080} duration={DURATION} background="#0a0c10" persistKey="bolyra-gw">
+      <Backdrop glowX={962} glowY={540} />
+      <Sprite start={0} end={18.4}>{({ localTime }) => (<React.Fragment><HeroDiagram t={localTime} /><TerminalCommand t={localTime} start={6.8} /></React.Fragment>)}</Sprite>
+      <Cap start={0.8} end={4.9} kicker="THE PROBLEM" title="Any agent can call any tool." sub="MCP servers trust every caller." />
+      <Cap start={6.3} end={9.9} kicker="ONE COMMAND" title="Put a gate in front of any MCP server." />
+      <Cap start={10.4} end={17.9} kicker="EVERY CALL, CHECKED" title="Credentials verified. Replays rejected." />
+      <Sprite start={18.0} end={22.9}>{({ localTime }) => <ReceiptsScene t={localTime} dur={4.9} />}</Sprite>
+      <Sprite start={22.7} end={27.5}>{({ localTime }) => <RedisScene t={localTime} dur={4.8} />}</Sprite>
+      <Sprite start={27.3} end={31}>{({ localTime }) => <CTAScene t={localTime} dur={3.7} />}</Sprite>
+    </Stage>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('video-root')).render(<Video />);
+</script>
+</body>
+</html>
