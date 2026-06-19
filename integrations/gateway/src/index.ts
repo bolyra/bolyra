@@ -21,6 +21,10 @@ export type { CliFlags } from './config';
 // Headers — X-Bolyra-* header injection and HMAC signing
 export { injectBolyraHeaders, computeHmac, verifyHmac } from './headers';
 
+// Redis nonce store — opt-in for multi-instance deployments
+export { RedisNonceStore } from './redis-nonce-store';
+export type { RedisNonceStoreOptions } from './redis-nonce-store';
+
 // Receipts — pluggable receipt output
 export { createReceiptWriter } from './receipts';
 
@@ -35,6 +39,7 @@ export type {
   ReceiptOutputConfig,
   CredentialSource,
   NonceConfig,
+  RedisNonceConfig,
   HealthConfig,
   HmacConfig,
   ReceiptWriter,

@@ -118,6 +118,114 @@ devMode: true
       } as Partial<GatewayConfig>;
       expect(() => validateConfig(config)).toThrow('webhook.url');
     });
+
+    it('passes valid redis nonce config', () => {
+      const config: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'redis', maxProofAge: 300, redis: { url: 'redis://localhost:6379' } },
+        receipts: { enabled: true, output: 'file', dir: './receipts/' },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('throws on redis store without redis.url', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'redis' as const },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('nonce.redis.url');
+    });
+
+    it('throws on redis.url with unresolved env var', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'redis' as const, redis: { url: '${REDIS_URL}' } },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('unresolved environment variable');
+    });
+
+    it('throws on unknown nonce store type', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'postgres' as any },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"nonce.store" must be one of');
+    });
+
+    it('throws on maxProofAge of 0', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'memory' as const, maxProofAge: 0 },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"nonce.maxProofAge" must be between 30 and 86400 seconds');
+    });
+
+    it('throws on negative maxProofAge', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'memory' as const, maxProofAge: -1 },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"nonce.maxProofAge" must be between 30 and 86400 seconds');
+    });
+
+    it('throws on maxProofAge exceeding 86400', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'memory' as const, maxProofAge: 100000 },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"nonce.maxProofAge" must be between 30 and 86400 seconds');
+    });
+
+    it('passes on valid maxProofAge', () => {
+      const config: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'memory', maxProofAge: 300 },
+        receipts: { enabled: true, output: 'file', dir: './receipts/' },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('throws on redis URL with http:// scheme', () => {
+      const config = {
+        target: 'http://localhost:3000/mcp',
+        nonce: { store: 'redis' as const, redis: { url: 'http://localhost:6379' } },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"nonce.redis.url" must use redis:// or rediss:// scheme');
+    });
+
+    it('passes on redis URL with redis:// scheme', () => {
+      const config: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'redis', maxProofAge: 300, redis: { url: 'redis://localhost:6379' } },
+        receipts: { enabled: true, output: 'file', dir: './receipts/' },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('continues to accept memory store (regression)', () => {
+      const config: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'memory', maxProofAge: 300 },
+        receipts: { enabled: true, output: 'file', dir: './receipts/' },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(config)).not.toThrow();
+    });
   });
 
   describe('mergeCliFlags', () => {

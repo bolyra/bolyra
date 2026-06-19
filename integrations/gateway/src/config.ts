@@ -106,8 +106,26 @@ export function validateConfig(config: Partial<GatewayConfig>): asserts config i
     }
   }
 
-  if (config.nonce?.store !== undefined && config.nonce.store !== 'memory') {
-    errors.push('"nonce.store" must be "memory" (Redis adapter deferred to v0.2)');
+  if (config.nonce?.maxProofAge !== undefined) {
+    if (typeof config.nonce.maxProofAge !== 'number' || config.nonce.maxProofAge < 30 || config.nonce.maxProofAge > 86400) {
+      errors.push('"nonce.maxProofAge" must be between 30 and 86400 seconds');
+    }
+  }
+
+  if (config.nonce?.store !== undefined) {
+    const validStores = ['memory', 'redis'];
+    if (!validStores.includes(config.nonce.store)) {
+      errors.push(`"nonce.store" must be one of: ${validStores.join(', ')}`);
+    }
+    if (config.nonce.store === 'redis') {
+      if (!config.nonce.redis?.url) {
+        errors.push('"nonce.redis.url" is required when nonce.store is "redis"');
+      } else if (config.nonce.redis.url.includes('${')) {
+        errors.push('"nonce.redis.url" contains unresolved environment variable reference');
+      } else if (!config.nonce.redis.url.startsWith('redis://') && !config.nonce.redis.url.startsWith('rediss://')) {
+        errors.push('"nonce.redis.url" must use redis:// or rediss:// scheme');
+      }
+    }
   }
 
   // HMAC secret validation
