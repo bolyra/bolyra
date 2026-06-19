@@ -19,6 +19,39 @@ from _shared import call_claude_cli, extract_json_array
 logger = logging.getLogger(__name__)
 
 HERE = Path(__file__).resolve().parent
+
+
+def _call_claude_with_web_search(
+    prompt: str,
+    *,
+    model: str = "sonnet",
+    timeout: int = 120,
+) -> str:
+    """Call Claude CLI with web search tool enabled.
+
+    The standard call_claude_cli doesn't enable web search, so the model
+    can't actually search the web. This variant adds --allowedTools to
+    permit WebSearch.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            [
+                "claude", "-p", prompt,
+                "--model", model,
+                "--allowedTools", "WebSearch",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Claude CLI timed out after {timeout}s") from e
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Claude CLI failed (exit {result.returncode}): {result.stderr[:500]}"
+        )
+    return result.stdout
 ROOT = HERE.parent
 SOURCE_REGISTRY = HERE / "source_registry.json"
 SEEN_SIGNALS_PATH = ROOT / "history" / "seen_signals.jsonl"
@@ -79,7 +112,7 @@ def _fetch_one_source(
         "Return ONLY the JSON array, no markdown fences or extra text."
     )
     try:
-        raw = call_claude_cli(prompt, model=model, timeout=timeout)
+        raw = _call_claude_with_web_search(prompt, model=model, timeout=timeout)
         results = extract_json_array(raw)
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to fetch signals for %s: %s", source["id"], e)
