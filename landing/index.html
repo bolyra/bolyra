@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.5.1: ZKP SDK with dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.7.0: auth + commerce receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. NEW: @bolyra/gateway v0.1.0 — MCP auth reverse proxy. Apache-2.0.">
+  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.5.1: ZKP SDK with dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.7.0: auth + commerce receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. NEW: @bolyra/gateway v0.2.0 — MCP auth reverse proxy. Apache-2.0.">
   <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.7.0 (receipts + payment-protocols) live on npm. NEW: @bolyra/gateway v0.1.0 — MCP auth reverse proxy. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. @bolyra/sdk@0.5.1, @bolyra/mcp@0.6.3, @bolyra/gateway@0.1.0, @bolyra/openclaw@0.3.2. v0.7.0: auth + commerce receipts — cryptographically signed via @bolyra/receipts.">
+  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.7.0 (receipts + payment-protocols) live on npm. NEW: @bolyra/gateway v0.2.0 — MCP auth reverse proxy. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. @bolyra/sdk@0.5.1, @bolyra/mcp@0.6.3, @bolyra/gateway@0.2.0, @bolyra/openclaw@0.3.2. v0.7.0: auth + commerce receipts — cryptographically signed via @bolyra/receipts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -793,7 +793,7 @@
         <div class="feature-card">
           <div class="feature-icon mutual">GW</div>
           <h3>MCP Auth Gateway</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. One command: <code>npx @bolyra/gateway --target http://localhost:3000/mcp</code>. Also exports <code>createGatewayMiddleware</code> for embedding in Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.1.0</code>.</p>
+          <p><strong style="color: var(--green);">v0.2.0:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. <strong>v0.2.0</strong> adds <code>RedisNonceStore</code> for multi-instance replay protection across restarts and load-balanced deployments. One command: <code>npx @bolyra/gateway --target http://localhost:3000/mcp</code>. Also exports <code>createGatewayMiddleware</code> for embedding in Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.2.0</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">R</div>
