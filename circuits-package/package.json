@@ -1,0 +1,45 @@
+{
+  "name": "@bolyra/circuits",
+  "version": "0.1.0",
+  "description": "Prebuilt Circom circuit artifacts for the Bolyra ZKP identity protocol",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "artifacts/",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "bash scripts/copy-artifacts.sh && tsc",
+    "test": "mocha --require ts-node/register test/**/*.test.ts --timeout 10000"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bolyra/bolyra",
+    "directory": "circuits-package"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "zkp",
+    "circom",
+    "snarkjs",
+    "groth16",
+    "plonk",
+    "bolyra",
+    "identity"
+  ],
+  "devDependencies": {
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "chai": "^4.3.0",
+    "mocha": "^10.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}

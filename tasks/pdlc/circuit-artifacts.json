@@ -1,0 +1,56 @@
+{
+  "id": "pdlc-2026-06-19-circuit-artifacts",
+  "feature": "Publish prebuilt circuit artifacts to npm as @bolyra/circuits",
+  "status": "active",
+  "stage": "IMPLEMENT",
+  "mode": "standard",
+  "created": "2026-06-19T00:00:00Z",
+  "updated": "2026-06-19T18:30:00Z",
+  "spec": "docs/superpowers/specs/2026-06-19-circuit-artifacts-design.md",
+  "plan": "docs/superpowers/plans/2026-06-19-circuit-artifacts.md",
+  "gates": {
+    "spec": { "status": "approved" },
+    "plan": { "status": "approved" },
+    "ship": { "status": "pending" },
+    "post_ship": { "status": "pending" }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "description": "Create circuits-package/ directory with package.json, tsconfig.json, .npmignore",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "pending"
+    },
+    {
+      "id": 2,
+      "description": "Create scripts/copy-artifacts.sh to copy/rename artifacts with checksums",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "description": "Create src/index.ts TypeScript API",
+      "type": "sequential",
+      "depends_on": [1],
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "description": "Create test/index.test.ts and README.md",
+      "type": "sequential",
+      "depends_on": [2, 3],
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "description": "Run copy-artifacts.sh, compile, run tests, commit",
+      "type": "sequential",
+      "depends_on": [4],
+      "status": "pending"
+    }
+  ],
+  "reviews": {},
+  "release": {}
+}
