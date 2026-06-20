@@ -72,20 +72,28 @@ export async function run(args: string[]): Promise<void> {
   const maxAge = parseInt(values['max-age'] ?? '86400', 10);
 
   try {
-    const result = verifyReceipt(receipt);
+    const valid = verifyReceipt(receipt);
+
+    if (!valid) {
+      console.error('FAIL: receipt signature invalid');
+      process.exitCode = 1;
+      return;
+    }
 
     // Check signer if specified
-    if (values.signer && result.signer !== values.signer) {
+    const receiptSigner = (receipt as unknown as Record<string, unknown>).signer as string | undefined;
+    if (values.signer && receiptSigner !== values.signer) {
       console.error(`FAIL: signer mismatch`);
       console.error(`  Expected: ${values.signer}`);
-      console.error(`  Got:      ${result.signer}`);
+      console.error(`  Got:      ${receiptSigner ?? 'unknown'}`);
       process.exitCode = 1;
       return;
     }
 
     // Check age
-    if (receipt.payload && typeof receipt.payload === 'object' && 'timestamp' in receipt.payload) {
-      const receiptTime = new Date((receipt.payload as Record<string, unknown>).timestamp as string).getTime();
+    const payload = (receipt as unknown as Record<string, unknown>).payload as Record<string, unknown> | undefined;
+    if (payload && 'timestamp' in payload) {
+      const receiptTime = new Date(payload.timestamp as string).getTime();
       const ageSeconds = (Date.now() - receiptTime) / 1000;
       if (ageSeconds > maxAge) {
         console.error(`FAIL: receipt too old (${Math.floor(ageSeconds)}s > ${maxAge}s max)`);
@@ -95,8 +103,7 @@ export async function run(args: string[]): Promise<void> {
     }
 
     console.log('PASS: receipt signature valid');
-    console.log(`  Signer: ${result.signer}`);
-    console.log(`  Hash:   ${hashPayload(receipt.payload)}`);
+    if (receiptSigner) console.log(`  Signer: ${receiptSigner}`);
   } catch (err) {
     console.error(`FAIL: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;

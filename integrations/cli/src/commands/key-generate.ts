@@ -56,16 +56,7 @@ export async function run(args: string[]): Promise<void> {
     });
   }
 
-  // Derive public key using SDK
-  const { derivePublicKey } = await import('@bolyra/sdk');
-
-  // derivePublicKey is not exported from index — we use the internal path
-  // Actually it IS used internally. Let's derive via the utils directly.
-  // The SDK exports derivePublicKey indirectly through createAgentCredential.
-  // For the CLI we need to call it directly. Since it's not in the public API,
-  // we'll compute it via circomlibjs directly or use the SDK's internal utils.
-  // Actually, looking at the SDK index.ts, derivePublicKey is NOT exported.
-  // Let's use the same approach the SDK uses internally.
+  // Derive public key via circomlibjs (same approach as SDK internals)
   const circomlibjs = await import('circomlibjs');
   const eddsa = await circomlibjs.buildEddsa();
   const poseidon = await circomlibjs.buildPoseidon();
