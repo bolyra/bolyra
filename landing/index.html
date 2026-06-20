@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bolyra — Verifiable Delegated Authority for AI Agents</title>
-  <meta name="description" content="SD-JWT delegation receipts for AI agent tool calls today; ZKP mutual handshake + scope-narrowing delegation chains + Stripe ACP payment gating. v0.5.1: ZKP SDK with dev mode for MCP — authenticated MCP server in 60 seconds, zero circuit artifacts. v0.7.0: auth + commerce receipts — secp256k1 + keccak256, EVM-compatible, audit-grade evidence. NEW: @bolyra/gateway v0.2.0 — MCP auth reverse proxy. Apache-2.0.">
-  <meta property="og:title" content="Bolyra — Verifiable Delegated Authority for AI Agents">
-  <meta property="og:description" content="@bolyra/delegation v0.2.2 (SD-JWT) and the ZKP cohort v0.7.0 (receipts + payment-protocols) live on npm. NEW: @bolyra/gateway v0.2.0 — MCP auth reverse proxy. Authenticated MCP server in 60 seconds — zero circuit artifacts, zero blockchain. @bolyra/sdk@0.5.1, @bolyra/mcp@0.6.3, @bolyra/gateway@0.2.0, @bolyra/openclaw@0.3.2. v0.7.0: auth + commerce receipts — cryptographically signed via @bolyra/receipts.">
+  <title>Bolyra -- Auth Gateway for AI Agent Tool Calls</title>
+  <meta name="description" content="Put Bolyra in front of any MCP server. Verifies agent credentials, enforces per-tool permissions, blocks replay, signs audit receipts. npm, pip, Docker. Apache-2.0.">
+  <meta property="og:title" content="Bolyra -- Auth Gateway for AI Agent Tool Calls">
+  <meta property="og:description" content="Auth gateway for AI agents. One command to protect any MCP server. Credentials verified. Replays rejected. Signed audit receipts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bolyra.ai">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -61,7 +61,7 @@
       padding: 0 24px;
     }
 
-    /* ── Nav ── */
+    /* -- Nav -- */
     nav {
       position: fixed;
       top: 0;
@@ -99,7 +99,7 @@
       color: var(--text);
     }
 
-    /* ── Hero ── */
+    /* -- Hero -- */
     .hero {
       padding: 160px 0 100px;
       text-align: center;
@@ -187,7 +187,7 @@
       letter-spacing: 0.05em;
     }
 
-    /* ── Section shared ── */
+    /* -- Section shared -- */
     section {
       padding: 80px 0;
     }
@@ -212,7 +212,7 @@
       margin-bottom: 48px;
     }
 
-    /* ── Features grid ── */
+    /* -- Features grid -- */
     .features-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -256,7 +256,7 @@
       line-height: 1.6;
     }
 
-    /* ── Code example ── */
+    /* -- Code example -- */
     .code-section {
       background: var(--bg-elevated);
       border-top: 1px solid var(--border);
@@ -305,7 +305,7 @@
       color: var(--text);
     }
 
-    /* ── Architecture ── */
+    /* -- Architecture -- */
     .arch-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -376,7 +376,7 @@
       font-size: 1.2rem;
     }
 
-    /* ── Numbers ── */
+    /* -- Numbers -- */
     .numbers-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -404,7 +404,7 @@
       line-height: 1.4;
     }
 
-    /* ── Standards ── */
+    /* -- Standards -- */
     .standards-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -449,7 +449,7 @@
       font-size: 0.82rem;
     }
 
-    /* ── Footer ── */
+    /* -- Footer -- */
     footer {
       border-top: 1px solid var(--border);
       padding: 48px 0;
@@ -502,7 +502,181 @@
       font-size: 0.8rem;
     }
 
-    /* ── Responsive ── */
+    /* -- Before/After section -- */
+    .before-after-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .before-after-col {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px 28px;
+    }
+    .before-after-col h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      letter-spacing: -0.01em;
+    }
+    .tool-call-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--bg-code);
+      margin-bottom: 10px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.88rem;
+    }
+    .tool-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 10px;
+      border-radius: 4px;
+    }
+    .tool-badge.open {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+    .tool-badge.gated {
+      background: rgba(74, 222, 128, 0.12);
+      color: var(--green);
+    }
+    .before-after-col .col-subtitle {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      margin-top: 16px;
+      line-height: 1.5;
+    }
+
+    /* -- Quickstart section -- */
+    .quickstart-terminal {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-top: 32px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.88rem;
+      line-height: 2;
+      overflow-x: auto;
+    }
+    .quickstart-terminal .prompt {
+      color: var(--green);
+      user-select: none;
+    }
+    .quickstart-terminal .cmd {
+      color: var(--cyan);
+    }
+    .quickstart-terminal .comment {
+      color: #546e7a;
+    }
+    .quickstart-result {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 28px;
+      line-height: 1.6;
+      max-width: 720px;
+    }
+    .quickstart-result code {
+      background: var(--bg-code);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.85rem;
+      color: var(--cyan);
+    }
+
+    /* -- Checks grid (4 cards) -- */
+    .checks-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 40px;
+    }
+    .check-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .check-card:hover {
+      border-color: #333;
+      transform: translateY(-2px);
+    }
+    .check-card .check-number {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 16px;
+    }
+    .check-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .check-card p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+    .check-card code {
+      background: var(--bg-code);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
+      font-size: 0.78rem;
+    }
+
+    /* -- Comparison table -- */
+    .comparison-table {
+      width: 100%;
+      margin-top: 40px;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    .comparison-table th {
+      text-align: left;
+      padding: 14px 20px;
+      border-bottom: 2px solid var(--border);
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+    .comparison-table th:first-child {
+      width: 30%;
+    }
+    .comparison-table td {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .comparison-table tr:hover td {
+      background: var(--bg-elevated);
+    }
+    .comparison-table td:last-child {
+      color: var(--green);
+    }
+
+    /* -- Responsive -- */
     @media (max-width: 768px) {
       .features-grid,
       .arch-grid,
@@ -530,6 +704,19 @@
       .contract-stack .arrow {
         transform: rotate(90deg);
       }
+      .before-after-grid {
+        grid-template-columns: 1fr;
+      }
+      .checks-grid {
+        grid-template-columns: 1fr;
+      }
+      .comparison-table {
+        font-size: 0.82rem;
+      }
+      .comparison-table th,
+      .comparison-table td {
+        padding: 10px 12px;
+      }
     }
 
     @media (max-width: 480px) {
@@ -554,14 +741,9 @@
     <div class="container">
       <div class="logo">Bolyra</div>
       <ul class="nav-links">
-        <li><a href="#today">Today</a></li>
-        <li><a href="#features">Protocol</a></li>
-        <li><a href="#why-now">Market</a></li>
-        <li><a href="#architecture">ZK Upgrade</a></li>
-        <li><a href="#standards">Standards</a></li>
-        <li><a href="/402">HTTP 402</a></li>
-        <li><a href="#design-partners">Partners</a></li>
+        <li><a href="#quickstart">Quickstart</a></li>
         <li><a href="#videos">Videos</a></li>
+        <li><a href="#ecosystem">Ecosystem</a></li>
         <li><a href="/blog">Blog</a></li>
         <li><a href="https://github.com/bolyra/bolyra">GitHub</a></li>
       </ul>
@@ -571,264 +753,125 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <h1>Bolyra</h1>
-      <p class="tagline">Verifiable delegated authority for AI agents. The human signs a scoped receipt; middleware verifies it before the agent calls a tool.</p>
-      <p class="tagline" style="font-size: 1.1rem; opacity: 0.7; margin-top: 0.5rem;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.7.0 shipped — mutual handshake, scope-narrowing delegation, MCP dev mode, Stripe ACP gating, and auth + commerce receipts via <code style="font-size: 0.9em;">@bolyra/receipts</code>.</p>
+      <p class="section-label" style="margin-bottom: 20px;">Auth for AI agents</p>
+      <h1>Your MCP server has no idea who's calling.</h1>
+      <p class="tagline">Put Bolyra in front of any MCP server. It verifies agent credentials, enforces per-tool permissions, blocks replay, and signs audit receipts.</p>
       <div class="cta-group">
-        <a href="https://www.npmjs.com/package/@bolyra/sdk" class="btn btn-primary">
-          npm @bolyra/sdk
-        </a>
-        <a href="https://www.npmjs.com/package/@bolyra/delegation" class="btn btn-secondary">
-          npm @bolyra/delegation
+        <a href="https://github.com/bolyra/gateway-quickstart" class="btn btn-primary">
+          Protect an MCP server
         </a>
         <a href="https://github.com/bolyra/bolyra" class="btn btn-secondary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-          GitHub
+          View GitHub
         </a>
       </div>
       <p class="install-hint">
-        <code>npm install @bolyra/sdk @bolyra/mcp @bolyra/gateway @bolyra/receipts @bolyra/payment-protocols</code>
-        <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.7.0 live</span>
+        <code>npx @bolyra/gateway --target http://localhost:3000/mcp</code>
       </p>
       <p class="install-hint" style="margin-top: 10px;">
-        Prefer SD-JWT today? <code>npm install @bolyra/delegation</code>
-        <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--accent);">v0.2.2</span>
-      </p>
-      <p class="install-hint" style="margin-top: 10px;">
-        Python / LangChain? <code>pip install bolyra-langchain</code>
+        <code>pip install bolyra-langchain</code>
         <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.1.0</span>
       </p>
+      <p class="install-hint" style="margin-top: 10px;">
+        <code>docker run ghcr.io/bolyra/gateway:0.2.0</code>
+        <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--accent);">v0.2.0</span>
+      </p>
     </div>
   </section>
 
-  <!-- Available today -->
-  <section id="today">
+  <!-- Before / After -->
+  <section id="before-after">
     <div class="container">
-      <p class="section-label">Available today &middot; delegation v0.2.2 on npm</p>
-      <h2 class="section-title">SD-JWT receipts for agent tool calls</h2>
-      <p class="section-subtitle">~30 lines from <code>npm install</code> to a verified call. The human issues a scoped SD-JWT receipt; the agent presents it with a fresh KB-JWT (proof of holder-key possession); middleware verifies before any side effect. Rejects wrong audience, expired receipt, amount-over-cap, currency mismatch, revoked status, or replayed nonce &mdash; each with a crisp, switchable failure reason.</p>
-      <div style="margin: 32px auto 40px; max-width: 920px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-elevated);">
-        <img src="https://raw.githubusercontent.com/bolyra/bolyra/main/delegation/demo/demo.gif?v=2" alt="@bolyra/delegation demo: human signs scoped receipt, agent purchase($25) allowed, agent purchase($75) rejected for amount_exceeds_cap" style="display: block; width: 100%; height: auto;">
+      <p class="section-label">The problem</p>
+      <h2 class="section-title">Every tool is wide open.</h2>
+      <div class="before-after-grid">
+        <div class="before-after-col">
+          <h3>Before Bolyra</h3>
+          <div class="tool-call-row">
+            <span>search()</span>
+            <span class="tool-badge open">OPEN</span>
+          </div>
+          <div class="tool-call-row">
+            <span>fetch()</span>
+            <span class="tool-badge open">OPEN</span>
+          </div>
+          <div class="tool-call-row">
+            <span>charge()</span>
+            <span class="tool-badge open">OPEN</span>
+          </div>
+          <div class="tool-call-row">
+            <span>delete()</span>
+            <span class="tool-badge open">OPEN</span>
+          </div>
+          <p class="col-subtitle">Any agent can call any tool. No identity, no permissions, no audit trail.</p>
+        </div>
+        <div class="before-after-col" style="border-color: rgba(74, 222, 128, 0.25);">
+          <h3>After Bolyra</h3>
+          <div class="tool-call-row">
+            <span>search()</span>
+            <span class="tool-badge gated">GATED</span>
+          </div>
+          <div class="tool-call-row">
+            <span>fetch()</span>
+            <span class="tool-badge gated">GATED</span>
+          </div>
+          <div class="tool-call-row">
+            <span>charge()</span>
+            <span class="tool-badge gated">GATED</span>
+          </div>
+          <div class="tool-call-row">
+            <span>delete()</span>
+            <span class="tool-badge gated">GATED</span>
+          </div>
+          <p class="col-subtitle">Credentials verified. Scope checked. Replay blocked. Receipt signed.</p>
+        </div>
       </div>
-      <div class="code-block-wrapper">
-        <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
-        <pre class="code-block"><code id="delegation-code"><span class="kw">import</span> { <span class="fn">allow</span>, <span class="fn">present</span>, <span class="fn">verify</span>, <span class="fn">staticIssuerResolver</span> } <span class="kw">from</span> <span class="str">'@bolyra/delegation'</span>;
-<span class="kw">import</span> { <span class="fn">generateKeyPair</span> } <span class="kw">from</span> <span class="str">'jose'</span>;
-
-<span class="cm">// 1. Human issues a scoped SD-JWT receipt to an agent.</span>
-<span class="kw">const</span> issuer <span class="op">=</span> <span class="kw">await</span> <span class="fn">generateKeyPair</span>(<span class="str">'EdDSA'</span>);
-<span class="kw">const</span> holder <span class="op">=</span> <span class="kw">await</span> <span class="fn">generateKeyPair</span>(<span class="str">'EdDSA'</span>);
-<span class="kw">const</span> receipt <span class="op">=</span> <span class="kw">await</span> <span class="fn">allow</span>({
-  iss:         <span class="str">'did:web:bolyra.ai'</span>,
-  sub:         <span class="str">'did:bolyra:agent-alice'</span>,
-  aud:         <span class="str">'https://merchant.example'</span>,
-  act:         <span class="str">'checkout.charge'</span>,
-  perm:        <span class="str">'FINANCIAL_SMALL'</span>,
-  max:         { amount: <span class="num">50</span>, currency: <span class="str">'USD'</span> },
-  ttlSeconds:  <span class="num">3600</span>,
-  agentPubKey: holder.publicKey,
-}, { privateKey: issuer.privateKey, kid: <span class="str">'k1'</span> });
-
-<span class="cm">// 2. Agent presents the receipt with a fresh server nonce (KB-JWT binding).</span>
-<span class="cm">//    `serverNonce` is the 32-byte random the merchant returned on its prior</span>
-<span class="cm">//    HTTP 402 response (`Bolyra-Challenge` header) — see /402 for the flow.</span>
-<span class="kw">const</span> serverNonce <span class="op">=</span> <span class="fn">crypto</span>.<span class="fn">randomUUID</span>();   <span class="cm">// in production: read from 402 response</span>
-<span class="kw">const</span> presented <span class="op">=</span> <span class="kw">await</span> <span class="fn">present</span>(receipt, holder.privateKey, {
-  audience: <span class="str">'https://merchant.example'</span>,
-  nonce:    serverNonce,
-});
-
-<span class="cm">// 3. Middleware verifies before the tool runs.</span>
-<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verify</span>(presented, {
-  audience:       <span class="str">'https://merchant.example'</span>,
-  action:         <span class="str">'checkout.charge'</span>,
-  perm:           <span class="str">'FINANCIAL_SMALL'</span>,
-  amount: <span class="num">25</span>, currency: <span class="str">'USD'</span>,
-  kbNonce:        serverNonce,
-  trustedIssuers: <span class="fn">staticIssuerResolver</span>({ <span class="str">'did:web:bolyra.ai'</span>: { k1: issuer.publicKey } }),
-});
-<span class="kw">if</span> (<span class="op">!</span>result.ok) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">`delegation rejected: </span>${result.reason}<span class="str">`</span>);</code></pre>
-      </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Today (v0.2.2):</strong> SD-JWT receipts with selective disclosure + KB-JWT proof-of-possession + IETF status-list revocation (draft-20) + EdDSA over Ed25519. Legacy v0.1 compact-JWS receipts still verify via <code>acceptLegacyV01</code>. <strong style="color: var(--text);">ZKP upgrade path:</strong> v0.5.1 SDK + v0.6.3 MCP dev mode → v0.7.0 auth + commerce receipts. Zero-knowledge mutual handshake, one-way scope-narrowing delegation chains, MCP dev mode, and signed auth + commerce receipts. <code>npm install @bolyra/sdk</code>.</p>
+      <p class="install-hint" style="margin-top: 32px; text-align: center;">
+        <code>npx @bolyra/gateway --target http://localhost:3000/mcp --dev</code>
+      </p>
     </div>
   </section>
 
-  <!-- ZK handshake demo (v0.5.1) -->
-  <section id="zk-demo">
+  <!-- 60-Second Quickstart -->
+  <section id="quickstart">
     <div class="container">
-      <p class="section-label">Zero-knowledge upgrade &middot; v0.5.1 on npm</p>
-      <h2 class="section-title">Mutual ZKP handshake in ~140ms</h2>
-      <p class="section-subtitle">Same trust model, zero information leakage. The human proves uniqueness without revealing identity; the agent proves an operator-signed credential without revealing the credential. Both Groth16 proofs are bound to a session nonce, verified atomically. Flip one byte of a proof &mdash; the pairing check fails by construction.</p>
-      <div style="margin: 32px auto 40px; max-width: 920px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-elevated);">
-        <img src="https://raw.githubusercontent.com/bolyra/bolyra/main/sdk/demo/demo.gif?v=1" alt="@bolyra/sdk demo: Groth16 mutual handshake verifies in 138ms, tampered proof rejected as PROOF_INVALID" style="display: block; width: 100%; height: auto;">
+      <p class="section-label">Try it now</p>
+      <h2 class="section-title">Authenticated in 60 seconds.</h2>
+      <div class="quickstart-terminal">
+        <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/bolyra/gateway-quickstart.git</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">cd gateway-quickstart && npm install</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">npm run server</span>   <span class="comment"># terminal 1</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">npm run gateway</span>  <span class="comment"># terminal 2</span></div>
       </div>
-      <div class="code-block-wrapper">
-        <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
-        <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> {
-  <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
-  <span class="fn">proveHandshake</span>, <span class="fn">verifyHandshake</span>, Permission,
-} <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
-
-<span class="cm">// 0. Fixtures — replace with your production values.</span>
-<span class="cm">//    secret: BN254-safe scalar; modelHash: Poseidon hash of the AI model id;</span>
-<span class="cm">//    operatorPrivKey: EdDSA-on-Baby-Jubjub private key held by the AI operator.</span>
-<span class="kw">const</span> humanSecret     <span class="op">=</span> <span class="num">12345678901234567890n</span>;
-<span class="kw">const</span> modelHash       <span class="op">=</span> <span class="num">0xabc1234567890n</span>;
-<span class="kw">const</span> operatorPrivKey <span class="op">=</span> <span class="str">'0x' </span><span class="op">+</span> <span class="str">'11'</span>.<span class="fn">repeat</span>(<span class="num">32</span>);
-
-<span class="cm">// 1. Human + agent enroll once. Commitments go on-chain; secrets never leave.</span>
-<span class="kw">const</span> human <span class="op">=</span> <span class="kw">await</span> <span class="fn">createHumanIdentity</span>(humanSecret);
-<span class="kw">const</span> agent <span class="op">=</span> <span class="kw">await</span> <span class="fn">createAgentCredential</span>(
-  modelHash, operatorPrivKey,
-  [Permission.READ_DATA, Permission.FINANCIAL_SMALL],
-  <span class="fn">BigInt</span>(<span class="fn">Math.floor</span>(<span class="fn">Date.now</span>() <span class="op">/</span> <span class="num">1000</span>) <span class="op">+</span> <span class="num">86400</span>),
-);
-
-<span class="cm">// 2. Mutual handshake: both Groth16 proofs in parallel, bound to one nonce.</span>
-<span class="kw">const</span> { humanProof, agentProof, nonce } <span class="op">=</span> <span class="kw">await</span> <span class="fn">proveHandshake</span>(human, agent);
-
-<span class="cm">// 3. Verify off-chain or submit to IdentityRegistry.verifyHandshake() on Base.</span>
-<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verifyHandshake</span>(humanProof, agentProof, nonce);
-<span class="kw">if</span> (<span class="op">!</span>result.verified) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="str">'handshake rejected'</span>);</code></pre>
-      </div>
-      <p class="section-subtitle" style="margin-top: 40px;"><strong style="color: var(--text);">Under the hood:</strong> <code>HumanUniqueness</code> reuses the public Semaphore v4 ceremony (depth 20, no project setup); <code>AgentPolicy</code> uses a project-specific Groth16 key over <code>pot16.ptau</code>. Production proving runs on rapidsnark (~200ms for both proofs in parallel). The verifier in the demo above is the same <code>snarkjs.groth16.verify</code> that the on-chain Solidity verifier was generated from.</p>
+      <p class="quickstart-result">Then <code>curl localhost:4100</code> -- unauthorized calls get <code>401</code>, authorized calls pass through with <code>X-Bolyra-*</code> headers.</p>
     </div>
   </section>
 
-  <!-- Features -->
-  <section id="features">
+  <!-- What Gets Verified -->
+  <section id="checks">
     <div class="container">
-      <p class="section-label">Protocol</p>
-      <h2 class="section-title">The full protocol</h2>
-      <p class="section-subtitle">Receipts are the on-ramp. The full Bolyra protocol is a complete authentication primitive for the human-AI boundary: three capabilities, zero information leakage. Same wire format and permission encoding as <code>@bolyra/delegation</code> — the upgrade is drop-in.</p>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon mutual">ZK</div>
-          <h3>Mutual Authentication</h3>
-          <p>Humans prove uniqueness via EdDSA + Poseidon commitments. AI agents prove operator-signed credentials. Both proofs are generated in parallel and verified in a single on-chain transaction.</p>
+      <p class="section-label">Every call, checked</p>
+      <h2 class="section-title">Four checks on every tool call.</h2>
+      <div class="checks-grid">
+        <div class="check-card">
+          <div class="check-number">1</div>
+          <h3>Credential Verification</h3>
+          <p><code>verifyBundle()</code> checks ZKP proof, delegation chain, scope commitment, expiry. 401 on failure.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">&rarr;</div>
-          <h3>Delegation Chains</h3>
-          <p>Agents delegate scoped permissions to other agents through privacy-preserving delegation circuits. Each link in the chain is a ZK proof &mdash; the verifier sees only that the permission is valid, not the delegation path.</p>
+        <div class="check-card">
+          <div class="check-number">2</div>
+          <h3>Tool Policy</h3>
+          <p>YAML config maps tool names to permission bitmasks. <code>read_file</code> needs <code>READ_DATA</code>, <code>delete</code> needs <code>WRITE_DATA</code>. 403 on insufficient.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">&empty;</div>
-          <h3>Zero Knowledge</h3>
-          <p>Neither party learns anything about the other beyond policy satisfaction. No identity attributes, no model weights, no operator details are revealed. Proof of compliance without disclosure.</p>
+        <div class="check-card">
+          <div class="check-number">3</div>
+          <h3>Replay Protection</h3>
+          <p>Session nonce checked against <code>MemoryNonceStore</code> or Redis. Same nonce twice = rejected.</p>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Code Example -->
-  <section id="sdk" class="code-section">
-    <div class="container">
-      <p class="section-label">ZKP SDK · v0.5.1 shipped</p>
-      <h2 class="section-title">10 lines to mutual auth</h2>
-      <p class="section-subtitle">When you graduate from signed receipts to zero-knowledge proofs: <code>@bolyra/sdk@0.5.1</code>. Identity creation, credential issuance, parallel proof generation, on-chain verification, and one-way scope-narrowing delegation chains — without revealing operator, model, or scope to the relying party. <strong>Dev mode:</strong> <code>createDevIdentities()</code> for instant testing without circuit artifacts. Python bindings on PyPI as <code>bolyra==0.4.0</code>.</p>
-      <div class="code-block-wrapper">
-        <button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>
-        <pre class="code-block"><code id="sdk-code"><span class="kw">import</span> { <span class="fn">createHumanIdentity</span>, <span class="fn">createAgentCredential</span>,
-         <span class="type">Permission</span>, <span class="fn">proveHandshake</span>, <span class="fn">verifyHandshake</span> } <span class="kw">from</span> <span class="str">'@bolyra/sdk'</span>;
-
-<span class="cm">// Fixtures — replace with your production values.</span>
-<span class="kw">const</span> secretScalar    <span class="op">=</span> <span class="num">12345678901234567890n</span>;
-<span class="kw">const</span> modelHash       <span class="op">=</span> <span class="num">0xabc1234567890n</span>;
-<span class="kw">const</span> operatorKey     <span class="op">=</span> <span class="str">'0x' </span><span class="op">+</span> <span class="str">'11'</span>.<span class="fn">repeat</span>(<span class="num">32</span>);
-<span class="kw">const</span> expiryTimestamp <span class="op">=</span> <span class="fn">BigInt</span>(<span class="fn">Math.floor</span>(<span class="fn">Date.now</span>() <span class="op">/</span> <span class="num">1000</span>) <span class="op">+</span> <span class="num">86400</span>);
-
-<span class="cm">// Human creates identity (EdDSA keypair + Poseidon commitment)</span>
-<span class="kw">const</span> human <span class="op">=</span> <span class="kw">await</span> <span class="fn">createHumanIdentity</span>(secretScalar);
-
-<span class="cm">// AI agent gets operator-signed credential</span>
-<span class="kw">const</span> agent <span class="op">=</span> <span class="kw">await</span> <span class="fn">createAgentCredential</span>(
-  modelHash, operatorKey,
-  [<span class="type">Permission</span>.<span class="prop">READ_DATA</span>, <span class="type">Permission</span>.<span class="prop">WRITE_DATA</span>],
-  expiryTimestamp
-);
-
-<span class="cm">// Mutual handshake — both Groth16 proofs generated in parallel (&lt;200ms with rapidsnark)</span>
-<span class="kw">const</span> { humanProof, agentProof, nonce } <span class="op">=</span> <span class="kw">await</span> <span class="fn">proveHandshake</span>(human, agent);
-
-<span class="cm">// Verify off-chain (or submit to IdentityRegistry.verifyHandshake on Base L2 for ~590k gas)</span>
-<span class="kw">const</span> result <span class="op">=</span> <span class="kw">await</span> <span class="fn">verifyHandshake</span>(humanProof, agentProof, nonce);</code></pre>
-      </div>
-    </div>
-  </section>
-
-  <!-- Why Now -->
-  <section id="why-now">
-    <div class="container">
-      <p class="section-label">Market</p>
-      <h2 class="section-title">Why agent identity, why now</h2>
-      <p class="section-subtitle">The infrastructure for agentic commerce is being built right now. Bolyra is the missing privacy layer.</p>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon mutual">$21B</div>
-          <h3>Machine Identity Market</h3>
-          <p>Non-human identities outnumber human users 3:1 in most enterprises. 63% of organizations cannot enforce purpose limitations on their AI agents (ISACA 2025).</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">4+</div>
-          <h3>Standards Bodies Active</h3>
-          <p>NIST, IETF (OpenAI co-authoring), OWASP Agentic Top 10, and FIDO Payments Working Group are all working on agent identity. Bolyra is the ZKP-native approach.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">Open</div>
-          <h3>Payment Rails Standardizing</h3>
-          <p>Visa Trusted Agent Protocol (Stripe, Shopify, Cloudflare), Mastercard Agent Pay, and Google AP2 are converging on agent payment standards. Each needs a privacy-preserving identity layer.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Ecosystem -->
-  <section id="ecosystem">
-    <div class="container">
-      <p class="section-label">Ecosystem</p>
-      <h2 class="section-title">Integrations and tools</h2>
-      <p class="section-subtitle">Plug Bolyra into your agent framework, wallet, or payment flow.</p>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon mutual">MCP</div>
-          <h3>MCP Middleware</h3>
-          <p><strong style="color: var(--green);">v0.6.3:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy, receiptSigner })</code>. Per-tool permission gating, delegation chain support, signed verification receipts, stdio + HTTP transports. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.6.3</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">GW</div>
-          <h3>MCP Auth Gateway</h3>
-          <p><strong style="color: var(--green);">v0.2.0:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. <strong>v0.2.0</strong> adds <code>RedisNonceStore</code> for multi-instance replay protection. <strong>Docker:</strong> <code>docker run ghcr.io/bolyra/gateway:0.2.0 --target &lt;your-mcp&gt;</code>. Also: <code>npx @bolyra/gateway</code> or <code>createGatewayMiddleware</code> for Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.2.0</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">R</div>
-          <h3>Signed Receipts</h3>
-          <p><strong style="color: var(--green);">v0.7.0:</strong> Auth + commerce receipts. Every verification and payment authorization decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. <code>bolyra-receipt-verify</code> CLI included. <code>npm install @bolyra/receipts@0.7.0</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">$</div>
-          <h3>Payment Protocols</h3>
-          <p>Stripe Agent Commerce Protocol wedge. <code>verifyStripeACPSpend(ctx, amount, currency, 'authorize' | 'confirm')</code> gates PaymentIntents against the leaf delegatee's cumulative-bit scope. <code>confirm</code> fails closed without <code>SIGN_ON_BEHALF</code>. <strong>v0.7.0</strong> adds <code>authorizeCommerceIntent</code> as the unified API across payment rails, with signed commerce receipts on every authorization. Note: Visa TAP and Google AP2 adapters are stub-only. <code>npm install @bolyra/payment-protocols@0.7.0</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">OC</div>
-          <h3>OpenClaw Adapter</h3>
-          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw@0.3.2</code></p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">&rarr;</div>
-          <h3>Off-Chain Mode</h3>
-          <p>Verify handshakes locally with zero gas. Batch sessions and post a single Merkle root on-chain. ~375x gas reduction at batch size 100.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">LC</div>
-          <h3>LangChain Adapter</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Three proper <code>BaseTool</code> subclasses for LangChain agents. <code>BolyraAuthTool</code> (ZKP mutual handshake), <code>BolyraDelegateTool</code> (ZKP delegation), <code>BolyraSDJWTTool</code> (pure-Python SD-JWT delegation, no Node.js required). Session manager for auth-then-delegate chains. Dev mode with auto-generated credentials. <code>pip install bolyra-langchain</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">PY</div>
-          <h3>Python SDK</h3>
-          <p><strong style="color: var(--green);">v0.5.0:</strong> Types, validation, and subprocess bridge to the Node SDK for ZKP proving. <strong>New:</strong> pure-Python SD-JWT delegation module (<code>allow()</code>, <code>present()</code>, <code>verify()</code>) matching the TypeScript wire format exactly. Ed25519 + PyJWT. <code>pip install bolyra</code>.</p>
+        <div class="check-card">
+          <div class="check-number">4</div>
+          <h3>Audit Receipt</h3>
+          <p>ES256K-signed receipt for every decision. Allow or deny. Timestamped.</p>
         </div>
       </div>
     </div>
@@ -923,7 +966,102 @@
     </div>
   </section>
 
-  <!-- Architecture -->
+  <!-- Ecosystem -->
+  <section id="ecosystem">
+    <div class="container">
+      <p class="section-label">Packages</p>
+      <h2 class="section-title">Integrations and tools</h2>
+      <p class="section-subtitle">Plug Bolyra into your agent framework, wallet, or payment flow.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon mutual">MCP</div>
+          <h3>MCP Middleware</h3>
+          <p><strong style="color: var(--green);">v0.6.3:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy, receiptSigner })</code>. Per-tool permission gating, delegation chain support, signed verification receipts, stdio + HTTP transports. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.6.3</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon mutual">GW</div>
+          <h3>MCP Auth Gateway</h3>
+          <p><strong style="color: var(--green);">v0.2.0:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. <strong>v0.2.0</strong> adds <code>RedisNonceStore</code> for multi-instance replay protection. <strong>Docker:</strong> <code>docker run ghcr.io/bolyra/gateway:0.2.0 --target &lt;your-mcp&gt;</code>. Also: <code>npx @bolyra/gateway</code> or <code>createGatewayMiddleware</code> for Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.2.0</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon delegation">R</div>
+          <h3>Signed Receipts</h3>
+          <p><strong style="color: var(--green);">v0.7.0:</strong> Auth + commerce receipts. Every verification and payment authorization decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. <code>bolyra-receipt-verify</code> CLI included. <code>npm install @bolyra/receipts@0.7.0</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon delegation">$</div>
+          <h3>Payment Protocols</h3>
+          <p>Stripe Agent Commerce Protocol wedge. <code>verifyStripeACPSpend(ctx, amount, currency, 'authorize' | 'confirm')</code> gates PaymentIntents against the leaf delegatee's cumulative-bit scope. <code>confirm</code> fails closed without <code>SIGN_ON_BEHALF</code>. <strong>v0.7.0</strong> adds <code>authorizeCommerceIntent</code> as the unified API across payment rails, with signed commerce receipts on every authorization. Note: Visa TAP and Google AP2 adapters are stub-only. <code>npm install @bolyra/payment-protocols@0.7.0</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon mutual">OC</div>
+          <h3>OpenClaw Adapter</h3>
+          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw@0.3.2</code></p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon delegation">&rarr;</div>
+          <h3>Off-Chain Mode</h3>
+          <p>Verify handshakes locally with zero gas. Batch sessions and post a single Merkle root on-chain. ~375x gas reduction at batch size 100.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon privacy">LC</div>
+          <h3>LangChain Adapter</h3>
+          <p><strong style="color: var(--green);">v0.1.0:</strong> Three proper <code>BaseTool</code> subclasses for LangChain agents. <code>BolyraAuthTool</code> (ZKP mutual handshake), <code>BolyraDelegateTool</code> (ZKP delegation), <code>BolyraSDJWTTool</code> (pure-Python SD-JWT delegation, no Node.js required). Session manager for auth-then-delegate chains. Dev mode with auto-generated credentials. <code>pip install bolyra-langchain</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon privacy">PY</div>
+          <h3>Python SDK</h3>
+          <p><strong style="color: var(--green);">v0.5.0:</strong> Types, validation, and subprocess bridge to the Node SDK for ZKP proving. <strong>New:</strong> pure-Python SD-JWT delegation module (<code>allow()</code>, <code>present()</code>, <code>verify()</code>) matching the TypeScript wire format exactly. Ed25519 + PyJWT. <code>pip install bolyra</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Not Just OAuth? -->
+  <section id="why-not-oauth">
+    <div class="container">
+      <p class="section-label">Differentiation</p>
+      <h2 class="section-title">Why not just OAuth?</h2>
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>OAuth / JWT</th>
+            <th>Bolyra</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Delegated scope narrowing</td>
+            <td>Manual policy engine</td>
+            <td>Circuit-enforced, one-way</td>
+          </tr>
+          <tr>
+            <td>Per-tool permissions</td>
+            <td>Custom middleware per tool</td>
+            <td>YAML config, one gateway</td>
+          </tr>
+          <tr>
+            <td>Replay protection</td>
+            <td>Token expiry only</td>
+            <td>Nonce store (memory / Redis)</td>
+          </tr>
+          <tr>
+            <td>Signed audit trail</td>
+            <td>Application logging</td>
+            <td>ES256K receipts on every call</td>
+          </tr>
+          <tr>
+            <td>Privacy-preserving upgrade</td>
+            <td>N/A</td>
+            <td>ZKP path: verifier never sees identity</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ZK Deep Dive -->
   <section id="architecture">
     <div class="container">
       <p class="section-label">Where this goes</p>
@@ -987,49 +1125,6 @@
         <div class="layer">DelegationVerifier.sol</div>
         <span class="arrow">&rarr;</span>
         <div class="layer">IdentityRegistry.sol</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Numbers -->
-  <section id="numbers">
-    <div class="container">
-      <p class="section-label">Benchmarks</p>
-      <h2 class="section-title">Numbers that matter</h2>
-      <p class="section-subtitle">Measured on commodity hardware. Verifier deployed on Base Sepolia testnet &mdash; mainnet with v0.3.</p>
-      <div class="numbers-grid">
-        <div class="number-card">
-          <div class="big">~590k</div>
-          <div class="desc">Gas for full handshake verification on Base L2</div>
-        </div>
-        <div class="number-card">
-          <div class="big">$0.15</div>
-          <div class="desc">Cost per mutual authentication at current gas prices</div>
-        </div>
-        <div class="number-card">
-          <div class="big">&lt;200ms</div>
-          <div class="desc">End-to-end handshake proving time (Groth16 + rapidsnark)</div>
-        </div>
-        <div class="number-card">
-          <div class="big">59,730</div>
-          <div class="desc">Total R1CS constraints across all three circuits</div>
-        </div>
-        <div class="number-card">
-          <div class="big">24</div>
-          <div class="desc">Patent claims filed (US Provisional #64/043,898)</div>
-        </div>
-        <div class="number-card">
-          <div class="big">49</div>
-          <div class="desc">Conformance test vectors (all passing)</div>
-        </div>
-        <div class="number-card">
-          <div class="big">0</div>
-          <div class="desc">Bits of information leaked beyond policy satisfaction</div>
-        </div>
-        <div class="number-card">
-          <div class="big">1</div>
-          <div class="desc">On-chain transaction for full mutual verification</div>
-        </div>
       </div>
     </div>
   </section>
@@ -1104,8 +1199,16 @@
               <li><a href="https://github.com/bolyra/bolyra/blob/main/CHANGELOG.md">Changelog</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/spec">IETF Draft</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/sdk">SDK Documentation</a></li>
-              <li><a href="#design-partners">Design Partners</a></li>
               <li><a href="/blog">Blog</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Packages</h4>
+            <ul>
+              <li><a href="https://www.npmjs.com/package/@bolyra/gateway">npm: @bolyra/gateway</a></li>
+              <li><a href="https://www.npmjs.com/package/@bolyra/sdk">npm: @bolyra/sdk</a></li>
+              <li><a href="https://pypi.org/project/bolyra/">PyPI: bolyra</a></li>
+              <li><a href="https://pypi.org/project/bolyra-langchain/">PyPI: bolyra-langchain</a></li>
             </ul>
           </div>
           <div class="footer-col">
@@ -1125,7 +1228,7 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <p>&copy; 2026 Bolyra. All rights reserved.</p>
+        <p>Built by Viswa Kondoju / ZKProva Inc. &copy; 2026 Bolyra. All rights reserved.</p>
         <p>US Provisional Patent Application #64/043,898 &middot; 24 claims filed</p>
       </div>
     </div>
