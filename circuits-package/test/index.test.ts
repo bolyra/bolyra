@@ -1,11 +1,13 @@
 import { expect } from 'chai';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import {
   getCircuitArtifacts,
   getArtifactsDir,
   getVerificationKey,
   listAvailableCircuits,
+  verifyIntegrity,
   CIRCUITS,
   CircuitName,
 } from '../src/index';
@@ -157,6 +159,46 @@ describe('@bolyra/circuits', () => {
         expect(fs.existsSync(checksumFile), 'checksums.sha256 exists').to.be.true;
         const content = fs.readFileSync(checksumFile, 'utf-8');
         expect(content.trim().length).to.be.greaterThan(0);
+      },
+    );
+
+    (artifactsExist ? it : it.skip)(
+      'all artifact hashes match checksums.sha256',
+      () => {
+        const checksumFile = path.join(artifactsDir, 'checksums.sha256');
+        const content = fs.readFileSync(checksumFile, 'utf-8');
+        const lines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+
+        expect(lines.length).to.be.greaterThan(0);
+
+        for (const line of lines) {
+          const match = line.match(/^([0-9a-f]{64})\s+(.+)$/);
+          expect(match, `valid checksum line: ${line}`).to.not.be.null;
+
+          const [, expectedHash, relativePath] = match!;
+          const filePath = path.resolve(artifactsDir, relativePath);
+
+          expect(fs.existsSync(filePath), `file exists: ${relativePath}`).to.be.true;
+
+          const fileBuffer = fs.readFileSync(filePath);
+          const actualHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+          expect(actualHash, `hash mismatch for ${relativePath}`).to.equal(expectedHash);
+        }
+      },
+    );
+
+    (artifactsExist ? it : it.skip)(
+      'verifyIntegrity() returns true for all artifacts',
+      () => {
+        expect(verifyIntegrity()).to.be.true;
+      },
+    );
+
+    (artifactsExist ? it : it.skip)(
+      'verifyIntegrity(circuit) works for a single circuit',
+      () => {
+        expect(verifyIntegrity('HumanUniqueness')).to.be.true;
       },
     );
   });

@@ -12,6 +12,7 @@ BUILD_DIR="$(cd "$PACKAGE_DIR/../circuits/build" && pwd)"
 ARTIFACTS_DIR="$PACKAGE_DIR/artifacts"
 
 CIRCUITS=("HumanUniqueness" "AgentPolicy" "Delegation")
+MISSING=0
 
 echo "=== Bolyra Circuit Artifacts Copy ==="
 echo "Source: $BUILD_DIR"
@@ -32,6 +33,7 @@ for circuit in "${CIRCUITS[@]}"; do
     echo "[OK] $circuit.wasm"
   else
     echo "[WARN] Missing: $WASM_SRC"
+    MISSING=$((MISSING + 1))
   fi
 
   # Copy Groth16 .zkey (named *_final.zkey in build/)
@@ -41,6 +43,7 @@ for circuit in "${CIRCUITS[@]}"; do
     echo "[OK] ${circuit}_groth16.zkey (from ${circuit}_final.zkey)"
   else
     echo "[WARN] Missing: $ZKEY_SRC"
+    MISSING=$((MISSING + 1))
   fi
 
   # Copy Groth16 vkey
@@ -57,6 +60,7 @@ for circuit in "${CIRCUITS[@]}"; do
     echo "[OK] ${circuit}_groth16_vkey.json (from ${circuit}_vkey.json)"
   else
     echo "[WARN] Missing Groth16 vkey for $circuit"
+    MISSING=$((MISSING + 1))
   fi
 
   # Copy PLONK vkey (verification only, no .zkey -- too large)
@@ -98,4 +102,11 @@ FILE_COUNT=$(find "$ARTIFACTS_DIR" -type f | wc -l | tr -d ' ')
 echo "=== Summary ==="
 echo "Files: $FILE_COUNT"
 echo "Total size: $TOTAL_SIZE"
+
+if [[ "$MISSING" -gt 0 ]]; then
+  echo ""
+  echo "ERROR: $MISSING artifact(s) missing. Build circuits first: npm run compile:circuits"
+  exit 1
+fi
+
 echo "Done."

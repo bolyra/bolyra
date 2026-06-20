@@ -7,6 +7,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 /** Production circuit names in the Bolyra protocol. */
 export type CircuitName = 'HumanUniqueness' | 'AgentPolicy' | 'Delegation';
@@ -131,4 +132,67 @@ export function listAvailableCircuits(): Array<{
     }
   }
   return result;
+}
+
+/**
+ * Verifies artifact integrity by comparing SHA-256 hashes against checksums.sha256.
+ *
+ * @param circuit - If specified, only verify artifacts for this circuit.
+ *                  If omitted, verify all artifacts listed in checksums.sha256.
+ * @returns true if all hashes match
+ * @throws If checksums.sha256 is missing, any referenced file is missing,
+ *         or any hash does not match the expected value.
+ */
+export function verifyIntegrity(circuit?: CircuitName): boolean {
+  const artifactsDir = getArtifactsDir();
+  const checksumFile = path.join(artifactsDir, 'checksums.sha256');
+
+  if (!fs.existsSync(checksumFile)) {
+    throw new Error(`Checksum file not found: ${checksumFile}`);
+  }
+
+  const content = fs.readFileSync(checksumFile, 'utf-8');
+  const lines = content
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length === 0) {
+    throw new Error('checksums.sha256 is empty');
+  }
+
+  for (const line of lines) {
+    // Format: <hash>  <relative-path>  (two-space separator from shasum)
+    const match = line.match(/^([0-9a-f]{64})\s+(.+)$/);
+    if (!match) {
+      throw new Error(`Malformed checksum line: ${line}`);
+    }
+
+    const [, expectedHash, relativePath] = match;
+    const filePath = path.resolve(artifactsDir, relativePath);
+
+    // If filtering by circuit, skip files not under that circuit's directory
+    if (circuit) {
+      const circuitPrefix = path.join(artifactsDir, circuit);
+      if (!filePath.startsWith(circuitPrefix + path.sep)) {
+        continue;
+      }
+    }
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Artifact file not found: ${filePath}`);
+    }
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const actualHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+    if (actualHash !== expectedHash) {
+      throw new Error(
+        `Integrity check failed for ${relativePath}: ` +
+          `expected ${expectedHash}, got ${actualHash}`,
+      );
+    }
+  }
+
+  return true;
 }

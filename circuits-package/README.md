@@ -66,7 +66,7 @@ const dir = getArtifactsDir();
 
 ## Integration with @bolyra/sdk
 
-When `@bolyra/circuits` is installed alongside `@bolyra/sdk`, the SDK automatically resolves circuit artifacts from this package. No configuration needed.
+Note: The SDK does not yet auto-resolve artifacts from this package. Pass the artifacts directory to the SDK config manually: `{ circuitDir: require('@bolyra/circuits').getArtifactsDir() }`. Auto-resolution is planned for a future SDK release.
 
 ## License
 
