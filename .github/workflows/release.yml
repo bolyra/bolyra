@@ -31,6 +31,7 @@ on:
       - '@bolyra/ai@*'
       - 'bolyra-python@*'
       - 'bolyra-langchain@*'
+      - 'bolyra-agents@*'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -268,6 +269,65 @@ jobs:
             FOUND=$(pip index versions bolyra-langchain 2>/dev/null | grep -o "${{ steps.tag.outputs.version }}" || true)
             if [ -n "$FOUND" ]; then
               echo "✓ bolyra-langchain==${{ steps.tag.outputs.version }} resolves on PyPI"
+              exit 0
+            fi
+            echo "PyPI CDN lag (attempt $i/6) — sleeping 10s"
+            sleep 10
+          done
+          echo "ERROR: published but not yet resolvable on PyPI" >&2
+          exit 1
+
+  # ── PyPI publish (OpenAI Agents adapter) ─────────────────────────
+  publish-agents:
+    name: Publish bolyra-agents (PyPI) ${{ github.ref_name }}
+    if: startsWith(github.ref, 'refs/tags/bolyra-agents@')
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Parse tag → version
+        id: tag
+        run: |
+          REF="${GITHUB_REF#refs/tags/bolyra-agents@}"
+          echo "version=$REF" >> "$GITHUB_OUTPUT"
+          echo "Publishing bolyra-agents==$REF to PyPI"
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Verify pyproject.toml version matches tag
+        working-directory: integrations/openai-agents
+        run: |
+          PJ_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$PJ_VERSION" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "ERROR: tag version ${{ steps.tag.outputs.version }} does not match pyproject.toml version $PJ_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build
+        working-directory: integrations/openai-agents
+        run: python3 -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: integrations/openai-agents/dist/
+
+      - name: Verify on PyPI
+        run: |
+          for i in 1 2 3 4 5 6; do
+            FOUND=$(pip index versions bolyra-agents 2>/dev/null | grep -o "${{ steps.tag.outputs.version }}" || true)
+            if [ -n "$FOUND" ]; then
+              echo "✓ bolyra-agents==${{ steps.tag.outputs.version }} resolves on PyPI"
               exit 0
             fi
             echo "PyPI CDN lag (attempt $i/6) — sleeping 10s"
