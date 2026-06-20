@@ -1,0 +1,95 @@
+{
+  "id": "pdlc-2026-06-20-claude-desktop-integration",
+  "feature": "Integration test with Claude Desktop as MCP host -- documented setup, config snippets, and automated e2e test for both stdio proxy and gateway paths",
+  "status": "active",
+  "stage": "IMPLEMENT",
+  "mode": "standard",
+  "created": "2026-06-20T12:00:00Z",
+  "updated": "2026-06-20T17:45:00Z",
+  "spec": "docs/superpowers/specs/2026-06-20-claude-desktop-integration-design.md",
+  "plan": null,
+  "gates": {
+    "spec": { "status": "approved" },
+    "plan": { "status": "approved" },
+    "ship": { "status": "pending" },
+    "post_ship": { "status": "pending" }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "description": "Package scaffolding (package.json, tsconfig.json)",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/package.json",
+        "examples/claude-desktop/tsconfig.json"
+      ]
+    },
+    {
+      "id": 2,
+      "description": "MCP server (src/server.ts) -- HTTP + stdio dual-mode",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/src/server.ts"
+      ]
+    },
+    {
+      "id": 3,
+      "description": "Config snippets for Claude Desktop (proxy + gateway)",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/configs/proxy-config.json",
+        "examples/claude-desktop/configs/gateway-config.json"
+      ]
+    },
+    {
+      "id": 4,
+      "description": "Setup script (scripts/setup.sh)",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/scripts/setup.sh"
+      ]
+    },
+    {
+      "id": 5,
+      "description": "E2E test: Stdio Proxy (test/test-proxy.ts)",
+      "type": "sequential",
+      "depends_on": [1, 2],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/test/test-proxy.ts"
+      ],
+      "tests": "4/4 passing"
+    },
+    {
+      "id": 6,
+      "description": "E2E test: HTTP Gateway (test/test-gateway.ts)",
+      "type": "sequential",
+      "depends_on": [1, 2],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/test/test-gateway.ts"
+      ],
+      "tests": "6/6 passing"
+    },
+    {
+      "id": 7,
+      "description": "README.md with setup guide and troubleshooting",
+      "type": "parallel",
+      "depends_on": [],
+      "status": "complete",
+      "files_changed": [
+        "examples/claude-desktop/README.md"
+      ]
+    }
+  ],
+  "reviews": {},
+  "release": {}
+}

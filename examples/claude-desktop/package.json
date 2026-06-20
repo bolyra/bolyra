@@ -1,0 +1,36 @@
+{
+  "name": "@bolyra/claude-desktop-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Desktop integration example with E2E tests for both stdio proxy and HTTP gateway paths.",
+  "scripts": {
+    "build": "tsc",
+    "setup": "bash scripts/setup.sh",
+    "test": "node dist/test/test-proxy.js && node dist/test/test-gateway.js",
+    "demo:proxy": "node ../../examples/mcp-demo/dist/bolyra-proxy.js",
+    "demo:gateway": "node dist/src/server.js"
+  },
+  "dependencies": {
+    "@bolyra/sdk": "file:../../sdk",
+    "@bolyra/mcp": "file:../../integrations/mcp",
+    "@bolyra/gateway": "file:../../integrations/gateway",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  },
+  "overrides": {
+    "tmp": "0.2.7",
+    "ws": "8.21.0",
+    "underscore": "1.13.8",
+    "qs": "6.15.2",
+    "ip-address": "10.2.0",
+    "hono": "4.12.23",
+    "fast-uri": "3.1.2",
+    "circom_tester": {
+      "snarkjs": "0.7.6"
+    }
+  }
+}
