@@ -81,7 +81,7 @@ export async function run(args: string[]): Promise<void> {
     null,
     2,
   );
-  fs.writeFileSync(outPath + '.pub', pubContent + '\n', 'utf-8');
+  fs.writeFileSync(outPath + '.pub', pubContent + '\n', { encoding: 'utf-8', mode: 0o644 });
 
   console.log('Keypair generated:');
   console.log(`  Private key: ${outPath} (mode 0600)`);

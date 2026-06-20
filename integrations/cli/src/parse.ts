@@ -26,6 +26,9 @@ export function parseDuration(input: string): number | null {
   const match = input.match(/^(\d+)([smhdwy])$/);
   if (!match) return null;
   const value = parseInt(match[1], 10);
+  if (value === 0) {
+    throw new Error('Duration must be positive');
+  }
   const unit = match[2];
   return value * DURATION_UNITS[unit];
 }
@@ -44,6 +47,10 @@ export function parseExpiry(input: string): bigint {
   // Try as Unix timestamp
   const ts = parseInt(input, 10);
   if (!isNaN(ts) && ts > 0) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (ts < nowSeconds) {
+      throw new Error('Expiry must be in the future');
+    }
     return BigInt(ts);
   }
 

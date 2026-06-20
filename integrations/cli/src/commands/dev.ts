@@ -58,8 +58,9 @@ export async function run(args: string[]): Promise<void> {
     expiryTimestamp,
   });
 
-  const serialized = serializeBigInt(identities);
-  const jsonOutput = JSON.stringify(serialized, null, 2);
+  const serialized = serializeBigInt(identities) as Record<string, unknown>;
+  const output = { ...serialized, _dev: true };
+  const jsonOutput = JSON.stringify(output, null, 2);
 
   if (values.out) {
     fs.writeFileSync(values.out, jsonOutput + '\n', 'utf-8');

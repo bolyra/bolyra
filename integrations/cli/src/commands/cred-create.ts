@@ -124,6 +124,7 @@ export async function run(args: string[]): Promise<void> {
     fs.writeFileSync(values.out, jsonOutput + '\n', 'utf-8');
     console.error(`Credential written to: ${values.out}`);
   } else {
+    console.error('WARNING: Full credential printed to stdout. Use --out <file> or --store to save securely.');
     console.log(jsonOutput);
   }
 

@@ -30,7 +30,7 @@ function commitmentFilename(commitment: string): string {
 /** Ensure the store directory exists */
 export function ensureStoreDir(storeDir?: string): string {
   const dir = storeDir ?? defaultStoreDir();
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;
 }
 
@@ -42,7 +42,7 @@ export function saveCredential(
   const dir = ensureStoreDir(storeDir);
   const filename = commitmentFilename(cred.commitment);
   const filePath = path.join(dir, filename);
-  fs.writeFileSync(filePath, JSON.stringify(cred, null, 2) + '\n', 'utf-8');
+  fs.writeFileSync(filePath, JSON.stringify(cred, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
   return filePath;
 }
 

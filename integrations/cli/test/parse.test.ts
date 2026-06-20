@@ -51,7 +51,16 @@ describe('parseExpiry', () => {
   });
 
   it('parses Unix timestamp', () => {
-    expect(parseExpiry('1750000000')).toBe(1750000000n);
+    const futureTs = Math.floor(Date.now() / 1000) + 86400;
+    expect(parseExpiry(String(futureTs))).toBe(BigInt(futureTs));
+  });
+
+  it('rejects past Unix timestamp', () => {
+    expect(() => parseExpiry('1000000000')).toThrow('Expiry must be in the future');
+  });
+
+  it('rejects zero duration', () => {
+    expect(() => parseDuration('0d')).toThrow('Duration must be positive');
   });
 
   it('throws on invalid input', () => {
