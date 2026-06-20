@@ -5,6 +5,7 @@
  * Mirrors patterns from @bolyra/mcp client.ts.
  */
 
+import { randomBytes } from 'crypto';
 import type { BolyraProofBundle } from '@bolyra/mcp';
 
 /**
@@ -27,8 +28,22 @@ export function decodeBundleFromHeader(authHeader: string): BolyraProofBundle | 
   }
   try {
     const base64 = authHeader.slice(prefix.length);
+    if (!base64) return null;
     const json = Buffer.from(base64, 'base64').toString('utf8');
-    return JSON.parse(json) as BolyraProofBundle;
+    const parsed = JSON.parse(json);
+    // Validate expected shape before returning
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      typeof parsed.v !== 'number' ||
+      !parsed.humanProof ||
+      !parsed.agentProof ||
+      !parsed.nonce ||
+      !parsed.credentialCommitment
+    ) {
+      return null;
+    }
+    return parsed as BolyraProofBundle;
   } catch {
     return null;
   }
@@ -48,8 +63,44 @@ export function buildAuthHeader(bundle: BolyraProofBundle): string {
  */
 export function generateNonce(): bigint {
   const ts = BigInt(Math.floor(Date.now() / 1000));
-  const entropy = BigInt(Math.floor(Math.random() * 2 ** 48));
+  const entropy = BigInt('0x' + randomBytes(8).toString('hex'));
   return (ts << 64n) | entropy;
+}
+
+/**
+ * Build a dev-mode proof bundle (no circuit artifacts needed).
+ * Shared by middleware.ts and tools.ts.
+ */
+export function buildDevBundle(
+  credential: import('@bolyra/sdk').AgentCredential,
+  nonce: bigint,
+): BolyraProofBundle {
+  const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+  const mockProofStrings = Array.from({ length: 8 }, () =>
+    BigInt('0x' + randomBytes(4).toString('hex')).toString(),
+  );
+
+  return {
+    v: 1,
+    humanProof: {
+      proof: mockProofStrings as unknown as import('@bolyra/sdk').Proof['proof'],
+      publicSignals: ['0', '0', '0', '0', nonce.toString()],
+    },
+    agentProof: {
+      proof: mockProofStrings as unknown as import('@bolyra/sdk').Proof['proof'],
+      publicSignals: [
+        '0',
+        '0',
+        credential.commitment.toString(),
+        credential.permissionBitmask.toString(),
+        currentTimestamp.toString(),
+        nonce.toString(),
+      ],
+    },
+    nonce: nonce.toString(),
+    credentialCommitment: credential.commitment.toString(),
+    _dev: true,
+  };
 }
 
 /**

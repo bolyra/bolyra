@@ -132,8 +132,9 @@ describe('Integration: full auth flow (dev mode)', () => {
       {},
       { toolCallId: 'int-1', messages: [], abortSignal: undefined },
     );
-    expect(authResult.status).toBe('authenticated');
-    expect(authResult.bundle).toBeTruthy();
+    expect(authResult.authenticated).toBe(true);
+    // C2: bundle must NOT be in tool output
+    expect(authResult.bundle).toBeUndefined();
 
     // Execute credential info tool
     const infoResult = await bolyraTools.bolyra_credential_info.execute!(
@@ -156,17 +157,15 @@ describe('Integration: full auth flow (dev mode)', () => {
       {},
       { toolCallId: 'rt-1', messages: [], abortSignal: undefined },
     );
-    expect(authResult.status).toBe('authenticated');
+    expect(authResult.authenticated).toBe(true);
 
-    // Decode the bundle from the tool result
-    const bundleBase64 = authResult.bundle;
-    const bundleJson = Buffer.from(bundleBase64, 'base64').toString('utf8');
-    const bundle = JSON.parse(bundleJson);
+    // C2: bundle is no longer in tool output — use accessor
+    const lastHeader = bolyraTools.getLastAuthHeader();
+    expect(lastHeader).toBeTruthy();
 
-    // Server verifies
-    const header = `Bolyra ${bundleBase64}`;
+    // Server verifies using the internally stored header
     const verifier = bolyraAuthMiddleware({ devMode: true });
-    const result = await verifier.verifyHeader(header);
+    const result = await verifier.verifyHeader(lastHeader!);
     expect(result.verified).toBe(true);
   });
 });

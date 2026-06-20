@@ -13,7 +13,7 @@ import type { LanguageModelV1, LanguageModelV1CallOptions } from 'ai';
 import { wrapLanguageModel } from 'ai';
 import type { BolyraAIConfig } from './types';
 import type { BolyraProofBundle } from '@bolyra/mcp';
-import { encodeBundle, generateNonce } from './utils';
+import { encodeBundle, generateNonce, buildDevBundle as buildDevBundleUtil } from './utils';
 
 /**
  * Wrap a language model with Bolyra ZKP authentication.
@@ -108,43 +108,16 @@ async function buildAuthForConfig(config: BolyraAIConfig): Promise<string> {
  */
 async function buildDevBundle(config: BolyraAIConfig): Promise<BolyraProofBundle> {
   let credential = config.credential;
-  let humanIdentity = config.humanIdentity;
 
   // If no credential provided in dev mode, create dev identities
   if (!credential) {
     const sdk = await import('@bolyra/sdk');
     const devIds = await sdk.createDevIdentities();
     credential = devIds.agent;
-    humanIdentity = devIds.human;
   }
 
   const nonce = generateNonce();
-  const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
-  const mockProofStrings = Array.from({ length: 8 }, () =>
-    BigInt(Math.floor(Math.random() * 2 ** 32)).toString(),
-  );
-
-  return {
-    v: 1,
-    humanProof: {
-      proof: mockProofStrings as unknown as import('@bolyra/sdk').Proof['proof'],
-      publicSignals: ['0', '0', '0', '0', nonce.toString()],
-    },
-    agentProof: {
-      proof: mockProofStrings as unknown as import('@bolyra/sdk').Proof['proof'],
-      publicSignals: [
-        '0',                                          // agentMerkleRoot
-        '0',                                          // nullifierHash
-        credential.commitment.toString(),             // scopeCommitment
-        credential.permissionBitmask.toString(),      // requiredScopeMask
-        currentTimestamp.toString(),                   // currentTimestamp
-        nonce.toString(),                             // sessionNonce
-      ],
-    },
-    nonce: nonce.toString(),
-    credentialCommitment: credential.commitment.toString(),
-    _dev: true,
-  };
+  return buildDevBundleUtil(credential, nonce);
 }
 
 /**

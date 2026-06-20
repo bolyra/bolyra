@@ -18,27 +18,34 @@ describe('createBolyraTools', () => {
     });
   });
 
-  it('creates four tools', () => {
+  const toolNames = [
+    'bolyra_authenticate',
+    'bolyra_delegate',
+    'bolyra_check_permissions',
+    'bolyra_credential_info',
+  ] as const;
+
+  it('creates four tools plus accessors', () => {
     expect(Object.keys(tools)).toEqual(
-      expect.arrayContaining([
-        'bolyra_authenticate',
-        'bolyra_delegate',
-        'bolyra_check_permissions',
-        'bolyra_credential_info',
-      ]),
+      expect.arrayContaining([...toolNames]),
     );
-    expect(Object.keys(tools)).toHaveLength(4);
+    // 4 tools + getLastBundle + getLastAuthHeader
+    expect(Object.keys(tools)).toHaveLength(6);
+    expect(typeof tools.getLastBundle).toBe('function');
+    expect(typeof tools.getLastAuthHeader).toBe('function');
   });
 
   it('all tools have description and parameters', () => {
-    for (const [name, t] of Object.entries(tools)) {
+    for (const name of toolNames) {
+      const t = tools[name];
       expect(t.description).toBeTruthy();
       expect(t.parameters).toBeDefined();
     }
   });
 
   it('all tools have execute functions', () => {
-    for (const [name, t] of Object.entries(tools)) {
+    for (const name of toolNames) {
+      const t = tools[name];
       expect(typeof t.execute).toBe('function');
     }
   });
@@ -49,10 +56,15 @@ describe('createBolyraTools', () => {
         {},
         { toolCallId: 'test-1', messages: [], abortSignal: undefined },
       );
-      expect(result.status).toBe('authenticated');
+      expect(result.authenticated).toBe(true);
       expect(result.mode).toBe('dev');
-      expect(result.bundle).toBeTruthy();
+      // C2: bundle must NOT be in tool output
+      expect(result.bundle).toBeUndefined();
       expect(result.did).toContain('did:bolyra:dev:');
+      expect(result.expiresAt).toBeTruthy();
+      // Bundle should be accessible via accessor
+      expect(tools.getLastBundle()).not.toBeNull();
+      expect(tools.getLastAuthHeader()).toContain('Bolyra ');
     });
 
     it('accepts an optional nonce', async () => {
@@ -60,7 +72,7 @@ describe('createBolyraTools', () => {
         { nonce: '12345' },
         { toolCallId: 'test-2', messages: [], abortSignal: undefined },
       );
-      expect(result.status).toBe('authenticated');
+      expect(result.authenticated).toBe(true);
     });
   });
 

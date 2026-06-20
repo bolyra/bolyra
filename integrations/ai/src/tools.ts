@@ -9,8 +9,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { BolyraToolsConfig } from './types';
-import type { AgentCredential, Permission } from '@bolyra/sdk';
-import { encodeBundle, generateNonce } from './utils';
+import { encodeBundle, generateNonce, buildDevBundle } from './utils';
 
 /**
  * Create Vercel AI SDK tools for Bolyra auth operations.
@@ -34,14 +33,30 @@ import { encodeBundle, generateNonce } from './utils';
 export function createBolyraTools(config: BolyraToolsConfig) {
   const { credential, devMode = false } = config;
 
-  return {
+  // H1: Dev guard — if not devMode, require real credentials
+  if (!devMode && (!config.humanIdentity || !credential)) {
+    throw new Error(
+      '@bolyra/ai: createBolyraTools requires either `devMode: true` or both `credential` and `humanIdentity` for production use.',
+    );
+  }
+
+  // C2: Internal bundle store — never expose raw bundles to LLM tool output
+  let _lastBundle: import('@bolyra/mcp').BolyraProofBundle | null = null;
+  let _lastAuthHeader: string | null = null;
+
+  /** Retrieve the last proof bundle for programmatic use. */
+  const getLastBundle = () => _lastBundle;
+  /** Retrieve the last Authorization header for programmatic use. */
+  const getLastAuthHeader = () => _lastAuthHeader;
+
+  const tools = {
     /**
      * Generate a proof bundle for the current agent credential.
      */
     bolyra_authenticate: tool({
       description:
         'Authenticate the current AI agent using Bolyra ZKP credentials. ' +
-        'Returns a proof bundle that can be attached to subsequent API calls. ' +
+        'Returns a confirmation with DID and permissions. ' +
         'Use this before making tool calls that require authentication.',
       parameters: z.object({
         nonce: z
@@ -51,23 +66,29 @@ export function createBolyraTools(config: BolyraToolsConfig) {
       }),
       execute: async ({ nonce: nonceStr }) => {
         const nonce = nonceStr ? BigInt(nonceStr) : generateNonce();
+        const network = config.network ?? 'base-sepolia';
 
         if (devMode) {
           const bundle = buildDevBundle(credential, nonce);
+          _lastBundle = bundle;
+          _lastAuthHeader = `Bolyra ${encodeBundle(bundle)}`;
+          const did = `did:bolyra:dev:${credential.commitment.toString(16).padStart(64, '0')}`;
+          const permBits = credential.permissionBitmask.toString(2).padStart(8, '0');
+          const expiryDate = new Date(Number(credential.expiryTimestamp) * 1000).toISOString();
           return {
-            status: 'authenticated',
+            authenticated: true,
             mode: 'dev',
-            bundle: encodeBundle(bundle),
-            did: `did:bolyra:dev:${credential.commitment.toString(16).padStart(64, '0')}`,
-            permissions: credential.permissionBitmask.toString(2),
+            did,
+            permissions: permBits,
+            expiresAt: expiryDate,
           };
         }
 
         // Production mode: generate real proof
         if (!config.humanIdentity) {
           return {
-            status: 'error',
-            reason: 'humanIdentity is required for production authentication.',
+            authenticated: false,
+            reason: 'Authentication failed: missing identity configuration.',
           };
         }
 
@@ -78,18 +99,22 @@ export function createBolyraTools(config: BolyraToolsConfig) {
             credential,
             { devMode: false },
           );
+          _lastBundle = auth.bundle;
+          _lastAuthHeader = auth.headers.Authorization;
+          const did = `did:bolyra:${network}:${credential.commitment.toString(16).padStart(64, '0')}`;
+          const permBits = credential.permissionBitmask.toString(2).padStart(8, '0');
+          const expiryDate = new Date(Number(credential.expiryTimestamp) * 1000).toISOString();
           return {
-            status: 'authenticated',
+            authenticated: true,
             mode: 'production',
-            bundle: encodeBundle(auth.bundle),
-            authHeader: auth.headers.Authorization,
-            did: `did:bolyra:${config.network ?? 'base-sepolia'}:${credential.commitment.toString(16).padStart(64, '0')}`,
-            permissions: credential.permissionBitmask.toString(2),
+            did,
+            permissions: permBits,
+            expiresAt: expiryDate,
           };
-        } catch (err) {
+        } catch {
           return {
-            status: 'error',
-            reason: err instanceof Error ? err.message : String(err),
+            authenticated: false,
+            reason: 'Authentication failed.',
           };
         }
       },
@@ -233,39 +258,7 @@ export function createBolyraTools(config: BolyraToolsConfig) {
       },
     }),
   };
-}
 
-/**
- * Build a dev-mode proof bundle (no circuit artifacts needed).
- */
-function buildDevBundle(
-  credential: AgentCredential,
-  nonce: bigint,
-): import('@bolyra/mcp').BolyraProofBundle {
-  const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
-  const mockProofStrings = Array.from({ length: 8 }, () =>
-    BigInt(Math.floor(Math.random() * 2 ** 32)).toString(),
-  );
-
-  return {
-    v: 1,
-    humanProof: {
-      proof: mockProofStrings as unknown as import('@bolyra/sdk').Proof['proof'],
-      publicSignals: ['0', '0', '0', '0', nonce.toString()],
-    },
-    agentProof: {
-      proof: mockProofStrings as unknown as import('@bolyra/sdk').Proof['proof'],
-      publicSignals: [
-        '0',
-        '0',
-        credential.commitment.toString(),
-        credential.permissionBitmask.toString(),
-        currentTimestamp.toString(),
-        nonce.toString(),
-      ],
-    },
-    nonce: nonce.toString(),
-    credentialCommitment: credential.commitment.toString(),
-    _dev: true,
-  };
+  // Attach accessors so callers can retrieve the bundle programmatically
+  return Object.assign(tools, { getLastBundle, getLastAuthHeader });
 }

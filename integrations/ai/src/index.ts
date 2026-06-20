@@ -14,6 +14,7 @@ export {
   buildAuthHeader,
   generateNonce,
   buildBolyraHeaders,
+  buildDevBundle,
 } from './utils';
 
 export type {
