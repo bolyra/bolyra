@@ -18,14 +18,14 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3  # v3.0.0
+      - uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226  # v3.0.0
 
       - name: Log in to GHCR
         if: startsWith(github.ref, 'refs/tags/')
-        uses: docker/login-action@v3
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d  # v3.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -41,7 +41,7 @@ jobs:
           fi
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09  # v6.0.0
         with:
           context: .
           file: Dockerfile.gateway
@@ -49,24 +49,26 @@ jobs:
           push: ${{ startsWith(github.ref, 'refs/tags/') }}
           tags: |
             ghcr.io/bolyra/gateway:${{ steps.version.outputs.version }}
-            ghcr.io/bolyra/gateway:latest
+            ${{ startsWith(github.ref, 'refs/tags/') && 'ghcr.io/bolyra/gateway:latest' || '' }}
           build-args: |
-            GATEWAY_VERSION=${{ steps.version.outputs.version }}
+            GATEWAY_VERSION=${{ steps.version.outputs.version == 'dev' && 'latest' || steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Smoke test
         if: success()
         run: |
-          # Build single-platform for smoke test (multi-arch already tested above)
-          docker build -f Dockerfile.gateway -t bolyra-gateway-smoke .
+          VERSION="${{ steps.version.outputs.version }}"
+          GWVER="${VERSION:-latest}"
+          [ "$GWVER" = "dev" ] && GWVER="latest"
+          docker build -f Dockerfile.gateway \
+            --build-arg GATEWAY_VERSION=$GWVER \
+            -t bolyra-gateway-smoke .
           docker run --rm -d -p 4100:4100 --name gw-smoke \
             bolyra-gateway-smoke --target http://localhost:9999/mcp --dev
           sleep 5
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4100/healthz || true)
           docker stop gw-smoke || true
-          # 200 = healthy (upstream reachable), 503 = degraded (upstream unreachable)
-          # Both confirm the gateway process started and /healthz responds.
           if [ "$STATUS" != "200" ] && [ "$STATUS" != "503" ]; then
             echo "Smoke test failed: /healthz returned $STATUS (expected 200 or 503)"
             exit 1
