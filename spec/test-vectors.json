@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -1081,6 +1081,116 @@
         "result": "FAIL",
         "reason": "empty_public_signals",
         "failsAt": "bolyra.proof_envelope.validate: public_signals must contain at least one element"
+      }
+    },
+    {
+      "id": "session-valid-jwt",
+      "description": "Valid session token issued after a successful handshake — JWT well-formed, nullifier claim present, not expired",
+      "type": "session_token",
+      "status": "experimental",
+      "inputs": {
+        "session_nonce": "nonce-sess-001",
+        "human_nullifier": "12345678901234567890",
+        "agent_scope_commitment": "98765432109876543210",
+        "scope": "0x07",
+        "issued_at": 1750000000,
+        "exp": 1750003600,
+        "verified_at": 1750001000,
+        "source": "handshake"
+      },
+      "expected": {
+        "result": "PASS",
+        "jwt_well_formed": true,
+        "nullifier_claim_present": true,
+        "not_expired": true
+      }
+    },
+    {
+      "id": "session-expired",
+      "description": "Session token past exp timestamp — verifier must reject with session_expired",
+      "type": "session_token",
+      "status": "experimental",
+      "inputs": {
+        "session_nonce": "nonce-sess-002",
+        "human_nullifier": "11111111111111111111",
+        "agent_scope_commitment": "22222222222222222222",
+        "scope": "0x03",
+        "issued_at": 1700000000,
+        "exp": 1700003600,
+        "verified_at": 1750000000,
+        "source": "handshake"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "session_expired",
+        "failsAt": "bolyra.session_token.verify: exp < current_timestamp"
+      }
+    },
+    {
+      "id": "session-scope-narrowing",
+      "description": "Delegation narrows scope from 0x0F to 0x03 and session token reflects the narrowed scope — valid",
+      "type": "session_token",
+      "status": "experimental",
+      "inputs": {
+        "session_nonce": "nonce-sess-003",
+        "human_nullifier": "33333333333333333333",
+        "agent_scope_commitment": "44444444444444444444",
+        "original_scope": "0x0F",
+        "delegated_scope": "0x03",
+        "scope": "0x03",
+        "issued_at": 1750000000,
+        "exp": 1750003600,
+        "verified_at": 1750001000,
+        "source": "delegation"
+      },
+      "expected": {
+        "result": "PASS",
+        "scope_reflects_delegation": true,
+        "scope_narrowed": true,
+        "verifier_accepts": true
+      }
+    },
+    {
+      "id": "session-missing-nullifier-binding",
+      "description": "Session token without nullifier claim — identity binding absent, must be rejected",
+      "type": "session_token",
+      "status": "experimental",
+      "inputs": {
+        "session_nonce": "nonce-sess-004",
+        "human_nullifier": null,
+        "agent_scope_commitment": "55555555555555555555",
+        "scope": "0x01",
+        "issued_at": 1750000000,
+        "exp": 1750003600,
+        "verified_at": 1750001000,
+        "source": "handshake"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "missing_nullifier_binding",
+        "failsAt": "bolyra.session_token.verify: nullifier claim is required for identity binding"
+      }
+    },
+    {
+      "id": "session-nonce-replay",
+      "description": "Stale session nonce reused in a second token request — replay must be rejected",
+      "type": "session_token",
+      "status": "experimental",
+      "inputs": {
+        "session_nonce": "nonce-sess-005",
+        "human_nullifier": "66666666666666666666",
+        "agent_scope_commitment": "77777777777777777777",
+        "scope": "0x07",
+        "issued_at": 1750000000,
+        "exp": 1750003600,
+        "verified_at": 1750001000,
+        "nonce_already_consumed": true,
+        "source": "handshake"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "nonce_replay",
+        "failsAt": "bolyra.session_token.issue: session_nonce already consumed"
       }
     }
   ]
