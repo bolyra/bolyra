@@ -796,6 +796,173 @@
         "reason": "cumulative_bit_violation",
         "failsAt": "Delegation circuit: cumulative bit invariant on delegateeScope (bit4 implies bit3, bit3 implies bit2)"
       }
+    },
+    {
+      "id": "sd-jwt-valid-issuance",
+      "description": "Valid SD-JWT allow() + present() round-trip — issuer signs, holder presents, verifier accepts",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "action": "read:documents",
+        "permission": "0x01",
+        "ttl_seconds": 300,
+        "nonce": "nonce-aaa-001",
+        "amount": null
+      },
+      "expected": {
+        "result": "PASS",
+        "jwt_issued": true,
+        "disclosure_bound": true,
+        "verifier_accepts": true
+      }
+    },
+    {
+      "id": "sd-jwt-expired-receipt",
+      "description": "SD-JWT receipt past exp timestamp — verifier must reject with token_expired",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "action": "read:documents",
+        "permission": "0x01",
+        "ttl_seconds": 60,
+        "nonce": "nonce-bbb-002",
+        "issued_at": 1700000000,
+        "exp": 1700000060,
+        "verified_at": 1700001000
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "token_expired",
+        "failsAt": "bolyra.sd_jwt.verify: exp < current_timestamp"
+      }
+    },
+    {
+      "id": "sd-jwt-wrong-audience",
+      "description": "SD-JWT presented to wrong audience — aud claim mismatch must cause rejection",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "presented_to": "https://other-service.example.com",
+        "action": "read:documents",
+        "permission": "0x01",
+        "ttl_seconds": 300,
+        "nonce": "nonce-ccc-003"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "audience_mismatch",
+        "failsAt": "bolyra.sd_jwt.verify: aud !== presented_to"
+      }
+    },
+    {
+      "id": "sd-jwt-missing-nonce-production",
+      "description": "SD-JWT issued without nonce in production mode — must fail; nonce is required to prevent replay",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "action": "write:documents",
+        "permission": "0x03",
+        "ttl_seconds": 300,
+        "nonce": null,
+        "mode": "production"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "missing_nonce",
+        "failsAt": "bolyra.sd_jwt.allow: nonce required in production mode"
+      }
+    },
+    {
+      "id": "sd-jwt-nonce-replay",
+      "description": "SD-JWT presented with a nonce that was already consumed — replay must be rejected",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "action": "read:documents",
+        "permission": "0x01",
+        "ttl_seconds": 300,
+        "nonce": "nonce-ddd-004",
+        "nonce_already_used": true
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "nonce_replay",
+        "failsAt": "bolyra.sd_jwt.verify: nonce already present in consumed_nonces set"
+      }
+    },
+    {
+      "id": "sd-jwt-max-amount-exceeded",
+      "description": "SD-JWT payment receipt with amount exceeding the permission cap — must fail FINANCIAL_SMALL limit",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://payments.example.com",
+        "action": "pay",
+        "permission": "0x04",
+        "ttl_seconds": 300,
+        "nonce": "nonce-eee-005",
+        "amount": 15000,
+        "amount_cap": 10000
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "amount_cap_exceeded",
+        "failsAt": "bolyra.sd_jwt.allow: amount 15000 > cap 10000 for FINANCIAL_MEDIUM"
+      }
+    },
+    {
+      "id": "sd-jwt-selective-disclosure",
+      "description": "SD-JWT selective disclosure — action claim revealed, amount claim hidden from verifier",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "action": "read:documents",
+        "permission": "0x01",
+        "ttl_seconds": 300,
+        "nonce": "nonce-fff-006",
+        "amount": 50,
+        "disclosed_claims": ["action"],
+        "hidden_claims": ["amount"]
+      },
+      "expected": {
+        "result": "PASS",
+        "action_disclosed": true,
+        "amount_hidden": true,
+        "verifier_accepts": true
+      }
+    },
+    {
+      "id": "sd-jwt-jti-uniqueness",
+      "description": "Two separately issued SD-JWT receipts must have distinct jti values — JTI uniqueness invariant",
+      "type": "sd_jwt",
+      "inputs": {
+        "issuer_id": "did:bolyra:issuer:abc123",
+        "agent_id": "did:bolyra:agent:def456",
+        "audience": "https://api.example.com",
+        "action": "read:documents",
+        "permission": "0x01",
+        "ttl_seconds": 300,
+        "nonce_a": "nonce-ggg-007a",
+        "nonce_b": "nonce-ggg-007b",
+        "verify_jti_uniqueness": true
+      },
+      "expected": {
+        "result": "PASS",
+        "jti_a_differs_from_jti_b": true
+      }
     }
   ]
 }
