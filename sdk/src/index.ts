@@ -70,3 +70,22 @@ export {
   MerkleTreeError,
   ConfigurationError,
 } from './errors';
+
+// Proof envelope wire format
+export {
+  CONTENT_TYPE,
+  ENVELOPE_VERSION,
+  serializeEnvelope,
+  deserializeEnvelope,
+  validateEnvelope,
+  envelopeFromSnarkjsProof,
+} from './envelope';
+
+export type {
+  ProofEnvelope,
+  ProofData,
+  ProofMetadata,
+  CircuitIdentity,
+  CircuitName,
+  ProofType,
+} from './envelope';
