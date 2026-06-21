@@ -1,18 +1,18 @@
 {
   "id": "pdlc-2026-06-20-crewai-adapter",
   "feature": "CrewAI adapter for Bolyra -- BaseTool subclasses, SD-JWT tool, BolyraGuard callback, pyproject.toml package",
-  "status": "active",
-  "stage": "REVIEW",
+  "status": "complete",
+  "stage": "POST-SHIP",
   "mode": "standard",
   "created": "2026-06-20T10:00:00Z",
-  "updated": "2026-06-20T11:00:00Z",
+  "updated": "2026-06-21T02:00:00Z",
   "spec": "docs/superpowers/specs/2026-06-20-crewai-adapter-design.md",
   "plan": "docs/superpowers/plans/2026-06-20-crewai-adapter.md",
   "gates": {
     "spec": { "status": "approved" },
     "plan": { "status": "approved" },
-    "ship": { "status": "pending" },
-    "post_ship": { "status": "pending" }
+    "ship": { "status": "approved", "pr": 53, "merged": "2026-06-21" },
+    "post_ship": { "status": "approved" }
   },
   "tasks": [
     { "id": 1, "description": "Remove old stub files", "type": "parallel", "depends_on": [], "status": "done" },
@@ -22,6 +22,6 @@
     { "id": 5, "description": "README.md", "type": "sequential", "depends_on": [3], "status": "done" },
     { "id": 6, "description": "Run tests, fix issues, commit", "type": "sequential", "depends_on": [4, 5], "status": "done" }
   ],
-  "reviews": {},
-  "release": {}
+  "reviews": { "pre-landing": { "score": 8.5, "findings_fixed": 7 } },
+  "release": { "pr": 53, "version": "0.1.0", "merged": "2026-06-21" }
 }
