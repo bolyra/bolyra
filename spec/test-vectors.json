@@ -963,6 +963,125 @@
         "result": "PASS",
         "jti_a_differs_from_jti_b": true
       }
+    },
+    {
+      "id": "envelope-valid-handshake",
+      "description": "Valid proof envelope for a handshake — content-type set, proof bytes well-formed, all required fields present",
+      "type": "proof_envelope",
+      "inputs": {
+        "proof_type": "groth16",
+        "circuit": "HumanUniqueness",
+        "public_signals": [
+          "12345678901234567890",
+          "98765432109876543210",
+          "11111111111111111111"
+        ],
+        "proof_bytes_b64": "eyJwcm9vZiI6InZhbGlkLWdyb3RoMTYtcHJvb2YtYnl0ZXMifQ==",
+        "content_type": "application/bolyra-proof+json"
+      },
+      "expected": {
+        "result": "PASS",
+        "envelope_well_formed": true,
+        "proof_bytes_decoded": true
+      }
+    },
+    {
+      "id": "envelope-missing-required-field",
+      "description": "Proof envelope without proof_type field — structural validation must reject it",
+      "type": "proof_envelope",
+      "inputs": {
+        "circuit": "AgentPolicy",
+        "public_signals": [
+          "55555555555555555555"
+        ],
+        "proof_bytes_b64": "eyJwcm9vZiI6InNvbWUtYWdlbnQtcG9saWN5LXByb29mIn0=",
+        "content_type": "application/bolyra-proof+json"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "missing_required_field",
+        "failsAt": "bolyra.proof_envelope.validate: proof_type is required"
+      }
+    },
+    {
+      "id": "envelope-malformed-proof-bytes",
+      "description": "Proof envelope with invalid base64 in proof_bytes_b64 — decoder must reject before ZK verification",
+      "type": "proof_envelope",
+      "inputs": {
+        "proof_type": "groth16",
+        "circuit": "Delegation",
+        "public_signals": [
+          "22222222222222222222"
+        ],
+        "proof_bytes_b64": "!!!not-valid-base64!!!",
+        "content_type": "application/bolyra-proof+json"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "malformed_proof_bytes",
+        "failsAt": "bolyra.proof_envelope.decode: base64 decode error on proof_bytes_b64"
+      }
+    },
+    {
+      "id": "envelope-unknown-fields-forward-compat",
+      "description": "Proof envelope with extra unknown fields — forward-compat: unknown fields preserved, envelope not rejected",
+      "type": "proof_envelope",
+      "inputs": {
+        "proof_type": "groth16",
+        "circuit": "HumanUniqueness",
+        "public_signals": [
+          "33333333333333333333"
+        ],
+        "proof_bytes_b64": "eyJwcm9vZiI6ImZvcndhcmQtY29tcGF0LXByb29mIn0=",
+        "content_type": "application/bolyra-proof+json",
+        "future_field_v2": "some-value",
+        "experimental_hint": true
+      },
+      "expected": {
+        "result": "PASS",
+        "unknown_fields_preserved": true,
+        "envelope_accepted": true
+      }
+    },
+    {
+      "id": "envelope-cross-circuit",
+      "description": "Proof envelope containing both handshake and delegation proofs in one payload — cross-circuit aggregation accepted",
+      "type": "proof_envelope",
+      "inputs": {
+        "proof_type": "groth16",
+        "circuit": "HumanUniqueness+Delegation",
+        "public_signals": [
+          "44444444444444444444",
+          "55555555555555555555",
+          "66666666666666666666",
+          "77777777777777777777"
+        ],
+        "proof_bytes_b64": "eyJoYW5kc2hha2UiOiJwcm9vZi1hIiwiZGVsZWdhdGlvbiI6InByb29mLWIifQ==",
+        "content_type": "application/bolyra-proof+json",
+        "circuits_included": ["HumanUniqueness", "Delegation"]
+      },
+      "expected": {
+        "result": "PASS",
+        "cross_circuit_accepted": true,
+        "both_proofs_present": true
+      }
+    },
+    {
+      "id": "envelope-empty-public-signals",
+      "description": "Proof envelope with empty public_signals array — at least one public signal required, must fail",
+      "type": "proof_envelope",
+      "inputs": {
+        "proof_type": "plonk",
+        "circuit": "AgentPolicy",
+        "public_signals": [],
+        "proof_bytes_b64": "eyJwcm9vZiI6InBsb25rLWFnZW50LXBvbGljeSJ9",
+        "content_type": "application/bolyra-proof+json"
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "empty_public_signals",
+        "failsAt": "bolyra.proof_envelope.validate: public_signals must contain at least one element"
+      }
     }
   ]
 }
