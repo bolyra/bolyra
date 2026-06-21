@@ -37,25 +37,28 @@ The IETF draft on AI agent authentication (draft-klrc-aiagent-auth-01) is an ope
 
 Action: monitor the draft, contribute if/when appropriate, ensure Bolyra's protocol is compatible.
 
-## Consensus: Stop Building, Start Validating
+## Current State (June 2026)
 
-Both Claude and Codex independently reached the same conclusion: **the technical primitives are sufficient. The risk is not "can we build it" but "does anyone want it."**
+Since the initial review, Bolyra has shipped significantly:
 
-Priority must shift from protocol development to demand validation:
-- Find 3-5 teams actually building agent commerce systems
-- Show them the delegated spend-policy verification concept
-- Measure reaction: indifference, curiosity, or "when can I use this?"
+- **12 published packages**: @bolyra/sdk, @bolyra/mcp, @bolyra/gateway, @bolyra/cli, @bolyra/circuits, @bolyra/payment-protocols, @bolyra/receipts, @bolyra/openclaw, @bolyra/ai, bolyra (PyPI), bolyra-langchain (PyPI), bolyra-crewai (PyPI), bolyra-agents (PyPI)
+- **Framework coverage**: LangChain, CrewAI, OpenAI Agents SDK, Vercel AI SDK, Claude Desktop
+- **Gateway**: standalone reverse proxy for MCP server auth (Docker + npm)
+- **Playground**: interactive 3-tab demo at bolyra.ai/playground
+- **IETF outreach**: email sent to 5 draft-klrc-aiagent-auth-01 authors (June 11)
+- **Stripe ACP e2e demo**: payment authorization with signed receipts
+- **25-person outreach list**: drafted but DMs not yet sent
 
-## Key Risk: Timing
+The technical primitives ARE built. The ecosystem IS published. The gap is now **demand**: zero external users, zero inbound issues, zero integration requests.
 
-The market for agent spending authorization is **6-18 months early**. Agents browsing, summarizing, and coding are mainstream. Agents autonomously spending money are not — yet.
+## Updated Consensus: Validate or Pivot
 
-This is a feature, not a bug, IF the time is used for:
-- Open-source ecosystem building (SDK, docs, reference implementations)
-- Standards participation
-- Community cultivation
+The risk has shifted from "can we build it" to "is anyone looking for this":
+- 12 packages published, 0 downloads that aren't self-installs
+- IETF email sent, no reply after 10 days (normal but not encouraging)
+- YC rejected (June 5, no individual feedback)
 
-It becomes a fatal risk if the time is spent on premature go-to-market.
+Priority: find the team that says "when can I use this?" Everything else is premature.
 
 ## PMF Signal
 

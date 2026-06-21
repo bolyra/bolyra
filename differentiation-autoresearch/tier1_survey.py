@@ -26,7 +26,7 @@ def _load_baselines() -> str:
     return "\n".join(parts)
 
 
-def run(candidate: dict, out_dir: Path, *, model: str = "sonnet", timeout: int = 240) -> Path:
+def run(candidate: dict, out_dir: Path, *, model: str = "sonnet", timeout: int = 480) -> Path:
     """Write baseline.md for this candidate. Return path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     baselines = _load_baselines()

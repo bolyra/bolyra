@@ -107,7 +107,7 @@ def run(
     out_dir: Path,
     *,
     model: str = "sonnet",
-    timeout: int = 240,
+    timeout: int = 480,
     use_codex: bool = True,
 ) -> Path:
     """Write attacks.md for this candidate. Return path."""
