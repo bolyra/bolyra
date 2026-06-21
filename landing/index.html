@@ -770,7 +770,7 @@
         <code>npx @bolyra/gateway --target http://localhost:3000/mcp</code>
       </p>
       <p class="install-hint" style="margin-top: 10px;">
-        <code>pip install bolyra-langchain</code> or <code>pip install bolyra-agents</code>
+        <code>pip install bolyra-langchain</code> or <code>bolyra-crewai</code> or <code>bolyra-agents</code>
         <span class="badge" style="background: rgba(74, 222, 128, 0.12); color: #4ade80;">v0.1.0</span>
       </p>
       <p class="install-hint" style="margin-top: 10px;">
@@ -1015,6 +1015,11 @@
           <p><strong style="color: var(--green);">v0.1.0:</strong> Auth guardrail + tool wrapper for the OpenAI Agents SDK. <code>BolyraAuthGuardrail</code> gates agent runs. <code>BolyraToolWrapper</code> enforces per-tool permissions. <code>bolyra_mcp_auth()</code> wraps MCP server connections with auth headers. SD-JWT and gateway modes. Tracing integration. <code>pip install bolyra-agents</code>.</p>
         </div>
         <div class="feature-card">
+          <div class="feature-icon privacy">CA</div>
+          <h3>CrewAI Adapter</h3>
+          <p><strong style="color: var(--green);">v0.1.0:</strong> Three <code>BaseTool</code> subclasses for CrewAI multi-agent workflows. <code>BolyraAuthTool</code>, <code>BolyraDelegateTool</code>, <code>BolyraSDJWTTool</code>. Pre-execution <code>BolyraGuard</code> with <code>guard_tools()</code> wrapping. Thread-safe <code>BolyraSession</code> chains handshake, delegation, and SD-JWT flows. 88 tests. <code>pip install bolyra-crewai</code>.</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon privacy">LC</div>
           <h3>LangChain Adapter</h3>
           <p><strong style="color: var(--green);">v0.1.0:</strong> Three proper <code>BaseTool</code> subclasses for LangChain agents. <code>BolyraAuthTool</code> (ZKP mutual handshake), <code>BolyraDelegateTool</code> (ZKP delegation), <code>BolyraSDJWTTool</code> (pure-Python SD-JWT delegation, no Node.js required). Session manager for auth-then-delegate chains. Dev mode with auto-generated credentials. <code>pip install bolyra-langchain</code>.</p>
@@ -1236,6 +1241,7 @@
               <li><a href="https://www.npmjs.com/package/@bolyra/sdk">npm: @bolyra/sdk</a></li>
               <li><a href="https://pypi.org/project/bolyra/">PyPI: bolyra</a></li>
               <li><a href="https://pypi.org/project/bolyra-langchain/">PyPI: bolyra-langchain</a></li>
+              <li><a href="https://pypi.org/project/bolyra-crewai/">PyPI: bolyra-crewai</a></li>
             </ul>
           </div>
           <div class="footer-col">
