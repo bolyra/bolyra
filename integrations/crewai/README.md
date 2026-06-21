@@ -32,20 +32,24 @@ sd_jwt = BolyraSDJWTTool()
 session = BolyraSession(auth_tool=auth, delegate_tool=delegate, sd_jwt_tool=sd_jwt)
 guard = BolyraGuard(session=session, on_failure="raise")
 
-# 3. Build agents
+# 3. Wrap tools with pre-execution auth enforcement
+analyst_tools = guard.guard_tools([auth, sd_jwt])
+delegator_tools = guard.guard_tools([delegate])
+
+# 4. Build agents
 analyst = Agent(
     role="Authenticated Data Analyst",
     goal="Analyze data only after mutual ZKP authentication",
-    tools=[auth, sd_jwt],
+    tools=analyst_tools,
 )
 
 delegator = Agent(
     role="Delegation Manager",
     goal="Delegate scoped permissions to sub-agents",
-    tools=[delegate],
+    tools=delegator_tools,
 )
 
-# 4. Build crew with guard
+# 5. Build crew
 crew = Crew(
     agents=[analyst, delegator],
     tasks=[
@@ -55,7 +59,6 @@ crew = Crew(
             agent=analyst,
         ),
     ],
-    step_callback=guard.step_callback,
 )
 ```
 
@@ -107,16 +110,27 @@ tool = BolyraSDJWTTool(
 
 ## BolyraGuard
 
-Step callback that verifies auth before any tool execution.
+Two enforcement modes:
+
+**Pre-execution (recommended):** wraps tools so auth is checked *before* execution:
 
 ```python
 guard = BolyraGuard(
     session=session,
     on_failure="raise",      # "raise" | "warn" | "skip"
     session_ttl_seconds=3600, # optional session expiry
-    allow_unauthenticated_tools=["bolyra_authenticate"],
 )
 
+# Wrap tools for pre-execution enforcement
+tools = guard.guard_tools([auth, sd_jwt, delegate])
+
+analyst = Agent(role="Analyst", tools=tools, ...)
+crew = Crew(agents=[analyst], tasks=[...])
+```
+
+**Post-execution audit:** hooks into CrewAI's step callback (fires *after* each step):
+
+```python
 crew = Crew(..., step_callback=guard.step_callback)
 ```
 

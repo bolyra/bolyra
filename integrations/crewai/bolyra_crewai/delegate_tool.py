@@ -7,7 +7,7 @@ to another agent with cryptographic scope narrowing.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -81,7 +81,7 @@ class BolyraDelegateTool(BaseTool):
 
     # Configuration
     agent_permissions: list[str] = ["read_data"]
-    operator_key: Optional[str] = None
+    operator_key: str | None = None
 
     def _run(
         self,
@@ -113,7 +113,8 @@ class BolyraDelegateTool(BaseTool):
             ).to_json()
 
         # Scope escalation check: cannot delegate what you don't hold
-        invalid = [p for p in requested if p not in self.agent_permissions]
+        held = [p.strip().lower() for p in self.agent_permissions]
+        invalid = [p for p in requested if p not in held]
         if invalid:
             return DelegationResult(
                 delegated=False,
@@ -122,8 +123,14 @@ class BolyraDelegateTool(BaseTool):
             ).to_json()
 
         try:
+            import hashlib
+
             from bolyra.delegation import delegate, verify_delegation
-            from bolyra.identity import create_dev_identities, permissions_to_bitmask
+            from bolyra.identity import (
+                create_agent_credential,
+                create_dev_identities,
+                permissions_to_bitmask,
+            )
             from bolyra.types import Permission
 
             _perm_map = {p.name.lower(): p for p in Permission}
@@ -140,12 +147,24 @@ class BolyraDelegateTool(BaseTool):
 
             delegatee_scope = permissions_to_bitmask(delegatee_perms)
 
-            # Use dev identities (production requires credential persistence)
-            perm_enums = [Permission[p.upper()] for p in self.agent_permissions]
+            perm_enums = [Permission[p.strip().upper()] for p in self.agent_permissions]
             bitmask = permissions_to_bitmask(perm_enums)
-            _human, delegator, operator_key_int = create_dev_identities(
-                permission_bitmask=bitmask,
-            )
+
+            if self.operator_key:
+                # Production path: use real operator key
+                operator_key_int = int(self.operator_key, 16)
+                model_hash_int = int(
+                    hashlib.sha256(b"delegator").hexdigest()[:16], 16
+                )
+                expiry_ts = int(time.time()) + 86400
+                delegator = create_agent_credential(
+                    model_hash_int, operator_key_int, perm_enums, expiry_ts
+                )
+            else:
+                # Dev path: use dev identities
+                _human, delegator, operator_key_int = create_dev_identities(
+                    permission_bitmask=bitmask,
+                )
 
             nonce_int = int(session_nonce)
             commitment_int = int(scope_commitment)
@@ -179,6 +198,13 @@ class BolyraDelegateTool(BaseTool):
                 session_nonce=nonce_int,
                 current_timestamp=current_timestamp,
             )
+
+            if not delegation_result.verified:
+                return DelegationResult(
+                    delegated=False,
+                    status="verification_failed",
+                    message="Delegation proof verification failed.",
+                ).to_json()
 
             return DelegationResult(
                 delegated=True,

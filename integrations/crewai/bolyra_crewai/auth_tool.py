@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -68,10 +68,10 @@ class BolyraAuthTool(BaseTool):
 
     # Configuration
     agent_model_hash: str = "default"
-    operator_key: Optional[str] = None
+    operator_key: str | None = None
     permissions: list[str] = ["read_data"]
     expiry_seconds: int = 86400
-    human_secret: Optional[int] = None
+    human_secret: int | None = None
 
     def _run(
         self,
@@ -132,9 +132,16 @@ class BolyraAuthTool(BaseTool):
                 model_hash_int = int(
                     hashlib.sha256(self.agent_model_hash.encode()).hexdigest()[:16], 16
                 )
-                operator_key_int = (
-                    int(self.operator_key, 16) if self.operator_key else 0
-                )
+                if not self.operator_key:
+                    return AuthResult(
+                        verified=False,
+                        status="error",
+                        message=(
+                            "operator_key is required in production mode "
+                            "(when human_secret is provided)."
+                        ),
+                    ).to_json()
+                operator_key_int = int(self.operator_key, 16)
                 expiry = int(time.time()) + self.expiry_seconds
 
                 agent = create_agent_credential(

@@ -8,9 +8,9 @@ the Bolyra SDK.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from bolyra_crewai._compat import BaseTool, check_crewai_available
 from bolyra_crewai.types import SDJWTResult, is_dev_mode_allowed, make_canonical_nonce
@@ -99,12 +99,7 @@ class BolyraSDJWTTool(BaseTool):
 
     # Internal vault: maps JTI -> raw presented SD-JWT.
     # Never expose this dict to the LLM context.
-    _receipt_vault: dict[str, str] = {}
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        # Instance-level vault (not shared across instances)
-        self._receipt_vault = {}
+    _receipt_vault: dict[str, str] = PrivateAttr(default_factory=dict)
 
     def get_receipt(self, jti: str) -> str | None:
         """Retrieve a raw SD-JWT receipt by JTI for out-of-band use.
