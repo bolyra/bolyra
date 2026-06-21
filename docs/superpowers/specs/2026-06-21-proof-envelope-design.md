@@ -14,7 +14,7 @@ versionable artifact.
 
 ## 2. Wire Format
 
-Content-Type: `application/bolyra-proof+json`
+Content-Type: `application/vnd.bolyra.proof+json` (vendor tree until IANA registration)
 
 ```json
 {
@@ -24,7 +24,7 @@ Content-Type: `application/bolyra-proof+json`
     "version": "0.4.0",
     "vkeyHash": "sha256:abcdef1234567890..."
   },
-  "proofType": "groth16",
+  "proofType": "groth16",  // v1 only supports groth16
   "publicSignals": ["12345678901234567890", "98765432109876543210"],
   "proof": {
     "pi_a": ["12345...", "67890..."],
@@ -42,12 +42,15 @@ Content-Type: `application/bolyra-proof+json`
 
 - **Field elements and proof coordinates:** decimal string representation of
   the BN254 scalar field element. No hex. No bare numbers. Always strings.
-  Leading zeros stripped. Example: `"21888242871839275222246405745257275088548364400416034343698204186575808495617"`.
+  Leading zeros stripped (reject `"0042"`, accept `"42"`). Implementations MUST
+  reject strings with leading zeros except for the value `"0"` itself.
+  Implementations MUST reject strings longer than 78 characters before parsing
+  to prevent BigInt allocation attacks. Example: `"42"`.
 - **Array order:** pi_a is `[x, y]`. pi_b is `[[x1, x2], [y1, y2]]`.
   pi_c is `[x, y]`. Matches snarkjs output order.
 - **Rejection:** Implementations MUST reject envelopes where any field element
-  string cannot be parsed as a non-negative integer, or exceeds the BN254
-  field modulus.
+  string cannot be parsed as a non-negative integer, or is greater than or
+  equal to the BN254 field modulus (p = 2188...5617).
 
 ### 2.2 Circuit Identity
 
@@ -55,8 +58,10 @@ The `circuit` field binds the proof to a specific circuit version:
 
 - `name`: one of `HumanUniqueness`, `AgentPolicy`, `Delegation` (enum, extensible).
 - `version`: semver string matching the `@bolyra/circuits` package version.
-- `vkeyHash`: `sha256:<hex>` digest of the canonical verification key JSON.
-  Implementations SHOULD verify this against their local vkey before accepting.
+- `vkeyHash`: `sha256:<64 lowercase hex chars>` digest of the verification key
+  JSON serialized with sorted keys and no whitespace (JSON.stringify with sorted
+  keys). Optional. Implementations SHOULD verify this against their local vkey
+  before accepting.
 
 This prevents version confusion where a proof generated against circuit v0.3.0
 is verified against v0.4.0's vkey.
@@ -93,7 +98,7 @@ RFC 8785) will be added as a minor version bump.
 
 ### 3.1 TypeScript (`sdk/src/envelope.ts`)
 
-- `ProofEnvelope` type (Zod schema for runtime validation)
+- `ProofEnvelope` type (runtime validation, no external library)
 - `CONTENT_TYPE = "application/bolyra-proof+json"` constant
 - `ENVELOPE_VERSION = "1.0.0"` constant
 - `serializeEnvelope(envelope: ProofEnvelope): string` -- JSON.stringify
@@ -104,7 +109,7 @@ RFC 8785) will be added as a minor version bump.
 
 ### 3.2 Python (`sdk-python/bolyra/envelope.py`)
 
-- `ProofEnvelope` (Pydantic v2 model, mirrors TS fields exactly)
+- `ProofEnvelope` (dataclass, mirrors TS fields exactly)
 - `CONTENT_TYPE`, `ENVELOPE_VERSION` constants
 - `to_json() -> str`, `from_json(raw: str) -> ProofEnvelope`
 - `envelope_from_proof(circuit, proof, signals, vkey_hash=None) -> ProofEnvelope`
@@ -131,7 +136,7 @@ the cross-SDK interop contract.
 **Python (pytest):**
 - Mirror all TS test cases
 - Cross-SDK: deserialize the same envelope_v1.json fixture
-- Pydantic validation: wrong types rejected
+- Type validation: wrong types rejected
 
 ## 4. Files
 

@@ -2,11 +2,22 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement `application/bolyra-proof+json` wire format with TypeScript and Python codecs, cross-SDK golden fixture, and version negotiation.
+**Goal:** Implement `application/vnd.bolyra.proof+json` wire format with TypeScript and Python codecs, cross-SDK golden fixtures, and version negotiation.
 
-**Architecture:** A new `envelope.ts` module in the TS SDK defines the ProofEnvelope type, serialize/deserialize functions, and a helper to wrap raw snarkjs proofs. A mirror `envelope.py` in the Python SDK uses Pydantic v2. A shared golden fixture ensures cross-SDK interop. No external validation library (plain TS types + runtime checks to keep SDK lean).
+**Architecture:** A new `envelope.ts` module in the TS SDK defines the ProofEnvelope type, serialize/deserialize functions, and a helper to wrap raw snarkjs proofs. A mirror `envelope.py` in the Python SDK uses dataclasses. Multiple golden fixtures ensure cross-SDK interop (happy path, boundary values, forward-compat, invalid). No external validation library. v1 supports groth16 only (PLONK has a different proof shape).
 
-**Tech Stack:** TypeScript (Jest), Python (pytest, Pydantic v2), JSON fixtures
+**Tech Stack:** TypeScript (Jest), Python (pytest, dataclasses), JSON fixtures
+
+**Codex review changes incorporated:**
+- Vendor media type (`vnd.bolyra`) until IANA registration
+- groth16 only in v1 (PLONK proof shape differs)
+- Reject leading zeros in field elements (`/^(0|[1-9]\d*)$/`)
+- Reject strings > 78 chars before BigInt parsing (DoS prevention)
+- Validate pi_b row length (each row must be exactly 2 elements)
+- Unknown-field preservation is top-level only
+- vkeyHash format validation (`sha256:<64 lowercase hex>`)
+- Multiple fixtures (boundary, forward-compat, invalid)
+- No Zod/Pydantic (plain TS + Python dataclasses)
 
 ---
 
@@ -37,7 +48,7 @@ Write `tasks/pdlc/proof-envelope.json`:
 ```json
 {
   "id": "pdlc-2026-06-21-proof-envelope",
-  "feature": "Proof envelope content type (application/bolyra-proof+json)",
+  "feature": "Proof envelope content type (application/vnd.bolyra.proof+json)",
   "status": "active",
   "stage": "IMPLEMENT",
   "mode": "standard",
@@ -60,9 +71,11 @@ Write `tasks/pdlc/proof-envelope.json`:
 }
 ```
 
-- [ ] **Step 2: Create the golden fixture**
+- [ ] **Step 2: Create golden fixtures**
 
-Write `sdk/test/fixtures/envelope_v1.json`. This is the cross-SDK interop contract. Both TS and Python tests must deserialize this identically.
+Write multiple fixtures in `sdk/test/fixtures/`. Both TS and Python tests must produce identical results on each.
+
+**`envelope_v1.json`** -- happy path, valid envelope:
 
 ```json
 {
@@ -89,6 +102,13 @@ Write `sdk/test/fixtures/envelope_v1.json`. This is the cross-SDK interop contra
   }
 }
 ```
+
+Also create:
+- **`envelope_v1_boundary.json`** -- field elements "0" and BN254 modulus minus 1
+- **`envelope_v1_forward_compat.json`** -- has an unknown top-level key `"futureField": "test"`
+- **`envelope_v1_invalid_leading_zero.json`** -- has `"0042"` in publicSignals (must reject)
+- **`envelope_v1_invalid_modulus.json`** -- has field element equal to BN254 modulus (must reject)
+- **`envelope_v1_invalid_pi_b.json`** -- has `pi_b: [["1"], ["2","3","4"]]` (must reject)
 
 - [ ] **Step 3: Create fixtures directory**
 
@@ -117,14 +137,14 @@ Create `sdk/src/envelope.ts` with:
 
 ```typescript
 /**
- * Proof envelope wire format: application/bolyra-proof+json
+ * Proof envelope wire format: application/vnd.bolyra.proof+json
  *
  * Self-describing envelope for ZKP proofs with typed fields,
  * circuit identity binding, and version negotiation.
  */
 
 /** Content-Type for HTTP headers. */
-export const CONTENT_TYPE = 'application/bolyra-proof+json';
+export const CONTENT_TYPE = 'application/vnd.bolyra.proof+json';
 
 /** Current envelope version. */
 export const ENVELOPE_VERSION = '1.0.0';
@@ -133,7 +153,8 @@ export const ENVELOPE_VERSION = '1.0.0';
 export type CircuitName = 'HumanUniqueness' | 'AgentPolicy' | 'Delegation';
 
 /** Valid proof systems. */
-export type ProofType = 'groth16' | 'plonk';
+/** Valid proof systems. v1 supports groth16 only (PLONK has different shape). */
+export type ProofType = 'groth16';
 
 /** Circuit identity with version and vkey binding. */
 export interface CircuitIdentity {
@@ -175,12 +196,20 @@ const BN254_FIELD_ORDER = 218882428718392752222464057452572750885483644004160343
  * Must be a non-negative integer that does not exceed BN254 field modulus.
  */
 function validateFieldElement(s: string, label: string): void {
-  if (typeof s !== 'string' || !/^\d+$/.test(s)) {
-    throw new Error(`${label}: must be a decimal string, got ${JSON.stringify(s)}`);
+  if (typeof s !== 'string') {
+    throw new Error(`${label}: must be a string, got ${typeof s}`);
+  }
+  // Reject strings > 78 chars before BigInt parsing (DoS prevention)
+  if (s.length > 78) {
+    throw new Error(`${label}: string too long (${s.length} chars, max 78)`);
+  }
+  // No leading zeros except "0" itself
+  if (!/^(0|[1-9]\d*)$/.test(s)) {
+    throw new Error(`${label}: must be a decimal string without leading zeros, got ${JSON.stringify(s)}`);
   }
   const n = BigInt(s);
-  if (n < 0n || n >= BN254_FIELD_ORDER) {
-    throw new Error(`${label}: value ${s} exceeds BN254 field modulus`);
+  if (n >= BN254_FIELD_ORDER) {
+    throw new Error(`${label}: value >= BN254 field modulus`);
   }
 }
 
@@ -206,7 +235,7 @@ function checkVersion(envelopeVersion: string): void {
 }
 
 const VALID_CIRCUITS: ReadonlySet<string> = new Set(['HumanUniqueness', 'AgentPolicy', 'Delegation']);
-const VALID_PROOF_TYPES: ReadonlySet<string> = new Set(['groth16', 'plonk']);
+const VALID_PROOF_TYPES: ReadonlySet<string> = new Set(['groth16']); // v1: groth16 only
 
 /**
  * Validate an envelope object. Throws on invalid structure or field values.
@@ -244,10 +273,15 @@ export function validateEnvelope(envelope: Record<string, unknown>): ProofEnvelo
   const pi_c = proof.pi_c as string[];
   if (!Array.isArray(pi_a) || pi_a.length !== 2) throw new Error('proof.pi_a must be [string, string]');
   if (!Array.isArray(pi_b) || pi_b.length !== 2) throw new Error('proof.pi_b must be [[s,s],[s,s]]');
+  for (let r = 0; r < 2; r++) {
+    if (!Array.isArray(pi_b[r]) || pi_b[r].length !== 2) {
+      throw new Error(`proof.pi_b[${r}] must be [string, string]`);
+    }
+  }
   if (!Array.isArray(pi_c) || pi_c.length !== 2) throw new Error('proof.pi_c must be [string, string]');
 
   pi_a.forEach((s, i) => validateFieldElement(s, `pi_a[${i}]`));
-  pi_b.flat().forEach((s, i) => validateFieldElement(s, `pi_b[${i}]`));
+  pi_b.forEach((row, r) => row.forEach((s: string, c: number) => validateFieldElement(s, `pi_b[${r}][${c}]`)));
   pi_c.forEach((s, i) => validateFieldElement(s, `pi_c[${i}]`));
 
   return envelope as unknown as ProofEnvelope;
@@ -395,7 +429,7 @@ git commit -s -m "feat: re-export proof envelope from @bolyra/sdk"
 Create `sdk-python/bolyra/envelope.py`:
 
 ```python
-"""Proof envelope wire format: application/bolyra-proof+json
+"""Proof envelope wire format: application/vnd.bolyra.proof+json
 
 Self-describing envelope for ZKP proofs with typed fields,
 circuit identity binding, and version negotiation.
@@ -408,22 +442,26 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any
 
-CONTENT_TYPE = "application/bolyra-proof+json"
+CONTENT_TYPE = "application/vnd.bolyra.proof+json"
 ENVELOPE_VERSION = "1.0.0"
 
 # BN254 scalar field modulus
 BN254_FIELD_ORDER = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 VALID_CIRCUITS = frozenset({"HumanUniqueness", "AgentPolicy", "Delegation"})
-VALID_PROOF_TYPES = frozenset({"groth16", "plonk"})
+VALID_PROOF_TYPES = frozenset({"groth16"})  # v1: groth16 only
 
 
 def _validate_field_element(s: str, label: str) -> None:
-    if not isinstance(s, str) or not re.match(r"^\d+$", s):
-        raise ValueError(f"{label}: must be a decimal string, got {s!r}")
+    if not isinstance(s, str):
+        raise ValueError(f"{label}: must be a string, got {type(s).__name__}")
+    if len(s) > 78:
+        raise ValueError(f"{label}: string too long ({len(s)} chars, max 78)")
+    if not re.match(r"^(0|[1-9]\d*)$", s):
+        raise ValueError(f"{label}: must be a decimal string without leading zeros, got {s!r}")
     n = int(s)
-    if n < 0 or n >= BN254_FIELD_ORDER:
-        raise ValueError(f"{label}: value exceeds BN254 field modulus")
+    if n >= BN254_FIELD_ORDER:
+        raise ValueError(f"{label}: value >= BN254 field modulus")
 
 
 def _parse_semver(v: str) -> tuple[int, int, int]:
@@ -559,9 +597,11 @@ def validate_envelope(d: dict[str, Any]) -> ProofEnvelope:
     pi_b = proof.get("pi_b")
     if not isinstance(pi_b, list) or len(pi_b) != 2:
         raise ValueError("proof.pi_b must be [[s,s],[s,s]]")
-    for row in pi_b:
-        for i, s in enumerate(row):
-            _validate_field_element(s, f"pi_b[{i}]")
+    for r, row in enumerate(pi_b):
+        if not isinstance(row, list) or len(row) != 2:
+            raise ValueError(f"proof.pi_b[{r}] must be [string, string]")
+        for c, s in enumerate(row):
+            _validate_field_element(s, f"pi_b[{r}][{c}]")
 
     return ProofEnvelope.from_dict(d)
 
