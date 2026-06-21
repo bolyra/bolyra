@@ -1,17 +1,17 @@
 # Bolyra Protocol Conformance Report
 
-**Generated:** 2026-06-13T16:57:09.437Z
-**Spec version:** 0.3.0
+**Generated:** 2026-06-21T05:49:58.101Z
+**Spec version:** 0.4.0
 **Runner:** spec/conformance-runner.js
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| Total vectors | 48 |
-| Passed | 48 |
+| Total vectors | 67 |
+| Passed | 62 |
 | Failed | 0 |
-| Skipped | 0 |
+| Skipped | 5 |
 
 ## Results by Category
 
@@ -92,6 +92,86 @@
 | 2 | delegation-chain-exceeds-max-hops | FAIL | ✓ PASS |
 | 3 | delegation-chain-scope-violation-mid-chain | FAIL | ✓ PASS |
 | 4 | delegation-valid-two-hop | PASS | ✓ PASS |
+
+### Sd Jwt (8 vectors)
+
+| # | Vector ID | Expected | Status |
+|---|-----------|----------|--------|
+| 1 | sd-jwt-valid-issuance | PASS | ✓ PASS |
+| 2 | sd-jwt-expired-receipt | FAIL | ✓ PASS |
+| 3 | sd-jwt-wrong-audience | FAIL | ✓ PASS |
+| 4 | sd-jwt-missing-nonce-production | FAIL | ✓ PASS |
+| 5 | sd-jwt-nonce-replay | FAIL | ✓ PASS |
+| 6 | sd-jwt-max-amount-exceeded | FAIL | ✓ PASS |
+| 7 | sd-jwt-selective-disclosure | PASS | ✓ PASS |
+| 8 | sd-jwt-jti-uniqueness | PASS | ✓ PASS |
+
+### Proof Envelope (6 vectors)
+
+| # | Vector ID | Expected | Status |
+|---|-----------|----------|--------|
+| 1 | envelope-valid-handshake | PASS | ✓ PASS |
+| 2 | envelope-missing-required-field | FAIL | ✓ PASS |
+| 3 | envelope-malformed-proof-bytes | FAIL | ✓ PASS |
+| 4 | envelope-unknown-fields-forward-compat | PASS | ✓ PASS |
+| 5 | envelope-cross-circuit | PASS | ✓ PASS |
+| 6 | envelope-empty-public-signals | FAIL | ✓ PASS |
+
+### Session Token (5 vectors)
+
+| # | Vector ID | Expected | Status |
+|---|-----------|----------|--------|
+| 1 | session-valid-jwt | PASS | – SKIP |
+| 2 | session-expired | FAIL | – SKIP |
+| 3 | session-scope-narrowing | PASS | – SKIP |
+| 4 | session-missing-nullifier-binding | FAIL | – SKIP |
+| 5 | session-nonce-replay | FAIL | – SKIP |
+
+## Normative Requirements
+
+The following requirements are semantic constraints that the JSON Schema cannot
+express. A conformant implementation MUST satisfy all of them.
+
+The key words "MUST", "MUST NOT", "SHOULD", and "MAY" in this section are to be
+interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
+
+### Nonce Replay
+
+A conformant implementation MUST reject a handshake proof that reuses a
+`sessionNonce` seen in any prior verified handshake within the same scope.
+Implementations SHOULD maintain a nonce registry scoped to the verifier's
+operational lifetime.
+
+### Token Replay
+
+A session token MUST be rejected if its nonce has been consumed by a prior
+verification within the token's audience scope. Stateless verifiers MAY use
+short-lived nonce windows instead of persistent registries.
+
+### Vault JTI Uniqueness
+
+SD-JWT issuers MUST generate globally unique JTI values. Collision across any
+two receipts issued by the same issuer constitutes a conformance failure.
+Implementations SHOULD use UUID v4 or equivalent entropy source.
+
+### Audience Binding
+
+An SD-JWT receipt presented to an audience not matching the `aud` claim MUST be
+rejected, even if the cryptographic signature is valid. The audience comparison
+MUST be case-sensitive and exact-match.
+
+### Nullifier Binding
+
+Session tokens MUST include the `humanNullifierHash` from the originating
+handshake as a claim. Tokens without this binding are non-conformant. Verifiers
+MUST check that the nullifier claim matches the handshake that produced the
+session.
+
+### Forward Compatibility
+
+Implementations MUST preserve unknown fields in proof envelopes without error.
+Rejecting unknown fields is a conformance failure. This enables protocol
+evolution without breaking existing implementations.
 
 ## References
 
