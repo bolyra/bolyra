@@ -17,7 +17,30 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
-## [0.7.0] — 2026-06-13
+## [0.7.1] — 2026-06-21
+
+### Added
+
+#### CrewAI Integration (`bolyra-crewai` 0.1.0) — NEW PACKAGE
+
+- **`BolyraAuthTool`** — CrewAI BaseTool subclass for mutual ZKP handshake
+  authentication. Dev mode and production mode with operator key.
+- **`BolyraDelegateTool`** — scoped permission delegation with cryptographic
+  narrowing. Comma-separated permission input for LLM reliability.
+- **`BolyraSDJWTTool`** — lightweight SD-JWT delegation (pure Python, no
+  Node.js). Receipt vaulting prevents bearer credentials from leaking into
+  LLM context.
+- **`BolyraGuard`** — pre-execution tool wrapper (`guard_tools()`) and
+  post-execution step callback. Three failure modes: raise, warn, skip.
+  Session TTL support.
+- **`BolyraSession`** — thread-safe session management chaining handshake,
+  delegation, and SD-JWT flows with auto-injected nonce/commitment.
+- 88 tests covering metadata, behavior, E2E, guard, session, and types.
+- Security hardening: 3 critical + 4 informational fixes from pre-landing
+  review (operator key enforcement, verify_delegation check, PrivateAttr
+  vault, case-normalized escalation check).
+
+
 
 The **commerce receipts** release. Every commerce authorization
 decision can produce a cryptographically signed receipt.
