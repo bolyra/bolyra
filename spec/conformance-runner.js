@@ -10,6 +10,10 @@
  *   node spec/conformance-runner.js --vector valid-handshake-basic
  *   node spec/conformance-runner.js --type delegation
  *   node spec/conformance-runner.js --report [path]
+ *   node spec/conformance-runner.js --validate-schema
+ *   node spec/conformance-runner.js --skip-experimental
+ *
+ * Exit codes: 0 = all pass, 1 = test failures, 2 = schema validation error
  */
 
 const fs = require('fs');
@@ -89,6 +93,20 @@ async function main() {
     const args = process.argv.slice(2);
     let selectedVectors = vectors.vectors;
 
+    if (args.includes('--validate-schema')) {
+        const Ajv = require('ajv/dist/2020');
+        const schemaPath = path.join(__dirname, 'conformance-schema.json');
+        const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+        const ajv = new Ajv({ allErrors: true });
+        const valid = ajv.validate(schema, vectors);
+        if (!valid) {
+            console.error('Schema validation FAILED:');
+            ajv.errors.forEach(e => console.error(`  ${e.instancePath}: ${e.message}`));
+            process.exit(2);
+        }
+        console.log('Schema validation: PASS\n');
+    }
+
     if (args.includes('--vector')) {
         const id = args[args.indexOf('--vector') + 1];
         selectedVectors = selectedVectors.filter(v => v.id === id);
@@ -96,6 +114,10 @@ async function main() {
     if (args.includes('--type')) {
         const type = args[args.indexOf('--type') + 1];
         selectedVectors = selectedVectors.filter(v => v.type === type);
+    }
+
+    if (args.includes('--skip-experimental')) {
+        selectedVectors = selectedVectors.filter(v => v.status !== 'experimental');
     }
 
     const poseidon = await buildPoseidon();
@@ -171,6 +193,12 @@ async function runVector(vector, crypto) {
             return runSignatureVerificationVector(vector, crypto);
         case 'merkle_inclusion':
             return runMerkleInclusionVector(vector, crypto);
+        case 'sd_jwt':
+            return runSDJWTVector(vector, crypto);
+        case 'proof_envelope':
+            return runProofEnvelopeVector(vector, crypto);
+        case 'session_token':
+            return { skipped: true, reason: 'experimental — no implementation yet' };
         default:
             return { skipped: true, reason: `unknown vector type: ${vector.type}` };
     }
@@ -632,6 +660,145 @@ async function runMerkleInclusionVector(vector, { poseidon, F }) {
     }
 
     return { skipped: true, reason: 'unhandled merkle_inclusion case' };
+}
+
+async function runSDJWTVector(vector, _crypto) {
+    const inputs = vector.inputs;
+    const expected = vector.expected;
+
+    // Required fields for any SD-JWT vector
+    const requiredFields = ['issuer_id', 'agent_id', 'audience', 'action', 'permission', 'ttl_seconds'];
+
+    if (expected.result === 'PASS') {
+        // Verify all required input fields are present and of correct type
+        for (const field of requiredFields) {
+            if (!(field in inputs)) {
+                return { pass: false, reason: `missing required field: ${field}` };
+            }
+        }
+        if (typeof inputs.issuer_id !== 'string' || !inputs.issuer_id.startsWith('did:')) {
+            return { pass: false, reason: 'issuer_id must be a DID string' };
+        }
+        if (typeof inputs.agent_id !== 'string' || !inputs.agent_id.startsWith('did:')) {
+            return { pass: false, reason: 'agent_id must be a DID string' };
+        }
+        if (typeof inputs.audience !== 'string' || !inputs.audience.startsWith('http')) {
+            return { pass: false, reason: 'audience must be an HTTP(S) URI string' };
+        }
+        if (typeof inputs.action !== 'string' || inputs.action.length === 0) {
+            return { pass: false, reason: 'action must be a non-empty string' };
+        }
+        if (typeof inputs.ttl_seconds !== 'number' || inputs.ttl_seconds <= 0) {
+            return { pass: false, reason: 'ttl_seconds must be a positive number' };
+        }
+        return { pass: true };
+    }
+
+    // FAIL vectors: verify expected.reason is documented
+    if (expected.result === 'FAIL') {
+        if (typeof expected.reason !== 'string' || expected.reason.length === 0) {
+            return { pass: false, reason: 'FAIL vector must document expected.reason' };
+        }
+        if (typeof expected.failsAt !== 'string' || expected.failsAt.length === 0) {
+            return { pass: false, reason: 'FAIL vector must document expected.failsAt' };
+        }
+        return { pass: true };
+    }
+
+    return { skipped: true, reason: 'unhandled sd_jwt case' };
+}
+
+async function runProofEnvelopeVector(vector, _crypto) {
+    const inputs = vector.inputs;
+    const expected = vector.expected;
+
+    const requiredFields = ['proof_type', 'circuit', 'public_signals', 'proof_bytes_b64', 'content_type'];
+
+    if (expected.result === 'PASS') {
+        // Check all required fields are present
+        for (const field of requiredFields) {
+            if (!(field in inputs)) {
+                return { pass: false, reason: `missing required field: ${field}` };
+            }
+        }
+
+        // Validate types
+        if (typeof inputs.proof_type !== 'string' || inputs.proof_type.length === 0) {
+            return { pass: false, reason: 'proof_type must be a non-empty string' };
+        }
+        if (typeof inputs.circuit !== 'string' || inputs.circuit.length === 0) {
+            return { pass: false, reason: 'circuit must be a non-empty string' };
+        }
+        if (typeof inputs.content_type !== 'string' || inputs.content_type.length === 0) {
+            return { pass: false, reason: 'content_type must be a non-empty string' };
+        }
+
+        // public_signals must be a non-empty array
+        if (!Array.isArray(inputs.public_signals) || inputs.public_signals.length === 0) {
+            return { pass: false, reason: 'public_signals must be a non-empty array' };
+        }
+
+        // Validate base64 encoding of proof_bytes_b64
+        if (typeof inputs.proof_bytes_b64 !== 'string') {
+            return { pass: false, reason: 'proof_bytes_b64 must be a string' };
+        }
+        try {
+            const decoded = Buffer.from(inputs.proof_bytes_b64, 'base64');
+            // Re-encode and compare to verify it was valid base64
+            const reencoded = decoded.toString('base64');
+            if (reencoded !== inputs.proof_bytes_b64) {
+                return { pass: false, reason: 'proof_bytes_b64 is not valid base64' };
+            }
+        } catch (e) {
+            return { pass: false, reason: `proof_bytes_b64 decode error: ${e.message}` };
+        }
+
+        return { pass: true };
+    }
+
+    if (expected.result === 'FAIL') {
+        // Structural check: verify expected.reason is documented
+        if (typeof expected.reason !== 'string' || expected.reason.length === 0) {
+            return { pass: false, reason: 'FAIL vector must document expected.reason' };
+        }
+
+        // For missing_required_field: verify the missing field is actually absent
+        if (expected.reason === 'missing_required_field') {
+            const missingField = requiredFields.find(f => !(f in inputs));
+            return {
+                pass: missingField !== undefined,
+                reason: missingField ? '' : 'expected missing required field but all required fields are present'
+            };
+        }
+
+        // For malformed_proof_bytes: verify proof_bytes_b64 is indeed invalid base64
+        if (expected.reason === 'malformed_proof_bytes') {
+            const b64 = inputs.proof_bytes_b64;
+            if (typeof b64 !== 'string') {
+                return { pass: true };
+            }
+            // Invalid base64 contains characters outside the base64 alphabet
+            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+            const isMalformed = !base64Regex.test(b64);
+            return {
+                pass: isMalformed,
+                reason: isMalformed ? '' : 'expected malformed base64 but string is valid base64'
+            };
+        }
+
+        // For empty_public_signals: verify public_signals is empty
+        if (expected.reason === 'empty_public_signals') {
+            const isEmpty = Array.isArray(inputs.public_signals) && inputs.public_signals.length === 0;
+            return {
+                pass: isEmpty,
+                reason: isEmpty ? '' : 'expected empty public_signals but array has elements'
+            };
+        }
+
+        return { pass: true };
+    }
+
+    return { skipped: true, reason: 'unhandled proof_envelope case' };
 }
 
 main().catch(err => {
