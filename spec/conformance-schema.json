@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bolyra.ai/spec/conformance-schema.json",
+  "title": "Bolyra Conformance Test Vector Schema",
+  "description": "JSON Schema (draft 2020-12) for Bolyra conformance test vectors. Validates the common structure of all vector types without per-type sub-schemas.",
+  "type": "object",
+  "required": ["version", "vectors"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the test vector suite (e.g., '0.4.0')"
+    },
+    "vectors": {
+      "type": "array",
+      "description": "Array of conformance test vectors",
+      "items": {
+        "$ref": "#/$defs/vector"
+      }
+    }
+  },
+  "$defs": {
+    "vector": {
+      "type": "object",
+      "required": ["id", "description", "type", "inputs", "expected"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Unique kebab-case identifier for this vector"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this vector tests"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "handshake",
+            "delegation",
+            "delegation_chain",
+            "enrollment",
+            "merkle_inclusion",
+            "signature_verification",
+            "sd_jwt",
+            "proof_envelope",
+            "session_token"
+          ],
+          "description": "The category of conformance behavior being tested"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["stable", "experimental"],
+          "default": "stable",
+          "description": "Stability level of this vector; experimental vectors may change without notice"
+        },
+        "inputs": {
+          "type": "object",
+          "description": "Arbitrary key/value inputs supplied to the construct under test"
+        },
+        "expected": {
+          "type": "object",
+          "required": ["result"],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": ["PASS", "FAIL"],
+              "description": "Whether this input combination should pass or fail conformance"
+            }
+          },
+          "description": "Expected outcome, including result and any additional behavioral checks"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
