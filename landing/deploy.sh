@@ -22,6 +22,7 @@ BLOG="$SCRIPT_DIR/blog.html"
 BLOG1="$SCRIPT_DIR/blog-1.html"
 BLOG2="$SCRIPT_DIR/blog-2.html"
 BLOG3="$SCRIPT_DIR/blog-3.html"
+BLOG4="$SCRIPT_DIR/blog-4.html"
 VIDEO="$SCRIPT_DIR/video.html"
 VIDEO2="$SCRIPT_DIR/video-receipts.html"
 VIDEO3="$SCRIPT_DIR/video-delegation.html"
@@ -32,7 +33,7 @@ VIDEO7="$SCRIPT_DIR/video-frameworks.html"
 VIDEO8="$SCRIPT_DIR/video-oauth.html"
 PLAYGROUND="$SCRIPT_DIR/playground.html"
 
-for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
@@ -82,6 +83,14 @@ aws s3 cp "$BLOG3" "s3://$BUCKET/blog-3.html" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 aws s3 cp "$BLOG3" "s3://$BUCKET/blog-3" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
+echo "→ uploading blog-4.html to s3://$BUCKET/"
+aws s3 cp "$BLOG4" "s3://$BUCKET/blog-4.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$BLOG4" "s3://$BUCKET/blog-4" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
@@ -160,7 +169,7 @@ aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground" \
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
   --query 'Invalidation.Id' \
   --output text)
 
