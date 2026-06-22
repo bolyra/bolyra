@@ -1,0 +1,61 @@
+# Bolyra Gateway config for Robinhood demo
+# Maps robinhood-for-agents tools to Bolyra permission tiers
+
+target: http://localhost:3100
+port: 4100
+devMode: true
+
+nonce:
+  store: memory
+  maxProofAge: 300
+
+receipts:
+  enabled: true
+  output: stdout
+
+tools:
+  # Read-only tools — require READ_DATA (bit 0 = 1)
+  robinhood_check_session:
+    requireBitmask: 1
+  robinhood_get_portfolio:
+    requireBitmask: 1
+  robinhood_get_accounts:
+    requireBitmask: 1
+  robinhood_get_account:
+    requireBitmask: 1
+  robinhood_get_stock_quote:
+    requireBitmask: 1
+  robinhood_get_historicals:
+    requireBitmask: 1
+  robinhood_get_news:
+    requireBitmask: 1
+  robinhood_get_movers:
+    requireBitmask: 1
+  robinhood_get_options:
+    requireBitmask: 1
+  robinhood_get_crypto:
+    requireBitmask: 1
+  robinhood_get_orders:
+    requireBitmask: 1
+  robinhood_get_order_status:
+    requireBitmask: 1
+  robinhood_search:
+    requireBitmask: 1
+
+  # Stock orders — require FINANCIAL_SMALL (bit 2 = 4)
+  robinhood_place_stock_order:
+    requireBitmask: 4
+
+  # Options + crypto orders — require FINANCIAL_MEDIUM (bit 3 = 8)
+  robinhood_place_option_order:
+    requireBitmask: 8
+  robinhood_place_crypto_order:
+    requireBitmask: 8
+
+  # Cancel — require WRITE_DATA (bit 1 = 2)
+  robinhood_cancel_order:
+    requireBitmask: 2
+
+  # Login — blocked (no agent should trigger browser login)
+  robinhood_browser_login:
+    requireBitmask: 255
