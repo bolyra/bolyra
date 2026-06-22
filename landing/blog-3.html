@@ -174,7 +174,7 @@ hmac:
     <ol>
       <li><strong>Credential verification.</strong> The proof bundle is verified via <code>verifyBundle()</code>. Agent identity, delegation chain, scope commitment, expiry. If any check fails: 401.</li>
       <li><strong>Tool policy.</strong> The agent's effective permission bitmask is checked against the tool's required permission. If the agent lacks the bits: 403.</li>
-      <li><strong>Replay protection.</strong> The session nonce is checked against the nonce store. If it's been seen before: 403.</li>
+      <li><strong>Replay protection.</strong> The session nonce is checked against the nonce store. If it's been seen before: 401.</li>
       <li><strong>Receipt.</strong> A signed receipt records the decision. Allow or deny. Timestamped, signed with ES256K.</li>
     </ol>
 
