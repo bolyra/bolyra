@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Protecting Robinhood's Agentic Trading MCP with Verifiable Agent Identity — Bolyra</title>
-  <meta name="description" content="A demo putting @bolyra/gateway in front of a mock Robinhood MCP server. Four scenarios: verified read, verified trade, unauthorized agent blocked, replay attack blocked.">
+  <meta name="description" content="A demo MCP gateway that verifies AI agent identity, enforces trading permissions, blocks replayed proofs, and emits signed audit receipts for mock Robinhood agentic trading tools.">
   <meta property="og:title" content="Protecting Robinhood's Agentic Trading MCP with Verifiable Agent Identity — Bolyra">
   <meta property="og:description" content="OAuth identifies the user. Nothing identifies the agent. Here's how to fix that.">
   <meta property="og:type" content="article">
@@ -111,11 +111,11 @@
     <h1>Protecting Robinhood's Agentic Trading MCP with Verifiable Agent Identity</h1>
     <p class="meta">June 22, 2026 &middot; Viswanadha Pratap Kondoju</p>
 
-    <p>Robinhood launched Agentic Trading on May 27, 2026. Any MCP-compatible agent can connect, call tools, and place trades. The question nobody's answering: how do you verify which agent is trading?</p>
+    <p>OAuth tells Robinhood who the user is. Nothing in the MCP handshake identifies which agent generated the trade instruction. Robinhood launched Agentic Trading on May 27, 2026, allowing agents with MCP support and user authorization to call trading tools. The agent identity layer is missing.</p>
 
     <h2>The gap</h2>
 
-    <p>OAuth identifies the user. Nothing identifies the agent. A legitimate Claude instance and a modified fork present the same OAuth token. From the server's perspective they are identical. No cryptographic attribution survives an audit. When a regulator asks "which software placed this trade at 14:32 on Tuesday," the answer today is "something with a valid user token."</p>
+    <p>OAuth identifies the user. MCP tool calls arrive with user auth but no standardized cryptographic agent attestation. A legitimate Claude instance and a modified fork present the same OAuth token. From the server's perspective they are identical. No portable MCP-native cryptographic attribution survives an audit. When a regulator asks "which software placed this trade at 14:32 on Tuesday," the answer today is "something with a valid user token."</p>
 
     <h2>What we built</h2>
 
@@ -177,7 +177,7 @@
       </tbody>
     </table>
 
-    <p>Cumulative bit encoding means <code>FINANCIAL_MEDIUM</code> (bit 3) implies <code>FINANCIAL_SMALL</code> (bit 2) implies <code>READ_DATA</code> (bit 0). An agent credentialed at tier 3 can read quotes and place stock orders without separate grants. An agent credentialed at tier 0 cannot trade. The delegation circuit enforces this on-chain, not just in the gateway config.</p>
+    <p>Cumulative bit encoding means <code>FINANCIAL_MEDIUM</code> (bit 3) implies <code>FINANCIAL_SMALL</code> (bit 2) implies <code>READ_DATA</code> (bit 0). An agent credentialed at tier 3 can read quotes and place stock orders without separate grants. An agent credentialed at tier 0 cannot trade. The delegation circuit enforces this in the ZK proof (verifiable locally or on-chain), not just in the gateway config.</p>
 
     <h2>Run it yourself</h2>
 
@@ -194,14 +194,16 @@ npm run demo</code></pre>
 
     <p>Bolyra adds verifiable agent attribution without changing the MCP protocol. The gateway is self-hosted, fail-closed, and generates audit receipts with cryptographic proof of every allow/deny decision. No external dependency in the trade path.</p>
 
-    <p>The <a href="/blog-3">gateway architecture</a> is the same one from the previous post. This demo applies it to a real use case: financial trading where the stakes are measured in dollars, not just data.</p>
+    <p>The <a href="/blog-3">gateway architecture</a> is the same one from the previous post. This demo applies it to financial trading tools.</p>
 
     <p style="margin-top: 32px; text-align: center;"><a href="/blog-3">&larr; Previous: Your MCP Server Doesn't Need Auth Code. It Needs a Gateway.</a></p>
 
     <div class="cta-box">
-      <p>Run the demo, inspect the receipts, try the interactive playground.</p>
+      <p>Clone the demo and inspect the signed allow/deny receipts.</p>
       <a href="https://github.com/bolyra/bolyra/tree/main/examples/robinhood-demo">View Demo on GitHub</a>
     </div>
+
+    <p style="margin-top: 24px; color: var(--text-muted); font-size: 0.8rem; text-align: center;">This project is not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc. The demo uses a mock server with no connection to Robinhood's production systems.</p>
   </article>
 
   <footer><div class="container">
