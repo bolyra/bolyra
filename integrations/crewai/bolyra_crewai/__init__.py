@@ -16,8 +16,9 @@ from bolyra_crewai.sd_jwt_tool import BolyraSDJWTTool, BolyraSDJWTInput
 from bolyra_crewai.guard import BolyraGuard, BolyraAuthError
 from bolyra_crewai.session import BolyraSession
 from bolyra_crewai.types import AuthResult, DelegationResult, SDJWTResult
+from bolyra_crewai.task_hook import BolyraDelegationFlow
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     # Tools
@@ -36,4 +37,6 @@ __all__ = [
     "AuthResult",
     "DelegationResult",
     "SDJWTResult",
+    # Delegation Flow
+    "BolyraDelegationFlow",
 ]
