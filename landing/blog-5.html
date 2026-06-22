@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Bolyra Agent Credentials Are Issued, Registered, Revoked, and Rotated — Bolyra</title>
+  <meta name="description" content="The full lifecycle of a Bolyra agent credential: Poseidon5 commitment, on-chain Merkle tree enrollment, off-chain resolution, tree-level revocation, circuit-enforced expiry, and key rotation via revoke-and-re-enroll.">
+  <meta property="og:title" content="How Bolyra Agent Credentials Are Issued, Registered, Revoked, and Rotated — Bolyra">
+  <meta property="og:description" content="Every blog post so far explained verification. This one explains where AI agent credentials come from, how they get registered, and what happens when they expire, rotate, or must be revoked.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://bolyra.ai/blog-5">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --text-muted: #888;
+      --accent: #6366f1; --accent-hover: #818cf8;
+      --green: #4ade80; --red: #f87171; --border: #222; --max-width: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 56px;
+    }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+    article { padding: 100px 0 80px; }
+    article h1 {
+      font-size: 2.2rem; font-weight: 800; line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 40px; }
+    article h2 {
+      font-size: 1.4rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    article p { margin-bottom: 16px; }
+    article ul, article ol { margin-bottom: 16px; padding-left: 24px; }
+    article li { margin-bottom: 6px; }
+    code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px;
+    }
+    pre {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; overflow-x: auto; margin-bottom: 24px; line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+    .diagram {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 24px; margin: 24px 0;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 0.85rem; line-height: 1.8; text-align: center;
+      color: var(--text-muted);
+    }
+    .diagram .highlight { color: var(--green); font-weight: 700; }
+    .diagram .label { color: var(--accent); }
+    .diagram .red { color: var(--red); font-weight: 700; }
+    table {
+      width: 100%; border-collapse: collapse; margin-bottom: 24px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left; padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--text-muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .cta-box {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; margin-top: 48px; text-align: center;
+    }
+    .cta-box a {
+      display: inline-block; background: var(--accent); color: #fff;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600;
+      margin-top: 12px; transition: background 0.2s;
+    }
+    .cta-box a:hover { background: var(--accent-hover); color: #fff; }
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 0;
+      color: var(--text-muted); font-size: 0.85rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <nav><div class="container">
+    <a href="/" class="logo">Bolyra</a>
+    <a href="/blog">Blog</a>
+  </div></nav>
+
+  <article class="container">
+    <h1>How Bolyra Agent Credentials Are Issued, Registered, Revoked, and Rotated</h1>
+    <p class="meta">June 22, 2026 &middot; Viswanadha Pratap Kondoju</p>
+
+    <p>Every post so far explained verification: how the gateway checks proofs, enforces policies, blocks replays. None explained where AI agent credentials come from, how they get registered in the agent identity registry, or what happens when they expire, rotate, or must be revoked.</p>
+
+    <p>This post covers the full credential lifecycle.</p>
+
+    <div class="diagram">
+      <span class="label">Issue</span> &rarr; <span class="label">Register</span> &rarr; <span class="highlight">Use (verify)</span> &rarr; <span class="red">Revoke / Expire</span> &rarr; <span class="label">Rotate</span>
+    </div>
+
+    <h2>1. Issuance: creating a credential</h2>
+
+    <p>An operator creates an agent credential by calling <code>createAgentCredential()</code>. Four inputs:</p>
+
+    <ul>
+      <li><strong>modelHash</strong> (bigint): hash of the model identifier, e.g. <code>sha256("gpt-4o")</code></li>
+      <li><strong>operatorPrivateKey</strong> (bigint | Buffer): the operator's EdDSA private key</li>
+      <li><strong>permissions</strong> (Permission[]): array of permission flags (READ_DATA, WRITE_DATA, FINANCIAL_SMALL, etc.)</li>
+      <li><strong>expiryTimestamp</strong> (bigint): Unix seconds when the credential expires</li>
+    </ul>
+
+    <p>The SDK validates the inputs (expiry must be in the future, cumulative bit encoding must be consistent), then computes a <strong>commitment</strong>:</p>
+
+<pre><code>commitment = Poseidon5(modelHash, operatorPubKey.x, operatorPubKey.y,
+                       permissionBitmask, expiryTimestamp)</code></pre>
+
+    <p>The commitment is a single field element that binds all five parameters. Changing any input changes the commitment. The operator also signs the commitment with EdDSA. This signature is verified inside the AgentPolicy circuit (not just the SDK), so a proof cannot be generated without a valid operator signature.</p>
+
+    <p>The credential object contains the inputs, the commitment, and the signature. It does not contain the private key.</p>
+
+    <p><strong>Access control:</strong> anyone can compute a commitment, but only the contract owner can call <code>enrollAgent()</code> to register it on-chain. This prevents unauthorized credential enrollment.</p>
+
+<pre><code>const credential = await createAgentCredential(
+  modelHash,
+  operatorPrivateKey,
+  [Permission.READ_DATA, Permission.FINANCIAL_SMALL],
+  BigInt(Math.floor(Date.now() / 1000) + 86400), // expires in 24h
+);</code></pre>
+
+    <h2>2. Registration: enrolling on-chain</h2>
+
+    <p>The credential commitment is enrolled in the <code>IdentityRegistry</code> contract as a leaf in a Lean Incremental Merkle Tree (LeanIMT).</p>
+
+<pre><code>// Single enrollment
+registry.enrollAgent(credential.commitment);
+
+// Batch enrollment (gas efficient)
+registry.enrollAgentBatch([cred1.commitment, cred2.commitment]);</code></pre>
+
+    <p>Enrollment inserts the commitment into the agent identity registry (<code>agentTree</code>), computes a new Merkle root, and stores it in a 30-root history buffer. The buffer is root-count-based, not time-based: old roots are evicted when 30 newer roots are recorded, which could take seconds or days depending on enrollment frequency. This allows in-flight proofs generated against a recent root to remain valid.</p>
+
+    <p>The contract stores commitments (Merkle leaves), not credentials. The credential itself lives off-chain: in a database, an API, or a peer-to-peer exchange. The registry is a commitment ledger, not a credential database.</p>
+
+    <h2>3. Resolution: looking up credentials</h2>
+
+    <p>When a proof bundle arrives, the verifier extracts <code>credentialCommitment</code> and calls <code>resolveCredential(commitment)</code> to retrieve the full credential object. Two patterns:</p>
+
+    <p><strong>In-memory store</strong> (demos and single-process servers):</p>
+
+<pre><code>class InMemoryCredentialStore {
+  private credentials = new Map&lt;string, AgentCredential&gt;();
+  async resolve(commitment: string): Promise&lt;AgentCredential | null&gt; {
+    return this.credentials.get(commitment) ?? null;
+  }
+}</code></pre>
+
+    <p><strong>Registry API</strong> (production, multi-instance):</p>
+
+<pre><code>import { createRegistryResolver } from '@bolyra/sdk';
+
+const resolve = createRegistryResolver({
+  registryUrl: 'https://registry.example.com',
+});
+// Fetches GET /v1/credentials/{commitment}</code></pre>
+
+    <p>Resolution is off-chain and application-layer. The on-chain registry does not expose credential retrieval. It only validates Merkle proofs.</p>
+
+    <h2>4. Expiry: time-bound enforcement</h2>
+
+    <p>Expiry is enforced at two levels:</p>
+
+    <p><strong>In the circuit</strong> (AgentPolicy.circom):</p>
+
+<pre><code>// Circom constraint — proof generation fails if expired
+component notExpired = LessThan(64);
+notExpired.in[0] &lt;== currentTimestamp;
+notExpired.in[1] &lt;== expiryTimestamp;
+notExpired.out === 1;</code></pre>
+
+    <p>The circuit rejects any witness where <code>currentTimestamp >= expiryTimestamp</code>. A valid Groth16 proof cannot be generated for an expired credential. <code>currentTimestamp</code> is a public signal, so the on-chain verifier can check it against <code>block.timestamp</code>.</p>
+
+    <p><strong>On-chain</strong> (IdentityRegistry.sol):</p>
+
+    <p>The contract also enforces a 5-minute freshness window: the proof's <code>currentTimestamp</code> must be within 5 minutes of <code>block.timestamp</code>. This prevents replaying proofs generated hours ago with a not-yet-expired credential.</p>
+
+    <h2>5. Credential revocation</h2>
+
+    <p>Two revocation paths, with different invalidation semantics:</p>
+
+    <p><strong>Agent credential revocation</strong> (eventual): the commitment leaf is updated to 0 in the Merkle tree. A new root is computed and added to the 30-root history buffer. Proofs generated against the old root remain valid until 30 newer roots push it out of the buffer. This is root-count-based, not time-based: if enrollments are frequent, the old root expires quickly; if the tree is quiet, it persists longer.</p>
+
+<pre><code>// On-chain: zero the commitment leaf (onlyOwner)
+registry.revokeAgent(oldCommitment, siblingNodes);
+// agentTree._update(oldCommitment, 0, siblingNodes)
+// New root computed, old root valid until evicted from 30-root buffer</code></pre>
+
+    <p>This means credential revocation is <strong>eventual, not immediate</strong>. In-flight proofs generated before revocation may still verify against a buffered root. Once the old root is evicted, all proofs referencing the revoked credential fail.</p>
+
+    <p><strong>Human revocation</strong> (immediate): the human's nullifier is added to a revocation mapping. The contract checks this mapping on every handshake verification, independent of Merkle roots. This is a hard revocation, not eventual.</p>
+
+<pre><code>// On-chain: mark nullifier as revoked (onlyOwner)
+registry.revokeHuman(nullifier);
+// humanRevocations[nullifier] = true
+// Checked at verification: if (humanRevocations[nullifier]) revert;</code></pre>
+
+    <p>Agent revocation is per-credential and eventual (root churn). Human revocation is per-identity and immediate (explicit check). Both require <code>onlyOwner</code> access on the contract.</p>
+
+    <h2>6. Rotation: recovering from compromise</h2>
+
+    <p>There is no built-in rotation circuit. Compromise is handled via revoke-and-re-enroll:</p>
+
+    <ol>
+      <li>Revoke the compromised credential: <code>revokeAgent(oldCommitment, siblingNodes)</code></li>
+      <li>Generate a new key pair</li>
+      <li>Issue a new credential with the new operator key: <code>createAgentCredential(modelHash, newKey, permissions, expiry)</code></li>
+      <li>Enroll the new credential: <code>enrollAgent(newCommitment)</code></li>
+      <li>Update the credential store so <code>resolveCredential</code> returns the new credential</li>
+    </ol>
+
+    <p>The old and new credentials are not cryptographically linked. Clients must be updated with the new commitment. This is a known limitation. A future rotation circuit could prove that a new credential was authorized by the old key, enabling seamless rotation without requiring clients to update.</p>
+
+    <h2>7. Delegated authorization in chains</h2>
+
+    <p>Delegation extends the credential lifecycle. A delegator agent narrows its scope and passes a subset to a delegatee agent via delegated authorization. The Delegation circuit enforces two invariants:</p>
+
+    <ul>
+      <li><code>delegateeScope &amp; ~delegatorScope == 0</code> (permissions are a subset)</li>
+      <li><code>delegateeExpiry &lt;= delegatorExpiry</code> (expiry is narrowed, never extended)</li>
+    </ul>
+
+    <p>A delegated credential cannot outlive or exceed its parent. If the parent credential is revoked and its old root is evicted from the 30-root buffer, the parent's Merkle proof fails and the delegation chain breaks. Until that eviction, in-flight delegated proofs may still verify. Max 3 hops per session (enforced by the contract via <code>delegationHopCount</code> tracking).</p>
+
+    <h2>Summary</h2>
+
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Mechanism</th><th>Enforcement</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Issuance</td><td>Poseidon5 commitment + EdDSA signature</td><td>SDK validation + circuit-enforced signature</td></tr>
+        <tr><td>Registration</td><td>Commitment enrolled in LeanIMT</td><td>On-chain contract</td></tr>
+        <tr><td>Resolution</td><td>Off-chain lookup (API or store)</td><td>Application layer</td></tr>
+        <tr><td>Expiry</td><td>Circuit constraint + 5-min freshness</td><td>Circom + Solidity</td></tr>
+        <tr><td>Revocation</td><td>Tree leaf zeroed, eventual (agent) or nullifier marked, immediate (human)</td><td>On-chain contract</td></tr>
+        <tr><td>Rotation</td><td>Revoke old, issue new, re-enroll</td><td>Sequential (no atomic circuit yet)</td></tr>
+        <tr><td>Delegation</td><td>Scope narrowing, expiry narrowing, max 3 hops</td><td>Circom + Solidity</td></tr>
+      </tbody>
+    </table>
+
+    <h2>What this does not cover</h2>
+
+    <p>This post describes the current implementation. Known gaps:</p>
+
+    <ul>
+      <li><strong>Atomic rotation:</strong> no circuit proves that a new credential was authorized by the old key. Rotation requires two transactions and client updates.</li>
+      <li><strong>Delegation revocation propagation:</strong> revoking a delegator does not atomically revoke delegatees. Delegatees become unusable because the parent's Merkle proof fails, but the delegatee's commitment remains in the tree.</li>
+      <li><strong>Credential discovery:</strong> there is no standard way to discover which credentials exist for a given operator or model. Resolution requires knowing the commitment in advance.</li>
+    </ul>
+
+    <p style="margin-top: 32px; text-align: center;"><a href="/blog-4">&larr; Previous: Protecting Robinhood's Agentic Trading MCP with Verifiable Agent Identity</a></p>
+
+    <div class="cta-box">
+      <p>Read the source: identity issuance, on-chain registry, and delegation circuits.</p>
+      <a href="https://github.com/bolyra/bolyra">View on GitHub</a>
+    </div>
+  </article>
+
+  <footer><div class="container">
+    &copy; 2026 ZKProva Inc. &middot; <a href="/">bolyra.ai</a> &middot; <a href="https://github.com/bolyra/bolyra">GitHub</a> &middot; <a href="mailto:viswa@bolyra.ai">viswa@bolyra.ai</a>
+  </div></footer>
+</body>
+</html>
