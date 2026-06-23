@@ -1,0 +1,24 @@
+# shield.yaml — Bolyra MCP Shield config
+# Copy to shield.yaml and customize for your MCP server.
+
+# Command to spawn the MCP server (can also use --server CLI flag)
+# server: "npx @modelcontextprotocol/server-filesystem /tmp"
+
+devMode: true
+
+nonce:
+  store: memory
+  maxProofAge: 300
+
+receipts:
+  enabled: true
+  output: stderr     # stderr (default) or file
+  # dir: ./receipts/ # when output: file
+
+tools:
+  read_file:
+    requireBitmask: 1    # READ_DATA
+  write_file:
+    requireBitmask: 2    # WRITE_DATA
+  delete_file:
+    requireBitmask: 2    # WRITE_DATA
