@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Spend — Bolyra</title>
+  <meta name="description" content="Let an AI agent pay for things on Base with spending limits and a cryptographic receipt. Interactive demo.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --text-muted: #888;
+      --accent: #6366f1; --accent-hover: #818cf8;
+      --green: #4ade80; --red: #f87171; --yellow: #fbbf24;
+      --border: #222; --max-width: 640px;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      padding: 40px 20px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.88em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px; }
+
+    .container { max-width: var(--max-width); width: 100%; }
+
+    nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+
+    h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 32px; }
+
+    .card {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px; margin-bottom: 20px;
+    }
+    .card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
+
+    .agent-row {
+      display: flex; align-items: center; gap: 14px; padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .agent-row:last-child { border-bottom: none; }
+    .agent-icon {
+      width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .agent-name { font-weight: 600; font-size: 0.95rem; }
+    .agent-detail { font-size: 0.8rem; color: var(--text-muted); }
+    .agent-right { margin-left: auto; text-align: right; }
+    .agent-balance { font-weight: 600; font-size: 0.95rem; }
+    .agent-limit { font-size: 0.75rem; color: var(--text-muted); }
+
+    .spend-form { display: flex; flex-direction: column; gap: 14px; }
+    .form-row { display: flex; gap: 12px; align-items: center; }
+    .form-label { font-size: 0.85rem; color: var(--text-muted); width: 90px; flex-shrink: 0; }
+    .form-value {
+      flex: 1; padding: 10px 14px; border-radius: 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-size: 0.9rem;
+      font-family: "SF Mono", monospace;
+    }
+    select.form-value { cursor: pointer; }
+
+    .btn {
+      padding: 14px 24px; border-radius: 10px; border: none;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; width: 100%;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .receipt-card {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden; margin-bottom: 20px;
+    }
+    .receipt-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .receipt-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600;
+    }
+    .receipt-body { padding: 20px; }
+    .receipt-row {
+      display: flex; justify-content: space-between; padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 0.85rem;
+    }
+    .receipt-row:last-child { border-bottom: none; }
+    .receipt-label { color: var(--text-muted); }
+    .receipt-value { font-family: "SF Mono", monospace; font-size: 0.82rem; }
+
+    .pipeline {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-bottom: 16px;
+    }
+    .pipeline-step {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+      font-size: 0.85rem; transition: all 0.3s;
+    }
+    .pipeline-step.pass { background: rgba(74,222,128,0.08); }
+    .pipeline-step.fail { background: rgba(248,113,113,0.08); }
+    .step-icon { width: 22px; height: 22px; border-radius: 11px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .step-icon.pending { background: rgba(255,255,255,0.08); }
+    .step-icon.pass { background: rgba(74,222,128,0.2); color: var(--green); }
+    .step-icon.fail { background: rgba(248,113,113,0.2); color: var(--red); }
+
+    .footer { margin-top: 32px; text-align: center; font-size: 0.8rem; color: var(--text-muted); }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .fade-in { animation: fadeIn 0.4s ease-out; }
+
+    @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+    .pulsing { animation: pulse 1s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="/" class="logo">Bolyra</a>
+      <div style="display: flex; gap: 16px; font-size: 0.9rem;">
+        <a href="/">Home</a>
+        <a href="/playground">Playground</a>
+        <a href="/blog">Blog</a>
+      </div>
+    </nav>
+
+    <h1>Agent Spend</h1>
+    <p class="subtitle">Let an AI agent pay for things on Base with spending limits and a cryptographic receipt.</p>
+
+    <!-- Agent Account -->
+    <div class="card">
+      <h2>Agent Account</h2>
+      <div class="agent-row">
+        <div class="agent-icon" style="background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);">
+          <span style="color: var(--accent);">A</span>
+        </div>
+        <div>
+          <div class="agent-name">research-agent-01</div>
+          <div class="agent-detail">did:bolyra:base-sepolia:0x742d...bDe7</div>
+        </div>
+        <div class="agent-right">
+          <div class="agent-balance">$4.75 USDC</div>
+          <div class="agent-limit">$5.00/day limit</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spend Form -->
+    <div class="card" id="spend-form-card">
+      <h2>Agent wants to spend</h2>
+      <div class="spend-form">
+        <div class="form-row">
+          <span class="form-label">Purpose</span>
+          <select class="form-value" id="purpose">
+            <option value="gpu">Buy 1 hour GPU inference — $0.25</option>
+            <option value="api">API credits (market data) — $0.50</option>
+            <option value="storage">IPFS storage (1 GB) — $0.10</option>
+            <option value="over">Premium dataset access — $6.00</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <span class="form-label">Amount</span>
+          <div class="form-value" id="amount-display">$0.25 USDC</div>
+        </div>
+        <div class="form-row">
+          <span class="form-label">Recipient</span>
+          <div class="form-value" style="font-size: 0.78rem;">0xVendor...3a8f (Base Sepolia)</div>
+        </div>
+        <div class="form-row">
+          <span class="form-label">Policy</span>
+          <div class="form-value" style="font-size: 0.82rem;">
+            Max $1.00/tx · Max $5.00/day · Receipt required
+          </div>
+        </div>
+        <button class="btn btn-primary" id="spend-btn" onclick="executeSpend()">
+          Execute Agent Spend
+        </button>
+      </div>
+    </div>
+
+    <!-- Pipeline (hidden initially) -->
+    <div class="card fade-in" id="pipeline-card" style="display: none;">
+      <h2>Bolyra Auth Pipeline</h2>
+      <div class="pipeline" id="pipeline"></div>
+    </div>
+
+    <!-- Receipt (hidden initially) -->
+    <div id="receipt-container"></div>
+
+    <!-- Footer -->
+    <div class="footer">
+      This demo uses mock transactions. No real funds are moved.<br>
+      <a href="https://github.com/bolyra/bolyra">GitHub</a> · <a href="https://bolyra.ai">bolyra.ai</a> · Apache 2.0
+    </div>
+  </div>
+
+  <script>
+    const AMOUNTS = { gpu: 0.25, api: 0.50, storage: 0.10, over: 6.00 };
+    const PURPOSES = { gpu: 'Buy 1 hour GPU inference', api: 'API credits (market data)', storage: 'IPFS storage (1 GB)', over: 'Premium dataset access' };
+
+    document.getElementById('purpose').addEventListener('change', function() {
+      const amt = AMOUNTS[this.value];
+      document.getElementById('amount-display').textContent = '$' + amt.toFixed(2) + ' USDC';
+    });
+
+    const STEPS = [
+      { name: 'Credential Check', desc: 'Verify agent identity' },
+      { name: 'Spend Policy', desc: 'Check per-tx and daily limits' },
+      { name: 'Replay Protection', desc: 'Ensure nonce is fresh' },
+      { name: 'Receipt Issuance', desc: 'Sign the authorization receipt' },
+    ];
+
+    async function executeSpend() {
+      const btn = document.getElementById('spend-btn');
+      const purpose = document.getElementById('purpose').value;
+      const amount = AMOUNTS[purpose];
+      const overLimit = amount > 1.00;
+
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+
+      // Show pipeline
+      const pipelineCard = document.getElementById('pipeline-card');
+      pipelineCard.style.display = 'block';
+      const pipeline = document.getElementById('pipeline');
+      pipeline.innerHTML = STEPS.map(s =>
+        `<div class="pipeline-step" id="step-${s.name.replace(/\s/g, '')}">
+          <div class="step-icon pending pulsing">·</div>
+          <div>
+            <div style="font-weight: 600;">${s.name}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${s.desc}</div>
+          </div>
+        </div>`
+      ).join('');
+
+      // Animate steps
+      for (let i = 0; i < STEPS.length; i++) {
+        await sleep(600);
+        const stepEl = document.getElementById('step-' + STEPS[i].name.replace(/\s/g, ''));
+        const iconEl = stepEl.querySelector('.step-icon');
+        iconEl.classList.remove('pulsing');
+
+        if (i === 1 && overLimit) {
+          // Fail at spend policy
+          stepEl.classList.add('fail');
+          iconEl.classList.remove('pending');
+          iconEl.classList.add('fail');
+          iconEl.textContent = '✗';
+          // Mark remaining as skipped
+          for (let j = i + 1; j < STEPS.length; j++) {
+            const skipEl = document.getElementById('step-' + STEPS[j].name.replace(/\s/g, ''));
+            skipEl.style.opacity = '0.3';
+            const skipIcon = skipEl.querySelector('.step-icon');
+            skipIcon.classList.remove('pulsing');
+            skipIcon.textContent = '—';
+          }
+          break;
+        }
+
+        stepEl.classList.add('pass');
+        iconEl.classList.remove('pending');
+        iconEl.classList.add('pass');
+        iconEl.textContent = '✓';
+      }
+
+      await sleep(400);
+
+      // Show receipt
+      const container = document.getElementById('receipt-container');
+      const txHash = '0x' + Date.now().toString(16) + 'abcdef1234';
+      const receiptId = 'rcp_' + Math.random().toString(36).slice(2, 10);
+      const now = new Date().toISOString();
+
+      if (overLimit) {
+        container.innerHTML = `
+          <div class="receipt-card fade-in">
+            <div class="receipt-header">
+              <div class="receipt-status" style="background: rgba(248,113,113,0.15); color: var(--red);">
+                <span>✗</span> DENIED
+              </div>
+              <span style="margin-left: auto; font-size: 0.8rem; color: var(--text-muted);">${receiptId}</span>
+            </div>
+            <div class="receipt-body">
+              <div class="receipt-row"><span class="receipt-label">Reason</span><span class="receipt-value" style="color: var(--red);">Amount $${amount.toFixed(2)} exceeds max per-tx limit of $1.00</span></div>
+              <div class="receipt-row"><span class="receipt-label">Purpose</span><span class="receipt-value">${PURPOSES[purpose]}</span></div>
+              <div class="receipt-row"><span class="receipt-label">Agent</span><span class="receipt-value">did:bolyra:base-sepolia:0x742d...bDe7</span></div>
+              <div class="receipt-row"><span class="receipt-label">Timestamp</span><span class="receipt-value">${now}</span></div>
+              <div class="receipt-row"><span class="receipt-label">Signature</span><span class="receipt-value" style="color: var(--accent);">ES256K · verified</span></div>
+            </div>
+          </div>
+          <div style="text-align: center; margin-top: 16px;">
+            <span style="color: var(--red); font-weight: 600; font-size: 0.9rem;">Spend denied. Receipt signed for audit trail.</span>
+          </div>`;
+      } else {
+        const remaining = (4.75 - amount).toFixed(2);
+        container.innerHTML = `
+          <div class="receipt-card fade-in">
+            <div class="receipt-header">
+              <div class="receipt-status" style="background: rgba(74,222,128,0.15); color: var(--green);">
+                <span>✓</span> AUTHORIZED
+              </div>
+              <span style="margin-left: auto; font-size: 0.8rem; color: var(--text-muted);">${receiptId}</span>
+            </div>
+            <div class="receipt-body">
+              <div class="receipt-row"><span class="receipt-label">Purpose</span><span class="receipt-value">${PURPOSES[purpose]}</span></div>
+              <div class="receipt-row"><span class="receipt-label">Amount</span><span class="receipt-value" style="color: var(--green);">$${amount.toFixed(2)} USDC</span></div>
+              <div class="receipt-row"><span class="receipt-label">Tx Hash</span><span class="receipt-value"><a href="https://sepolia.basescan.org/tx/${txHash}" target="_blank" style="color: var(--accent);">${txHash.slice(0, 18)}...</a></span></div>
+              <div class="receipt-row"><span class="receipt-label">Recipient</span><span class="receipt-value">0xVendor...3a8f</span></div>
+              <div class="receipt-row"><span class="receipt-label">Agent</span><span class="receipt-value">did:bolyra:base-sepolia:0x742d...bDe7</span></div>
+              <div class="receipt-row"><span class="receipt-label">Network</span><span class="receipt-value">Base Sepolia</span></div>
+              <div class="receipt-row"><span class="receipt-label">Policy</span><span class="receipt-value">$1.00/tx · $5.00/day</span></div>
+              <div class="receipt-row"><span class="receipt-label">Remaining</span><span class="receipt-value">$${remaining} USDC today</span></div>
+              <div class="receipt-row"><span class="receipt-label">Timestamp</span><span class="receipt-value">${now}</span></div>
+              <div class="receipt-row"><span class="receipt-label">Signature</span><span class="receipt-value" style="color: var(--accent);">ES256K · verified</span></div>
+            </div>
+          </div>
+          <div style="text-align: center; margin-top: 16px;">
+            <span style="color: var(--green); font-weight: 600; font-size: 0.9rem;">Spend authorized. Signed receipt issued.</span>
+          </div>`;
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Execute Agent Spend';
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  </script>
+</body>
+</html>
