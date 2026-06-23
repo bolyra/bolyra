@@ -1008,7 +1008,7 @@
         <div class="feature-card">
           <div class="feature-icon mutual">GW</div>
           <h3>MCP Auth Gateway</h3>
-          <p><strong style="color: var(--green);">v0.2.0:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. <strong>v0.2.0</strong> adds <code>RedisNonceStore</code> for multi-instance replay protection. <strong>Docker:</strong> <code>docker run ghcr.io/bolyra/gateway:0.2.0 --target &lt;your-mcp&gt;</code>. Also: <code>npx @bolyra/gateway</code> or <code>createGatewayMiddleware</code> for Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.2.0</code>.</p>
+          <p><strong style="color: var(--green);">v0.2.1:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. <code>RedisNonceStore</code> for multi-instance replay protection. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <strong>Docker:</strong> <code>docker run ghcr.io/bolyra/gateway --target &lt;your-mcp&gt;</code>. Also: <code>npx @bolyra/gateway</code> or <code>createGatewayMiddleware</code> for Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.2.1</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">R</div>
@@ -1069,6 +1069,31 @@
           <div class="feature-icon mutual">CD</div>
           <h3>Claude Desktop</h3>
           <p>Tested integration with Claude Desktop as MCP host. Two paths: stdio proxy (bolyra-proxy injects ZKP proofs) or HTTP gateway (reverse proxy in front). Copy-paste <code>claude_desktop_config.json</code> snippets, setup script, 10 E2E tests. <a href="https://github.com/bolyra/bolyra/tree/main/examples/claude-desktop">Step-by-step guide</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Adoption -->
+  <section style="padding: 60px 0;">
+    <div class="container">
+      <p class="section-label">Adoption</p>
+      <h2 class="section-title">Where Bolyra shows up</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 32px;">
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Official Directory</div>
+          <h3 style="font-size: 1.1rem; margin-bottom: 8px;">MCP Server Registry</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Listed on the official Model Context Protocol registry at <a href="https://registry.modelcontextprotocol.io/">registry.modelcontextprotocol.io</a>. Discoverable by any MCP client.</p>
+        </div>
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Community Docs</div>
+          <h3 style="font-size: 1.1rem; margin-bottom: 8px;">robinhood-for-agents</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Agent identity guide <a href="https://github.com/kevin1chun/robinhood-for-agents/blob/main/docs/AGENT-IDENTITY.md">merged into the docs</a> of the community MCP server for Robinhood's Agentic Trading platform.</p>
+        </div>
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Demo</div>
+          <h3 style="font-size: 1.1rem; margin-bottom: 8px;">Robinhood Gateway Demo</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">4-scenario demo protecting a mock Robinhood MCP server. Verified trade, unauthorized agent blocked, replay attack rejected. <a href="/blog-4">Read the writeup</a> or <a href="/playground">try the playground</a>.</p>
         </div>
       </div>
     </div>
