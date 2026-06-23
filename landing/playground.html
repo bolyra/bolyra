@@ -228,11 +228,11 @@ async function signEd25519(keyPair, data) {
 
 // ── Tool definitions ──
 const TOOLS = [
-  { name: 'read_file', label: 'read_file', requiredBits: [0], financial: false },
-  { name: 'write_file', label: 'write_file', requiredBits: [0, 1], financial: false },
-  { name: 'charge', label: 'charge ($)', requiredBits: [0, 2], financial: true },
-  { name: 'delete', label: 'delete', requiredBits: [0, 1], financial: false },
-  { name: 'transfer', label: 'transfer ($)', requiredBits: [0, 2], financial: true },
+  { name: 'get_portfolio', label: 'get_portfolio', requiredBits: [0], financial: false },
+  { name: 'get_stock_quote', label: 'get_stock_quote', requiredBits: [0], financial: false },
+  { name: 'place_stock_order', label: 'place_stock_order ($)', requiredBits: [0, 2], financial: true },
+  { name: 'place_option_order', label: 'place_option_order ($$)', requiredBits: [0, 3], financial: true },
+  { name: 'cancel_order', label: 'cancel_order', requiredBits: [0, 1], financial: false },
 ];
 
 // ── Shared components ──
@@ -254,7 +254,7 @@ function DelegationTab() {
   const [credential, setCredential] = useState(null);
   const [keyData, setKeyData] = useState(null);
   const [supported, setSupported] = useState(true);
-  const [selectedTool, setSelectedTool] = useState('read_file');
+  const [selectedTool, setSelectedTool] = useState('get_portfolio');
   const [amount, setAmount] = useState('50');
   const [result, setResult] = useState(null);
 
@@ -430,14 +430,14 @@ function DelegationTab() {
 
 // ── Tab 2: Gateway Simulation ──
 const SCENARIOS = [
-  { name: 'Valid Agent', desc: 'Valid credential, read_file, passes all 4 steps',
-    credential: { valid: true, expired: false, permBits: [0, 1], tool: 'read_file' } },
+  { name: 'Valid Agent', desc: 'Valid credential, get_portfolio, passes all 4 steps',
+    credential: { valid: true, expired: false, permBits: [0, 1], tool: 'get_portfolio' } },
   { name: 'Expired Credential', desc: 'Credential expired yesterday',
-    credential: { valid: true, expired: true, permBits: [0, 1], tool: 'read_file' } },
-  { name: 'Insufficient Permissions', desc: 'READ_DATA only, but tool requires WRITE_DATA',
-    credential: { valid: true, expired: false, permBits: [0], tool: 'write_file' } },
+    credential: { valid: true, expired: true, permBits: [0, 1], tool: 'get_portfolio' } },
+  { name: 'Insufficient Permissions', desc: 'READ_DATA only, but place_stock_order requires FINANCIAL_SMALL',
+    credential: { valid: true, expired: false, permBits: [0], tool: 'place_stock_order' } },
   { name: 'Replay Attack', desc: 'Same nonce used twice -- click twice to see',
-    credential: { valid: true, expired: false, permBits: [0, 1], tool: 'read_file', fixedNonce: true } },
+    credential: { valid: true, expired: false, permBits: [0, 1], tool: 'get_portfolio', fixedNonce: true } },
 ];
 
 function GatewayTab({ onReceiptGenerated }) {
@@ -591,7 +591,7 @@ function GatewayTab({ onReceiptGenerated }) {
 // ── Tab 3: Receipt Inspector ──
 const SAMPLE_RECEIPT = JSON.stringify({
   type: 'BolyraSignedReceipt', version: '0.7.0',
-  payload: { decision: 'ALLOW', toolName: 'read_file', subject: 'did:bolyra:agent:a1b2c3d4e5f6',
+  payload: { decision: 'ALLOW', toolName: 'get_portfolio', subject: 'did:bolyra:agent:a1b2c3d4e5f6',
     permissionBitmask: 3, nonce: 'sample-nonce-00ff', issuedAt: new Date().toISOString(), gatewayId: 'gateway-demo-abcd' },
   signature: { algorithm: 'secp256k1-keccak256', value: '0x' + '4f'.repeat(64),
     payloadHash: '0x' + 'ab'.repeat(32), signer: '0x' + 'cd'.repeat(20) },
