@@ -1011,6 +1011,11 @@
           <p><strong style="color: var(--green);">v0.2.1:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent ZKP credentials, enforces per-tool permission policies, prevents replay, and emits signed audit receipts for every tool call. <code>RedisNonceStore</code> for multi-instance replay protection. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <strong>Docker:</strong> <code>docker run ghcr.io/bolyra/gateway --target &lt;your-mcp&gt;</code>. Also: <code>npx @bolyra/gateway</code> or <code>createGatewayMiddleware</code> for Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.2.1</code>.</p>
         </div>
         <div class="feature-card">
+          <div class="feature-icon mutual">SH</div>
+          <h3>MCP Shield</h3>
+          <p><strong style="color: var(--green);">v0.1.0:</strong> Stdio MCP auth proxy. Wrap any stdio MCP server with per-tool permission enforcement, replay protection, and audit receipts. No code changes to the server. <code>npx @bolyra/shield --server "npx some-mcp-server" --dev</code>. Shield covers stdio; Gateway covers HTTP. Both use the same <code>verifyBundle()</code> and <code>checkToolPolicy()</code>. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <code>npm install @bolyra/shield</code>.</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon delegation">R</div>
           <h3>Signed Receipts</h3>
           <p><strong style="color: var(--green);">v0.7.0:</strong> Auth + commerce receipts. Every verification and payment authorization decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. <code>bolyra-receipt-verify</code> CLI included. <code>npm install @bolyra/receipts@0.7.0</code>.</p>
@@ -1083,7 +1088,7 @@
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Official Directory</div>
           <h3 style="font-size: 1.1rem; margin-bottom: 8px;">MCP Server Registry</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">3 packages listed on the official Model Context Protocol registry: <a href="https://registry.modelcontextprotocol.io/">gateway, mcp, and sdk</a>. Discoverable by any MCP client.</p>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">4 packages listed on the official Model Context Protocol registry: <a href="https://registry.modelcontextprotocol.io/">gateway, shield, mcp, and sdk</a>. Discoverable by any MCP client.</p>
         </div>
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Community Docs</div>
