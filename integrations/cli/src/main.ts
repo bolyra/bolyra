@@ -80,6 +80,7 @@ Commands:
   observe           Live activity viewer for bolyra run receipts
   replay            Re-evaluate receipts against current or alternate policy
   dev               Generate dev identities for testing
+  dev from-receipt  Generate test fixtures from receipt history
 
 Options:
   --help, -h        Show this help message
@@ -158,6 +159,10 @@ export async function main(argv: string[]): Promise<void> {
     case 'replay':
       return runReplay(args.slice(1));
     case 'dev':
+      if (args[1] === 'from-receipt') {
+        const { run: runFromReceipt } = await import('./commands/from-receipt');
+        return runFromReceipt(args.slice(2));
+      }
       return runDev(args.slice(1));
     default:
       console.error(`Unknown command: ${group}`);
