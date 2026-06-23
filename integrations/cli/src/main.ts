@@ -76,6 +76,7 @@ Commands:
 
   receipt verify    Verify a signed audit receipt
 
+  shield test       Safety test runner for MCP servers (base-mcp preset)
   run               Run any MCP server with auth + HTTP exposure
   observe           Live activity viewer for bolyra run receipts
   replay            Re-evaluate receipts against current or alternate policy
@@ -150,6 +151,14 @@ export async function main(argv: string[]): Promise<void> {
       }
       console.error(`Unknown receipt command: ${action ?? '(none)'}`);
       console.error('Available: verify');
+      process.exitCode = 2;
+      return;
+    case 'shield':
+      if (args[1] === 'test') {
+        const { run: runShieldTest } = await import('./commands/shield-test');
+        return runShieldTest(args.slice(2));
+      }
+      console.error('Unknown shield command. Available: test');
       process.exitCode = 2;
       return;
     case 'doctor': {
