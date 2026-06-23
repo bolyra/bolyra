@@ -226,14 +226,35 @@ async function signEd25519(keyPair, data) {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ── Tool definitions ──
-const TOOLS = [
-  { name: 'get_portfolio', label: 'get_portfolio', requiredBits: [0], financial: false },
-  { name: 'get_stock_quote', label: 'get_stock_quote', requiredBits: [0], financial: false },
-  { name: 'place_stock_order', label: 'place_stock_order ($)', requiredBits: [0, 2], financial: true },
-  { name: 'place_option_order', label: 'place_option_order ($$)', requiredBits: [0, 3], financial: true },
-  { name: 'cancel_order', label: 'cancel_order', requiredBits: [0, 1], financial: false },
-];
+// ── Demo presets ──
+const DEMO_PRESETS = {
+  robinhood: {
+    label: 'Robinhood Agentic Trading',
+    description: 'Simulates @bolyra/gateway protecting a Robinhood Agentic Trading MCP server.',
+    tools: [
+      { name: 'get_portfolio', label: 'get_portfolio', requiredBits: [0], financial: false },
+      { name: 'get_stock_quote', label: 'get_stock_quote', requiredBits: [0], financial: false },
+      { name: 'place_stock_order', label: 'place_stock_order ($)', requiredBits: [0, 2], financial: true },
+      { name: 'place_option_order', label: 'place_option_order ($$)', requiredBits: [0, 3], financial: true },
+      { name: 'cancel_order', label: 'cancel_order', requiredBits: [0, 1], financial: false },
+    ],
+  },
+  coinbase: {
+    label: 'Coinbase Agent Account',
+    description: 'Simulates @bolyra/gateway protecting a Coinbase AgentKit MCP server on Base.',
+    tools: [
+      { name: 'get_wallet_balance', label: 'get_wallet_balance', requiredBits: [0], financial: false },
+      { name: 'get_portfolio', label: 'get_portfolio', requiredBits: [0], financial: false },
+      { name: 'transfer_token', label: 'transfer_token ($)', requiredBits: [0, 2], financial: true },
+      { name: 'swap_tokens', label: 'swap_tokens ($)', requiredBits: [0, 2], financial: true },
+      { name: 'pay_for_api', label: 'pay_for_api (x402)', requiredBits: [0, 2], financial: true },
+      { name: 'deploy_contract', label: 'deploy_contract ($$$)', requiredBits: [0, 4], financial: true },
+    ],
+  },
+};
+
+// Default to robinhood
+const TOOLS = DEMO_PRESETS.robinhood.tools;
 
 // ── Shared components ──
 function CodeBlock({ data, maxHeight }) {
@@ -249,12 +270,12 @@ function Badge({ status }) {
 }
 
 // ── Tab 1: Delegation Flow ──
-function DelegationTab() {
+function DelegationTab({ tools: TOOLS }) {
   const [bits, setBits] = useState([0]); // READ_DATA by default
   const [credential, setCredential] = useState(null);
   const [keyData, setKeyData] = useState(null);
   const [supported, setSupported] = useState(true);
-  const [selectedTool, setSelectedTool] = useState('get_portfolio');
+  const [selectedTool, setSelectedTool] = useState(TOOLS[0]?.name ?? 'get_portfolio');
   const [amount, setAmount] = useState('50');
   const [result, setResult] = useState(null);
 
@@ -429,18 +450,21 @@ function DelegationTab() {
 }
 
 // ── Tab 2: Gateway Simulation ──
-const SCENARIOS = [
-  { name: 'Valid Agent', desc: 'Valid credential, get_portfolio, passes all 4 steps',
-    credential: { valid: true, expired: false, permBits: [0, 1], tool: 'get_portfolio' } },
-  { name: 'Expired Credential', desc: 'Credential expired yesterday',
-    credential: { valid: true, expired: true, permBits: [0, 1], tool: 'get_portfolio' } },
-  { name: 'Insufficient Permissions', desc: 'READ_DATA only, but place_stock_order requires FINANCIAL_SMALL',
-    credential: { valid: true, expired: false, permBits: [0], tool: 'place_stock_order' } },
-  { name: 'Replay Attack', desc: 'Same nonce used twice -- click twice to see',
-    credential: { valid: true, expired: false, permBits: [0, 1], tool: 'get_portfolio', fixedNonce: true } },
-];
+function GatewayTab({ onReceiptGenerated, preset }) {
+  const TOOLS = preset.tools;
+  const readTool = TOOLS.find(t => !t.financial)?.name ?? TOOLS[0]?.name;
+  const financialTool = TOOLS.find(t => t.financial)?.name ?? TOOLS[1]?.name;
 
-function GatewayTab({ onReceiptGenerated }) {
+  const SCENARIOS = [
+    { name: 'Valid Agent', desc: `Valid credential, ${readTool}, passes all 4 steps`,
+      credential: { valid: true, expired: false, permBits: [0, 1], tool: readTool } },
+    { name: 'Expired Credential', desc: 'Credential expired yesterday',
+      credential: { valid: true, expired: true, permBits: [0, 1], tool: readTool } },
+    { name: 'Insufficient Permissions', desc: `READ_DATA only, but ${financialTool} requires more`,
+      credential: { valid: true, expired: false, permBits: [0], tool: financialTool } },
+    { name: 'Replay Attack', desc: 'Same nonce used twice -- click twice to see',
+      credential: { valid: true, expired: false, permBits: [0, 1], tool: readTool, fixedNonce: true } },
+  ];
   const [steps, setSteps] = useState([null, null, null, null]);
   const [running, setRunning] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState(null);
@@ -527,7 +551,7 @@ function GatewayTab({ onReceiptGenerated }) {
 
   return (
     <div>
-      <p style={{color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px'}}>Simulates <strong style={{color: 'var(--text)'}}>@bolyra/gateway</strong> protecting a Robinhood Agentic Trading MCP server. Each scenario shows the 4-step auth pipeline: credential check, tool policy, replay protection, receipt issuance.</p>
+      <p style={{color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px'}}>{preset.description} Each scenario shows the 4-step auth pipeline: credential check, tool policy, replay protection, receipt issuance.</p>
       <div className="card">
         <h3>Select Scenario</h3>
         <div className="scenarios">
@@ -763,11 +787,30 @@ function InspectorTab({ lastReceipt }) {
 function App() {
   const [tab, setTab] = useState(0);
   const [lastReceipt, setLastReceipt] = useState(null);
+  const [demoPreset, setDemoPreset] = useState('robinhood');
 
   const tabs = ['Delegation Flow', 'Gateway Simulation', 'Receipt Inspector'];
+  const preset = DEMO_PRESETS[demoPreset];
 
   return (
     <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {Object.entries(DEMO_PRESETS).map(([key, p]) => (
+          <button key={key}
+            onClick={() => setDemoPreset(key)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: demoPreset === key ? '2px solid var(--accent)' : '1px solid var(--border)',
+              background: demoPreset === key ? 'rgba(99,102,241,0.15)' : 'var(--bg-elevated)',
+              color: demoPreset === key ? 'var(--accent)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              fontWeight: demoPreset === key ? 700 : 400,
+              fontSize: '0.85rem',
+            }}>{p.label}</button>
+        ))}
+      </div>
+
       <div className="tab-bar">
         {tabs.map((t, i) => (
           <button key={i} className={`tab-btn ${tab === i ? 'active' : ''}`}
@@ -775,8 +818,8 @@ function App() {
         ))}
       </div>
 
-      {tab === 0 && <DelegationTab />}
-      {tab === 1 && <GatewayTab onReceiptGenerated={setLastReceipt} />}
+      {tab === 0 && <DelegationTab key={demoPreset} tools={preset.tools} />}
+      {tab === 1 && <GatewayTab key={demoPreset} onReceiptGenerated={setLastReceipt} preset={preset} />}
       {tab === 2 && <InspectorTab lastReceipt={lastReceipt} />}
 
       <div style={{ marginTop: 40, paddingTop: 20, borderTop: '1px solid var(--border)',
