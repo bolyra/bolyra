@@ -47,6 +47,10 @@ async function runDev(args: string[]): Promise<void> {
   const { run } = await import('./commands/dev');
   await run(args);
 }
+async function runRun(args: string[]): Promise<void> {
+  const { run } = await import('./commands/run');
+  await run(args);
+}
 
 const HELP = `Bolyra CLI — credential lifecycle management
 
@@ -64,6 +68,7 @@ Commands:
 
   receipt verify    Verify a signed audit receipt
 
+  run               Run any MCP server with auth + HTTP exposure
   dev               Generate dev identities for testing
 
 Options:
@@ -135,6 +140,9 @@ export async function main(argv: string[]): Promise<void> {
       console.error('Available: verify');
       process.exitCode = 2;
       return;
+    case 'run':
+      // Pass everything after 'run' including '--' separator
+      return runRun(args.slice(1));
     case 'dev':
       return runDev(args.slice(1));
     default:
