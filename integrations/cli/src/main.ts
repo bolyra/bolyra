@@ -79,6 +79,7 @@ Commands:
   run               Run any MCP server with auth + HTTP exposure
   observe           Live activity viewer for bolyra run receipts
   replay            Re-evaluate receipts against current or alternate policy
+  doctor            Health check for the Bolyra setup
   dev               Generate dev identities for testing
   dev from-receipt  Generate test fixtures from receipt history
 
@@ -151,6 +152,10 @@ export async function main(argv: string[]): Promise<void> {
       console.error('Available: verify');
       process.exitCode = 2;
       return;
+    case 'doctor': {
+      const { run: runDoctor } = await import('./commands/doctor');
+      return runDoctor(args.slice(1));
+    }
     case 'run':
       // Pass everything after 'run' including '--' separator
       return runRun(args.slice(1));
