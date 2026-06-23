@@ -1,0 +1,43 @@
+# Bolyra Gateway config for Coinbase Agent Account demo
+# Maps Coinbase AgentKit tools to permission tiers
+
+target: http://localhost:3200
+port: 4200
+devMode: true
+
+nonce:
+  store: memory
+  maxProofAge: 300
+
+receipts:
+  enabled: true
+  output: stdout
+
+tools:
+  # Read-only — READ_DATA (bit 0 = 1)
+  get_wallet_balance:
+    requireBitmask: 1
+  get_portfolio:
+    requireBitmask: 1
+  get_wallet_address:
+    requireBitmask: 1
+  get_token_price:
+    requireBitmask: 1
+  get_transaction_history:
+    requireBitmask: 1
+
+  # Small transfers — FINANCIAL_SMALL (bit 2 = 4, < $100)
+  transfer_token:
+    requireBitmask: 4
+
+  # Swaps — FINANCIAL_SMALL (bit 2 = 4)
+  swap_tokens:
+    requireBitmask: 4
+
+  # x402 paid API — FINANCIAL_SMALL (bit 2 = 4)
+  pay_for_api:
+    requireBitmask: 4
+
+  # Deploy contract — FINANCIAL_UNLIMITED (bit 4 = 16)
+  deploy_contract:
+    requireBitmask: 16
