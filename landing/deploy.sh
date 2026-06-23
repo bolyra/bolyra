@@ -103,6 +103,29 @@ aws s3 cp "$BLOG5" "s3://$BUCKET/blog-5" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
+for JSXF in animations.jsx system.jsx scenes_replaycheck.jsx scenes_cli.jsx; do
+  echo "→ uploading $JSXF to s3://$BUCKET/"
+  aws s3 cp "$SCRIPT_DIR/$JSXF" "s3://$BUCKET/$JSXF" \
+    --content-type "application/javascript; charset=utf-8" \
+    --cache-control "public, max-age=300"
+done
+
+echo "→ uploading video-replay-check.html to s3://$BUCKET/"
+aws s3 cp "$SCRIPT_DIR/video-replay-check.html" "s3://$BUCKET/video-replay-check.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$SCRIPT_DIR/video-replay-check.html" "s3://$BUCKET/video-replay-check" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
+echo "→ uploading video-cli.html to s3://$BUCKET/"
+aws s3 cp "$SCRIPT_DIR/video-cli.html" "s3://$BUCKET/video-cli.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$SCRIPT_DIR/video-cli.html" "s3://$BUCKET/video-cli" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
 echo "→ uploading video.html to s3://$BUCKET/"
 aws s3 cp "$VIDEO" "s3://$BUCKET/video.html" \
   --content-type "text/html; charset=utf-8" \
@@ -178,7 +201,7 @@ aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground" \
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
   --query 'Invalidation.Id' \
   --output text)
 
