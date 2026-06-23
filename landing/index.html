@@ -1063,7 +1063,12 @@
         <div class="feature-card">
           <div class="feature-icon mutual">CLI</div>
           <h3>Credential CLI</h3>
-          <p><strong style="color: var(--green);">v0.2.0:</strong> <strong>New: <code>bolyra run</code></strong> — one command to run any stdio MCP server with auth + HTTP exposure. Spawns the server, wraps with Shield, exposes over HTTP. <code>bolyra run --dev -- npx some-mcp-server</code>. Also: <code>bolyra cred create|inspect|revoke|list</code>, <code>key generate|show</code>, <code>receipt verify</code>, <code>dev</code>. <code>npm install -g @bolyra/cli</code>.</p>
+          <p><strong style="color: var(--green);">v0.2.0:</strong> <strong><code>bolyra run</code></strong> — one command to run any stdio MCP server with auth + HTTP exposure. <strong><code>bolyra observe</code></strong> — live activity viewer + auto-generate policy. <strong><code>bolyra replay</code></strong> — re-evaluate receipts against policies. <strong><code>bolyra dev from-receipt</code></strong> — generate test fixtures from receipt history. Also: <code>cred</code>, <code>key</code>, <code>receipt verify</code>, <code>dev</code>. <code>npm install -g @bolyra/cli</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon mutual">CI</div>
+          <h3>GitHub Action</h3>
+          <p><strong style="color: var(--green);">v0.1.0:</strong> <strong>Bolyra Replay Check</strong> — CI for agent behavior regressions. Replays receipt history against your policy on every PR. Posts a comment showing regressions (allow→deny) and relaxations (deny→allow). Fails the check if regressions are found. Drop-in: <code>uses: bolyra/bolyra/actions/replay-check@main</code>. <a href="https://github.com/bolyra/bolyra/tree/main/actions/replay-check">View on GitHub</a>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">ZK</div>
