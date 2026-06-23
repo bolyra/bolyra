@@ -1,0 +1,41 @@
+name: 'Bolyra Replay Check'
+description: 'CI for agent behavior regressions. Replays receipts against your policy and comments on PRs.'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  receipt-path:
+    description: 'Path to receipt NDJSON files (file or directory)'
+    required: false
+    default: '.bolyra/receipts'
+  policy:
+    description: 'Path to shield.yaml policy file'
+    required: false
+    default: 'shield.yaml'
+  fail-on-regression:
+    description: 'Fail the check if regressions are found (allow→deny changes)'
+    required: false
+    default: 'true'
+  comment:
+    description: 'Post a PR comment with results'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for PR comments (default: github.token)'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  total:
+    description: 'Total receipts replayed'
+  changed:
+    description: 'Number of decisions that changed'
+  regressions:
+    description: 'Number of allow→deny regressions'
+  relaxations:
+    description: 'Number of deny→allow relaxations'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

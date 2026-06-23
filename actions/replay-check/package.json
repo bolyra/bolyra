@@ -1,0 +1,20 @@
+{
+  "name": "bolyra-replay-check",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub Action: CI for agent behavior regressions",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').copyFileSync('dist/index.js','dist/index.js')\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/github": "^6.0.0",
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
