@@ -55,6 +55,10 @@ async function runObserve(args: string[]): Promise<void> {
   const { run } = await import('./commands/observe');
   await run(args);
 }
+async function runReplay(args: string[]): Promise<void> {
+  const { run } = await import('./commands/replay');
+  await run(args);
+}
 
 const HELP = `Bolyra CLI — credential lifecycle management
 
@@ -74,6 +78,7 @@ Commands:
 
   run               Run any MCP server with auth + HTTP exposure
   observe           Live activity viewer for bolyra run receipts
+  replay            Re-evaluate receipts against current or alternate policy
   dev               Generate dev identities for testing
 
 Options:
@@ -150,6 +155,8 @@ export async function main(argv: string[]): Promise<void> {
       return runRun(args.slice(1));
     case 'observe':
       return runObserve(args.slice(1));
+    case 'replay':
+      return runReplay(args.slice(1));
     case 'dev':
       return runDev(args.slice(1));
     default:
