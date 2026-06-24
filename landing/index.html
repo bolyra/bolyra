@@ -1075,7 +1075,7 @@
         <div class="feature-card">
           <div class="feature-icon privacy">CA</div>
           <h3>CrewAI Adapter</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Three <code>BaseTool</code> subclasses for CrewAI multi-agent workflows. <code>BolyraAuthTool</code>, <code>BolyraDelegateTool</code>, <code>BolyraSDJWTTool</code>. Pre-execution <code>BolyraGuard</code> with <code>guard_tools()</code> wrapping. Thread-safe <code>BolyraSession</code> chains handshake, delegation, and SD-JWT flows. 88 tests. <code>pip install bolyra-crewai</code>.</p>
+          <p><strong style="color: var(--green);">v0.2.0:</strong> Three <code>BaseTool</code> subclasses for CrewAI multi-agent workflows. <code>BolyraAuthTool</code>, <code>BolyraDelegateTool</code>, <code>BolyraSDJWTTool</code>. Pre-execution <code>BolyraGuard</code> with <code>guard_tools()</code> wrapping. Thread-safe <code>BolyraSession</code> chains handshake, delegation, and SD-JWT flows. <strong>BolyraDelegationFlow</strong> for per-agent scoping with proof envelope audit trail. 99 tests. <code>pip install bolyra-crewai</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon privacy">LC</div>
@@ -1085,12 +1085,12 @@
         <div class="feature-card">
           <div class="feature-icon privacy">PY</div>
           <h3>Python SDK</h3>
-          <p><strong style="color: var(--green);">v0.5.0:</strong> Types, validation, and subprocess bridge to the Node SDK for ZKP proving. <strong>New:</strong> pure-Python SD-JWT delegation module (<code>allow()</code>, <code>present()</code>, <code>verify()</code>) matching the TypeScript wire format exactly. Ed25519 + PyJWT. <code>pip install bolyra</code>.</p>
+          <p><strong style="color: var(--green);">v0.5.0:</strong> Types, validation, and subprocess bridge to the Node SDK for ZKP proving. TS SDK at v0.5.2. <strong>New:</strong> pure-Python SD-JWT delegation module (<code>allow()</code>, <code>present()</code>, <code>verify()</code>) matching the TypeScript wire format exactly. Ed25519 + PyJWT. <code>pip install bolyra</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon mutual">CLI</div>
           <h3>Credential CLI</h3>
-          <p><strong style="color: var(--green);">v0.3.0:</strong> <strong><code>bolyra shield test</code></strong> — safety test runner for MCP servers. Checks tool schemas, financial tool params, slippage protection, read/write separation. <code>base-mcp</code> preset for money-moving plugins. <strong><code>bolyra run</code></strong> — stdio→HTTP with auth. <strong><code>bolyra observe</code></strong> — live viewer + policy gen. <strong><code>bolyra replay</code></strong> — receipt re-evaluation. <strong><code>bolyra doctor</code></strong> — health check. Also: <code>cred</code>, <code>key</code>, <code>receipt verify</code>, <code>dev from-receipt</code>. <code>npm install -g @bolyra/cli</code>.</p>
+          <p><strong style="color: var(--green);">v0.3.1:</strong> <strong><code>bolyra shield test</code></strong> — safety test runner for MCP servers. Checks tool schemas, financial tool params, slippage protection, read/write separation. <code>base-mcp</code> preset for money-moving plugins. <strong><code>bolyra run</code></strong> — stdio→HTTP with auth. <strong><code>bolyra observe</code></strong> — live viewer + policy gen. <strong><code>bolyra replay</code></strong> — receipt re-evaluation. <strong><code>bolyra doctor</code></strong> — health check. Also: <code>cred</code>, <code>key</code>, <code>receipt verify</code>, <code>dev from-receipt</code>. <code>npm install -g @bolyra/cli</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon mutual">CI</div>
@@ -1125,7 +1125,7 @@
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Official Directory</div>
           <h3 style="font-size: 1.1rem; margin-bottom: 8px;">MCP Server Registry</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">4 packages listed on the official Model Context Protocol registry: <a href="https://registry.modelcontextprotocol.io/">gateway, shield, mcp, and sdk</a>. Discoverable by any MCP client.</p>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">6 packages listed on the official Model Context Protocol registry: <a href="https://registry.modelcontextprotocol.io/">gateway, shield, mcp, sdk, circuits, and receipts</a>. Discoverable by any MCP client.</p>
         </div>
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Community Docs</div>
@@ -1136,6 +1136,11 @@
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Demo</div>
           <h3 style="font-size: 1.1rem; margin-bottom: 8px;">Robinhood Gateway Demo</h3>
           <p style="color: var(--text-muted); font-size: 0.9rem;">4-scenario demo protecting a mock Robinhood MCP server. Verified trade, unauthorized agent blocked, replay attack rejected. <a href="/blog-4">Read the writeup</a> or <a href="/playground">try the playground</a>.</p>
+        </div>
+        <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Demo</div>
+          <h3 style="font-size: 1.1rem; margin-bottom: 8px;">x402 Agent Wallet</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Agent wallet with human-set spend limits for x402 micropayments on Base. 6 scenarios: research, inference, and market data allowed; premium report denied (per-request cap); daily cap enforced. <a href="/playground">Try the playground</a> or <a href="https://github.com/bolyra/bolyra/tree/main/examples/x402-agent-wallet">view the code</a>.</p>
         </div>
       </div>
     </div>
@@ -1264,7 +1269,7 @@
           <span class="std-badge ietf">IETF</span>
           <h3>Draft (preparing for submission)</h3>
           <p><code>draft-bolyra-mutual-zkp-auth-01</code></p>
-          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. v0.5.1 SDK aligns all circuits to Groth16 (REQUIRED), PLONK (OPTIONAL). Canonical 6-element Delegation public-signals layout locked for IETF submission.</p>
+          <p style="margin-top: 10px;">Formal protocol specification for mutual zero-knowledge proof authentication. Defines message flows, proof formats, and verification procedures. v0.5.2 SDK aligns all circuits to Groth16 (REQUIRED), PLONK (OPTIONAL). Canonical 6-element Delegation public-signals layout locked for IETF submission.</p>
         </div>
         <div class="standard-card">
           <span class="std-badge w3c">W3C</span>
@@ -1275,7 +1280,7 @@
         <div class="standard-card">
           <span class="std-badge test">Conformance</span>
           <h3>Test Vectors</h3>
-          <p><code>49 vectors, all passing</code></p>
+          <p><code>67 vectors, all passing</code></p>
           <p style="margin-top: 10px;">Conformance suite covers handshake, 2-hop delegation chain, forged-token EdDSA, nullifier-per-nonce, Poseidon3/4 binding sensitivity, LeanIMT root edges, canonical 6-element public-signals layout, financial scope narrowing, and cumulative-invariant rejection.</p>
         </div>
       </div>
