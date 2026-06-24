@@ -80,6 +80,7 @@ Commands:
   run               Run any MCP server with auth + HTTP exposure
   observe           Live activity viewer for bolyra run receipts
   replay            Re-evaluate receipts against current or alternate policy
+  inspect vectors   Conformance vector inspector (read-only)
   doctor            Health check for the Bolyra setup
   dev               Generate dev identities for testing
   dev from-receipt  Generate test fixtures from receipt history
@@ -151,6 +152,14 @@ export async function main(argv: string[]): Promise<void> {
       }
       console.error(`Unknown receipt command: ${action ?? '(none)'}`);
       console.error('Available: verify');
+      process.exitCode = 2;
+      return;
+    case 'inspect':
+      if (args[1] === 'vectors') {
+        const { run: runInspect } = await import('./commands/inspect-vectors');
+        return runInspect(args.slice(2));
+      }
+      console.error('Unknown inspect command. Available: vectors');
       process.exitCode = 2;
       return;
     case 'shield':
