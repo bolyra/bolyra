@@ -97,8 +97,35 @@
   </nav>
 
   <h1>Agent Spend Security Benchmark</h1>
-  <p class="subtitle">Can your AI agent safely touch money? 10 adversarial tests. See the score with and without Bolyra.</p>
+  <p class="subtitle">Can your AI agent safely touch money? Analyze your MCP server's tools or run the simulated demo.</p>
 
+  <!-- Tab bar: Analyze / Demo -->
+  <div style="display: flex; gap: 4px; margin-bottom: 24px; background: var(--bg-el); border-radius: 10px; padding: 4px; border: 1px solid var(--border);">
+    <button id="tab-analyze" onclick="switchTab('analyze')" style="flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; background: var(--accent); color: #fff;">
+      Analyze Your Server
+    </button>
+    <button id="tab-demo" onclick="switchTab('demo')" style="flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted);">
+      Simulated Demo
+    </button>
+  </div>
+
+  <!-- ANALYZE MODE -->
+  <div id="analyze-section">
+    <div style="margin-bottom: 16px;">
+      <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px;">Paste your MCP server's <code>tools/list</code> response JSON</label>
+      <textarea id="tools-json" rows="8" placeholder='{"tools": [{"name": "transfer_token", "description": "Transfer tokens", "inputSchema": {"type": "object", "properties": {"amount": {"type": "string"}, "to": {"type": "string"}}}}]}'
+        style="width: 100%; padding: 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.82rem; font-family: 'SF Mono', monospace; resize: vertical;"></textarea>
+      <div style="font-size: 0.75rem; color: var(--faint); margin-top: 6px;">
+        Get this by running: <code>echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | your-mcp-server</code>
+      </div>
+    </div>
+    <button class="run-btn" onclick="analyzeTools()">Analyze Tools</button>
+
+    <div id="analyze-results" style="display: none;"></div>
+  </div>
+
+  <!-- DEMO MODE (existing) -->
+  <div id="demo-section" style="display: none;">
   <div style="margin-bottom: 16px;">
     <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px;">Project / MCP Server Name</label>
     <input type="text" id="project-name" placeholder="e.g. my-trading-agent, Coinbase MCP, Robinhood bot"
@@ -146,6 +173,8 @@
       <div id="copy-confirm" style="font-size: 0.8rem; color: var(--green); margin-top: 8px; display: none;">Copied!</div>
     </div>
   </div>
+
+  </div><!-- close demo-section -->
 
   <div class="footer">
     Simulated benchmark. No real funds moved. Tests run entirely in your browser.<br>
@@ -393,6 +422,131 @@ function loadFromHash() {
     results.with = TESTS.map(t => t.with);
     renderTests();
   } catch {}
+}
+
+// ── Tab switching ──
+function switchTab(tab) {
+  document.getElementById('analyze-section').style.display = tab === 'analyze' ? 'block' : 'none';
+  document.getElementById('demo-section').style.display = tab === 'demo' ? 'block' : 'none';
+  document.getElementById('tab-analyze').style.background = tab === 'analyze' ? 'var(--accent)' : 'transparent';
+  document.getElementById('tab-analyze').style.color = tab === 'analyze' ? '#fff' : 'var(--muted)';
+  document.getElementById('tab-demo').style.background = tab === 'demo' ? 'var(--accent)' : 'transparent';
+  document.getElementById('tab-demo').style.color = tab === 'demo' ? '#fff' : 'var(--muted)';
+}
+
+// ── Real tool analysis (mirrors shield test logic) ──
+const FINANCIAL_KW = ['transfer','send','swap','trade','buy','sell','mint','burn','deploy','approve','revoke','bridge','stake','unstake','withdraw','deposit','pay','purchase','order','bid','list','delist'];
+const AMOUNT_KW = ['amount','value','price','quantity','token','asset'];
+const RECIPIENT_KW = ['to','recipient','address','destination'];
+const CHAIN_KW = ['chain','network','chainid','chain_id'];
+const SLIPPAGE_KW = ['slippage','max_slippage','slippage_bps','slippagetolerance'];
+
+function analyzeTools() {
+  const raw = document.getElementById('tools-json').value.trim();
+  if (!raw) { alert('Paste your tools/list JSON first'); return; }
+
+  let tools;
+  try {
+    const parsed = JSON.parse(raw);
+    tools = parsed.tools || parsed.result?.tools || (Array.isArray(parsed) ? parsed : null);
+    if (!tools) throw new Error('No tools array found');
+  } catch (e) {
+    alert('Invalid JSON: ' + e.message); return;
+  }
+
+  const checks = [];
+  const getProps = (t) => {
+    const s = t.inputSchema; if (!s || !s.properties) return [];
+    return Object.keys(s.properties).map(k => k.toLowerCase());
+  };
+  const isFin = (t) => {
+    const n = t.name.toLowerCase(), d = (t.description||'').toLowerCase();
+    return FINANCIAL_KW.some(k => n.includes(k) || d.includes(k));
+  };
+
+  // Check 1: schemas
+  const withSchema = tools.filter(t => t.inputSchema && Object.keys(t.inputSchema).length > 0);
+  checks.push({ name: 'Tool Schemas Defined', pass: withSchema.length === tools.length,
+    detail: withSchema.length === tools.length ? `${tools.length}/${tools.length} have schemas` : `${withSchema.length}/${tools.length} — missing schemas reduce visibility` });
+
+  // Check 2: financial tools identified
+  const finTools = tools.filter(isFin);
+  checks.push({ name: 'Financial Tools Identified', pass: true,
+    detail: finTools.length > 0 ? `${finTools.length} found: ${finTools.map(t=>t.name).join(', ')}` : 'None detected — if this server moves money, tool names may need clearer naming' });
+
+  // Check 3: amount params
+  const finWithAmount = finTools.filter(t => { const p = getProps(t); return AMOUNT_KW.some(k => p.some(pp => pp.includes(k))); });
+  checks.push({ name: 'Financial Tools Expose Amount', pass: finTools.length === 0 || finWithAmount.length === finTools.length,
+    detail: finTools.length === 0 ? 'N/A' : `${finWithAmount.length}/${finTools.length} expose amount/value param` });
+
+  // Check 4: recipient params on transfer-like tools
+  const transferTools = finTools.filter(t => { const n = t.name.toLowerCase(); return n.includes('transfer') || n.includes('send') || n.includes('pay') || n.includes('bridge'); });
+  const withRecipient = transferTools.filter(t => { const p = getProps(t); return RECIPIENT_KW.some(k => p.some(pp => pp.includes(k))); });
+  checks.push({ name: 'Transfer Tools Expose Recipient', pass: transferTools.length === 0 || withRecipient.length === transferTools.length,
+    detail: transferTools.length === 0 ? 'N/A' : `${withRecipient.length}/${transferTools.length} expose recipient/to param` });
+
+  // Check 5: chain/network
+  const hasChain = tools.some(t => { const p = getProps(t); return CHAIN_KW.some(k => p.some(pp => pp.includes(k))); });
+  checks.push({ name: 'Chain/Network Parameter', pass: hasChain,
+    detail: hasChain ? 'At least one tool exposes chain/network' : 'No chain param found — cross-chain confusion risk' });
+
+  // Check 6: slippage on swap tools
+  const swapTools = tools.filter(t => { const n = t.name.toLowerCase(); return n.includes('swap') || n.includes('trade') || n.includes('exchange'); });
+  const withSlippage = swapTools.filter(t => { const p = getProps(t); return SLIPPAGE_KW.some(k => p.some(pp => pp.includes(k))); });
+  checks.push({ name: 'Slippage Protection on Swaps', pass: swapTools.length === 0 || withSlippage.length === swapTools.length,
+    detail: swapTools.length === 0 ? 'N/A — no swap tools' : `${withSlippage.length}/${swapTools.length} have slippage param` });
+
+  // Check 7: no broad tool names
+  const broad = tools.filter(t => ['execute','run','do','action'].includes(t.name.toLowerCase()));
+  checks.push({ name: 'No Overly Broad Tool Names', pass: broad.length === 0,
+    detail: broad.length === 0 ? 'All tool names are specific' : `Broad names: ${broad.map(t=>t.name).join(', ')}` });
+
+  // Check 8: tool count
+  checks.push({ name: 'Reasonable Tool Count', pass: tools.length <= 50,
+    detail: `${tools.length} tools` + (tools.length > 50 ? ' — large surfaces increase confusion risk' : '') });
+
+  // Check 9: read/write separation
+  const readTools = tools.filter(t => { const n = t.name.toLowerCase(); return n.includes('get') || n.includes('list') || n.includes('fetch') || n.includes('query') || n.includes('search') || n.includes('check') || n.includes('view'); });
+  checks.push({ name: 'Read/Write Separation', pass: readTools.length > 0 && readTools.length < tools.length,
+    detail: `${readTools.length} read-only, ${tools.length - readTools.length} write/action — can be split into permission tiers` });
+
+  // Check 10: no auth/approval in tool names (tools should be gated externally)
+  const authInName = tools.filter(t => { const n = t.name.toLowerCase(); return n.includes('login') || n.includes('auth') || n.includes('password') || n.includes('secret'); });
+  checks.push({ name: 'No Auth/Secret Tools Exposed', pass: authInName.length === 0,
+    detail: authInName.length === 0 ? 'No auth/login/secret tools found' : `Dangerous: ${authInName.map(t=>t.name).join(', ')} should not be agent-callable` });
+
+  // Render results
+  const passed = checks.filter(c => c.pass).length;
+  const container = document.getElementById('analyze-results');
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div class="summary-card fade-in" style="margin-top: 16px;">
+      <div class="summary-score" style="color: ${passed >= 8 ? 'var(--green)' : passed >= 5 ? 'var(--yellow)' : 'var(--red)'};">${passed}/10</div>
+      <div class="summary-label">${tools.length} tools analyzed · ${finTools.length} financial</div>
+    </div>
+    <div class="test-list">
+      ${checks.map((c, i) => `
+        <div class="test-row fade-in">
+          <div class="test-icon ${c.pass ? 'pass' : 'fail'}">${c.pass ? '✓' : '✗'}</div>
+          <div>
+            <div class="test-name">${c.name}</div>
+            <div class="test-desc">${c.detail}</div>
+          </div>
+          <div class="test-result" style="color: ${c.pass ? 'var(--green)' : 'var(--red)'}">${c.pass ? 'PASS' : 'FAIL'}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div style="text-align: center; margin-top: 16px;">
+      <div class="badge-box">![Bolyra Benchmark](https://img.shields.io/badge/Agent_Spend_Benchmark-${passed}%2F10-${passed >= 8 ? 'brightgreen' : passed >= 5 ? 'yellow' : 'red'})</div>
+      <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px;">
+        <button onclick="navigator.clipboard.writeText(window.location.href)" style="padding: 10px 20px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(99,102,241,0.1); color: var(--accent); font-size: 0.85rem; font-weight: 600; cursor: pointer;">Copy Link</button>
+      </div>
+      <div style="margin-top: 16px; padding: 16px; border-radius: 10px; background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.2);">
+        <div style="font-size: 0.9rem; font-weight: 600; color: var(--accent); margin-bottom: 4px;">Want to fix the failures?</div>
+        <div style="font-size: 0.82rem; color: var(--muted);">Add <code>@bolyra/gateway</code> or <code>@bolyra/shield</code> in front of your server. Per-tool permissions, replay protection, signed receipts.</div>
+      </div>
+    </div>
+  `;
 }
 
 // Initial render
