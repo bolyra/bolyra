@@ -498,7 +498,7 @@ async function searchRegistry() {
   container.innerHTML = '<div style="font-size: 0.8rem; color: var(--muted); padding: 8px;">Searching...</div>';
 
   try {
-    const res = await fetch(`https://registry.modelcontextprotocol.io/v0/servers?search=${encodeURIComponent(q)}&limit=10`);
+    const res = await fetch(`https://app.bolyra.ai/api/registry-search?q=${encodeURIComponent(q)}&limit=10`);
     const data = await res.json();
 
     // Dedupe by name (keep latest version)
