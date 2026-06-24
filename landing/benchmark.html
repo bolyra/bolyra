@@ -115,8 +115,12 @@
       <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px;">Paste your MCP server's <code>tools/list</code> response JSON</label>
       <textarea id="tools-json" rows="8" placeholder='{"tools": [{"name": "transfer_token", "description": "Transfer tokens", "inputSchema": {"type": "object", "properties": {"amount": {"type": "string"}, "to": {"type": "string"}}}}]}'
         style="width: 100%; padding: 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.82rem; font-family: 'SF Mono', monospace; resize: vertical;"></textarea>
-      <div style="font-size: 0.75rem; color: var(--faint); margin-top: 6px;">
-        Get this by running: <code>echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | your-mcp-server</code>
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+        <span style="font-size: 0.75rem; color: var(--faint);">Load example:</span>
+        <button onclick="loadExample('robinhood')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-el); color: var(--accent); font-size: 0.75rem; font-weight: 600; cursor: pointer;">Robinhood (18 tools)</button>
+        <button onclick="loadExample('coinbase')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-el); color: var(--accent); font-size: 0.75rem; font-weight: 600; cursor: pointer;">Coinbase AgentKit (9 tools)</button>
+        <button onclick="loadExample('filesystem')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-el); color: var(--accent); font-size: 0.75rem; font-weight: 600; cursor: pointer;">Filesystem (4 tools)</button>
+        <span style="font-size: 0.7rem; color: var(--faint); margin-left: 4px;">or run: <code>echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | your-server</code></span>
       </div>
     </div>
     <button class="run-btn" onclick="analyzeTools()">Analyze Tools</button>
@@ -422,6 +426,51 @@ function loadFromHash() {
     results.with = TESTS.map(t => t.with);
     renderTests();
   } catch {}
+}
+
+// ── Example tool sets ──
+const EXAMPLES = {
+  robinhood: { tools: [
+    { name: 'robinhood_get_portfolio', description: 'Get portfolio positions and equity', inputSchema: { type: 'object', properties: {} } },
+    { name: 'robinhood_get_accounts', description: 'Get account information', inputSchema: { type: 'object', properties: {} } },
+    { name: 'robinhood_get_account', description: 'Get specific account details', inputSchema: { type: 'object', properties: { account_id: { type: 'string' } } } },
+    { name: 'robinhood_get_stock_quote', description: 'Get real-time stock quote', inputSchema: { type: 'object', properties: { symbol: { type: 'string' } } } },
+    { name: 'robinhood_get_historicals', description: 'Get historical price data', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, interval: { type: 'string' } } } },
+    { name: 'robinhood_get_news', description: 'Get news for a stock', inputSchema: { type: 'object', properties: { symbol: { type: 'string' } } } },
+    { name: 'robinhood_get_movers', description: 'Get market movers', inputSchema: { type: 'object', properties: {} } },
+    { name: 'robinhood_get_options', description: 'Get options chain data', inputSchema: { type: 'object', properties: { symbol: { type: 'string' } } } },
+    { name: 'robinhood_get_crypto', description: 'Get crypto price', inputSchema: { type: 'object', properties: { symbol: { type: 'string' } } } },
+    { name: 'robinhood_get_orders', description: 'Get order history', inputSchema: { type: 'object', properties: {} } },
+    { name: 'robinhood_get_order_status', description: 'Get status of specific order', inputSchema: { type: 'object', properties: { order_id: { type: 'string' } } } },
+    { name: 'robinhood_search', description: 'Search for stocks', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
+    { name: 'robinhood_check_session', description: 'Check authentication session', inputSchema: { type: 'object', properties: {} } },
+    { name: 'robinhood_place_stock_order', description: 'Place a stock order', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, side: { type: 'string' }, quantity: { type: 'number' }, type: { type: 'string' } } } },
+    { name: 'robinhood_place_option_order', description: 'Place an options order', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, contract: { type: 'string' } } } },
+    { name: 'robinhood_place_crypto_order', description: 'Place a crypto order', inputSchema: { type: 'object', properties: { symbol: { type: 'string' }, side: { type: 'string' }, quantity: { type: 'number' } } } },
+    { name: 'robinhood_cancel_order', description: 'Cancel an open order', inputSchema: { type: 'object', properties: { order_id: { type: 'string' } } } },
+    { name: 'robinhood_browser_login', description: 'Open browser for Robinhood login', inputSchema: { type: 'object', properties: {} } },
+  ]},
+  coinbase: { tools: [
+    { name: 'get_wallet_balance', description: 'Get wallet token balances', inputSchema: { type: 'object', properties: {} } },
+    { name: 'get_portfolio', description: 'Get portfolio positions and value', inputSchema: { type: 'object', properties: {} } },
+    { name: 'get_wallet_address', description: 'Get wallet address', inputSchema: { type: 'object', properties: {} } },
+    { name: 'get_token_price', description: 'Get token price', inputSchema: { type: 'object', properties: { token: { type: 'string' } } } },
+    { name: 'get_transaction_history', description: 'Get transaction history', inputSchema: { type: 'object', properties: {} } },
+    { name: 'transfer_token', description: 'Transfer tokens to address', inputSchema: { type: 'object', properties: { token: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, chain: { type: 'string' } } } },
+    { name: 'swap_tokens', description: 'Swap tokens via Uniswap', inputSchema: { type: 'object', properties: { fromToken: { type: 'string' }, toToken: { type: 'string' }, amount: { type: 'string' } } } },
+    { name: 'pay_for_api', description: 'Pay for API access via x402', inputSchema: { type: 'object', properties: { amount: { type: 'string' }, recipient: { type: 'string' }, purpose: { type: 'string' } } } },
+    { name: 'deploy_contract', description: 'Deploy a smart contract', inputSchema: { type: 'object', properties: { bytecode: { type: 'string' } } } },
+  ]},
+  filesystem: { tools: [
+    { name: 'read_file', description: 'Read a file from the filesystem', inputSchema: { type: 'object', properties: { path: { type: 'string' } } } },
+    { name: 'write_file', description: 'Write content to a file', inputSchema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } } } },
+    { name: 'list_directory', description: 'List files in a directory', inputSchema: { type: 'object', properties: { path: { type: 'string' } } } },
+    { name: 'search_files', description: 'Search for files by pattern', inputSchema: { type: 'object', properties: { pattern: { type: 'string' }, path: { type: 'string' } } } },
+  ]},
+};
+
+function loadExample(name) {
+  document.getElementById('tools-json').value = JSON.stringify(EXAMPLES[name], null, 2);
 }
 
 // ── Tab switching ──
