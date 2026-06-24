@@ -465,16 +465,22 @@ function GatewayTab({ onReceiptGenerated, preset }) {
   const TOOLS = preset.tools;
   const readTool = TOOLS.find(t => !t.financial)?.name ?? TOOLS[0]?.name;
   const financialTool = TOOLS.find(t => t.financial)?.name ?? TOOLS[1]?.name;
+  // For "Valid Agent", use enough bits to cover the first tool's requirements
+  const firstTool = TOOLS[0];
+  const validBits = firstTool?.requiredBits ?? [0, 1];
+  const validTool = firstTool?.name ?? readTool;
+  // For denied scenario, pick a tool that needs higher bits than READ_DATA
+  const deniedTool = TOOLS.find(t => t.financial && t.requiredBits.some(b => b > 1))?.name ?? financialTool;
 
   const SCENARIOS = [
-    { name: 'Valid Agent', desc: `Valid credential, ${readTool}, passes all 4 steps`,
-      credential: { valid: true, expired: false, permBits: [0, 1], tool: readTool } },
+    { name: 'Valid Agent', desc: `Valid credential, ${validTool}, passes all 4 steps`,
+      credential: { valid: true, expired: false, permBits: validBits, tool: validTool } },
     { name: 'Expired Credential', desc: 'Credential expired yesterday',
-      credential: { valid: true, expired: true, permBits: [0, 1], tool: readTool } },
-    { name: 'Insufficient Permissions', desc: `READ_DATA only, but ${financialTool} requires more`,
-      credential: { valid: true, expired: false, permBits: [0], tool: financialTool } },
+      credential: { valid: true, expired: true, permBits: validBits, tool: validTool } },
+    { name: 'Insufficient Permissions', desc: `READ_DATA only, but ${deniedTool} requires more`,
+      credential: { valid: true, expired: false, permBits: [0], tool: deniedTool } },
     { name: 'Replay Attack', desc: 'Same nonce used twice -- click twice to see',
-      credential: { valid: true, expired: false, permBits: [0, 1], tool: readTool, fixedNonce: true } },
+      credential: { valid: true, expired: false, permBits: validBits, tool: validTool, fixedNonce: true } },
   ];
   const [steps, setSteps] = useState([null, null, null, null]);
   const [running, setRunning] = useState(false);
