@@ -99,6 +99,12 @@
   <h1>Agent Spend Security Benchmark</h1>
   <p class="subtitle">Can your AI agent safely touch money? 10 adversarial tests. See the score with and without Bolyra.</p>
 
+  <div style="margin-bottom: 16px;">
+    <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px;">Project / MCP Server Name</label>
+    <input type="text" id="project-name" placeholder="e.g. my-trading-agent, Coinbase MCP, Robinhood bot"
+      style="width: 100%; padding: 12px 16px; border-radius: 10px; background: var(--bg-el); border: 1px solid var(--border); color: var(--text); font-size: 0.95rem; font-family: 'SF Mono', monospace;" />
+  </div>
+
   <div class="mode-bar">
     <button class="mode-btn active" id="mode-without" onclick="setMode('without')">
       Without Bolyra
@@ -129,6 +135,15 @@
     <div style="text-align: center; margin-bottom: 20px;">
       <div style="font-size: 0.85rem; color: var(--muted); margin-bottom: 8px;">Share this result:</div>
       <div class="badge-box" id="badge-md"></div>
+      <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px;">
+        <button onclick="copyResultLink()" style="padding: 10px 20px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(99,102,241,0.1); color: var(--accent); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+          Copy Result Link
+        </button>
+        <button onclick="shareOnX()" style="padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-el); color: var(--text); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+          Share on X
+        </button>
+      </div>
+      <div id="copy-confirm" style="font-size: 0.8rem; color: var(--green); margin-top: 8px; display: none;">Copied!</div>
     </div>
   </div>
 
@@ -301,6 +316,7 @@ async function runBenchmark() {
     document.getElementById('badge-md').textContent =
       '![Bolyra Benchmark](https://img.shields.io/badge/Agent_Spend_Benchmark-' + wPassed + '%2F10-' + (wPassed >= 8 ? 'brightgreen' : wPassed >= 5 ? 'yellow' : 'red') + ')';
     document.getElementById('results').style.display = 'block';
+    updateUrlHash();
   }
 
   // Auto-run other mode
@@ -323,8 +339,65 @@ async function runBenchmark() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function getResultHash() {
+  const project = document.getElementById('project-name').value || 'unnamed';
+  const wo = results.without ? results.without.filter(r => r.result === 'pass').length : 0;
+  const w = results.with ? results.with.filter(r => r.result === 'pass').length : 0;
+  return encodeURIComponent(btoa(JSON.stringify({ p: project, wo, w, t: Date.now() })));
+}
+
+function generateResultUrl() {
+  return window.location.origin + '/benchmark#r=' + getResultHash();
+}
+
+function updateUrlHash() {
+  if (results.without && results.with) {
+    window.location.hash = 'r=' + getResultHash();
+  }
+}
+
+function copyResultLink() {
+  const url = generateResultUrl();
+  navigator.clipboard.writeText(url).then(() => {
+    const el = document.getElementById('copy-confirm');
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 2000);
+  });
+}
+
+function shareOnX() {
+  const project = document.getElementById('project-name').value || 'my agent';
+  const wo = results.without ? results.without.filter(r => r.result === 'pass').length : 0;
+  const w = results.with ? results.with.filter(r => r.result === 'pass').length : 0;
+  const text = `Agent Spend Security Benchmark results for ${project}:\n\nWithout auth: ${wo}/10\nWith @bolyra gateway: ${w}/10\n\nRun it yourself:`;
+  const url = generateResultUrl();
+  window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank');
+}
+
+function loadFromHash() {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#r=')) return;
+  try {
+    const data = JSON.parse(atob(decodeURIComponent(hash.slice(3))));
+    document.getElementById('project-name').value = data.p || '';
+    document.getElementById('score-without').textContent = data.wo + '/10';
+    document.getElementById('score-with').textContent = data.w + '/10';
+    document.getElementById('final-without').textContent = data.wo + '/10';
+    document.getElementById('final-with').textContent = data.w + '/10';
+    document.getElementById('badge-md').textContent =
+      '![Bolyra Benchmark](https://img.shields.io/badge/Agent_Spend_Benchmark-' + data.w + '%2F10-' + (data.w >= 8 ? 'brightgreen' : data.w >= 5 ? 'yellow' : 'red') + ')';
+    document.getElementById('results').style.display = 'block';
+
+    // Populate test results visually
+    results.without = TESTS.map(t => t.without);
+    results.with = TESTS.map(t => t.with);
+    renderTests();
+  } catch {}
+}
+
 // Initial render
 renderTests();
+loadFromHash();
 </script>
 </body>
 </html>
