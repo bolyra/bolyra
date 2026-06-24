@@ -111,16 +111,33 @@
 
   <!-- ANALYZE MODE -->
   <div id="analyze-section">
+
+    <!-- Registry search -->
+    <div style="margin-bottom: 20px;">
+      <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px;">Search the MCP Registry</label>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="registry-search" placeholder="e.g. stripe, coinbase, filesystem, github..."
+          style="flex: 1; padding: 10px 14px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.9rem;"
+          onkeydown="if(event.key==='Enter')searchRegistry()" />
+        <button onclick="searchRegistry()" style="padding: 10px 18px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(99,102,241,0.1); color: var(--accent); font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;">Search</button>
+      </div>
+      <div id="registry-results" style="margin-top: 8px;"></div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+      <div style="flex: 1; height: 1px; background: var(--border);"></div>
+      <span style="font-size: 0.75rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.1em;">or paste tools/list JSON</span>
+      <div style="flex: 1; height: 1px; background: var(--border);"></div>
+    </div>
+
     <div style="margin-bottom: 16px;">
-      <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px;">Paste your MCP server's <code>tools/list</code> response JSON</label>
-      <textarea id="tools-json" rows="8" placeholder='{"tools": [{"name": "transfer_token", "description": "Transfer tokens", "inputSchema": {"type": "object", "properties": {"amount": {"type": "string"}, "to": {"type": "string"}}}}]}'
+      <textarea id="tools-json" rows="6" placeholder='{"tools": [{"name": "transfer_token", "description": "Transfer tokens", "inputSchema": {"type": "object", "properties": {"amount": {"type": "string"}, "to": {"type": "string"}}}}]}'
         style="width: 100%; padding: 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.82rem; font-family: 'SF Mono', monospace; resize: vertical;"></textarea>
       <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
         <span style="font-size: 0.75rem; color: var(--faint);">Load example:</span>
         <button onclick="loadExample('robinhood')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-el); color: var(--accent); font-size: 0.75rem; font-weight: 600; cursor: pointer;">Robinhood (18 tools)</button>
         <button onclick="loadExample('coinbase')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-el); color: var(--accent); font-size: 0.75rem; font-weight: 600; cursor: pointer;">Coinbase AgentKit (9 tools)</button>
         <button onclick="loadExample('filesystem')" style="padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-el); color: var(--accent); font-size: 0.75rem; font-weight: 600; cursor: pointer;">Filesystem (4 tools)</button>
-        <span style="font-size: 0.7rem; color: var(--faint); margin-left: 4px;">or run: <code>echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | your-server</code></span>
       </div>
     </div>
     <button class="run-btn" onclick="analyzeTools()">Analyze Tools</button>
@@ -471,6 +488,96 @@ const EXAMPLES = {
 
 function loadExample(name) {
   document.getElementById('tools-json').value = JSON.stringify(EXAMPLES[name], null, 2);
+}
+
+// ── Registry search + live fetch ──
+async function searchRegistry() {
+  const q = document.getElementById('registry-search').value.trim();
+  if (!q) return;
+  const container = document.getElementById('registry-results');
+  container.innerHTML = '<div style="font-size: 0.8rem; color: var(--muted); padding: 8px;">Searching...</div>';
+
+  try {
+    const res = await fetch(`https://registry.modelcontextprotocol.io/v0/servers?search=${encodeURIComponent(q)}&limit=10`);
+    const data = await res.json();
+
+    // Dedupe by name (keep latest version)
+    const seen = new Map();
+    for (const entry of data.servers || []) {
+      const name = entry.server.name;
+      const isLatest = entry._meta?.['io.modelcontextprotocol.registry/official']?.isLatest;
+      if (!seen.has(name) || isLatest) seen.set(name, entry);
+    }
+    const servers = [...seen.values()];
+
+    if (servers.length === 0) {
+      container.innerHTML = '<div style="font-size: 0.8rem; color: var(--faint); padding: 8px;">No servers found.</div>';
+      return;
+    }
+
+    container.innerHTML = servers.map(entry => {
+      const s = entry.server;
+      const hasRemote = s.remotes && s.remotes.length > 0;
+      const remoteUrl = hasRemote ? s.remotes[0].url : null;
+      const hasPkg = s.packages && s.packages.length > 0;
+      const pkgId = hasPkg ? s.packages[0].identifier : null;
+      return `
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; background: var(--bg-el); border: 1px solid var(--border); margin-bottom: 6px;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.title || s.name}</div>
+            <div style="font-size: 0.72rem; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.description || ''}</div>
+            <div style="font-size: 0.7rem; color: var(--faint); font-family: 'SF Mono', monospace; margin-top: 2px;">${s.name} · v${s.version || '?'}${pkgId ? ' · ' + pkgId : ''}</div>
+          </div>
+          ${hasRemote ? `<button onclick="fetchFromRemote('${remoteUrl}', '${(s.title||s.name).replace(/'/g,'')}')" style="padding: 6px 14px; border-radius: 6px; border: 1px solid var(--green); background: rgba(74,222,128,0.08); color: var(--green); font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap;">Fetch & Analyze</button>` : `<span style="font-size: 0.7rem; color: var(--faint); white-space: nowrap;">stdio only</span>`}
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div style="font-size: 0.8rem; color: var(--red); padding: 8px;">Error: ${err.message}</div>`;
+  }
+}
+
+async function fetchFromRemote(url, title) {
+  const container = document.getElementById('registry-results');
+  container.innerHTML = `<div style="font-size: 0.8rem; color: var(--muted); padding: 8px;">Fetching tools from ${url}...</div>`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
+    });
+    const data = await res.json();
+    const tools = data.result?.tools || data.tools || [];
+
+    if (tools.length === 0) {
+      // Try initialize first then tools/list
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 0, params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'bolyra-benchmark', version: '0.1.0' } } }),
+      });
+      const res2 = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
+      });
+      const data2 = await res2.json();
+      const tools2 = data2.result?.tools || data2.tools || [];
+      if (tools2.length > 0) {
+        document.getElementById('tools-json').value = JSON.stringify({ tools: tools2 }, null, 2);
+        container.innerHTML = `<div style="font-size: 0.8rem; color: var(--green); padding: 8px;">✓ Loaded ${tools2.length} tools from ${title}. Click "Analyze Tools" below.</div>`;
+        return;
+      }
+      container.innerHTML = `<div style="font-size: 0.8rem; color: var(--yellow); padding: 8px;">Server responded but returned 0 tools. It may require auth or a different endpoint.</div>`;
+      return;
+    }
+
+    document.getElementById('tools-json').value = JSON.stringify({ tools }, null, 2);
+    container.innerHTML = `<div style="font-size: 0.8rem; color: var(--green); padding: 8px;">✓ Loaded ${tools.length} tools from ${title}. Click "Analyze Tools" below.</div>`;
+  } catch (err) {
+    container.innerHTML = `<div style="font-size: 0.8rem; color: var(--red); padding: 8px;">Failed to fetch: ${err.message}. The server may block cross-origin requests. Try pasting the JSON manually.</div>`;
+  }
 }
 
 // ── Tab switching ──
