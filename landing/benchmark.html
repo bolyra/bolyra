@@ -539,44 +539,28 @@ async function searchRegistry() {
 
 async function fetchFromRemote(url, title) {
   const container = document.getElementById('registry-results');
-  container.innerHTML = `<div style="font-size: 0.8rem; color: var(--muted); padding: 8px;">Fetching tools from ${url}...</div>`;
+  container.innerHTML = `<div style="font-size: 0.8rem; color: var(--muted); padding: 8px;">Fetching tools from ${title}...</div>`;
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
-    });
+    const res = await fetch(`https://app.bolyra.ai/api/mcp-tools?url=${encodeURIComponent(url)}`);
     const data = await res.json();
+
+    if (data.error) {
+      container.innerHTML = `<div style="font-size: 0.8rem; color: var(--yellow); padding: 8px;">Server error: ${data.error}. It may require authentication. Try pasting the JSON manually.</div>`;
+      return;
+    }
+
     const tools = data.result?.tools || data.tools || [];
 
     if (tools.length === 0) {
-      // Try initialize first then tools/list
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 0, params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'bolyra-benchmark', version: '0.1.0' } } }),
-      });
-      const res2 = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
-      });
-      const data2 = await res2.json();
-      const tools2 = data2.result?.tools || data2.tools || [];
-      if (tools2.length > 0) {
-        document.getElementById('tools-json').value = JSON.stringify({ tools: tools2 }, null, 2);
-        container.innerHTML = `<div style="font-size: 0.8rem; color: var(--green); padding: 8px;">✓ Loaded ${tools2.length} tools from ${title}. Click "Analyze Tools" below.</div>`;
-        return;
-      }
-      container.innerHTML = `<div style="font-size: 0.8rem; color: var(--yellow); padding: 8px;">Server responded but returned 0 tools. It may require auth or a different endpoint.</div>`;
+      container.innerHTML = `<div style="font-size: 0.8rem; color: var(--yellow); padding: 8px;">Server responded but returned 0 tools. It may require auth or a session.</div>`;
       return;
     }
 
     document.getElementById('tools-json').value = JSON.stringify({ tools }, null, 2);
     container.innerHTML = `<div style="font-size: 0.8rem; color: var(--green); padding: 8px;">✓ Loaded ${tools.length} tools from ${title}. Click "Analyze Tools" below.</div>`;
   } catch (err) {
-    container.innerHTML = `<div style="font-size: 0.8rem; color: var(--red); padding: 8px;">Failed to fetch: ${err.message}. The server may block cross-origin requests. Try pasting the JSON manually.</div>`;
+    container.innerHTML = `<div style="font-size: 0.8rem; color: var(--red); padding: 8px;">Failed to fetch: ${err.message}. Try pasting the JSON manually.</div>`;
   }
 }
 
