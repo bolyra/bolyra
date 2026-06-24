@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Spend Security Benchmark — Bolyra</title>
+  <meta name="description" content="Can your AI agent safely touch money? 10 adversarial tests. Before/after with Bolyra. Public scorecard.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-el: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --muted: #888; --faint: #555;
+      --accent: #6366f1; --green: #4ade80; --red: #f87171; --yellow: #fbbf24;
+      --border: #222;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.85em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+    nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+
+    h1 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 32px; }
+
+    .mode-bar { display: flex; gap: 8px; margin-bottom: 24px; }
+    .mode-btn {
+      flex: 1; padding: 14px; border-radius: 10px; border: 2px solid var(--border);
+      background: var(--bg-el); color: var(--muted); font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; text-align: center; transition: all 0.2s;
+    }
+    .mode-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(99,102,241,0.08); }
+    .mode-btn .score { display: block; font-size: 1.8rem; font-weight: 800; margin-top: 4px; }
+
+    .test-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+    .test-row {
+      display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+      background: var(--bg-el); border: 1px solid var(--border); border-radius: 10px;
+      transition: all 0.3s;
+    }
+    .test-row.running { border-color: var(--accent); }
+    .test-icon {
+      width: 28px; height: 28px; border-radius: 14px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+    }
+    .test-icon.pending { background: rgba(255,255,255,0.06); color: var(--faint); }
+    .test-icon.pass { background: rgba(74,222,128,0.15); color: var(--green); }
+    .test-icon.fail { background: rgba(248,113,113,0.15); color: var(--red); }
+    .test-name { font-weight: 600; font-size: 0.9rem; }
+    .test-desc { font-size: 0.78rem; color: var(--muted); }
+    .test-result { margin-left: auto; font-size: 0.8rem; font-weight: 600; font-family: "SF Mono", monospace; }
+
+    .run-btn {
+      width: 100%; padding: 16px; border-radius: 10px; border: none;
+      background: var(--accent); color: #fff; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: background 0.2s; margin-bottom: 24px;
+    }
+    .run-btn:hover { background: #818cf8; }
+    .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .summary-card {
+      background: var(--bg-el); border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px; text-align: center; margin-bottom: 20px;
+    }
+    .summary-score { font-size: 3rem; font-weight: 800; }
+    .summary-label { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+
+    .badge-box {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px; font-family: "SF Mono", monospace; font-size: 0.8rem; color: var(--muted);
+      word-break: break-all; margin-bottom: 20px;
+    }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+
+    .footer { text-align: center; font-size: 0.8rem; color: var(--faint); margin-top: 32px; }
+
+    @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+    .pulsing { animation: pulse 0.8s ease-in-out infinite; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="/" class="logo">Bolyra</a>
+    <div style="display: flex; gap: 16px; font-size: 0.9rem;">
+      <a href="/playground">Playground</a>
+      <a href="/agent-spend">Agent Spend</a>
+      <a href="https://app.bolyra.ai">Wallet</a>
+    </div>
+  </nav>
+
+  <h1>Agent Spend Security Benchmark</h1>
+  <p class="subtitle">Can your AI agent safely touch money? 10 adversarial tests. See the score with and without Bolyra.</p>
+
+  <div class="mode-bar">
+    <button class="mode-btn active" id="mode-without" onclick="setMode('without')">
+      Without Bolyra
+      <span class="score" id="score-without">—</span>
+    </button>
+    <button class="mode-btn" id="mode-with" onclick="setMode('with')">
+      With Bolyra Gateway
+      <span class="score" id="score-with">—</span>
+    </button>
+  </div>
+
+  <button class="run-btn" id="run-btn" onclick="runBenchmark()">Run Benchmark</button>
+
+  <div class="test-list" id="test-list"></div>
+
+  <div id="results" style="display: none;">
+    <div class="compare">
+      <div class="summary-card">
+        <div class="summary-score" style="color: var(--red);" id="final-without">—</div>
+        <div class="summary-label">Without Bolyra</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-score" style="color: var(--green);" id="final-with">—</div>
+        <div class="summary-label">With Bolyra Gateway</div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-bottom: 20px;">
+      <div style="font-size: 0.85rem; color: var(--muted); margin-bottom: 8px;">Share this result:</div>
+      <div class="badge-box" id="badge-md"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Simulated benchmark. No real funds moved. Tests run entirely in your browser.<br>
+    <a href="https://github.com/bolyra/bolyra">GitHub</a> · <a href="https://bolyra.ai">bolyra.ai</a> · Apache 2.0
+  </div>
+</div>
+
+<script>
+const TESTS = [
+  {
+    id: 'unauthorized-transfer',
+    name: 'Unauthorized Transfer',
+    desc: 'Agent with READ_DATA attempts a token transfer',
+    attack: 'Agent calls transfer_token without FINANCIAL permission',
+    without: { result: 'fail', detail: 'Transfer executed — no permission check' },
+    with: { result: 'pass', detail: 'Blocked — requires FINANCIAL_SMALL (bit 2)' },
+  },
+  {
+    id: 'over-limit-spend',
+    name: 'Over-Limit Spend',
+    desc: 'Agent attempts $500 transfer on $100/tx limit',
+    attack: 'Agent bypasses UI limit and sends $500 in one call',
+    without: { result: 'fail', detail: 'Transfer executed — no spend limit enforcement' },
+    with: { result: 'pass', detail: 'Blocked — $500 exceeds $100/tx policy' },
+  },
+  {
+    id: 'replay-attack',
+    name: 'Replay Attack',
+    desc: 'Attacker replays a previously valid proof bundle',
+    attack: 'Captured proof bundle replayed to execute duplicate transfer',
+    without: { result: 'fail', detail: 'Duplicate transfer executed — no replay detection' },
+    with: { result: 'pass', detail: 'Blocked — nonce already used' },
+  },
+  {
+    id: 'expired-credential',
+    name: 'Expired Credential',
+    desc: 'Agent uses a credential that expired 2 hours ago',
+    attack: 'Stale credential accepted because no expiry check',
+    without: { result: 'fail', detail: 'Accepted — no credential expiry validation' },
+    with: { result: 'pass', detail: 'Blocked — credential expired at circuit level' },
+  },
+  {
+    id: 'privilege-escalation',
+    name: 'Privilege Escalation',
+    desc: 'READ_DATA agent tries to deploy a smart contract',
+    attack: 'Agent calls deploy_contract with READ-only credential',
+    without: { result: 'fail', detail: 'Contract deployed — no per-tool gating' },
+    with: { result: 'pass', detail: 'Blocked — deploy_contract requires FINANCIAL_UNLIMITED' },
+  },
+  {
+    id: 'missing-receipt',
+    name: 'Missing Audit Receipt',
+    desc: 'Financial action executed with no audit trail',
+    attack: 'Transfer completes but no cryptographic proof exists',
+    without: { result: 'fail', detail: 'No receipt — unprovable after the fact' },
+    with: { result: 'pass', detail: 'Signed ES256K receipt with agent DID, amount, timestamp' },
+  },
+  {
+    id: 'agent-impersonation',
+    name: 'Agent Impersonation',
+    desc: 'Modified agent fork presents same OAuth token',
+    attack: 'Forked agent uses stolen OAuth to place trades',
+    without: { result: 'fail', detail: 'Accepted — OAuth identifies user, not agent' },
+    with: { result: 'pass', detail: 'Blocked — agent must present valid ZKP proof bundle' },
+  },
+  {
+    id: 'delegation-scope-escape',
+    name: 'Delegation Scope Escape',
+    desc: 'Delegated agent tries to widen its permissions',
+    attack: 'Sub-agent attempts to call tools outside delegated scope',
+    without: { result: 'fail', detail: 'Sub-agent accessed all tools — no scope enforcement' },
+    with: { result: 'pass', detail: 'Blocked — delegation scope can only narrow, never widen' },
+  },
+  {
+    id: 'daily-limit-bypass',
+    name: 'Daily Limit Bypass',
+    desc: 'Agent makes 20 small transfers to exceed daily cap',
+    attack: 'Many small transactions totaling $500 on $100/day limit',
+    without: { result: 'fail', detail: 'All transfers executed — no cumulative tracking' },
+    with: { result: 'pass', detail: 'Blocked at $100 — gateway tracks daily spend per agent' },
+  },
+  {
+    id: 'cross-chain-confusion',
+    name: 'Cross-Chain Confusion',
+    desc: 'Agent sends tokens to wrong network',
+    attack: 'Transfer intended for Base Sepolia sent on mainnet',
+    without: { result: 'fail', detail: 'Wrong-chain transfer — no network validation' },
+    with: { result: 'pass', detail: 'Blocked — proof bound to base-sepolia network' },
+  },
+];
+
+let mode = 'without';
+let running = false;
+let results = { without: null, with: null };
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-without').classList.toggle('active', m === 'without');
+  document.getElementById('mode-with').classList.toggle('active', m === 'with');
+  renderTests();
+}
+
+function renderTests() {
+  const list = document.getElementById('test-list');
+  const res = results[mode];
+  list.innerHTML = TESTS.map((t, i) => {
+    const r = res ? res[i] : null;
+    const iconClass = !r ? 'pending' : (r.result === 'pass' ? 'pass' : 'fail');
+    const iconText = !r ? (i + 1) : (r.result === 'pass' ? '✓' : '✗');
+    const resultColor = !r ? '' : (r.result === 'pass' ? 'color: var(--green)' : 'color: var(--red)');
+    return `
+      <div class="test-row ${r ? 'fade-in' : ''}" id="test-${i}">
+        <div class="test-icon ${iconClass}">${iconText}</div>
+        <div>
+          <div class="test-name">${t.name}</div>
+          <div class="test-desc">${r ? r.detail : t.desc}</div>
+        </div>
+        <div class="test-result" style="${resultColor}">${r ? r.result.toUpperCase() : ''}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function runBenchmark() {
+  if (running) return;
+  running = true;
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+
+  // Reset
+  results[mode] = [];
+  renderTests();
+
+  // Run tests one by one
+  for (let i = 0; i < TESTS.length; i++) {
+    const row = document.getElementById('test-' + i);
+    row.classList.add('running');
+    const icon = row.querySelector('.test-icon');
+    icon.classList.add('pulsing');
+
+    await sleep(400 + Math.random() * 300);
+
+    const test = TESTS[i];
+    const r = mode === 'with' ? test.with : test.without;
+    results[mode].push(r);
+
+    icon.classList.remove('pulsing', 'pending');
+    icon.classList.add(r.result === 'pass' ? 'pass' : 'fail');
+    icon.textContent = r.result === 'pass' ? '✓' : '✗';
+    row.querySelector('.test-name').nextElementSibling.textContent = r.detail;
+    row.querySelector('.test-result').textContent = r.result.toUpperCase();
+    row.querySelector('.test-result').style.color = r.result === 'pass' ? 'var(--green)' : 'var(--red)';
+    row.classList.remove('running');
+    row.classList.add('fade-in');
+  }
+
+  // Update score
+  const passed = results[mode].filter(r => r.result === 'pass').length;
+  document.getElementById('score-' + mode).textContent = passed + '/10';
+
+  // If both modes run, show comparison
+  if (results.without && results.with) {
+    const woPassed = results.without.filter(r => r.result === 'pass').length;
+    const wPassed = results.with.filter(r => r.result === 'pass').length;
+    document.getElementById('final-without').textContent = woPassed + '/10';
+    document.getElementById('final-with').textContent = wPassed + '/10';
+    document.getElementById('badge-md').textContent =
+      '![Bolyra Benchmark](https://img.shields.io/badge/Agent_Spend_Benchmark-' + wPassed + '%2F10-' + (wPassed >= 8 ? 'brightgreen' : wPassed >= 5 ? 'yellow' : 'red') + ')';
+    document.getElementById('results').style.display = 'block';
+  }
+
+  // Auto-run other mode
+  if (!results[mode === 'without' ? 'with' : 'without']) {
+    btn.textContent = 'Run ' + (mode === 'without' ? 'With Bolyra' : 'Without Bolyra');
+    btn.disabled = false;
+    running = false;
+    // Auto-switch and run
+    const otherMode = mode === 'without' ? 'with' : 'without';
+    setMode(otherMode);
+    await sleep(500);
+    await runBenchmark();
+    return;
+  }
+
+  btn.textContent = 'Run Again';
+  btn.disabled = false;
+  running = false;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Initial render
+renderTests();
+</script>
+</body>
+</html>

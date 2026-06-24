@@ -110,6 +110,14 @@ for JSXF in animations.jsx system.jsx scenes_replaycheck.jsx scenes_cli.jsx; do
     --cache-control "public, max-age=300"
 done
 
+echo "→ uploading benchmark.html to s3://$BUCKET/"
+aws s3 cp "$SCRIPT_DIR/benchmark.html" "s3://$BUCKET/benchmark.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$SCRIPT_DIR/benchmark.html" "s3://$BUCKET/benchmark" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
 echo "→ uploading agent-spend.html to s3://$BUCKET/"
 aws s3 cp "$SCRIPT_DIR/agent-spend.html" "s3://$BUCKET/agent-spend.html" \
   --content-type "text/html; charset=utf-8" \
@@ -209,7 +217,7 @@ aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground" \
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/agent-spend.html" "/agent-spend" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
   --query 'Invalidation.Id' \
   --output text)
 
