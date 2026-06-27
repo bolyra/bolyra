@@ -131,7 +131,12 @@ export class PolicyGateway {
     network?: string,
     reason?: string,
   ): GatewayResult {
-    const receiptData = `${decision}|${credential.agentDid}|${action}|${amount}|${nonce}`;
+    // Sign over all receipt fields (mock HMAC — production uses secp256k1)
+    const receiptData = [
+      decision, credential.agentDid, action, requiredPermission,
+      permissionGranted, amount, asset, network,
+      reason, nonce, dailySpent, new Date().toISOString(),
+    ].join('|');
     const signature = crypto.createHmac('sha256', 'gateway-signing-key')
       .update(receiptData).digest('hex');
 
@@ -159,8 +164,8 @@ export class PolicyGateway {
     return { allowed: decision === 'allow', receipt };
   }
 
-  getReceipts(): GatewayReceipt[] { return this.receipts; }
-  getReceiptsForAgent(agentDid: string): GatewayReceipt[] {
+  getReceipts(): readonly GatewayReceipt[] { return [...this.receipts]; }
+  getReceiptsForAgent(agentDid: string): readonly GatewayReceipt[] {
     return this.receipts.filter(r => r.agentDid === agentDid);
   }
 }

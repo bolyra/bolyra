@@ -110,7 +110,13 @@ export function issueCredential(opts: {
   const expiresAt = new Date(Date.now() + opts.expiresInHours * 3600_000).toISOString();
 
   // Sign the credential (mock — in production this is EdDSA over the credential hash)
-  const credentialData = `${agentDid}|${bitmask}|${opts.maxPerRequest}|${opts.dailyCap}|${expiresAt}`;
+  // Sign over all credential fields (mock HMAC — production uses EdDSA)
+  const credentialData = [
+    agentDid, opts.agentKeypair.publicKey, bitmask,
+    opts.maxPerRequest, opts.dailyCap,
+    opts.allowedAssets.join(','), opts.allowedNetworks.join(','),
+    issuedAt, expiresAt, opts.issuerDid,
+  ].join('|');
   const signature = crypto.createHmac('sha256', 'issuer-secret')
     .update(credentialData).digest('hex');
 
@@ -139,7 +145,13 @@ export function verifyCredential(cred: AgentCredential): { valid: boolean; reaso
   }
 
   // Verify signature
-  const credentialData = `${cred.agentDid}|${cred.permissionBitmask}|${cred.maxPerRequest}|${cred.dailyCap}|${cred.expiresAt}`;
+  // Verify signature over all fields (must match issueCredential signing)
+  const credentialData = [
+    cred.agentDid, cred.publicKey, cred.permissionBitmask,
+    cred.maxPerRequest, cred.dailyCap,
+    cred.allowedAssets.join(','), cred.allowedNetworks.join(','),
+    cred.issuedAt, cred.expiresAt, cred.issuer,
+  ].join('|');
   const expectedSig = crypto.createHmac('sha256', 'issuer-secret')
     .update(credentialData).digest('hex');
 

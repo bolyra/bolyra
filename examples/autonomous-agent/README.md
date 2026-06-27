@@ -9,7 +9,7 @@ Agents own keys and hold balances. Bolyra proves what they're allowed to do with
 | Phase | What happens |
 |-------|-------------|
 | 1. PROVISION | Agent generates keypair, human issues credential with permissions + spend limits + expiry |
-| 2. OPERATE | Agent autonomously calls paid APIs through policy gateway (8 scenarios) |
+| 2. OPERATE | Agent autonomously calls paid APIs through policy gateway (8 scenarios, 4 denied) |
 | 3. AUDIT | Every decision has a signed receipt — saved to disk for replay |
 | 4. REVOKE | Expired credential rejected — human controls the lifecycle |
 

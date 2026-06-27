@@ -180,9 +180,14 @@ async function main(): Promise<void> {
     ...credential,
     expiresAt: new Date(Date.now() - 3600_000).toISOString(), // expired 1h ago
   };
-  // Re-sign with the expired time so signature is valid for the expired credential
+  // Re-sign with the expired time so signature matches all fields
   const crypto2 = await import('crypto');
-  const credentialData = `${expiredCred.agentDid}|${expiredCred.permissionBitmask}|${expiredCred.maxPerRequest}|${expiredCred.dailyCap}|${expiredCred.expiresAt}`;
+  const credentialData = [
+    expiredCred.agentDid, expiredCred.publicKey, expiredCred.permissionBitmask,
+    expiredCred.maxPerRequest, expiredCred.dailyCap,
+    expiredCred.allowedAssets.join(','), expiredCred.allowedNetworks.join(','),
+    expiredCred.issuedAt, expiredCred.expiresAt, expiredCred.issuer,
+  ].join('|');
   expiredCred.signature = crypto2.createHmac('sha256', 'issuer-secret')
     .update(credentialData).digest('hex');
 
@@ -211,8 +216,9 @@ async function main(): Promise<void> {
   console.log('  4. REVOKE     Expired credentials are rejected. Human');
   console.log('                controls the lifecycle.');
   console.log('');
-  console.log('Agents own keys and hold balances.');
-  console.log('Bolyra proves what they\'re allowed to do with them.');
+  console.log('Autonomous agents need more than keys and balances.');
+  console.log('They need provable authorization, enforced policy, and auditable receipts.');
+  console.log('That\'s the Bolyra layer.');
 }
 
 main().catch((err) => {
