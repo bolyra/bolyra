@@ -228,6 +228,17 @@ async function signEd25519(keyPair, data) {
 
 // ── Demo presets ──
 const DEMO_PRESETS = {
+  autonomous: {
+    label: 'Autonomous Agent',
+    description: 'Full lifecycle: agent owns its keypair, human issues a scoped credential, gateway enforces policy. Shows how Bolyra proves what an agent is allowed to do.',
+    tools: [
+      { name: 'read_market_data', label: 'read_market_data', requiredBits: [0], financial: false },
+      { name: 'write_analytics', label: 'write_analytics', requiredBits: [0, 1], financial: false },
+      { name: 'buy_research', label: 'buy_research ($)', requiredBits: [0, 2], financial: true },
+      { name: 'gpu_inference', label: 'gpu_inference ($)', requiredBits: [0, 2], financial: true },
+      { name: 'wire_transfer', label: 'wire_transfer ($$)', requiredBits: [0, 3], financial: true },
+    ],
+  },
   robinhood: {
     label: 'Robinhood Agentic Trading',
     description: 'Simulates @bolyra/gateway protecting a Robinhood Agentic Trading MCP server.',
@@ -804,7 +815,7 @@ function InspectorTab({ lastReceipt }) {
 function App() {
   const [tab, setTab] = useState(0);
   const [lastReceipt, setLastReceipt] = useState(null);
-  const [demoPreset, setDemoPreset] = useState('robinhood');
+  const [demoPreset, setDemoPreset] = useState('autonomous');
 
   const tabs = ['Delegation Flow', 'Gateway Simulation', 'Receipt Inspector'];
   const preset = DEMO_PRESETS[demoPreset];
