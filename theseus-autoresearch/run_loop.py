@@ -37,12 +37,13 @@ from _shared import call_claude_cli  # noqa: E402
 from scoring import IntegrationScore, score_integration  # noqa: E402
 from run_tier2_validate import run_tier2_validate  # noqa: E402
 from run_tier3_challenge import run_tier3_challenge  # noqa: E402
-from history.plateau_detector import should_stop, load_trajectory, record_iteration  # noqa: E402
+from plateau_detector import should_stop, load_trajectory, record_iteration  # noqa: E402
 
 RUNS_DIR = HERE / "runs"
 OUTPUT_DIR = HERE / "output"
 REPORTS_DIR = HERE / "reports"
 BOARD_PATH = OUTPUT_DIR / "integration_board.json"
+TRAJECTORY_PATH = HERE / "history" / "integration_trajectory.jsonl"
 
 MIN_SCORE_THRESHOLD = 60.0
 DEFAULT_MAX_ITERATIONS = 8
@@ -329,7 +330,7 @@ def run_iteration(
 
     if not opportunities:
         print(f"[iter {iter_num}] No opportunities found. Recording empty iteration.")
-        entry = record_iteration(
+        entry = record_iteration(path=TRAJECTORY_PATH,
             iter_num=iter_num, ts=ts, new_opportunities=0,
             max_score=0, approved_count=0, conditional_count=0,
             rejected_count=0, high_scoring_count=0, board_size=len(load_board()),
@@ -342,7 +343,7 @@ def run_iteration(
 
     if not promoted:
         print(f"[iter {iter_num}] No opportunities promoted past Tier 1.")
-        entry = record_iteration(
+        entry = record_iteration(path=TRAJECTORY_PATH,
             iter_num=iter_num, ts=ts, new_opportunities=len(opportunities),
             max_score=max((o.get("scores", {}).get("total", 0) for o in judge_result.get("scored", [])), default=0),
             approved_count=0, conditional_count=0, rejected_count=0,
@@ -356,7 +357,7 @@ def run_iteration(
 
     if not tier2_promoted:
         print(f"[iter {iter_num}] No opportunities survived Tier 2 validation.")
-        entry = record_iteration(
+        entry = record_iteration(path=TRAJECTORY_PATH,
             iter_num=iter_num, ts=ts, new_opportunities=len(opportunities),
             max_score=max((c.get("scores", {}).get("total", 0) for c in tier2_result.get("cards", [])), default=0),
             approved_count=0, conditional_count=0, rejected_count=0,
@@ -383,7 +384,7 @@ def run_iteration(
     high_scoring_count = sum(1 for s in all_scores if s > MIN_SCORE_THRESHOLD)
 
     # Record trajectory
-    entry = record_iteration(
+    entry = record_iteration(path=TRAJECTORY_PATH,
         iter_num=iter_num,
         ts=ts,
         new_opportunities=len(opportunities),
@@ -469,7 +470,7 @@ def main() -> int:
 
     for i in range(1, args.max_iterations + 1):
         # Check plateau detector
-        trajectory = load_trajectory()
+        trajectory = load_trajectory(path=TRAJECTORY_PATH)
         stop, reason = should_stop(trajectory, max_iters=args.max_iterations)
         if stop:
             print(f"Stopping (plateau): {reason}")

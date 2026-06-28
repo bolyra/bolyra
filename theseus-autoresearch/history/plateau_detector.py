@@ -1,1 +1,1 @@
-../discovery-autoresearch/history/plateau_detector.py
+../../discovery-autoresearch/history/plateau_detector.py

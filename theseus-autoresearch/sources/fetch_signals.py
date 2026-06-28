@@ -1,1 +1,1 @@
-../discovery-autoresearch/sources/fetch_signals.py
+../../discovery-autoresearch/sources/fetch_signals.py
