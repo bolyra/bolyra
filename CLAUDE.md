@@ -125,3 +125,4 @@ Do not mix winners between loops.
 - IETF-style draft: `spec/draft-bolyra-mutual-zkp-auth-01.md`
 - OWASP agentic threat mapping: `docs/owasp-agentic-mapping.md`
 - Differentiation vs RFC 7662: `strategy/zk-vs-rfc7662-differentiation.md`
+- Wiki knowledge base: `wiki/_index.md` (LLM-maintained, see `WIKI.md` for schema)
