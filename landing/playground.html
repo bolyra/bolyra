@@ -811,13 +811,263 @@ function InspectorTab({ lastReceipt }) {
   );
 }
 
+// ── Tab 4: Base Wallet ──
+const BASE_WALLET_POLICY = {
+  maxPerRequest: 2.00,
+  dailyCap: 2.00,
+  allowedAssets: ['USDC'],
+  allowedNetworks: ['base-sepolia'],
+  agentDid: 'did:bolyra:base-sepolia:0x742d...bDe7',
+  permissions: ['READ_DATA', 'FINANCIAL_SMALL'],
+};
+
+const BASE_WALLET_SCENARIOS = [
+  { id: 1, request: 'NVDA research',  amount: 0.50, allowed: true },
+  { id: 2, request: 'BTC summary',    amount: 0.25, allowed: true },
+  { id: 3, request: 'GPU inference',  amount: 1.00, allowed: true },
+  { id: 4, request: 'Premium report', amount: 5.00, allowed: false, reason: 'exceeds $2.00/request cap' },
+  { id: 5, request: 'Market feed',    amount: 0.10, allowed: true },
+  { id: 6, request: 'More research',  amount: 0.50, allowed: false, reason: 'daily cap exceeded' },
+];
+
+function BaseWalletTab() {
+  const [rows, setRows] = useState(BASE_WALLET_SCENARIOS.map(() => null)); // null = pending
+  const [running, setRunning] = useState(false);
+  const [dailySpent, setDailySpent] = useState(0);
+  const [receipts, setReceipts] = useState([]);
+
+  function makeReceipt(sc, decision, spent) {
+    return {
+      type: 'BolyraWalletReceipt',
+      version: '0.7.0',
+      payload: {
+        decision,
+        request: sc.request,
+        amount: `$${sc.amount.toFixed(2)}`,
+        asset: 'USDC',
+        network: 'base-sepolia',
+        dailySpent: `$${spent.toFixed(2)}`,
+        dailyRemaining: `$${Math.max(0, BASE_WALLET_POLICY.dailyCap - spent).toFixed(2)}`,
+        agent: BASE_WALLET_POLICY.agentDid,
+        timestamp: new Date().toISOString(),
+        nonce: randomHex(16),
+      },
+      signature: {
+        algorithm: 'secp256k1-keccak256',
+        value: '0x' + randomHex(64),
+        signer: randomAddress(),
+      },
+    };
+  }
+
+  async function runDemo() {
+    setRunning(true);
+    setRows(BASE_WALLET_SCENARIOS.map(() => null));
+    setReceipts([]);
+    let spent = 0;
+
+    for (let i = 0; i < BASE_WALLET_SCENARIOS.length; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      const sc = BASE_WALLET_SCENARIOS[i];
+      let result;
+
+      if (sc.amount > BASE_WALLET_POLICY.maxPerRequest) {
+        // Exceeds per-request cap
+        result = { allowed: false, reason: sc.reason };
+      } else if (spent + sc.amount > BASE_WALLET_POLICY.dailyCap) {
+        // Exceeds daily cap
+        result = { allowed: false, reason: sc.reason };
+      } else {
+        spent += sc.amount;
+        result = { allowed: true };
+      }
+
+      const receipt = makeReceipt(sc, result.allowed ? 'ALLOW' : 'DENY', spent);
+      if (!result.allowed) {
+        receipt.payload.denyReason = result.reason;
+      }
+
+      setRows(prev => {
+        const next = [...prev];
+        next[i] = result;
+        return next;
+      });
+      setDailySpent(spent);
+      setReceipts(prev => [...prev, receipt]);
+    }
+
+    setRunning(false);
+  }
+
+  function reset() {
+    setRows(BASE_WALLET_SCENARIOS.map(() => null));
+    setDailySpent(0);
+    setReceipts([]);
+  }
+
+  const completedCount = rows.filter(r => r !== null).length;
+
+  return (
+    <div>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 16 }}>
+        Simulates a human-gated agent wallet on Base. The human sets spending limits; the agent auto-pays
+        x402 API requests within policy. No server calls -- pure client-side simulation.
+      </p>
+
+      {/* Policy Card */}
+      <div className="card">
+        <h3>Delegation Policy</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: '0.85rem' }}>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Max per request: </span>
+            <strong style={{ color: 'var(--green)' }}>${BASE_WALLET_POLICY.maxPerRequest.toFixed(2)}</strong>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Daily cap: </span>
+            <strong style={{ color: 'var(--green)' }}>${BASE_WALLET_POLICY.dailyCap.toFixed(2)}</strong>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Allowed assets: </span>
+            <code>{BASE_WALLET_POLICY.allowedAssets.join(', ')}</code>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Allowed networks: </span>
+            <code>{BASE_WALLET_POLICY.allowedNetworks.join(', ')}</code>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Agent DID: </span>
+            <code style={{ fontSize: '0.8rem' }}>{BASE_WALLET_POLICY.agentDid}</code>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Permissions: </span>
+            {BASE_WALLET_POLICY.permissions.map(p => (
+              <span key={p} className="badge badge-pass" style={{ marginRight: 6 }}>{p}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction Table */}
+      <div className="card">
+        <h3>Transaction Simulation</h3>
+        <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th style={{ padding: '8px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600 }}>#</th>
+              <th style={{ padding: '8px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600 }}>Request</th>
+              <th style={{ padding: '8px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>Amount</th>
+              <th style={{ padding: '8px', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {BASE_WALLET_SCENARIOS.map((sc, i) => {
+              const result = rows[i];
+              const isPending = result === null;
+              const isAllow = result?.allowed;
+              const rowBg = isPending ? 'transparent'
+                : isAllow ? 'rgba(74,222,128,0.05)' : 'rgba(248,113,113,0.05)';
+              const rowBorder = isPending ? 'var(--border)'
+                : isAllow ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)';
+
+              return (
+                <tr key={sc.id} style={{
+                  borderBottom: `1px solid ${rowBorder}`,
+                  background: rowBg,
+                  opacity: isPending ? 0.35 : 1,
+                  transition: 'all 0.4s ease',
+                }}>
+                  <td style={{ padding: '10px 8px' }} className="mono">{sc.id}</td>
+                  <td style={{ padding: '10px 8px' }}>{sc.request}</td>
+                  <td style={{ padding: '10px 8px', textAlign: 'right' }} className="mono">
+                    ${sc.amount.toFixed(2)}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    {isPending ? (
+                      <span className="badge badge-skip">PENDING</span>
+                    ) : isAllow ? (
+                      <span className="badge badge-pass">ALLOW</span>
+                    ) : (
+                      <span>
+                        <span className="badge badge-fail">DENY</span>
+                        <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--red)', marginTop: 2 }}>
+                          {result.reason}
+                        </span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Running total */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', padding: '12px 8px 4px',
+          fontSize: '0.82rem', borderTop: '1px solid var(--border)', marginTop: 4,
+        }}>
+          <span style={{ color: 'var(--text-muted)' }}>
+            Daily spent: <strong className="mono" style={{ color: 'var(--text)' }}>
+              ${dailySpent.toFixed(2)}
+            </strong>
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>
+            Remaining: <strong className="mono" style={{
+              color: BASE_WALLET_POLICY.dailyCap - dailySpent <= 0 ? 'var(--red)' : 'var(--green)'
+            }}>
+              ${Math.max(0, BASE_WALLET_POLICY.dailyCap - dailySpent).toFixed(2)}
+            </strong>
+          </span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button className="btn btn-primary" onClick={runDemo}
+          disabled={running || completedCount === BASE_WALLET_SCENARIOS.length}>
+          {running ? 'Running...' : completedCount > 0 ? 'Demo Complete' : 'Run Demo'}
+        </button>
+        {completedCount > 0 && !running && (
+          <button className="btn btn-secondary" onClick={reset}>Reset</button>
+        )}
+      </div>
+
+      {/* Receipt Feed */}
+      {receipts.length > 0 && (
+        <div className="card">
+          <h3>Receipt Feed</h3>
+          <div style={{
+            maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8,
+          }}>
+            {receipts.map((r, i) => (
+              <div key={i} style={{
+                background: 'var(--bg-code)', border: '1px solid var(--border)',
+                borderRadius: 6, padding: 10, borderLeft: `3px solid ${r.payload.decision === 'ALLOW' ? 'var(--green)' : 'var(--red)'}`,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: '0.75rem' }}>
+                  <span style={{ fontWeight: 600 }}>#{i + 1} {r.payload.request}</span>
+                  <Badge status={r.payload.decision === 'ALLOW' ? 'ALLOWED' : 'FAIL'} />
+                </div>
+                <pre className="mono" style={{
+                  fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all', margin: 0, lineHeight: 1.4,
+                }}>{JSON.stringify(r, null, 2)}</pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── App ──
 function App() {
   const [tab, setTab] = useState(0);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [demoPreset, setDemoPreset] = useState('autonomous');
 
-  const tabs = ['Delegation Flow', 'Gateway Simulation', 'Receipt Inspector'];
+  const tabs = ['Delegation Flow', 'Gateway Simulation', 'Receipt Inspector', 'Base Wallet'];
   const preset = DEMO_PRESETS[demoPreset];
 
   return (
@@ -849,6 +1099,7 @@ function App() {
       {tab === 0 && <DelegationTab key={demoPreset} tools={preset.tools} />}
       {tab === 1 && <GatewayTab key={demoPreset} onReceiptGenerated={setLastReceipt} preset={preset} />}
       {tab === 2 && <InspectorTab lastReceipt={lastReceipt} />}
+      {tab === 3 && <BaseWalletTab />}
 
       <div style={{ marginTop: 40, paddingTop: 20, borderTop: '1px solid var(--border)',
         fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
