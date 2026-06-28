@@ -1,0 +1,1 @@
+../patent-autoresearch/_shared.py
