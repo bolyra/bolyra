@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties (AS-blind presentation, adversarial-AS resilience) that RFC 7662 cannot match. However, the rfc7662_advocate's Attack 1 correctly demolishes 'Failure 2' (runtime-adaptive predicates): a numeric JWT claim like `\"pbm\": 47` lets the RS evaluate any bitmask predicate locally with no pre-computation. The construction never addresses this configuration, making one of its four claimed independent axes false. Additionally, the spiffe_engineer's Attack 1 notes the construction never engages with SPIFFE/WIMSE at all \u2014 a deployed workload-identity stack that achieves AS-blind presentation via bundle-cached offline verification. Baseline dominance requires proving the best non-ZK alternative provably cannot match; two of the four claimed impossibilities are either false or unaddressed against the full baseline set. The AS-blind and adversarial-AS axes survive, but the 'four independent axes' framing is overstated."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has explicit threat models (SSU and SSZK games), named cryptographic assumptions (A1-A4), and reduction sketches for both theorems \u2014 far more than most constructions. However, the cryptographer's Attack 1 and the rfc7662_advocate's Attack 2 both independently identify a fatal flaw in SSZK: the adversary controls the AS, therefore knows both credCommitment values from enrollment, and can compute nullifierHash for any sessionNonce to trivially win SSZK with advantage 1. The reduction in Theorem 2 step 3 assumes the adversary does not know the PRF key (credCommitment), but the adversarial-AS model grants exactly this knowledge. This is not a minor gap \u2014 it breaks the headline privacy claim against the headline adversary. The cryptographer's Attack 2 (colluding RSes reusing nonces) further shows SSZK's freshness assumption is not enforced by the protocol. The threat model and reductions exist but contain a provably wrong step, so this cannot score 2."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon5 credential commitment, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits(64), cumulative bit enforcement \u2014 all from the AgentPolicy circuit. The only change is Poseidon3 instead of Poseidon2 for scopeCommitment, adding ~25 constraints (0.3% increase). Total circuit cost is ~8,514 constraints, well within pot16.ptau (2^16). Proving times are stated: <0.5s rapidsnark, <3s snarkjs, both within Phase 1 budget. The auth0_pm's Attack 1 about managed inference runtimes is a deployment concern, not a primitive mapping issue \u2014 the circuit itself is implementable with existing Bolyra primitives at stated cost."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer. The cryptographer's Attack 1 (AS knows credCommitment, trivially breaks SSZK with advantage 1) is a fundamental break in the headline privacy claim \u2014 not mitigated, not within the stated threat model, and the construction's own reduction is wrong at the step that would prevent it. The cryptographer's Attack 2 (colluding RSes reuse sessionNonce to collapse unlinkability) exploits a protocol gap where nonce freshness is assumed but not enforced. The rfc7662_advocate's Attack 3 (cross-RS replay via non-RS-bound sessionNonce) shows a concrete protocol vulnerability where a network adversary can replay proofs across RSes. These are not attacks 'inside the stated threat model' \u2014 they are attacks the construction claims to defend against but fails to. The construction must fix the SSZK game, add RS-binding to nonces, and enforce nonce freshness before adversarial survival can score above 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario (\u00a77) is concrete and names a real stakeholder with real regulatory context (NCUA, GLBA). However, the cu_ciso's Attack 1 correctly identifies that cross-RS unlinkability \u2014 a core design goal \u2014 is structurally incompatible with NCUA Part 748 audit requirements. The cu_ciso's Attack 4 identifies that operational observability (error triage at 2am) is absent. The auth0_pm's Attack 4 notes that NFCU owns all three RSes, making cross-RS unlinkability a liability rather than a benefit for the stated buyer. The scenario is named and plausible but the construction's privacy properties actively harm the stated stakeholder's compliance posture, making the property nice-to-have at best and harmful at worst for this specific deployment. A scenario where RSes are genuinely adversarial to each other (cross-organization) would score 2 but is not developed."
+    }
+  },
+  "gaps": [
+    "SSZK is trivially broken when the adversary (AS) knows credCommitment from enrollment \u2014 nullifierHash = Poseidon2(credCommitment, sessionNonce) is computable by the AS. Must blind the nullifier with a prover-held secret unknown to the AS, or restrict the SSZK adversary model.",
+    "sessionNonce is not bound to RS identity \u2014 a network MITM can replay proofs cross-RS. Add RS endpoint identity as a public input or hash it into the nonce.",
+    "Colluding RSes can reuse the same sessionNonce to collapse cross-session unlinkability. The protocol must enforce joint nonce generation (agent contributes randomness) or specify CSPRNG requirements and nonce uniqueness scope.",
+    "'Failure 2' (runtime-adaptive predicates) is a strawman \u2014 numeric JWT claims allow RS-side bitmask evaluation without pre-computation. Restate the baseline comparison to focus on the genuine differentiators (AS-blind, adversarial-AS) rather than claiming four independent axes.",
+    "The construction never addresses SPIFFE/WIMSE as a baseline comparator. Must explicitly engage with WIMSE token exchange + structured claims.",
+    "The NFCU scenario is harmed by cross-RS unlinkability (conflicts with NCUA audit requirements). Either add a privileged audit path or develop a cross-organization scenario where RS unlinkability is genuinely load-bearing.",
+    "No revocation mechanism \u2014 compromised operator keys leave credentials valid until expiry. Must specify an on-chain revocation registry or credential blocklist with defined SLA.",
+    "No operational error taxonomy \u2014 PLONK.Verify returns true/false with no diagnostic information for Tier 1 operators."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,65 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "title": "Standardize proof envelope wire format with IANA content type",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add \u00a74 ABNF grammar for proof envelope, define application/bolyra-proof+json and application/bolyra-proof+cbor media types, document version negotiation semantics"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-schema.json",
+      "description": "JSON Schema for versioned proof envelope: version, circuitId, provingSystem enum (groth16|plonk), publicSignals[], proof (pi_A/pi_B/pi_C or PLONK equivalents), metadata (chain, registryAddress, timestamp)"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "ProofEnvelope type definition, serializeEnvelope() and deserializeEnvelope() for both +json and +cbor variants, version negotiation helper, schema validation"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export ProofEnvelope types and serialize/deserialize helpers from public API surface"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Round-trip serialization tests for +json and +cbor, schema validation rejection tests, version mismatch handling, backward-compatibility with legacy ad-hoc blobs"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/proof-envelope-vectors.json",
+      "description": "Canonical test vectors for both media type variants across groth16 and plonk proving systems, one vector per (circuitId, provingSystem, contentType) combination"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add content-type negotiation section showing Accept header usage, envelope construction example, and CBOR vs JSON tradeoffs"
+    }
+  ],
+  "steps": [
+    "Audit existing proof object shapes in sdk/src/ and integrations/ to inventory all ad-hoc serialization patterns that must be unified",
+    "Define ProofEnvelope v1 schema fields: version (semver string), circuitId (URI), provingSystem ('groth16'|'plonk'), publicSignals (string[]), proof ({pi_A, pi_B, pi_C} | {A, B, C, Z, T1, T2, T3, Wxi, Wxiw, eval_a, eval_b, eval_c, eval_s1, eval_s2, eval_zw, eval_r, protocol}), metadata ({chain: number, registryAddress: 0x-string, issuedAt: unix-ms})",
+    "Write JSON Schema (spec/proof-envelope-schema.json) with strict additionalProperties: false and enum constraints on provingSystem",
+    "Draft ABNF grammar in spec/draft-bolyra-mutual-zkp-auth-01.md \u00a74 covering envelope structure, field ordering rules, and content-type suffix semantics (+json vs +cbor)",
+    "Register placeholder IANA media type names application/bolyra-proof+json and application/bolyra-proof+cbor in the IETF draft per RFC 6838 \u00a74.2 conventions",
+    "Implement serializeEnvelope(envelope, format: 'json'|'cbor'): Buffer and deserializeEnvelope(buf, contentType: string): ProofEnvelope in sdk/src/envelope.ts; use cbor-x for CBOR encoding",
+    "Add schema validation on deserialization using ajv with the JSON Schema, throwing typed BolyraEnvelopeError with error codes on schema mismatch or unknown version",
+    "Update proveHandshake() and verifyHandshake() in sdk/src/index.ts to return and accept ProofEnvelope instead of raw proof objects; maintain a legacy shim for callers passing raw objects (emit deprecation warning)",
+    "Generate canonical test vectors covering (HumanUniqueness+groth16+json), (AgentPolicy+groth16+json), (AgentPolicy+plonk+json), (Delegation+groth16+cbor) with known-good publicSignals and proof fields; commit to spec/conformance/proof-envelope-vectors.json",
+    "Write round-trip tests in sdk/test/envelope.test.ts: serialize then deserialize equals original, CBOR encoding is smaller than JSON, invalid version string throws, unknown provingSystem rejects",
+    "Add conformance runner entry in spec/ that validates all test vectors against the JSON Schema and the ABNF parser",
+    "Update sdk/QUICKSTART.md with a content negotiation example and note on when to prefer CBOR (bandwidth-constrained on-chain calldata) vs JSON (REST APIs, debugging)",
+    "Run npm run build and npm run typecheck in sdk/; fix any type errors introduced by the ProofEnvelope refactor",
+    "Bump sdk package version to 0.3.0 in sdk/package.json to signal the breaking type change, update CHANGELOG.md"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cbor-x npm package for CBOR serialization",
+    "ajv npm package for JSON Schema validation",
+    "Existing circuits/build/ .vkey.json files to extract canonical publicSignals lengths per circuit",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md must exist and have \u00a74 placeholder",
+    "RFC 6838 (media type registration) and RFC 7049/8949 (CBOR) as normative references in the IETF draft"
+  ]
+}

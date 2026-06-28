@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction identifies a capability the baseline provably cannot match: proving monotonic narrowing (bitwise subset) over hidden intermediate scopes across a multi-issuer credential chain. \u00a78 correctly argues BBS+ has no predicate for bitwise subset containment over hidden bitmasks, RFC 8693 act-chain selective disclosure cannot hide intermediate sub claims, and WIMSE federation requires each org's AS to see traversing scopes. The rfc7662_advocate's Attack 1 (AS-signed hash-chain) is partially valid \u2014 an honest AS can produce a log digest without disclosing values \u2014 but the construction's rebuttal holds: the AS must hold plaintext scope values and the auditor must trust the AS's computation, whereas the PLONK proof is self-verifiable. The rfc7662_advocate's Attack 4 (registry = AS) correctly notes trust relocation but the construction's trust surface is structurally smaller: the registry is a deterministic smart contract whose logic is publicly auditable, not an opaque HTTP server. The baseline genuinely cannot prove a relational property (bitwise subset) across credentials from different issuers while hiding those credentials \u2014 this is explicitly ruled out of BBS+, WIMSE, and RFC 8693."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-defined threat model (\u00a73) with explicit adversary capabilities, a formal game (Audit Forgery Game with 5 win conditions), named cryptographic assumptions (CR-Poseidon, SPR-Poseidon, KS-PLONK, ZK-PLONK), and reduction sketches for soundness, completeness, and privacy. However, the cryptographer's attacks expose real gaps: (1) The SRS trust assumption for pot16.ptau is never stated \u2014 KS-PLONK is conditional on honest setup but the construction treats it as unconditional. (2) The privacy proof invokes ZK-PLONK but the multi-query adaptive auditor attack (Attack 2) shows HVZK is insufficient for the repeated-audit setting \u2014 SE-ZK is needed but not established. (3) The journalist variant's anonymity claim is broken by Attack 4: the initial delegationLogDigest[nonce] = Poseidon2(0, rootScopeCommitment) is on-chain and trivially invertible over a small anonymity set K. These are real formal gaps that weaken the security argument below the 2-point bar."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon2/3, Num2Bits(64), LessEqThan(64), Mux1, cumulative bit encoding \u2014 all already implemented in the Delegation circuit. The circuit cost estimate is detailed and concrete: ~10,535 constraints for MAX_HOPS=8, well within pot16.ptau's 2^16 ceiling. Proving time target is <5s PLONK (snarkjs) or <0.7s (rapidsnark). On-chain cost is ~30,000 gas per hop (one SSTORE + one Poseidon2), negligible vs existing 230K gas verification. The journalist variant adds ~2,500 constraints for BinaryMerkleRoot(depth=10), totaling ~13,000 \u2014 still within budget. The only new on-chain element is a single uint256 mapping per session. This is a Phase 1-compatible construction with stated costs."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 adversaries surfaced multiple real attacks that the construction mitigates only partially. The cryptographer's Attack 4 (journalist variant initial log digest leaks rootScopeCommitment) is a clean break of the journalist anonymity claim \u2014 the construction cannot answer it without modification. The cryptographer's Attack 3 (L2 sequencer reordering) exposes an unstated trust assumption. The spiffe_engineer's Attack 1 (off-chain hops bypass completeness) correctly shows the incompleteness win condition conflates 'executed' with 'registered.' The cu_ciso's Attack 4 (forensic dead-end after violation) and Attack 3 (hiding vendor identity from examiner violates NCUA obligations) are operationally damaging. The auth0_pm's Attack 1 (witness assembly coordination) is a real deployment gap. While the core cryptographic construction survives (narrowing soundness, chain linking), the journalist variant is broken, completeness is weaker than claimed, and several operational attacks land. This is a 1: Tier 3 surfaced real attacks that weaken the claim."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario (\u00a77) is concrete and names a real stakeholder (Navy Federal, $175B assets, NCUA examination). However, the cu_ciso's Attack 3 devastatingly argues that hiding vendor identities from an NCUA examiner violates GLBA Safeguards Rule and NCUA Part 748.A(6) \u2014 the very privacy feature the construction advertises is a regulatory finding, not a feature, in the named deployment. Attack 4 shows no forensic path after a failed proof. The auth0_pm's Attack 4 argues NCUA examiners already know vendor relationships through mandatory disclosures. The scenario is concrete but the privacy property is not load-bearing in the regulatory context as described \u2014 it is potentially counterproductive. The journalist/source variant is hypothetical and its anonymity claim is broken (cryptographer Attack 4). This drops the scenario from load-bearing to hypothetical/niche."
+    }
+  },
+  "gaps": [
+    "Journalist variant anonymity is broken: initial delegationLogDigest[nonce] = Poseidon2(0, rootScopeCommitment) is on-chain and trivially invertible over small anonymity set K. Must blind the initial accumulator seed.",
+    "SRS trust assumption for pot16.ptau is never stated. Must explicitly name the ceremony trust model (honest majority, updatable SRS, or subversion-ZK) and cite the ceremony transcript.",
+    "Privacy proof uses HVZK but the multi-query adaptive auditor setting requires SE-ZK. Must either establish SE-ZK for the PLONK variant used or restrict to single-query audits.",
+    "L2 sequencer can reorder inter-transaction delegation hops, producing a valid but semantically incorrect execution log. Must add sequencer honesty as explicit trust assumption or use order-independent accumulators.",
+    "Completeness guarantee only covers on-chain registered hops \u2014 off-chain tool calls bypass the execution log entirely. Must specify mandatory on-chain registration for any hop exercising delegated permissions.",
+    "NFCU scenario's privacy claim (hiding vendor identity from NCUA examiner) conflicts with GLBA/NCUA vendor disclosure obligations. Must separate 'hide scope values' (defensible) from 'hide participant identities' (indefensible in regulatory audit). Lead scenario should demonstrate scope-value privacy, not participant-identity privacy.",
+    "No forensic break-glass path when proof verification fails. Must specify selective-disclosure or escrow mechanism for incident response.",
+    "Witness assembly across cross-org participants has no coordination protocol specified. Must describe how multi-org private witness data is assembled without a trusted aggregator.",
+    "terminalScopeCommitment is a public output vulnerable to credential dictionary attack over known agent parameters. Must add session-specific blinding to credential commitments in the audit proof.",
+    "No revocation check in the circuit \u2014 a revoked credential still produces a valid audit proof. Must either add a non-membership proof against a revocation accumulator or explicitly scope the claim to structural properties only."
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

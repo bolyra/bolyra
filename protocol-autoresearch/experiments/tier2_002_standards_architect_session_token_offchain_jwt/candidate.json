@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_session_token_offchain_jwt",
+  "persona": "standards_architect",
+  "title": "Define JWT-based off-chain session token format for verified handshakes",
+  "dimension": "standards",
+  "description": "After a successful on-chain handshake verification, there is no standardized way to carry the result into off-chain API calls. Define a JWT profile (RFC 7519) where the payload includes the humanNullifier, agentNullifier, sessionNonce, scopeCommitment, and chain of delegation nullifiers. The JWT is signed by the relayer/verifier and has a short TTL (e.g., 5 minutes). This lets services accept Bolyra auth results without querying on-chain state per request, and gives framework integrations (LangChain, Vercel AI) a standard bearer token to pass. Deliverable: a spec document in spec/ with ABNF for the JWT claims, a reference TS implementation in sdk/, and 10+ test vectors.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "standards_architect_session_token_offchain_jwt",
+  "adoption": 21,
+  "standards": 17,
+  "completeness": 20,
+  "correctness": 15,
+  "total": 73,
+  "verdict": "consider"
+}

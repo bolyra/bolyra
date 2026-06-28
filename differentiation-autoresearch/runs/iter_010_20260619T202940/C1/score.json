@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties the baseline cannot match (AS-blind predicate evaluation, circuit-enforced implication closure, SE-NIZK). However, the rfc7662_advocate's Attack 1 (Enrollment Authority Paradox) is devastating and unaddressed: the operator who enrolls credentials on-chain IS the AS relocated to enrollment time. A compromised Columbia CU operator can enroll 0xFF bitmask credentials and all proofs verify. The spiffe_engineer's Attack 1 further shows SPIRE + ZK attestor plugin achieves the same five properties inside an existing trust framework \u2014 the construction never compares against this composition. The adversarial-AS claim is weakened to 'adversarial-AS at query time only, with trusted enrollment authority' \u2014 which boolean-return RFC 7662 + jwt-introspection-response + offline caching approximates with less operational complexity. Score 1 not 2 because the formal separation (R1CS constraint vs. AS assertion for predicate evaluation) is real but the enrollment trust gap means the baseline can approximate with extra configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is stated (Section 3) with explicit adversary capabilities, named assumptions (PLONK knowledge soundness, Poseidon CR, Baby Jubjub DL, EdDSA unforgeability, ROM, SE). Reduction sketches for soundness and privacy are provided. However, three structural gaps prevent a score of 2: (1) The cryptographer's Attack 2 shows the mqSE-IND game is definitionally vacuous \u2014 64 single-bit queries extract the full bitmask, but full extraction is not a winning condition under the game definition. The game proves indistinguishability between bitmasks that agree on all queried predicates, which is trivially true after full extraction. The privacy claim is weaker than stated. (2) The cryptographer's Attack 1 identifies that PLONK knowledge soundness (Assumption 1) is conditioned on honest SRS generation, but the construction never justifies pot16.ptau provenance or models subverted setup. (3) The cryptographer's Attack 3 shows the blinded nullifier (Poseidon3 with fresh random blindingNonce) renders rate-limiting incoherent \u2014 fresh nonces produce unlinkable nullifiers, so the RS cannot count requests per agent. The construction claims 'enables rate-limiting without cross-session linkage' but these are contradictory as implemented. Reduction sketch present but assumptions are either unjustified (SRS) or the game definition has a known gap (mqSE-IND)."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps precisely to existing Bolyra primitives: Poseidon hash (all circuits), EdDSAPoseidonVerifier (AgentPolicy G3), BinaryMerkleRoot depth 20 (shared), Baby Jubjub EdDSA, PLONK with pot16.ptau. Circuit cost is estimated at ~18,150 constraints, well within 2^16 = 65,536 budget. Proving time targets stated: <3s snarkjs, <500ms rapidsnark. Section 5 provides a complete primitive mapping table. No new cryptographic building blocks required \u2014 the construction is a restructuring of existing AgentPolicy with added public inputs and blinding. This is squarely within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 adversaries (5 personas) surfaced multiple real attacks that the construction does not fully answer: (1) cryptographer found mqSE-IND game definitionally vacuous after 64 queries \u2014 construction acknowledges 1-bit-per-query leakage but game does not capture full extraction as attack; (2) cryptographer found blinded nullifier breaks rate-limiting claim; (3) rfc7662_advocate's enrollment authority paradox relocates AS trust to enrollment time without governance; (4) cu_ciso found audit trail incompatibility with NCUA Part 748 (blinded nullifiers are not human-readable audit records); (5) all personas identified unbounded revocation window from 30-entry root history buffer; (6) spiffe_engineer and rfc7662_advocate both showed constant-time SD=0 claim is false under real Node.js/snarkjs execution. The construction mitigates some attacks (constant-time discipline addresses timing conceptually, implication closure is genuinely circuit-enforced) but multiple attacks weaken the claims materially. Score 1: Tier 3 surfaced real attacks that the construction mitigates partially but which weaken the stated claims."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Section 7 names a concrete deployment: Pacific Northwest Credit Union Consortium with Columbia Credit Union ($3.4B assets, Vancouver WA), 12-CU federated data lake, AI agent loan pre-qualification. The scenario identifies specific regulatory requirements (NCUA Letter 24-CU-03, FFIEC 2025 API security guidance, GLBA) and names the property as load-bearing: adversarial-AS soundness is required because rival CUs do not trust Columbia CU's AS, and AS-blind presentation is required because CrowdStrike-style outages have locked out consortium agents for 14 hours. The permission hiding is load-bearing (Columbia CU must not reveal FINANCIAL_UNLIMITED and ACCESS_PII to partner CUs). This is not hypothetical \u2014 it names a real institution, real assets, real regulatory framework. The cu_ciso attacks (audit trail, vendor management) weaken the regulatory alignment claim but do not negate the scenario's concreteness or the load-bearing nature of the property."
+    }
+  },
+  "gaps": [
+    "Enrollment authority trust model: construction relocates AS trust to operator at enrollment time without governance (multi-party threshold, HSM attestation, or on-chain enrollment governance). Must define who can enroll and under what constraints.",
+    "mqSE-IND game definition is vacuous after 64 single-bit queries \u2014 must either acknowledge 1-bit-per-query information-theoretic leakage as inherent and restate the privacy claim accurately, or define a game where full bitmask extraction is a winning condition.",
+    "Blinded nullifier (fresh random blindingNonce per presentation) makes rate-limiting impossible \u2014 must redesign to epoch-based nullifier (Poseidon3(commitment, mask, epoch)) or downgrade claim to proof-replay prevention only.",
+    "Revocation window from 30-entry root history buffer is unbounded \u2014 must specify mandatory root rotation interval or add emergency revocation mechanism (nullifier set, root flush) with a concrete time bound.",
+    "pot16.ptau SRS provenance not described \u2014 must either reference a public MPC ceremony with verifiable transcript or acknowledge residual trust in SRS generator, which undermines the adversarial-AS superiority claim.",
+    "SD(D_accept, D_reject) = 0 claim is false under snarkjs/Node.js runtime \u2014 must quantify residual statistical distance under realistic execution model or restrict the claim to rapidsnark with bounded subprocess variance.",
+    "NCUA audit trail gap: blinded nullifiers and scopePredicateHash are not human-readable \u2014 must specify a separate institution-internal plaintext audit log with retention policy meeting NCUA Part 748 and GLBA.",
+    "SPIRE + ZK attestor plugin composition not addressed \u2014 must argue why a ZK-extended SPIRE workload attestor is architecturally insufficient rather than comparing against vanilla SPIRE only."
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

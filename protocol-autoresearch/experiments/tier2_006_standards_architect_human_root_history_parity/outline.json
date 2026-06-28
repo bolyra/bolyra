@@ -1,0 +1,52 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "title": "Add human tree root history buffer matching agent tree's 30-root buffer",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add ROOT_HISTORY_SIZE=30 circular buffer for humanTree roots, uint256[30] humanRootHistory and uint32 humanRootIndex state vars, push new root on enrollment, and expose isKnownHumanRoot(bytes32) view function"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Update verifyHandshake() to call isKnownHumanRoot(humanMerkleRoot) instead of checking only the current humanTree root, mirroring the existing isKnownAgentRoot() pattern"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.test.ts",
+      "description": "Add test cases: (1) proof generated before enrollment still passes within 30-root window, (2) proof generated before 31st enrollment fails (root evicted), (3) proof against current root always passes, (4) isKnownHumanRoot returns false for unknown root"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add paragraph to Security Considerations section describing humanTree root staleness window: provers have a window of up to ROOT_HISTORY_SIZE (30) enrollments before their cached root is evicted; implementations SHOULD re-fetch the current root if proof generation is delayed"
+    },
+    {
+      "type": "docs",
+      "filename": "contracts/CHANGELOG.md",
+      "description": "Document the breaking behavior change: humanTree root checks now use 30-root history buffer, matching agentTree parity; verifyHandshake no longer rejects in-flight proofs during concurrent enrollments"
+    }
+  ],
+  "steps": [
+    "Inspect contracts/src/IdentityRegistry.sol to locate the existing agentTree ROOT_HISTORY_SIZE pattern, isKnownAgentRoot(), and verifyHandshake() to understand exact variable names and slot layout",
+    "Add uint256 constant ROOT_HISTORY_SIZE_HUMAN = 30 (or reuse the existing ROOT_HISTORY_SIZE constant if already defined globally)",
+    "Add state variables: bytes32[30] public humanRootHistory and uint32 public humanRootIndex (use uint32 to match agentRootIndex type if present)",
+    "In the enrollment function (enrollHuman or equivalent), after updating the humanTree Merkle root, push the new root into humanRootHistory[humanRootIndex % 30] and increment humanRootIndex",
+    "Implement isKnownHumanRoot(bytes32 root) public view returns (bool) that iterates over humanRootHistory and returns true if root matches any entry (mirror isKnownAgentRoot logic exactly)",
+    "Update verifyHandshake(): replace require(humanTree.root == humanMerkleRoot) with require(isKnownHumanRoot(humanMerkleRoot), 'Unknown human root')",
+    "Run existing contract tests to confirm no regressions: npm run test:contracts",
+    "Add the four new test cases to contracts/test/IdentityRegistry.test.ts covering root window acceptance, eviction boundary, current-root pass, and unknown-root rejection",
+    "Run full test suite to confirm all pass: npm test",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md Security Considerations with root staleness window documentation",
+    "Update contracts/CHANGELOG.md with the behavioral change note",
+    "Commit with DCO sign-off: git commit -s"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 existing agentTree ROOT_HISTORY_SIZE and isKnownAgentRoot() pattern to mirror",
+    "contracts/test/IdentityRegistry.test.ts \u2014 existing test harness for verifyHandshake()",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 IETF draft Security Considerations section",
+    "Hardhat test environment with incremental enrollment support to simulate 30+ enrollments in tests"
+  ]
+}

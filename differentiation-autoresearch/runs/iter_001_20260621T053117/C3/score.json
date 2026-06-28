@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real gap: cross-credential predicates over hidden values (intermediate scope hiding + chain length concealment + AS-compromise resistance). However, the rfc7662_advocate's Attack 1 correctly shows that a well-configured AS with filtered introspection policy can produce auditor-blind narrowing results without ZK. The construction's Section 8 conflates 'auditor doesn't see scopes' (achievable by baseline) with 'AS itself cannot reconstruct under subpoena' (genuinely irreducible). The spiffe_engineer's Attack 2 further shows a SPIRE ZKDelegationAttestation plugin could wrap the PLONK proof inside existing SPIFFE infrastructure, making the standalone protocol unnecessary. The surviving differentiator \u2014 AS-compromise resistance + trust-free verification \u2014 is real but the construction does not cleanly isolate it from the weaker claims the baseline can match. Score 1: preferable but baseline can approximate the auditor-facing properties."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat model (Section 3), named assumptions (A1: Poseidon collision resistance, A2: Baby Jubjub DL, A3: PLONK knowledge soundness in AGM+ROM), two security games (CHAIN-NARROW-SOUNDNESS, CHAIN-PRIVACY), and reduction sketches for both theorems. This is substantially above a 0. However, the cryptographer's Attack 1 (pubkey-commitment decoupling) is devastating: delegatorPubkeys[i] is never bound to credCommitments[i-1] in-circuit, so an adversary can substitute arbitrary keys without forging signatures, breaking chain-of-custody without violating any stated assumption. The cryptographer's Attack 2 (phantom root) shows rootScopeCommitment is unanchored to any registry \u2014 the CHAIN-NARROW-SOUNDNESS game is too weak because it lets the adversary freely choose the root. The rfc7662_advocate's Attack 3 confirms the same: pubkeys are private inputs unchecked against the registry, making the proof about a hypothetical chain, not the operational one. These are gaps in the formal argument itself (the game definition is incomplete), not just implementation gaps. Score 1: threat model and assumptions stated but reduction has identified holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/Poseidon4 hashing, EdDSAPoseidonVerifier on Baby Jubjub, cumulative-bit encoding (bits 4\u21923\u21922), PLONK proving system (agent-class circuit per spec), nullifier derivation pattern. Circuit cost is estimated at ~113,244 constraints fitting within 2^17, with detailed per-gadget breakdown. Proving time targets (< 4s PLONK, < 1.5s with rapidsnark) are within the Phase 1 agent-class budget (< 5s spec target). No new primitives are introduced. All operations stay within BN128 scalar field. The pot17.ptau SRS requirement is noted (though the cryptographer flags SRS provenance as unspecified, this is an operational detail not a primitive gap). Score 2: maps to existing primitives with stated cost within budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer without structural changes. The cryptographer's Attack 1 (pubkey-commitment decoupling) breaks chain integrity without violating any assumption \u2014 explicitly marked 'not in threat model, construction must address.' The cryptographer's Attack 2 and rfc7662_advocate's Attack 3 and spiffe_engineer's Attack 1 all independently identify the unanchored registry binding \u2014 credCommitments are never proven to be enrolled agents. The auth0_pm's Attack 1 (central witness assembler) shows the cross-org privacy claim fails without MPC. The auth0_pm's Attack 2 (unanchored root) is confirmed by three other personas. The cu_ciso's Attack 1 (forensics blackout) identifies a fundamental tension: the privacy guarantee destroys post-incident forensic capability required by NCUA Part 748. At least 4 attacks are explicitly outside the threat model and the construction cannot answer them without new gadgets (registry Merkle proof, pubkey-commitment binding, forensic disclosure path). Score 0: Tier 3 found attacks the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU loan pipeline scenario (Section 7) is concrete, names a real stakeholder (Navy Federal CU, 13M+ members), and identifies a regulatory requirement (NCUA examination of AI agent access controls). The whistleblower and cross-org handoff variants add depth. However, the cu_ciso's attacks significantly weaken the scenario: Attack 1 shows NCUA Part 748 breach forensics requires the ability to reconstruct what data was accessed by whom \u2014 the construction's privacy guarantee blocks this. Attack 2 shows NCUA examiners cannot accept a PLONK bit as control evidence without a regulatory evidence package. Attack 4 shows on-chain dependency creates BCP/operational resilience findings. The spiffe_engineer's Attack 3 shows rootScopeCommitment is brute-forceable in realistic deployments where credCommitments are public registry entries. The scenario is load-bearing in principle but the construction as written would generate NCUA findings rather than close them. Score 1: scenario named and plausible but regulatory fit is undermined by identified gaps."
+    }
+  },
+  "gaps": [
+    "Add in-circuit registry binding: Merkle inclusion proof that credCommitments[i] appears in the on-chain enrolled-agent tree, anchoring the root and every hop to real registrations (fixes phantom root + synthetic chain attacks from cryptographer, rfc7662_advocate, spiffe_engineer)",
+    "Add pubkey-commitment binding constraint: credCommitments[i-1] === Poseidon(delegatorPubkeys[i][0], delegatorPubkeys[i][1], delegator_salt[i]) for each active hop i > 0 (fixes cryptographer Attack 1 \u2014 chain integrity without this is vacuous)",
+    "Specify cross-org witness assembly: either require MPC/collaborative proving or explicitly scope the privacy claim to single-operator chains (fixes auth0_pm Attack 1 \u2014 'intermediate scopes private' is false when a central assembler sees everything)",
+    "Add blinding salts to rootScopeCommitment and finalScopeCommitment to prevent brute-force scope recovery from public credCommitments (fixes spiffe_engineer Attack 3)",
+    "Define a credentialed-disclosure path for post-incident forensics: a separate circuit or out-of-band mechanism where the operator can selectively open the witness to regulators under subpoena, coexisting with the default-private audit mode (fixes cu_ciso Attack 1 \u2014 NCUA Part 748 forensics)",
+    "Add a Regulatory Evidence Package specification: human-readable attestation mapping PLONK outputs to NCUA/FFIEC-recognizable control statements (fixes cu_ciso Attack 2 \u2014 examiner explainability)",
+    "Tighten Section 8 baseline comparison: isolate AS-compromise resistance as the irreducible differentiator, acknowledge that filtered introspection + signed JWT summary can approximate auditor-blind narrowing (fixes rfc7662_advocate Attacks 1-2)",
+    "Specify PLONK SRS provenance: cite a specific existing ceremony or define ceremony requirements for deployment (fixes cryptographer Attack 4)",
+    "Address multi-session unlinkability: either enforce fresh salt via auditor-issued commitment or weaken privacy claim to single-session (fixes cryptographer Attack 3)"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

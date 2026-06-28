@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The adversarial-AS property (RS verifies against on-chain root, not AS attestation) is a real separation from RFC 7662/9701, which always trusts the AS for scope truthfulness. However, rfc7662_advocate Attack 4 shows the trust bootstrapping is circular: whoever writes the on-chain commitment (often the AS/operator) can mint inflated credentials at issuance time. The construction only delivers verification-time AS resistance, not full adversarial-AS resistance. Additionally, auth0_pm Attack 4 correctly shows the constant-size claim mischaracterizes BBS+ (which is also ~constant for single-predicate disclosure). The construction is preferable to baseline in the semi-trusted-AS scenario but the baseline can approximate via RFC 9701 offline verification + RFC 8693 scope narrowing + per-RS policy. Awarding 1, not 2, because no axis is provably impossible for the baseline to match \u2014 the strongest axis (adversarial-AS) is undermined by the circular trust bootstrapping gap."
+    },
+    "formal_security_argument": {
+      "points": 0,
+      "justification": "The cryptographer attacks are devastating and unaddressed. Attack 1: adaptive predicate queries recover the full 8-bit bitmask in 8 queries \u2014 no query budget or adaptive-ZK argument is provided. Attack 2: the Poseidon5 commitment over an 8-bit bitmask has only 256 candidate values, trivially enumerable by any party knowing the other four inputs \u2014 no blinding factor exists. Attack 4: no simulator is defined or sketched, so the zero-knowledge claim is formally unverified. The construction names Groth16 and Poseidon but provides no threat model specifying adversary capabilities, no cryptographic assumption statement, and no reduction sketch. The hiding property is provably broken at 8 bits without blinding. Score 0."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The construction maps to existing Bolyra primitives (Poseidon hash, Groth16, BabyJubjub EdDSA, 8-bit cumulative bitmask) and states ~28,000 constraints fitting within pot16.ptau. This is concrete and within Phase 1 budget. However, the cryptographer's Attack 2 (missing blinding factor) means the circuit as specified is broken for its stated purpose \u2014 adding a blinding term changes the circuit design, constraint count, and witness structure. The construction maps to primitives but the actual circuit that would be correct (with blinding, with adaptive-query mitigation) has unknown cost. Awarding 1."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks remain unanswered and are outside the stated threat model. Cryptographer Attack 1 (adaptive bit recovery) is critical and unmitigated. Cryptographer Attack 2 (8-bit preimage enumeration) breaks the hiding property entirely. auth0_pm Attack 1 (proving latency on hot path) collapses the runtime-adaptive claim. rfc7662_advocate Attack 4 (circular trust bootstrapping) undermines the adversarial-AS axis. cu_ciso Attacks 1-4 (regulatory mapping void, audit trail tension, on-chain SLA, opKey custody) are all marked not-in-threat-model. The construction cannot answer these attacks as currently specified."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Navy Federal CU API gateway is named as a concrete deployment scenario with a specific use case (fintech agents proving READ_DATA | FINANCIAL_SMALL without leaking other permissions). However, cu_ciso attacks show this scenario is not load-bearing as stated: no regulatory mapping to NCUA Part 748 or NIST 800-53 controls, no audit trail for post-breach forensics (ZK privacy directly conflicts with GLBA incident documentation requirements), and no on-chain SLA acceptable to a $180B credit union's vendor management policy. The scenario is named but not defended against the regulatory reality of the named stakeholder. Awarding 1 \u2014 scenario exists but is hypothetical in its current form."
+    }
+  },
+  "gaps": [
+    "Add 128-bit blinding randomness to Poseidon commitment to prevent 8-bit bitmask enumeration (cryptographer Attack 2)",
+    "Define query budget or prove ZK under adaptive requiredScopeMask selection to prevent full bitmask recovery in 8 queries (cryptographer Attack 1)",
+    "Provide simulator sketch and specify whether HVZK or malicious-verifier ZK is claimed (cryptographer Attack 4)",
+    "Resolve circular trust bootstrapping: specify who writes on-chain commitments and prove opKey \u2260 AS key, or scope adversarial-AS to verification-time only (rfc7662_advocate Attack 4)",
+    "Address proving latency on API hot path: either benchmark under realistic gateway SLAs or redefine runtime-adaptive to acknowledge session-setup-time proving (auth0_pm Attack 1)",
+    "Add NIST SP 800-53 control mapping table (AC-3, AC-6, IA-5) for the CU CISO scenario (cu_ciso Attack 1)",
+    "Specify RS-side audit logging of requiredScopeMask and proof acceptance to satisfy GLBA/NCUA incident documentation (cu_ciso Attack 2)",
+    "Define on-chain RPC SLA, staleness window, and RS fallback behavior when chain is unavailable (cu_ciso Attack 3, auth0_pm Attack 3)",
+    "Specify opKey custody requirements (HSM), rotation procedure, and compromise revocation runbook (cu_ciso Attack 4)",
+    "Correct or drop the constant-size BBS+ comparison \u2014 BBS+ single-predicate proof is also effectively constant-size (auth0_pm Attack 4, spiffe_engineer Attack 4)",
+    "Address WIMSE token exchange gap: explain why WIMSE selective disclosure is insufficient in adversarial-AS scenario (spiffe_engineer Attack 2)",
+    "Document pot16.ptau ceremony transcript or adopt updatable setup to address subverted-setup proof forgery (cryptographer Attack 3)"
+  ],
+  "strength": 3,
+  "verdict": "drop"
+}

@@ -1,0 +1,298 @@
+{
+  "$schema": "https://bolyra.ai/schemas/did-resolution-test-vectors/v1",
+  "version": "1.0.0",
+  "description": "Test vectors for did:bolyra DID resolution algorithm conformance",
+  "vectors": [
+    {
+      "id": "human-enrolled",
+      "description": "Valid enrolled human identity resolves to full DID Document",
+      "input": {
+        "did": "did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": {
+        "getEnrollmentStatus": {
+          "enrolled": true,
+          "publicKey": [
+            "12345678901234567890123456789012345678901234567890123456789012345",
+            "98765432109876543210987654321098765432109876543210987654321098765"
+          ],
+          "blockNumber": 1000
+        },
+        "isRevoked": false,
+        "getAgentCredential": {
+          "agentId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "modelHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "operatorPubKey": ["0", "0"],
+          "permissions": 0,
+          "expiry": 0
+        },
+        "getMerkleRoot": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      },
+      "expectedOutput": {
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/eddsa-2022/v1",
+            "https://bolyra.ai/ns/v1"
+          ],
+          "id": "did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#key-1",
+              "type": "EdDSAVerificationKey2022",
+              "controller": "did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+              "publicKeyMultibase": "z__COMPUTED_FROM_BABYJUBJUB_POINT__"
+            }
+          ],
+          "authentication": ["did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#key-1"],
+          "assertionMethod": ["did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#key-1"],
+          "service": [
+            {
+              "id": "did:bolyra:0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#proof-exchange",
+              "type": "BolyraProofExchange",
+              "serviceEndpoint": "https://relay.bolyra.ai/exchange"
+            }
+          ]
+        },
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocumentMetadata": {
+          "versionId": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        }
+      }
+    },
+    {
+      "id": "agent-enrolled",
+      "description": "Valid enrolled agent identity resolves to DID Document with agent-policy service",
+      "input": {
+        "did": "did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": {
+        "getEnrollmentStatus": {
+          "enrolled": false,
+          "publicKey": ["0", "0"],
+          "blockNumber": 0
+        },
+        "isRevoked": false,
+        "getAgentCredential": {
+          "agentId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "modelHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "operatorPubKey": [
+            "11111111111111111111111111111111111111111111111111111111111111111",
+            "22222222222222222222222222222222222222222222222222222222222222222"
+          ],
+          "permissions": 7,
+          "expiry": 1735689600
+        },
+        "getMerkleRoot": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "expectedOutput": {
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/eddsa-2022/v1",
+            "https://bolyra.ai/ns/v1"
+          ],
+          "id": "did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#key-1",
+              "type": "EdDSAVerificationKey2022",
+              "controller": "did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "publicKeyMultibase": "z__COMPUTED_FROM_BABYJUBJUB_POINT__"
+            }
+          ],
+          "authentication": ["did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#key-1"],
+          "assertionMethod": ["did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#key-1"],
+          "service": [
+            {
+              "id": "did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#proof-exchange",
+              "type": "BolyraProofExchange",
+              "serviceEndpoint": "https://relay.bolyra.ai/exchange"
+            },
+            {
+              "id": "did:bolyra:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#agent-policy",
+              "type": "BolyraAgentPolicy",
+              "serviceEndpoint": "https://relay.bolyra.ai/agent/policy",
+              "permissions": 7
+            }
+          ]
+        },
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocumentMetadata": {
+          "versionId": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
+    },
+    {
+      "id": "revoked-identity",
+      "description": "Revoked identity returns deactivated=true with minimal DID Document",
+      "input": {
+        "did": "did:bolyra:0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": {
+        "getEnrollmentStatus": {
+          "enrolled": true,
+          "publicKey": [
+            "55555555555555555555555555555555555555555555555555555555555555555",
+            "66666666666666666666666666666666666666666666666666666666666666666"
+          ],
+          "blockNumber": 500
+        },
+        "isRevoked": true,
+        "getAgentCredential": {
+          "agentId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "modelHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "operatorPubKey": ["0", "0"],
+          "permissions": 0,
+          "expiry": 0
+        },
+        "getMerkleRoot": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      },
+      "expectedOutput": {
+        "didDocument": {
+          "@context": ["https://www.w3.org/ns/did/v1"],
+          "id": "did:bolyra:0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddead"
+        },
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocumentMetadata": {
+          "deactivated": true
+        }
+      }
+    },
+    {
+      "id": "not-found",
+      "description": "Non-existent commitment returns notFound error",
+      "input": {
+        "did": "did:bolyra:0x0000000000000000000000000000000000000000000000000000000000000001",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": {
+        "getEnrollmentStatus": {
+          "enrolled": false,
+          "publicKey": ["0", "0"],
+          "blockNumber": 0
+        },
+        "isRevoked": false,
+        "getAgentCredential": {
+          "agentId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "modelHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "operatorPubKey": ["0", "0"],
+          "permissions": 0,
+          "expiry": 0
+        },
+        "getMerkleRoot": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      },
+      "expectedOutput": {
+        "didDocument": null,
+        "didResolutionMetadata": {
+          "error": "notFound",
+          "message": "Commitment not enrolled"
+        },
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "malformed-did",
+      "description": "Malformed DID string missing prefix returns invalidDid error",
+      "input": {
+        "did": "bolyra:0x1a2b3c4d",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": null,
+      "expectedOutput": {
+        "didDocument": null,
+        "didResolutionMetadata": {
+          "error": "invalidDid",
+          "message": "Missing did:bolyra: prefix"
+        },
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "invalid-hex",
+      "description": "DID with non-hex characters returns invalidDid error",
+      "input": {
+        "did": "did:bolyra:0xZZZZinvalidhex",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": null,
+      "expectedOutput": {
+        "didDocument": null,
+        "didResolutionMetadata": {
+          "error": "invalidDid",
+          "message": "Invalid hex commitment"
+        },
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "no-0x-prefix",
+      "description": "DID without 0x prefix resolves identically to the 0x-prefixed form",
+      "input": {
+        "did": "did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "registryAddress": "0x1234567890abcdef1234567890abcdef12345678"
+      },
+      "onChainState": {
+        "getEnrollmentStatus": {
+          "enrolled": true,
+          "publicKey": [
+            "12345678901234567890123456789012345678901234567890123456789012345",
+            "98765432109876543210987654321098765432109876543210987654321098765"
+          ],
+          "blockNumber": 1000
+        },
+        "isRevoked": false,
+        "getAgentCredential": {
+          "agentId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "modelHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "operatorPubKey": ["0", "0"],
+          "permissions": 0,
+          "expiry": 0
+        },
+        "getMerkleRoot": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      },
+      "expectedOutput": {
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/eddsa-2022/v1",
+            "https://bolyra.ai/ns/v1"
+          ],
+          "id": "did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#key-1",
+              "type": "EdDSAVerificationKey2022",
+              "controller": "did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+              "publicKeyMultibase": "z__COMPUTED_FROM_BABYJUBJUB_POINT__"
+            }
+          ],
+          "authentication": ["did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#key-1"],
+          "assertionMethod": ["did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#key-1"],
+          "service": [
+            {
+              "id": "did:bolyra:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890#proof-exchange",
+              "type": "BolyraProofExchange",
+              "serviceEndpoint": "https://relay.bolyra.ai/exchange"
+            }
+          ]
+        },
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocumentMetadata": {
+          "versionId": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        }
+      }
+    }
+  ]
+}

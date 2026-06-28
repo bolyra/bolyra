@@ -1,0 +1,82 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "title": "Standardized proof envelope with application/bolyra+json content type",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope.md",
+      "description": "Normative spec for the application/bolyra+json envelope format: schema, versioning, required/optional fields, and MIME type registration rationale"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript types (ProofEnvelope, ProofType enum) and serialize/deserialize/validate helpers"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Update proveHandshake and delegate return types to ProofEnvelope"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.schema.json",
+      "description": "JSON Schema for ProofEnvelope used by conformance runner and runtime validation"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests: round-trip serialization, validation rejects malformed envelopes, version field enforcement"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/middleware.ts",
+      "description": "Update LangChain credential middleware to accept and emit ProofEnvelope instead of ad-hoc proof objects"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/mcp/src/index.ts",
+      "description": "Update MCP integration to use ProofEnvelope for all proof payloads"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/envelope-vectors.json",
+      "description": "Conformance test vectors: valid and invalid envelopes covering each proofType"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/envelope.test.ts",
+      "description": "Conformance runner assertions against envelope-vectors.json"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope.md",
+      "description": "Developer guide: what the envelope is, how to construct one, HTTP usage with Content-Type header, migration from ad-hoc serialization"
+    }
+  ],
+  "steps": [
+    "Define the ProofEnvelope JSON schema: {version: string, proofType: 'handshake'|'delegation'|'agent_policy', publicSignals: string[], proof: object, metadata: {issuedAt: number, nonce?: string, [key: string]: unknown}}",
+    "Write sdk/src/envelope.schema.json capturing the schema with required fields and additionalProperties: false on core fields",
+    "Implement sdk/src/envelope.ts with TypeScript interfaces, ProofType enum, createEnvelope(), validateEnvelope() (AJV or zod), and serializeEnvelope()/deserializeEnvelope() helpers",
+    "Update proveHandshake() in sdk/src/index.ts to wrap snarkjs proof output into ProofEnvelope before returning",
+    "Update delegate() (and any other proof-returning SDK methods) similarly",
+    "Add Content-Type constant BOLYRA_CONTENT_TYPE = 'application/bolyra+json' to sdk/src/envelope.ts",
+    "Update LangChain middleware (integrations/langchain) to emit and accept ProofEnvelope, removing existing ad-hoc serialization",
+    "Update MCP integration (integrations/mcp) to use ProofEnvelope for proof payloads in tool responses",
+    "Write envelope-vectors.json conformance test vectors covering: valid handshake envelope, valid delegation envelope, missing version field, unknown proofType, malformed proof object",
+    "Write conformance runner test (spec/conformance/envelope.test.ts) that validates each vector against the schema and expected pass/fail outcome",
+    "Write SDK unit tests (sdk/test/envelope.test.ts) for round-trip, validation, and edge cases",
+    "Write spec/proof-envelope.md with normative field definitions, MIME type rationale, and HTTP usage examples",
+    "Write docs/proof-envelope.md developer guide with migration notes from pre-envelope integrations",
+    "Run npm run test:circuits:fast and npm run test:contracts to confirm no regressions",
+    "Update sdk/QUICKSTART.md to show the envelope shape in the proveHandshake example"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk proveHandshake and delegate APIs (existing)",
+    "snarkjs proof output format (groth16: {pi_a, pi_b, pi_c, protocol, curve})",
+    "integrations/langchain credential middleware (existing)",
+    "integrations/mcp MCP server integration (existing)",
+    "spec/conformance runner infrastructure (existing or to be created alongside)",
+    "AJV or zod for runtime JSON Schema validation in the SDK"
+  ]
+}

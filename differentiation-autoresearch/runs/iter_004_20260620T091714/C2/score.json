@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction achieves cryptographic nullifier separation per scope, which is stronger than PPID+RFC 8707 policy filtering. However, the rfc7662_advocate's Attack 1 correctly identifies that PPID already eliminates RS-to-RS linkability. The construction's genuine advantage is issuance-time scope hiding (AS never sees which scopeId the agent will use), but this distinction is not explicitly argued in the construction text. Attack 2 further narrows the gap: JWT introspection caching already removes the AS from the hot path, limiting AS visibility to coarse issuance events. The baseline can approximate with PPID + audience-bound tokens + cached introspection responses. Construction is preferable but baseline approximates."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction names IND-UNL-AS-DL, states a threat model (adversarial AS with DL-BJJ break), names Poseidon2-PRF assumption, and provides a two-layer PRF reduction sketch. However, the cryptographer's attacks expose critical gaps: (1) no simulator is produced for the ZK claim \u2014 HVZK vs malicious-verifier ZK is unspecified (Attack 2), (2) the independence assumption between operatorPrivateKey compromise and blindingSalt compromise is unargued (rfc7662_advocate Attack 3), (3) Groth16 CRS trust assumption is not stated as a named hardness assumption (cryptographer Attack 4), (4) blindingSalt generation oracle and its privacy assumptions are not formally specified (cryptographer Attack 3). Threat model is stated but reduction has real gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to existing Bolyra primitives: Poseidon2 hash (already used), Groth16 AgentPolicy circuit, BabyJubJub EdDSA. Circuit cost is explicitly stated: +500 constraints bringing total to 16,450, which fits under pot16.ptau (2^16 = 65,536 constraint capacity). Two new constraints (9 and 10) are well-defined Poseidon2 evaluations. This is squarely within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary and all 5 personas found attacks the construction cannot answer: (1) blindingSalt lifecycle/custody is unspecified \u2014 auth0_pm, cu_ciso, spiffe_engineer, cryptographer all flag this independently; (2) BSA/AML compliance conflict \u2014 cu_ciso shows unlinkability from the AS directly contradicts SAR filing obligations for the named CU scenario; (3) timing/metadata side channels explicitly acknowledged as unresolved in the construction's own gap list; (4) no simulator for ZK claim; (5) scopeId namespace governance gap; (6) provisioning oracle attack (who generates blindingSalt, is AS excluded?). Multiple attacks lie outside the stated threat model and the construction cannot answer them. This is worse than 'mitigates but weakens' \u2014 fundamental design gaps remain."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: cross-CU member agent and healthcare agent delegation. However, cu_ciso's Attack 2 devastatingly shows that the CU scenario is not just hypothetical but actively contradicted by BSA/AML obligations \u2014 the CU is legally required to link member activity, making unlinkability a compliance liability rather than a load-bearing feature. The healthcare scenario faces similar HIPAA audit trail requirements. The scenarios are named but the construction's strongest property conflicts with the regulatory requirements of the named stakeholders, making them hypothetical at best."
+    }
+  },
+  "gaps": [
+    "blindingSalt lifecycle must be fully specified: generation procedure (CSPRNG, offline, no AS involvement), storage model (TPM/HSM vs software), rotation ceremony, recovery path, and explicit exclusion of AS from provisioning",
+    "Must distinguish operator-unlinkability (AS cannot link) from third-party-unlinkability (colluding RSes cannot link) \u2014 CU scenario requires the AS to retain an audit mapping for BSA/AML/SAR compliance while preserving unlinkability to external parties only",
+    "Produce a formal simulator for the ZK property: specify HVZK or malicious-verifier ZK, and ground the cross-scope unlinkability reduction on the simulator proof",
+    "Address timing/metadata side channels: proof submission timestamps, gas patterns, relayer identity create a linkage graph independent of nullifier separation \u2014 need protocol-level mitigation (batching, fixed cadence, or mixing) or explicit scope-out",
+    "Specify scopeId governance: who mints scopeId, how global uniqueness is enforced, and what prevents colluding RS pairs from registering identical scopeId values",
+    "State Groth16 CRS trust assumption as a named hardness assumption and explain whether PLONK universal SRS is preferred for the unlinkability property specifically",
+    "Argue the independence assumption between operatorPrivateKey compromise and blindingSalt compromise, or explicitly scope IND-UNL-AS-DL to exclude full device compromise",
+    "Add explicit comparison to PPID + JWT introspection caching, arguing why issuance-time scope hiding matters beyond what the baseline provides"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

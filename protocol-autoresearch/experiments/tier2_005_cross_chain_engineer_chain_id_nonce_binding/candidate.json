@@ -1,0 +1,16 @@
+{
+  "id": "cross_chain_engineer_chain_id_nonce_binding",
+  "persona": "cross_chain_engineer",
+  "title": "Bind sessionNonce to chainId to prevent cross-chain replay",
+  "dimension": "correctness",
+  "description": "The current sessionNonce is chain-agnostic: a valid handshake proof generated for Base can be replayed on Arbitrum or Polygon if the same IdentityRegistry is deployed there with the same roots. Fix: change nonceBinding in HumanUniqueness and nullifierHash in AgentPolicy to include block.chainid as a Poseidon input (nonceBinding = Poseidon3(nullifierHash, sessionNonce, chainId)). Update IdentityRegistry.verifyHandshake to pass block.chainid as the expected chainId public signal. This is a prerequisite for any multi-chain deployment.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "cross_chain_engineer_chain_id_nonce_binding",
+  "adoption": 17,
+  "standards": 16,
+  "completeness": 18,
+  "correctness": 20,
+  "total": 71,
+  "verdict": "consider"
+}

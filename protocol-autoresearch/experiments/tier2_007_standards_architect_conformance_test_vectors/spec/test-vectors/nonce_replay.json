@@ -1,0 +1,44 @@
+{
+  "id": "nonce_replay",
+  "description": "Replayed (humanProof, agentProof) pair with a previously-used sessionNonce. The circuit will generate a valid witness (it is stateless), but the verifier MUST reject the proof because the nullifierHash has already been consumed for this scope.",
+  "steps": [
+    {
+      "circuit": "HumanUniqueness",
+      "input_witnesses": {
+        "identityTreeRoot": "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+        "nullifierHash": "FROZEN_BY_EXTRACT",
+        "scope": "42",
+        "secret": "12345678901234567890",
+        "identityNonce": "1",
+        "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+        "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+      },
+      "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "42"],
+      "expected_result": "pass"
+    },
+    {
+      "circuit": "AgentPolicy",
+      "input_witnesses": {
+        "agentTreeRoot": "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+        "nullifierHash": "FROZEN_BY_EXTRACT",
+        "currentTimestamp": "1719000000",
+        "expiryTimestamp": "1750000000",
+        "agentSecret": "98765432109876543210",
+        "agentNonce": "2",
+        "policyScope": "42",
+        "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+        "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+      },
+      "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "1719000000", "1750000000"],
+      "expected_result": "pass"
+    }
+  ],
+  "expected_result": "fail",
+  "failure_reason": "Nonce replay: the (nullifierHash, scope) pair from the HumanUniqueness step has already been consumed in a prior session. The verifier must maintain a nullifier set and reject duplicate nullifierHash values for the same scope. This is identical to the valid_handshake witness — the circuit is stateless, so replay detection is the verifier's responsibility.",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "hand-authored",
+    "notes": "This vector reuses the same witness inputs as valid_handshake. The replay semantics are: if valid_handshake was already verified, this identical proof must be rejected."
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "id": "sdk_designer_session_token_offchain",
+  "title": "Ship SD-JWT session tokens for off-chain proof reuse",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/SessionTokenIssuer.ts",
+      "description": "Mints SD-JWT session tokens from a HandshakeResult; binds nullifierHash, scopeCommitment, agentId, iat, exp (configurable TTL 60-3600s), and selective-disclosure salt per claim."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/SessionTokenVerifier.ts",
+      "description": "Verifies SD-JWT token signature, expiry, and presence of requiredClaims; returns decoded payload or throws typed errors."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/types.ts",
+      "description": "SessionTokenOptions (ttl, issuer, audience, selectiveDisclosureFields), SessionTokenPayload, and SessionVerifyOptions (requiredClaims, clockSkew) interfaces."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/index.ts",
+      "description": "Barrel export for SessionTokenIssuer, SessionTokenVerifier, and types."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export session module from main SDK entry point."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/SessionTokenIssuer.test.ts",
+      "description": "Unit tests: mint returns compact JWT, TTL enforced, required claims present, nullifierHash and scopeCommitment bound correctly."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/SessionTokenVerifier.test.ts",
+      "description": "Unit tests: valid token passes, expired token throws SessionTokenExpiredError, missing requiredClaims throws SessionTokenClaimMissingError, tampered signature throws SessionTokenInvalidError."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/integration.test.ts",
+      "description": "End-to-end: verifyHandshake() \u2192 SessionTokenIssuer.mint() \u2192 SessionTokenVerifier.verify() round-trip with real handshake fixture."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-offchain.md",
+      "description": "Protocol spec: SD-JWT claim set definition, selective disclosure fields, TTL policy, replay prevention via nullifierHash binding, security considerations (token theft, clock skew)."
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add 'Session Tokens' section showing 5-line mint+verify usage pattern after verifyHandshake()."
+    }
+  ],
+  "steps": [
+    "Add jose (or @sd-jwt/core) as a dependency in sdk/package.json; choose a library that supports selective disclosure natively to avoid rolling crypto.",
+    "Define SessionTokenPayload type: { nullifierHash: string, scopeCommitment: string, agentId: string, humanMerkleRoot: string, iat: number, exp: number } plus _sd array for selective disclosure.",
+    "Define SessionTokenOptions: { ttl: number (default 300, min 60, max 3600), issuer: string, audience?: string, signingKey: CryptoKey | string, selectiveDisclosureFields?: Array<keyof SessionTokenPayload> }.",
+    "Implement SessionTokenIssuer.mint(handshakeResult: HandshakeResult, opts: SessionTokenOptions): Promise<string> \u2014 extract claims from handshakeResult, apply SD-JWT encoding for selective fields, sign with HS256 or ES256 depending on key type, return compact token string.",
+    "Implement SessionTokenVerifier.verify(token: string, opts: SessionVerifyOptions): Promise<SessionTokenPayload> \u2014 decode header, verify signature, check exp vs Date.now() with configurable clockSkew (default 30s), assert all requiredClaims are disclosed, return decoded payload.",
+    "Define typed error classes: SessionTokenExpiredError, SessionTokenInvalidError, SessionTokenClaimMissingError \u2014 all extend BolyraError base so existing catch blocks work.",
+    "Write unit tests for issuer: happy path, TTL boundary (59s rejected at config time), selective disclosure omits undisclosed fields from decoded payload.",
+    "Write unit tests for verifier: tampered payload fails, expired token throws correct error, missing required claim throws correct error, clock skew tolerance respected.",
+    "Write integration test using real handshake fixture (mock prover output) to confirm full mint\u2192verify round-trip without re-proving.",
+    "Export SessionTokenIssuer and SessionTokenVerifier from sdk/src/index.ts; bump SDK version to v0.3.0 in package.json.",
+    "Update spec/session-token-offchain.md with claim set table, replay-prevention rationale (nullifierHash is single-use at proof time; token is short-lived to bound window), and recommended TTL guidance per threat level.",
+    "Add 'Session Tokens' section to sdk/QUICKSTART.md with minimal 5-line example and note that tokens replace per-call ZK proving."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose >=5.0 or @sd-jwt/core for SD-JWT encoding/decoding",
+    "HandshakeResult type from sdk/src/core/types.ts (nullifierHash, scopeCommitment, agentId, humanMerkleRoot)",
+    "BolyraError base class from sdk/src/errors.ts",
+    "Existing verifyHandshake() function as the upstream entry point",
+    "Node 18+ SubtleCrypto for key generation in tests"
+  ]
+}

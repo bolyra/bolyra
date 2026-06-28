@@ -1,0 +1,73 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Specify DID resolution algorithm with on-chain state queries",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Updated DID method spec: W3C DID Core \u00a77.1 compliant read() and resolve() operations with pseudocode, error codes (invalidDid, notFound, deactivated, methodNotSupported, internalError), DID Document structure including verificationMethod (EdDSA/BabyJubJub), serviceEndpoints for proof exchange, and deactivated metadata for revoked identities"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-resolution-algorithm.md",
+      "description": "Standalone resolution algorithm document: step-by-step resolver pipeline from DID string parsing through on-chain IdentityRegistry.sol queries to DID Document construction, including caching hints and deterministic ordering rules"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/did-resolution-vectors.json",
+      "description": "5+ test vectors covering: valid human DID resolution, valid agent DID resolution, revoked identity (deactivated=true), non-existent commitment (notFound), and malformed DID string (invalidDid)"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Test vector schema documentation: field definitions, how to run conformance checks against the vectors, and expected resolver output format"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/interfaces/IIdentityRegistry.sol",
+      "description": "Minimal Solidity interface exposing the read surface needed by resolvers: getEnrollmentStatus(commitment), getMerkleRoot(), isRevoked(nullifierHash), getAgentCredential(agentId) \u2014 documents the exact query pattern the resolution algorithm depends on"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "TypeScript implementation of the resolution algorithm: DIDResolver class implementing resolve(did, options) \u2192 DIDResolutionResult, wrapping ethers.js calls to IdentityRegistry and constructing the DID Document per spec"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Unit tests for DIDResolver: mocked IdentityRegistry responses covering all test-vector scenarios, error path coverage, and DID Document structural validation"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-resolution-quickstart.md",
+      "description": "Operator guide: how to instantiate a Bolyra DID resolver, configure RPC endpoint for IdentityRegistry, and integrate with the W3C did-resolver npm package"
+    }
+  ],
+  "steps": [
+    "Audit existing spec/did-method-bolyra.md to catalog what DID syntax and partial resolution hints already exist; note gaps against W3C DID Core \u00a77.1 checklist (read, resolve, error codes, DID Document fields)",
+    "Define the canonical DID Document structure: id field (did:bolyra:<commitment>), verificationMethod array (type EdDSAVerificationKey2022, publicKeyMultibase encoding of BabyJubJub point), authentication and assertionMethod referencing the verificationMethod, service array with type BolyraProofExchange pointing to proof-exchange endpoint",
+    "Define deactivated metadata handling: when IdentityRegistry.isRevoked(nullifierHash) returns true, resolver MUST set didDocumentMetadata.deactivated=true and return an empty DID Document body per W3C spec",
+    "Write pseudocode for parse(did) step: validate did:bolyra: prefix, extract <commitment> hex string, return error code invalidDid if malformed",
+    "Write pseudocode for read(commitment, options) step: call IdentityRegistry.getEnrollmentStatus(commitment) on the configured chain; if not enrolled return notFound; if revoked return deactivated; else return enrollment record with current Merkle root and BabyJubJub public key",
+    "Write pseudocode for resolve(did, options) step: call parse(), then read(), then construct DIDResolutionResult with didDocument, didDocumentMetadata (created, updated, versionId = Merkle root block number), and didResolutionMetadata (contentType application/did+ld+json, error if any)",
+    "Define all error codes as an enum with W3C-mandated string values: invalidDid, notFound, deactivated, methodNotSupported, internalError; document under which on-chain or parse conditions each is returned",
+    "Author 5 test vectors in spec/test-vectors/did-resolution-vectors.json: (1) enrolled human identity \u2192 full DID Document, (2) enrolled agent credential \u2192 DID Document with agent-specific service endpoint, (3) revoked nullifier \u2192 deactivated=true empty document, (4) commitment not in registry \u2192 notFound error, (5) malformed DID string missing prefix \u2192 invalidDid error",
+    "Draft IIdentityRegistry.sol interface exposing exactly the view functions the resolution algorithm queries, with NatSpec documenting the return types and revert conditions",
+    "Implement DIDResolver TypeScript class in sdk/src/resolver.ts: constructor takes ethers.Provider + registry address, resolve() method maps DID string to DIDResolutionResult, uses ethers multicall for batching getEnrollmentStatus + isRevoked in a single RPC round-trip",
+    "Write unit tests in sdk/test/resolver.test.ts using sinon stubs for the IdentityRegistry contract; assert exact DID Document field values against each test vector from the JSON file",
+    "Update spec/did-method-bolyra.md in-place: add \u00a77 Resolution section with the pseudocode, error code table, DID Document example, and a pointer to spec/test-vectors/",
+    "Write docs/did-resolution-quickstart.md: three-step operator guide (install @bolyra/sdk, configure resolver with RPC URL + registry address, call resolver.resolve(did))",
+    "Run tsc --noEmit on sdk/ to confirm TypeScript types are coherent; run npm test in sdk/ to confirm all resolver unit tests pass",
+    "Perform a final gap check: verify the spec language satisfies W3C DID Core conformance criteria \u00a77.1 (all MUST/SHOULD terms accounted for), cross-reference against spec/draft-bolyra-mutual-zkp-auth-01.md for consistency"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/IdentityRegistry.sol \u2014 production contract ABI needed to finalize IIdentityRegistry.sol interface and confirm view function signatures",
+    "spec/did-method-bolyra.md \u2014 existing syntax definition is the base document being extended",
+    "W3C DID Core \u00a77.1 and \u00a77.3 (read + resolve algorithm requirements) \u2014 normative reference",
+    "BabyJubJub public key serialization format \u2014 must confirm multibase encoding scheme (base58btc vs base64url) used in verificationMethod to align with circuits/AgentPolicy key output",
+    "@bolyra/sdk v0.2.0 public API \u2014 resolver module must not break existing createAgentCredential / proveHandshake exports",
+    "ethers.js v6 \u2014 required for on-chain IdentityRegistry queries in the TypeScript resolver",
+    "W3C did-resolver npm package interface \u2014 DIDResolutionResult type must match its expected shape for drop-in compatibility"
+  ]
+}

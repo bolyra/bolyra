@@ -1,0 +1,775 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete DID method resolution algorithm per W3C DID Core \u00a77",
+      "dimension": "standards",
+      "description": "spec/did-method-bolyra.md defines the DID syntax (did:bolyra:<commitment>) but lacks a conformant resolution algorithm. Implement the resolve(did, resolutionOptions) \u2192 {didDocument, didResolutionMetadata, didDocumentMetadata} interface per W3C DID Core \u00a77.1. The resolver must query IdentityRegistry for enrollment status, populate the verificationMethod array with the BabyJubjub public key (type JsonWebKey2020 with crv=Baby-Jubjub), and set didDocumentMetadata.deactivated=true for revoked identities. Without this, did:bolyra cannot pass the W3C DID Test Suite.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 16,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 74,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "title": "Complete DID method resolution algorithm per W3C DID Core \u00a77",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Extend existing DID method spec with \u00a77-conformant resolution algorithm: resolve(), dereference(), and error code table (invalidDid, notFound, deactivated, methodNotSupported, internalError)"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/resolver.ts",
+          "description": "TypeScript implementation of resolve(did, resolutionOptions) returning {didDocument, didResolutionMetadata, didDocumentMetadata}. Parses did:bolyra:<commitment>, queries IdentityRegistry, builds DID Document with BabyJubjub verificationMethod (JsonWebKey2020, crv=Baby-Jubjub), sets deactivated flag for revoked identities"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did-document-builder.ts",
+          "description": "Constructs the DID Document object: id, @context, verificationMethod array, authentication, assertionMethod. Encodes BabyJubjub public key as JWK with crv=Baby-Jubjub"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Add getIdentityStatus(bytes32 commitment) view returning (bool enrolled, bool revoked, uint256 enrolledAt, bytes32 babyJubjubPubKeyX, bytes32 babyJubjubPubKeyY) to support on-chain resolution queries"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/resolver.test.ts",
+          "description": "Unit tests covering: valid DID resolves to correct document, revoked DID sets deactivated=true, invalid DID syntax returns invalidDid error, unknown DID returns notFound error, verificationMethod encodes correct JWK"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/did-resolution-conformance.test.ts",
+          "description": "W3C DID Test Suite conformance runner: validates resolve() return shape matches DID Core \u00a77.1 exactly, checks all required metadata fields, runs against W3C test vectors"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/did-resolution.md",
+          "description": "Developer guide: how to instantiate the resolver, configure RPC endpoint for IdentityRegistry, handle resolution errors, integrate with did-resolver universal resolver interface"
+        }
+      ],
+      "steps": [
+        "Audit spec/did-method-bolyra.md to inventory what DID syntax and commitment derivation are already defined; identify gaps against W3C DID Core \u00a77.1 resolution algorithm requirements",
+        "Add getIdentityStatus() view function to IdentityRegistry.sol returning enrollment bool, revocation bool, enrolledAt timestamp, and packed BabyJubjub pubkey coordinates (X, Y as uint256)",
+        "Implement DID parser in sdk/src/resolver.ts: validate did:bolyra:<commitment> syntax, extract commitment string, return invalidDid metadata on parse failure",
+        "Implement did-document-builder.ts: construct @context array ([https://www.w3.org/ns/did/v1, crv extension context]), build verificationMethod entry with type=JsonWebKey2020 and publicKeyJwk.crv=Baby-Jubjub using X/Y coordinates from registry",
+        "Implement resolve(did, resolutionOptions) core: call IdentityRegistry.getIdentityStatus(), handle not-enrolled (notFound), build DID Document via builder, set didDocumentMetadata.deactivated=true if revoked, populate didResolutionMetadata.contentType=application/did+ld+json",
+        "Implement resolutionOptions.accept content negotiation: support application/did+ld+json and application/did+json; return representationNotSupported error for unknown types",
+        "Wire resolver to an ethers.js provider so RPC endpoint is configurable at instantiation; expose BolyraResolver class with constructor({ rpcUrl, registryAddress })",
+        "Write unit tests in sdk/test/resolver.test.ts using Hardhat in-process network: mock IdentityRegistry, test all error branches and the happy path",
+        "Write W3C conformance tests in spec/conformance/did-resolution-conformance.test.ts validating exact shape of return triple against DID Core \u00a77.1 normative requirements",
+        "Update spec/did-method-bolyra.md with Resolution section: algorithm pseudocode, error code table, verificationMethod encoding spec for BabyJubjub JWK, and deactivation semantics",
+        "Export resolver from sdk/src/index.ts as part of public API; update sdk/QUICKSTART.md with resolver usage example",
+        "Run full test suite (npm test) and confirm all resolver tests pass; verify no regressions in circuit or contract tests"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "IdentityRegistry.sol deployed with getIdentityStatus() view function",
+        "BabyJubjub public key stored in IdentityRegistry at enrollment time",
+        "W3C DID Core \u00a77 spec (https://www.w3.org/TR/did-core/#resolution)",
+        "JsonWebKey2020 context and Baby-Jubjub JWK crv value registration",
+        "ethers.js v6 for contract interaction",
+        "did-resolver npm package interface (for universal resolver compatibility)",
+        "Hardhat local network for integration tests"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Standardize proof envelope wire format with CBOR content type negotiation",
+      "dimension": "standards",
+      "description": "The SDK currently passes proof objects as ad-hoc JSON with no versioning, no content type, and no canonical serialization. Define a CBOR-based proof envelope (tag 55799 self-describing CBOR) with fields: version, circuit_id, proving_system (groth16|plonk), public_signals[], proof_bytes, and an optional delegation_chain[]. Register application/bolyra-proof+cbor as the canonical media type. This is prerequisite for any HTTP-based interop \u2014 without it, every integration reinvents parsing.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 17,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 15,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "title": "Standardize proof envelope wire format with CBOR content type negotiation",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-v1.md",
+          "description": "Canonical specification for the application/bolyra-proof+cbor media type, CBOR tag 55799 envelope schema, field semantics, versioning policy, and content negotiation rules for HTTP transport."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-schema.cddl",
+          "description": "CDDL (Concise Data Definition Language) schema for the proof envelope, covering version, circuit_id, proving_system enum, public_signals array, proof_bytes, and optional delegation_chain."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/envelope.ts",
+          "description": "TypeScript implementation: encodeProofEnvelope() and decodeProofEnvelope() using cbor2 library, enforcing self-describing CBOR tag 55799, schema validation, and versioning guards."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "ProofEnvelope, ProvingSystem, DelegationChainEntry TypeScript types and Zod schemas for runtime validation of decoded envelopes."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/http.ts",
+          "description": "HTTP transport helpers: serializeForHttp() sets Content-Type to application/bolyra-proof+cbor, parseFromHttp() performs Accept header negotiation and falls back to JSON for backward compatibility."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/envelope.test.ts",
+          "description": "Round-trip encode/decode tests for all proving systems, delegation chain presence/absence, version mismatch rejection, malformed CBOR rejection, and tag 55799 enforcement."
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/envelope-vectors.json",
+          "description": "Canonical hex-encoded test vectors for each proving system (groth16, plonk) and delegation depth (0, 1, 2), usable by any conforming implementation."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope-migration.md",
+          "description": "Migration guide from ad-hoc JSON proof objects to the CBOR envelope, including backward-compat shim usage and timeline for JSON deprecation."
+        }
+      ],
+      "steps": [
+        "Define the envelope field set: version (uint, starts at 1), circuit_id (tstr, e.g. 'HumanUniqueness/v1'), proving_system (tstr enum: 'groth16'|'plonk'), public_signals (array of bstr), proof_bytes (bstr, proving-system-specific encoding), delegation_chain (optional array of bstr, each a nested envelope).",
+        "Write the CDDL schema (spec/proof-envelope-schema.cddl) capturing the above, including the self-describing CBOR tag 55799 wrapper and the outer map structure.",
+        "Draft spec/proof-envelope-v1.md covering: media type registration path (application/bolyra-proof+cbor), CBOR deterministic encoding requirements (RFC 8949 \u00a74.2 core deterministic encoding), versioning policy (major bump for breaking field changes), HTTP content negotiation (Accept/Content-Type), and interop constraints.",
+        "Add cbor2 (or cbor-x) as a dependency in sdk/package.json; audit for minimal footprint and no transitive vulnerabilities against the existing overrides policy.",
+        "Implement sdk/src/types.ts: define ProofEnvelope interface, ProvingSystem union type, DelegationChainEntry type, and Zod schemas for runtime validation.",
+        "Implement sdk/src/envelope.ts: encodeProofEnvelope() serializes to CBOR bytes with tag 55799; decodeProofEnvelope() validates tag, runs Zod schema check, version guard, and returns typed ProofEnvelope.",
+        "Implement sdk/src/http.ts: serializeForHttp() wraps encoded bytes with correct Content-Type header; parseFromHttp() inspects Content-Type and Accept, routes to CBOR or legacy JSON path, emits deprecation warning on JSON path.",
+        "Generate canonical test vectors (spec/conformance/envelope-vectors.json): one vector per proving system \u00d7 delegation depth, storing hex input and expected hex output.",
+        "Write sdk/test/envelope.test.ts covering: round-trip fidelity for all proving systems, delegation chain serialization, version mismatch throws EnvelopeVersionError, missing tag 55799 throws EnvelopeFormatError, unknown proving_system string throws, oversized public_signals array handled without truncation.",
+        "Update sdk/src/index.ts public exports to expose encodeProofEnvelope, decodeProofEnvelope, ProofEnvelope type, and BOLYRA_PROOF_CONTENT_TYPE constant.",
+        "Update verifyHandshake() in sdk/src/sdk.ts to accept ProofEnvelope objects in addition to raw proof objects, delegating parsing to decodeProofEnvelope().",
+        "Write docs/proof-envelope-migration.md with before/after code snippets, the backward-compat JSON shim, and a deprecation timeline.",
+        "Run npm run typecheck and npm test in sdk/ to confirm no regressions; verify test vectors pass deterministic encoding checks."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "cbor2 or cbor-x npm package (CBOR encode/decode with tag support)",
+        "zod (already used in SDK for runtime validation)",
+        "RFC 8949 \u2014 CBOR standard (deterministic encoding \u00a74.2)",
+        "IANA media type registration process for application/bolyra-proof+cbor (long-term; interim use of x. prefix acceptable)",
+        "Existing @bolyra/sdk v0.2.0 public API surface (no breaking changes to proveHandshake/verifyHandshake signatures)",
+        "snarkjs proof output format (groth16: {pi_a, pi_b, pi_c, protocol}; plonk: {A,B,C,...}) \u2014 must define canonical bstr encoding for each",
+        "Delegation circuit envelope nesting depth limit (recommend max depth 8 to bound CBOR size)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_session_token_offchain",
+      "persona": "standards_architect",
+      "title": "Define off-chain session token format for verified handshakes",
+      "dimension": "standards",
+      "description": "After a successful on-chain handshake verification, there is no standardized bearer token format for the resulting session. Define a compact JWT-like session token (JWS with EdDSA over BabyJubjub) that encodes the verified nullifierHash, scopeCommitment, sessionNonce, and expiry. This enables off-chain relying parties to accept Bolyra auth results without querying the chain for every API call. Include IANA media type registration for application/bolyra-session+jwt and a COSE equivalent for constrained environments.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_session_token_offchain",
+      "adoption": 19,
+      "standards": 19,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_session_token_offchain",
+      "title": "Define off-chain session token format for verified handshakes",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/bolyra-session-token-v1.md",
+          "description": "Full specification: JWT header/payload/signature layout, BabyJubjub EdDSA signing algorithm identifier (crv: Baby-Jubjub), claim registry (nullifierHash, scopeCommitment, sessionNonce, exp, iss, aud, iat), and serialization rules"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/bolyra-session-token-cose.md",
+          "description": "COSE_Sign1 equivalent for constrained environments: CBOR encoding of the same claims, algorithm mapping to ECDH-ES+Baby-Jubjub, compact binary layout"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/iana-media-type-registration.md",
+          "description": "IANA media type registration template for application/bolyra-session+jwt and application/bolyra-session+cose per RFC 6838 / RFC 9290"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/sessionToken.ts",
+          "description": "TypeScript implementation: issueSessionToken(handshakeResult, signerKey, opts) -> compact JWS string; verifySessionToken(token, verifierKey) -> VerifiedSession; decodeSessionToken(token) -> SessionClaims (no sig check)"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/types.ts",
+          "description": "SessionClaims interface, VerifiedSession type, SessionTokenOptions, algorithm constants (BOLYRA_ALG = 'EdDSA-BJJ')"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/coseToken.ts",
+          "description": "COSE_Sign1 variant: issueCoseSession() and verifyCoseSession() using cbor + baby-jubjub-js; mirrors JWT API surface"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session/sessionToken.test.ts",
+          "description": "Round-trip tests: issue then verify, expired token rejection, tampered payload rejection, wrong key rejection, nullifierHash binding check, scopeCommitment integrity, nonce uniqueness assertion"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session/coseToken.test.ts",
+          "description": "COSE round-trip tests mirroring JWT suite; cross-format non-interoperability assertion"
+        },
+        {
+          "type": "test",
+          "filename": "spec/test-vectors/session-token-vectors.json",
+          "description": "Normative test vectors: known nullifierHash + scopeCommitment + sessionNonce inputs -> expected compact JWS and COSE hex; used by conformance runner"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-token-integration.md",
+          "description": "Relying party integration guide: verify on-chain handshake once, cache session token, validate token on every API call without chain reads; expiry recommendations, key rotation policy"
+        }
+      ],
+      "steps": [
+        "Define claim set: map handshake outputs (nullifierHash, scopeCommitment, sessionNonce) to IANA-registered JWT claim names; reserve 'nul', 'sco', 'snc' as private claims under bolyra.ai namespace pending IANA registration",
+        "Specify JWT header: typ=bolyra-session+jwt, alg=EdDSA, crv=Baby-Jubjub; document that standard RS256/ES256 MUST NOT be used to prevent algorithm confusion",
+        "Define payload encoding: nullifierHash and scopeCommitment as base64url-encoded 32-byte big-endian field elements; sessionNonce as hex string; exp/iat as NumericDate; iss as DID of the Bolyra verifier contract",
+        "Specify signing procedure: serialize header.payload as ASCII bytes, sign with Baby-Jubjub EdDSA (iden3/babyjubjub), encode signature as base64url(R_x || R_y || S) \u2014 96 bytes total",
+        "Define verification procedure: decode and validate header alg/crv, check exp > now, recompute expected nullifierHash from on-chain event log or local cache, verify EdDSA signature over header.payload",
+        "Design COSE_Sign1 mapping: CBOR label -100 for nullifierHash, -101 for scopeCommitment, -102 for sessionNonce; alg = -8 (EdDSA) with key param crv = -1 (Baby-Jubjub); full CDDL schema in spec",
+        "Implement issueSessionToken() in sdk/src/session/sessionToken.ts using noble/ed25519 shim adapted for Baby-Jubjub field; wire in existing bjj utilities from sdk/src/crypto/",
+        "Implement verifySessionToken() with constant-time signature comparison; reject tokens where nullifierHash in payload does not match the verified handshake record",
+        "Implement COSE variant in coseToken.ts using cbor2 library; ensure the two formats are never accidentally cross-validated (type discriminator check at entry point)",
+        "Write test vectors by running issueSessionToken with fixed deterministic key + known inputs; commit output to spec/test-vectors/session-token-vectors.json as normative reference",
+        "Add sessionToken exports to sdk/src/index.ts public API; bump SDK minor version to 0.3.0",
+        "Draft IANA media type registration document per RFC 6838; include contact, security considerations (replay, nullifier reuse), and interoperability notes",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md Section 7 to reference session token format as the bearer credential produced after handshake completion",
+        "Add conformance test cases to spec/conformance/ that validate session token issuance and verification against the test vectors"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "Baby-Jubjub EdDSA signing library (iden3/babyjubjub-js or noble equivalent)",
+        "cbor2 or cbor-x for COSE encoding",
+        "Existing handshake verification output types in sdk/src/types.ts",
+        "Existing BabyJubjub field utilities in sdk/src/crypto/",
+        "spec/did-method-bolyra.md (for iss DID format)",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md (parent spec to update)",
+        "RFC 7519 (JWT), RFC 8037 (EdDSA in JOSE), RFC 9052 (COSE), RFC 6838 (media types)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Publish deterministic conformance test vectors in JSON Schema",
+      "dimension": "standards",
+      "description": "Create a spec/test-vectors/ directory with 30+ JSON files covering: valid handshake (happy path), expired agent credential, revoked human identity, stale Merkle root, scope subset violation, cumulative bit encoding violation, delegation chain depths 1/2/3, and max-hop rejection. Each vector includes input witness, expected public signals, and expected accept/reject outcome. Validate against a JSON Schema so alternative implementations can run the suite mechanically. This is the single biggest interop enabler \u2014 no third party can implement Bolyra without reproducible test cases.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 18,
+      "standards": 23,
+      "completeness": 19,
+      "correctness": 18,
+      "total": 78,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_test_vectors",
+      "title": "Publish deterministic conformance test vectors in JSON Schema",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/schema/test-vector.schema.json",
+          "description": "JSON Schema (draft-07) defining the canonical shape of every test vector: inputWitness, publicSignals, expectedOutcome, vectorId, category, circuitId"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/schema/handshake-witness.schema.json",
+          "description": "Sub-schema for HumanUniqueness+AgentPolicy combined handshake witness fields"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/schema/delegation-witness.schema.json",
+          "description": "Sub-schema for Delegation circuit witness fields including chain depth and scope bitmask"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/happy-path/tv-001-valid-handshake.json",
+          "description": "Happy-path vector: valid human+agent handshake, fresh nonce, non-expired credential, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/happy-path/tv-002-valid-delegation-depth-1.json",
+          "description": "Single-hop delegation with scope subset, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/happy-path/tv-003-valid-delegation-depth-2.json",
+          "description": "Two-hop delegation chain, each narrowing scope, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/happy-path/tv-004-valid-delegation-depth-3.json",
+          "description": "Three-hop delegation chain at max allowed depth, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/happy-path/tv-005-valid-read-only-scope.json",
+          "description": "Agent with READ_DATA only (bit 0), minimal permissions, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/happy-path/tv-006-valid-financial-medium.json",
+          "description": "FINANCIAL_MEDIUM (bit 3) implying FINANCIAL_SMALL (bit 2), cumulative bits satisfied, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-010-expired-agent-credential.json",
+          "description": "Agent credential with expiry timestamp in the past, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-011-revoked-human-identity.json",
+          "description": "NullifierHash present in on-chain revocation set, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-012-stale-merkle-root.json",
+          "description": "HumanMerkleRoot not present in registry's accepted roots window, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-013-scope-superset-violation.json",
+          "description": "Delegated credential claims permissions broader than parent, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-014-cumulative-bit-violation.json",
+          "description": "FINANCIAL_MEDIUM set without FINANCIAL_SMALL, encoding invariant broken, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-015-max-hop-exceeded.json",
+          "description": "Delegation chain depth 4 (exceeds max 3), reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-016-nonce-replay.json",
+          "description": "Reused sessionNonce from a prior accepted handshake, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-017-wrong-model-hash.json",
+          "description": "AgentPolicy witness modelHash mismatch with on-chain registered hash, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-018-sub-delegate-without-bit.json",
+          "description": "Delegator attempts to sub-delegate but SUB_DELEGATE bit (6) not set, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-019-pii-bit-without-sign-bit.json",
+          "description": "ACCESS_PII (7) granted but SIGN_ON_BEHALF (5) omitted in a context requiring both, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/rejection/tv-020-tampered-public-signal.json",
+          "description": "One public signal field mutated post-witness-generation, proof verification fails, reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/edge/tv-030-zero-permissions.json",
+          "description": "All permission bits zero, structurally valid but semantically empty; conformance runners must accept as valid ZK proof while flagging empty scope"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/edge/tv-031-financial-unlimited-implies-all.json",
+          "description": "FINANCIAL_UNLIMITED (bit 4) set, bits 2+3 automatically implied, cumulative check passes, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/edge/tv-032-delegation-scope-identity.json",
+          "description": "Delegated scope equals parent scope exactly (not narrowed), boundary case, accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/edge/tv-033-max-depth-boundary.json",
+          "description": "Delegation at exactly depth 3 (boundary), accept; depth 4 covered by tv-015"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/README.md",
+          "description": "Human-readable index: categories, how to run the suite, JSON Schema validation instructions, how to contribute new vectors"
+        },
+        {
+          "type": "test",
+          "filename": "spec/test-vectors/validate.js",
+          "description": "Node script: iterates all tv-*.json files, validates each against test-vector.schema.json via ajv, reports pass/fail \u2014 runnable as `node spec/test-vectors/validate.js`"
+        },
+        {
+          "type": "test",
+          "filename": "spec/test-vectors/runner.js",
+          "description": "Conformance runner: loads each vector, generates witness via snarkjs (fast path) or calls rapidsnark (slow path), compares actualPublicSignals and verificationResult against expectedOutcome"
+        },
+        {
+          "type": "docs",
+          "filename": "spec/CONFORMANCE.md",
+          "description": "Normative conformance statement: which vectors are MUST/SHOULD/MAY, how third-party implementations claim conformance, versioning policy for vectors"
+        }
+      ],
+      "steps": [
+        "Define JSON Schema in spec/test-vectors/schema/test-vector.schema.json covering all mandatory fields: vectorId (string), category (enum: happy-path|rejection|edge), circuitId (enum: HumanUniqueness|AgentPolicy|Delegation|Handshake), inputWitness (object), expectedPublicSignals (array of stringified field elements), expectedOutcome (enum: accept|reject), rejectReason (string, required when expectedOutcome=reject)",
+        "Define sub-schemas handshake-witness.schema.json and delegation-witness.schema.json and $ref them from the top-level schema to keep witness shapes normative and independently validatable",
+        "Audit circuits/src/ and sdk/ source to extract every public signal name and ordering for HumanUniqueness, AgentPolicy, and Delegation circuits \u2014 encode signal order as a constant table in README.md and reference it in the schema description fields",
+        "Generate tv-001 through tv-006 (happy-path vectors) by running actual witness generation with snarkjs for representative inputs; capture inputWitness and publicSignals output; hand-verify accept outcome",
+        "Generate tv-010 through tv-020 (rejection vectors) by crafting inputs that trip each invariant; for ZK-layer rejections (tampered signal, encoding violation) capture the witness that would be generated and annotate why verifyProof returns false; for application-layer rejections (revocation, stale root) annotate the off-chain check that fails",
+        "Generate tv-030 through tv-033 (edge-case vectors) covering boundary conditions at scope=0, cumulative-bit implication ceiling, and max delegation depth boundary",
+        "Write validate.js using ajv@8 with draft-07 meta-schema; fail-fast on first schema violation; exit code 1 on any failure so CI can gate on it",
+        "Write runner.js that for each vector: (a) loads inputWitness, (b) calls snarkjs.wtns.calculate then snarkjs.groth16.fullProve (fast mode) or execs rapidsnark binary (slow mode via FULL_PROOF env var), (c) compares publicSignals array element-by-element using BigInt comparison, (d) calls verifyProof and compares boolean to expectedOutcome, (e) for reject vectors checks that rejectReason category matches the observed failure mode",
+        "Add `conformance:validate` and `conformance:run` npm scripts to root package.json pointing at validate.js and runner.js respectively",
+        "Add conformance jobs to CI: `conformance:validate` runs on every PR (schema check only, <5s); `conformance:run` runs on the slow CI label alongside test:circuits:slow",
+        "Write spec/CONFORMANCE.md declaring which vectors are MUST-pass for conformance claims, semantic versioning scheme for the vector suite (semver minor = new vectors, patch = fix existing, major = breaking schema change), and the process for third parties to submit new vectors via PR",
+        "Update spec/test-vectors/README.md with: directory layout, category descriptions, how to add a vector (template + checklist), and pointer to CONFORMANCE.md",
+        "Cross-reference CONFORMANCE.md from the top-level spec/did-method-bolyra.md and spec/draft-bolyra-mutual-zkp-auth-01.md so implementers discover the test suite from the normative specs",
+        "Run full suite locally, fix any signal ordering mismatches or schema gaps discovered, commit all artifacts with DCO sign-off"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "circuits/src/HumanUniqueness.circom \u2014 public signal names and order",
+        "circuits/src/AgentPolicy.circom \u2014 public signal names and order",
+        "circuits/src/Delegation.circom \u2014 public signal names, chain depth signal, scope output",
+        "circuits/build/ \u2014 compiled .r1cs, .zkey, .vkey files required by runner.js witness generation",
+        "sdk/src/ \u2014 validateCumulativeBitEncoding() logic to derive reject cases for bit encoding vectors",
+        "circuits/FORMAL-PROPERTIES.md \u2014 canonical list of invariants each rejection vector must cover",
+        "spec/did-method-bolyra.md \u2014 normative anchor for revocation and Merkle root acceptance window semantics",
+        "ajv@8 (npm) \u2014 JSON Schema validation in validate.js",
+        "snarkjs ^0.7.x \u2014 witness generation and proof verification in runner.js fast path",
+        "circuits/build/rapidsnark_prover \u2014 optional binary for slow-path proving in runner.js"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "framework_integrator_session_token_offchain_jwt",
+      "persona": "framework_integrator",
+      "title": "Off-chain JWT session token from verified handshake",
+      "dimension": "adoption",
+      "description": "After a successful on-chain handshake verification, emit a signed JWT containing the nullifierHash, scopeCommitment, and expiry so that LangChain/CrewAI tool chains can pass a lightweight bearer token on subsequent calls instead of re-proving. The SDK should expose `handshakeToSessionToken(proof, signingKey) \u2192 JWT` and `verifySessionToken(jwt, pubKey) \u2192 {nullifier, scope, expiry}`. This eliminates the biggest integration friction: frameworks expect sub-100ms auth checks, not 2-second proof generation on every tool invocation.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_session_token_offchain_jwt",
+      "adoption": 22,
+      "standards": 14,
+      "completeness": 18,
+      "correctness": 16,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "framework_integrator_session_token_offchain_jwt",
+      "title": "Off-chain JWT session token from verified handshake",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session.ts",
+          "description": "Core session token module: handshakeToSessionToken(proof, signingKey) -> JWT and verifySessionToken(jwt, pubKey) -> {nullifier, scope, expiry}. Uses jose library for ES256 signing."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/index.ts",
+          "description": "Re-export handshakeToSessionToken and verifySessionToken from public API surface."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/session-token-schema.md",
+          "description": "JWT payload schema: sub=nullifierHash, scope=hex-encoded scopeCommitment, exp=expiry unix timestamp, iss='bolyra', aud=['langchain'|'crewai'|'*']. Documents signing algorithm (ES256), key format requirements, and replay-prevention via nullifier uniqueness."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session.test.ts",
+          "description": "Unit tests: round-trip encode/decode, expiry enforcement, tampered payload rejection, wrong key rejection, scope mismatch detection, integration with mock handshake proof output."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-token-integration.md",
+          "description": "Integration guide for LangChain and CrewAI: one-time handshake -> token issuance -> bearer token on subsequent tool calls. Includes code snippets, token lifetime recommendations, and revocation guidance via nullifier registry."
+        }
+      ],
+      "steps": [
+        "Add 'jose' as a dependency in sdk/package.json for standards-compliant JWT sign/verify (ES256, compact serialization).",
+        "Define the JWT payload TypeScript interface: { nullifier: string, scope: string, exp: number, iss: string, aud: string | string[] } in sdk/src/types.ts.",
+        "Implement handshakeToSessionToken(proof: VerifiedHandshakeProof, signingKey: CryptoKey, options?: { ttlSeconds?: number, audience?: string }) -> Promise<string> in sdk/src/session.ts. Extract nullifierHash and scopeCommitment from proof, set exp = now + ttlSeconds (default 3600), sign with ES256.",
+        "Implement verifySessionToken(jwt: string, pubKey: CryptoKey) -> Promise<{ nullifier: string, scope: string, expiry: number }> in sdk/src/session.ts. Verify signature, check exp, return structured claims. Throw typed errors on expiry or invalid signature.",
+        "Export both functions from sdk/src/index.ts alongside existing public API.",
+        "Write spec/session-token-schema.md documenting JWT structure, key requirements, recommended TTLs (3600s for agent sessions), and the security model (token is a session cache\u2014on-chain nullifier check remains the ground truth).",
+        "Write sdk/test/session.test.ts with Mocha/Chai covering: valid round-trip, expired token rejection, tampered payload rejection, wrong public key rejection, missing claims rejection.",
+        "Write docs/session-token-integration.md with LangChain Python snippet (requests + Authorization: Bearer header) and CrewAI tool wrapper example.",
+        "Run npm run typecheck and npm run test:sdk to verify no regressions.",
+        "Update sdk/QUICKSTART.md with a 'Session Tokens' section pointing to the new integration guide."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "jose >= 5.0 (JWT sign/verify, ES256, Web Crypto API compatible)",
+        "Existing verifyHandshake() output shape (nullifierHash, scopeCommitment fields must be present)",
+        "Node 18+ Web Crypto API (SubtleCrypto) for key import \u2014 no native crypto module dependency",
+        "sdk/src/types.ts VerifiedHandshakeProof type must expose nullifierHash and scopeCommitment as top-level fields"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "framework_integrator_proof_envelope_content_type",
+      "persona": "framework_integrator",
+      "title": "Standard proof envelope with MIME content type for HTTP transport",
+      "dimension": "standards",
+      "description": "Define an `application/bolyra-proof+json` content type and a canonical JSON envelope: `{version, circuit, publicSignals[], proof{pi_a, pi_b, pi_c}, sessionToken?, delegationChain[]}`. LangChain's `APIChain` and AutoGen's `ConversableAgent` both pass structured payloads over HTTP \u2014 without a standard envelope, every integration reinvents serialization. Add `ProofEnvelope.serialize()` / `ProofEnvelope.parse()` to both TS and Python SDKs, with round-trip test vectors in `spec/test-vectors/`.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_proof_envelope_content_type",
+      "adoption": 16,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 15,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "framework_integrator_proof_envelope_content_type",
+      "title": "Standard proof envelope with MIME content type for HTTP transport",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-content-type.md",
+          "description": "RFC-style specification for application/bolyra-proof+json MIME type and canonical envelope schema"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/proof-envelope-roundtrip.json",
+          "description": "Round-trip test vectors: one HumanUniqueness proof, one AgentPolicy proof, one delegated proof with delegationChain"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/proof-envelope.ts",
+          "description": "TypeScript ProofEnvelope class with serialize() / parse() / validate() methods and ContentType constant"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk-python/bolyra/proof_envelope.py",
+          "description": "Python ProofEnvelope dataclass with serialize() / parse() matching TS schema exactly"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/proof-envelope.test.ts",
+          "description": "Mocha tests: serialize/parse round-trip, schema validation errors, cross-SDK vector compatibility"
+        },
+        {
+          "type": "test",
+          "filename": "sdk-python/tests/test_proof_envelope.py",
+          "description": "pytest tests: round-trip against shared spec/test-vectors/, invalid envelope rejection"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope-http-guide.md",
+          "description": "Integration guide showing LangChain APIChain and AutoGen ConversableAgent usage with Content-Type header"
+        }
+      ],
+      "steps": [
+        "Define canonical envelope JSON schema: {version: string, circuit: 'HumanUniqueness'|'AgentPolicy'|'Delegation', publicSignals: string[], proof: {pi_a: string[], pi_b: string[][], pi_c: string[]}, sessionToken?: string, delegationChain?: DelegationLink[]}",
+        "Register MIME type constant BOLYRA_PROOF_CONTENT_TYPE = 'application/bolyra-proof+json' in both SDKs",
+        "Implement ProofEnvelope.serialize() in TS: validates required fields, JSON.stringify with stable key order, returns string",
+        "Implement ProofEnvelope.parse() in TS: JSON.parse, validates against schema, throws typed BolyraEnvelopeError on malformed input",
+        "Port ProofEnvelope to Python as a dataclass with serialize()/parse() matching TS output byte-for-byte for the shared test vectors",
+        "Write spec/test-vectors/proof-envelope-roundtrip.json with at least 3 canonical fixtures covering all circuit types",
+        "Add TS Mocha tests: round-trip fidelity against test vectors, missing-field rejection, extra-field tolerance (forward compat)",
+        "Add Python pytest tests: same round-trip fixtures, ensure json.dumps output matches TS serialize() output for each vector",
+        "Update sdk/src/index.ts and sdk-python/bolyra/__init__.py to export ProofEnvelope and BOLYRA_PROOF_CONTENT_TYPE",
+        "Add integration snippet in docs/proof-envelope-http-guide.md showing fetch() with Content-Type header (TS) and requests.post() (Python)",
+        "Verify npm run typecheck and pytest -v both pass with no new errors"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "@bolyra/sdk existing proof output types (SnarkProof, PublicSignals)",
+        "snarkjs proof field naming (pi_a, pi_b, pi_c)",
+        "spec/did-method-bolyra.md for version string convention",
+        "Python bolyra package dataclass pattern from sdk-python/",
+        "Delegation circuit output schema for delegationChain link structure"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "product_visionary_session_token_offchain",
+      "persona": "product_visionary",
+      "title": "Off-chain session token with on-chain checkpoint batching",
+      "dimension": "completeness",
+      "description": "After a successful handshake, emit a signed session token (JWT-like envelope containing humanNullifier, agentNullifier, scopeCommitment, expiry) that downstream tool calls can verify locally without hitting the chain. Batch session roots on-chain every N minutes via a Merkle accumulator. This is the unlock for agentic commerce at scale \u2014 no agent-to-agent interaction can tolerate per-call on-chain verification latency or gas. Implement in the TS SDK as `createSessionToken()` and `verifySessionToken()`, with the batching contract as a new `SessionCheckpoint.sol`.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "product_visionary_session_token_offchain",
+      "adoption": 23,
+      "standards": 11,
+      "completeness": 21,
+      "correctness": 12,
+      "total": 67,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "product_visionary_session_token_offchain",
+      "title": "Off-chain session token with on-chain checkpoint batching",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session.ts",
+          "description": "createSessionToken() and verifySessionToken() \u2014 signs a JWT-like envelope containing humanNullifier, agentNullifier, scopeCommitment, expiry, and sessionNonce using Ed25519; returns typed SessionToken object"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/sessionBatcher.ts",
+          "description": "SessionBatcher class \u2014 accumulates session token hashes in a local Merkle tree, flushes root on-chain every N minutes via SessionCheckpoint.sol, exposes flush() and getPendingCount()"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/SessionCheckpoint.sol",
+          "description": "Stores batched Merkle roots of session tokens; emits CheckpointStored(root, timestamp, count); owner-controlled or permissioned submitter role"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/session-token-format.md",
+          "description": "Wire format spec: header (alg, typ), payload (humanNullifier, agentNullifier, scopeCommitment, expiry, sessionNonce, issuedAt), signature; canonicalization rules for Merkle leaf hashing"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session.test.ts",
+          "description": "Unit tests for createSessionToken / verifySessionToken: valid token, expired token, tampered payload, wrong signer, scope commitment mismatch"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/sessionBatcher.test.ts",
+          "description": "Tests for batching logic: accumulation, Merkle root correctness, flush trigger (time-based and manual), idempotent flush on empty batch"
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/SessionCheckpoint.test.ts",
+          "description": "Hardhat tests: store checkpoint, verify root on-chain, access control on submitter, event emission"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-tokens.md",
+          "description": "Developer guide: how to issue session tokens post-handshake, configure batch interval, verify tokens in downstream tool calls without chain access"
+        }
+      ],
+      "steps": [
+        "Define session token payload schema in spec/session-token-format.md: fields, canonicalization, leaf hashing (keccak256 of ABI-encoded payload)",
+        "Implement createSessionToken(handshakeResult, signingKey, expiry) in sdk/src/session.ts \u2014 produce Ed25519-signed envelope; derive leaf hash",
+        "Implement verifySessionToken(token, trustedPublicKey) in sdk/src/session.ts \u2014 check signature, expiry, and scopeCommitment consistency",
+        "Build incremental Merkle accumulator in sdk/src/sessionBatcher.ts \u2014 insert leaf hashes, compute root via keccak256 binary tree",
+        "Add flush() method that submits Merkle root to SessionCheckpoint.sol via ethers.js; support configurable batch interval (default 5 min) and max batch size (default 100)",
+        "Write SessionCheckpoint.sol \u2014 mapping(uint256 => bytes32) checkpointRoots, storeCheckpoint(bytes32 root, uint256 count) with submitter role, CheckpointStored event",
+        "Compile and deploy SessionCheckpoint.sol to local Hardhat node; update deploy scripts for Base Sepolia",
+        "Wire SessionBatcher into the SDK's public API \u2014 export from sdk/src/index.ts alongside existing createHumanIdentity, createAgentCredential",
+        "Write unit tests for session.ts (happy path + all failure modes)",
+        "Write unit tests for sessionBatcher.ts (accumulation, flush, empty-batch guard)",
+        "Write Hardhat integration tests for SessionCheckpoint.sol",
+        "Add end-to-end test: full handshake \u2192 createSessionToken \u2192 verifySessionToken \u2192 batch flush \u2192 on-chain root verification",
+        "Write docs/session-tokens.md developer guide with code examples",
+        "Run tsc --noEmit and npm test; fix any type errors or test failures",
+        "DCO sign-off on all commits"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "Existing proveHandshake / verifyHandshake API in sdk/src/index.ts",
+        "sessionNonce binding already enforced in handshake \u2014 reuse as session token nonce",
+        "ethers.js (already in sdk/package.json) for on-chain flush",
+        "@noble/ed25519 or @noble/curves for session token signing (lightweight, audited)",
+        "Hardhat + contracts/hardhat.config.ts for SessionCheckpoint deployment",
+        "pot16.ptau and existing circuit build artifacts (no new circuits required)",
+        "Base Sepolia RPC + deployer key in contracts/.env for testnet deploy"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_cumulative_bit_completeness",
+      "persona": "formal_verifier",
+      "title": "Prove cumulative bit encoding constraints are necessary and sufficient",
+      "dimension": "correctness",
+      "description": "The Delegation circuit enforces cumulative bit invariants (bit 4 implies bits 2+3, bit 3 implies bit 2) on the delegatee scope. Formally verify two properties: (1) SOUNDNESS \u2014 no witness satisfying the circuit constraints can violate the implication rules, and (2) COMPLETENESS \u2014 every valid cumulative encoding is accepted. Write a standalone test harness that exhaustively checks all 2^8 permission byte values against the circuit constraints and confirms exact agreement with the SDK's validateCumulativeBitEncoding(). This also catches any off-by-one in bit indexing between Circom (LSB-first Num2Bits) and the Solidity/TS layer.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_cumulative_bit_completeness",
+      "adoption": 14,
+      "standards": 12,
+      "completeness": 20,
+      "correctness": 21,
+      "total": 67,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_cumulative_bit_completeness",
+      "title": "Prove cumulative bit encoding constraints are necessary and sufficient",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/src/CumulativeBitCheck.circom",
+          "description": "Standalone sub-circuit that encodes exactly the cumulative-bit implication rules (bit4\u2192bits2+3, bit3\u2192bit2) as Circom constraints, importable by Delegation.circom and independently testable."
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/cumulative_bit_completeness.test.js",
+          "description": "Exhaustive harness: iterates all 256 permission byte values, computes expected validity via SDK validateCumulativeBitEncoding(), generates a witness for each value against CumulativeBitCheck, and asserts exact agreement. Failures surface bit-indexing mismatches between Circom LSB-first Num2Bits and the TS/Solidity layer."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/permissions.ts",
+          "description": "Reference to (or minor audit of) the existing validateCumulativeBitEncoding() function \u2014 the ground truth for the completeness check. No changes expected; function is treated as oracle."
+        },
+        {
+          "type": "spec",
+          "filename": "circuits/FORMAL-PROPERTIES.md",
+          "description": "Append two formally stated properties: SOUNDNESS (no satisfying witness violates implication rules) and COMPLETENESS (every valid encoding is accepted). Include table mapping Circom bit indices to permission names."
+        },
+        {
+          "type": "docs",
+          "filename": "circuits/test/README.md",
+          "description": "Document how to run the completeness harness, what a failure means, and how to extend when new permission bits are added."
+        }
+      ],
+      "steps": [
+        "Audit Delegation.circom: extract the exact Circom constraints that enforce cumulative-bit implications; note the Num2Bits signal ordering (LSB = bit index 0 = READ_DATA).",
+        "Audit sdk/src/permissions.ts validateCumulativeBitEncoding(): document which bit indices it checks and the exact implication rules it applies; confirm LSB vs MSB convention matches Circom.",
+        "Create circuits/src/CumulativeBitCheck.circom as a standalone template(1 input: permByte[8] bits) that encodes only the implication constraints; add assert-style IsZero/IsEqual gates for each rule.",
+        "Wire CumulativeBitCheck into Delegation.circom via component instantiation so the Delegation circuit delegates (pun intended) its scope-validation to the sub-circuit \u2014 single source of truth.",
+        "Write circuits/test/cumulative_bit_completeness.test.js: for each v in 0..255, (a) call validateCumulativeBitEncoding(v) to get expected boolean, (b) attempt witness generation on CumulativeBitCheck with input bits derived from v, (c) assert witness success iff SDK returns valid.",
+        "Run the harness in fast mode (witness-only, no proof) to get the exhaustive 256-case result; log any disagreement with full bit breakdown.",
+        "Fix any discovered mismatches: if a Circom constraint is too tight (rejects valid encoding) or too loose (accepts invalid), correct CumulativeBitCheck.circom; if SDK is wrong, fix validateCumulativeBitEncoding().",
+        "Re-run full 256-case sweep to confirm zero disagreements.",
+        "Append SOUNDNESS and COMPLETENESS properties to circuits/FORMAL-PROPERTIES.md with the bit-index table and reference to the exhaustive test as the proof artifact.",
+        "Update circuits/test/README.md with run instructions and a note that any new permission bit requires extending both CumulativeBitCheck.circom and the SDK validator in lockstep."
+      ],
+      "estimated_constraints": 24,
+      "dependencies": [
+        "circom_tester (npm, dev)",
+        "snarkjs ^0.7.x",
+        "@bolyra/sdk (validateCumulativeBitEncoding as oracle)",
+        "circuits/src/Delegation.circom (existing cumulative-bit constraints to audit)",
+        "circuits/build/pot16.ptau (only needed for slow/proof mode, not for witness-only sweep)"
+      ]
+    }
+  }
+]

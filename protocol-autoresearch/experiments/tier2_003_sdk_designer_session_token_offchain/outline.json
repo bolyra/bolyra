@@ -1,0 +1,66 @@
+{
+  "id": "sdk_designer_session_token_offchain",
+  "title": "SD-JWT session token for off-chain proof reuse",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/session-token-sd-jwt.md",
+      "description": "Specification for SD-JWT session token structure: claims layout (nullifierHash, scopeCommitment, humanMerkleRoot, agentCredentialHash, exp, iat, iss), selective disclosure map, and verifySessionToken() contract"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session.ts",
+      "description": "TypeScript implementation: issueSessionToken(handshakeResult, ttl) and verifySessionToken(token, opts) using jose or sd-jwt-vc library"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export issueSessionToken and verifySessionToken from public API"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/session.py",
+      "description": "Python implementation: issue_session_token() and verify_session_token() using python-sd-jwt + PyJWT, mirroring TS claim structure"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/__init__.py",
+      "description": "Expose issue_session_token and verify_session_token in the Python public API"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session.test.ts",
+      "description": "Unit tests: token issuance after mock handshake, expiry enforcement, tampered signature rejection, selective disclosure of nullifierHash only, round-trip verify"
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_session.py",
+      "description": "Python pytest suite mirroring TS tests: issue, verify, expiry, tamper, selective disclosure"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add session token section: one-time handshake \u2192 issueSessionToken \u2192 subsequent calls with verifySessionToken, latency comparison table (full ZKP ~2s vs JWT <1ms)"
+    }
+  ],
+  "steps": [
+    "Define SD-JWT claim schema in spec/session-token-sd-jwt.md: required claims (iss, iat, exp, nullifierHash, scopeCommitment, humanMerkleRoot, agentCredentialHash), optional disclosable claims (modelHash, operatorDID), and signing key conventions (HMAC-SHA256 shared secret or EdDSA keypair)",
+    "Add sd-jwt / jose dependency to sdk/package.json; confirm python-sd-jwt added to sdk-python/pyproject.toml alongside existing PyJWT dep",
+    "Implement sdk/src/session.ts: issueSessionToken(result: HandshakeResult, secret: Uint8Array, ttl?: number): string \u2014 packs verified nullifierHash, scopeCommitment, humanMerkleRoot, agentCredentialHash into SD-JWT; verifySessionToken(token: string, secret: Uint8Array): SessionClaims \u2014 validates signature + exp, returns decoded claims",
+    "Implement sdk-python/bolyra/session.py mirroring the same interface; reuse PyJWT for signature, python-sd-jwt for selective disclosure envelope",
+    "Wire issueSessionToken call into the existing proveHandshake / verifyHandshake flow as an optional post-step \u2014 do not break existing API, make session token opt-in via options flag",
+    "Write sdk/test/session.test.ts covering: valid round-trip, expired token rejection, signature tamper rejection, selective disclosure (only disclose nullifierHash, hide scopeCommitment), clock skew tolerance param",
+    "Write sdk-python/tests/test_session.py with equivalent pytest coverage",
+    "Run npm test and pytest -v; confirm all new and existing tests pass",
+    "Update sdk/QUICKSTART.md with session token usage example and latency context",
+    "Update spec/session-token-sd-jwt.md with final claim names, version, and interop notes between TS and Python implementations"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose (TS) or sd-jwt-vc for selective disclosure envelope in Node",
+    "python-sd-jwt for Python selective disclosure",
+    "PyJWT (already present in sdk-python)",
+    "Existing HandshakeResult type from sdk/src/index.ts",
+    "verifyHandshake() return shape must expose nullifierHash and scopeCommitment for token packing"
+  ]
+}

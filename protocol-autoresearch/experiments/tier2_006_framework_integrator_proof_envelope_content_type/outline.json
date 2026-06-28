@@ -1,0 +1,68 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "title": "Standardized proof envelope with application/bolyra+json content type",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-v1.md",
+      "description": "Formal specification of the application/bolyra+json envelope schema: version, circuit name, publicSignals array, proof object (pi_a/pi_b/pi_c), and metadata block. Includes ABNF for the Authorization header value 'Bearer bolyra:<base64url-envelope>'."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/content-type-registration.md",
+      "description": "IANA-style registration template for application/bolyra+json: type, subtype, required fields, optional fields, encoding considerations, security considerations."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript implementation of ProofEnvelope type, serializeEnvelope(), deserializeEnvelope(), and encodeAuthHeader() / decodeAuthHeader() utilities. Validates schema on both encode and decode paths."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/middleware/express.ts",
+      "description": "Express middleware: extractBolyraProof(req, res, next) \u2014 parses Authorization header, base64url-decodes envelope, validates schema, calls verifyHandshake(), attaches result to req.bolyraIdentity. 3-line usage: app.use(extractBolyraProof)."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/middleware/fastapi.py",
+      "description": "FastAPI dependency: bolyra_auth = Depends(BolyraAuthMiddleware()) \u2014 parses Authorization header, delegates proof verification to the Node subprocess bridge, returns BolyraIdentity pydantic model. 3-line usage via Depends()."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests for round-trip serialize/deserialize, Authorization header encode/decode, schema validation rejections (missing fields, wrong version, malformed base64), and Express middleware integration with a mock Express app."
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_middleware_fastapi.py",
+      "description": "pytest tests for FastAPI middleware: valid proof header, missing header 401, malformed base64 400, expired credential 403. Uses httpx TestClient."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope-quickstart.md",
+      "description": "Integration guide showing 3-line Express setup, 3-line FastAPI setup, curl example with a real base64url-encoded envelope, and a table mapping framework types (MCP server, OpenAI function proxy, REST tool server) to the middleware import path."
+    }
+  ],
+  "steps": [
+    "Define ProofEnvelopeV1 JSON schema in spec/proof-envelope-v1.md: required fields version (string semver), circuit (string enum: HumanUniqueness|AgentPolicy|Delegation), publicSignals (string[] hex), proof ({pi_a: string[], pi_b: string[][], pi_c: string[]}), metadata ({framework?: string, sdkVersion: string, provingTimeMs?: number})",
+    "Write serializeEnvelope() and deserializeEnvelope() in sdk/src/envelope.ts with zod schema validation; export ProofEnvelope TypeScript type",
+    "Implement encodeAuthHeader(envelope: ProofEnvelope): string (returns 'bolyra <base64url>') and decodeAuthHeader(header: string): ProofEnvelope with error throws for malformed input",
+    "Build Express middleware extractBolyraProof in sdk/src/middleware/express.ts: parse header, decode envelope, call verifyHandshake() from existing SDK, attach to req.bolyraIdentity, call next() on success or return 401/403 JSON error",
+    "Build FastAPI dependency BolyraAuthMiddleware in sdk-python/bolyra/middleware/fastapi.py: extract Authorization header via Request, delegate to subprocess bridge for verification, return BolyraIdentity pydantic model or raise HTTPException",
+    "Write unit tests for envelope serialization round-trips, header encode/decode, and schema rejection cases in sdk/test/envelope.test.ts",
+    "Write pytest tests for FastAPI middleware covering valid, missing, malformed, and expired cases in sdk-python/tests/test_middleware_fastapi.py",
+    "Update sdk/src/index.ts to export serializeEnvelope, deserializeEnvelope, encodeAuthHeader, decodeAuthHeader, and extractBolyraProof",
+    "Update sdk-python/bolyra/__init__.py to expose BolyraAuthMiddleware",
+    "Write spec/content-type-registration.md following IANA structured syntax template, referencing proof-envelope-v1.md for schema",
+    "Write docs/proof-envelope-quickstart.md with Express snippet, FastAPI snippet, curl example, and framework compatibility table",
+    "Run npm run typecheck in sdk/ and pytest in sdk-python/ to confirm no regressions; verify existing verifyHandshake integration tests still pass"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk verifyHandshake() public API",
+    "sdk-python subprocess bridge to Node for proof verification",
+    "zod (already in sdk/package.json) for schema validation",
+    "fastapi + httpx (already in sdk-python) for middleware and tests",
+    "express @types/express (already in sdk devDependencies)"
+  ]
+}

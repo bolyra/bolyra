@@ -1,0 +1,81 @@
+{
+  "id": "security_auditor_nullifier_cross_session_linkability",
+  "title": "HumanUniqueness nullifier is constant across sessions, enabling cross-verifier linkability",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Change public nullifierHash output to Poseidon3(scope, secret, sessionNonce) for per-session unlinkability. Add new private signal externalNullifier = Poseidon2(scope, secret) passed only to an on-chain commitment hash, not exposed as a public output."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniquenessRevocation.circom",
+      "description": "New helper circuit (or inline in HumanUniqueness) that proves knowledge of externalNullifier without revealing it \u2014 outputs a Poseidon commitment used by the registry for sybil/revocation gating."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/HumanRegistry.sol",
+      "description": "Update verifyAndRegister to accept the new public outputs: per-session nullifierHash (used for replay prevention) and externalNullifierCommitment (used for sybil/revocation). Store commitment in mapping, not raw nullifier."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IHumanVerifier.sol",
+      "description": "Update interface to reflect the new proof public signals: humanMerkleRoot, nullifierHash, nonceBinding, externalNullifierCommitment."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/human.ts",
+      "description": "Update proveHandshake and verifyHandshake to pass sessionNonce into the circuit witness for nullifierHash derivation. Expose externalNullifierCommitment in the proof output type for registry calls."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Add externalNullifierCommitment to HumanProof type. Deprecate the old flat nullifierHash field in a backwards-compatible way for the transition."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Document the two-nullifier architecture: per-session nullifierHash for replay prevention (visible to verifier) vs externalNullifierCommitment for sybil gating (committed on-chain only). Add privacy threat model section covering cross-verifier linkability."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/HumanUniqueness.test.js",
+      "description": "Add test: same (scope, secret) with different sessionNonce values produces distinct nullifierHash values. Add test: externalNullifierCommitment is stable across sessions for the same identity. Add linkability regression test asserting no two sessions share nullifierHash."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/HumanRegistry.test.js",
+      "description": "Update integration tests for new public signal layout. Add test: two proofs from the same identity with different nonces both accepted by registry (replay guard uses session nullifier, sybil guard uses commitment)."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/privacy-nullifier-design.md",
+      "description": "New doc explaining the two-layer nullifier design, the cross-session linkability threat, and why the fix breaks linkability without sacrificing sybil resistance. Include before/after signal diagrams."
+    }
+  ],
+  "steps": [
+    "Audit current HumanUniqueness.circom: document existing signals, constraints, and public outputs to establish a baseline before changes.",
+    "Design the two-nullifier signal layout on paper: (1) sessionNullifier = Poseidon3(scope, secret, sessionNonce) as the public nullifierHash output, (2) externalNullifier = Poseidon2(scope, secret) as a private intermediate, (3) externalNullifierCommitment = Poseidon1(externalNullifier) as a new public output for on-chain registry.",
+    "Update HumanUniqueness.circom: add sessionNonce as a private input signal, replace the Poseidon2(scope, secret) nullifier computation with Poseidon3(scope, secret, sessionNonce), add the externalNullifierCommitment signal, and update the public output declaration.",
+    "Re-run trusted setup: since public outputs changed, the existing .zkey is invalid. Generate a new project-specific Groth16 key against pot16.ptau and regenerate the vkey.json. Do NOT use the Semaphore v4 ceremony for this \u2014 HumanUniqueness no longer shares the same constraint shape.",
+    "Regenerate Solidity verifier from the new vkey.json using snarkjs exportSolidityVerifier. Replace contracts/src/generated/HumanUniquenessVerifier.sol.",
+    "Update HumanRegistry.sol: change the verifyAndRegister function signature to accept externalNullifierCommitment as a separate parameter. Use the session nullifierHash for per-session replay prevention (revert if seen in sessionNullifiers mapping). Use externalNullifierCommitment for sybil/revocation gating (revert if commitment is revoked).",
+    "Update sdk/src/types.ts: add externalNullifierCommitment to HumanProof. Mark old nullifierHash as the session-scoped value (not the sybil key) in JSDoc.",
+    "Update sdk/src/human.ts: pass sessionNonce into the circuit witness builder. Surface externalNullifierCommitment from proof publicSignals. Ensure verifyHandshake validates both the session nullifier (replay) and optionally the commitment (revocation check).",
+    "Write circuit tests covering: (a) distinct sessionNonce \u2192 distinct nullifierHash, (b) same identity \u2192 same externalNullifierCommitment across sessions, (c) invalid witness (wrong secret) rejected.",
+    "Write contract integration tests covering: (a) first handshake accepted, (b) replay of same session nullifier rejected, (c) second handshake with new nonce accepted for same identity, (d) revoked commitment rejected.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md with the new signal table, a privacy threat model subsection, and a note that verifiers MUST NOT log externalNullifierCommitment for linkability prevention.",
+    "Write docs/privacy-nullifier-design.md with before/after signal diagrams and the threat model rationale.",
+    "Run full test suite (npm run test:circuits:fast, npm run test:contracts) and fix any failures.",
+    "Run npm run test:circuits:slow (full Groth16 proof) to validate the new zkey end-to-end.",
+    "Update CHANGELOG and bump SDK minor version (breaking change to HumanProof type and circuit public outputs)."
+  ],
+  "estimated_constraints": 2200,
+  "dependencies": [
+    "circomlib Poseidon3 (3-input hash) \u2014 verify it is available in the imported circomlib version",
+    "pot16.ptau \u2014 must have capacity for ~2200 constraints; current pot16 supports 2^16, sufficient",
+    "snarkjs exportSolidityVerifier \u2014 required to regenerate verifier contract from new vkey",
+    "Hardhat \u2014 contract recompile and test re-run after verifier replacement",
+    "Semaphore v4 ceremony no longer usable for HumanUniqueness after this change \u2014 project must maintain its own Groth16 ceremony artifact"
+  ]
+}

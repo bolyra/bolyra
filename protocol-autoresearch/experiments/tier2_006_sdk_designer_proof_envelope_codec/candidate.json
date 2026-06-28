@@ -1,0 +1,16 @@
+{
+  "id": "sdk_designer_proof_envelope_codec",
+  "persona": "sdk_designer",
+  "title": "Self-describing proof envelope with named public signals",
+  "dimension": "adoption",
+  "description": "Proofs are currently bare `{ proof, publicSignals: bigint[] }` with positional semantics \u2014 `publicSignals[0]` vs `publicSignals[4]` is a constant source of integration bugs. Ship a `BolyraEnvelope` type with `encode()`/`decode()` that wraps proofs in `{ version, circuit, provingSystem, signals: { humanMerkleRoot, nullifierHash, ... }, proof }`. Include a `fromRaw(circuit, rawSignals)` migration helper. Publish in both TS and Python SDKs so integrators never index by position again.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "sdk_designer_proof_envelope_codec",
+  "adoption": 21,
+  "standards": 16,
+  "completeness": 19,
+  "correctness": 15,
+  "total": 71,
+  "verdict": "consider"
+}

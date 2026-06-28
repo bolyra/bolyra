@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap: proving bitwise subset containment over hidden scopes across a multi-issuer credential chain. BBS+ dismissal is valid, but the rfc7662_advocate's Attack 4 (Pedersen commitments + Bulletproofs) is not addressed \u2014 this baseline can prove range/subset over committed values. The construction has genuine advantages (chain linking + credential binding) over Pedersen+Bulletproofs, but these are NOT argued in \u00a78. The baseline comparison misidentifies the strongest competitor. Additionally, the 'no AS' claim is overstated per rfc7662_advocate Attack 1 \u2014 the on-chain registry IS a trust anchor functionally equivalent to an AS for handshake authorization. Dominance is real but incompletely argued."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit with named adversary capabilities, game definition, named assumptions (CR-Poseidon, KS-PLONK, ZK-PLONK), and a reduction sketch. However, the cryptographer's Attack 1 (chain truncation) identifies a fundamental completeness gap: the Audit Forgery Game does not include a completeness win condition \u2014 an adversary can omit violating hops by setting chainLength below actual execution depth. Attack 2 (phantom agent injection) shows intermediate credential commitments are never checked against the enrollment Merkle tree. Attack 3 correctly notes ZK-PLONK is cited without specifying HVZK vs SE-ZK, and the privacy game requires malicious-verifier ZK. These are real formal gaps that weaken the security argument below a 2."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps entirely to existing Bolyra primitives: Poseidon2, Poseidon3, Num2Bits(64), LessEqThan(64), cumulative bit encoding, PLONK proving. Circuit cost is explicitly estimated at ~8,500 constraints for MAX_HOPS=8, well within pot16.ptau (2^16). Proving time target <5s is substantiated with snarkjs PLONK benchmarks. Journalist variant adds ~2,500 constraints, still within budget. All gadgets are already implemented in the Delegation circuit. This is a clean Phase 1 implementation."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks land outside the threat model and the construction cannot answer them. Cryptographer Attack 1 (chain truncation/completeness) is devastating: chainLength is prover-chosen with no on-chain anchor, so violating hops can simply be omitted. Cryptographer Attack 2 (phantom agents) shows intermediate credential commitments are unconstrained against enrollment. The cu_ciso and auth0_pm both independently identify that the NFCU flagship scenario is structurally broken \u2014 NCUA requires vendor disclosure, making the privacy guarantee a regulatory liability rather than a feature. The auth0_pm Attack 1 (cross-org witness assembly) identifies that no single party legitimately holds all private inputs across org boundaries, and no witness assembly protocol is specified. These are not mitigated attacks \u2014 they are unanswered."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario is concrete with a named stakeholder ($175B CU, NCUA examination), a 4-hop pipeline, and specific permission narrowing. However, cu_ciso Attack 1 and auth0_pm Attack 2 demolish this as load-bearing: NCUA examination practice requires vendor disclosure (NCUA IRPS 07-1, Letter 01-CU-20), so hiding Chainalysis and Circle from the examiner actively violates regulatory requirements rather than satisfying them. The journalist/source variant is more defensible but is presented as a secondary scenario, not primary. The healthcare HIPAA variant is mentioned but undeveloped. The primary named scenario is structurally broken for its stated regulatory purpose."
+    }
+  },
+  "gaps": [
+    "Add audit completeness: commit (chainLength, terminalScopeCommitment) on-chain at each delegation step, or add a completeness win condition with corresponding circuit constraint binding proof to an on-chain execution log",
+    "Add Merkle membership proof for each intermediate delegateeCredCommitment[i] against the on-chain agent Merkle root to prevent phantom agent injection",
+    "Specify the witness assembly protocol for cross-org chains (MPC, per-hop partial witnesses, or designated relay with explicit trust assumptions and privacy proof)",
+    "Replace NFCU/NCUA as flagship scenario \u2014 NCUA requires vendor disclosure, making intermediary hiding a regulatory liability. Promote journalist/source or healthcare cross-provider as primary scenario where privacy is genuinely desired by the verifier",
+    "Address Pedersen+Bulletproofs as the correct baseline competitor (not BBS+) and explicitly argue why chain linking + credential binding make PLONK rollup superior",
+    "Specify HVZK vs SE-ZK for the privacy claim \u2014 the audit privacy game's adversary is the verifier, requiring malicious-verifier ZK, not just HVZK",
+    "Either make chainLength private (with range proof) or acknowledge it as an explicit metadata leak, especially for the journalist/source variant",
+    "Add companion audit report format mapping circuit outputs to human-readable regulatory evidence (timestamped logs, permission labels, transaction IDs)"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

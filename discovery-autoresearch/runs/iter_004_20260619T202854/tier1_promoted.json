@@ -1,0 +1,182 @@
+[
+  {
+    "id": "aws_agentcore_payment_auth",
+    "title": "ZKP Payment Authorization for AWS AgentCore Agents",
+    "description": "AWS AgentCore + Stripe + Privy enables agent payments but lacks fine-grained spending authorization proofs. Bolyra's FINANCIAL_SMALL/MEDIUM/UNLIMITED permission tiers and delegation circuit could provide cryptographic spending caps that agents prove on-chain before transacting \u2014 no trust in the orchestrator required.",
+    "category": "agentic_commerce",
+    "source": "privy_agents",
+    "preliminary_demand": 22,
+    "preliminary_timing": 22,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 18,
+    "scores": {
+      "demand": 22,
+      "timing": 22,
+      "fit": 24,
+      "feasibility": 18,
+      "total": 86
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "agentic_wallet_identity",
+    "title": "Machine-Native Identity Layer for Agentic Wallets",
+    "description": "The 2026 shift to agentic wallets (Privy, Coinbase, TON) creates demand for self-sovereign agent identity that isn't just a keypair. Bolyra's AgentPolicy proof bundles model hash, operator signature, and permission scope into a single verifiable credential \u2014 giving wallets reputation-building primitives without doxxing the operator.",
+    "category": "agentic_commerce",
+    "source": "privy_agents",
+    "preliminary_demand": 21,
+    "preliminary_timing": 23,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 19,
+    "scores": {
+      "demand": 21,
+      "timing": 23,
+      "fit": 22,
+      "feasibility": 19,
+      "total": 85
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "langchain_zkp_auth",
+    "title": "LangChain Agent Authentication Plugin",
+    "description": "LangChain lacks native agent-to-agent authentication. Bolyra's AgentPolicy circuit could provide a LangChain middleware that lets agents prove credentials (model hash, operator, permissions) without revealing private keys. The existing langchain integration in integrations/langchain/ is a natural launchpad.",
+    "category": "developer_tools",
+    "source": "langchain_auth",
+    "preliminary_demand": 18,
+    "preliminary_timing": 20,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 22,
+    "scores": {
+      "demand": 18,
+      "timing": 20,
+      "fit": 23,
+      "feasibility": 22,
+      "total": 83
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "did_vc_zkp_agents",
+    "title": "DID-Native ZKP Credentials for Zero-Trust Agent Frameworks",
+    "description": "The arxiv paper (2505.19301) validates the zero-trust + DID + VC direction for agentic AI but uses conventional VCs without ZKP selective disclosure. Bolyra's did:bolyra method and proof envelope format are purpose-built for this gap \u2014 agents prove specific claims (e.g., 'authorized for financial ops under $10K') without revealing the full credential.",
+    "category": "standards",
+    "source": "w3c_did_agents",
+    "preliminary_demand": 17,
+    "preliminary_timing": 19,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 21,
+    "scores": {
+      "demand": 17,
+      "timing": 19,
+      "fit": 25,
+      "feasibility": 21,
+      "total": 82
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "autogen_rbac_zkp",
+    "title": "ZKP-Based Role Verification for AutoGen Multi-Agent Systems",
+    "description": "AutoGen's discussion #4656 shows teams struggling with agent authorization in multi-agent orchestrations. Bolyra's cumulative-bit permissions and Delegation circuit map directly to role-based access control where agents prove capability tiers without exposing the full permission set. This is a pure protocol fit.",
+    "category": "enterprise_auth",
+    "source": "autogen_identity",
+    "preliminary_demand": 16,
+    "preliminary_timing": 18,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 20,
+    "scores": {
+      "demand": 16,
+      "timing": 18,
+      "fit": 24,
+      "feasibility": 20,
+      "total": 78
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "delegation_chain_saas",
+    "title": "Auditable Agent Delegation Chains for Enterprise SaaS",
+    "description": "As enterprises deploy agent swarms, the question 'who authorized this agent to act?' becomes a compliance requirement. Bolyra's Delegation circuit provides cryptographic proof of the full authorization chain (human \u2192 operator \u2192 agent \u2192 sub-agent) with one-way scope narrowing, satisfying auditors without revealing internal org structure.",
+    "category": "enterprise_auth",
+    "source": "okta_machine_identity",
+    "preliminary_demand": 19,
+    "preliminary_timing": 16,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 20,
+    "scores": {
+      "demand": 19,
+      "timing": 16,
+      "fit": 23,
+      "feasibility": 20,
+      "total": 78
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "okta_nhi_zkp_bridge",
+    "title": "Zero-Knowledge Non-Human Identity Attestations for Enterprise IAM",
+    "description": "Okta is building centralized NHI governance but can't solve the privacy problem: enterprises don't want to reveal which agents they run or what permissions they hold to third-party identity providers. Bolyra's handshake protocol lets agents prove authorization without leaking internal policy to the IdP. Position as a privacy layer that sits beneath Okta/Entra.",
+    "category": "enterprise_auth",
+    "source": "okta_machine_identity",
+    "preliminary_demand": 20,
+    "preliminary_timing": 17,
+    "preliminary_fit": 21,
+    "preliminary_feasibility": 15,
+    "scores": {
+      "demand": 20,
+      "timing": 17,
+      "fit": 21,
+      "feasibility": 15,
+      "total": 73
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "xaa_privacy_layer",
+    "title": "Privacy-Preserving Cross-App Agent Access (XAA Alternative)",
+    "description": "Okta's XAA protocol centralizes app-to-app agent connections under one identity fabric, creating a single point of trust and surveillance. Bolyra's mutual ZKP handshake offers a decentralized alternative where agents prove authorization across app boundaries without a central broker seeing every connection. Target enterprises with multi-vendor agent deployments.",
+    "category": "enterprise_auth",
+    "source": "okta_machine_identity",
+    "preliminary_demand": 15,
+    "preliminary_timing": 15,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 14,
+    "scores": {
+      "demand": 15,
+      "timing": 15,
+      "fit": 22,
+      "feasibility": 14,
+      "total": 66
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "agent_reputation_protocol",
+    "title": "Privacy-Preserving Agent Reputation via Nullifier-Based History",
+    "description": "Agentic wallets need reputation but agents can't build track records without linking transactions to a persistent identity. Bolyra's nullifier mechanism (from HumanUniqueness, adapted for agents) enables unlinkable yet consistent reputation scores \u2014 an agent proves 'I have completed N transactions above threshold' without revealing which ones.",
+    "category": "agentic_commerce",
+    "source": "privy_agents",
+    "preliminary_demand": 16,
+    "preliminary_timing": 14,
+    "preliminary_fit": 20,
+    "preliminary_feasibility": 13,
+    "scores": {
+      "demand": 16,
+      "timing": 14,
+      "fit": 20,
+      "feasibility": 13,
+      "total": 63
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE"
+  }
+]

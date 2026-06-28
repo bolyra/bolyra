@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction explicitly identifies AS-blind issuer hiding as structurally impossible in RFC 7662 (AS inherently knows issuer), BBS+ (verification requires named issuer key), and WIMSE (intermediate CA reveals issuer). The constant-size proof over arbitrary predicates with issuer anonymity is a capability no baseline can replicate. Gap 6 analysis is thorough. Privacy Pass comparison is missing but the dynamic-predicate case remains unique."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "IND-ISS game is well-defined with three adversary classes, named assumptions (PLONK ZK, Poseidon PRF/CR, Baby Jubjub DL), and a 4-hybrid reduction sketch. However, cryptographer Attack 1 (predicateHash not re-derived inside circuit from private clause inputs) is a real soundness gap \u2014 the circuit as described allows predicate substitution. Attack 2 (64-bit range underconstraint ambiguity) is unresolved. The IND-ISS game also fails to condition on predicate-restricted anonymity set size (cryptographer Attack 4, rfc7662_advocate Attack 1). These are not fatal but weaken the formal argument below full marks."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every component maps to existing Bolyra primitives (Poseidon, EdDSA on Baby Jubjub, PLONK with pot16.ptau, Merkle trees). Constraint count is ~49,200, well within 2^16 budget. Proving time targets stated (< 4s snarkjs, ~0.8s rapidsnark). No new cryptographic primitives required. The Poseidon3 gadget is a trivial arity extension."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Five personas attacked. The construction survives structurally on its core claim (AS-blind hiding). However, multiple attacks remain unanswered: cryptographer's predicate substitution (missing in-circuit predicateHash binding), coordinated-nonce cross-verifier correlation (spiffe_engineer Attack 2, rfc7662_advocate Attack 2), predicate-driven anonymity set collapse (raised by 3 personas independently), revocation root staleness, and regulatory audit trail blindness. These are explicitly marked 'not in threat model' by attackers, meaning the construction cannot answer them as written."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Cross-CU NCUA membership proof is concrete, names PenFed ($36B), cites specific regulatory requirements (12 U.S.C. \u00a7 1784, BSA/AML), and the issuer-hiding property is load-bearing (not nice-to-have) because NCUA as AS would otherwise learn real-time transaction patterns of supervised entities. The KYB cross-jurisdiction extension adds a second concrete scenario."
+    }
+  },
+  "gaps": [
+    "Add in-circuit re-derivation of predicateHash from private clause inputs (Poseidon over clause vector) and constrain equality against public predicateHash \u2014 fixes predicate substitution attack",
+    "Add explicit per-slot Num2Bits(64) range checks on all attrValues before comparator gadgets, confirm in constraint breakdown",
+    "Condition IND-ISS advantage bound on k-anonymity parameter k = |qualifying issuer subset for predicate \u03c6|, add minimum-k deployment guidance",
+    "Address coordinated-nonce attack: either enforce nonce freshness via on-chain nonce registry rejecting reuse, or require prover-chosen nonce with verifier-binding commitment",
+    "Add 'honest CRS generation' as named assumption #7 in \u00a74",
+    "Add Privacy Pass / OHTTP to \u00a78 comparison table; narrow 'AS-blind hiding requires ZK' claim to dynamic-predicate case",
+    "Define break-glass audit mechanism (optional issuer-held proofSalt log) for GLBA/NCUA Part 748 compliance",
+    "Specify emergency key removal from issuer registry outside quarterly cadence (multisig governance or on-chain proposal mechanism)"
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

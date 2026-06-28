@@ -1,0 +1,31 @@
+{
+  "id": "pdlc-2026-06-20-openai-agents-adapter",
+  "feature": "OpenAI Agents SDK adapter for Bolyra (bolyra-agents) -- Python package providing BolyraAuthGuardrail, BolyraToolWrapper, and bolyra_mcp_auth() for SD-JWT and gateway auth paths",
+  "status": "active",
+  "stage": "REVIEW",
+  "mode": "standard",
+  "created": "2026-06-20T16:00:00Z",
+  "updated": "2026-06-20T17:30:00Z",
+  "spec": "docs/superpowers/specs/2026-06-20-openai-agents-adapter-design.md",
+  "plan": "docs/superpowers/plans/2026-06-20-openai-agents-adapter.md",
+  "gates": {
+    "spec": { "status": "approved" },
+    "plan": { "status": "approved" },
+    "ship": { "status": "pending" },
+    "post_ship": { "status": "pending" }
+  },
+  "tasks": [
+    { "id": 1, "description": "Package scaffolding (pyproject.toml, __init__.py)", "type": "parallel", "depends_on": [], "status": "complete" },
+    { "id": 2, "description": "Types module (AuthMode, AuthResult, BolyraAgentsConfig)", "type": "parallel", "depends_on": [], "status": "complete" },
+    { "id": 3, "description": "Tracing module (_tracing.py)", "type": "parallel", "depends_on": [], "status": "complete" },
+    { "id": 4, "description": "Auth context (BolyraAuthContext)", "type": "sequential", "depends_on": [2], "status": "complete" },
+    { "id": 5, "description": "Verification logic (_verify.py)", "type": "sequential", "depends_on": [2, 3, 4], "status": "complete" },
+    { "id": 6, "description": "Guardrail (BolyraAuthGuardrail)", "type": "sequential", "depends_on": [4, 5], "status": "complete" },
+    { "id": 7, "description": "Tool wrapper (BolyraToolWrapper + bolyra_tool decorator)", "type": "sequential", "depends_on": [4, 5], "status": "complete" },
+    { "id": 8, "description": "MCP auth wrapper (bolyra_mcp_auth)", "type": "sequential", "depends_on": [4, 5], "status": "complete" },
+    { "id": 9, "description": "Tests (conftest + unit tests for all modules)", "type": "sequential", "depends_on": [6, 7, 8], "status": "complete" },
+    { "id": 10, "description": "README with usage examples", "type": "sequential", "depends_on": [6, 7, 8], "status": "complete" }
+  ],
+  "reviews": {},
+  "release": {}
+}

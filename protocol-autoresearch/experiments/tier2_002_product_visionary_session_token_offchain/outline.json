@@ -1,0 +1,67 @@
+{
+  "id": "product_visionary_session_token_offchain",
+  "title": "Off-chain session token with on-chain checkpoint batching",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session.ts",
+      "description": "createSessionToken() and verifySessionToken() \u2014 signs a SD-JWT embedding nullifierHash, scopeCommitment, sessionNonce, expiry, and agentDID after a successful handshake proof"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/checkpoint.ts",
+      "description": "SessionCheckpointBatcher \u2014 accumulates verified session token hashes in a local Merkle tree and flushes the root to SessionCheckpoint.sol every N minutes or every M sessions"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/SessionCheckpoint.sol",
+      "description": "Accepts Merkle roots of batched session hashes from an authorized flusher address; emits CheckpointAnchored(root, timestamp, count); allows anyone to verify session inclusion via a Merkle path"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-format.md",
+      "description": "SD-JWT claim schema: standard header, protected claims (nullifierHash, scopeCommitment, sessionNonce, agentDID, humanMerkleRoot, expiry), selective-disclosure frame, and signing key derivation rules"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session.test.ts",
+      "description": "Unit tests: createSessionToken round-trip, expiry enforcement, replay rejection via nonce mismatch, scope narrowing reflected in token claims"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/SessionCheckpoint.test.ts",
+      "description": "Hardhat integration tests: anchor root, verify Merkle inclusion path, reject unauthorized flusher, test batch overflow edge case"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-tokens.md",
+      "description": "Developer guide: why per-call proving is eliminated, session lifecycle diagram, createSessionToken / verifySessionToken API reference, checkpoint batching tuning parameters"
+    }
+  ],
+  "steps": [
+    "Define SD-JWT claim schema for session tokens in spec/session-token-format.md \u2014 pin claim names (nullifierHash, scopeCommitment, sessionNonce, agentDID, humanMerkleRoot, expiry) and selective-disclosure frame",
+    "Add jose / @sd-jwt/core dependency to sdk/package.json; confirm no flat-override collision with existing snarkjs overrides",
+    "Implement createSessionToken(handshakeResult, signingKey, ttlSeconds): SessionToken in sdk/src/session.ts \u2014 sign SD-JWT with operator EdDSA key, embed all required claims, set expiry",
+    "Implement verifySessionToken(token, verificationKey): VerifiedSession in sdk/src/session.ts \u2014 validate signature, check expiry, return decoded claims; throw typed errors on failure",
+    "Write sdk/test/session.test.ts covering happy path, expired token, tampered nullifier, and scope claim presence",
+    "Implement in-memory MerkleTree helper in sdk/src/checkpoint.ts using poseidon2 hashes (reuse existing poseidon dependency from circuits) to accumulate session token hashes",
+    "Implement SessionCheckpointBatcher class: add(sessionTokenHash), flush(signer, contract) \u2014 builds root, calls SessionCheckpoint.sol.anchorRoot, clears buffer; expose flushEveryN and flushEveryMs config knobs",
+    "Author contracts/src/SessionCheckpoint.sol: owner-settable flusherAddress, anchorRoot(bytes32 root, uint256 count) with event CheckpointAnchored, verifyInclusion(bytes32 root, bytes32 leaf, bytes32[] proof) pure helper",
+    "Write contracts/test/SessionCheckpoint.test.ts with Hardhat \u2014 anchor, verify inclusion, reject wrong flusher, test empty batch guard",
+    "Wire createSessionToken into the existing proveHandshake return value as an optional sessionToken field \u2014 gated behind a createSession: true option so callers opt in",
+    "Export createSessionToken, verifySessionToken, SessionCheckpointBatcher from sdk/src/index.ts public API surface",
+    "Update sdk/QUICKSTART.md and write docs/session-tokens.md with lifecycle diagram, tuning guidance, and security considerations (token revocation caveat, checkpoint lag window)",
+    "Run npm run test:circuits:fast && npm run test:contracts to confirm no regressions; run tsc --noEmit in sdk/",
+    "DCO sign-off all commits with git commit -s"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Successful proveHandshake() output (nullifierHash, scopeCommitment, sessionNonce) as token input source",
+    "jose or @sd-jwt/core library for SD-JWT signing and verification",
+    "Poseidon hash function available in SDK (already used by circuits via circomlibjs)",
+    "Operator EdDSA key pair for signing session tokens (same key that signs AgentCredential)",
+    "Deployed SessionCheckpoint.sol address and ethers.js provider for on-chain flush",
+    "pot16.ptau and existing .zkey artifacts unchanged \u2014 session tokens bypass proving entirely, no new circuit needed",
+    "Hardhat environment for SessionCheckpoint.sol tests"
+  ]
+}

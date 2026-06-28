@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps vs BBS+ (issuer key visible, proof size O(|S|)) and RFC 7662 (AS knows issuer). However, the rfc7662_advocate's Attack 2 demonstrates that a federated NCUA identity broker with RFC 8693 token exchange + PPIDs + filtered introspection + DPoP can approximate RS-blind hiding and cross-RS unlinkability without ZK. The construction benchmarks against naive per-issuer RFC 7662, not the federated broker composition. AS-blind hiding remains a real advantage, but the construction does not prove the federated broker cannot achieve an organizational equivalent \u2014 it conflates cryptographic and organizational guarantees without ruling out the latter for the NCUA scenario specifically. The don't-care clause contradiction (cryptographer Attack 1, rfc7662_advocate Attack 1) also undermines the 'arbitrary-schema' baseline dominance claim since the predicate engine is currently broken for real credentials where attrValues[0] != 0."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides an explicit IND-ISS game, named assumptions, and a hybrid reduction sketch \u2014 far above average. However, three formal gaps prevent a score of 2: (1) The PRF assumption is incorrectly claimed as a consequence of CR + preimage resistance (cryptographer Attack 2) \u2014 this is false as a matter of cryptographic theory, and the entire hybrid argument (Hybrids 0\u21921 and 3\u21924) depends on it. (2) The Hybrid 2\u21923 transition requires simulating PLONK proofs for potentially unsatisfiable public statements without addressing the simulation trapdoor (cryptographer Attack 3). (3) The revocation-tree issuer-hiding claim is presented as cryptographic in the summary table but conditioned on a SHOULD-level application nonce that the circuit does not enforce (cryptographer Attack 4). The threat model is stated and assumptions are named, but the reduction has identifiable gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every component maps to existing Bolyra primitives: Poseidon (multi-arity), EdDSA on Baby Jubjub, PLONK with pot16.ptau universal setup, lean incremental Merkle tree, sparse Merkle tree. The constraint breakdown totals ~57,600, fitting within the 2^16 = 65,536 budget with 12% headroom. Proving time target (<5s PLONK, ~1.2s rapidsnark) is stated and grounded in existing benchmarks. No new cryptographic primitives or ceremonies required. The don't-care clause bug is a design issue fixable within the same constraint budget (adding an ALWAYS_TRUE comparator adds negligible constraints)."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 with 5 personas surfaced multiple real attacks that weaken claims: (1) Don't-care clause canonicalization contradiction (cryptographer + rfc7662_advocate) is a soundness bug \u2014 the construction as written either rejects valid credentials or abandons fixed predicateHash. (2) PRF assumption is incorrectly derived (cryptographer). (3) Cross-epoch registry correlation collapses anonymity set for newly enrolled issuers (rfc7662_advocate + spiffe_engineer). (4) Colluding RS nonce coordination enables cross-RS de-anonymization (rfc7662_advocate). (5) Schema-binding is conventional not cryptographic \u2014 semantic substitution attack unmodeled (spiffe_engineer). The construction mitigates some attacks (e.g., revocation-tree hiding with nonce caveat) but several attacks are outside the stated threat model and unaddressed."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "The cross-CU NCUA membership proof scenario is concrete, names PenFed ($36B assets) as stakeholder, identifies NCUA Part 748 and GLBA regulatory requirements, and describes a detailed end-to-end workflow including issuance, predicate compilation, proof generation, verification, and revocation. The property (issuer-blind predicate proof) is load-bearing for the scenario \u2014 PenFed's AI agent proving NCUA charter status without revealing PenFed's identity to partner CUs. The cu_ciso attacks raise valid operational concerns (audit attribution, incident response) but these are deployment gaps, not scenario-fit gaps \u2014 the scenario itself is concrete and regulatory-grounded. Extension to cross-country KYB is also named with jurisdiction-hiding as the load-bearing property."
+    }
+  },
+  "gaps": [
+    "Don't-care clause canonicalization is broken: the construction specifies credential-dependent thresholds for unused clauses, making predicateHash prover-specific rather than a fixed verifier-publishable value. Must implement ALWAYS_TRUE comparator (type 6) or equivalent fixed encoding.",
+    "PRF security of Poseidon is incorrectly claimed as a consequence of CR + preimage resistance. Must be stated as a standalone named assumption with citation to Poseidon security analysis treating first argument as key, or replace commitment/nullifier scheme with one reducing to a standard PRF assumption.",
+    "Hybrid 2\u21923 transition in the IND-ISS reduction requires PLONK simulation for potentially unsatisfiable statements. Must restructure hybrids so intermediate statements remain satisfiable (e.g., apply PRF replacement before witness switch) or explicitly invoke SE-SNARK formulation with trapdoor access.",
+    "Revocation-tree issuer-hiding is claimed as cryptographic but depends on SHOULD-level per-credential nonce. Either enforce minimum-entropy nonce in-circuit or restate the claim as conditional on application-layer cooperation.",
+    "IND-ISS game does not model dynamic registry updates. Cross-epoch registry correlation (newly enrolled issuers identifiable by root transition timing) can collapse anonymity set. Must extend game to adaptive registry or specify synchronous credential refresh on root updates.",
+    "Colluding RS nonce coordination attack unaddressed: verifiers sharing a fixed sessionNonce can correlate blindNullifier across RSes. Must require verifier-specific entropy in sessionNonce derivation or scope unlinkability claim to non-colluding verifiers.",
+    "Schema-binding is conventional, not cryptographic: predicate integrity defends structural substitution but not semantic substitution by a malicious issuer using a divergent attribute schema. Must include schema commitment in predicateHash or define an in-circuit schema registry check.",
+    "Baseline comparison targets naive per-issuer RFC 7662, not a federated NCUA broker with RFC 8693 + PPIDs + filtered introspection. Must benchmark against the strongest feasible OAuth composition to establish genuine baseline dominance."
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

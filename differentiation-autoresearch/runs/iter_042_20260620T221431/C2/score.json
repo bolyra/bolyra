@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Construction identifies that BBS+ Mode B cannot produce an AS-opaque persistent pseudonym (Theorem 4.6, three cases all yield Adv=1/2). The scopeBlindingSecret is a genuine structural advance over Mode B. However, auth0_pm Attack 2 shows Mode B has zero market share \u2014 the actual deployed baseline is short-TTL aud-restricted tokens (Mode C), which the construction never benchmarks against. rfc7662_advocate Attack 4 shows RFC 8693 token exchange with per-RS scoped issuance + PPID is a distinct baseline with a different trust topology the construction doesn't engage. The construction beats a theoretical best-case baseline but not the operational one buyers will compare against."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "IND-UNL-AS game is explicitly defined with adversarial AS as the threat actor. Theorem 4.6 formalizes BBS+ Mode B failure across three cases. Corollary 4.7 summary table exists. However: (1) cryptographer Attack 1 is devastating \u2014 the construction never specifies the full public-input vector, so if the credential commitment C is a public input (as it almost certainly must be for RS verification), the nullifier is unlinkable but C trivially re-links all presentations, making the theorem vacuously correct. (2) No setup trust assumption stated (cryptographer Attack 2). (3) Nonce oracle not modeled in the game (cryptographer Attack 3, rfc7662_advocate Attack 3). (4) No entropy lower bound on scopeBlindingSecret (cryptographer Attack 4). Threat model exists but critical modeling gaps and no reduction sketch connecting scopeBlindingSecret to a named hardness assumption."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "scopeBlindingSecret + Poseidon hash maps to existing Bolyra primitives (AgentPolicy circuit, BabyJubjub EdDSA, nullifier scheme). Dual Groth16/PLONK build already exists. However: (1) no circuit cost stated \u2014 no constraint count or proving time target for the scope-blinded variant. (2) cryptographer Attack 1 implies fixing the public-input linkage may require a second ZK layer (recursive proof or split-proof design) to hide credential commitment, which is a new primitive outside Phase 1 budget. (3) auth0_pm Attack 4 shows 15s Groth16 proof time fails multi-RS MCP tool-call scenarios (3-7 hops per turn = 45-105s latency). No proof-caching design that avoids leaking scope pre-selection."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple fatal attacks the construction cannot answer. cryptographer Attack 1 (credential commitment as stable cross-RS public input) is structurally devastating \u2014 the scopeBlindingSecret blinds the nullifier but not the credential commitment, and the construction never specifies that C is hidden. auth0_pm Attack 1 (CU-as-AS has BSA/AML duty to surveil the exact graph being hidden) makes the primary scenario self-defeating. cu_ciso Attack 4 (unlinkability blinds the CU while leaving agent operator with full correlation) shows the privacy runs in the wrong direction. spiffe_engineer Attack 2 (TLS SVID re-links at transport layer) bypasses the ZK layer entirely. Of 20 attacks across 5 personas, 17 are marked 'No \u2014 construction must address' and 3 'Partially.' No persona failed to find an unanswered attack."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios named: cross-CU member agent (CU-as-AS must not see merchant graph) and healthcare delegation across providers. Both name stakeholders (CU CISO, healthcare provider). However: auth0_pm Attack 1 shows the CU scenario is self-defeating \u2014 under BSA/AML, OFAC, and SAR obligations the CU has a legal duty to surveil exactly the graph being hidden. cu_ciso Attack 2 confirms this: unlinkability from AS means unlinkability from the CU's own compliance monitoring, violating NCUA Part 748 and GLBA Safeguards. cu_ciso Attack 4 shows the construction blinds the regulated entity while leaving the unregulated agent operator with full correlation capability \u2014 the opposite of what a CISO needs. The property is a regulatory liability, not load-bearing, in the named deployment."
+    }
+  },
+  "gaps": [
+    "FATAL: Specify full public-input vector of scope-blinded proof; demonstrate no deterministic per-credential identifier (e.g., credential commitment C) appears as a public input across scope presentations. Without this, unlinkability is vacuously correct. May require per-scope commitment C_i = H(C, scope_i) or rerandomizable commitment scheme.",
+    "Add Mode C baseline (short-TTL aud-restricted tokens \u00e0 la WorkOS/Auth0/Cloudflare Access) to Section 3 and formally show why AS still observes refresh cadence per RS, leaking the traffic graph. Also run explicit Bolyra-vs-RFC 8693 comparison for delegation.",
+    "Restructure CU scenario: separate (a) CU's internal compliance function (must retain audit capability per BSA/AML/NCUA Part 748) from (b) cross-CU or merchant-to-merchant correlation. The scopeBlindingSecret may still win for inter-CU unlinkability but the current framing conflates the regulated CU's own audit needs with the privacy guarantee.",
+    "Define adversary model for malicious agent operator who holds both credential key and scopeBlindingSecret. Current game blinds the AS/issuer but the agent operator has full correlation capability \u2014 wrong direction for CU CISO who must oversee third-party vendors under GLBA \u00a7314.4(f).",
+    "Extend IND-UNL-AS game to model: (a) Issue(W) oracle so adversary has issuance log, (b) nonce oracle interactions (who generates sessionNonce and what metadata AS retains), (c) multi-epoch credential rotation with scopeBlindingSecret lifecycle specified (per-epoch vs persistent).",
+    "State setup trust assumption explicitly: either commit to public MPC ceremony with N\u22652 independent contributors for Groth16, or argue unlinkability under PLONK universal SRS. Current construction has no setup trust statement.",
+    "Specify scopeBlindingSecret entropy requirement (SBS \u2190 {0,1}^\u03bb, uniform, secure random, never transmitted) and lifecycle (storage, rotation, revocation, loss recovery). Address SOC 2 Type II audit story and emergency revocation under unlinkability constraints.",
+    "Address transport-layer correlation: TLS mTLS SVID, timing side channels (\u00b1ms server logs), and SPIFFE bundle federation metadata all re-link at layers below the ZK proof. Specify required deployment topology (proxy, jitter, anonymization) or bound the residual leakage."
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

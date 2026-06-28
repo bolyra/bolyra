@@ -1,0 +1,16 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "persona": "framework_integrator",
+  "title": "Standardized proof envelope with MIME content-type for HTTP transport",
+  "dimension": "standards",
+  "description": "Framework integrations currently serialize proofs as ad-hoc JSON blobs with no standard envelope. Define `application/bolyra-proof+json` with a fixed schema: `{version, circuit, publicSignals, proof, metadata: {prover, timestamp}}`. The TS and Python SDKs should produce and consume this format. This unblocks framework-agnostic middleware (FastAPI dependency, Express middleware, MCP tool wrapper) that can verify any Bolyra proof from the Content-Type header alone without knowing which framework generated it. Artifact: update `spec/draft-bolyra-mutual-zkp-auth-01.md` \u00a7Wire-Format and add `sdk/src/envelope.ts` + `sdk-python/bolyra/envelope.py`.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "framework_integrator_proof_envelope_content_type",
+  "adoption": 19,
+  "standards": 18,
+  "completeness": 19,
+  "correctness": 15,
+  "total": 71,
+  "verdict": "consider"
+}

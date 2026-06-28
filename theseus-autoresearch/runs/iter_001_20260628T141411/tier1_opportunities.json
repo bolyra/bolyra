@@ -1,0 +1,407 @@
+[
+  {
+    "id": "agent_key_custody_zkp_rotation",
+    "persona": "agent_key_custody",
+    "title": "ZKP-Enforced Agent Key Rotation Without Human Approver",
+    "category": "key_management",
+    "description": "On Theseus, when an agent's EdDSA key is compromised or reaches its rotation epoch, there is no human fallback to authorize a new key. A ZKP-based rotation proof allows the agent to attest it holds both the old private key and the new one \u2014 committing to a key-transition nullifier on-chain \u2014 without revealing either key. This is structurally different from standard key rotation (which requires a human CA or multisig owner): the proof itself is the authorization. Bolyra's AgentPolicy circuit can be extended to include a rotation witness, and the IdentityRegistry contract can enforce that a valid ZKP is the only valid rotation path. Evidence: Theseus's 'no human key path' constraint makes this a day-1 operational gap \u2014 raw EdDSA rotation on an L1 with no human approver means a compromised key stays live until the agent self-destructs.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://litprotocol.com",
+      "https://turnkey.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_key_custody_agent_rooted_delegation",
+    "persona": "agent_key_custody",
+    "title": "Agent-Rooted Delegation Chain: L1 Genesis as Root of Trust",
+    "category": "authorization",
+    "description": "Bolyra's current Delegation circuit assumes a human is the root delegator. Theseus agents are the root \u2014 no human ever holds a parent key. An agent-rooted variant of the Delegation circuit treats the agent's on-chain birth transaction (or L1 genesis block commitment) as the trust anchor instead of a human Merkle leaf. This enables Agent A to delegate a subset of its permission bits to Agent B with on-circuit enforcement \u2014 scope can only narrow, never expand \u2014 without any human approval in the path. This is the foundational primitive for multi-agent workflows on Theseus: orchestrator agents spawning sub-agents with scoped authority. Competitors (Lit Protocol, Turnkey, Privy) have no delegation circuit \u2014 they rely on off-chain ACLs that can be bypassed.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://litprotocol.com",
+      "https://turnkey.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_key_custody_birth_cert_no_ceremony",
+    "persona": "agent_key_custody",
+    "title": "ZKP Agent Birth Certificate via PLONK (No Per-Agent Trusted Setup)",
+    "category": "identity",
+    "description": "When a new agent spawns on Theseus, it needs a verifiable identity commitment that (a) doesn't require a human ceremony, (b) proves the agent was legitimately born from the L1 (not fabricated off-chain), and (c) is portable to other chains. Bolyra's PLONK-based AgentPolicy circuit avoids per-agent trusted setup \u2014 the universal SRS is the ceremony. An agent can generate its credential commitment at spawn time, submit a PLONK proof to the IdentityRegistry, and receive a DID (did:bolyra:...) anchored to the Theseus genesis block. This directly addresses the 'no human key path' constraint: the L1 itself is the root of trust, and ZKP is what proves legitimate birth without a human CA. Bolyra already ships PLONK zkeys for AgentPolicy \u2014 this is a configuration extension, not a new circuit.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets"
+    ],
+    "time_horizon": "sunday_demo",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "agent_key_custody_nullifier_cross_chain",
+    "persona": "agent_key_custody",
+    "title": "Nullifier-Based Cross-Chain Agent Identity for x402 Micropayments",
+    "category": "cross_chain",
+    "description": "Theseus agents need to interact with Base and Ethereum contracts (DeFi, x402 payment endpoints, Coinbase Agentic Wallets). Revealing the Theseus-native key on Base links all cross-chain activity back to the agent's L1 identity \u2014 a privacy and security risk (once the Base key is compromised, the Theseus identity is deanonymized). ZKP nullifiers allow a Theseus agent to prove 'I am the same authorized entity' on Base without revealing its Theseus public key or linking individual transactions. Bolyra's HumanUniqueness circuit already implements nullifier-hash binding; an agent-rooted variant makes this work without the human Merkle tree. The @bolyra/payment-protocols x402 implementation provides the payment layer. This is the only approach that achieves cross-chain agent pseudonymity \u2014 EdDSA + Merkle alone leaks the linkage.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://www.gncrypto.news/news/base-mcp-ai-agents-on-chain-defi/"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_key_custody_quorum_recovery",
+    "persona": "agent_key_custody",
+    "title": "Agent Quorum Recovery: ZKP Proof of Legitimate Key Reconstitution",
+    "category": "security",
+    "description": "When a Theseus agent's key is irrecoverably lost (process crash, storage failure) with no human fallback, the only recovery path is a quorum of peer agents co-signing a new key. The threat model: a malicious agent could fabricate a recovery quorum to steal identity. A ZKP proof of quorum legitimacy \u2014 proving that k-of-n agents signed the recovery without revealing which agents participated \u2014 prevents quorum deanonymization attacks and makes it impossible to prove you orchestrated a hostile recovery. Bolyra's Delegation circuit can be adapted as a quorum-threshold witness: each quorum member's AgentPolicy credential is included as a private input, and the circuit proves the threshold is met without leaking membership. This is novel territory \u2014 no competitor (Lit, Turnkey, Privy) has agent-native quorum recovery with ZKP privacy of the quorum itself.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://litprotocol.com",
+      "https://spiffe.io"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "months"
+  },
+  {
+    "id": "l1_security_delegation_chain_monotonicity",
+    "persona": "l1_security",
+    "title": "ZKP-Enforced Delegation Chain with Scope Monotonicity on Theseus L1",
+    "category": "authorization",
+    "description": "On Theseus, Agent A delegates to Agent B which delegates to Agent C \u2014 without circuit-level enforcement, Agent C can claim permissions Agent A never granted (privilege escalation). Bolyra's Delegation circuit enforces one-way scope narrowing at the proof level: a delegatee cannot construct a valid proof claiming bits the delegator lacked. This is structurally unsolvable with ACLs alone on an agent-native L1 because there is no human to audit the chain in real time. The 8-bit cumulative encoding (bits 2\u21923\u21924 implication) is already implemented and the circuit is live on Base Sepolia \u2014 adapting it for agent-rooted trust (no human at root) is the key extension.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "l1_security_sybil_agent_genesis",
+    "persona": "l1_security",
+    "title": "Sybil-Resistant Agent Genesis Proof Without Human Biometric Root",
+    "category": "identity",
+    "description": "On human-centric chains, Sybil resistance relies on biometrics (World ID) or social graph (Proof of Humanity). On Theseus, neither applies \u2014 there is no human in the loop. An attacker can spin up 10,000 agent identities at near-zero cost, flooding the agent economy and manipulating reputation/voting mechanisms. ZKP nullifier schemes (adapted from HumanUniqueness circuit) can prove that a given agent genesis transaction was unique to a specific operator key or TEE attestation without revealing the operator \u2014 preventing farm creation while preserving agent autonomy. This is a day-1 blocker: any agent marketplace, reputation system, or governance mechanism on Theseus is immediately gameable without Sybil resistance.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://pitchbook.com/profiles/company/1130531-59"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "l1_security_session_nonce_replay_prevention",
+    "persona": "l1_security",
+    "title": "Nullifier-Bound Session Nonces to Block Agent Transaction Replay Attacks",
+    "category": "security",
+    "description": "Agents on Theseus execute high-frequency autonomous transactions \u2014 authorization proofs issued at time T can be replayed at T+N if the receiving contract or counterparty agent does not enforce per-session uniqueness. Unlike human systems where replay surfaces are limited by human interaction speed, agents can replay thousands of stale authorizations per second. Bolyra's handshake protocol already binds every proof to a fresh sessionNonce and enforces nullifier uniqueness on-chain \u2014 replaying (humanProof, agentProof) without rebinding the nonce fails verification by design. Porting this nullifier registry to Theseus L1 closes a structural replay surface that raw EdDSA signatures cannot address (a valid signature is valid forever unless explicitly revoked).",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/"
+    ],
+    "time_horizon": "sunday_demo",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "l1_security_selective_disclosure_spending_authority",
+    "persona": "l1_security",
+    "title": "Selective Disclosure of Agent Spending Authority for DeFi and API Access",
+    "category": "authorization",
+    "description": "When Agent A needs to access a DeFi protocol or paid API on Theseus (or via Base MCP), the counterparty needs to verify Agent A has spending authority up to $X \u2014 but revealing the full permission set (all 8 bits) leaks operational intelligence about the agent's operator. Bolyra's AgentPolicy circuit supports selective disclosure: Agent A proves it holds permission bit 2 (FINANCIAL_SMALL < $100) without revealing bits 5-7 (SIGN_ON_BEHALF, SUB_DELEGATE, ACCESS_PII). This matters specifically for agent-native chains because agents transact with other autonomous agents that have no human judgment to assess revealed metadata \u2014 everything revealed on-chain is permanently exploitable by adversarial agents.",
+    "signal_urls": [
+      "https://www.gncrypto.news/news/base-mcp-ai-agents-on-chain-defi/",
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets",
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "l1_security_autonomous_credential_expiry",
+    "persona": "l1_security",
+    "title": "Autonomous Credential Expiry and Revocation Without Human Intervention",
+    "category": "key_management",
+    "description": "On human-centric systems, a compromised credential triggers a human-initiated revocation flow (call support, rotate keys, notify users). On Theseus, there is no human fallback \u2014 if an agent's EdDSA key is compromised, the attacker operates indefinitely unless the system has autonomous expiry enforcement. Bolyra's AgentPolicy circuit encodes expiry as a public signal committed at issuance time; any proof generated after expiry fails on-chain verification without requiring a revocation oracle or human action. Combined with Theseus's on-chain agent persistence model, this creates a self-enforcing credential lifecycle that is strictly better than ACL-based revocation lists (which require a trusted admin with a human key to update).",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://litprotocol.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_economy_preflight_credit_proof",
+    "persona": "agent_economy",
+    "title": "Pre-flight creditworthiness proof before x402 service negotiation",
+    "category": "authorization",
+    "description": "Before an autonomous Theseus agent negotiates an x402 service contract, the counterparty needs proof the agent has spending authority \u2014 without the agent revealing its wallet balance, full delegation chain, or operator identity. Bolyra's AgentPolicy circuit already encodes FINANCIAL_SMALL/MEDIUM/UNLIMITED permission bits (2-4) in its 8-bit cumulative model; a ZKP can attest 'this agent is authorized to spend up to $10K' without leaking anything else. This is economically critical because x402 is now processing $600M annualized volume on Base and Solana, and Theseus agents have no human fallback to approve individual transactions \u2014 spending authority must be cryptographically self-certifying. Turnkey and Privy offer wallets but have no authorization proof layer; Bolyra's circuit is the only ready primitive.",
+    "signal_urls": [
+      "https://www.x402.org",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://theseuschain.com",
+      "https://turnkey.com"
+    ],
+    "time_horizon": "sunday_demo",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_economy_spending_cap_circuit",
+    "persona": "agent_economy",
+    "title": "Circuit-enforced cumulative spending caps for autonomous agent wallets",
+    "category": "authorization",
+    "description": "Theseus's 'no human key path' architecture means there is no human approving transactions after the fact \u2014 spending limits must be enforced at the cryptographic layer, not the UI layer. Bolyra's Delegation circuit enforces one-way scope narrowing on-chain: a parent agent can issue a credential to a sub-agent with FINANCIAL_MEDIUM (bit 3) but not FINANCIAL_UNLIMITED (bit 4), and the circuit rejects any proof that exceeds the delegated cap. This directly solves the autonomous commerce control problem that Coinbase Agentic Wallets and AWS AgentCore Payments leave open \u2014 both provide payment rails but no authorization proof that the spending agent was actually permitted to transact at that amount. Theseus cannot build this without ZKP expertise; it requires a circuit-level constraint, not just a smart contract balance check (which an adversarial agent can route around).",
+    "signal_urls": [
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://theseuschain.com",
+      "https://www.x402.org"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_economy_sybil_resistant_reputation",
+    "persona": "agent_economy",
+    "title": "Sybil-resistant agent reputation via ZKP nullifiers for agent marketplaces",
+    "category": "identity",
+    "description": "Agent marketplaces collapse when reputation is cheap to fake \u2014 if spinning up a new agent costs nothing, a bad actor resets its reputation every time. Bolyra's HumanUniqueness circuit uses Semaphore v4-style nullifier hashing to prove 'this identity has not been seen before in this context' without revealing which identity it is. Adapting this to agent-rooted trust (where the Theseus genesis transaction replaces the human enrollment) gives each agent a unique, unlinkable nullifier that persists across sessions but cannot be duplicated. This is the foundational primitive for any reputation system on Theseus \u2014 Merit Systems' x402scan and Kite both build payment discovery on top of agent reputation, but neither provides Sybil resistance at the identity layer. World's agentkit attempts human-attestation as a proxy for uniqueness but explicitly excludes agent-native scenarios.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.x402.org/ecosystem",
+      "https://www.coindesk.com/tech/2026/03/17/",
+      "https://litprotocol.com"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_economy_mutual_handshake_marketplace",
+    "persona": "agent_economy",
+    "title": "Mutual agent handshake protocol for agent-to-agent service hiring on Theseus",
+    "category": "agent_economy",
+    "description": "When Agent A wants to hire Agent B for a paid service on Theseus, both parties need to exchange verifiable credentials before committing funds \u2014 Agent A proves it has spending authority, Agent B proves it has the claimed capability and a non-zero reputation score, and both bind to a fresh session nonce so neither replay is valid. Bolyra's existing proveHandshake/verifyHandshake API implements exactly this mutual credential exchange; the missing piece is an agent-rooted variant where the root of trust is the Theseus L1 genesis transaction rather than a human enrollment. This is the commercial primitive that makes Theseus an actual agent economy rather than just an agent ledger \u2014 without it, agents transact on blind trust or fall back to human-curated allowlists. Base MCP's 6 DeFi protocol plugins for AI agents demonstrate the demand for programmatic agent service access, but none enforce mutual pre-authorization.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.gncrypto.news/news/base-mcp-ai-agents-on-chain-defi/",
+      "https://www.x402.org",
+      "https://www.cryptotimes.io/2026/06/23/base-unveils-builder-codes/"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "agent_economy_payment_attribution_proof",
+    "persona": "agent_economy",
+    "title": "ZKP delegation chain proof appended to x402 payment receipts for audit and dispute",
+    "category": "agent_economy",
+    "description": "Base's Builder Codes (ERC-8021) establish on-chain attribution for x402 payments, but attribution is not authorization \u2014 knowing which agent paid tells you nothing about whether it was permitted to pay, on whose behalf, or under what delegation chain. Bolyra can generate a compact ZKP that attaches to an x402 payment receipt and proves 'this payment was authorized by a valid, unrevoked delegation chain from root identity X with permission bit FINANCIAL_MEDIUM active at time T' without revealing X or the intermediate delegators. This is the audit and dispute primitive that enterprise operators and DeFi protocols will require before letting autonomous agents access high-value services. The x402 Foundation's Linux Foundation backing (Google, Visa, Stripe, AWS, Mastercard) signals regulatory scrutiny is coming; authorization proofs on payment receipts position Bolyra as the compliance layer for autonomous agent commerce.",
+    "signal_urls": [
+      "https://www.cryptotimes.io/2026/06/23/base-unveils-builder-codes/",
+      "https://www.x402.org",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "months"
+  },
+  {
+    "id": "cross_chain_identity_nullifier_domain_separation",
+    "persona": "cross_chain_identity",
+    "title": "Chain-scoped nullifier binding for Theseus\u2194Base cross-chain agent auth",
+    "category": "cross_chain",
+    "description": "Bolyra's existing nullifier scheme hashes (credentialCommitment, sessionNonce) but is chain-blind \u2014 a Theseus agent credential proof replayed on Base Sepolia would pass verification today. Adding chain_id as a public input to AgentPolicy's nullifier hash (nullifier = H(credentialCommitment, sessionNonce, chain_id)) creates cryptographically-enforced domain separation at the circuit level. This means a Theseus agent can present the same underlying credential on multiple chains without the ZKP verifier accepting cross-chain replays. The fix is a single-line Circom change to AgentPolicy and a matching chain_id public signal in the Solidity verifier \u2014 but the protocol guarantee is fundamental to safe multi-chain operation. Without this, any cross-chain Bolyra deployment is vulnerable to replay across chains sharing the same BN254 curve.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "cross_chain_identity_storage_proof_registry_sync",
+    "persona": "cross_chain_identity",
+    "title": "EIP-1186 storage proof relay to sync Bolyra IdentityRegistry root onto Theseus L1",
+    "category": "cross_chain",
+    "description": "Bolyra's IdentityRegistry on Base Sepolia maintains a Merkle root of enrolled agent credentials. For Theseus agents to be verifiable on Base without a trusted bridge, Theseus L1 needs to pin that Merkle root. Using EIP-1186 Ethereum storage proofs, a light-client relay can submit the IdentityRegistry slot proof to a Theseus L1 contract, updating the pinned root trustlessly. A Bolyra ZKP generated on Base is then verifiable on Theseus by checking inclusion against the locally-synced root \u2014 no bridge operator required. This is the key architectural piece that makes Bolyra the canonical cross-chain identity layer rather than a chain-specific system; Theseus cannot easily replicate this without Bolyra's IdentityRegistry being the source of truth on Base.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.gncrypto.news/news/base-mcp-ai-agents-on-chain-defi/"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "cross_chain_identity_plonk_vm_agnostic_verifier",
+    "persona": "cross_chain_identity",
+    "title": "PLONK universal verifier deployment on Theseus L1 for VM-agnostic proof acceptance",
+    "category": "cross_chain",
+    "description": "Groth16 verifiers are EVM-specific (Solidity + BN254 precompiles). If Theseus runs a custom VM, Bolyra's current Groth16 verifier contracts can't be deployed as-is. Bolyra already ships PLONK variants for AgentPolicy and Delegation circuits using a universal SRS (pot16.ptau) \u2014 PLONK verifiers can be implemented in any language without chain-specific precompile support. The proposal is to package the PLONK verification logic as a standalone Rust/Go library (Theseus is likely Rust-native given the L1 custom-VM pattern) so Theseus L1 can verify Bolyra agent credentials natively. This creates a hard dependency: Theseus's native agent auth is cryptographically tied to Bolyra's proof format and SRS, not something they can swap out post-launch.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://litprotocol.com"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "months"
+  },
+  {
+    "id": "cross_chain_identity_agent_genesis_credential",
+    "persona": "cross_chain_identity",
+    "title": "Agent genesis credential: L1 birth-transaction as ZKP root of trust (no human root)",
+    "category": "identity",
+    "description": "Bolyra's current AgentPolicy circuit commits to operatorPrivKey (a human-held key) as the issuer root. Theseus has no human key path \u2014 agents are bootstrapped by the L1 genesis or agent birth transaction itself. The fix: replace the human operatorPrivKey input with the agent's genesis tx hash (chain_id + block_hash + tx_index) as the credential root, issued by the Theseus L1 protocol rather than a human key. A Bolyra ZKP then proves 'this agent credential was issued by Theseus L1 genesis block B at tx index T, and its permissions are scoped to bits 0bXXXXXXXX' \u2014 all without revealing which specific agent it is (nullifier privacy preserved). This is the exact architectural gap the Theseus 'no human key path' constraint creates, and it's where Bolyra's circuit infrastructure provides a 6-12 month head start over anything Theseus could build internally.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.coindesk.com/tech/2026/03/17/"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "cross_chain_identity_x402_chain_bound_payment_auth",
+    "persona": "cross_chain_identity",
+    "title": "Chain-bound x402 payment authorization proof for Theseus agents spending on Base DeFi",
+    "category": "agent_economy",
+    "description": "Theseus agents interacting with Base DeFi (Base MCP launched May 2026 with 6 DeFi plugins) need to prove authorization to spend up to a dollar amount without revealing their full credential or delegation chain. Bolyra's AgentPolicy circuit already encodes FINANCIAL_SMALL/MEDIUM/UNLIMITED permission bits. Binding these to an x402 payment nonce (amount + recipient + chain_id + expiry) inside the ZKP means the proof simultaneously authorizes the spend, scopes it to the correct chain, and expires it \u2014 all in a single 256-byte Groth16 proof verifiable in the x402 response header. The @bolyra/payment-protocols package already implements x402 flows; the circuit extension is the binding of payment parameters as public inputs. This is the Sunday demo path: Bolyra proof in x402 header, Theseus agent pays Base DeFi protocol, authorization is chain-specific and non-replayable.",
+    "signal_urls": [
+      "https://www.gncrypto.news/news/base-mcp-ai-agents-on-chain-defi/",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://www.x402.org/ecosystem"
+    ],
+    "time_horizon": "sunday_demo",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "protocol_mapper_agent_rooted_delegation",
+    "persona": "protocol_mapper",
+    "title": "Agent-rooted Delegation circuit: L1 genesis as root of trust",
+    "category": "authorization",
+    "description": "Bolyra's existing Delegation circuit hard-assumes a human delegator \u2014 the delegator key is bound to a HumanUniqueness credential commitment. Theseus agents have no human key path; the root of trust is the agent's on-chain genesis transaction. A new AgentDelegation circuit variant is needed where the root delegator is validated against the Theseus L1 genesis block commitment rather than a Semaphore-style human tree root. The existing scope-narrowing logic (delegateeScope \u2286 delegatorScope, expiry monotonicity, max-3-hop chain) carries over with ~3k additional constraints to verify the L1 genesis commitment. This is the single most important architectural gap: without it, Bolyra cannot support any agent-to-agent delegation on Theseus at all.",
+    "signal_urls": [
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "protocol_mapper_agentpolicy_native_identity",
+    "persona": "protocol_mapper",
+    "title": "AgentPolicy + IdentityRegistry as Theseus native agent identity layer",
+    "category": "identity",
+    "description": "The existing AgentPolicy circuit (PLONK, 20923 constraints) already verifies EdDSA operator signatures over credential commitments, enforces 8-bit cumulative permission bitmasks, and supports selective disclosure of required scope bits \u2014 exactly what Theseus needs to prove 'this agent is authorized for action X' without revealing its full capability set. The IdentityRegistry.agentTree (dual LeanIMT with 30-entry root history buffer) provides the on-chain membership oracle. Minimal new work: deploy IdentityRegistry on Theseus L1 (if EVM-compatible) or expose a cross-chain state proof relay to Base Sepolia. The createAgentCredential() + proveHandshake() SDK path ships today. This can be demoed Sunday with zero circuit changes if Theseus is EVM-compatible.",
+    "signal_urls": [
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "sunday_demo",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "protocol_mapper_authorization_proof_layer",
+    "persona": "protocol_mapper",
+    "title": "Authorization proof layer atop Theseus verifiable AI execution",
+    "category": "security",
+    "description": "Theseus advertises 'verifiable AI execution' \u2014 proving WHAT an agent computed. But verifiable execution without verifiable authorization is an incomplete trust model: you can prove an agent ran model M and produced output O, but not that it was authorized to act on behalf of entity E with permission scope S. Bolyra's AgentPolicy circuit closes this gap by binding the execution proof to a scope commitment: Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp). The composition is: Theseus execution attestation anchors to a Bolyra scope commitment, so on-chain verifiers can check both claims atomically. No new circuit \u2014 the existing AgentPolicy selective disclosure output (requiredScopeMask) is the binding point. New work is a Solidity adapter (est. 2 days) that wraps IdentityRegistry.verifyHandshake with Theseus's execution attestation hash.",
+    "signal_urls": [
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "protocol_mapper_x402_spending_limits",
+    "persona": "protocol_mapper",
+    "title": "ZKP-enforced x402 spending limits for autonomous Theseus agents",
+    "category": "agent_economy",
+    "description": "x402 is now an industry standard (Linux Foundation, Coinbase, AWS Bedrock, Stripe) and Bolyra already ships @bolyra/payment-protocols implementing x402 flows. The AgentPolicy circuit's permission bits 2 (FINANCIAL_SMALL <$100), 3 (FINANCIAL_MEDIUM <$10K), and 4 (FINANCIAL_UNLIMITED) provide ZKP-enforced spending authorization: an agent proves it holds a credential with the required financial permission bit set, without revealing its full credential or who granted it. For Theseus, this means autonomous agents can make x402 payments with cryptographically enforced spending caps \u2014 no human approval needed, no trusted intermediary. The FINANCIAL_MEDIUM implication of FINANCIAL_SMALL (cumulative bit encoding, enforced in AgentPolicy circuit) prevents privilege escalation. Integration path: @bolyra/payment-protocols + existing AgentPolicy circuit + a thin Theseus-native SDK wrapper calling proveHandshake() before each x402 payment request.",
+    "signal_urls": [
+      "https://www.x402.org",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "protocol_mapper_agent_marketplace_scope_attestation",
+    "persona": "protocol_mapper",
+    "title": "Selective capability disclosure for Theseus agent marketplace",
+    "category": "authorization",
+    "description": "As Theseus scales to multiple agents transacting with each other, agents need to advertise capabilities without leaking their full permission set to counterparties (a privacy and competitive intelligence concern). AgentPolicy's selective disclosure mechanism \u2014 proving requiredScopeMask bits are set without revealing the full permissionBitmask \u2014 maps directly to this. An agent wanting to offer 'financial services up to $100' can prove bit 2 is set without revealing bits 5-7 (SIGN_ON_BEHALF, SUB_DELEGATE, ACCESS_PII). The on-chain proof (PlonkVerifier at 0x28b99c...) serves as the attestation anchor for a marketplace discovery protocol. New work needed: a DID document extension (did:bolyra method already exists) that encodes the selective disclosure proof as a service endpoint, making it readable by Theseus marketplace indexers. Estimated 3-4 days of SDK + spec work.",
+    "signal_urls": [
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "partnership_strategist_agentpolicy_live_demo",
+    "persona": "partnership_strategist",
+    "title": "Live AgentPolicy proof on Base Sepolia as Theseus agent credential primitive",
+    "category": "authorization",
+    "description": "Bolyra's AgentPolicy circuit (PLONK, deployed at 0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db on Base Sepolia) already does exactly what Theseus needs for agent credential verification: EdDSA operator signature over a credential commitment, 8-bit permission bitmask with cumulative enforcement, selective disclosure of required scope bits, and expiry gating \u2014 all proven on-chain in a single transaction. On Sunday's call we run a live terminal demo: spin up an agent credential with permissions 0b00000111 (READ+WRITE+FINANCIAL_SMALL), generate a PLONK proof, and call IdentityRegistry.verifyHandshake() on Base Sepolia in real time. This is not a slide \u2014 it's a working primitive Theseus can fork today. The signal is Theseus's 'no human key path' constraint: their agents need programmatic credential issuance and scope enforcement without a human signing off at runtime, which is exactly what AgentPolicy delivers.",
+    "signal_urls": [
+      "https://theseuschain.com"
+    ],
+    "time_horizon": "sunday_demo",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "partnership_strategist_agent_rooted_delegation",
+    "persona": "partnership_strategist",
+    "title": "Agent-rooted Delegation circuit: L1 genesis as trust anchor, no human required",
+    "category": "identity",
+    "description": "Bolyra's current Delegation circuit assumes a human root (HumanUniqueness proof anchors the chain). Theseus's architecture explicitly removes the human key path \u2014 agents are born on-chain at genesis, not spawned by humans. The 2-week deliverable is a Delegation circuit variant where the delegator is an agent credential (AgentPolicy proof) rather than a human nullifier: agent A (Theseus L1 genesis tx as trust anchor) delegates a narrowed permission subset to agent B, enforceable on-chain with the same scope-narrowing and expiry-narrowing guarantees. The existing circuit is 22,398 PLONK constraints; the agent-rooted variant adds ~1,500 constraints to replace the human Merkle path with an agent commitment path. Theseus cannot replicate this without 3+ months of ZKP R&D \u2014 they have no Circom expertise evident from their public materials. This is the deepest technical lock-in play: if Theseus builds on this circuit, migrating away requires re-auditing their entire agent authorization model.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://litprotocol.com"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "partnership_strategist_auth_proof_complement",
+    "persona": "partnership_strategist",
+    "title": "Authorization proof layer completing Theseus's verifiable execution story",
+    "category": "security",
+    "description": "Theseus advertises 'verifiable AI execution on-chain' \u2014 but verifiable execution without verifiable authorization is an incomplete security story. You can prove WHAT a model computed; you cannot prove WHETHER that agent was authorized to act. Bolyra provides the missing half: a Groth16/PLONK proof that this agent held permission bits 0b00000111, delegated by entity X, not expired, not replayed. The partnership pitch to Theseus's investors (Orange DAO / future Series A) is: 'Theseus proves the computation; Bolyra proves the mandate.' This is a 3-month roadmap item requiring a joint spec that defines how Theseus's execution attestation format (unknown \u2014 TEE? ZKP? optimistic?) composes with Bolyra's authorization proof in a single on-chain handshake. It's worth raising on Sunday to plant the narrative seed, but the concrete deliverable is a joint whitepaper / IETF draft amendment (extending draft-bolyra-mutual-zkp-auth-01 with an agent-execution attestation binding) that both teams co-author. This differentiates Theseus from every other agent L1 in the market.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://www.x402.org"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "months"
+  },
+  {
+    "id": "partnership_strategist_x402_spending_gating",
+    "persona": "partnership_strategist",
+    "title": "x402 autonomous spending gated by Bolyra AgentPolicy permission bits",
+    "category": "agent_economy",
+    "description": "AWS Bedrock AgentCore, Coinbase Agentic Wallets, and World's agentkit all launched x402 support in 2026 \u2014 autonomous agents paying for services via HTTP 402 micropayments is becoming infrastructure. Bolyra's @bolyra/payment-protocols package already implements x402 flows. The integration play: Theseus agents that call x402-enabled APIs present a Bolyra AgentPolicy proof alongside the payment, proving they hold FINANCIAL_SMALL (bit 2, <$100) or FINANCIAL_MEDIUM (bit 3, <$10K) permission \u2014 gating autonomous spending to the authorized limit without a human approval step. The 2-week deliverable is a demo script: Theseus agent calls an x402-gated endpoint, Bolyra proof is verified in the payment middleware, spending is approved only if permission bits match the payment amount. This is the most concrete 'agents transacting autonomously' story we can show on Sunday as a 5-minute live demo after the AgentPolicy demo. x402 Foundation backing (Google, Visa, Stripe, AWS, Mastercard) makes this a credible ecosystem play, not a toy.",
+    "signal_urls": [
+      "https://www.x402.org",
+      "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+      "https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets"
+    ],
+    "time_horizon": "2_week_sprint",
+    "estimated_effort": "weeks"
+  },
+  {
+    "id": "partnership_strategist_theseus_native_did",
+    "persona": "partnership_strategist",
+    "title": "did:bolyra:theseus DID method with Theseus L1 genesis tx as root of trust",
+    "category": "identity",
+    "description": "Bolyra already has a W3C DID method (did:bolyra) and an IETF internet-draft. Extending did:bolyra to include a Theseus-native DID namespace (did:bolyra:theseus:<agent-genesis-tx-hash>) would make Bolyra the canonical identity layer for the Theseus ecosystem \u2014 every agent born on Theseus L1 gets a portable, cross-chain DID resolvable via the did:bolyra method. This is a 3-month roadmap item requiring: (1) Theseus confirming their genesis transaction format, (2) a DID document schema for agent-born identities, (3) a resolver plugin that reads Theseus L1 state. The partnership leverage is asymmetric and durable: once Theseus ecosystem tooling (explorers, wallets, agent marketplaces) resolves did:bolyra:theseus DIDs, switching identity layers means re-issuing every agent credential and breaking all integrations. Raise this on Sunday as the long-term vision after establishing near-term credibility with the AgentPolicy demo \u2014 it signals Bolyra is thinking about the Theseus ecosystem becoming a major vertical, not just a one-off integration.",
+    "signal_urls": [
+      "https://theseuschain.com",
+      "https://pitchbook.com/profiles/company/1130531-59"
+    ],
+    "time_horizon": "3_month_roadmap",
+    "estimated_effort": "months"
+  }
+]

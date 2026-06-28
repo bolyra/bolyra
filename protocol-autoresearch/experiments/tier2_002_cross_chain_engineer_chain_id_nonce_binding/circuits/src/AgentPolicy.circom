@@ -1,0 +1,120 @@
+pragma circom 2.1.0;
+
+include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
+include "../node_modules/circomlib/circuits/bitify.circom";
+include "../node_modules/circomlib/circuits/eddsaposeidon.circom";
+include "../node_modules/@semaphore-protocol/circuits/tree.circom";
+include "./lib/MerkleDepthCheck.circom";
+
+/// @title  AgentPolicy
+/// @notice Proves an AI agent holds a valid EdDSA-signed credential with
+///         cumulative-bit permissions, committed into a Merkle registry.
+///         Includes cross-chain replay prevention via chainId binding.
+///
+/// @dev    effectiveNonce = Poseidon2(sessionNonce, chainId) replaces the
+///         old nonceBinding. The on-chain verifier asserts chainId == block.chainid.
+template AgentPolicy(MAX_DEPTH) {
+    // --- Private inputs ---
+    signal input modelHash;
+    signal input operatorPubKeyX;
+    signal input operatorPubKeyY;
+    signal input signatureR8x;
+    signal input signatureR8y;
+    signal input signatureS;
+    signal input permissions;         // 8-bit cumulative
+    signal input expiry;
+    signal input merkleProofLength;
+    signal input merkleProofSiblings[MAX_DEPTH];
+    signal input merkleProofIndices[MAX_DEPTH];
+
+    // --- Public inputs ---
+    signal input agentMerkleRoot;
+    signal input currentTimestamp;
+    signal input requiredPermissions;  // bitmask
+    signal input sessionNonce;
+    signal input chainId;
+
+    // --- Public outputs ---
+    signal output credentialHash;
+    signal output nonceBinding;
+
+    // =====================================================
+    // 1. Merkle depth boundedness: 1 <= depth <= MAX_DEPTH
+    // =====================================================
+    component depthCheck = RangeCheckDepth(MAX_DEPTH);
+    depthCheck.merkleProofLength <== merkleProofLength;
+    depthCheck.valid === 1;
+
+    // =====================================================
+    // 2. Credential commitment
+    // =====================================================
+    component credHasher = Poseidon(4);
+    credHasher.inputs[0] <== modelHash;
+    credHasher.inputs[1] <== operatorPubKeyX;
+    credHasher.inputs[2] <== permissions;
+    credHasher.inputs[3] <== expiry;
+    credentialHash <== credHasher.out;
+
+    // =====================================================
+    // 3. EdDSA signature verification
+    // =====================================================
+    component sigVerifier = EdDSAPoseidonVerifier();
+    sigVerifier.enabled <== 1;
+    sigVerifier.Ax <== operatorPubKeyX;
+    sigVerifier.Ay <== operatorPubKeyY;
+    sigVerifier.R8x <== signatureR8x;
+    sigVerifier.R8y <== signatureR8y;
+    sigVerifier.S <== signatureS;
+    sigVerifier.M <== credentialHash;
+
+    // =====================================================
+    // 4. Merkle tree membership
+    // =====================================================
+    component tree = BinaryMerkleRoot(MAX_DEPTH);
+    tree.leaf <== credentialHash;
+    tree.depth <== merkleProofLength;
+    for (var i = 0; i < MAX_DEPTH; i++) {
+        tree.siblings[i] <== merkleProofSiblings[i];
+        tree.indices[i] <== merkleProofIndices[i];
+    }
+    tree.out === agentMerkleRoot;
+
+    // =====================================================
+    // 5. Expiry check: currentTimestamp < expiry
+    // =====================================================
+    component expiryCheck = LessThan(64);
+    expiryCheck.in[0] <== currentTimestamp;
+    expiryCheck.in[1] <== expiry;
+    expiryCheck.out === 1;
+
+    // =====================================================
+    // 6. Permission check: (permissions & requiredPermissions) === requiredPermissions
+    // =====================================================
+    component permBits = Num2Bits(8);
+    permBits.in <== permissions;
+    component reqBits = Num2Bits(8);
+    reqBits.in <== requiredPermissions;
+    signal permCheck[8];
+    for (var i = 0; i < 8; i++) {
+        permCheck[i] <== reqBits.out[i] * (1 - permBits.out[i]);
+        permCheck[i] === 0;
+    }
+
+    // =====================================================
+    // 7. Effective nonce (chain-bound)
+    //    effectiveNonce = Poseidon2(sessionNonce, chainId)
+    //    Binding chainId prevents cross-chain replay.
+    // =====================================================
+    component effectiveNonceHasher = Poseidon(2);
+    effectiveNonceHasher.inputs[0] <== sessionNonce;
+    effectiveNonceHasher.inputs[1] <== chainId;
+    signal effectiveNonce <== effectiveNonceHasher.out;
+
+    component nonceHasher = Poseidon(2);
+    nonceHasher.inputs[0] <== credentialHash;
+    nonceHasher.inputs[1] <== effectiveNonce;
+    nonceBinding <== nonceHasher.out;
+}
+
+component main {public [agentMerkleRoot, currentTimestamp, requiredPermissions, sessionNonce, chainId]} = AgentPolicy(20);

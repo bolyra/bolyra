@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction targets AS-opacity (unlinkability even when the AS is adversarial), which RFC 7662/DPoP/SPIFFE do not natively provide. However, rfc7662_advocate Attack 3 correctly identifies that DPoP+per-RS ephemeral keys covers RS-side unlinkability completely, and the construction never explicitly delineates the residual gap ZK closes vs what DPoP already handles. Additionally, rfc7662_advocate Attack 1 notes OIDC Federation + pairwise PPIDs is not ruled out as an alternative for the federated CU scenario. The construction asserts AS-opacity but does not formally prove the baseline cannot approximate it (e.g., via blind token issuance or federation-layer PPIDs). Baseline can approximate with extra configuration, so 1 not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a threat model (\u00a73 grants A the operatorSecret, models operator=AS), names Poseidon2 PRF assumption, and provides a hybrid argument (\u00a74 Hybrid 0/1). However, as the candidate's own gap field and cryptographer Attack 2 both confirm, the IND-UNL-AS game is undefined \u2014 there is no formal game definition with winning condition, no distinction between passive/active/colluding AS power levels, and no reduction sketch from cross-scope session unlinkability to Poseidon2 PRF security. The hybrid sequence shows credential indistinguishability, not cross-scope unlinkability. Threat model stated but reduction missing \u2192 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "\u00a76 provides concrete circuit cost: +854 constraints (~600 Poseidon2 + ~254 Num2Bits range check) \u2192 15,943 total, explicitly stated as within the <3s PLONK proving target. Maps directly to existing Bolyra primitives: Poseidon2 hash, PLONK agent circuit, BabyJubjub EdDSA. blindingSalt is a 256-bit CSPRNG value consumed as a private input. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks remain unanswered by the construction: (1) cryptographer Attack 1 \u2014 credCommitment as public output is a stable cross-scope correlator, construction silent on whether it appears in public signals; (2) cryptographer Attack 3 \u2014 PLONK SRS trust model unaddressed, subverted setup extracts blindingSalt; (3) rfc7662_advocate Attack 4 \u2014 AS-chosen nonces create timing correlation the construction acknowledges but does not mitigate; (4) cu_ciso Attack 1 \u2014 BSA/AML regulatory conflict with unlinkability guarantee is structural and unaddressed; (5) cryptographer Attack 4 \u2014 MUST NOT rules are policy not cryptographic enforcement, AS-controlled runtime exfiltrates blindingSalt. These are not inside the stated threat model \u2014 the construction cannot answer them."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: cross-CU member agent and healthcare referral network. However, cu_ciso Attacks 1 and 3 demonstrate the CU scenario is actively contradicted by BSA/AML and NCUA incident response requirements \u2014 the unlinkability property is load-bearing in the wrong direction (it prevents required regulatory monitoring). The healthcare scenario is hypothetical with no named stakeholder or regulatory requirement cited. The CU scenario names a stakeholder but the property is regulatory-incompatible as stated, making it niche at best until the BSA carve-out is addressed."
+    }
+  },
+  "gaps": [
+    "Define the IND-UNL-AS game with explicit winning condition and reduction to Poseidon2 PRF security \u2014 distinguish passive/active/colluding AS power levels",
+    "Prove credCommitment is NOT a public circuit output at the RS-facing proof, or introduce per-scope commitment blinding so AS cannot correlate on the statement",
+    "Address BSA/AML carve-out: specify compliance-mode selective disclosure or scope unlinkability to exclude CU-as-regulated-entity self-monitoring",
+    "Add nonce-timing mitigation: client-generated nonces with AS freshness verification, or blind nonce issuance protocol",
+    "State PLONK SRS trust model: cite ceremony transcript or scope threat model to honest-setup",
+    "Specify blindingSalt maximum session lifetime and forced rotation policy comparable to SPIFFE SVID TTL",
+    "Add break-glass recovery architecture (e.g., Shamir with operator-excluded escrow parties) that preserves unlinkability",
+    "Explicitly delineate what ZK adds beyond DPoP+per-RS ephemeral keys \u2014 stratify the claim",
+    "Address credCommitment revocation checking without exposing it as a public correlation handle"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

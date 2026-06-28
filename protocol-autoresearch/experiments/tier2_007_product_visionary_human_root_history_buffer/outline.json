@@ -1,0 +1,58 @@
+{
+  "id": "product_visionary_human_root_history_buffer",
+  "title": "Human tree root history buffer (parity with agent tree)",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add `uint256[30] public humanRootHistory` ring buffer and `uint256 public humanRootHistoryIndex` cursor. On every `enrollHuman` call, write the new Merkle root into `humanRootHistory[humanRootHistoryIndex % 30]` and increment `humanRootHistoryIndex`. Update `verifyHandshake` to accept a `humanMerkleRoot` that exists anywhere in `humanRootHistory` (linear scan over 30 slots), not just the current `humanMerkleRoot` storage slot."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IIdentityRegistry.sol",
+      "description": "Expose `humanRootHistory(uint256 index) external view returns (uint256)` and `humanRootHistoryIndex() external view returns (uint256)` in the interface to allow off-chain SDK queries for staleness checks."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+      "description": "Hardhat tests covering: (1) single enrollment writes root to slot 0; (2) 30 sequential enrollments fill all slots; (3) 31st enrollment overwrites slot 0 (ring wrap); (4) a handshake proof generated against root N-1 still verifies after enrollment N; (5) a proof generated against root N-31 (evicted) is rejected; (6) concurrent enrollment simulation \u2014 two proofs generated at the same root both verify after a third enrollment lands."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/registry.ts",
+      "description": "Update `verifyHandshake` helper to query `humanRootHistory` on-chain and surface a `STALE_HUMAN_ROOT` typed error when the proof root is not found in the buffer, giving callers actionable feedback before submitting a doomed transaction."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add a paragraph under \u00a74 (Registry State) specifying the 30-slot ring buffer semantics for both human and agent trees, the eviction policy (oldest slot overwritten), and the security implication: provers must regenerate proofs after more than 30 concurrent enrollments have landed."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/quickstart.md",
+      "description": "Add a note in the 'Concurrent Enrollments' section warning that proofs are valid only while the root they commit to remains in the 30-slot history buffer, and recommend callers check proof freshness before submitting handshakes in high-throughput deployments."
+    }
+  ],
+  "steps": [
+    "Read existing `enrollAgent` / `agentRootHistory` implementation in IdentityRegistry.sol to confirm exact ring-buffer pattern to mirror.",
+    "Add `uint256[30] public humanRootHistory` and `uint256 public humanRootHistoryIndex` state variables immediately after the analogous agent fields for layout symmetry.",
+    "In `enrollHuman(uint256 newRoot)`: replace `humanMerkleRoot = newRoot` with `humanRootHistory[humanRootHistoryIndex % 30] = newRoot; humanRootHistoryIndex++; humanMerkleRoot = newRoot;` (retain the scalar for cheap current-root reads by external tooling).",
+    "Extract a private `_humanRootValid(uint256 root) internal view returns (bool)` helper that iterates the 30-slot array and returns true on any match \u2014 mirrors the existing `_agentRootValid` pattern.",
+    "Replace the single-equality root check in `verifyHandshake` with `require(_humanRootValid(humanMerkleRoot), 'STALE_HUMAN_ROOT')`.",
+    "Update `IIdentityRegistry.sol` interface with the two new view functions (`humanRootHistory`, `humanRootHistoryIndex`).",
+    "Run `npm run compile:contracts` and confirm zero compiler errors; fix any storage layout or interface mismatch warnings.",
+    "Write Hardhat tests in `contracts/test/IdentityRegistry.humanRootHistory.test.ts` covering all six scenarios listed in the test artifact description.",
+    "Run `npm run test:contracts` and confirm all existing and new tests pass.",
+    "Update `sdk/src/registry.ts` to expose `STALE_HUMAN_ROOT` typed error from the `verifyHandshake` helper.",
+    "Update spec and docs artifacts with the 30-slot semantics and concurrency guidance.",
+    "Commit with DCO sign-off: `git commit -s -m 'feat(contracts): add humanRootHistory ring buffer for proof staleness tolerance'`."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 existing agentRootHistory ring buffer implementation to mirror",
+    "contracts/src/IIdentityRegistry.sol \u2014 interface must stay in sync with new view functions",
+    "pot16.ptau \u2014 no circuit changes required; HumanUniqueness circuit already outputs humanMerkleRoot as a public signal, so no re-ceremony needed",
+    "Hardhat 2.x \u2014 test suite for contract-level ring buffer verification",
+    "@bolyra/sdk \u2014 registry.ts staleness check depends on the updated interface ABI"
+  ]
+}

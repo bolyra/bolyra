@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies genuine gaps (selective scope disclosure over hidden bitmask with implication closure, adversarial-AS resilience). However, multiple Tier 3 attacks erode the claimed 6-gap dominance: rfc7662_advocate Attack 2 shows jwt-introspection-response + DPoP already achieves AS-blind offline verification for non-adversarial deployments; Attack 4 shows Gap 5 (model-identity binding) is baseline-matchable since neither stack proves execution; spiffe_engineer Attack 3 shows SPIFFE Workload API already achieves no-AS-roundtrip presentation. The genuine residual differentiator is the conjunction of adversarial-AS + bitwise-AND-predicate-over-hidden-bitmask + constant-size proof, but the construction overstates by claiming 6 independent gaps when several collapse under scrutiny. Baseline can approximate most individual properties; the simultaneous conjunction is preferable but not all 6 are 'provably impossible' for the baseline as claimed."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-structured threat model (\u00a73), named assumptions (A1-A6), and reduction sketches for both SSU and SP. However, cryptographer Attack 2 identifies a critical inconsistency: the SP game assumes the adversary cannot access credentialCommitment, yet the threat model grants AS control, and the enrollment protocol does not enforce that credentialCommitment is hidden from the AS/operator. If operator=AS (common in \u00a77 CUSO scenario), SP breaks with probability 1 via nullifierHash computation. Cryptographer Attack 3 (adaptive bit-probing by malicious RS recovers full bitmask in 64 queries) is unaddressed \u2014 the SP game covers only single-presentation indistinguishability. Cryptographer Attack 4 identifies that delegation composition requires simulation extractability, which is not argued. The threat model is stated and assumptions are named, but the reduction has identified gaps that weaken the claim, so partial credit."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon5 credential commitment, Poseidon2 blinded leaf (new but uses existing Poseidon2), EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64) for scope satisfaction. Circuit cost is explicitly estimated at ~21,000 constraints, well under pot16.ptau's 2^16 limit. Proving time targets are stated (<0.5s rapidsnark, <5s snarkjs). The blinded leaf adds only ~300 constraints. Proof size is 128-448 bytes. All within Phase 1 budget. The only new primitive is the blinding factor in enrollment, which is a straightforward Poseidon2 addition."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer within its current text: (1) cryptographer Attack 2 \u2014 SP game is inconsistent with adversarial-AS threat model when operator=AS, credentialCommitment is known, nullifierHash breaks SP with prob 1; (2) cryptographer Attack 3 \u2014 adaptive bit-probing by malicious RS recovers full bitmask in 64 queries, SP game only covers single-presentation; (3) cu_ciso Attack 1 \u2014 audit trail opacity under NCUA Part 748/GLBA is a deployment-blocking gap with no auditor path specified; (4) auth0_pm Attack 4 \u2014 30-root revocation window is unquantified for financial-tier permissions. These are not merely weakening \u2014 the SP game inconsistency (Attack 2) and adaptive bit-probing (Attack 3) are fundamental to the core privacy claim. The construction cannot answer these attacks as written."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The CUSO scenario (\u00a77) is concrete: 200 credit unions, NCUA \u00a7701.27, specific API endpoints, specific permission masks. However, cu_ciso Attacks 1-4 collectively demonstrate the scenario is not deployment-ready: audit trail opacity violates GLBA \u00a7314.4(c)(3), blindingFactor has no key custody spec, on-chain root availability has no SLA, and the adversarial-AS model replaces a contractable vendor with an uncontractable L2 sequencer. The scenario is named and specific but the regulatory requirements cited actually work against the construction as specified. The property is load-bearing in theory but the deployment gaps make it hypothetical rather than operationalizable."
+    }
+  },
+  "gaps": [
+    "SP game is broken when operator=AS: credentialCommitment is known to enrollment authority, enabling nullifierHash computation to win SP with prob 1. Must either enforce operator\u2260AS as a protocol invariant or redesign nullifier to use leafCommitment instead of credentialCommitment",
+    "Adaptive bit-probing by malicious RS recovers full bitmask in 64 single-bit queries \u2014 SP game covers only single-presentation. Must extend SP to multi-proof adaptive game or acknowledge and document this as a deployment constraint (RS must not vary requiredScopeMask adversarially)",
+    "No auditor path specified: NCUA/GLBA require mapping access events to named agents/operators. Construction must define an audit escrow or linkage certificate mechanism",
+    "blindingFactor lifecycle unspecified: no generation entropy requirements, storage medium, backup/recovery, rotation protocol, or HSM compatibility guidance",
+    "Revocation window via 30-root buffer is unquantified: must specify root-update frequency and bound the maximum revocation-to-invalidation time, especially for FINANCIAL_UNLIMITED permissions",
+    "Groth16 Phase 2 ceremony parameters unspecified: number of participants, threshold, transcript verifiability, recovery path on toxic waste leak",
+    "Delegation composition requires simulation extractability \u2014 not argued for Groth16. Must either prove SE or mandate PLONK for delegation chains",
+    "Gap 5 (model-identity binding) is baseline-matchable \u2014 neither stack proves model execution. Should remove or narrow this claim",
+    "Collapse overstated 6-gap baseline comparison: jwt-introspection-response + DPoP achieves AS-blind offline verification in non-adversarial deployments; SPIFFE Workload API achieves no-AS-roundtrip. Reframe Gap 1 around AS-invisible selective presentation"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,72 @@
+{
+  "id": "standards_architect_session_token_offchain",
+  "title": "Standardize off-chain session token format post-handshake",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/session-token-profile.md",
+      "description": "Normative specification defining the Bolyra Session Token (BST) as a JWT/CWT profile: required claims (nullifierHash, scopeCommitment, sessionNonce, chainId, blockNumber, exp, iat, iss), signing algorithm choices (EdDSA/Ed25519 or ES256), claim validation rules, and error codes."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-schema.json",
+      "description": "JSON Schema (draft-2020-12) for the BST JWT payload, enabling machine-readable validation by LangChain/CrewAI/MCP consumers."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session-token.ts",
+      "description": "TypeScript implementation: issueSessionToken(verifiedHandshake, signingKey, opts) and verifySessionToken(token, verificationKey) functions. Uses jose library for JWT encoding. Enforces all required claims and cumulative-bit scope constraints."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/session-token.ts",
+      "description": "TypeScript types: BolyraSessionTokenPayload, SessionTokenOptions, SessionTokenVerificationResult interfaces."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/session_token.py",
+      "description": "Python implementation: issue_session_token() and verify_session_token() using PyJWT with Ed25519/ES256 support. Mirrors TS API for LangChain/CrewAI adapter parity."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session-token.test.ts",
+      "description": "Unit and integration tests: round-trip issue/verify, claim validation failures, expiry enforcement, scope commitment mismatch, chain ID mismatch, replay detection via nullifier hash uniqueness."
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/session-token-vectors.json",
+      "description": "Conformance test vectors: valid token examples and invalid examples (missing claims, wrong algorithm, expired, tampered scopeCommitment) for cross-implementation validation."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-integration.md",
+      "description": "Integration guide for LangChain, CrewAI, and MCP consumers: how to exchange a verified handshake for a BST, validate it middleware-side, and map scope bits to application-level permissions."
+    }
+  ],
+  "steps": [
+    "Define the BST claim set: map each on-chain handshake output (nullifierHash, scopeCommitment, sessionNonce, chainId, blockNumber) to a JWT registered or private claim name following IANA conventions; specify exp and iat as NumericDate; define iss as the verifier DID.",
+    "Choose and justify signing algorithms: EdDSA (Ed25519) as RECOMMENDED for new deployments (compact, fast, safe), ES256 (P-256) as OPTIONAL for environments lacking Ed25519 support; prohibit HS256 (shared-secret) in the spec.",
+    "Specify validation rules: verify signature, check exp > now, assert chainId matches expected network, confirm nullifierHash was not previously seen (replay prevention), validate scopeCommitment against claimed permissions using validateCumulativeBitEncoding().",
+    "Write spec/session-token-profile.md with MUST/SHOULD/MAY language, ABNF claim format definitions, and algorithm registry.",
+    "Produce spec/session-token-schema.json as the machine-readable normative artifact.",
+    "Implement issueSessionToken() in sdk/src/session-token.ts using jose; accept VerifiedHandshakeResult as input; populate all required claims; sign with caller-supplied Ed25519 or P-256 key.",
+    "Implement verifySessionToken() in sdk/src/session-token.ts; return typed BolyraSessionTokenVerification result including decoded payload and verification metadata.",
+    "Mirror implementation in sdk-python/bolyra/session_token.py using PyJWT; ensure claim names and validation logic are byte-for-byte equivalent with the TS implementation for conformance.",
+    "Author conformance test vectors in spec/conformance/session-token-vectors.json covering: valid EdDSA token, valid ES256 token, expired token, missing nullifierHash, tampered scopeCommitment, wrong chainId.",
+    "Write sdk/test/session-token.test.ts covering all validation paths, replay detection, and algorithm agility; integrate with existing Mocha test suite.",
+    "Update sdk/src/index.ts to export issueSessionToken, verifySessionToken, and session token types as part of the public API.",
+    "Add session token integration examples to LangChain and MCP adapters in integrations/ showing middleware-level BST validation.",
+    "Write docs/session-token-integration.md with a 5-minute quickstart, claim mapping table, and scope-bit-to-permission translation guide.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md to reference the BST profile as the RECOMMENDED post-handshake artifact."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Verified handshake output type (VerifiedHandshakeResult) from sdk/src/types",
+    "validateCumulativeBitEncoding() from sdk/src/permissions",
+    "jose npm package (JWT encoding, Ed25519/ES256 support)",
+    "PyJWT + cryptography Python packages",
+    "spec/did-method-bolyra.md (for iss claim DID format)",
+    "spec/conformance/ directory (existing conformance runner)",
+    "8-bit cumulative permissions model documented in CLAUDE.md"
+  ]
+}

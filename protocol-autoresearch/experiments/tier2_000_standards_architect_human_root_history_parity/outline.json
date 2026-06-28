@@ -1,0 +1,47 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "title": "Specify human tree root history buffer matching agent tree parity",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add humanRootHistory[30] ring buffer, humanRootHistoryIndex counter, _pushHumanRoot() internal helper, and isKnownHumanRoot() public view function mirroring the existing isKnownAgentRoot() pattern. Call _pushHumanRoot() inside enrollHuman() after LeanIMT insertion."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+      "description": "Hardhat tests covering: (1) root present immediately after enrollment, (2) root survives up to 29 subsequent enrollments, (3) root evicted after 30 subsequent enrollments, (4) isKnownHumanRoot() reverts/returns false for zero root, (5) ring-buffer wrap-around at index boundary."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add \u00a77 Security Considerations subsection: 'Human Merkle Root Staleness Window'. Document 30-root history buffer, staleness bound (30 enrollments), expected throughput assumption for N-minute bound, and client retry guidance when proof verification fails due to stale root."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Note under replay/race-condition threat entries that human proofs now share the same 30-root window as agent proofs, eliminating the prior asymmetry that caused instant invalidation."
+    }
+  ],
+  "steps": [
+    "Read contracts/src/IdentityRegistry.sol in full to locate existing agentRootHistory[30], agentRootHistoryIndex, _pushAgentRoot(), isKnownAgentRoot(), and enrollHuman() so the new code mirrors the exact pattern.",
+    "Declare `uint256[30] private humanRootHistory` and `uint256 private humanRootHistoryIndex` storage variables adjacent to their agent counterparts.",
+    "Implement `function _pushHumanRoot(uint256 root) internal` that stores root at humanRootHistory[humanRootHistoryIndex % 30] then increments humanRootHistoryIndex.",
+    "Implement `function isKnownHumanRoot(uint256 root) public view returns (bool)` iterating humanRootHistory[0..29] and returning true on match, false otherwise (same O(30) linear scan as agent variant).",
+    "Inside enrollHuman(), after the LeanIMT leaf insertion call, invoke `_pushHumanRoot(humanTree.root())` to record the new root.",
+    "Remove or correct the misleading contract comment 'humanTree uses Semaphore's [root history]' since humanTree is now a standalone LeanIMT with its own buffer.",
+    "Update verifyHumanProof() (or the handshake verifier) to call isKnownHumanRoot(publicSignals.humanMerkleRoot) instead of a direct root equality check, matching the agent proof verification path.",
+    "Write Hardhat test file covering the five scenarios listed in the test artifact: immediate presence, survival through 29 enrollments, eviction at enrollment 30, zero-root guard, and wrap-around.",
+    "Run `npm run test:contracts` and confirm all new and existing tests pass.",
+    "Add \u00a77 subsection to spec/draft-bolyra-mutual-zkp-auth-01.md documenting the 30-root staleness window, throughput assumption (e.g. \u22641 enrollment/minute \u2192 ~30-minute window), and client retry guidance.",
+    "Update docs/owasp-agentic-mapping.md to note the eliminated human/agent asymmetry.",
+    "Commit with DCO sign-off: `git commit -s -m 'fix(contracts): add humanRootHistory[30] ring buffer matching agent tree parity'`."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 existing agentRootHistory pattern to mirror",
+    "LeanIMT library \u2014 humanTree.root() must be callable after insertion",
+    "Hardhat test suite \u2014 contracts/test/ must compile with updated ABI",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 \u00a77 must exist or be created"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real architectural differences \u2014 eliminating the AS from the per-request path and providing scope-blind pseudonyms. However, the rfc7662_advocate's Attack 1 correctly shows that \u00a78 Structural Impossibility 1 overstates the baseline weakness: RFC 9700 signed JWT introspection responses already eliminate per-request AS visibility. The construction's framing conflates enrollment-time visibility with per-request visibility. The true remaining gap (enrollment graph disclosure) is genuine but is not what \u00a78 argues. Additionally, the spiffe_engineer's Attack 1 confirms the AS-per-request elimination is valid but the construction does not sharpen its claim against the strongest baseline configuration. Baseline can approximate with long-lived JWTs + PPID, though it cannot fully match the zero-enrollment-signal property. This is 'preferable but baseline can approximate with extra configuration' territory."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides an explicit threat model (\u00a73), named assumptions (POS-PRF, POS-CR, DL-BJJ, KS-G16/KS-PLONK), and a detailed four-step hybrid argument. However, the cryptographer's Attack 1 and rfc7662_advocate's Attack 4 both independently identify that POS-PRF-Joint is a non-standard assumption with no published reduction \u2014 Poseidon2 and Poseidon4 share the same permutation family with different state widths, and modeling them as independent random oracles is unjustified. This is the load-bearing assumption for the entire hybrid; if it fails, the proof collapses. The construction acknowledges this is in the ROM but provides no citation or reduction from a standard assumption. Additionally, the cryptographer's Attack 2 notes that Groth16 Phase 2 trusted setup subversion (enabling witness extraction including scopeBlindingSecret) is entirely absent from the threat model. Threat model is stated, but the core assumption is non-standard and the reduction has a known gap \u2014 this is precisely the definition of score 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/4/5 hashes, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits range checks, LessThan comparator, and cumulative bit encoding constraints. \u00a76 provides a detailed constraint breakdown: ~26,840 for ScopeBlindAuth and ~27,102 for ScopeBlindDelegation, both fitting within pot16.ptau (2^16 = 65,536). Net change from prior construction is +400 constraints (~1.5%). Proving time targets are stated: <0.6s Groth16/rapidsnark, <4s PLONK/snarkjs. All within Phase 1 budget. The auth0_pm's latency attack (Attack 1) is an operational concern, not a primitive/cost concern \u2014 the circuit fits and the primitives exist."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex adversary with 5 personas surfaced multiple real attacks that the construction cannot fully answer: (1) POS-PRF-Joint is unproven \u2014 raised independently by cryptographer and rfc7662_advocate, unfixed. (2) Delegation blinding secret transfer leaks delegator's sbs to delegatee \u2014 cryptographer Attack 3 shows a compromised delegatee can retroactively deanonymize all past sessions with no forward secrecy, and this is outside the game model. (3) agentMerkleRoot as epoch discriminator \u2014 raised by rfc7662_advocate Attack 3 and spiffe_engineer Attack 2 \u2014 the shared-tree assumption is unproven in multi-operator deployments, and even in single-tree deployments the AS controls enrollment timing to shrink anonymity sets. (4) Batch relayer is unmodeled \u2014 raised by auth0_pm, cryptographer, cu_ciso, rfc7662_advocate, and spiffe_engineer (near-unanimous). (5) scopeBlindingSecret lifecycle/storage unaddressed \u2014 raised by auth0_pm, cu_ciso, and spiffe_engineer. The construction mitigates some attacks (spiffe_engineer Attack 1 confirms AS-per-request elimination holds) but the POS-PRF-Joint gap and delegatee sbs leakage are real attacks that weaken the core claim."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names a concrete deployment: cross-credit-union member agent at Desert Financial CU with CU*Answers as shared infrastructure, where NCUA Regulation V (affiliate marketing opt-out) and Arizona financial privacy requirements make cross-scope unlinkability load-bearing \u2014 the AS (Desert Financial) must not reconstruct the member's merchant graph. The scenario names specific stakeholders (Desert Financial, CU*Answers, 150 member CUs), specific regulatory requirements (NCUA Reg V, GLBA), and a specific attack vector (dictionary attack on merchant graph with ~10,000 merchants). The healthcare scenario (Kaiser/Cedars-Sinai) provides a secondary concrete deployment. These are not hypothetical \u2014 they name real institutions and real regulatory obligations where the property is required, not nice-to-have."
+    }
+  },
+  "gaps": [
+    "POS-PRF-Joint assumption is non-standard and unproven \u2014 either cite a peer-reviewed result establishing cross-arity Poseidon independence, or redesign to use single-arity Poseidon with explicit domain separation tags (e.g., Poseidon3(DOMAIN_TAG || scopeId, sbs, aux)) reducing to standard POS-PRF at fixed width",
+    "Delegation blinding secret transfer leaks delegator sbs to delegatee \u2014 redesign chain-linking constraint so delegatee proves receipt of anchor without learning sbs (e.g., commitment scheme or per-scope ephemeral blinding secrets with forward-secure derivation)",
+    "agentMerkleRoot is an AS-controllable epoch discriminator \u2014 the shared-tree assumption is unproven in multi-operator deployments and enrollment timing shrinks anonymity sets; must either enforce minimum enrollment cohort size on-chain or extend hybrid argument to bound agentMerkleRoot leakage",
+    "Batch relayer is an unmodeled trusted third party \u2014 include relayer in adversary model or replace with oblivious submission mechanism; current 1/m timing bound only applies to passive chain observers, not to the relayer operator who sees source metadata and arrival times",
+    "\u00a78 Structural Impossibility 1 overstates baseline weakness \u2014 RFC 9700 already eliminates per-request AS visibility; sharpen claim to focus on enrollment graph disclosure (the true gap OAuth cannot close)",
+    "Groth16 Phase 2 trusted setup is absent from threat model \u2014 either mandate PLONK with publicly verifiable universal SRS or commit to multi-party Phase 2 ceremony with verified transcript",
+    "scopeBlindingSecret lifecycle (storage, backup, rotation, recovery) is unspecified \u2014 must address key management in cloud-native agent runtimes without re-introducing the AS as a trusted recovery party"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

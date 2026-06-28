@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a genuine capability gap (proving multi-hop narrowing without disclosing intermediate scopes or participants, without an AS). However, the rfc7662_advocate's Attack 4 correctly notes that an AS can already provide offline narrowing attestations via signed JWT introspection responses without disclosing intermediate scopes to the auditor \u2014 the 'cannot' in \u00a78 is overstated. The real differentiator is narrower: AS-free cross-org narrowing proof where no single party holds plaintext scopes. Additionally, the spiffe_engineer's Attack 3 and rfc7662_advocate's Attack 1 show that allDelegateesMerkleRoot is effectively a shared trust anchor (just on-chain instead of HTTPS), weakening the 'no trusted third party' claim. The baseline can approximate with a trusted AS issuing signed narrowing attestations; the construction's advantage is real but overclaimed."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has explicit threat model, three game definitions (GAME-NARROW, GAME-HIDE, GAME-FORGE), named cryptographic assumptions (DL-BJJ, CR-Poseidon, KS-Groth16, ZK-Groth16), and reduction sketches. However, the cryptographer's attacks expose critical gaps: (1) GAME-NARROW does not cover chain fidelity \u2014 colluding agents can fabricate shadow chains that pass all checks (Attack 1, history rewriting); (2) currentTimestamp is prover-controlled and not bound into auditDigest, making expiry liveness vacuous (Attack 2); (3) GAME-HIDE's precondition requires identical public outputs which real deployments won't satisfy (Attack 3); (4) PLONK SRS ceremony provenance is unspecified (Attack 4). The spiffe_engineer's Attack 2 adds that active[h] is prover-controlled, meaning chainLength is asserted not proven. Multiple game definitions are incomplete or inapplicable to real deployment conditions."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps directly to existing Bolyra primitives: Poseidon2/4, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits(64), LessThan/LessEqThan \u2014 all from circomlib/@zk-kit already used in the Delegation circuit. Circuit cost is explicitly estimated at ~139,400 constraints for 8-hop (fits pot18.ptau), ~69,700 for 4-hop (fits pot16.ptau). Proving time targets stated (<5s for 8-hop PLONK). The construction composes the same per-hop constraints as the existing Delegation circuit iteratively. PLONK choice justified for agent-class (no human secret). Verification cost ~300K gas. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer without significant redesign: (1) cryptographer's shadow chain attack (GAME-NARROW doesn't cover chain fidelity \u2014 no on-chain binding of actual delegation tokens used at runtime); (2) prover-controlled currentTimestamp with no freshness enforcement or auditDigest binding; (3) GAME-HIDE precondition too strong for real cross-org deployments; (4) spiffe_engineer's active[h] attack \u2014 chainLength is prover-asserted, not cryptographically enforced; (5) auth0_pm's prover assembly problem \u2014 no specified protocol for aggregating private witness across adversarially-separated hops (especially fatal for whistleblower scenario). These are not mitigated attacks; they are unanswered structural flaws."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The Navy Federal scenario is concrete and names a real stakeholder (NFCU, NCUA examiner, GENIUS Act). However, the cu_ciso's attacks reveal the scenario is poorly fitted: (1) the proof covers delegation integrity but not behavioral integrity \u2014 the examiner's actual question ('which agent authorized the $47K transfer to a sanctioned wallet?') cannot be answered; (2) the proof artifact is not examiner-legible (no FFIEC mapping, no SOC 2, no control framework alignment); (3) witness custody creates a GLBA data retention problem unaddressed by the construction; (4) the auditor cannot verify the proof without BN128-aware tooling. The scenario is named but the construction doesn't actually solve the examiner's load-bearing requirement \u2014 it solves a subset (delegation narrowing) that the examiner needs wrapped in a regulatory attestation layer not specified."
+    }
+  },
+  "gaps": [
+    "Add GAME-FAITHFUL: per-hop delegation nullifiers must be public outputs checked against on-chain nullifier registry to prevent shadow-chain forgery",
+    "Bind currentTimestamp into auditDigest (Poseidon5) and specify on-chain freshness check (currentTimestamp >= block.timestamp - STALENESS_WINDOW)",
+    "Specify witness aggregation protocol for multi-party proof generation \u2014 recursive proving or MPC witness assembly for adversarially-separated hops",
+    "Replace single allDelegateesMerkleRoot with per-hop root array or set-membership proof against a roots commitment to support true cross-org without shared registry",
+    "Make chainLength cryptographically enforced via on-chain nullifier chain completeness check, not prover-asserted via active[h]",
+    "Narrow \u00a78 baseline comparison: 'cannot without trusting an AS' not 'cannot' \u2014 acknowledge AS-issued signed attestations as a valid approximation",
+    "Add scope-blinding salt to Poseidon2(permissionBitmask, credCommitment) so identical scopes don't produce fingerprintable commitments",
+    "Address regulatory legibility: specify attestation wrapper layer that maps proof semantics to FFIEC/Part 748 controls for examiner consumption",
+    "Scope deployment claim to 'delegation integrity audit' explicitly, not behavioral audit \u2014 or add per-hop action log commitments"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "stale_merkle_root",
+  "description": "HumanUniqueness proof with an identityTreeRoot that is not in the accepted root window. The circuit will produce a valid witness for the provided root, but the on-chain verifier must reject the root as stale (not in the recent-roots ring buffer).",
+  "circuit": "HumanUniqueness",
+  "input_witnesses": {
+    "identityTreeRoot": "999999999999999999999999999999",
+    "nullifierHash": "0",
+    "scope": "42",
+    "secret": "12345678901234567890",
+    "identityNonce": "1",
+    "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+    "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+  },
+  "public_signals": [],
+  "expected_result": "fail",
+  "failure_reason": "identityTreeRoot does not match the Merkle root computed from the provided path — the circuit constraint merkleCheck.root === identityTreeRoot will fail during witness generation because the stale root does not correspond to any valid tree containing this identity commitment",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "hand-authored"
+  }
+}

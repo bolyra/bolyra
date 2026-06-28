@@ -1,0 +1,16 @@
+{
+  "id": "product_visionary_human_root_history_buffer",
+  "persona": "product_visionary",
+  "title": "Human tree root history buffer (parity with agent tree)",
+  "dimension": "correctness",
+  "description": "The agentTree has a 30-root history buffer preventing proof staleness during concurrent enrollments, but humanTree has none \u2014 any new human enrollment instantly invalidates all in-flight human proofs. Add the same `uint256[30] humanRootHistory` ring buffer to IdentityRegistry.sol and update `verifyHandshake` to check membership in the buffer. Without this, production deployments with >1 human enrolling concurrently will see random handshake failures, which is a dealbreaker for any real adoption.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "product_visionary_human_root_history_buffer",
+  "adoption": 19,
+  "standards": 14,
+  "completeness": 19,
+  "correctness": 18,
+  "total": 70,
+  "verdict": "consider"
+}

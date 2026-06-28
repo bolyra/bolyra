@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies genuine structural gaps in the baseline (AS sees RS at issuance, no scope blinding, no formal game, delegation chain leaks). However, \u00a72.1 lists rsIdentifier as a PUBLIC input while \u00a78 claims it is a PRIVATE input \u2014 a specification-level contradiction found independently by rfc7662_advocate (Attack 1), spiffe_engineer (Attack 1), and cryptographer (Attack 1). With rsIdentifier public, the AS reads it from on-chain events and the core 'AS cannot learn which RS the agent contacts' claim collapses. The baseline dominance argument is sound in theory but the construction as written does not deliver the claimed capability."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model (\u00a73.1) is explicit with named adversary capabilities. Four named assumptions (Poseidon PRF, DL on Baby Jubjub, Groth16 knowledge soundness, Poseidon collision resistance). IND-UNL-AS game (\u00a73.2) is formally defined with a reduction sketch (\u00a74.2). However, the cryptographer identifies a full concrete break: blindedScopeCommitment contains no agentSecret \u2014 it is deterministic in (credComm, rsId), both AS-known, making it a trivial O(n) lookup (Attack 1). The reduction in \u00a74.2 never touches blindedScopeCommitment. The game also under-models AS prior knowledge \u2014 the AS already knows all credential commitments from issuance and does not need the oracle (Attack 2). No simulator is defined for the malicious-verifier ZK property despite RSes being explicitly adversarial (Attack 3). Reduction exists but is broken."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps extensively to existing Bolyra primitives (\u00a75): Poseidon2/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits, LessThan all reused. New gadgets (ScopeDerivedSecret, ScopeNullifier, ScopePseudonym, BlindedScopeCommitment) are simple Poseidon2 compositions. Circuit cost explicitly estimated: AgentScopeAuth ~29,400 constraints, ScopeBlindedDelegation ~29,500 \u2014 both within 2^15 budget under pot16.ptau. PLONK proving time target <3s stated. HumanUniqueness unchanged at ~21,000 constraints. Fits Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with 5 personas surfaced multiple unresolvable attacks. Cryptographer Attack 1 is a full concrete break: blindedScopeCommitment is trivially invertible by the AS via O(n) forward computation on known inputs \u2014 no cryptographic assumption is broken, just evaluated. This directly breaks IND-UNL-AS. The rsIdentifier public/private contradiction (rfc7662_advocate Attack 1, spiffe_engineer Attack 1) is a specification error that collapses the scope-blinding claim. The cu_ciso shows the GLBA \u00a7502 argument is inverted \u2014 cryptographic AS-blindness violates BSA/AML monitoring obligations (Attack 1) and NCUA Part 748 audit log requirements (Attack 4). These are not mitigated attacks; they are unanswered breaks across cryptographic, specification, and regulatory dimensions."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Concrete deployment scenario names NFCU (13M+ members) as AS with Amazon/Costco RSes and cites NCUA Reg E, CFPB agent-authorization rules, GLBA \u00a7502. Healthcare variant names UHC with HIPAA minimum necessary standard. However, the cu_ciso demolishes the regulatory framing: BSA/AML (31 U.S.C. \u00a75318(g)) requires CU transaction monitoring that AS-blindness cryptographically prevents (Attack 1); GLBA \u00a7502 restricts disclosure to third parties, not CU visibility into member activity (Attack 4); NCUA Part 748 Appendix A \u00a7III(C) requires audit logs the construction makes impossible. The scenario is concrete but the regulatory justification is inverted \u2014 an examiner would cite AS-blindness as a deficiency, not a compliance win."
+    }
+  },
+  "gaps": [
+    "Fix rsIdentifier public/private contradiction: either make it truly private (requires redesign of on-chain verification to avoid calldata exposure) or retract the AS-blindness claim in \u00a78",
+    "Add agentSecret or fresh per-proof randomizer to blindedScopeCommitment so the AS cannot precompute the lookup table \u2014 current formula uses only AS-known inputs",
+    "Strengthen IND-UNL-AS game to give adversary the full issuance table (credComm, perm, expiry for all agents) at Setup, then re-derive the reduction covering ALL public outputs including blindedScopeCommitment",
+    "Define a simulator for malicious-verifier ZK or restrict RS to semi-honest and state this limitation \u2014 Groth16/PLONK HVZK is insufficient when RSes are explicitly adversarial",
+    "Address scopePseudonym as a permanent per-RS tracking handle: either add per-epoch blinding rotation or explicitly scope the privacy claim to exclude within-RS linkability",
+    "Specify revocation protocol with latency bounds \u2014 batch nonce pre-issuance creates a revocation blind spot where a compromised agent can burn 99 nonces before on-chain revocation lands",
+    "Add BSA/AML compliance carve-out architecture: a member-consented audit log plane that coexists with unlinkability, or explicitly exclude federally supervised depository institutions from the deployment scenario",
+    "Fix GLBA \u00a7502 framing: \u00a7502 restricts disclosure to third parties, not CU operational visibility \u2014 the compliance narrative should position ZK as an additional member-elected privacy tier, not a replacement for CU audit obligations",
+    "Specify agentSecret and scopeBlindingNonce storage model: hardware-backed (TEE/TPM/Secure Enclave) with attestation binding, or scope threat model to exclude operator-as-adversary",
+    "Resolve nullifier dilemma: specify whether scopeBlindingNonce is fixed per (agent, RS) or per-authorization, and how the chosen regime interacts with on-chain replay prevention"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

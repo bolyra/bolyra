@@ -1,0 +1,16 @@
+// Add to sdk/src/types.ts — Session token types
+
+export interface BolyraSessionPayload {
+  /** sub = nullifierHash from the handshake proof */
+  sub: string;
+  /** Hex-encoded scopeCommitment */
+  scope: string;
+  /** Expiry Unix timestamp */
+  exp: number;
+  /** Issued-at Unix timestamp */
+  iat: number;
+  /** Issuer: always 'bolyra' */
+  iss: string;
+  /** Audience: 'langchain' | 'crewai' | '*' */
+  aud: string | string[];
+}

@@ -1,0 +1,53 @@
+{
+  "id": "formal_verifier_scope_monotonicity_chain",
+  "title": "End-to-end scope monotonicity proof across delegation chain",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/scope-monotonicity-proof.md",
+      "description": "Formal inductive proof document: base case (hop-0 scope \u2286 AgentPolicy scopeCommitment), inductive step (hop k+1 scope \u2286 hop k scope via bitwise AND-mask), and corollary that N-hop composition preserves subset relationship end-to-end."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/scope_monotonicity_chain.test.js",
+      "description": "Mocha witness-generation tests covering 1-, 2-, and 3-hop delegation chains. Each chain tests: (a) valid narrowing passes, (b) lateral scope expansion (same bits) fails, (c) scope escalation (new bit set) fails at each hop position, (d) escalation on final hop fails even when intermediate hops are valid."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/DelegationChain.circom",
+      "description": "Optional helper template DelegationChainN(N) that composes N Delegation instances sequentially and exposes a single public output asserting finalScope is a bitwise subset of rootScope. Used as a gadget to make the chain property circuit-native rather than relying solely on off-circuit composition."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Append section 'Scope Monotonicity \u2014 Chain Induction' to existing formal properties doc. Enumerates the three circuit constraints that enforce the invariant: (1) scopeCommitment binding in AgentPolicy, (2) delegateeScope & ~delegatorScope == 0 in Delegation, (3) chain composition via DelegationChainN."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/scope_escalation_vectors.json",
+      "description": "Machine-readable test-vector file: each entry is {hops, rootScope, intermediateScopes[], finalScope, expectedValid}. Covers 24 adversarial cases: escalation at hop 0, hop 1, hop 2, final hop, and multi-hop simultaneous escalation attempts."
+    }
+  ],
+  "steps": [
+    "Read Delegation.circom and AgentPolicy.circom in full to map existing constraint names (scopeCommitment, delegatorScope, delegateeScope) and signal wire identifiers.",
+    "Formalize base case in spec: show that AgentPolicy's scopeCommitment Poseidon hash binds the agent's scope to its credential; any witness with a scope not matching the commitment fails the circuit's hash-equality constraint.",
+    "Formalize inductive step in spec: for any hop k, the constraint `delegateeScope & ~delegatorScope == 0` is equivalent to `delegateeScope \u2286 delegatorScope` in the 8-bit cumulative encoding. Prove this holds for all 256 possible 8-bit values.",
+    "Prove chain corollary by induction: if S_0 is the root scope, S_1 \u2286 S_0, S_2 \u2286 S_1, \u2026, then S_N \u2286 S_0 by transitivity of subset. Document in spec/scope-monotonicity-proof.md with explicit bit-level notation.",
+    "Design the 24 adversarial test-vector cases covering: (a) single-hop escalation (all 8 bit positions), (b) 2-hop escalation at hop 1, (c) 2-hop escalation at hop 2, (d) 3-hop escalation at each hop, (e) multi-hop simultaneous escalation. Write these to circuits/test/scope_escalation_vectors.json.",
+    "Implement scope_monotonicity_chain.test.js: load test vectors, for each vector call snarkjs.wtns.calculate on Delegation circuit, assert witness generation succeeds iff expectedValid === true.",
+    "Add DelegationChainN(N) template to circuits/src/DelegationChain.circom: instantiate N Delegation components, wire output delegateeScope of hop k to input delegatorScope of hop k+1, expose rootScope (hop 0 delegatorScope) and finalScope (hop N-1 delegateeScope) as public outputs.",
+    "Add a chain-level constraint in DelegationChainN: assert finalScope & ~rootScope == 0 as a redundant top-level check (defense in depth beyond per-hop constraints).",
+    "Extend circuits/test/scope_monotonicity_chain.test.js to also exercise DelegationChainN for N=1,2,3 against the same adversarial vectors.",
+    "Update circuits/FORMAL-PROPERTIES.md with the new 'Scope Monotonicity \u2014 Chain Induction' section, referencing the proof document and linking to the test vectors.",
+    "Run npm run test:circuits:fast to confirm all new tests pass and no existing tests regress.",
+    "Optionally encode base case and inductive step as Lean 4 lemmas in spec/lean/ScopeMonotonicity.lean for machine-checkable verification outside the circuit toolchain."
+  ],
+  "estimated_constraints": 48,
+  "dependencies": [
+    "circuits/src/Delegation.circom",
+    "circuits/src/AgentPolicy.circom",
+    "circuits/FORMAL-PROPERTIES.md",
+    "circuits/build/Delegation.r1cs",
+    "circuits/build/AgentPolicy.r1cs"
+  ]
+}

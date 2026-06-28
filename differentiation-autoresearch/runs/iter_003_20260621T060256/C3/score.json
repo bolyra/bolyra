@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps (chain aggregation, participant anonymity, chain length hiding) that RFC 8693 + BBS+ cannot natively provide. However, the rfc7662_advocate's Attack 2 demonstrates a commitment-only AS with signed JWT introspection can approximate the auditor-facing semantics. The spiffe_engineer's Attack 2 shows the WIMSE characterization in \u00a78 is a strawman (WIMSE doesn't require AS at audit time). The baseline comparison argues against the weakest deployment of RFC 8693, not the strongest. The genuine residual advantage is narrower than claimed: AS-adversarial scenarios where the operator distrusts the AS. Since the construction never formally states an AS-adversarial threat model in \u00a73, the dominance claim is soft \u2014 preferable but not provably impossible for the baseline to approximate."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has explicit threat models (CHAIN-NARROW-SOUNDNESS, CHAIN-PRIVACY, SCOPE-COMMITMENT-HIDING), named assumptions (A1-A3), and reduction sketches. However, the cryptographer's attacks expose critical formal gaps: (1) CHAIN-PRIVACY game is parameterized to exclude root-hop distinguishability by forcing identical handshakeScopeCommitment \u2014 the game proves something strictly weaker than the stated claim; (2) the unblinded public input handshakeScopeCommitment is invertible in O(256\u00d7N) Poseidon2 evaluations, directly contradicting the privacy claim for the root hop; (3) G5 multiplexer constraint for inactive-hop nonce equality is stated in prose but no Circom constraint is shown \u2014 chain-length hiding is unverified. The formal games are internally consistent but don't cover the informal claims."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps precisely to existing Bolyra primitives: Poseidon2/3, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), PLONK proving system, cumulative-bit encoding, nullifier pattern. Circuit cost is estimated at ~216,105 constraints fitting within 2^18 SRS. Per-hop breakdown is detailed (13,155 constraints/hop). Proving time target <5s PLONK / <2s rapidsnark is within Phase 1 budget for agent-class circuits. The only new primitive is Poseidon3 (standard arity variant). Cost of blinding quantified at 3.2% overhead."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer: (1) cryptographer's Attack 1 \u2014 root-hop deanonymization via unblinded handshakeScopeCommitment is a concrete break of the privacy claim for the whistleblower scenario; (2) spiffe_engineer's Attack 4 \u2014 no causal binding between proof and runtime execution means the NCUA scenario is oversold (operator can fabricate post-hoc proofs over fake chains); (3) cu_ciso's Attack 1 \u2014 forensic dead-end under GLBA/Part 748 with no selective unblinding mechanism; (4) rfc7662_advocate's Attack 4 \u2014 binary search oracle over policyFloor recovers final scope in 6 on-chain calls. These are not mitigated \u2014 the construction has no answer to root-hop deanonymization or causal binding."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario names a concrete stakeholder (Navy Federal CU, 13M+ members) and regulatory requirement (NCUA examination, GLBA Safeguards Rule). However, multiple attacks demonstrate the scenario is undermined: (1) cu_ciso shows NCUA examiners cannot read the audit artifact and no regulatory guidance accepts ZK proofs in lieu of access logs; (2) the privacy properties obstruct the CU's own incident response under Part 748.0(b); (3) chain-length hiding may violate NCUA AI governance disclosure requirements; (4) no off-chain fallback for L2 outages. The scenario is named and plausible but the construction as written creates regulatory conflicts that make it not clearly load-bearing \u2014 it's more hypothetical than deployment-ready."
+    }
+  },
+  "gaps": [
+    "Root-hop deanonymization: handshakeScopeCommitment is an unblinded Poseidon2 public input invertible in O(256\u00d7N) \u2014 must blind the on-chain anchor or narrow the privacy claim to exclude root hop",
+    "No causal binding between proof witness and actual runtime execution \u2014 operator can fabricate post-hoc proofs over synthetic chains that passed all checks but never governed real execution",
+    "CHAIN-PRIVACY game excludes root-hop distinguishability by design (forces identical handshakeScopeCommitment) \u2014 formal proof is weaker than informal claim",
+    "Binary search oracle: adversary with audit-request capability can vary policyFloor across calls to recover final scope in O(log 64) queries \u2014 need policyFloor commitment or rate-limiting",
+    "No selective unblinding mechanism for CU's own incident response (GLBA \u00a7314.4(f) forensics) or regulatory compulsion",
+    "Cross-org scenario unsupported: circuit has single agentRegistryRoot with no multi-domain federation mechanism",
+    "G5 multiplexer constraint for inactive-hop nonce equality is prose-only \u2014 must show Circom constraint or chain-length hiding is unverified",
+    "Baseline comparison strawmans WIMSE (claims AS involvement at audit time which is incorrect) and ignores commitment-only AS deployments of RFC 8693"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

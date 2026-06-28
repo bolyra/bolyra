@@ -1,0 +1,67 @@
+{
+  "id": "standards_architect_conformance_test_vectors",
+  "title": "Machine-readable conformance test vectors (JSON) for all three circuits",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Schema documentation for test vector JSON format, runner invocation, and how to add new vectors"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/schema.json",
+      "description": "JSON Schema (draft-07) defining the canonical structure for every test vector file"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/human-uniqueness.json",
+      "description": "Vectors for HumanUniqueness circuit: valid enrollment, stale Merkle root, nullifier replay (nonce replay), revoked identity, depth boundary"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/agent-policy.json",
+      "description": "Vectors for AgentPolicy circuit (Groth16 + PLONK): valid credential, expired credential, cumulative-bit encoding violation, scope subset violation, modelHash mismatch"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/delegation.json",
+      "description": "Vectors for Delegation circuit: valid chain depth 1/2/3, scope narrowing valid, scope expansion attempt (must reject), max-depth exceeded, cumulative-bit inheritance violation"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/handshake-integration.json",
+      "description": "End-to-end handshake vectors combining human + agent proofs: valid handshake, nonce mismatch, human proof from different session, agent expired mid-handshake"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/runner.js",
+      "description": "Lightweight Node.js runner: loads each JSON file, generates witnesses via snarkjs, asserts public outputs match expected or catches expected rejection reasons; exits non-zero on any mismatch"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/validate-schema.js",
+      "description": "CI pre-check: validates every .json file in spec/test-vectors/ against schema.json before running the witness runner"
+    }
+  ],
+  "steps": [
+    "Audit existing circuit test files (circuits/test/) to extract canonical witness input shapes for HumanUniqueness, AgentPolicy, and Delegation",
+    "Define JSON Schema in spec/test-vectors/schema.json covering fields: id, circuit, provingSystem (groth16|plonk|witness-only), inputs (object), expectedPublicOutputs (object|null), expectedRejection (string|null), tags (array)",
+    "Author human-uniqueness.json: 8 vectors \u2014 valid enrollment, stale Merkle root (+1 epoch), nullifier replay with same nonce, identity revoked (root absent from on-chain registry stub), depth 19 boundary (valid), depth 21 (invalid), missing commitment leaf, zero secret",
+    "Author agent-policy.json: 10 vectors \u2014 valid Groth16, valid PLONK, expired timestamp, cumulative-bit violation (bit 3 set without bit 2), scope field exceeding declared max, modelHash all-zeros, operatorPrivKey mismatch, permissions=0 edge case, permissions=0xFF valid, expiryTimestamp=0",
+    "Author delegation.json: 10 vectors \u2014 chain depth 1 valid, depth 2 valid, depth 3 valid, depth 4 rejection (exceeds max), parent scope \u2283 child scope (valid narrowing), parent scope \u2282 child scope (invalid expansion must reject), cumulative-bit propagation valid, bit dropped at delegation (valid), bit added at delegation (must reject), null parent credential",
+    "Author handshake-integration.json: 6 vectors \u2014 valid full handshake, nonce mismatch between human and agent proof, human proof replayed in second session, agent credential expired before handshake completion, delegation chain injected into handshake, scope mismatch between human allowlist and agent claim",
+    "Implement spec/test-vectors/runner.js: iterate all JSON files, for witness-only vectors use snarkjs.wtns.calculate(), for full proof vectors optionally run groth16/plonk prove+verify when FULL_PROOF=1 env is set; print PASS/FAIL per vector with vector id",
+    "Implement spec/test-vectors/validate-schema.js: use ajv to validate each vector file against schema.json; fail fast with clear error on schema violations",
+    "Add npm scripts to root package.json: 'test:vectors' (validate-schema + runner with witness-only), 'test:vectors:full' (sets FULL_PROOF=1)",
+    "Wire 'test:vectors' into the CI matrix alongside test:circuits:fast so vectors run on every PR",
+    "Write spec/test-vectors/README.md: schema field reference, how to generate fixture inputs using the TS SDK, how to add a new vector, and conformance claim requirements (must pass all 30+ vectors)"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "snarkjs ^0.7.x (already a direct dep \u2014 witness generation and optional full prove/verify)",
+    "ajv ^8 (JSON Schema validation for validate-schema.js)",
+    "circuits/build/ artifacts must exist (.wasm files for witness generation) \u2014 run npm run compile:circuits first",
+    "circuits/src/HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom \u2014 input signal names must be stable before authoring vectors",
+    "sdk/src/ \u2014 TS SDK used to derive canonical fixture values (commitments, nullifiers, modelHash) for vector inputs"
+  ]
+}

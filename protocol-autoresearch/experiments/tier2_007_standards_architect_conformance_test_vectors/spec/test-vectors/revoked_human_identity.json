@@ -1,0 +1,24 @@
+{
+  "id": "revoked_human_identity",
+  "description": "Human identity whose nullifierHash appears in the on-chain revocation set. The circuit itself will generate a valid witness (it does not check revocation), but the verifier MUST reject the proof when nullifierHash is in the revocation set. This vector tests the off-chain/on-chain revocation check, not the circuit constraint.",
+  "circuit": "HumanUniqueness",
+  "input_witnesses": {
+    "identityTreeRoot": "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+    "nullifierHash": "FROZEN_BY_EXTRACT",
+    "scope": "42",
+    "secret": "12345678901234567890",
+    "identityNonce": "1",
+    "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+    "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+  },
+  "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "42"],
+  "expected_result": "fail",
+  "failure_reason": "nullifierHash is in the revocation set — verifier must reject even though circuit witness is valid. Revocation is enforced at the application/contract layer, not inside the ZK circuit.",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "hand-authored",
+    "revocation_set": ["FROZEN_BY_EXTRACT"],
+    "notes": "The nullifierHash in revocation_set must equal the nullifierHash produced by the witness. Run extract_vectors.js to freeze both values."
+  }
+}

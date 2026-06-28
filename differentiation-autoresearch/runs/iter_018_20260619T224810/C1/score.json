@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction names five axes of baseline dominance (\u00a78), and the runtime-adaptive bitwise predicate over hidden bits with cumulative implication closure (Axis 2) is genuinely inexpressible in SD-JWT or BBS+. However, the rfc7662_advocate's Attack 1 correctly identifies that Axis 1 (AS-blind presentation) overstates the gap \u2014 SD-JWT with key binding achieves offline holder presentation without AS roundtrips. The spiffe_engineer's Attack 3 further narrows the irreducible claim to adversarial-AS elimination only, noting WIMSE could close Axes 1/2/4/5. The construction is preferable but does not cleanly rule out all baseline approximations \u2014 the Axis 1 language conflates 'offline presentation' with 'offline ZK predicate presentation,' inviting dismissal. Score 1, not 2, because the baseline can approximate on some axes (SD-JWT offline presentation) even though it cannot match the bitwise predicate property."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides four explicit security games (SCOPE-FORGE, SCOPE-HIDE, AS-BLIND, CROSS-RS-UNLINK) with named assumptions (A1\u2013A5), adversary capabilities, and reduction sketches. This is substantially more rigorous than most constructions. However, the cryptographer's attacks identify real gaps: (1) A1 misstates Groth16 as using Fiat-Shamir when it uses an SRS \u2014 a category error that undermines the assumption table's credibility; (2) the SRS ceremony integrity is not in the threat model despite being load-bearing for SCOPE-FORGE; (3) SCOPE-HIDE is a one-shot game but the construction claims multi-query privacy without proving it \u2014 the adaptive 64-round bit extraction attack is fully in-model and unaddressed; (4) agentBlind CSPRNG integrity is security-critical but unnamed as a formal assumption. The threat model exists and is well-structured, but has material gaps in assumptions and game definitions. Score 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/3/5 hashes, BabyJubjub EdDSA, BinaryMerkleRoot(20), Num2Bits(64), cumulative bit constraints \u2014 all already in the AgentPolicy circuit. The two modifications (session-randomized scopeCommitment, agent-side nonce blinding) add ~600 constraints each, bringing the total to ~16,400 \u2014 well under the pot16.ptau ceiling of 65,536. Delegation circuit stays under 21,000. Proving time targets are stated (rapidsnark <0.5s, snarkjs <5s). Proof size is constant (192 bytes Groth16, ~768 bytes PLONK). Verification cost is ~220K gas. All within Phase 1 budget. The cost analysis is concrete and credible."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Five Tier 3 personas attacked the construction. The cryptographer found a critical issue: the SRS ceremony is outside the threat model (A1 mislabel), meaning SCOPE-FORGE advantage \u2192 1 under subverted SRS. The adaptive 64-round predicate attack (cryptographer Attack 3) is fully in-model and the construction cannot answer it \u2014 bitmask privacy is per-proof only, not against sequential queries. The rfc7662_advocate's agentMerkleRoot epoch-correlation attack is unaddressed. The cu_ciso raised revocation kill-time and audit trail gaps that the construction cannot answer. The spiffe_engineer confirmed the operator-key-as-AS circularity. While several attacks are mitigated (nonce coordination is genuinely fixed, Poseidon collision resistance holds for delegation chains), multiple attacks land and weaken the claims materially. Score 1 because Tier 3 surfaced real attacks that the construction mitigates partially but that weaken the overall claim."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The construction names a concrete deployment: Navy Federal Credit Union with three RSes (account inquiry, loan pre-qual, wire transfer) under NCUA examination. However, the cu_ciso and rfc7662_advocate attacks demolish this specific scenario's load-bearing status: (1) the credit union operates both the AS and the RSes, making AS-blindness circular (rfc7662_advocate Attack 4); (2) on-chain dependency has no NCUA-examinable vendor contract (cu_ciso Attack 1); (3) no revocation SLA for GLBA incident response (cu_ciso Attack 2); (4) ZK proof outputs are audit-trail-incompatible with NCUA Part 748 (cu_ciso Attack 3). The scenario is named with regulatory citations but the construction's properties are not load-bearing in the single-operator CU deployment described \u2014 a federated multi-operator scenario would be load-bearing but is not specified. Score 1 for named but undermined scenario."
+    }
+  },
+  "gaps": [
+    "Fix A1 assumption: replace 'Fiat-Shamir' with SRS/CRS model for Groth16; add SRS ceremony integrity as a named trust assumption with explicit scoping (who ran the ceremony, public verifiability of ceremony transcripts, or mandate PLONK-only to eliminate the issue)",
+    "Add agentBlind CSPRNG integrity as a numbered assumption (A6) with explicit failure mode analysis \u2014 what happens to CROSS-RS-UNLINK when agentBlind has low entropy or is deterministically derived",
+    "Define a multi-query SCOPE-HIDE game (q-SCOPE-HIDE) that addresses the adaptive 64-round bit extraction attack \u2014 either bound the number of adaptive queries per RS session, or acknowledge that per-proof privacy does not extend to adaptive multi-query settings and adjust the privacy claim accordingly",
+    "Address agentMerkleRoot as an epoch-correlation signal: quantify the anonymity set size as a function of tree population, and either expand Game 4 to bound this leakage or acknowledge it as an explicit residual",
+    "Replace the single-operator credit union scenario with a federated multi-operator scenario where AS-blindness is genuinely load-bearing (e.g., multi-CU shared services organization where each CU operates its own RS but a shared vendor operates the AS, and the CUs do not trust the vendor's AS attestations)",
+    "Specify the delegation channel: define how delegatorBlindedNonce is transmitted from delegator to delegatee with authentication semantics and threat model for the delegator-to-delegatee channel",
+    "Address revocation SLA: specify root rotation cadence, maximum credential validity window after revocation, and emergency revocation mechanism (e.g., on-chain blocklist) for GLBA incident response",
+    "Specify operator key custody requirements: HSM level, key rotation procedure, multi-party signing threshold, and circuit handling of key rotation for the EdDSA operator key"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

@@ -1,0 +1,641 @@
+[
+  {
+    "id": "agentic_commerce_identity",
+    "title": "ZKP Identity Layer for Agentic Commerce Transactions",
+    "description": "The $547M-to-$5.2B agentic commerce market identifies identity as a critical infrastructure gap. Bolyra's permission-scoped agent credentials with financial tier bits (FINANCIAL_SMALL/MEDIUM/UNLIMITED) map directly to agent purchasing authority, enabling verifiable spending limits without exposing buyer identity.",
+    "category": "agentic_commerce",
+    "source": "agentic_commerce",
+    "scores": {
+      "demand": 8,
+      "timing": 7,
+      "fit": 21,
+      "feasibility": 19,
+      "total": 55
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and the preliminary score of 22 is unsupported \u2014 the '$547M-to-$5.2B' market sizing has no cited analyst report URL, no named buyer, and no verifiable source.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines are cited; 'agentic commerce' remains pre-market with no concrete timeline anchors beyond speculative analyst projections.",
+      "fit": "All four core primitives (AgentPolicy financial tier bits, HumanUniqueness sybil resistance, Delegation scope narrowing, IdentityRegistry atomic verification) map directly with only minor extensions needed \u2014 this is genuinely what Bolyra was built for.",
+      "feasibility": "MVP spec is well-scoped at ~5 days reusing existing circuits and SDK with no new ZK work, though the absence of real merchant partners or integration targets makes 'feasibility to market' weaker than 'feasibility to build'."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Permission bitmask bits 2-4 (FINANCIAL_SMALL/MEDIUM/UNLIMITED) directly encode purchasing authority tiers. Selective disclosure lets an agent prove it can spend up to $100 without revealing its full permission set or operator identity. The expiry enforcement ensures spending authority is time-bounded.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The human behind an agent purchase can prove enrollment (sybil resistance) without revealing buyer identity. Scope-based nullifiers prevent double-claiming of per-user promotions or loyalty rewards without linking purchases across merchants.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Human delegates purchasing authority to an agent with scope narrowing \u2014 e.g., grants FINANCIAL_MEDIUM but the agent can only sub-delegate FINANCIAL_SMALL to a sub-agent. Expiry narrowing ensures delegated spending windows are strictly shorter than the parent grant.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "Atomic handshake verification lets a merchant verify in a single tx that (a) the human principal is enrolled, (b) the agent has valid spending authority, and (c) the delegation chain is intact. Root history buffers tolerate slight staleness in high-throughput commerce scenarios.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createAgentCredential already accepts permissions and expiry. proveHandshake produces the paired proofs a merchant needs. permissionsToBitmask and validateCumulativeBitEncoding enforce the financial tier implication rules (bit 4 implies 2+3) at the SDK level before proof generation.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft's mutual ZKP auth flow is the wire protocol for agent-to-merchant handshakes. Commerce transactions are a concrete instantiation of the draft's abstract handshake ceremony.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "SpendingProof circuit: extends AgentPolicy with a committed spending amount input and a range proof that amount <= tier ceiling (e.g., amount < 10000 for FINANCIAL_MEDIUM). Outputs a Poseidon commitment to (amount, nonce, merchantScope) without revealing the exact amount to the chain \u2014 only that it falls within the authorized tier.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "CommerceEscrow contract: accepts a verified handshake result plus the SpendingProof, holds funds in escrow until merchant confirms delivery. Integrates with IdentityRegistry for proof verification and adds a simple dispute window. Needs to handle ERC-20 and native ETH.",
+        "complexity": "high"
+      },
+      {
+        "type": "sdk",
+        "description": "Commerce API surface: purchaseHandshake(human, agent, amount, merchantDid) that orchestrates the SpendingProof + standard handshake, and verifyPurchase(proof, merchantKey) for the merchant side. Wraps the new circuit and escrow contract calls.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Commerce profile for the IETF draft: defines the agentic-commerce transaction flow as a concrete profile of draft-bolyra-mutual-zkp-auth, specifying the SpendingProof extension, merchant DID requirements, and escrow settlement semantics. Maps to X402/L402 payment protocol patterns.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "Payment protocol adapters: thin wrappers for X402 (HTTP 402 + Lightning/stablecoin) and Stripe Connect that translate Bolyra commerce handshakes into settlement instructions. The Bolyra proof becomes the authorization artifact replacing traditional API keys or OAuth tokens.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "LangChain/CrewAI commerce tools: upgrade the existing stub integrations to expose purchaseHandshake as a tool that agents can invoke mid-task, with automatic permission checking against the agent's credential bitmask before attempting the purchase.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "Agentic commerce positions Bolyra as the invisible identity and authorization layer beneath commerce platforms (Shopify, Stripe, payment networks) rather than competing with them. Merchants integrate Bolyra proofs the way they integrate 3DS today \u2014 as an infrastructure primitive they don't build themselves. This is the privacy-layer-under-incumbents strategy: Stripe processes the payment, Bolyra proves the agent is authorized to make it. The $547M-to-$5.2B market growth creates urgency for incumbents to solve agent identity, and Bolyra's ZKP approach offers what OAuth/API-key solutions cannot \u2014 verifiable spending authority without exposing the principal's identity to the merchant, which is a regulatory advantage under GDPR/CCPA for cross-border agent commerce.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "commerce-handshake-example",
+          "type": "demo",
+          "description": "End-to-end Node script: human delegates FINANCIAL_SMALL to agent, agent proves spending authority to a mock merchant endpoint, merchant verifies the paired proofs. Uses existing AgentPolicy + Delegation circuits with no new ZK work. Demonstrates the core value prop (privacy-preserving purchasing authority) with what ships today.",
+          "days": 2,
+          "reuses": "AgentPolicy, Delegation, @bolyra/sdk"
+        },
+        {
+          "name": "merchant-verifier SDK helper",
+          "type": "sdk",
+          "description": "Thin wrapper in @bolyra/sdk: verifyCommerceHandshake(humanProof, agentProof, nonce, requiredTierBit) \u2014 checks the handshake AND asserts the agent's permission bitmask includes the required financial tier. Returns {valid, tierCeiling, expiresAt}. ~80 lines wrapping existing verifyHandshake + bitmask checks.",
+          "days": 1,
+          "reuses": "@bolyra/sdk verifyHandshake, validateCumulativeBitEncoding"
+        },
+        {
+          "name": "commerce tier test vectors",
+          "type": "spec",
+          "description": "JSON test vectors in spec/test-vectors/ covering: (1) agent with FINANCIAL_SMALL proves to merchant requiring SMALL \u2014 pass, (2) agent with FINANCIAL_SMALL proves to merchant requiring MEDIUM \u2014 fail, (3) delegated agent with narrowed permissions \u2014 pass at narrowed tier only, (4) expired credential \u2014 fail. Feeds conformance runner.",
+          "days": 1,
+          "reuses": "spec/conformance-runner"
+        },
+        {
+          "name": "agentic-commerce integration doc",
+          "type": "docs",
+          "description": "Technical writeup in docs/: how Bolyra's existing permission bits map to agentic commerce spending tiers, wire protocol flow diagram (agent\u2194merchant using draft-bolyra-mutual-zkp-auth-01), comparison vs plaintext API key auth. No pricing, no CTA \u2014 pure technical architecture doc suitable for blog or conference talk.",
+          "days": 1,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "SpendingProof circuit design spec",
+          "type": "spec",
+          "description": "Written spec only (no implementation): circuit IO, range proof approach (Poseidon commitment to amount + tier ceiling check), constraint estimate, integration points with AgentPolicy. Parks the design for post-EAD implementation when real merchant integrations are possible.",
+          "days": 1,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 6,
+      "reuse_percentage": 85,
+      "risks": [
+        "No web search evidence of current demand \u2014 the $547M market sizing is projected, not validated by active builder requests or RFPs",
+        "SpendingProof range proof adds ~15K constraints and needs careful audit before any real money flows through it",
+        "Agentic commerce standards are fragmented (A2A, MCP, custom) \u2014 picking the wrong integration surface wastes the demo",
+        "Without real merchant feedback (blocked by EAD), the tier ceiling mapping ($100/$10K/unlimited) may not match actual purchasing patterns",
+        "Solo-founder risk: 6 days of commerce work competes with protocol-autoresearch and SDK v0.3 delegation work"
+      ],
+      "success_criteria": "Demo script runs end-to-end: human enrolls \u2192 delegates FINANCIAL_SMALL to agent \u2192 agent handshakes with mock merchant \u2192 merchant verifies spending authority is sufficient \u2192 proof passes. All 4 test vectors pass in conformance runner. Technical doc gets published as a blog post or conference submission. Measured by: (1) demo completes in <5s on laptop, (2) test vectors integrated into CI, (3) at least one external developer references the doc within 60 days of publication."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND FABRICATION: The '$547M-to-$5.2B' market size has no cited analyst report, no URL, no named buyer, and the card's own evidence array is literally empty. The Tier 2 demand score already flagged 'web search evidence returned zero results.' This is textbook phantom demand \u2014 conference-talk hype with zero procurement signals.",
+      "TIMING SELF-CONTRADICTION: The card's own timing_assessment field says '18_plus_months' yet it scored timing at 7/10. An 18+ month horizon for a pre-revenue, solo-founder startup on H1B is a death sentence \u2014 you'll burn runway building for a market that doesn't exist yet while incumbents watch and wait.",
+      "NO PRODUCTION AGENTS DOING COMMERCE: Name one enterprise running an AI agent that autonomously purchases goods with real money in production today. Not a demo, not a hackathon project \u2014 a production deployment. There are none. The entire opportunity assumes a deployment model (autonomous agent purchasing) that enterprises have not sanctioned and likely won't for years due to liability concerns.",
+      "STRIPE KILLS THIS IN A SPRINT: Stripe Connect already handles delegated payment authority with spending limits, merchant onboarding, and escrow. They have 3.1M businesses integrated. Adding 'agent identity' is a feature flag for Stripe, not a product for Bolyra. The CommerceEscrow contract described in new_components_needed is literally reinventing Stripe Connect on-chain \u2014 worse UX, worse compliance, zero merchant adoption.",
+      "ZKP IS OVERENGINEERING: A merchant verifying an agent's spending limit does NOT need zero-knowledge proofs. OAuth 2.0 scopes + signed JWTs with spending_limit claims achieve the same authorization semantics with millisecond latency instead of multi-second proof generation. The 'privacy' argument (hiding buyer identity from merchant) conflicts with KYC/AML requirements that merchants face \u2014 they NEED to know who's buying, especially for cross-border transactions the card claims as an advantage.",
+      "EAD BLOCKS ALL COMMERCIAL VALUE: The card correctly classifies as WAIT_FOR_EAD. Building merchant integrations, payment protocol adapters, and commerce APIs is pure commercial infrastructure. The open-source demo is the only buildable artifact, and a demo without merchants or buyers proves nothing. You cannot validate demand without commercial activity, and you cannot do commercial activity without EAD.",
+      "NEW COMPONENT SCOPE EXPLOSION: The card claims MVP is ~5 days reusing existing circuits, then lists a new SpendingProof circuit (medium complexity), CommerceEscrow contract (HIGH complexity), commerce SDK surface, IETF profile extension, two payment protocol adapters, and LangChain/CrewAI upgrades. That is not an MVP \u2014 that is a 2-3 month roadmap disguised as a quick win.",
+      "GDPR/CCPA ARGUMENT IS BACKWARDS: The card claims ZKP privacy is a 'regulatory advantage under GDPR/CCPA for cross-border agent commerce.' In reality, GDPR requires data controllers (merchants) to know the identity of data subjects to fulfill access/deletion requests. Hiding buyer identity from merchants via ZKP creates compliance problems, not advantages."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Phantom demand backed by zero evidence, an 18+ month market horizon by the card's own admission, trivially replicated by Stripe/Visa, ZKP unnecessary for the core authorization problem, and EAD-blocked from any commercial validation \u2014 kill this opportunity and reallocate attention to markets with verifiable procurement signals.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "ietf_zkp_extension",
+    "title": "ZKP Extension to IETF draft-klrc-aiagent-auth",
+    "description": "The IETF draft recommends leveraging SPIFFE/WIMSE/OAuth but acknowledges no existing standard handles privacy-preserving agent auth. Bolyra's mutual ZKP auth draft could position as the privacy layer that complements draft-klrc, proving agent identity without credential disclosure.",
+    "category": "standards",
+    "source": "ietf_agent_auth",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 20,
+      "feasibility": 16,
+      "total": 54
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results; no verifiable URLs, named buyers, or engagement metrics support demand \u2014 only the existence of an early IETF draft suggests nascent interest.",
+      "timing": "draft-klrc is an early-stage IETF individual draft with no WG adoption, no RFC number, and no published finalization timeline \u2014 the window is 18+ months out at best.",
+      "fit": "All three core circuits (AgentPolicy, HumanUniqueness, Delegation) plus the existing internet-draft map directly to the draft-klrc gaps with only minor modifications needed.",
+      "feasibility": "The MVP spec is well-scoped at ~12 days reusing existing primitives, but depends on an external standard that may pivot or stall, creating execution risk on a moving target."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive for draft-klrc complementary layer \u2014 proves agent identity, operator authorization, and permission scope via PLONK proof without disclosing the credential itself. The selective-disclosure capability (requiredScopeMask) maps directly to draft-klrc's need for capability-scoped auth without credential exposure.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Provides the human-in-the-loop attestation that draft-klrc identifies as missing \u2014 proves a human principal authorized the agent chain without revealing which human. The nullifier mechanism enables sybil-resistant audit trails across SPIFFE trust domains.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Maps to draft-klrc's multi-hop agent delegation model (human \u2192 orchestrator \u2192 sub-agent). The scope-narrowing and expiry-narrowing constraints enforce the principle of least privilege that draft-klrc recommends but has no cryptographic mechanism to enforce. Max 3 hops aligns with practical agent chain depths.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root-of-trust registry for agent enrollment. Could serve as a public verifier endpoint that SPIFFE/WIMSE federations reference for ZKP verification, analogous to how OAuth uses JWKS endpoints but for proof verification keys.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "Already structured as an IETF internet-draft \u2014 the wire format, proof envelope content types, and handshake flow can be proposed as the privacy-preserving profile that draft-klrc references. Section alignment: Bolyra's mutual auth maps to klrc's 'agent-to-agent authentication' gap.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "DID method provides the identifier layer that bridges SPIFFE SVIDs to ZKP-backed identities. A draft-klrc agent could hold both a SPIFFE SVID (for infrastructure auth) and a did:bolyra (for privacy-preserving capability proof), with the DID method resolution spec defining how verifiers discover proof parameters.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "SDK's proveHandshake/verifyHandshake API is the developer-facing integration point. Agent frameworks implementing draft-klrc would call these functions to generate/verify the ZKP privacy layer atop their existing SPIFFE/OAuth tokens.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "SPIFFE-to-Bolyra bridge specification: defines how a SPIFFE SVID maps to a Bolyra agent credential commitment, enabling agents already enrolled in SPIFFE trust domains to generate ZKP proofs without re-enrollment. Needs to specify the binding between SPIFFE ID (spiffe://trust-domain/path) and the Poseidon3 scope commitment.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "OAuth token binding extension: defines an 'x-bolyra-proof' field in OAuth token introspection responses (RFC 7662) that carries a compact ZKP proof envelope, allowing existing OAuth infrastructure to relay Bolyra proofs without understanding them. Complements the zk-vs-rfc7662 differentiation strategy.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "WIMSE workload identity adapter: thin wrapper that extracts workload identity claims from WIMSE tokens and maps them to AgentPolicy circuit inputs (modelHash, operatorKey binding, permission bitmask). Enables WIMSE-enrolled workloads to generate Bolyra proofs.",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "Proof envelope content type registration: register 'application/bolyra-proof+cbor' (or similar) with IANA for use in HTTP headers, aligning with draft-klrc's preference for standard content negotiation. The protocol-autoresearch loop already has an experiment on this (tier2_000 proof_envelope_content_type).",
+        "complexity": "low"
+      },
+      {
+        "type": "sdk",
+        "description": "Credential-less verification mode: SDK function that verifies a Bolyra proof given only the proof envelope and public verification key URL (no local circuit artifacts needed). Required for draft-klrc verifiers that don't want to ship snarkjs \u2014 they just need to check proofs against a published vkey.",
+        "complexity": "medium"
+      },
+      {
+        "type": "circuit",
+        "description": "Timestamp-authority binding: optional circuit extension that commits the proof to a signed timestamp from a trusted TSA (RFC 3161), giving verifiers temporal non-repudiation without relying on block timestamps. Draft-klrc's audit requirements suggest this will be asked for.",
+        "complexity": "high"
+      }
+    ],
+    "positioning_alignment": "This opportunity is the canonical expression of Bolyra's privacy-layer-under-incumbents strategy. Draft-klrc explicitly acknowledges the gap: 'no existing standard handles privacy-preserving agent auth.' By positioning as the complementary privacy profile rather than a competing auth framework, Bolyra avoids the fatal mistake of trying to replace SPIFFE/OAuth/WIMSE and instead becomes the layer they all reference when privacy is required. The strategy works because: (1) incumbents have no incentive to build ZKP \u2014 it's orthogonal to their core value prop, so Bolyra fills a vacuum rather than competing; (2) the IETF draft process gives Bolyra standards legitimacy that pure-product approaches lack; (3) once draft-klrc references Bolyra's proof format as the recommended privacy profile, every implementation of draft-klrc becomes a distribution channel. The risk is timing \u2014 if draft-klrc finalizes before Bolyra's bridge specs are ready, the window closes and a simpler approach (e.g., encrypted OAuth tokens) gets blessed instead.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "draft-bolyra-klrc-zkp-profile-00",
+          "type": "spec",
+          "description": "IETF internet-draft defining Bolyra as the privacy-preserving profile for draft-klrc agent auth. Covers proof envelope content types (application/bolyra-proof+cbor), HTTP header bindings (Bolyra-Proof, Bolyra-Nonce), and how ZKP auth layers atop existing SPIFFE/OAuth tokens without replacing them.",
+          "days": 4,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "SPIFFE-SVID-to-Bolyra commitment mapping",
+          "type": "spec",
+          "description": "Short appendix spec (part of the draft) defining how a SPIFFE SVID's x509/JWT fields map to Bolyra agent credential commitments. Covers trust domain \u2192 Merkle tree partitioning and SVID expiry \u2192 circuit expiry binding.",
+          "days": 2,
+          "reuses": "AgentPolicy"
+        },
+        {
+          "name": "AgentPolicy requiredScopeMask alignment",
+          "type": "circuit",
+          "description": "Minor update to AgentPolicy circuit: add an optional public input for draft-klrc capability URIs hashed to scope bits, so verifiers can check 'agent is authorized for POST /transfer' without seeing the full credential. Existing requiredScopeMask logic handles this with a hash-to-bitmask helper.",
+          "days": 1,
+          "reuses": "AgentPolicy"
+        },
+        {
+          "name": "klrc-bridge middleware",
+          "type": "sdk",
+          "description": "Express/Fastify middleware (~200 LOC) that intercepts draft-klrc-style Authorization headers, extracts the SPIFFE SVID, calls @bolyra/sdk verifyHandshake() for the ZKP layer, and returns a unified auth result. Reference implementation, not production-hardened.",
+          "days": 3,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "Conformance test vectors",
+          "type": "docs",
+          "description": "JSON test vector file with 10+ cases: valid klrc+bolyra handshake, expired SVID with valid proof (must reject), valid SVID with scope-narrowed proof, replayed nonce (must reject), delegation chain depth 1-3. Enables other implementers to test against the spec.",
+          "days": 2,
+          "reuses": "spec/test-vectors"
+        },
+        {
+          "name": "klrc-bolyra-demo",
+          "type": "demo",
+          "description": "Single docker-compose with two agents (requester + provider) performing mutual ZKP auth over HTTP using the klrc bridge middleware. README walkthrough shows the handshake, proof verification, and scope check. No UI \u2014 curl-based.",
+          "days": 3,
+          "reuses": "examples/mcp-demo"
+        }
+      ],
+      "total_days": 15,
+      "reuse_percentage": 78,
+      "risks": [
+        "draft-klrc is early-stage and may pivot \u2014 our extension could target a moving spec",
+        "IETF adoption cycles are 18+ months; no short-term validation signal",
+        "Web search evidence returned nothing \u2014 actual demand from implementers is unverified",
+        "Solo capacity risk: 15 days assumes no interruptions from other Bolyra priorities",
+        "SPIFFE community may prefer their own privacy extension over an external ZKP layer"
+      ],
+      "success_criteria": "Draft accepted as an individual submission to the IETF WIMSE or OAuth working group mailing list, at least 2 substantive review comments from WG participants, and the conformance test vectors passing against both the reference middleware and at least one third-party implementation attempt within 6 months of publication."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND: Zero verified demand signals. The opportunity card itself admits 'Web search evidence returned zero results; no verifiable URLs, named buyers, or engagement metrics.' The entire demand thesis rests on the existence of an early IETF draft that has no WG adoption. This is textbook phantom demand \u2014 conference-talk interest masquerading as procurement intent. No enterprise has asked for ZKP-based agent auth; they are still figuring out basic agent authorization with OAuth and API keys.",
+      "DEMAND: The 'buyer' for an IETF extension is not a buyer at all. Standards bodies do not pay. The theory that 'every implementation of draft-klrc becomes a distribution channel' requires draft-klrc to (a) finalize, (b) reference Bolyra specifically, and (c) generate implementations that actually integrate the privacy profile. Each step has <30% probability; chained probability is <3%.",
+      "COMPETITIVE MOAT: SPIFFE/WIMSE incumbents (HPE/SPIRE, Google, Microsoft) own the trust-domain infrastructure. If privacy-preserving agent auth becomes important, they will add encrypted attestation bundles or work with existing privacy-enhancing tech (Intel SGX attestation, AWS Nitro Enclaves) rather than adopt an external ZKP layer from a solo-founder startup with no IETF track record. The moat argument \u2014 'incumbents have no incentive to build ZKP' \u2014 is exactly backwards: incumbents have no incentive to adopt YOUR ZKP either.",
+      "COMPETITIVE MOAT: Worldcoin/World already has production ZKP identity infrastructure with $250M+ in funding and actual IETF/W3C presence. If ZKP agent identity becomes a real category, they extend World ID to agents in weeks, not months.",
+      "TIMING: draft-klrc is an individual submission with no working group adoption. IETF individual drafts have a >70% abandonment rate. Building bridge specs to a draft that may never become an RFC is building on quicksand. The card's own timing assessment says '18+ months out at best' \u2014 this means 18 months of spec-tracking work with high probability of total waste if the draft pivots or dies.",
+      "TIMING: No production AI agents exist with real multi-hop delegation authorization needs today. Enterprises are doing single-agent POCs with hardcoded API keys. The privacy-preserving agent auth problem is real but premature \u2014 solving it now means maintaining the solution through 2+ years of standard churn before anyone needs it.",
+      "TECHNICAL FIT: The strongest non-ZKP alternative is devastating here. SPIFFE SVIDs + OAuth DPoP + encrypted JWT claims already provide: machine identity (mTLS), delegation chains (token exchange RFC 8693), scoped permissions (OAuth scopes), and credential non-disclosure (encrypted JWTs with selective claim release via JWE). The specific ZKP property needed \u2014 'prove authorization without revealing the credential' \u2014 can be approximated by encrypted token introspection where the verifier gets a yes/no without seeing the token. This is worse privacy than ZKP but 100x simpler and already deployed.",
+      "EAD COMPLIANCE: Card is correctly classified as WAIT_FOR_EAD. However, the 'pure technical work' framing is fragile \u2014 engaging with IETF draft authors, positioning Bolyra in standards discussions, and building bridge specs to specific commercial identity platforms (SPIFFE, WIMSE) walks dangerously close to business development activity. The spec-writing is permissible; the lobbying required to get draft-klrc to reference Bolyra is not.",
+      "EXECUTION: 12-day MVP estimate is unrealistic for producing a credible IETF internet-draft plus SPIFFE bridge spec plus WIMSE adapter plus IANA content-type registration. Each of those is individually a multi-week effort if done to IETF quality. The 6 new components identified (3 medium, 2 low, 1 high complexity) suggest 2-3 months of real work, not 12 days."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Zero verified demand, no WG adoption of the target draft, incumbents own the distribution, and the ZKP layer can be approximated by encrypted token introspection \u2014 this is a standards-prestige play with no path to revenue and high probability of total waste; kill it.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "cross_platform_agent_passport",
+    "title": "Cross-Platform Agent Identity Passport",
+    "description": "Agents increasingly operate across LangChain, AutoGen, Bedrock, and custom frameworks, each with siloed identity. Bolyra's DID method and portable ZKP credentials could serve as a universal agent passport, proving capabilities once and presenting proofs across platforms without re-enrollment.",
+    "category": "enterprise_auth",
+    "source": "microsoft_agent_identity",
+    "scores": {
+      "demand": 8,
+      "timing": 9,
+      "fit": 19,
+      "feasibility": 16,
+      "total": 52
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no URLs were cited; the need for cross-platform agent identity is plausible but entirely unverified with no named buyers, funding rounds, or analyst reports.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were provided; multi-framework agent identity is an emerging concept with no concrete timeline anchors beyond general industry momentum.",
+      "fit": "AgentPolicy, Delegation, IdentityRegistry, did:bolyra, and HumanUniqueness all map directly with only minor modifications needed \u2014 this is essentially what Bolyra was designed for.",
+      "feasibility": "MVP spec reuses existing circuits and SDK primitives with no new trusted setup, but the 14-day estimate across spec + SDK module + two framework adapters + demo is tight for a solo founder and the AutoGen/Bedrock ecosystems are still shifting targets."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core credential circuit already proves an agent's permission bitmask, operator signature, and expiry without revealing the full credential. A cross-platform passport is literally a portable AgentPolicy proof \u2014 the agent proves once (e.g. in LangChain) and any other framework can verify the same PLONK proof against the public verification key without the agent re-enrolling.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Multi-hop delegation chains let an enterprise operator delegate scoped credentials to agents running on different platforms. Agent on LangChain gets FINANCIAL_SMALL, sub-delegates to an AutoGen sub-agent with READ_DATA only. The one-way scope narrowing is exactly the trust attenuation cross-platform identity needs.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root history buffers and nullifier tracking provide the shared verification anchor across platforms. Any framework can call verifyHandshake or verifyDelegation against the same Base Sepolia contract without trusting the originating platform.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "The DID method is the portable identifier layer \u2014 each agent gets a did:bolyra:agent:<commitment> that resolves to its credential metadata and verification keys. Frameworks resolve the DID to find the verification key and contract address, eliminating platform-specific enrollment.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Human-in-the-loop governance: the human operator behind a fleet of cross-platform agents proves uniqueness once, and delegation chains bind all agent credentials back to that human root. Prevents a single operator from creating unlimited unlinked agent identities across platforms.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "SDK's createAgentCredential + proveHandshake are the issuance and presentation APIs. Cross-platform passport requires these to work in diverse runtimes (Node in LangChain, Python via subprocess bridge in CrewAI/AutoGen, browser for web agents).",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "Cross-Platform Credential Presentation Protocol \u2014 defines the wire format for presenting a Bolyra proof to a verifying framework. Needs: proof serialization envelope, DID resolution steps, nonce challenge-response flow, and framework-agnostic verification endpoint spec. Extends draft-bolyra-mutual-zkp-auth-01 with a 'portable presentation' profile.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "Framework adapter SDKs for AutoGen, Bedrock, and Vertex AI Agent Builder. Similar shape to existing langchain-bolyra-tool and crewai-bolyra-tool stubs \u2014 thin wrappers that accept a Bolyra proof, resolve the DID, verify on-chain, and expose trust metadata to the framework's native permission model.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Credential wallet / keystore abstraction \u2014 agents need to persist their credential commitment and proof artifacts across platform boundaries. A lightweight encrypted keystore (file-based or cloud KMS-backed) that the SDK can read from any framework runtime.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "Cross-platform nonce registry or session binding extension to IdentityRegistry \u2014 when an agent presents a proof on Platform B that was generated for Platform A, the nonce binding needs to support either platform-scoped nonces (current) or a transferable session token. May need a small contract extension for multi-scope nonce validation.",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "Credential revocation list or status registry \u2014 cross-platform passports need a way for the issuing operator to revoke an agent's credential globally. Current nullifier mechanism is scope-bound; revocation needs to work across all platforms simultaneously.",
+        "complexity": "high"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. LangChain, AutoGen, and Bedrock each have proprietary identity silos \u2014 none wants to adopt a competitor's identity system. Bolyra slots underneath all of them as neutral infrastructure: agents prove capabilities via ZKP without any platform learning the agent's full permission set or operator identity. The value prop to each platform is 'accept Bolyra proofs and your agents become interoperable with every other framework for free.' This avoids the competitive dynamics that block platform-to-platform identity federation and positions Bolyra as the TCP/IP layer for agent trust \u2014 exactly the wedge the protocol strategy targets.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "Portable Presentation Profile spec",
+          "type": "spec",
+          "description": "Extension to draft-bolyra-mutual-zkp-auth-01 defining a challenge-response wire format for presenting AgentPolicy proofs cross-platform. Covers: proof envelope serialization (CBOR), DID resolution steps, nonce binding, and a framework-agnostic /verify endpoint contract. Intentionally thin \u2014 reuses existing proof format, just standardizes the presentation wrapper.",
+          "days": 3,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01 + AgentPolicy circuit"
+        },
+        {
+          "name": "@bolyra/passport SDK module",
+          "type": "sdk",
+          "description": "New module in sdk/ exporting presentCredential(agentProof, targetNonce) and verifyPresentation(envelope). Thin wrapper around existing proveHandshake and verifyHandshake \u2014 adds envelope serialization, DID-based key resolution, and nonce rebinding. No new circuits.",
+          "days": 4,
+          "reuses": "@bolyra/sdk (createAgentCredential, proveHandshake, verifyHandshake)"
+        },
+        {
+          "name": "LangChain adapter",
+          "type": "integration",
+          "description": "Integration under integrations/langchain/ that implements a LangChain CallbackHandler or Tool wrapper. On agent init, loads a Bolyra credential and presents it to a verifier endpoint. On incoming requests, verifies presented proofs. ~200 lines leveraging existing langchain integration skeleton.",
+          "days": 3,
+          "reuses": "integrations/langchain/ skeleton + @bolyra/passport"
+        },
+        {
+          "name": "AutoGen adapter",
+          "type": "integration",
+          "description": "Integration under integrations/autogen/ implementing an AutoGen ConversableAgent mixin that attaches Bolyra credential presentation to agent-to-agent messages. Verifier side checks proofs before processing. Mirrors LangChain adapter pattern.",
+          "days": 2,
+          "reuses": "@bolyra/passport (same verification logic)"
+        },
+        {
+          "name": "Cross-platform demo",
+          "type": "demo",
+          "description": "End-to-end demo: a LangChain agent with FINANCIAL_SMALL permission delegates READ_DATA to an AutoGen sub-agent. The AutoGen agent presents its delegated credential back to a verifier. Runs locally with Base Sepolia contracts. Produces a README walkthrough suitable for a blog post.",
+          "days": 3,
+          "reuses": "Delegation circuit + IdentityRegistry + both adapters"
+        },
+        {
+          "name": "Conformance test vectors",
+          "type": "spec",
+          "description": "Machine-readable test vectors (JSON) for the portable presentation profile: valid presentations, expired credentials, scope-narrowing violations, nonce replay attempts. Extends spec/test-vectors/. Any future framework adapter can validate against these without running circuits.",
+          "days": 1,
+          "reuses": "spec/conformance-runner + existing test vector format"
+        }
+      ],
+      "total_days": 16,
+      "reuse_percentage": 78,
+      "risks": [
+        "Framework API instability \u2014 LangChain and AutoGen APIs change frequently; adapters may break within weeks of release",
+        "Adoption chicken-and-egg \u2014 portable credentials only matter if multiple frameworks actually integrate; without organic adoption the demo stays a demo",
+        "DID resolution latency \u2014 resolving did:bolyra on-chain adds 1-3s per verification; cross-platform flows that chain multiple resolutions may feel slow",
+        "Solo-founder maintenance burden \u2014 two framework adapters double the surface area to keep current against upstream breaking changes",
+        "Search evidence gap \u2014 web search returned no results, so demand signal is unvalidated; the 21-point demand score is speculative"
+      ],
+      "success_criteria": "A developer can follow the demo README, create an agent credential in LangChain, delegate a narrowed credential to an AutoGen sub-agent, and verify the delegated proof end-to-end \u2014 all without platform-specific re-enrollment. Secondary: at least 2 conformance test vectors pass in both adapters, and the portable presentation spec is self-contained enough for a third-party to implement a verifier without reading Bolyra source code."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND FABRICATED: Card scores demand at 8/10 but demand_strength is literally 'none' \u2014 zero URLs, zero named buyers, zero analyst reports, zero procurement signals. This is vaporware demand. The rationale even admits 'web search evidence returned zero results.' An 8/10 demand score with zero evidence is self-deception.",
+      "PHANTOM MARKET: Nobody is running production agents across LangChain AND AutoGen AND Bedrock simultaneously today. Enterprises pick one framework. The 'cross-platform agent identity' problem assumes a multi-framework world that does not exist and may never exist \u2014 platforms consolidate, they don't federate.",
+      "OAUTH TOKEN EXCHANGE KILLS THIS: RFC 8693 (Token Exchange) already lets you swap a token from Platform A for a token on Platform B with scope narrowing. SPIFFE/SPIRE handles machine identity portability across trust domains. The 'passport' is literally what federated OAuth was designed for \u2014 no ZKP needed.",
+      "ZKP ADDS COST WITHOUT BUYER VALUE: The privacy argument ('no platform learns the agent's full permission set') solves a problem no enterprise buyer has articulated. Enterprises WANT their platforms to know agent permissions \u2014 that's called authorization. Hiding permissions from the platform is a bug, not a feature.",
+      "PLATFORM OWNERS WILL NEVER ADOPT THIS: Microsoft (AutoGen), Amazon (Bedrock), and Google (Vertex) each control their own identity stack. Why would Amazon accept a third-party ZKP proof when they have IAM? The 'neutral infrastructure' pitch requires all three incumbents to voluntarily cede identity control to a solo founder's protocol. This has never happened in the history of platform competition.",
+      "TIMING IS 18+ MONTHS BY YOUR OWN ASSESSMENT: The card's timing_assessment says '18_plus_months.' The timing score of 9/10 directly contradicts this. Building framework adapters for AutoGen and Bedrock when both APIs are 'still shifting targets' (the card's own words) guarantees rework.",
+      "14-DAY MVP ESTIMATE IS FICTION: Spec + SDK module + two framework adapters + demo in 14 days for a solo founder, when the target frameworks are actively changing their APIs. The credential revocation component alone is marked 'high complexity.'",
+      "EAD CLASSIFICATION IS WAIT_FOR_EAD: The card correctly identifies this as requiring commercial activity. Framework adapter partnerships, 'universal passport' positioning, and platform adoption conversations are all commercial acts. The pure-technical subset (spec writing) is permitted but produces no value without the commercial motion."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "FAIL",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Zero verified demand, OAuth/SPIFFE solves it without ZKP, platform owners will never cede identity control to a third party, timing is 18+ months by the card's own admission, and EAD blocks the commercial motion required to make it real \u2014 kill this opportunity.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "bedrock_obo_zkp",
+    "title": "ZKP On-Behalf-Of for AWS Bedrock AgentCore",
+    "description": "AWS Bedrock's OBO token exchange carries both user and agent identity but relies on opaque tokens. Bolyra's Delegation circuit could prove scope narrowing cryptographically, letting agents prove they act within delegated permissions without the resource server needing to call back to the IdP.",
+    "category": "enterprise_auth",
+    "source": "aws_bedrock_agents",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 19,
+      "feasibility": 14,
+      "total": 51
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no URLs were cited; AWS Bedrock AgentCore OBO is a newly announced feature with no public GitHub issues, RFPs, or named buyers requesting ZKP-based delegation \u2014 demand is speculative extrapolation from a platform announcement.",
+      "timing": "Bedrock AgentCore is early-stage with no concrete standard milestones or competitor ZKP integrations dated; the OBO pattern exists but no one is shipping cryptographic delegation proofs for it, putting this at 18+ months from market readiness.",
+      "fit": "All three core circuits (Delegation, AgentPolicy, HumanUniqueness) map directly to the OBO chain with minimal modification needed; the 3-hop delegation model and cumulative-bit scope narrowing are precisely what the Delegation circuit was designed for.",
+      "feasibility": "The delegate() SDK stub is incomplete (v0.3), the Bedrock adapter requires deep AWS integration testing against a moving-target API, and the 17-day MVP estimate understates the effort of making ZKP proofs compatible with AWS's opaque token infrastructure."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "Delegation",
+        "usage": "Core primitive. AWS Bedrock OBO exchanges a user token for a narrower agent token \u2014 this is exactly what the Delegation circuit does cryptographically. The 3-hop chain (user \u2192 orchestrator agent \u2192 sub-agent) maps to Bedrock's multi-agent routing. Scope narrowing (delegateeScope \u2286 delegatorScope) replaces opaque OBO token introspection with a verifiable proof.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Each Bedrock agent needs a verifiable credential proving its operator-signed permission bitmask. The selective disclosure capability lets a resource server verify an agent has FINANCIAL_SMALL without learning it also has WRITE_DATA \u2014 useful when Bedrock agents fan out to multiple downstream APIs with different trust requirements.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The human root of the delegation chain. In OBO flows the original user identity anchors trust \u2014 HumanUniqueness proves the user is a real enrolled member without revealing who they are to downstream resource servers. The nullifier scoping prevents the same user from being double-counted across Bedrock agent sessions.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain verification of the full OBO chain in a single atomic transaction. The existing handshake verification (Groth16 + PLONK) and delegation chain-state tracking already support this. Root history buffers handle the latency between when a credential was issued and when the resource server checks it.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "The delegate() stub (v0.3) needs to be completed to expose the OBO flow as a clean SDK call: delegateOnBehalfOf(humanIdentity, agentCredential, narrowedPermissions, bedrockSessionContext). verifyHandshake already handles the verification side.",
+        "modification_needed": "major"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "@bolyra/bedrock-agentcore adapter \u2014 translates between AWS Bedrock's OBO token exchange protocol (STS AssumeRole-style) and Bolyra's Delegation proof generation. Intercepts the OBO token request, generates a Delegation proof, and attaches it as a custom claim or header that resource servers can verify without calling back to the IdP.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "OBO-to-ZKP binding specification \u2014 defines how a Bedrock OBO session ID maps to the Delegation circuit's scope commitment, how the AWS request context (region, model ID, guardrail ID) gets hashed into the nonce binding, and the exact claim structure for carrying proofs alongside or instead of opaque tokens.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Complete the delegate() v0.3 stub with full proof generation, chain validation, and a Bedrock-specific convenience wrapper that maps IAM permission boundaries to Bolyra's 8-bit permission bitmask.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "BedrockSessionVerifier \u2014 a lightweight contract or off-chain verifier module that validates Delegation proofs against Bedrock session metadata without requiring the resource server to hold AWS credentials or call STS. Could be an L2 contract on Base or a pure JS/WASM verifier for serverless deployments.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "IAM-to-bitmask mapping standard \u2014 a canonical translation table from AWS IAM action wildcards (bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, etc.) to Bolyra's 8-bit cumulative permission encoding. This is the bridge that makes the ZKP proof meaningful to AWS-native tooling.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This is the platonic ideal of the privacy-layer-under-incumbents strategy. AWS owns the compute, the orchestration, and the IAM plane \u2014 Bolyra does not compete with any of that. Instead, it slots in as the cryptographic verification layer that eliminates the IdP callback, reducing latency and removing a single point of failure. Resource servers verify proofs locally instead of calling STS. AWS benefits because agents become more portable across accounts and regions without expanding the IAM trust boundary. The enterprise buyer gets auditability (on-chain delegation chain) without surveillance (zero-knowledge). This positions Bolyra as infrastructure AWS might eventually want to integrate natively, not compete with \u2014 the same way TLS became part of the stack rather than a competing product.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "OBO-to-ZKP binding spec",
+          "type": "spec",
+          "description": "Defines how a Bedrock OBO session ID maps to the Delegation circuit's scope commitment. Covers: AWS request context (region, model ID, guardrail ID) hashed into nonce binding, claim structure for carrying proofs alongside opaque tokens, 3-hop chain mapping (user \u2192 orchestrator \u2192 sub-agent). Published as a markdown spec alongside existing draft-bolyra-mutual-zkp-auth-01.",
+          "days": 3,
+          "reuses": "spec/draft-bolyra-mutual-zkp-auth-01.md"
+        },
+        {
+          "name": "delegate() SDK completion (v0.3 \u2192 v0.4)",
+          "type": "sdk",
+          "description": "Complete the existing delegate() stub in @bolyra/sdk to support multi-hop delegation chains with scope narrowing. Core function: delegateOnBehalfOf(humanIdentity, agentCredential, narrowedPermissions, sessionContext) that generates a Delegation proof. This is the foundation the Bedrock adapter calls.",
+          "days": 5,
+          "reuses": "Delegation circuit + @bolyra/sdk v0.3 stub"
+        },
+        {
+          "name": "Delegation chain verification tests",
+          "type": "sdk",
+          "description": "End-to-end tests proving 3-hop delegation chains work: human \u2192 orchestrator agent \u2192 sub-agent, with cumulative-bit permission narrowing enforced at each hop. Both fast (witness-only) and slow (full proof) variants.",
+          "days": 2,
+          "reuses": "Delegation circuit + existing test harness"
+        },
+        {
+          "name": "@bolyra/bedrock-agentcore adapter",
+          "type": "integration",
+          "description": "Lightweight adapter that translates between AWS Bedrock's OBO token exchange and Bolyra's Delegation proof generation. Intercepts OBO flow, generates Delegation proof, attaches as custom header. Resource servers verify proof without IdP callback. Ships as an npm package.",
+          "days": 7,
+          "reuses": "Delegation circuit + AgentPolicy"
+        },
+        {
+          "name": "Local demo: Bedrock OBO simulation",
+          "type": "demo",
+          "description": "Self-contained demo simulating a Bedrock multi-agent OBO flow with 3 agents. No real AWS dependency \u2014 mocks the STS AssumeRole-style exchange and shows the ZKP proof replacing the opaque token. Runnable with 'npm run demo:bedrock-obo'.",
+          "days": 3,
+          "reuses": "existing mcp-demo pattern + sdk"
+        }
+      ],
+      "total_days": 20,
+      "reuse_percentage": 72,
+      "risks": [
+        "No validated demand \u2014 web search returned zero evidence of developers asking for ZKP-based OBO. AWS could add native cryptographic delegation to Bedrock, making this moot.",
+        "Bedrock AgentCore OBO protocol is new and underdocumented \u2014 adapter may need rework as AWS iterates on the API surface.",
+        "20 days is aggressive for a solo founder; delegate() completion alone could balloon if the Delegation circuit's multi-hop logic needs changes beyond the existing stub.",
+        "Enterprise buyers (the real audience) won't evaluate an open-source adapter without a production reference deployment, which requires EAD to pursue.",
+        "Timing assessment is 18+ months \u2014 this may be too early to invest 4 weeks of solo capacity."
+      ],
+      "success_criteria": "delegate() SDK function generates valid 3-hop Delegation proofs that pass on-chain verification. The local demo runs end-to-end in under 10 seconds (fast mode), simulating a Bedrock OBO flow where a sub-agent proves narrowed permissions to a resource server without an IdP callback. At least one external developer (via GitHub issue or Discord) reproduces the demo independently."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND IS PHANTOM: The card's own rationale admits 'zero results' from web search, no GitHub issues, no RFPs, no named buyers. This is a founder projecting a use case onto a platform announcement, not responding to market pull. Nobody running Bedrock agents today is asking for ZKP-based delegation \u2014 they're asking for better IAM policies and guardrails.",
+      "AWS OWNS THE ENTIRE STACK AND WILL EAT THIS: AWS controls Bedrock, IAM, STS, and the OBO token exchange. If cryptographic scope narrowing becomes valuable, AWS will add it as a native IAM feature \u2014 they've done this repeatedly (Verified Access, IAM Roles Anywhere, SigV4 delegation). A 2-person startup cannot out-integrate AWS on their own platform. The 'privacy layer under incumbents' positioning is fantasy when the incumbent can trivially add the privacy layer themselves.",
+      "ZKP IS NOT NEEDED \u2014 STS TOKEN INTROSPECTION IS FINE: The 'eliminate IdP callback' pitch ignores that STS endpoints run in every AWS region with sub-10ms latency. Resource servers already verify OBO tokens via local policy evaluation, not round-trips. The privacy benefit (not revealing full permissions) is solvable with scoped IAM policies, which AWS already provides. ZKP adds 100-500ms proof generation latency to a flow that currently takes <50ms \u2014 this is a performance regression, not an improvement.",
+      "TIMING IS 18+ MONTHS BY THE CARD'S OWN ASSESSMENT: Bedrock AgentCore is pre-GA. Multi-agent OBO flows are not in production anywhere. Building a ZKP integration against a moving-target API that will change its auth model multiple times before stabilizing is pure waste. The delegate() SDK stub is incomplete (v0.3), meaning Bolyra would need to finish its own foundation AND build the integration simultaneously.",
+      "EAD BLOCKS ALL MEANINGFUL VALIDATION: The card correctly classifies this as WAIT_FOR_EAD. But the problem is deeper \u2014 even the 'technical work' of building a Bedrock adapter requires AWS enterprise account access, customer conversations to validate the OBO flow assumptions, and integration testing against production Bedrock endpoints. You cannot validate this opportunity with pure open-source work. By the time EAD arrives and validation can begin, AWS will have shipped 2-3 more iterations of their auth model, invalidating any spec written today.",
+      "IAM-TO-BITMASK MAPPING IS A CATEGORY ERROR: AWS IAM has thousands of fine-grained actions. Mapping them to an 8-bit bitmask is not 'low complexity' \u2014 it's a lossy compression that destroys the granularity enterprises actually need. No enterprise security team will accept 'FINANCIAL_SMALL' as a substitute for 'bedrock:InvokeModel on resource arn:aws:bedrock:us-east-1:*:model/anthropic.claude-*'. This mapping would need to be per-customer, per-deployment, making it unshippable as a standard."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "FAIL",
+      "ead_compliance": "FAIL"
+    },
+    "tier3_summary": "Zero verified demand, AWS can trivially replicate, ZKP adds latency without solving a real problem, 18+ months from market readiness, and EAD blocks all meaningful validation \u2014 kill this opportunity immediately.",
+    "tier3_source": "claude_cli"
+  }
+]

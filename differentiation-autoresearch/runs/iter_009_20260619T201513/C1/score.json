@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Section 8 Axis 2 explicitly names bitwise predicate evaluation with implication-closure enforcement over a hidden bitmask as something BBS+ cannot express ('No BBS+ extension in draft-irtf-cfrg-bbs-signatures or VC-DI-BBS supports this'). The rfc7662_advocate persona (Attack 2) confirms: 'the RS cannot verify that the returned subset is consistent with the implication lattice... No JWT-based scheme can offer this because JWT verification is over disclosed claim values, not over hidden witnesses. This is the construction's strongest surviving claim.' The construction identifies a specific capability \u2014 circuit-enforced implication closure over hidden witnesses \u2014 and explicitly rules it out of BBS+, SD-JWT, RFC 7662, and JWT introspection baselines."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Section 3 defines an explicit adversary model (controls AS, network, N-1 agents; does NOT control on-chain registry, verification key, Baby Jubjub DLP, Poseidon collision resistance). Section 4 names four cryptographic assumptions (Groth16/PLONK knowledge soundness, Poseidon collision resistance over BN254, DLP on Baby Jubjub, EdDSA-Poseidon EUF-CMA). A reduction sketch is provided: if adversary wins Game_SelectiveScope with probability \u03b5, construct B\u2081 breaking Poseidon collision resistance or B\u2082 breaking PLONK knowledge soundness. Privacy game Game_ScopePrivacy is defined with indistinguishability bound. The cryptographer's Attack 1 (honest-setup assumption unnamed) and Attack 2 (linkability game missing) are refinement gaps, not structural absences \u2014 the core threat model + assumptions + reduction are present."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 maps every element to existing Bolyra primitives: Poseidon over BN254, EdDSA-Poseidon on Baby Jubjub, Lean Incremental Merkle Tree depth 20, PLONK via pot16.ptau. Section 6 provides a detailed constraint budget (~32,500 constraints, under the 2^16 ceiling). Proving time targets stated: <500ms with rapidsnark, <5s in browser. The circuit is described as a specialization of the existing AgentPolicy circuit \u2014 'all constraints are identical' with only agentMerkleRoot moved from output to public input. This is clearly within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 ran with all 5 personas. The core implication-closure claim survives (rfc7662_advocate Attack 2: 'Yes \u2014 the construction survives this attack on implication closure grounds'). However, multiple real attacks weaken the construction without fully breaking it: (1) cryptographer Attack 2 \u2014 AS+RS collusion breaks AS-blind claim via proof fingerprinting; linkability game is never defined, (2) rfc7662_advocate Attack 1 \u2014 RFC 8693 Token Exchange not addressed in Section 7, providing runtime-adaptive scope narrowing that partially closes the gap, (3) cu_ciso Attack 2 \u2014 forensic invisibility is directly antagonistic to GLBA \u00a7314.4(c), (4) cu_ciso Attack 3 \u2014 AS-blind presentation eliminates real-time revocation, conflicting with NCUA Part 748, (5) spiffe_engineer Attack 1 \u2014 SPIRE ZK attestor shim not addressed. These weaken but don't destroy the core cryptographic claim."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Section 7 names Navy Federal Credit Union with a concrete deployment flow (fintech agent accessing member financial data, NFCU gateway as RS, CUSO partners sharing infrastructure) and cites NCUA Part 748 as the regulatory requirement. However, the cu_ciso persona identifies that the construction's core property \u2014 hiding the full permission bitmask from the RS \u2014 is 'directly antagonistic to GLBA Safeguards \u00a7314.4(c) (audit and monitoring)' (Attack 2) and that AS-blind presentation eliminates real-time revocation required by NCUA Part 748 (Attack 3). The named scenario creates regulatory conflicts at the named institution type that are not resolved by the construction. The scenario is concrete but partially self-undermining without a forensic disclosure mode and short-lived credential regime."
+    }
+  },
+  "gaps": [
+    "Add RFC 8693 Token Exchange analysis to Section 7 \u2014 currently absent; rfc7662_advocate shows it provides runtime-adaptive scope narrowing that partially matches the construction's claim",
+    "Define a linkability game and address proof fingerprinting: cryptographer Attack 2 shows AS+RS collusion can link sessions via identical public inputs (permissionRoot, scopeId, predicateHash); specify proof re-randomization or session-ephemeral public inputs",
+    "Explicitly name honest-setup as a security assumption: cryptographer Attack 1 notes Groth16 soundness is conditional on SRS integrity but this is not listed among the four named assumptions",
+    "Add forensic disclosure mode (regulator-held bitmask escrow or audit channel) to resolve cu_ciso Attack 2: the core ZK property destroys GLBA \u00a7314.4(c) forensic reconstruction capability at the named deployment scenario",
+    "Address real-time revocation: define a short-lived credential regime or on-chain nullifier check that satisfies NCUA Part 748 timely-access-termination requirement (cu_ciso Attack 3)",
+    "Add SPIRE ZK-attestor shim analysis to Section 7: spiffe_engineer Attack 1 shows a 500-line SPIRE plugin could embed Groth16 proofs in JWT-SVIDs; must show where attestor-call observability re-introduces AS-side leakage",
+    "Reframe Section 8 Property 4: constant-size proof is not ZK-unique (bitmask JWTs are also constant-size); the differentiator is constant-size-with-predicate-privacy, not size alone (rfc7662_advocate Attack 4)",
+    "Scope the adversarial-AS claim precisely: distinguish semi-honest AS (privacy guarantee holds) from credential-forging AS (ZK cannot help); bound to honest issuance in the threat model (rfc7662_advocate Attack 3, spiffe_engineer Attack 2)"
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

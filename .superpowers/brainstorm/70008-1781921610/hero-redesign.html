@@ -1,0 +1,124 @@
+<h2>Landing Page Redesign: New Hero + Page Flow</h2>
+<p class="subtitle">Based on Codex's review: lead with the gateway product, not the protocol. Show before/after. Move ZK deep-dive below the fold.</p>
+
+<div class="section">
+<h3>Current Hero (5/10)</h3>
+<div class="mockup">
+<div class="mockup-header">bolyra.ai — current</div>
+<div class="mockup-body" style="background: #0a0a0a; color: #e0e0e0; padding: 40px; text-align: center; font-family: system-ui;">
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #e0e0e0; margin-bottom: 8px;">Bolyra</h1>
+  <p style="color: #888; font-size: 0.95rem;">Verifiable delegated authority for AI agents. The human signs a scoped receipt; middleware verifies it before the agent calls a tool.</p>
+  <p style="color: #666; font-size: 0.8rem; margin-top: 8px;">SD-JWT receipts + KB-JWT proof-of-possession + IETF status-list revocation. Per-call audience, action, permission, amount-cap, and expiry checks. Apache-2.0, one dep, 95 conformance tests. ZKP cohort v0.7.0 shipped...</p>
+  <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+    <span style="background: #6366f1; color: white; padding: 6px 16px; border-radius: 6px; font-size: 0.8rem;">npm @bolyra/sdk</span>
+    <span style="background: #222; color: #ccc; padding: 6px 16px; border-radius: 6px; font-size: 0.8rem;">npm @bolyra/delegation</span>
+    <span style="background: #222; color: #ccc; padding: 6px 16px; border-radius: 6px; font-size: 0.8rem;">GitHub</span>
+  </div>
+  <p style="color: #555; font-size: 0.75rem; margin-top: 12px; font-family: monospace;">npm install @bolyra/sdk @bolyra/mcp @bolyra/gateway @bolyra/receipts @bolyra/payment-protocols</p>
+</div>
+</div>
+<div class="pros-cons">
+  <div class="cons"><h4>Problems</h4><ul>
+    <li>"Verifiable delegated authority" is abstract</li>
+    <li>Floods with acronyms (SD-JWT, KB-JWT, IETF...)</li>
+    <li>5 npm packages at once, unclear where to start</li>
+    <li>Reads like release notes</li>
+  </ul></div>
+</div>
+</div>
+
+<div class="section">
+<h3>Proposed Hero</h3>
+<div class="mockup">
+<div class="mockup-header">bolyra.ai — proposed</div>
+<div class="mockup-body" style="background: #0a0a0a; color: #e0e0e0; padding: 48px; text-align: center; font-family: system-ui;">
+  <p style="font-family: monospace; font-size: 0.75rem; letter-spacing: 0.2em; color: #6366f1; text-transform: uppercase; margin-bottom: 16px;">Auth for AI agents</p>
+  <h1 style="font-size: 2.8rem; font-weight: 800; color: #e0e0e0; margin-bottom: 16px; letter-spacing: -0.02em;">Your MCP server has no idea<br>who's calling.</h1>
+  <p style="color: #888; font-size: 1.1rem; max-width: 600px; margin: 0 auto 24px; line-height: 1.6;">Put Bolyra in front of any MCP server. It verifies agent credentials, enforces per-tool permissions, blocks replay, and signs audit receipts.</p>
+  <div style="margin-top: 20px; display: flex; gap: 12px; justify-content: center;">
+    <span style="background: #6366f1; color: white; padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: 600;">Protect an MCP server</span>
+    <span style="background: rgba(255,255,255,0.06); color: #ccc; padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; border: 1px solid rgba(255,255,255,0.1);">View GitHub</span>
+  </div>
+  <p style="color: #555; font-size: 0.85rem; margin-top: 20px; font-family: monospace;">npx @bolyra/gateway --target http://localhost:3000/mcp</p>
+</div>
+</div>
+<div class="pros-cons">
+  <div class="pros"><h4>Improvements</h4><ul>
+    <li>Problem-first headline: "has no idea who's calling"</li>
+    <li>One clear CTA: "Protect an MCP server"</li>
+    <li>One install command (gateway), not five packages</li>
+    <li>Outcome-focused subcopy, zero acronyms</li>
+  </ul></div>
+</div>
+</div>
+
+<div class="section">
+<h3>Proposed Page Flow (top to bottom)</h3>
+<div class="options">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>Hero</h3>
+      <p>"Your MCP server has no idea who's calling." + single CTA</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>Before / After</h3>
+      <p>Before: any agent calls charge() or delete(). After: valid receipt = allowed, wrong audience/expired/over-cap/replayed = rejected. Diagram + one command.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>60-Second Quickstart</h3>
+      <p>git clone quickstart, npm install, npm run server, npm run gateway. Three terminal commands.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>What Gets Verified (4 checks)</h3>
+      <p>Credential verification, tool policy, replay protection, signed receipt. Clean icons + one-liners.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">5</div>
+    <div class="content">
+      <h3>Videos (3x2 grid)</h3>
+      <p>6 interactive launch videos, same as current but after the conversion path.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">6</div>
+    <div class="content">
+      <h3>Ecosystem</h3>
+      <p>Package cards (gateway, mcp, sdk, langchain, receipts, etc.) -- moved below videos.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">7</div>
+    <div class="content">
+      <h3>Why Not Just OAuth?</h3>
+      <p>Comparison table: delegated scope, per-tool policy, replay protection, signed receipts, privacy-preserving upgrade. NEW section.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">8</div>
+    <div class="content">
+      <h3>ZK Deep Dive (below fold)</h3>
+      <p>Architecture, circuits, benchmarks, standards, delegation -- moved here from top of page.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">9</div>
+    <div class="content">
+      <h3>Blog + Footer</h3>
+      <p>Blog links + "Built by Viswa / ZKProva Inc" + Apache-2.0</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<p class="subtitle" style="margin-top: 24px;">Take a look and let me know if this flow works, or if you want to rearrange anything. Click sections to select the ones you approve.</p>

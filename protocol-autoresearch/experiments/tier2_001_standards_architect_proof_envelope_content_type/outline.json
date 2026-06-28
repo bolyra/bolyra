@@ -1,0 +1,62 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "title": "Define application/bolyra-proof+cbor content type and envelope schema",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-proof-envelope.cddl",
+      "description": "CDDL schema covering human-proof, agent-proof, and delegation-proof envelope types with public signals, session nonce binding, and discriminant tag"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "IANA considerations section addendum: media type registration template for application/bolyra-proof+cbor per RFC 6838 structured syntax suffix rules"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "Reference CBOR encoder/decoder for ProofEnvelope using cbor-x; exports encodeProofEnvelope() and decodeProofEnvelope() with full TypeScript types"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/envelope.ts",
+      "description": "TypeScript type definitions for ProofEnvelope, HumanProofPayload, AgentProofPayload, DelegationProofPayload, and SessionNonceBinding"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Round-trip encode/decode tests for all three proof types, nonce binding verification, unknown field rejection, and malformed input error handling"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/wire-format.md",
+      "description": "Developer-facing guide: content-type negotiation flow, HTTP header examples, MCP tool payload shape, and framework-agnostic deserialization pattern"
+    }
+  ],
+  "steps": [
+    "Audit existing proof output shapes in sdk/src/ (proveHandshake, createAgentCredential, delegation stub) to extract all public signal field names and types",
+    "Define CDDL top-level discriminant: proof-envelope = human-proof-envelope / agent-proof-envelope / delegation-proof-envelope with a uint version tag (major type 0, value 1)",
+    "Write CDDL for human-proof-envelope: { version: 1, type: 0, humanMerkleRoot: bstr .size 32, nullifierHash: bstr .size 32, nonceBinding: bstr .size 32, groth16Proof: groth16-proof }",
+    "Write CDDL for agent-proof-envelope: { version: 1, type: 1, credentialCommitment: bstr .size 32, permissionBits: uint .size 1, expiryEpoch: uint, nonceBinding: bstr .size 32, provingSystem: proving-system, proof: groth16-proof / plonk-proof }",
+    "Write CDDL for delegation-proof-envelope: { version: 1, type: 2, parentCredentialHash: bstr .size 32, delegatedPermissionBits: uint .size 1, delegateePubKey: bstr .size 32, nonceBinding: bstr .size 32, provingSystem: proving-system, proof: groth16-proof / plonk-proof }",
+    "Define shared CDDL types: groth16-proof = { pi_a: [bstr, bstr], pi_b: [[bstr, bstr], [bstr, bstr]], pi_c: [bstr, bstr] }; plonk-proof = bstr; proving-system = 0 / 1 (groth16 / plonk)",
+    "Add IANA considerations section to spec/draft-bolyra-mutual-zkp-auth-01.md: type name 'application', subtype 'bolyra-proof+cbor', required parameters (version), encoding (CBOR per RFC 8949), interoperability considerations, security considerations reference",
+    "Create sdk/src/types/envelope.ts with TypeScript interfaces mirroring the CDDL schema; use branded types for 32-byte fixed-length bstr fields",
+    "Install cbor-x as a peer dependency in sdk/package.json (already a transitive dep via snarkjs path \u2014 confirm before adding); implement encodeProofEnvelope() using cbor-x encode with deterministic option enabled",
+    "Implement decodeProofEnvelope() with strict validation: check version tag, discriminant type field, required field presence, and byte-length constraints; throw typed BolyraEnvelopeError on violations",
+    "Write SDK tests covering: human/agent/delegation round-trips, nonce binding preserved, wrong version rejected, truncated bytes rejected, extra unknown fields stripped with warning",
+    "Wire encodeProofEnvelope/decodeProofEnvelope into proveHandshake return value and verifyHandshake input to make the wire format the canonical interchange surface",
+    "Update docs/wire-format.md with HTTP example (Content-Type: application/bolyra-proof+cbor, Accept negotiation), MCP tool payload wrapper pattern, and Node/Python deserialization snippets",
+    "Export encodeProofEnvelope and decodeProofEnvelope from sdk/src/index.ts public API surface"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cbor-x (npm) \u2014 deterministic CBOR serialization",
+    "RFC 8949 \u2014 CBOR data model",
+    "RFC 6838 \u2014 media type structured syntax suffixes (+cbor)",
+    "RFC 9090 \u2014 CBOR tags registry (for potential future tag allocation)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 existing IETF draft to receive IANA section",
+    "sdk/src/index.ts \u2014 public API surface that must export new encoder/decoder",
+    "circuits/build/*.vkey.json \u2014 public signal names must match CDDL field definitions exactly"
+  ]
+}

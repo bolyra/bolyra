@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap \u2014 proving monotonic scope narrowing over hidden values without a trusted third party. However, Tier 3 attacks expose that the 'no trusted third party' claim is overclaimed (pot16.ptau ceremony is structurally equivalent to AS trust per rfc7662_advocate Attack 2), the shared agentMerkleRoot IS a shared trust anchor contradicting \u00a78's 'Cross-org without shared trust anchor' row (rfc7662_advocate Attack 4, spiffe_engineer Attack 1), and BBS+ with commit-and-prove can approximate bitwise-subset predicates over hidden values (spiffe_engineer Attack 4). The construction is preferable to baseline but does not provably rule out baseline approximation \u2014 multiple \u00a78 table rows are demonstrably false or overclaimed. Awarding 1, not 2, because the baseline comparison contains material inaccuracies that weaken the dominance claim."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a detailed threat model (\u00a73) with five security games, four named cryptographic assumptions (A1\u2013A4), and reduction sketches for five theorems. This is substantial. However, Tier 3 cryptographer attacks identify two genuine gaps that weaken the formal argument: (1) Attack 1 shows Theorem 3 (Scope Privacy) is vacuous \u2014 the 1/2^64 bound assumes uniform entropy but cumulative-bit encoding restricts valid bitmasks to \u226450 combinations, making dictionary attack on finalScopeCommitment trivial if delegateeCredCommitment is known. (2) Attack 2 shows Theorem 2 (Participant Privacy) claims malicious-verifier ZK ('even a compromised auditor with unbounded compute learns nothing') but only proves HVZK \u2014 no simulator is exhibited, and Groth16/PLONK are HVZK not MVZK in the standard model. (3) Attack 4 identifies that Groth16 non-malleability/simulation-extractability is not established, undermining UC composition claims. The threat model is stated and assumptions are named, but the reductions have identified gaps \u2014 awarding 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/4/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), BabyJubjub EdDSA, Num2Bits(64), cumulative bit encoding gates. \u00a75 provides an explicit primitive mapping table with spec references. \u00a76 provides a detailed per-hop constraint breakdown totaling ~55,044 constraints, fitting within the 2^16 = 65,536 pot16.ptau budget. Proving time targets (<5s PLONK, ~1.5s rapidsnark Groth16) are stated and grounded in Bolyra benchmark ratios. The root-pinning fix adds only 4 multiplication gates. No new primitives are required. This is a clear 2."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Five personas attacked the construction. Several attacks are inside the threat model or addressable, but multiple attacks found real gaps the construction cannot currently answer: (1) cryptographer Attack 1 \u2014 dictionary attack on finalScopeCommitment due to small scope space makes Theorem 3 vacuous; (2) cryptographer Attack 2 \u2014 HVZK vs MVZK gap invalidates the journalist/source 'unbounded compute' claim; (3) rfc7662_advocate Attack 3 \u2014 finalScopeCommitment is a stable cross-session identifier enabling longitudinal correlation, directly undermining the journalist/source scenario; (4) cu_ciso Attacks 1-2 \u2014 no privileged disclosure path for incident response or regulatory reconstruction; (5) auth0_pm Attack 4 \u2014 registry operator can deanonymize journalist sources at enrollment time. The construction survives on narrowing soundness and phantom enrollment (core cryptographic claims hold), but the privacy claims and deployment scenario claims are materially weakened. Awarding 1 because Tier 3 surfaced real attacks that weaken claims without completely destroying the construction."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario (\u00a77) is concrete, names a real stakeholder (Navy Federal, 13M+ members, NCUA-regulated), and describes a specific 4-hop loan-processing pipeline. However, Tier 3 cu_ciso attacks demonstrate the scenario is not viable as described: (1) NCUA Part 748 requires reconstructive audit trails, not boolean narrowingValid=1 (Attack 1); (2) no incident response path exists \u2014 ops cannot identify or revoke a compromised agent mid-chain (Attack 2); (3) third-party risk due diligence requires vendor identity, which the construction hides (Attack 3); (4) key compromise allows 24-hour exploitation window with no emergency revocation (Attack 4). The scenario is named and specific but the construction cannot currently serve as a load-bearing audit mechanism under NCUA examination without a dual-mode audit (ZK proof + institution-private plaintext log) that is not described. The journalist/source scenario is further undermined by registry operator deanonymization (auth0_pm Attack 4) and cross-session correlation via stable finalScopeCommitment (rfc7662_advocate Attack 3). Awarding 1 \u2014 scenarios are named but only hypothetically viable given the identified regulatory and operational gaps."
+    }
+  },
+  "gaps": [
+    "Theorem 3 (Scope Privacy) must address the small effective preimage space: either salt the scope commitment with a random blinding factor or prove sufficient min-entropy after cumulative-bit-encoding reduction \u2014 the 1/2^64 bound is vacuous for \u226450 valid bitmasks",
+    "Theorem 2 (Participant Privacy) must either restrict to HVZK and remove the 'unbounded compute' claim, or explicitly prove MVZK via Fiat-Shamir in the ROM with a cited theorem",
+    "Include sessionNonce in finalScopeCommitment (Poseidon3 instead of Poseidon2) to break cross-session correlation of the terminal agent \u2014 zero additional circuit cost",
+    "Add a dual-mode audit design: ZK proof for external parties (NCUA examiner) proving narrowing, plus an institution-private encrypted log mapping auditDigest back to plaintext scope transitions, producible on regulatory demand under GLBA-compliant encryption",
+    "Specify the enrollment authorization model for the shared agent registry: who controls enrollment, what governance applies cross-org, and how registry compromise is handled \u2014 the current 'no trusted third party' claim must be corrected to 'trust is in a one-time ceremony + shared on-chain registry, not an online AS'",
+    "Address operator-level deanonymization in the journalist/source scenario: either introduce anonymous credential issuance for tree leaf enrollment or retract the journalist/source claim for adversaries with enrollment-time visibility",
+    "Add emergency revocation mechanism with bounded RTO: either verifier-enforced currentTimestamp from block.timestamp (not prover-supplied) or a revocation-list check in the on-chain verifier that overrides unexpired credentials",
+    "Correct \u00a78 baseline comparison table: replace 'No trusted third party' with nuanced ceremony-vs-AS trust comparison; replace 'Cross-org without shared trust anchor' with 'Cross-org audit without exposing enrollment identities, using shared on-chain registry as trust anchor'"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

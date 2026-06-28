@@ -1,0 +1,29 @@
+{
+  "id": "delegation_depth_1",
+  "description": "Single-hop delegation chain: operator delegates to agent-1 with narrowed scope. The Delegation circuit must produce a valid witness with correct scopeCommitment and nullifierHash.",
+  "circuit": "Delegation",
+  "input_witnesses": {
+    "agentTreeRoot": "FROZEN_BY_EXTRACT",
+    "scopeCommitment": "FROZEN_BY_EXTRACT",
+    "nullifierHash": "FROZEN_BY_EXTRACT",
+    "delegatorSecret": "55555555555555555555",
+    "delegatorNonce": "3",
+    "delegateeCredCommitment": "FROZEN_BY_EXTRACT",
+    "scope": "7",
+    "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+    "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+  },
+  "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT"],
+  "expected_result": "pass",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "extract_vectors.js",
+    "delegation_chain": {
+      "depth": 1,
+      "parent_permissions": 255,
+      "delegated_permissions": 7,
+      "permissions_binary": "00000111"
+    }
+  }
+}

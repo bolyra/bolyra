@@ -1,0 +1,65 @@
+{
+  "description": "Conformance test vectors for application/bolyra-proof+cbor",
+  "spec_version": 1,
+  "vectors": [
+    {
+      "id": "valid_groth16",
+      "description": "Valid Groth16 proof envelope with two public signals",
+      "expect": "accept",
+      "envelope": {
+        "version": 1,
+        "proof_system": "groth16",
+        "circuit_id": "HumanUniqueness",
+        "public_signals": [42, 1337],
+        "proof_bytes_hex": "aabbccdd00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        "timestamp": 1750000000
+      }
+    },
+    {
+      "id": "valid_plonk",
+      "description": "Valid PLONK proof envelope with metadata and three signals",
+      "expect": "accept",
+      "envelope": {
+        "version": 1,
+        "proof_system": "plonk",
+        "circuit_id": "AgentPolicy",
+        "public_signals": [100, 200, 300],
+        "proof_bytes_hex": "deadbeefcafebabe0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+        "timestamp": 1750000001,
+        "metadata": {
+          "chain_id": 84532,
+          "nonce": "test-nonce-001"
+        }
+      }
+    },
+    {
+      "id": "reject_wrong_version",
+      "description": "Envelope with version=2, must be rejected by v1 decoders",
+      "expect": "reject",
+      "expected_error": "Unsupported envelope version",
+      "envelope": {
+        "version": 2,
+        "proof_system": "groth16",
+        "circuit_id": "HumanUniqueness",
+        "public_signals": [1],
+        "proof_bytes_hex": "ff",
+        "timestamp": 1750000000
+      }
+    },
+    {
+      "id": "accept_unknown_fields",
+      "description": "Envelope with unknown extra fields — must be tolerated per forward-compat rule",
+      "expect": "accept",
+      "envelope": {
+        "version": 1,
+        "proof_system": "groth16",
+        "circuit_id": "Delegation",
+        "public_signals": [7, 8, 9],
+        "proof_bytes_hex": "0102030405060708",
+        "timestamp": 1750000002,
+        "future_extension_a": "some-value",
+        "future_extension_b": 999
+      }
+    }
+  ]
+}

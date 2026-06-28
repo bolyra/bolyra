@@ -1,0 +1,70 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "title": "Define proof envelope MIME type and serialization format",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-media-type.md",
+      "description": "Narrative spec: rationale for application/bolyra-proof+cbor, IANA registration template, content negotiation rules, COSE_Sign1 wrapper structure, and version/discriminator field semantics"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope.cddl",
+      "description": "CBOR CDDL schema defining ProofEnvelope, HumanProofPayload, AgentProofPayload, DelegationChain, ProofSystem enum (groth16=0, plonk=1), PublicSignalsLayout tag, and version uint"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope.abnf",
+      "description": "ABNF grammar for the Content-Type header value including parameter rules (version, proof-system) per RFC 6838 structured syntax suffix conventions"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript module exporting serializeProofEnvelope() and deserializeProofEnvelope() using cbor-x; encodes version, proof-system discriminator, public-signals layout tag, and raw proof bytes"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope-types.ts",
+      "description": "TypeScript types: ProofEnvelope, ProofSystem enum, PublicSignalsLayout, EnvelopeVersion constant, and HumanProofEnvelope / AgentProofEnvelope / DelegationEnvelope branded subtypes"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/envelope-roundtrip.test.ts",
+      "description": "Round-trip conformance tests: serialize then deserialize for each proof type (human, agent, delegation) and each proof system (groth16, plonk); assert byte-for-byte determinism and schema validity against CDDL"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/envelope-vectors.json",
+      "description": "Static test vectors: hex-encoded canonical CBOR bytes for version=1 human-groth16, agent-plonk, and delegation-groth16 envelopes with known public signals; used by conformance runners in other languages"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope-guide.md",
+      "description": "Developer guide: how to attach application/bolyra-proof+cbor in HTTP and MCP transports, content negotiation fallback to JSON, migration path from existing raw JSON arrays, and SDK usage examples"
+    }
+  ],
+  "steps": [
+    "Audit existing SDK proof output: read sdk/src/prove.ts and sdk/src/types.ts to catalog current BigInt-string JSON array shapes for human, agent, and delegation proofs",
+    "Design CBOR CDDL schema: define ProofEnvelope top-level map with mandatory fields (version: 1, proof-system: 0|1, layout-tag: tstr, proof: bstr, public-signals: [bstr]), write spec/proof-envelope.cddl",
+    "Write ABNF grammar for Content-Type parameter syntax and add IANA registration template section to spec/proof-envelope-media-type.md",
+    "Add cbor-x as a direct dependency in sdk/package.json (already present in snarkjs transitive tree; pin to ^1.5.0 for deterministic map encoding)",
+    "Implement envelope.ts: serializeProofEnvelope() maps proof-system enum and public-signals BigInt array to CBOR bstr array; deserializeProofEnvelope() reverses and validates required keys",
+    "Export new types and functions from sdk/src/index.ts without breaking existing verifyHandshake / proveHandshake public API signatures",
+    "Write conformance round-trip tests in spec/conformance/envelope-roundtrip.test.ts covering all three proof types \u00d7 both proof systems; assert deterministic encoding (same input \u2192 same bytes)",
+    "Generate and commit static test vectors in spec/conformance/envelope-vectors.json using the serializer against fixture proofs from existing fast-circuit test outputs",
+    "Validate generated CBOR against the CDDL schema in CI using cddl-validator npm package as a dev dependency",
+    "Update docs/proof-envelope-guide.md with HTTP Accept/Content-Type negotiation examples, MCP tool metadata pattern, and a migration note for existing consumers of raw JSON arrays",
+    "Add envelope-roundtrip test suite to npm run test in root package.json alongside existing circuit and contract test suites",
+    "Run full test suite (npm test) and typecheck (cd sdk && npm run typecheck) to confirm no regressions, then sign and commit with DCO"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cbor-x ^1.5.0 (sdk direct dependency)",
+    "cddl-validator (dev dependency for CI schema validation)",
+    "existing sdk/src/prove.ts proof output shapes (must not break)",
+    "existing verifyHandshake / proveHandshake public API (additive change only)",
+    "snarkjs BigInt public-signals array format (determines CBOR bstr encoding strategy)",
+    "RFC 6838 structured syntax suffix rules for +cbor media type registration",
+    "COSE_Sign1 structure (informational reference for envelope design, not a hard runtime dependency in Phase 1)"
+  ]
+}

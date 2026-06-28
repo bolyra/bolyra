@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction names a real capability gap: AS-layer unlinkability where the AS is the adversary. RFC 9449 per-RS DPoP keys + OIDC PPID achieve RS-layer unlinkability without ZK, as the rfc7662_advocate correctly identifies. The \u00a78 'structural impossibility' framing overstates \u2014 impossibilities 1-2 are partially achievable via per-RS DPoP + PPID. The genuine differentiator (adversarial AS that actively correlates) is real but narrower than claimed. The construction does not cleanly partition RS-layer vs AS-layer unlinkability, so the baseline dominance claim is imprecise. Score 1: preferable to baseline but the baseline approximates RS-layer unlinkability, and the construction's framing conflates the two layers."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "A threat model (\u00a73), named assumptions (POS-PRF, DL-BJJ, POS-CR, KS-G16), and a reduction sketch (IND-UNL-AS \u2192 POS-PRF) are present \u2014 satisfying the structural requirements. However, the cryptographer's Attack 2 identifies a fatal game-definition error: the IND-UNL-AS game assumes the adversary does NOT see \u03c0_B's public signals (step 3: 'adversary sees only that some proof was submitted'), but on-chain verification makes all public outputs globally visible. The game is strictly weaker than the deployed adversary. The reduction may still hold (PRF multi-query security), but the proof as written is unsound against the actual deployment model. Additionally, the scopeCommitment public output creates a deterministic cross-scope correlator that the reduction does not address for the delegation variant. The Groth16 Phase 2 trust assumption is absent from the threat model despite AS-as-adversary being the central threat. Score 1: threat model and assumptions stated, but reduction is against a weaker game than reality, and multiple cryptographic gaps remain."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon2/5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding. Circuit cost is estimated at ~26,040 constraints, fitting within pot16.ptau (2^16 = 65,536). The ~1,050 constraint overhead over existing AgentPolicy is negligible (~4%). Proving time targets (PLONK <4s snarkjs, <0.8s rapidsnark) are within Phase 1 budget. The construction specifies constraint-level detail for every gadget. Score 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer: (1) scopeCommitment is a deterministic cross-scope correlator when delegation is active \u2014 identified by cryptographer, auth0_pm, cu_ciso, rfc7662_advocate, and spiffe_engineer independently. The construction's own \u00a74 acknowledges it but offers only a compile-time flag, which means the primary claim ('cryptographically unlinkable') is false for the delegation variant. (2) The IND-UNL-AS game definition is incorrect for on-chain deployment (cryptographer Attack 2). (3) The batch relayer is outside the formal threat model despite being on the critical privacy path (auth0_pm Attack 1, spiffe_engineer Attack 2, cu_ciso Attack 3). (4) agentMerkleRoot collapses anonymity sets in small deployments (cryptographer Attack 3, rfc7662_advocate Attack 2). (5) No key management spec for scopeBlindingSecret \u2014 loss orphans all RS accounts, compromise breaks unlinkability retroactively (auth0_pm Attack 2, cu_ciso Attack 2, spiffe_engineer Attack 1). (6) Groth16 Phase 2 ceremony trust is unspecified while AS is the adversary (cryptographer Attack 4). These are not mitigated attacks \u2014 the construction either contradicts itself (scopeCommitment) or is silent (relayer trust, key management, setup ceremony). Score 0: Tier 3 found attacks the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "The cross-credit-union scenario (Desert Financial + CU*Answers, 150 member CUs) names a concrete stakeholder, a specific regulatory requirement (NCUA Regulation V affiliate marketing opt-out, GLBA Safeguards Rule), and explains why AS-layer unlinkability is load-bearing (CU-as-AS must not reconstruct member merchant graph). The healthcare delegation scenario (Kaiser \u2192 Cedars-Sinai) is a real deployment pattern with HIPAA minimum necessary as the regulatory driver. The cu_ciso's audit-trail attack (Attack 1) identifies a tension with BSA/AML compliance that weakens the scenario operationally, but the scenario itself is concrete and load-bearing. Score 2."
+    }
+  },
+  "gaps": [
+    "scopeCommitment is a deterministic cross-scope correlator when delegation is active \u2014 either derive a scope-specific delegation commitment (e.g., Poseidon3(scopeId, permBitmask, credCommitment)) or formally exclude delegation from the IND-UNL-AS claim and provide a separate weaker game for the delegation variant",
+    "IND-UNL-AS game definition assumes adversary cannot see \u03c0_B public signals, but on-chain verification makes them globally visible \u2014 restate the game to give A full public outputs of both proofs and re-verify the PRF reduction closes under multi-query PRF security",
+    "Batch relayer is outside the formal threat model despite being on the critical privacy path \u2014 either formalize relayer as a semi-trusted party with explicit trust assumption, or replace with oblivious submission (mixnet, onion routing), or prove that public-input-only observation is insufficient for deanonymization",
+    "agentMerkleRoot leaks enrollment-cohort fingerprint in small deployments \u2014 specify a minimum anonymity set size, a padding/dummy-insertion policy, or an epoch-root strategy that accumulates enrollments before root updates",
+    "scopeBlindingSecret has no key management specification \u2014 define derivation hierarchy (e.g., HKDF from master seed), rotation protocol that preserves RS account continuity, recovery model, and blast radius on compromise",
+    "Groth16 Phase 2 ceremony trust is unspecified while AS-as-adversary is the central threat \u2014 either mandate PLONK-only for ScopeBlindAuth (universal setup) or specify a multi-party Phase 2 ceremony with explicit 'AS did not compromise Phase 2' assumption",
+    "Baseline dominance framing overstates \u2014 partition the comparison into RS-layer unlinkability (achievable via RFC 9449 per-RS DPoP + OIDC PPID) vs AS-layer unlinkability (requires ZK-local proving) and narrow the 'structural impossibility' claims accordingly",
+    "No regulatory compliance channel \u2014 credit union BSA/AML and GLBA monitoring requirements conflict with total AS blindness; add an optional memberBinding proof or compliance disclosure mechanism"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

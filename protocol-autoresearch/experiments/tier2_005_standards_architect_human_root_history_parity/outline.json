@@ -1,0 +1,45 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "title": "Add human tree root history buffer matching agent tree's 30-root buffer",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add 30-entry ring buffer humanRootHistory and humanRootHistoryIndex mirroring the existing agentRootHistory pattern. Update _enrollHuman to push the new root into the ring buffer on every enrollment. Update verifyHandshake to check humanMerkleRoot against humanRootHistory (same loop pattern as agentRootHistory check). Add isValidHumanRoot(bytes32) view helper."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.test.ts",
+      "description": "Add test cases: (1) in-flight human proof remains valid after a second enrollment lands (i.e., staleness window honoured up to 30 roots), (2) proof using root older than 30 enrollments is correctly rejected, (3) ring-buffer wrap-around at index 30 evicts oldest root, (4) verifyHandshake rejects proof with humanMerkleRoot not in history."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add normative requirement to \u00a7Security Considerations: 'The on-chain IdentityRegistry MUST retain the N most-recent human Merkle roots (N \u2265 30) and MUST accept proofs anchored to any root in that window. Implementations MUST NOT accept roots outside the window. The staleness window SHOULD be documented in the deployment manifest.' Reference parity with agent-tree root-history semantics."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Add note under proof-replay / stale-credential section that human proofs carry the same 30-root staleness window as agent proofs, and that relying parties can observe the window size via isValidHumanRoot()."
+    }
+  ],
+  "steps": [
+    "Read contracts/src/IdentityRegistry.sol in full to locate agentRootHistory ring-buffer implementation and verifyHandshake logic.",
+    "Declare storage variables in IdentityRegistry: `bytes32[30] public humanRootHistory` and `uint256 public humanRootHistoryIndex` immediately after the analogous agent fields.",
+    "In _enrollHuman (or equivalent enrollment entry point): after updating the humanTree root, write `humanRootHistory[humanRootHistoryIndex % 30] = newRoot; humanRootHistoryIndex++;`.",
+    "Add view helper `function isValidHumanRoot(bytes32 root) public view returns (bool)` that iterates humanRootHistory and returns true on match (mirror isValidAgentRoot if it exists).",
+    "Update verifyHandshake: replace any direct `humanTree.root == proof.humanMerkleRoot` equality check with a call to isValidHumanRoot(proof.humanMerkleRoot), reverting with a descriptive error (e.g., HumanRootStale) on mismatch.",
+    "Write Hardhat tests covering: valid in-flight proof after second enrollment, rejection of proof outside 30-root window, ring-buffer wrap-around eviction, and verifyHandshake integration path.",
+    "Run `npm run test:contracts` and confirm all new and existing tests pass.",
+    "Open spec/draft-bolyra-mutual-zkp-auth-01.md, locate \u00a7Security Considerations, and insert the normative MUST/SHOULD language for the human root staleness window.",
+    "Update docs/owasp-agentic-mapping.md with the parity note.",
+    "Run `npm run compile:contracts` to ensure no ABI regressions, then sign and commit with DCO sign-off."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 existing agentRootHistory ring-buffer pattern to mirror",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 \u00a7Security Considerations section must exist or be created",
+    "Hardhat test suite (contracts/test/) \u2014 must be green before this change lands",
+    "circuits/src/HumanUniqueness.circom \u2014 humanMerkleRoot is a public output; no circuit change needed, but field name must match what verifyHandshake reads"
+  ]
+}

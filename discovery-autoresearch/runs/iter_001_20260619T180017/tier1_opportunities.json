@@ -1,0 +1,101 @@
+[
+  {
+    "id": "github_agent_credential_leak",
+    "title": "ZKP-Based Agent Auth to Prevent Credential Exposure",
+    "description": "OpenAI's coding agent leaked GitHub passwords because agents held long-lived secrets. Bolyra's AgentPolicy circuit lets agents prove authorization via ZKP without ever holding or transmitting the underlying credential, eliminating the credential-exposure attack surface entirely.",
+    "category": "developer_tools",
+    "source": "OpenAI coding agent flaw exposed GitHub passwords",
+    "preliminary_demand": 22,
+    "preliminary_timing": 23,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 18
+  },
+  {
+    "id": "github_agent_load_identity",
+    "title": "Cryptographic Agent Identity for Platform Load Management",
+    "description": "GitHub's agent traffic crisis broke enterprise SLAs because the platform couldn't distinguish or throttle misbehaving agent clients. Bolyra's nullifier-based identity lets platforms rate-limit per-agent-identity without storing API keys, enabling shed-load decisions based on verified agent provenance.",
+    "category": "enterprise_auth",
+    "source": "GitHub AI agent crisis / platform stability issues",
+    "preliminary_demand": 20,
+    "preliminary_timing": 22,
+    "preliminary_fit": 19,
+    "preliminary_feasibility": 16
+  },
+  {
+    "id": "microsoft_agent_mesh_zkp",
+    "title": "ZKP Layer for Microsoft Agent Mesh / IATP",
+    "description": "Microsoft's Agent Governance Toolkit uses DIDs with Ed25519 for inter-agent trust but lacks privacy-preserving proof of permissions. Bolyra's Delegation circuit could plug in as the ZKP layer that proves scoped authorization without revealing the full credential chain, complementing IATP's transport.",
+    "category": "standards",
+    "source": "Microsoft Agent Governance Toolkit with DID-based Agent Mesh",
+    "preliminary_demand": 18,
+    "preliminary_timing": 20,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 14
+  },
+  {
+    "id": "langchain_agent_auth_integration",
+    "title": "Bolyra SDK as LangChain Agent Auth Provider",
+    "description": "LangChain's Agent Auth beta supports OAuth 2.0 flows but lacks zero-knowledge delegation. A Bolyra adapter for LangChain's authenticate() API would let any LangChain agent prove scoped permissions via ZKP, reaching the largest agentic framework ecosystem with minimal integration friction.",
+    "category": "developer_tools",
+    "source": "LangChain Agent Auth beta documentation",
+    "preliminary_demand": 21,
+    "preliminary_timing": 24,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 20
+  },
+  {
+    "id": "agent_passport_competitor_gap",
+    "title": "Privacy-Preserving Alternative to Agent Passport / AID",
+    "description": "Agent Passport and AgentIDs.org offer OAuth-like agent identity but expose agent metadata (operator, model, permissions) to every verifier. Bolyra's selective-disclosure ZKP proofs let agents prove 'I have FINANCIAL_SMALL permission' without revealing their full credential or operator identity \u2014 a clear privacy moat.",
+    "category": "enterprise_auth",
+    "source": "Agent Passport (HN) and AgentIDs.org open protocol",
+    "preliminary_demand": 19,
+    "preliminary_timing": 22,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 19
+  },
+  {
+    "id": "human_verified_gateway",
+    "title": "ZKP Upgrade for HTTP Message Signature Gateways",
+    "description": "HUMAN Security's Verified AI Agent framework uses RFC 9421 HTTP signatures at the gateway, but every request reveals the signing key's identity. Bolyra's gateway can verify agent ZKP proofs instead, proving the agent is authorized without linking requests to a persistent public key \u2014 defeating cross-service tracking.",
+    "category": "enterprise_auth",
+    "source": "HUMAN Verified AI Agent open-source framework",
+    "preliminary_demand": 17,
+    "preliminary_timing": 19,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 17
+  },
+  {
+    "id": "github_pre_agent_steps",
+    "title": "ZKP Pre-Agent-Steps for CI/CD Agent Authentication",
+    "description": "GitHub's pre-agent-steps hook runs custom auth setup before agents execute. Bolyra could provide a pre-agent-step action that generates a scoped ZKP proof of the agent's permissions, replacing static tokens with per-session proofs that auto-expire and can't be replayed.",
+    "category": "developer_tools",
+    "source": "GitHub Agentic Workflows weekly update \u2014 pre-agent-steps",
+    "preliminary_demand": 16,
+    "preliminary_timing": 21,
+    "preliminary_fit": 20,
+    "preliminary_feasibility": 21
+  },
+  {
+    "id": "human_agent_linking",
+    "title": "Privacy-Preserving Human-Agent Linking Protocol",
+    "description": "BillionsNetwork's verified-agent-identity uses signed DID challenges for human-agent linking but exposes the human's DID to the agent operator. Bolyra's HumanUniqueness circuit proves the human endorsed the agent without revealing which human, using nullifier-based uniqueness \u2014 directly solving the linking problem the market is building toward.",
+    "category": "standards",
+    "source": "BillionsNetwork verified-agent-identity repo",
+    "preliminary_demand": 15,
+    "preliminary_timing": 18,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 18
+  },
+  {
+    "id": "secure_code_game_education",
+    "title": "ZKP Security Training Module for Agentic AI",
+    "description": "GitHub's Secure Code Game teaches developers to find auth flaws in agentic AI. A Bolyra-sponsored challenge level demonstrating ZKP vs token-based agent auth would drive developer awareness and position Bolyra as the security-first choice, reaching GitHub's massive developer audience.",
+    "category": "developer_tools",
+    "source": "GitHub Secure Code Game for agentic AI security",
+    "preliminary_demand": 12,
+    "preliminary_timing": 17,
+    "preliminary_fit": 16,
+    "preliminary_feasibility": 22
+  }
+]

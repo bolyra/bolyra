@@ -1,0 +1,98 @@
+{
+  "id": "standards_architect_scope_blinding_salt",
+  "title": "Add blinding salt to scope commitment to prevent brute-force",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Change scopeCommitment from Poseidon2(bitmask, credCommitment) to Poseidon3(bitmask, credCommitment, blindingSalt). Add blindingSalt as a private input signal."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Propagate blindingSalt as a private input; update scopeCommitment computation to Poseidon3(bitmask, credCommitment, blindingSalt). Verify narrowed-scope commitment uses a fresh delegateSalt, not the parent salt."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/test/AgentPolicy.test.js",
+      "description": "Add witness-generation tests for blinded commitment. Assert that two proofs with identical bitmask + credCommitment but different blindingSalt produce distinct scopeCommitments. Add negative test: replaying a commitment with wrong salt must fail."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/test/Delegation.test.js",
+      "description": "Add tests verifying delegateSalt independence from parent salt, and that delegation still enforces one-way scope narrowing under blinded commitments."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/agent.ts",
+      "description": "Generate cryptographically random blindingSalt (32-byte field element) during createAgentCredential(); include it in the AgentCredential type as a private field. Pass to prover inputs."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Extend AgentCredential interface with blindingSalt: bigint (private, never serialized in public credential objects). Extend ProverInputs accordingly."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/handshake.ts",
+      "description": "Thread blindingSalt through proveHandshake() prover input assembly. Ensure salt is never included in the public proof JSON or handshake transcript."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/types.py",
+      "description": "Add blinding_salt field to AgentCredential dataclass (private, not exported). Update subprocess bridge call to include salt in prover args."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/AgentPolicyVerifier.sol",
+      "description": "Regenerate Solidity verifier from updated AgentPolicy.zkey after circuit change. No semantic changes required; file is auto-generated."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/DelegationVerifier.sol",
+      "description": "Regenerate Solidity verifier from updated Delegation.zkey after circuit change."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update Section on scopeCommitment construction to specify Poseidon3(bitmask, credCommitment, blindingSalt). Add privacy analysis subsection: brute-force precomputation attack on 8-bit bitmask, why salt closes it, and that blindingSalt MUST be generated fresh per credential issuance using a CSPRNG with at least 128-bit entropy."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Note in the credential representation section that blindingSalt is a private holder secret excluded from DID Document and VC proof objects."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Update permission scope privacy entry: scope commitment is now unlinkable across sessions even when credCommitment is known to an observer."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/AgentPolicyIntegration.ts",
+      "description": "Hardhat integration test: submit blinded-scope proof on-chain; assert verifyProof returns true. Confirm on-chain verifier rejects a proof built from pre-salt commitment under the new verifier."
+    }
+  ],
+  "steps": [
+    "Add blindingSalt as a private input to AgentPolicy.circom; replace Poseidon2 call with Poseidon3(bitmask, credCommitment, blindingSalt); verify constraint count delta is +1 Poseidon3 gate (~240 constraints).",
+    "Mirror the same change in Delegation.circom, using a separate delegateSalt private input so parent and child commitments are independently blinded and unlinkable.",
+    "Recompile both circuits: npm run compile:circuits; confirm .r1cs, .zkey, and .vkey artifacts are regenerated cleanly.",
+    "Regenerate Solidity verifiers from new vkey.json for both AgentPolicy and Delegation; replace contracts/src/AgentPolicyVerifier.sol and DelegationVerifier.sol.",
+    "Extend AgentCredential TypeScript type with blindingSalt: bigint (private). Update createAgentCredential() to generate a random 32-byte field element via crypto.getRandomValues and reduce mod BN254 scalar field order.",
+    "Update proveHandshake() and prover input assembly in sdk/src/handshake.ts to pass blindingSalt; audit all proof serialization paths to confirm salt is stripped from public output.",
+    "Mirror salt field in sdk-python AgentCredential dataclass; update subprocess bridge JSON payload to include blinding_salt key.",
+    "Write fast circuit tests (witness-only) for AgentPolicy and Delegation covering: (a) distinct salts produce distinct commitments, (b) replayed commitment with wrong salt rejected, (c) delegation scope-narrowing still holds under blinding.",
+    "Write Hardhat integration tests submitting blinded proofs against regenerated on-chain verifiers.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md with new scopeCommitment formula and privacy analysis subsection documenting the brute-force attack and mitigation.",
+    "Update spec/did-method-bolyra.md and docs/owasp-agentic-mapping.md to reflect blinded commitment privacy properties.",
+    "Run full test suite (npm test) including contracts; confirm all tests pass before cutting a protocol version bump."
+  ],
+  "estimated_constraints": 2650,
+  "dependencies": [
+    "circomlib Poseidon3 template (already available in circomlib >=2.0.5)",
+    "pot16.ptau \u2014 existing universal SRS covers the constraint budget for both updated circuits",
+    "snarkjs trusted setup scripts for AgentPolicy and Delegation (project-specific phase-2)",
+    "BN254 scalar field order constant in SDK for salt reduction",
+    "crypto.getRandomValues or Node crypto.randomBytes available in SDK runtime"
+  ]
+}

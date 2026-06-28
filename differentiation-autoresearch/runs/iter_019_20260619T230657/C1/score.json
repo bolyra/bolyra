@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies genuine properties the baseline lacks (ZK predicate evaluation over hidden bitmasks, cumulative-bit implication enforcement without revelation). However, the rfc7662_advocate (Attack 2) correctly narrows the BBS+ comparison \u2014 per-attribute selective disclosure is O(required_bits), not exponential. The spiffe_engineer (Attack 1) shows JWT SVIDs already achieve AS-blind offline presentation. The real differentiator is ZK hiding under offline presentation, but Axis 1 and Axis 2 as written overstate the gap. The baseline can approximate most properties except ZK predicate evaluation with hidden surplus bits and cumulative-bit enforcement without disclosure. Score 1: preferable but baseline approximates with configuration, and the framing contains strawman elements that weaken the claim."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction presents four well-structured games, named assumptions (A1a-A5), and reduction sketches. This is substantially above average. However, two critical gaps prevent a score of 2. First, the cryptographer (Attack 1) identifies that SCOPE-HIDE is a single-shot game while a real RS can adaptively query 64 single-bit masks to reconstruct the full bitmask \u2014 the adaptive security model is unaddressed and the reduction is valid only for single-query. This is not merely a protocol gap but a formal modeling error: the game does not capture the deployment threat. Second, the cryptographer (Attack 4) correctly notes that A4 is stated as 'unconditional' but actually depends on the Generic Group Model \u2014 a non-trivial idealization. The substance of the A1a/A4 separation is sound but the formalization is imprecise. Third, the cryptographer (Attack 3) identifies that agentBlind freshness requirement directly conflicts with nullifier-based replay detection \u2014 the same credential can produce unlimited distinct nullifiers against the same sessionNonce, making the nullifier vacuous for its stated purpose."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/3/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits(64), LessThan(64). Circuit cost is estimated at ~16,400 constraints, well under pot16.ptau ceiling of 65,536. Proving time targets stated (rapidsnark <0.5s, snarkjs <5s). Proof size constant at 192 bytes (Groth16) or 768 bytes (PLONK). Delegation circuit gains ~600 constraints, total under 21,000. All gadgets reference existing Bolyra spec sections. The two modifications (session-randomized scope commitment, agent-side nonce blinding) add only Poseidon2 and Poseidon3 calls. This is clearly within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks land outside the threat model and the construction cannot answer them. The cryptographer's Attack 1 (adaptive bitmask recovery) is devastating \u2014 64 sequential single-bit queries reconstruct the full bitmask, and SCOPE-HIDE's single-shot game provides no defense. The cryptographer's Attack 2 (delegatee learns delegator's full scope via 256 Poseidon evaluations over the 8-bit cumulative space) is unanswered. The cryptographer's Attack 3 (nullifier futility \u2014 agentBlind freshness makes nullifiers useless for replay detection within a session) contradicts a stated design goal. The cu_ciso's Attack 1 (unlinkability destroys audit trails required by GLBA/NCUA) is unaddressed. The auth0_pm's Attack 4 (delegation requires unspecified inter-agent channel) is unaddressed. These are not mitigated weaknesses \u2014 they are unanswered structural attacks."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The credit union deployment scenario (\u00a77) names Navy Federal, NCUA examination, specific RS configurations, and a concrete runtime flow. However, cu_ciso attacks 1-4 demonstrate the scenario is not load-bearing as written: unlinkability conflicts with GLBA audit requirements (Attack 1), operator key custody is unspecified (Attack 2), blockchain availability has no SLA for member-facing workloads (Attack 3), and operational error taxonomy is missing (Attack 4). The auth0_pm (Attack 2) further argues that adversarial-AS is not in credit unions' actual procurement threat model. The scenario names real stakeholders and regulations but the construction's properties actively conflict with those stakeholders' regulatory requirements (GLBA logging vs. unlinkability). Score 1: scenario named but regulatory fit is contradicted by the construction's own privacy properties."
+    }
+  },
+  "gaps": [
+    "SCOPE-HIDE must be reformulated as an adaptive game bounding per-query leakage to 1 bit, with an explicit protocol-level mechanism (e.g., RS commits to requiredScopeMask before learning whether the agent can satisfy it, or rate-limiting) to prevent full bitmask reconstruction",
+    "Delegation privacy is broken: delegatee can recover delegator's full scope via \u2264256 Poseidon evaluations over the cumulative-bit space. Must either add recursive proof composition so delegatee never sees delegatorScope, or explicitly scope delegation out of SCOPE-HIDE",
+    "Nullifier design contradicts agentBlind freshness: same credential produces unlimited distinct nullifiers per sessionNonce, defeating replay/quota detection. Must either make nullifier deterministic per (credential, sessionNonce) via a separate nullifier secret, or remove the replay-detection claim from nullifiers",
+    "Add an auditable pseudonymous identifier (e.g., deterministic per-operator-key pseudonym) to satisfy GLBA/NCUA audit trail requirements without full unlinkability \u2014 explicitly model the privacy-auditability tradeoff",
+    "Restate A4 as GGM-conditional, not unconditional \u2014 correct the SRS trust table to reflect that ZK depends on the Generic Group Model holding for BN254",
+    "Specify the inter-agent channel for delegatorBlindedNonce transmission: key establishment, message format, latency cost, and linkability implications",
+    "Narrow Axis 1 (AS-blind) to acknowledge JWT SVID and DPoP offline validation \u2014 reframe the differentiator as ZK hiding under offline presentation, not offline presentation per se",
+    "Replace the BBS+ exponential-enumeration strawman in Axis 2 with the accurate comparison: per-attribute BBS+ disclosure is O(required_bits), and the genuine gap is cumulative-bit implication enforcement and constant proof size",
+    "Address operational gaps for the credit union scenario: blockchain availability SLA, operator key custody/rotation/revocation, structured error taxonomy, and Tier 1 incident response procedures"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

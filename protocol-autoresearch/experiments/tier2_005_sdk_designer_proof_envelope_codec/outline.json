@@ -1,0 +1,74 @@
+{
+  "id": "sdk_designer_proof_envelope_codec",
+  "title": "Self-describing proof envelope with named public signals",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "BolyraEnvelope type, encode(), decode(), and fromRaw() helpers for TS SDK"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/signals.ts",
+      "description": "Per-circuit signal name maps: HumanUniqueness, AgentPolicy, Delegation \u2014 maps positional index to named field"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export BolyraEnvelope, encode, decode, fromRaw from public API"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/envelope.py",
+      "description": "Python dataclass BolyraEnvelope with encode/decode (JSON-serialisable) and from_raw() migration helper"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/signals.py",
+      "description": "Python dict-of-dicts: circuit -> positional index -> field name, mirrors TS signal maps"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-v1.md",
+      "description": "Canonical schema: version, circuit, provingSystem, signals object, proof object \u2014 wire format spec with field semantics"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests: round-trip encode/decode, fromRaw for all three circuits, unknown-circuit rejection, version mismatch error"
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_envelope.py",
+      "description": "Python pytest: round-trip, from_raw, JSON serialisation, error cases"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add migration section: fromRaw() usage, before/after example replacing publicSignals[0] with signals.humanMerkleRoot"
+    }
+  ],
+  "steps": [
+    "Define the BolyraEnvelope wire schema in spec/proof-envelope-v1.md: version string (semver), circuit enum (HumanUniqueness|AgentPolicy|Delegation), provingSystem enum (groth16|plonk), signals record keyed by name, proof object passthrough",
+    "Create sdk/src/signals.ts: export SIGNAL_MAPS constant mapping each circuit to an ordered array of field names drawn from circuit public output order in the .circom source",
+    "Implement encode(circuit, provingSystem, rawProof, rawSignals): BolyraEnvelope in sdk/src/envelope.ts \u2014 zips rawSignals array with SIGNAL_MAPS[circuit] into a named-field record",
+    "Implement decode(envelope): { proof, publicSignals } in sdk/src/envelope.ts \u2014 inverts the zip back to positional bigint[] for downstream verifyProof calls",
+    "Implement fromRaw(circuit, provingSystem, rawProof, rawSignals): BolyraEnvelope as a convenience alias for encode() \u2014 entry point for migrating existing callers",
+    "Add version validation in decode(): throw a descriptive error if envelope.version is not a recognised schema version",
+    "Wire encode/decode/fromRaw into existing proveHandshake and verifyHandshake so returned proof objects are envelopes by default; keep a rawOutput option flag for backward compat",
+    "Mirror signal maps and dataclass in sdk-python/bolyra/signals.py and sdk-python/bolyra/envelope.py; serialise/deserialise via standard json with int coercion for bigints",
+    "Write sdk/test/envelope.test.ts covering: encode then decode is identity, fromRaw produces correct field names for each circuit, wrong circuit name throws, version mismatch in decode throws",
+    "Write sdk-python/tests/test_envelope.py with equivalent coverage plus JSON round-trip test",
+    "Update sdk/QUICKSTART.md with migration guide: show old positional access pattern vs new named-field pattern, and fromRaw() one-liner for existing integrators",
+    "Bump sdk package version to 0.3.0 (minor \u2014 public API addition), update CHANGELOG"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk >= 0.2.0",
+    "circuits/src/HumanUniqueness.circom (public signal order)",
+    "circuits/src/AgentPolicy.circom (public signal order)",
+    "circuits/src/Delegation.circom (public signal order)",
+    "snarkjs SnarkjsProof type (proof object shape)",
+    "bolyra Python SDK >= 0.1.0"
+  ]
+}

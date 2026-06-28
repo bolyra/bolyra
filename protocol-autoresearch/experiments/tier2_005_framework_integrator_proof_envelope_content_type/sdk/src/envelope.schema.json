@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bolyra.ai/schemas/proof-envelope/v1.0",
+  "title": "Bolyra Proof Envelope",
+  "description": "Canonical JSON envelope for Bolyra ZKP proof payloads",
+  "type": "object",
+  "required": ["version", "proofType", "publicSignals", "proof", "metadata"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Schema version in major.minor format"
+    },
+    "proofType": {
+      "type": "string",
+      "enum": ["handshake", "delegation", "agent_policy"],
+      "description": "Circuit type that produced this proof"
+    },
+    "publicSignals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Ordered public signals as decimal strings"
+    },
+    "proof": {
+      "type": "object",
+      "required": ["pi_a", "pi_b", "pi_c", "protocol", "curve"],
+      "properties": {
+        "pi_a": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "pi_b": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "pi_c": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["groth16", "plonk"]
+        },
+        "curve": {
+          "type": "string",
+          "enum": ["bn128"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["issuedAt"],
+      "properties": {
+        "issuedAt": {
+          "type": "number",
+          "description": "Unix timestamp in seconds"
+        },
+        "nonce": {
+          "type": "string"
+        },
+        "sdkVersion": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

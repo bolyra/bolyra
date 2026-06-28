@@ -1,0 +1,90 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Complete did:bolyra resolution algorithm per W3C DID Core \u00a77",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Extend existing spec with full \u00a77-compliant CRUD definitions: Read (resolve), Deactivate, and explicit no-op stubs for Create/Update with rationale. Include DID Document JSON-LD context, verification method type matrix (Ed25519VerificationKey2020 for operators, JsonWebKey2020 for providers), and resolution metadata fields (deactivated, versionId, nextUpdate)."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-resolution-algorithm.md",
+      "description": "Standalone resolution algorithm document. Pseudocode for: (1) parse did:bolyra:<commitment> into method-specific-id, (2) derive leaf hash from commitment, (3) query on-chain humanTree or agentTree Merkle root for inclusion proof, (4) assemble DID Document with appropriate verification methods, (5) check revocation event log for deactivated flag, (6) return DIDResolutionResult per W3C DID Core \u00a77.1."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-bolyra-context.jsonld",
+      "description": "JSON-LD context file defining did:bolyra vocabulary: bolyra:commitment, bolyra:merkleRoot, bolyra:permissionBits, bolyra:nullifierHash. Extends https://www.w3.org/ns/did/v1 and https://w3id.org/security/suites/ed25519-2020/v1."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance-test-vectors.json",
+      "description": "Test vectors for resolution algorithm: valid human DID \u2192 expected DID Document, valid agent DID \u2192 expected DID Document with permissionBits in verificationMethod, deactivated DID \u2192 deactivated:true in didDocumentMetadata, malformed DID \u2192 invalidDid error, DID with unknown commitment \u2192 notFound error."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/BolyraRegistry.sol",
+      "description": "Add RevocationEvent(bytes32 indexed commitment, uint256 blockNumber) event and isRevoked(bytes32 commitment) view function. Required so the resolver can map on-chain revocation to the deactivated metadata property."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "TypeScript DID resolver implementing the algorithm: parse, merkle-inclusion check via ethers.js call to BolyraRegistry, assemble DIDDocument object, check revocation, return DIDResolutionResult. Exports resolve(did, options) compatible with the did-resolver package interface."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did-document.ts",
+      "description": "DIDDocument assembly helpers: buildHumanDIDDocument(commitment, merkleRoot, publicKey) \u2192 Ed25519VerificationKey2020 verificationMethod; buildAgentDIDDocument(commitment, operatorPubKey, permissionBits) \u2192 JsonWebKey2020 verificationMethod with bolyra:permissionBits extension."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Unit tests for resolver.ts against local Hardhat fork: resolve valid human DID, resolve valid agent DID, resolve deactivated DID, reject malformed DID syntax, reject unknown commitment. Validates full DIDResolutionResult shape including didDocumentMetadata."
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance-runner.ts",
+      "description": "Conformance test runner that loads spec/conformance-test-vectors.json and drives sdk/src/resolver.ts, asserting each vector's expected output matches actual resolution result. CI gate for spec compliance."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-resolution-guide.md",
+      "description": "Developer-facing guide: how to resolve a did:bolyra DID, what each DID Document field means, how to verify a credential against the resolved verificationMethod, and how to interpret deactivated status."
+    }
+  ],
+  "steps": [
+    "Audit spec/did-method-bolyra.md to catalog what is already defined vs. what is missing relative to W3C DID Core \u00a77 (Read, Deactivate, Create stub, Update stub, resolution metadata).",
+    "Define the method-specific-id grammar: did:bolyra:<commitment> where <commitment> is the 32-byte Poseidon hash encoded as lowercase hex, with optional ;<path> fragment for sub-resources.",
+    "Specify the Read algorithm: (1) validate DID syntax, (2) extract commitment bytes, (3) call BolyraRegistry.getLeafType(commitment) to determine human vs. agent tree, (4) fetch Merkle inclusion proof from humanTree or agentTree root, (5) on inclusion failure return notFound, (6) call BolyraRegistry.isRevoked(commitment) to set deactivated flag, (7) assemble DID Document.",
+    "Define DID Document structure for human DIDs: id=did:bolyra:<commitment>, @context=[w3c-did-v1, ed25519-2020, bolyra-context], verificationMethod=[Ed25519VerificationKey2020 with operator publicKeyMultibase], authentication and assertionMethod referencing the verificationMethod id.",
+    "Define DID Document structure for agent DIDs: id=did:bolyra:<commitment>, @context=[w3c-did-v1, jwk-2020, bolyra-context], verificationMethod=[JsonWebKey2020 with operatorPublicKey as JWK, plus bolyra:permissionBits integer extension], capabilityInvocation referencing verificationMethod id.",
+    "Specify resolution metadata fields: contentType=application/did+ld+json, deactivated (bool from isRevoked), versionId (block number of most recent tree root update), equivalentId (none \u2014 commitments are canonical).",
+    "Specify Deactivate operation: operator submits RevocationEvent transaction; resolver subsequently returns deactivated:true in didDocumentMetadata and omits verificationMethods from the returned DID Document body per \u00a77.3.",
+    "Document explicit no-op stubs for Create and Update with rationale: commitments are derived from circuit witnesses at enrollment time and are immutable \u2014 no on-chain create transaction exists; updates would break nullifier unlinkability.",
+    "Author spec/did-bolyra-context.jsonld defining bolyra: namespace terms needed for permissionBits and merkleRoot extensions, extending w3c-did-v1 and ed25519-2020 contexts.",
+    "Add RevocationEvent event and isRevoked(bytes32) view to BolyraRegistry.sol; update ABI artifact and TypeChain bindings.",
+    "Implement sdk/src/did-document.ts assembly helpers for both human and agent DID Document shapes.",
+    "Implement sdk/src/resolver.ts resolve() function wiring parse \u2192 on-chain lookup \u2192 document assembly \u2192 revocation check \u2192 DIDResolutionResult.",
+    "Write conformance test vectors covering: valid human, valid agent, deactivated, malformed syntax, unknown commitment.",
+    "Write sdk/test/resolver.test.ts against local Hardhat fork using the conformance vectors.",
+    "Write spec/conformance-runner.ts to load vectors JSON and drive the resolver, usable as a standalone CI job.",
+    "Update spec/did-method-bolyra.md in-place with the full \u00a77 algorithm prose, referencing the standalone algorithm doc and JSON-LD context.",
+    "Write docs/did-resolution-guide.md for developers integrating the resolver.",
+    "Run full test suite (npm test) and conformance runner; confirm all vectors pass.",
+    "Sign all commits with DCO (git commit -s)."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "spec/did-method-bolyra.md (existing \u2014 extend in place)",
+    "contracts/src/BolyraRegistry.sol (existing \u2014 add RevocationEvent + isRevoked)",
+    "W3C DID Core \u00a77 (https://www.w3.org/TR/did-core/#core-properties)",
+    "W3C DID Resolution spec (https://w3c-ccg.github.io/did-resolution/)",
+    "Ed25519VerificationKey2020 suite (https://w3id.org/security/suites/ed25519-2020/v1)",
+    "JsonWebKey2020 suite (https://w3id.org/security/suites/jws-2020/v1)",
+    "did-resolver npm package (Decentralized Identity Foundation) for resolver interface compatibility",
+    "ethers.js v6 (already used in SDK for contract calls)",
+    "Hardhat local fork (for resolver integration tests)",
+    "pot16.ptau + existing .zkey artifacts (no new trusted setup needed \u2014 resolver is read-only)"
+  ]
+}

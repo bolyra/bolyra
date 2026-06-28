@@ -1,0 +1,55 @@
+{
+  "id": "standards_architect_session_token_offchain",
+  "title": "Define off-chain session token format for verified handshakes",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/session-token-format.md",
+      "description": "Normative specification for application/bolyra-session+jwt: header/payload/signature structure, required claims (humanNullifier, agentNullifier, sessionNonce, scopeCommitment, iat, exp, iss), serialization rules, and IANA media type registration template"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/iana-media-type-registration.md",
+      "description": "Draft IANA media type registration for application/bolyra-session+jwt per RFC 6838, including encoding considerations, security considerations, and contact info"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session-token.ts",
+      "description": "mintSessionToken(handshakeResult, signingKey, ttlSeconds): signs JWS over public signals; verifySessionToken(token, verifyingKey): validates signature + expiry + nonce binding without on-chain re-verification"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/session.ts",
+      "description": "TypeScript types: BolyraSessionPayload, BolyraSessionHeader, SessionTokenOptions, VerifiedSession"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session-token.test.ts",
+      "description": "Unit tests: mint round-trip, expiry rejection, tampered nullifier rejection, scope commitment mismatch, nonce binding verification, media type header assertion"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-tokens.md",
+      "description": "How-to guide: mint token after verifyHandshake(), attach as Bearer in subsequent requests, validate at relying party without on-chain call, session lifetime recommendations"
+    }
+  ],
+  "steps": [
+    "Define canonical payload schema: JWT header with typ=bolyra-session+jwt and alg=ES256 (or EdDSA); claims humanNullifier (bytes32 hex), agentNullifier (bytes32 hex), sessionNonce (bytes32 hex), scopeCommitment (bytes32 hex), iat, exp, iss (did:bolyra of issuer)",
+    "Choose signing key model: relying party holds an ES256/EdDSA keypair; token is a JWS compact serialization (not a ZKP \u2014 the ZKP already happened on-chain); specify key discovery via did:bolyra DID document jwks endpoint",
+    "Implement mintSessionToken() in sdk/src/session-token.ts using jose library: serialize payload, sign with ES256/EdDSA, embed handshake public signals verbatim so token is cryptographically bound to the on-chain proof",
+    "Implement verifySessionToken(): parse compact JWS, verify signature against issuer public key, check exp > now, confirm sessionNonce matches expected value to prevent cross-session token reuse",
+    "Add scopeCommitment enforcement helper: extractScopeFromToken() that decodes the permission bits from the committed scope so relying parties can gate API calls without re-querying chain",
+    "Write normative spec in spec/session-token-format.md: ABNF grammar for the token, claim semantics, error codes (EXPIRED_SESSION, NONCE_MISMATCH, SCOPE_INSUFFICIENT, INVALID_SIGNATURE), interop requirements",
+    "Draft IANA registration template in spec/iana-media-type-registration.md following RFC 6838 Section 5 format; note this is application/ tree with +jwt structured syntax suffix per RFC 7515",
+    "Write test suite covering: happy path mint+verify, expired token, wrong issuer key, tampered humanNullifier, scopeCommitment mismatch, nonce replay detection",
+    "Export mintSessionToken and verifySessionToken from sdk/src/index.ts public surface; add BolyraSessionPayload to exported types",
+    "Write docs/session-tokens.md how-to: show three-line snippet (verifyHandshake \u2192 mintSessionToken \u2192 Bearer header), warn about TTL recommendations (max 1 hour for financial scopes, 24h for read-only)"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose (JWS compact serialization, ES256/EdDSA signing)",
+    "verifyHandshake() return type must expose humanNullifier, agentNullifier, sessionNonce, scopeCommitment as public signals",
+    "did:bolyra DID method spec (spec/did-method-bolyra.md) for issuer key discovery",
+    "8-bit cumulative permission encoding (scopeCommitment derivation must be stable and documented)"
+  ]
+}

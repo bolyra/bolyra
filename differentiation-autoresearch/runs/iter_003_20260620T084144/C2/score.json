@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims AS removal from the hot path, but rfc7662_advocate Attack 1 and spiffe_engineer Attack 1 show JWT introspection caching and SPIRE already achieve this. The true differentiator \u2014 AS learns nothing about which RS the agent contacts even at issuance time \u2014 exists (rfc7662_advocate confirms PPID mapping is AS-invertible) but the construction frames it imprecisely as 'hot path removal' rather than 'credential-holder unlinkability under adversarial AS including at issuance.' Baseline can approximate the stated claim; the real claim is narrower and unstated."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "IND-UNL-AS game, IND-UNL-AS-RS colluding variant, and Poseidon PRF reduction are named \u2014 threat model exists. However the cryptographer's Attack 1 breaks the reduction: AS issued credCommit and knows it, so Poseidon2(rsScopeId, credCommit) is precomputable without inverting the PRF. Attack 2 identifies HVZK vs malicious-verifier ZK gap (PLONK SE-ZK not cited). Attack 3 shows public outputs beyond the nullifier are not enumerated in the game transcript. The reduction sketch does not go through against the stated adversary."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Summary claims ~16,300 constraints, PLONK, reuses Poseidon/BabyJubjub/existing Bolyra primitives \u2014 maps to Phase 1 stack. However the actual construction.md was never written (blocked by permissions), so the circuit's full public output vector is unspecified. spiffe_engineer Attack 2 shows operatorPubKey and permissionMask are stable cross-RS public inputs not addressed in the circuit design. Cost is stated but circuit specification is incomplete."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks are explicitly marked 'not in threat model' with no construction answer: (1) cryptographer Attack 1 \u2014 credCommit precomputation breaks the PRF reduction entirely; (2) cu_ciso Attack 1 \u2014 no audit trail mechanism exists; (3) auth0_pm Attack 3 \u2014 BSA/AML makes CU scenario a compliance liability; (4) cu_ciso Attack 4 \u2014 IND-UNL-AS-RS prevents breach scope reconstruction required by GLBA/HIPAA; (5) spiffe_engineer Attack 2 \u2014 stable public inputs enable cross-RS correlation without breaking Poseidon. These are not mitigated; the construction cannot answer them."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Navy Federal CU (merchant graph privacy) and Kaiser Permanente (referral network privacy) are named with specific stakeholders. However auth0_pm Attack 3 shows the CU scenario conflicts with BSA/AML SAR obligations (CU is legally required to monitor the merchant graph the construction hides), and cu_ciso Attack 4 shows HIPAA breach notification requires the cross-RS graph the construction cryptographically prevents reconstructing. Both flagship scenarios have regulatory requirements directly opposed to the core claim."
+    }
+  },
+  "gaps": [
+    "credCommit must contain a holder-side blinding factor the AS never sees \u2014 derive nullifier as Poseidon2(rsScopeId, Poseidon(credSecret, blindingSalt)) where blindingSalt is agent-local",
+    "IND-UNL-AS game must include the enrollment/issuance phase in the adversary's view and explicitly bound what the AS learns about credCommit",
+    "Enumerate ALL public circuit outputs and prove each carries no cross-session mutual information \u2014 operatorPubKey must be hidden behind a group membership proof",
+    "Add selective deanonymization mechanism (threshold escrow key or AuditCommitment output) for BSA/AML SAR and HIPAA breach notification compliance",
+    "Specify minimum anonymity set size per epoch and define dummy traffic padding when cohort falls below threshold",
+    "Cite PLONK simulation-extractable ZK result (AGM+ROM) and construct the malicious-verifier simulator for the IND-UNL-AS game",
+    "Reframe baseline dominance claim from 'AS off hot path' to 'AS learns zero bits about RS selection even at credential issuance time' \u2014 the precise property baselines cannot match",
+    "Address NIST-alignment gap for Poseidon in regulated procurement contexts or scope flagship scenarios to crypto-native operators"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

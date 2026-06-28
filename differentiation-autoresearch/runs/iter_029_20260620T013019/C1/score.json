@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps (adversarial-AS resilience, cryptographic implication closure, model-identity binding) that baselines cannot match. However, multiple Tier 3 attacks land: rfc7662_advocate shows Gap 1 (AS-blind) is already solved by jwt-introspection-response caching and SPIFFE SVIDs; spiffe_engineer shows WIMSE transaction tokens achieve runtime-adaptive scope narrowing and are not even compared; rfc7662_advocate demonstrates SD-JWT with per-bit claims achieves selective bitmask disclosure at comparable size for small k. The construction overstates the baseline gap by conflating AS-blindness (solved) with adversarial-AS resilience (genuine). Gap 2 survives only on the narrow sub-claim of cryptographic implication closure over a fully hidden bitmask. The baseline cannot match the adversarial-AS + implication-closure combination, but the document inflates the comparison by ignoring SD-JWT and WIMSE entirely. Preferability established but baseline can approximate most individual properties."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (\u00a73), assumptions are named (A1-A6), and reduction sketches for SSU and SP are provided. However, the SP game is broken as written: both cryptographer and rfc7662_advocate independently demonstrate that credentialCommitment values are on-chain Merkle leaves (publicly readable from insertion events, confirmed by \u00a77's claim that examiners can audit the registry). An adversary reads credCommitment from chain, computes Poseidon2(credCommitment, sessionNonce), compares to nullifierHash, and wins SP with probability 1. The construction simultaneously claims on-chain auditability and credential commitment secrecy \u2014 these are contradictory. Additionally, cryptographer identifies that Groth16 is not simulation-extractable, making the joint SSU\u2227SP composition argument incomplete. The SSU reduction itself is sound in isolation. Awarding 1 because the threat model and assumptions are clearly stated with reduction sketches, but the SP proof is unsound under the deployment model described."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps precisely to existing Bolyra primitives: Poseidon over BN254, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64), cumulative-bit implication constraints. Circuit cost is detailed at ~20,700 constraints, well under pot16.ptau's 2^16 limit. The Poseidon2\u2192Poseidon3 change for session-randomized scopeCommitment adds zero net constraints (same round count for t\u22644). Proving time targets are stated (rapidsnark <0.5s, snarkjs <5s). Proof sizes specified (128-256 bytes). Delegation chain impact is analyzed. All gadgets reference existing circuit components from the AgentPolicy circuit spec. This is a concrete, buildable construction within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary and 5 personas surfaced multiple attacks the construction cannot answer as written. The fatal attack (identified independently by cryptographer, rfc7662_advocate, and auth0_pm): on-chain Merkle leaf exposure breaks the SP game entirely \u2014 credentialCommitment is a public Merkle leaf, so the adversary reads it from chain events and trivially distinguishes proofs without any preimage inversion. This is not a weakening \u2014 it is a complete break of the SP claim. Additional unaddressed attacks: revocation lag via 30-root buffer has no specified SLA (cu_ciso, spiffe_engineer); Phase 2 trusted setup ceremony is undocumented (cryptographer, cu_ciso); audit trail opacity fails examiner discovery requirements (cu_ciso); WIMSE comparison entirely absent (spiffe_engineer). The construction cannot answer the on-chain leaf exposure attack without a redesign (blinded commitments or off-chain tree), which is not present."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "The CUSO deployment scenario (\u00a77) is concrete and load-bearing: 200 federated credit unions sharing a data platform, regulated under NCUA \u00a7701.27, where no single CU trusts another's AS and cross-CU agents must prove permissions without revealing competitive signals. The stakeholder (CUSO compliance officer, NCUA examiner) is named. The regulatory requirements (NCUA \u00a7701.27, GLBA \u00a7501(b)) are cited with specific subsections. The selective scope property is load-bearing in this scenario \u2014 not nice-to-have \u2014 because a centralized AS trusted by all 200 CUs is operationally infeasible, and permission disclosure reveals competitive intelligence. The scenario is real and maps to existing CUSO structures."
+    }
+  },
+  "gaps": [
+    "SP game is broken: credentialCommitment is a public on-chain Merkle leaf, so adversary reads it from chain events and wins SP with probability 1 by comparing Poseidon2(credCommitment, sessionNonce) against nullifierHash. Must either blind the leaf (hash(credCommitment || blindingFactor)) or use an off-chain tree with commitment scheme.",
+    "Gap 1 (AS-blind) overstates baseline weakness: jwt-introspection-response caching and SPIFFE SVIDs already achieve presentation-time AS-blindness. Merge Gap 1 into Gap 3 (adversarial-AS resilience) as the genuine differentiator.",
+    "\u00a78 comparison table omits WIMSE transaction tokens (draft-ietf-wimse-arch), the most directly relevant competing standard for workload identity + runtime scope narrowing. Must add WIMSE column and argue why TTS-online requirement is disqualifying.",
+    "\u00a78 Gap 2 ignores SD-JWT (RFC 9278-related) per-bit selective disclosure, which achieves bitmask predicate evaluation at O(k) size. Narrow the claim to cryptographic implication closure enforcement over a fully hidden bitmask.",
+    "Revocation SLA is unspecified: 30-root history buffer with unstated update frequency creates an unbounded revocation window. Must specify root update frequency, maximum revocation lag, or add a separate on-chain revocation registry.",
+    "Groth16 Phase 2 trusted setup for AgentPolicy circuit is undocumented: no ceremony participant count, no transcript, no attestation artifacts. SSU security is contingent on an undescribed ceremony.",
+    "Groth16 non-simulation-extractability: joint SSU\u2227SP composition requires either SE proof or argument that concurrent adversary cannot exploit the gap.",
+    "Operator key management requirements are absent: no HSM requirement, no rotation schedule, no re-enrollment procedure on compromise. Single operatorPrivKey across 200 CUs is a blast-radius problem.",
+    "Audit trail architecture is missing: nullifierHash\u2192agent identity mapping requires an off-chain correlation log whose schema, retention, and tamper-evidence requirements are unspecified.",
+    "Latency compounding in agentic loops unaddressed: 40 tool calls \u00d7 0.5s = 20s auth overhead per task. Must specify whether proof is per-session or per-call, and if per-session, define the session token mechanism."
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

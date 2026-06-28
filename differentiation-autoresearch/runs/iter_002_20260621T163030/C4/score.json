@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction correctly identifies that BBS+ cannot hide the issuer (Gap 1) and that revocation status lists leak issuer identity (Gap 4). However, the rfc7662_advocate's Attack 1 is devastating and unaddressed: RFC 7662 filtered introspection via a trusted AS achieves RS-level issuer anonymity without ZK. The construction's stronger property \u2014 AS-blind issuer hiding \u2014 is never stated in the threat model or IND-ISS game. The spiffe_engineer's WIMSE intermediary attack reinforces this. Until the threat model explicitly includes the AS/intermediary as an honest-but-curious adversary and names AS-blindness as the novel property, the baseline can approximate issuer hiding at the verifier layer with existing infrastructure."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The IND-ISS game is defined and a reduction sketch is provided, which is more than most constructions offer. However, the cryptographer identified two real formal gaps: (1) The reduction's key step invokes a PRF property of Poseidon that is not listed as a named assumption and is incorrectly claimed to follow from collision resistance \u2014 this is a genuine error in the proof sketch. (2) The IND-ISS game is static (fixed issuerRegistryRoot) but the deployment scenario is dynamic (quarterly updates), leaving cross-epoch linkability outside the formal model. Additionally, the salt-revocation contradiction (Attack 1 from cryptographer) means the construction cannot simultaneously achieve unlinkability and revocability as written, undermining the reduction's premises. Threat model is stated but the reduction has a real gap."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every component maps to existing Bolyra primitives: Poseidon hash, EdDSA on Baby Jubjub, PLONK proving system, Lean Incremental Merkle Tree, pot16.ptau universal SRS. The constraint breakdown totals ~48,300, well within the 2^16 = 65,536 budget. Proving time targets are stated (<4s PLONK, ~0.8s rapidsnark). No new cryptographic primitives are required. The primitive mapping table in \u00a75 is explicit and references existing spec sections. This dimension is fully satisfied."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found structural flaws the construction cannot answer: (1) The cryptographer's salt-revocation contradiction is fatal \u2014 fresh salt breaks revocation, fixed salt breaks unlinkability, and no rerandomization gadget is specified. (2) The cryptographer's PRF assumption gap is a real formal error in the reduction. (3) The auth0_pm's predicate-index-vs-semantic-claim attack (no schema commitment linking attrIndex to named attributes) means the predicate proves an index assertion, not a semantic claim. (4) The cu_ciso's audit trail destruction attack shows verifier-side regulatory requirements directly conflict with the privacy guarantee, with no conditional anonymity or escrow mechanism. (5) The rfc7662_advocate's filtered introspection attack is outside the threat model entirely. These are not mitigated weaknesses \u2014 they are unanswered structural gaps."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The cross-CU NCUA membership scenario is concrete and names a real stakeholder (PenFed, $36B). However, multiple attackers demonstrated it is hypothetical rather than deployable: the NCUA does not publish Baby Jubjub key registries, there is no schema registry mapping attrIndex to NCUA-defined attributes, the quarterly registry refresh violates NCUA Part 748 incident response timelines, the construction lacks FIPS-validated primitives required for federally insured CU procurement, and there is no revocation tree operator or SLA. The scenario is well-motivated but premised on infrastructure and regulatory arrangements that do not exist and require multi-year coordination. It is aspirational, not load-bearing today."
+    }
+  },
+  "gaps": [
+    "Add AS/intermediary as honest-but-curious adversary to IND-ISS game; name AS-blind issuer hiding as the novel property distinct from RS-level hiding achievable via RFC 7662 filtered introspection",
+    "Fix the salt-revocation contradiction: specify a commitment rerandomization gadget (e.g., Pedersen blinding or epoch-based salt derivation) that allows stable revocation commitments while producing unlinkable public outputs",
+    "Add Poseidon PRF security as an explicit named assumption in \u00a74; do not derive it from collision resistance",
+    "Add a schema commitment (mapping attribute names to indices) as either a public input or circuit constraint to bind predicateHash to semantic claims, not just index-level assertions",
+    "Define conditional anonymity / escrow mechanism for issuer identity recovery under regulatory subpoena to satisfy SOC 2 CC7.2 and FFIEC audit trail requirements",
+    "Add an issuer key revocation tree (separate from credential revocation) with sub-72-hour update SLA to satisfy NCUA Part 748 incident response",
+    "Extend IND-ISS game to cover epoch transitions (dynamic issuerRegistryRoot updates) or explicitly disclaim cross-epoch unlinkability",
+    "Correct 'arbitrary Boolean expressions' claim to '8-clause fixed template with 3-level Boolean combination' and assess whether stated scenarios fit within that bound",
+    "Address predicate threshold recovery via dictionary attack on predicateHash by separating public predicate identity from private clause parameters",
+    "Scope deployment scenario honestly: either provide a migration path from X.509/SAML to Baby Jubjub without requiring NCUA infrastructure changes, or acknowledge the NCUA registry as aspirational and name a nearer-term deployment context under Bolyra's control"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

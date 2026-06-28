@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_underconstrained_merkle_depth_guard",
+  "persona": "formal_verifier",
+  "title": "Add under-constrained Merkle depth range check",
+  "dimension": "correctness",
+  "description": "All three circuits pass merkleProofLength to BinaryMerkleRoot(MAX_DEPTH) but do not range-check that merkleProofLength <= MAX_DEPTH or merkleProofLength >= 1. If merkleProofLength is 0 or exceeds MAX_DEPTH, BinaryMerkleRoot may silently produce a root from an empty or truncated path. Add explicit Num2Bits + LessThan constraints ensuring 1 <= merkleProofLength <= MAX_DEPTH in HumanUniqueness, AgentPolicy, Delegation, and ModelInstanceBinding. Write a witness-generation test that attempts merkleProofLength = 0 and merkleProofLength = MAX_DEPTH + 1 and asserts constraint failure.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_underconstrained_merkle_depth_guard",
+  "adoption": 15,
+  "standards": 14,
+  "completeness": 21,
+  "correctness": 22,
+  "total": 72,
+  "verdict": "consider"
+}

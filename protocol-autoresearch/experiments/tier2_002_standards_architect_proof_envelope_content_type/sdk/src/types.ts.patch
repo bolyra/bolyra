@@ -1,0 +1,34 @@
+// Add the following types to sdk/src/types.ts and re-export from sdk/src/index.ts
+// (Patch — merge into existing file)
+
+/**
+ * Proving system identifier for the proof envelope.
+ */
+export type ProofSystem = 'groth16' | 'plonk';
+
+/**
+ * Metadata attached to a proof envelope.
+ */
+export type EnvelopeMetadata = Record<string, unknown>;
+
+/**
+ * CBOR-encoded proof envelope per spec/proof-envelope-cbor.md.
+ *
+ * Media type: application/bolyra-proof+cbor
+ */
+export interface ProofEnvelope {
+  /** Envelope schema version. Currently 1. */
+  version: number;
+  /** Proving system used to generate the proof. */
+  proofSystem: ProofSystem;
+  /** Circuit build artifact name (e.g. "HumanUniqueness"). */
+  circuitId: string;
+  /** Ordered public signals. bigint for field elements > 2^64. */
+  publicSignals: Array<number | bigint>;
+  /** Opaque proof blob (system-specific internal structure). */
+  proofBytes: Uint8Array;
+  /** Unix epoch seconds (UTC) when the proof was generated. */
+  timestamp: number;
+  /** Optional extension metadata. */
+  metadata?: EnvelopeMetadata;
+}

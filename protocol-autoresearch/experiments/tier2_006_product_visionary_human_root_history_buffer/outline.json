@@ -1,0 +1,59 @@
+{
+  "id": "product_visionary_human_root_history_buffer",
+  "title": "Human tree root history buffer (parity with agentTree)",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add humanRootHistory[30] ring buffer storage variable and humanRootHistoryIndex uint256 pointer. Update enrollHuman() to push the new Merkle root into the ring buffer before emitting the event. Update verifyHumanProof() (or the internal _isValidHumanRoot() helper) to accept a proof root that matches any of the 30 buffered historical roots, mirroring the existing agentTree pattern."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/interfaces/IIdentityRegistry.sol",
+      "description": "Extend interface with isValidHumanRoot(bytes32 root) view function and updated enrollHuman/verifyHumanProof signatures if they change."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+      "description": "Hardhat tests covering: (1) proof generated before a new enrollment remains valid; (2) proof generated 30 enrollments ago is still accepted; (3) proof generated 31 enrollments ago is rejected (evicted from ring); (4) ring buffer wraparound correctness at index boundary; (5) concurrent enrollment simulation with interleaved proof submissions."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/verify.ts",
+      "description": "Update verifyHandshake() to call isValidHumanRoot() on-chain rather than comparing against a single currentHumanRoot. If operating in off-chain mode, accept an optional historicalRoots array parameter and validate the proof root against the provided set."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Add a section documenting the 30-root history window for humanTree: semantics, eviction policy, and the implication that human proofs carry a finite validity window tied to enrollment rate rather than wall-clock time."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/quickstart.md",
+      "description": "Add a callout noting that human proofs are valid for up to 30 subsequent enrollments (not indefinitely), with guidance to re-prove for long-lived sessions."
+    }
+  ],
+  "steps": [
+    "Read contracts/src/IdentityRegistry.sol to map the exact agentRootHistory[30] storage layout, index pointer name, and the internal helper used in agentTree proof verification.",
+    "Add storage variables `bytes32[30] public humanRootHistory` and `uint256 public humanRootHistoryIndex` directly below the agentTree equivalents to maintain layout parity.",
+    "In enrollHuman(): after computing the new humanTree root, write it into `humanRootHistory[humanRootHistoryIndex % 30]` then increment `humanRootHistoryIndex`.",
+    "Extract or add an internal `_isValidHumanRoot(bytes32 root) internal view returns (bool)` function that iterates the 30-slot ring and returns true on any match \u2014 mirror the agentTree helper exactly.",
+    "Update verifyHumanProof() (and any external isValidHumanRoot() view) to call the new helper instead of a single equality check against currentHumanRoot.",
+    "Add a `HumanRootHistoryUpdated(bytes32 newRoot, uint256 historyIndex)` event emitted in enrollHuman() for off-chain indexers.",
+    "Update contracts/test/IdentityRegistry.humanRootHistory.test.ts with the five test scenarios described in the artifact above, using Hardhat's mine-block helpers to simulate concurrent enrollments.",
+    "Run `npm run test:contracts` and confirm all new and existing tests pass.",
+    "Update sdk/src/verify.ts to call isValidHumanRoot() on-chain; bump SDK minor version to reflect the behavioral change.",
+    "Update spec/did-method-bolyra.md and docs/quickstart.md with the 30-root window semantics.",
+    "Run `tsc --noEmit` in sdk/ and confirm no type errors.",
+    "Commit with DCO sign-off: `git commit -s -m 'feat(contracts): add humanRootHistory[30] ring buffer parity with agentTree'`."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol (existing agentRootHistory[30] pattern to mirror)",
+    "contracts/test/IdentityRegistry.test.ts (existing test suite must remain green)",
+    "sdk/src/verify.ts (verifyHandshake consumes human root validity check)",
+    "spec/did-method-bolyra.md (proof validity window semantics must be documented)",
+    "Hardhat toolchain (contracts/hardhat.config.ts)",
+    "npm run test:contracts CI gate"
+  ]
+}

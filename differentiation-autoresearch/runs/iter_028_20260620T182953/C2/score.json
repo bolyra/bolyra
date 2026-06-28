@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction identifies a specific capability the baseline provably cannot match: unlinkability against an adversarial AS at issuance time. RFC 9068 eliminates per-request AS contact for verification, but every OAuth variant requires the AS to see the requested scope at token issuance. The construction removes the AS from the authorization path entirely post-enrollment. The rfc7662_advocate's Attack 3 acknowledges this: 'Where the construction genuinely wins is the issuance-time privacy: even a single RFC 9068 token request tells the AS which scope the agent requested.' The SPIFFE/WIMSE attack (spiffe_engineer Attack 1) argues a SPIRE attestor plugin could approximate the property, but concedes the SPIRE agent process still issues SVIDs with AS-visible audience fields \u2014 the scope is visible to the SPIRE server at issuance. \u00a78's table overstates the per-request baseline dependency (should distinguish issuance from verification), but the core claim \u2014 no baseline eliminates AS scope visibility at issuance \u2014 holds."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction defines an IND-UNL-AS game (\u00a73.2), names four cryptographic assumptions (Poseidon PRF, Poseidon CR, PLONK KS, Baby Jubjub DL), and provides a reduction sketch (\u00a74.2). However, three concrete gaps prevent awarding 2: (1) \u00a72.4's scopeBlindingSecret derivation from operatorPrivKey directly contradicts \u00a73.1's adversary model where AS=operator \u2014 identified independently by auth0_pm Attack 2, cryptographer Attack 1, and rfc7662_advocate Attack 1. The PRF key is known to the declared adversary, making the reduction vacuous for the most commercially relevant threat scenario. (2) The cryptographer's Attack 4 identifies that the reduction uses the PLONK ZK simulator without establishing simulation soundness \u2014 the bound is missing a term. (3) The rfc7662_advocate's Attack 2 correctly notes IND-UNL-AS is a scope-identification game, not a multi-agent cross-RS linkage game, which is the actual collusion attack modeled in \u00a77. The threat model and assumptions are stated but the reduction has a fatal gap (operatorPrivKey derivation) and a formal incompleteness (simulation soundness)."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps entirely to existing Bolyra primitives: Poseidon2/5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding, PLONK with pot16.ptau universal setup. \u00a76 provides detailed constraint breakdowns: ScopedAgentAuth ~17,124 constraints, DelegationEntry ~16,328 constraints, ScopedDelegation ~19,200 constraints \u2014 all within the 2^16 pot16.ptau budget. Proving time targets (<3s PLONK, <2s Groth16 with rapidsnark) are stated and consistent with Phase 1 budget. The auth0_pm latency attack (Attack 1) questions whether 3s is acceptable for agentic workloads, but this is a product-market concern, not a primitives/cost concern \u2014 the circuit fits the existing infrastructure. No new primitives are introduced; the scopeBlindingSecret is a standard field element. The DelegationEntry circuit reuses all existing gadgets."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer as written: (1) The scopeBlindingSecret derivation from operatorPrivKey breaks IND-UNL-AS with advantage 1 when AS=operator \u2014 identified by 3 of 5 personas (auth0_pm, cryptographer, rfc7662_advocate). This is not a weakening; it is a complete break of the core claim for the primary deployment scenario. (2) The cryptographer's Attack 2 shows blindingCommitment is a dead constraint \u2014 agents can cycle blinding secrets to defeat double-spend detection, with no on-chain anchor. (3) The cu_ciso identifies that the construction structurally prohibits NCUA Part 748 audit trails and BSA/AML monitoring required for the CU deployment scenario in \u00a77. These are not mitigated attacks \u2014 they are unanswered. The scopeBlindingSecret derivation alone is fatal: the construction's core security property is broken under its own stated threat model."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names two concrete deployments: (1) Cross-credit-union member agent where NFCU as AS must not learn member merchant graph \u2014 names Navy Federal Credit Union, Amazon, Costco as specific stakeholders, with the regulatory requirement that CU-as-AS sees full merchant graph under current OAuth. (2) Healthcare delegation across Kaiser Permanente, Quest Diagnostics, Cedars-Sinai where referral network topology must be hidden from issuer. The CU scenario is load-bearing: NCUA examiners and GLBA \u00a7314.4(h) create real regulatory pressure around member data exposure. The cu_ciso attacks challenge whether the construction is actually deployable at CUs (audit trail gaps, BSA/AML), but the scenario itself is concrete, named, and load-bearing \u2014 the property is not nice-to-have but addresses a real privacy exposure in the current CU-as-AS model."
+    }
+  },
+  "gaps": [
+    "scopeBlindingSecret derivation in \u00a72.4 must be severed from operatorPrivKey \u2014 require agent-local generation independent of operator material, or the IND-UNL-AS game is broken with advantage 1 when AS=operator (the primary threat scenario)",
+    "blindingCommitment (\u00a72.2 constraint 9) is an inert intermediate signal \u2014 must be anchored to an on-chain or enrollment-time public commitment so agents cannot cycle blinding secrets to defeat double-spend detection",
+    "IND-UNL-AS game (\u00a73.2) models scope-identification not multi-agent cross-RS linkage \u2014 supplement with a multi-agent unlinkability game or prove IND-UNL-AS implies it",
+    "On-chain scopeCommitment from DelegationEntry is stable across sessions \u2014 add a per-session blinding nonce to prevent linking repeat delegation initiations by the same agent",
+    "\u00a74.2 reduction uses PLONK simulator without establishing simulation soundness \u2014 add SE-PLONK requirement or restructure reduction to use knowledge extractor",
+    "Add privacy-preserving audit log mechanism (e.g., encrypted session receipts to CU SIEM) to address NCUA Part 748 and BSA/AML monitoring requirements for the CU deployment scenario in \u00a77",
+    "Address scopeBlindingSecret rotation lifecycle \u2014 current design has no forward secrecy and no migration protocol for double-spend stores at existing RSes"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Specify human tree root history buffer matching agent tree parity",
+      "dimension": "correctness",
+      "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but has no equivalent for humanTree \u2014 the contract comment says 'humanTree uses Semaphore's' but the code uses a standalone LeanIMT with no history. This means any new human enrollment instantly invalidates all in-flight human proofs. Add a `humanRootHistory[30]` ring buffer with the same `isKnownHumanRoot()` check pattern used by `isKnownAgentRoot()`. Document the staleness window (30 enrollments \u2248 N minutes at expected throughput) in the IETF draft Security Considerations \u00a77.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 17,
+      "standards": 16,
+      "completeness": 19,
+      "correctness": 21,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_000_standards_architect_human_root_history_parity",
+    "score": {
+      "experiment_id": "tier2_000_standards_architect_human_root_history_parity",
+      "total": 44,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 13,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 18,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Publish deterministic JSON test vectors for cross-implementation conformance",
+      "dimension": "standards",
+      "description": "Create a `spec/test-vectors/` directory with 30+ JSON files covering: valid handshake round-trip, expired agent credential rejection, stale Merkle root, scope subset violation, cumulative bit encoding violations (bit 4 without 3, bit 3 without 2), delegation chain at max depth, and nullifier replay. Each vector includes deterministic inputs (using a fixed secret/key pair), expected intermediate values (commitment hashes), and expected pass/fail outcome. Reference these from the IETF draft \u00a7A (Appendix). This is the single most impactful interop artifact \u2014 any alternative SDK implementation can validate correctness against these vectors.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 20,
+      "standards": 23,
+      "completeness": 20,
+      "correctness": 18,
+      "total": 81,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_001_standards_architect_conformance_test_vectors",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_conformance_test_vectors",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 10,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Standardize proof envelope wire format with IANA content type",
+      "dimension": "standards",
+      "description": "The SDK currently passes proof objects as ad-hoc JSON blobs with no schema versioning or content negotiation. Define a versioned proof envelope (`application/bolyra-proof+cbor` / `+json`) with fields: `version`, `circuitId`, `provingSystem` (groth16|plonk), `publicSignals[]`, `proof` (\u03c0_A, \u03c0_B, \u03c0_C or equivalent), and `metadata` (chain, registryAddress). Add an ABNF grammar to the IETF draft \u00a74. This is prerequisite for any multi-implementation interop \u2014 without it, each SDK reinvents serialization.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 21,
+      "standards": 20,
+      "completeness": 16,
+      "correctness": 14,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_002_standards_architect_proof_envelope_content_type",
+    "score": {
+      "experiment_id": "tier2_002_standards_architect_proof_envelope_content_type",
+      "total": 51,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 12,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 20,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_chain_scoped_nullifier",
+      "persona": "cross_chain_engineer",
+      "title": "Chain-scoped nullifier domain separation",
+      "dimension": "correctness",
+      "description": "The current nullifierHash in HumanUniqueness is Poseidon2(scope, secret) and in AgentPolicy is Poseidon2(credentialCommitment, sessionNonce). Neither includes a chain identifier, so a valid proof on Base can be replayed on Arbitrum or Polygon if the same IdentityRegistry is deployed with the same roots. Add a public input chainId to all three circuits and bind it into the nullifier: Poseidon3(scope, secret, chainId) for humans, Poseidon3(credentialCommitment, sessionNonce, chainId) for agents. The on-chain verifier checks chainId == block.chainid.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_scoped_nullifier",
+      "adoption": 19,
+      "standards": 15,
+      "completeness": 20,
+      "correctness": 17,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_003_cross_chain_engineer_chain_scoped_nullifier",
+    "score": {
+      "experiment_id": "tier2_003_cross_chain_engineer_chain_scoped_nullifier",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete DID resolution algorithm with verification methods",
+      "dimension": "standards",
+      "description": "The existing `spec/did-method-bolyra.md` defines the DID syntax but lacks a complete resolution algorithm per W3C DID Core \u00a77.1. Specify: (1) how `did:bolyra:<commitment>` resolves to a DID Document by querying IdentityRegistry events, (2) verification method entries mapping to the EdDSA Baby Jubjub keys (for agents) or the nullifier-based authentication (for humans), (3) service endpoints pointing to the on-chain registry. Without this, no DID resolver library can implement `did:bolyra` support.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 18,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 13,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_004_standards_architect_did_resolution_algorithm",
+    "score": {
+      "experiment_id": "tier2_004_standards_architect_did_resolution_algorithm",
+      "total": 54,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 16,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 19,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "product_visionary_session_token_offchain_jwt",
+      "persona": "product_visionary",
+      "title": "Off-chain session token (JWT) after on-chain handshake",
+      "dimension": "completeness",
+      "description": "After a successful on-chain handshake verification, emit a signed JWT session token that encodes the verified scope, nullifiers, and expiry. Subsequent API calls within the session present this JWT instead of re-proving on-chain. This is the critical path to production adoption: no agentic commerce platform will pay gas per API call. Implement a SessionTokenIssuer in the SDK that takes handshake proof outputs and returns a compact JWT, plus a verifySessionToken() function that checks signature, expiry, and scope without touching the chain. Add a spec section defining the JWT claims (scope_commitment, human_nullifier, agent_nullifier, session_nonce, iat, exp).",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "product_visionary_session_token_offchain_jwt",
+      "adoption": 21,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 13,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_005_product_visionary_session_token_offchain_jwt",
+    "score": {
+      "experiment_id": "tier2_005_product_visionary_session_token_offchain_jwt",
+      "total": 25,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 12,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 2,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_session_token_offchain",
+      "persona": "standards_architect",
+      "title": "Define off-chain session token format for verified handshakes",
+      "dimension": "standards",
+      "description": "After a successful on-chain handshake verification, there is no standardized bearer token format for subsequent off-chain API calls within the same session. Define a compact JWT-like session token (JWS over the handshake public signals: humanNullifier, agentNullifier, sessionNonce, scopeCommitment) with an IANA-registerable media type `application/bolyra-session+jwt`. This lets relying parties skip on-chain re-verification for the session lifetime while maintaining cryptographic binding to the original ZKP handshake.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_session_token_offchain",
+      "adoption": 20,
+      "standards": 18,
+      "completeness": 17,
+      "correctness": 14,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_006_standards_architect_session_token_offchain",
+    "score": {
+      "experiment_id": "tier2_006_standards_architect_session_token_offchain",
+      "total": 47,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 18,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 17,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_underconstrained_merkle_depth",
+      "persona": "formal_verifier",
+      "title": "Prove BinaryMerkleRoot depth parameter cannot be manipulated to accept invalid proofs",
+      "dimension": "correctness",
+      "description": "The `merkleProofLength` input in all three circuits controls how many siblings are actually used by BinaryMerkleRoot, but there is no constraint that `merkleProofLength` matches the expected tree depth. An attacker could supply a shorter proof path against a subtree root that happens to be in the root history buffer. Write a formal property (Certora-style invariant or circom assert) proving that for any accepted witness, the Merkle root output corresponds to a tree of exactly the deployed depth, or add an equality constraint `merkleProofLength === EXPECTED_DEPTH` to each circuit.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_underconstrained_merkle_depth",
+      "adoption": 14,
+      "standards": 15,
+      "completeness": 18,
+      "correctness": 22,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_007_formal_verifier_underconstrained_merkle_depth",
+    "score": {
+      "experiment_id": "tier2_007_formal_verifier_underconstrained_merkle_depth",
+      "total": 21,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 3,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

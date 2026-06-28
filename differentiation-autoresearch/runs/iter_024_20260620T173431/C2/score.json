@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims AS-bypass and cross-scope unlinkability, but multiple attackers successfully challenged the categorical superiority claim. rfc7662_advocate Attack 1 shows RFC 8693 pre-issued token batteries achieve presentation-path AS bypass without ZK. spiffe_engineer Attack 2 demonstrates WIMSE WIT + SPIRE local SVID issuance already eliminates most of \u00a78's six failure modes. The residual delta (AS knows which RS-scoped SVIDs exist but not which were presented) is real but narrower than \u00a78 claims. The construction is preferable to the baseline but the baseline can approximate with extra configuration (pre-issued per-RS tokens + pairwise pseudonymous SPIFFE IDs), so this is a 1, not a 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides a well-structured IND-UNL-AS game, named assumptions (P-PRF, G16-ZK, PLONK-ZK, P-CR, DL-BJJ), and a hybrid reduction sketch. However, cryptographer Attack 1 identifies that the game proves cross-agent indistinguishability (given two known agents, guess which produced the challenge proof) rather than cross-scope unlinkability (given two presentations at different RSes, determine if they share an agent). These are different properties. cryptographer Attack 2 shows agentMerkleRoot epoch fingerprinting collapses anonymity sets without breaking any cryptographic assumption. cryptographer Attack 3 correctly notes the SRS trust model (pot16.ptau ceremony honesty) is never named as an assumption despite being load-bearing for soundness. rfc7662_advocate Attack 4 notes Poseidon-PRF is non-standard and the construction does not cite concrete security analyses. The threat model exists but the game is mismatched to the claim and key assumptions are missing, so this is 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon2/3/5, EdDSA on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding, PLONK/Groth16. Circuit cost is explicitly estimated at ~13,043 constraints for ScopedPresentation and ~15,300 for ScopedDelegation, both within pot16.ptau's 2^16 budget. Proving time targets (<3s PLONK, <1.5s Groth16) are grounded in existing bench_rapidsnark.js benchmarks. The only new primitive is scopeBlinder (a random field element), which maps naturally to existing scope-commitment patterns. This is a clear 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer within its current threat model. (1) cryptographer Attack 1: the IND-UNL-AS game proves cross-agent indistinguishability, not the claimed cross-scope unlinkability \u2014 the formal game is mismatched to the claim. (2) cryptographer Attack 2: Merkle root epoch fingerprinting collapses anonymity sets using only public outputs, no crypto break needed, not addressed. (3) cryptographer Attack 4: scopeId namespace has no collision prevention; colluding RSes choosing the same scopeId trivially link agents with zero cryptographic effort \u2014 this is a protocol-level design flaw, not mitigated. (4) cu_ciso Attack 1: BSA/AML requirements directly conflict with the unlinkability property in the primary deployment scenario, making the \u00a77 CU scenario self-contradictory. (5) spiffe_engineer Attack 4 and rfc7662_advocate Attack 3: scopeBlinder secrecy assumption fails for cloud-hosted agents (the dominant deployment topology), and no TEE/HSM requirement is stated. These are not weakened claims \u2014 they are unanswered structural attacks."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named (CU cross-merchant unlinkability, healthcare referral privacy) with specific stakeholders (Navy Federal, Kaiser Permanente) and regulatory references (NCUA \u00a7701.36). However, cu_ciso Attack 1 demonstrates that the primary CU scenario is self-contradictory: NCUA \u00a7701.36 governs member data sharing with third parties, not the CU's own BSA/AML monitoring obligations under 31 U.S.C. \u00a75318(g). A CU that genuinely cannot reconstruct member transaction patterns cannot file SARs \u2014 making the unlinkability property a regulatory liability, not a feature, in the named deployment. The scenario is concrete but the unlinkability property conflicts with mandatory compliance requirements of the named stakeholder, reducing this to 1."
+    }
+  },
+  "gaps": [
+    "IND-UNL-AS game must be supplemented with a session-unlinkability game: adversary sees two transcripts (scope_1, \u03c0\u2081) and (scope_2, \u03c0\u2082) and wins if it can guess whether they share an agent \u2014 current game only covers cross-agent indistinguishability",
+    "Add scopeId registry or on-chain uniqueness enforcement to prevent colluding RSes from choosing identical scopeIds and trivially linking agents",
+    "Address Merkle root epoch fingerprinting: mandate epoch-batched enrollment or random historical root selection to prevent AS+RS timing correlation via public agentMerkleRoot output",
+    "Add SRS trust model assumption (pot16.ptau ceremony honesty) to named assumptions \u2014 this is load-bearing for PLONK soundness",
+    "Specify TEE/HSM requirement for scopeBlinder storage or restrict unlinkability claim to on-device agents \u2014 cloud-hosted agents where operator=AS violate the local-state exclusion",
+    "Resolve BSA/AML conflict in CU scenario: define an audit-credential or selective-disclosure mechanism that gives the CU SAR-filing capability without breaking cross-RS unlinkability for non-regulatory queries",
+    "Cite concrete Poseidon PRF security analyses (e.g., Grassi et al. 2021) and quantify assumption strength against known algebraic attacks",
+    "Specify scopeBlinder backup/recovery semantics and RS-side nullifier orphan handling for credential rotation"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

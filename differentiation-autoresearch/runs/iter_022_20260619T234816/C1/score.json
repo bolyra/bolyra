@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps vs RFC 7662 baseline (AS-blind presentation, runtime-adaptive predicate, adversarial-AS soundness, constant-size proof, cumulative implication enforcement, adaptive multi-proof privacy). However, multiple Tier 3 attackers successfully narrowed several gaps: rfc7662_advocate Attack 2 shows offline JWT introspection already removes AS from hot path (Gap 1 overstated); Attack 4 shows RFC 8693 Token Exchange provides runtime scope narrowing at request time (Gap 2 partially matched); spiffe_engineer Attack 2 shows WIMSE TrATs replicate Gap 1 partially. The surviving unique property is private bitmask predicate evaluation where neither AS nor RS learns the full bitmask \u2014 but the construction frames Gap 1 and Gap 2 in terms the baseline can approximate. The genuine differentiator (predicate privacy + adversarial-AS soundness combined) is real but not crisply isolated from properties the baseline can match with configuration. Score 1, not 2, because baseline can approximate several claimed gaps."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models (SSU and ASI games), named cryptographic assumptions (A1-A6), and reduction sketches for both unforgeability and privacy. This is substantive work. However, cryptographer Attack 1 identifies that the SSU reduction assumes honest CRS generation but the construction never specifies ceremony integrity \u2014 Groth16 knowledge soundness (A1) is vacuous under subverted setup. Cryptographer Attack 2 demonstrates the ASI proof sketch has a concrete gap: scopeCommitment breaks ASI because credentialCommitment values are public Merkle leaves, so the adversary can precompute Poseidon2(B_b, credComm) for all leaves and match against the public output \u2014 the reduction's claim that 'recovering permBitmask requires a preimage attack without knowing credComm' is false since credComm is on-chain. Cryptographer Attack 4 notes Groth16 is HVZK not simulation-extractable, and the hybrid argument for adaptive multi-proof ASI is missing. These are real formal gaps that weaken the security argument, not just nits. Score 1: threat model stated and assumptions named, but reduction has identified gaps and CRS integrity assumption is unaddressed."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps entirely to existing Bolyra primitives: Poseidon hash, Groth16/PLONK proving, BabyJubjub EdDSA, BinaryMerkleRoot(20), cumulative bit encoding. \u00a75 provides a complete primitive mapping table. \u00a76 provides detailed constraint breakdown (~42,400 total) with per-gadget estimates, proving time targets (<1s rapidsnark, <8s snarkjs WASM, <5s PLONK), and proof sizes (320 bytes Groth16, 752 bytes PLONK). The construction explicitly states 'No new primitives are introduced' and references existing AgentPolicy circuit. All targets are within the spec's PLONK agent budget. No Tier 3 attacker challenged implementability within Phase 1 budget. Score 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer: (1) cryptographer Attack 2 \u2014 scopeCommitment breaks ASI claim because credentialCommitment is publicly readable from on-chain Merkle tree, making the reduction sketch incorrect as written; (2) cryptographer Attack 1 + cu_ciso Attack 1 + rfc7662_advocate Attack 3 \u2014 Groth16 CRS integrity is unaddressed, and the SSU theorem's honest-setup assumption is unstated; (3) cu_ciso Attack 3 + spiffe_engineer Attack 4 \u2014 no revocation primitive exists, compromised credentials remain valid for the full expiry window with no emergency path; (4) cryptographer Attack 3 \u2014 nullifier deanonymization via public credentialCommitment enumeration breaks pseudonymity with O(n) Poseidon evaluations; (5) spiffe_engineer Attack 1 \u2014 modelHash is an unattested claim with no platform binding. The construction cannot answer several of these attacks (revocation, CRS integrity, scopeCommitment linkability in the main variant, ASI proof gap). Score 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "\u00a77 provides a concrete deployment scenario (federated credit union agent authorization) with named stakeholder (NCUA-regulated credit union), specific agent roles (loan agent, support chatbot, fraud agent), concrete bitmask assignments, and a runtime flow. However, cu_ciso Attacks 3 and 4 demonstrate the scenario does not survive regulatory contact: no revocation mechanism for compromised agents (NCUA Part 748 requires prompt response), no human-readable audit trail (examiner cannot interpret Groth16 proof blobs), and the proof proves capability not action (GLBA requires action audit logs). auth0_pm Attack 4 argues the adversarial-AS threat model does not map to the credit union buyer's actual threat model (the CU's AS is its own). The scenario is named and detailed but the regulatory requirements cited in \u00a77 are not actually met by the construction. Score 1: scenario named with stakeholder but gaps make it partially hypothetical as presented."
+    }
+  },
+  "gaps": [
+    "scopeCommitment breaks ASI privacy claim \u2014 credentialCommitment values are public Merkle leaves enabling precomputation attack; must either drop scopeCommitment (adopt ASI-Minimal as default) or randomize it per-session",
+    "Groth16 CRS integrity is unaddressed \u2014 specify MPC ceremony with participant attestations, or make PLONK the production default, or explicitly add honest-setup as a stated assumption",
+    "No credential revocation primitive \u2014 add a revocation Merkle tree or nullifier registry so compromised credentials can be invalidated before expiry; define revocation SLA for NCUA compliance",
+    "Nullifier deanonymization via public credentialCommitment enumeration \u2014 O(n) Poseidon evaluations by colluding AS+RS identifies the proving agent; consider blinded nullifier scheme",
+    "Tighten Gap 1 and Gap 2 framing \u2014 offline JWT introspection and WIMSE TrATs already remove AS from hot path; the surviving differentiator is private predicate evaluation over a hidden bitmask, not merely 'no AS roundtrip'",
+    "modelHash has no platform attestation binding \u2014 credential exfiltration allows any party to prove as the authorized model; address with explicit threat model scoping or platform binding",
+    "Add companion audit log format mapping requiredScopeMask bits to named permissions and linking proofs to transaction IDs for NCUA examiner legibility",
+    "ASI reduction hybrid argument is missing \u2014 formalize the sequential composition of real and simulated proofs, or restrict composition claims for the Groth16 path"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

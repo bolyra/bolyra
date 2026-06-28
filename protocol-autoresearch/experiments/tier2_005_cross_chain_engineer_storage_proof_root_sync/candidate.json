@@ -1,0 +1,16 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "persona": "cross_chain_engineer",
+  "title": "Cross-chain root sync via EIP-1186 storage proofs",
+  "dimension": "completeness",
+  "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside the existing Base Sepolia deployment, then implement a StorageProofRootRelay contract that accepts EIP-1186 storage proofs of the humanTree and agentTree roots from the canonical chain. This eliminates reliance on trusted relayers: any user can submit a storage proof from Base to update the mirrored root on Arbitrum/Polygon. The relay contract verifies the RLP-encoded account proof against the L1 state root (available via each L2's precompile: ArbSys on Arbitrum, L1Block on OP-stack/Base) and extracts the specific storage slot holding the Merkle root.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+  "adoption": 18,
+  "standards": 16,
+  "completeness": 21,
+  "correctness": 15,
+  "total": 70,
+  "verdict": "consider"
+}

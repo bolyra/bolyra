@@ -1,0 +1,54 @@
+{
+  "id": "standards_architect_session_token_offchain_jwt",
+  "title": "Define JWT-based off-chain session token format for verified handshakes",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-session-token-jwt-01.md",
+      "description": "JWT profile spec with ABNF claim definitions, signing requirements, TTL policy, and delegation chain encoding"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session-token.ts",
+      "description": "Reference TS implementation: issueSessionToken(), verifySessionToken(), and claim type definitions"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/session-token.ts",
+      "description": "TypeScript interfaces: BolyraJWTPayload, SessionTokenOptions, VerifiedSessionClaims"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session-token.test.ts",
+      "description": "10+ test vectors covering valid tokens, expired TTL, tampered claims, delegation chain permutations, and scope commitment mismatches"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-integration.md",
+      "description": "Integration guide for LangChain and Vercel AI SDK middleware to extract and validate Bolyra bearer tokens"
+    }
+  ],
+  "steps": [
+    "Audit existing handshake output shape (humanNullifier, agentNullifier, sessionNonce, scopeCommitment) in sdk/src/ and contracts/ to confirm canonical field names and byte encodings",
+    "Define JWT header: alg ES256 (or EdDSA for Ed25519 relayer keys), typ 'bolyra+jwt'",
+    "Define JWT payload ABNF: bolyra-claims = humanNullifier / agentNullifier / sessionNonce / scopeCommitment / delegationChain / iss / sub / iat / exp / chainId / verifierContract",
+    "Specify delegationChain as an ordered JSON array of nullifier hex strings (root \u2192 leaf), empty array for non-delegated sessions",
+    "Set TTL policy: default exp = iat + 300s (5 min), max 3600s, relayer MUST reject tokens with exp - iat > 3600",
+    "Specify claim validation rules: scopeCommitment must equal Poseidon(permissions, salt) committed on-chain; chainId must match the verified contract's network",
+    "Implement issueSessionToken(handshakeResult, relayerPrivKey, opts) in sdk/src/session-token.ts using jose library",
+    "Implement verifySessionToken(token, relayerPubKey) with full claim validation and expiry check",
+    "Write 10+ test vectors: (1) valid minimal token, (2) valid with 3-hop delegation chain, (3) expired token rejection, (4) wrong alg header, (5) tampered humanNullifier, (6) scopeCommitment mismatch, (7) chainId mismatch, (8) delegationChain out of order, (9) max TTL boundary, (10) missing required claim, (11) future iat rejection",
+    "Export issueSessionToken and verifySessionToken from sdk/src/index.ts public API surface",
+    "Write integration guide showing Express middleware pattern and LangChain/Vercel AI bearer token extraction",
+    "Add spec to spec/ index and link from sdk/QUICKSTART.md"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "RFC 7519 (JWT)",
+    "RFC 7518 (JWA \u2014 ES256/EdDSA)",
+    "jose npm package (^5.x) for JWT sign/verify",
+    "Bolyra handshake output types from sdk/src/types/",
+    "On-chain verifier contract address + chainId from contracts/deployments/",
+    "Poseidon hash implementation (circomlibjs) for scopeCommitment recomputation in verifier"
+  ]
+}

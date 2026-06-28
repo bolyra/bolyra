@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The combined property of hiding the full bitmask while proving implication closure in a single constant-size proof is genuinely stronger than any single baseline mechanism. BBS+ over WIMSE WPoP comes closest but cannot enforce global structural integrity without leaking all bits (spiffe_engineer Attack 2 confirms construction survives). However, three authorization-layer baselines are unaddressed: SD-JWT (RFC 9635) provides AS-blind selective disclosure of individual permission bits without circuits (rfc7662_advocate Attack 1); RFC 9396 RAR + FGA-class engines handle the 2^64 scaling scenario with sub-ms latency (auth0_pm Attack 3); RFC 8693 token exchange provides runtime-adaptive scope narrowing (rfc7662_advocate Attack 4). Until these are explicitly ruled out or shown insufficient, baseline dominance is not proven \u2014 only preferable."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Section 3 defines Game_ImplicationClosureForgery and names Groth16 knowledge soundness and Poseidon collision resistance as assumptions. However: (a) no HVZK simulator Sim(vk, x) is provided, so the ZK claim is asserted, not proven (cryptographer Attack 2); (b) no knowledge extractor is exhibited for the sub-game, so soundness of ImplicationClosureForgery is a game definition, not a proof (cryptographer Attack 4); (c) trusted setup integrity is entirely absent from the threat model \u2014 a subverted pot16.ptau breaks soundness for both Groth16 and PLONK (cryptographer Attack 1); (d) Groth16 is not simulation-extractable, and the nonce-binding defense against re-randomization is not formally argued (cryptographer Attack 2). Threat model exists but reduction is missing on multiple axes."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps directly to existing Bolyra primitives: AgentPolicy circuit (Groth16+PLONK), 8-bit cumulative encoding with validateCumulativeBitEncoding(), Poseidon hashing, BabyJubjub EdDSA. The circuit exists and compiles. However, the proof lifecycle is unspecified (auth0_pm Attack 2): issuance-time pre-computation defeats the moment-of-use disclosure property, while request-time generation at ~15s (or even 2-3s with rapidsnark) is undeployable in synchronous MCP tool-call chains. No latency target or operational deployment model is stated, so actual cost within Phase 1 budget cannot be confirmed."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with 5 personas surfaced multiple attacks the construction cannot answer: (1) SD-JWT baseline entirely omitted \u2014 directly competes on AS-blind selective disclosure (rfc7662_advocate Attack 1, marked No); (2) trusted setup subversion destroys the adversarial-AS claim with no MPC ceremony or CRS integrity attestation (cryptographer Attack 1, marked No); (3) modelHash as persistent cross-session linkability vector is unaddressed (cryptographer Attack 3, marked No); (4) NCUA audit trail opacity \u2014 examiner cannot read a Groth16 proof (cu_ciso Attack 1, marked No); (5) revocation latency undefined vs. 72-hour NCUA breach clock (cu_ciso Attack 2, marked No); (6) RFC 8693 + RFC 9396 + FGA unaddressed authorization-layer baselines (auth0_pm Attack 3, rfc7662_advocate Attack 4, both No). Construction survives BBS+ and SPIRE attestor attacks but fails on too many others to score above 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: regulated agent with 2^64 permission space and semi-trusted AS across org boundaries. The CU deployment scenario references real regulatory frameworks (NCUA, GLBA). However: (a) the 2^64 scenario is internally inconsistent with the 8-bit permission model actually deployed (auth0_pm Attack 4); (b) the adversarial-AS scenario is not a real buyer concern per cu_ciso and auth0_pm personas \u2014 no CISO buys protection against their own AS; (c) cu_ciso attacks reveal the CU deployment has unaddressed operational gaps (audit trail, revocation, secret custody, vendor risk) that make it hypothetical rather than deployable. No named stakeholder has been shown to require this specific property as load-bearing."
+    }
+  },
+  "gaps": [
+    "Address SD-JWT (RFC 9635) as a baseline in Section 7 \u2014 show that SD-JWT selective disclosure cannot combine hiding with implication closure enforcement in a single proof",
+    "Address RFC 8693 token exchange and RFC 9396 RAR + FGA-class engines as authorization-layer baselines \u2014 show the roundtrip-to-AS and AS-trust requirements are load-bearing gaps",
+    "Provide HVZK simulator Sim(vk, x) and knowledge extractor for Game_ImplicationClosureForgery \u2014 current sub-game is a definition, not a proof",
+    "Specify CRS integrity model: either public MPC ceremony with at least one honest party, or scope the adversarial-AS claim to runtime-only adversaries",
+    "Define proof lifecycle (issuance-time vs. request-time) with latency target compatible with synchronous MCP tool-call chains",
+    "Make modelHash a per-session commitment (e.g. H(modelHash, operatorPrivKey, nonce)) or explicitly scope the privacy claim to permission-predicate privacy only, not agent unlinkability",
+    "Add audit trail translation layer: how (proof, public_signals, sessionNonce) maps to examiner-readable access logs satisfying NCUA 748 Appendix A",
+    "Bound revocation latency and define registry admin key custody for NCUA 72-hour breach clock compliance",
+    "Resolve internal inconsistency: narrow the constant-size-proof claim to future large-bitmask scenarios or expand the permission model beyond 8 bits to justify it",
+    "Rename portable identity to Sybil-resistant portable identity and contrast with SPIFFE federation which is portable but not Sybil-resistant"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

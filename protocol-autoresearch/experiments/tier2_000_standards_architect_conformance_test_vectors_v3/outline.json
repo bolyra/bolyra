@@ -1,0 +1,66 @@
+{
+  "id": "standards_architect_conformance_test_vectors_v3",
+  "title": "Machine-readable conformance test vectors (JSON Schema + vectors)",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/conformance/vector-schema.json",
+      "description": "JSON Schema (draft-07) defining the canonical test vector format: id, category, description, inputs, expected_result (accept|reject), error_code, notes"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/vectors.json",
+      "description": "30+ concrete test vectors covering all required scenarios, each conforming to vector-schema.json"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/README.md",
+      "description": "Human-readable guide: purpose, vector categories, how alternative implementations must consume and validate vectors, error code registry"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/error-codes.json",
+      "description": "Canonical error code registry mapping symbolic names (ERR_NONCE_REPLAY, ERR_SCOPE_VIOLATION, etc.) to numeric codes and descriptions"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/validate-vectors.js",
+      "description": "Node script that validates vectors.json against vector-schema.json using ajv, exits non-zero on any schema violation \u2014 runnable in CI"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/run-vectors.js",
+      "description": "Conformance runner: feeds each vector's inputs through @bolyra/sdk (witness generation or full proof based on FULL_PROOF env), asserts expected_result and error_code match"
+    },
+    {
+      "type": "docs",
+      "filename": "spec/conformance/INTEROP.md",
+      "description": "Interoperability guidance for alternative SDK authors: how to parse vectors, what 'inputs' fields map to circuit signals, pass/fail criteria, how to report results"
+    }
+  ],
+  "steps": [
+    "Audit existing spec/ files (did-method-bolyra.md, draft-bolyra-mutual-zkp-auth-01.md) and circuits/FORMAL-PROPERTIES.md to enumerate all acceptance and rejection conditions that vectors must cover",
+    "Define error code registry (error-codes.json): assign symbolic names and numeric codes for every rejection category \u2014 ERR_EXPIRED_CREDENTIAL, ERR_REVOKED_IDENTITY, ERR_STALE_ROOT_HUMAN, ERR_STALE_ROOT_AGENT, ERR_SCOPE_SUBSET_VIOLATION, ERR_CUMULATIVE_BIT_VIOLATION, ERR_DELEGATION_MAX_HOPS, ERR_NONCE_REPLAY, ERR_PHANTOM_DELEGATEE, ERR_INVALID_SIGNATURE",
+    "Author vector-schema.json (JSON Schema draft-07) with required fields: id (string), category (enum), description (string), inputs (object with sub-schema per circuit), expected_result (enum: accept|reject), error_code (string|null for accept cases), notes (string optional)",
+    "Write vectors.json with 30+ entries grouped by category: (1) valid_handshake \u2014 3 vectors covering minimal, full-permissions, and delegation chain happy paths; (2) expired_credential \u2014 2 vectors at boundary and past expiry; (3) revoked_identity \u2014 2 vectors single and batch revocation; (4) stale_root \u2014 4 vectors covering human tree stale, agent tree stale, both stale, root just-rotated; (5) scope_violation \u2014 4 vectors strict subset, exact match, superset attempt, empty scope; (6) cumulative_bit \u2014 4 vectors valid encoding, FINANCIAL_MEDIUM without FINANCIAL_SMALL, SUB_DELEGATE chain, all bits set; (7) delegation_chain \u2014 3 vectors at max hops (accepted), max+1 hops (rejected), zero-hop passthrough; (8) nonce_replay \u2014 3 vectors same nonce same session, same nonce different session, fresh nonce; (9) phantom_delegatee \u2014 3 vectors unregistered delegatee, mismatched commitment, valid delegatee",
+    "Write validate-vectors.js using ajv to load vector-schema.json and validate all entries in vectors.json, printing per-vector PASS/FAIL and a summary count \u2014 wire into package.json as 'validate:vectors'",
+    "Write run-vectors.js conformance runner: for each vector, construct circuit inputs from vector.inputs, call @bolyra/sdk witness generation (or full snarkjs proof if FULL_PROOF=1), map SDK error to error code, assert expected_result and error_code \u2014 output JSON results suitable for CI artifact upload",
+    "Add 'test:conformance' and 'validate:vectors' scripts to root package.json; add conformance job to CI that runs validate-vectors.js unconditionally and run-vectors.js in fast (witness-only) mode",
+    "Write spec/conformance/README.md: purpose, category taxonomy, inputs schema reference per circuit (signal name \u2192 vector field mapping), error code table, CI badge instructions",
+    "Write spec/conformance/INTEROP.md: step-by-step guide for alternative SDK authors \u2014 parsing vectors.json, mapping inputs to their proving system, expected error surfacing contract, how to open a conformance PR with results JSON",
+    "Run validate-vectors.js to confirm all 30+ vectors are schema-valid; run run-vectors.js in fast mode against @bolyra/sdk to confirm all accept vectors pass and all reject vectors fail with correct error codes",
+    "Commit with DCO sign-off; add spec/conformance/ to landing page ecosystem mentions if relevant"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "spec/did-method-bolyra.md",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md",
+    "circuits/FORMAL-PROPERTIES.md",
+    "circuits/src/HumanUniqueness.circom",
+    "circuits/src/AgentPolicy.circom",
+    "circuits/src/Delegation.circom",
+    "@bolyra/sdk (sdk/)",
+    "ajv (npm \u2014 JSON Schema validator)",
+    "snarkjs (witness generation for run-vectors fast mode)"
+  ]
+}

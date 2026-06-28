@@ -1,0 +1,65 @@
+{
+  "id": "formal_verifier_field_overflow_public_signal_binding",
+  "title": "Prove no field-overflow on public signal round-trip to Solidity",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add Num2Bits(253) range constraints on sessionNonce, scope, modelHash, requiredScopeMask public inputs"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add Num2Bits(253) range constraints on sessionNonce public input; audit nullifierHash and humanMerkleRoot for existing Poseidon-implied bounds"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Add Num2Bits(253) range constraints on any unranged delegatee public signals; verify requiredScopeMask is already covered by cumulative-bit check or add explicit range"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/RangeChecks.circom",
+      "description": "New shared template file exporting RangeCheck(n) wrapper around Num2Bits(n) to avoid duplicating the include across all circuits"
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add table documenting every public input signal, its circuit, its range-check width (64, 253, or Poseidon-implied), and the attack class each constraint closes"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/range_checks.test.js",
+      "description": "Mocha tests: valid boundary values (0, 2^253-1) pass witness generation; value == BN254 r causes constraint failure; each circuit rejects p+x aliased inputs"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/security/field-overflow-mitigation.md",
+      "description": "Short prose explaining the modular aliasing attack class, which signals were unranged, and the fix applied \u2014 links to FORMAL-PROPERTIES.md"
+    }
+  ],
+  "steps": [
+    "Audit every public signal across HumanUniqueness, AgentPolicy, and Delegation: list signal name, current range constraint (if any), and how it reaches the Solidity verifier as uint256",
+    "Identify Poseidon-output signals (humanMerkleRoot, nullifierHash, credentialCommitment) \u2014 Poseidon internally reduces mod r, so these are already canonical; document this as 'Poseidon-implied < r' in the spec, no Num2Bits needed",
+    "For signals with existing Num2Bits(64) (permissionBitmask, expiryTimestamp, currentTimestamp) confirm they already prevent aliasing at their declared width; no change needed",
+    "Create circuits/src/RangeChecks.circom with a parameterized template RangeCheck(n) { signal input in; component b = Num2Bits(n); b.in <== in; } for reuse",
+    "In AgentPolicy.circom, include RangeChecks.circom and instantiate RangeCheck(253) for sessionNonce, scope, modelHash, requiredScopeMask; wire each public signal through the component before it is used in any other constraint",
+    "In HumanUniqueness.circom, add RangeCheck(253) for sessionNonce; verify nonceBinding is derived from sessionNonce inside the circuit (so checking the input is sufficient)",
+    "In Delegation.circom, add RangeCheck(253) for any delegatee-supplied signals not already covered by the cumulative-bit Num2Bits check",
+    "Run npm run compile:circuits and confirm R1CS constraint counts increase by exactly 253 per added check (one Num2Bits(253) = 253 constraints)",
+    "Write range_checks.test.js: for each circuit, test witness generation with in=0, in=2^253-1 (both must succeed), in=BN254_r (must throw), and in=BN254_r+1 (must throw)",
+    "Run npm run test:circuits:fast to confirm all new and existing tests pass",
+    "Update circuits/FORMAL-PROPERTIES.md: add 'Public Signal Range Guarantee' table with columns Signal | Circuit | Range | Method | Attack Class Closed",
+    "Write docs/security/field-overflow-mitigation.md explaining the vulnerability class, affected signals, and remediation",
+    "Run npm run test:contracts to confirm Solidity verifier integration tests still pass with new zkey artifacts after recompile",
+    "Update estimated_constraints in this outline with actual delta observed after compile"
+  ],
+  "estimated_constraints": 3081,
+  "dependencies": [
+    "circomlib Num2Bits template (already a project dependency)",
+    "pot16.ptau \u2014 new AgentPolicy and Delegation zkeys must be regenerated after adding constraints; HumanUniqueness reuses Semaphore ceremony so its zkey must also be rebuilt if signals are added",
+    "snarkjs trusted setup re-run for project-specific circuits (AgentPolicy, Delegation) using existing pot16.ptau",
+    "Solidity verifier contracts must be regenerated from new vkey.json after zkey rebuild",
+    "npm run compile:circuits must complete successfully before test suite can run"
+  ]
+}

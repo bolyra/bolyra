@@ -1,0 +1,92 @@
+{
+  "id": "sdk_designer_circuit_artifact_cdn",
+  "title": "Automatic circuit artifact fetching via CDN with integrity checks",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "packages/artifacts/src/index.ts",
+      "description": "Main entry point for @bolyra/artifacts \u2014 exports fetchArtifact(), resolveArtifacts(), and ArtifactResolver class"
+    },
+    {
+      "type": "sdk",
+      "filename": "packages/artifacts/src/registry.ts",
+      "description": "Version-pinned artifact registry mapping circuit name + version to CDN URL and expected SHA-256 digest"
+    },
+    {
+      "type": "sdk",
+      "filename": "packages/artifacts/src/fetcher.ts",
+      "description": "HTTP fetch + streaming SHA-256 verification; retries on transient failure; throws ArtifactIntegrityError on digest mismatch"
+    },
+    {
+      "type": "sdk",
+      "filename": "packages/artifacts/src/cache.ts",
+      "description": "Local disk cache backed by ~/.bolyra/artifacts/<version>/; hit check skips network; cache entries validated on read"
+    },
+    {
+      "type": "sdk",
+      "filename": "packages/artifacts/src/errors.ts",
+      "description": "Typed error classes: ArtifactIntegrityError, ArtifactFetchError, ArtifactNotFoundError"
+    },
+    {
+      "type": "sdk",
+      "filename": "packages/artifacts/package.json",
+      "description": "@bolyra/artifacts package manifest \u2014 zero runtime deps beyond node built-ins and fetch"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/prover.ts",
+      "description": "Patch proveHandshake() to call ArtifactResolver.resolve() before invoking snarkjs; falls back to locally-built artifacts if BOLYRA_ARTIFACTS_DIR is set"
+    },
+    {
+      "type": "spec",
+      "filename": "packages/artifacts/INTEGRITY.md",
+      "description": "Documents the integrity model: SHA-256 over raw bytes, digest format (hex), registry schema, and how to rotate compromised keys"
+    },
+    {
+      "type": "test",
+      "filename": "packages/artifacts/test/fetcher.test.ts",
+      "description": "Unit tests for fetcher: mock HTTP server, digest match, digest mismatch throws, retry on 5xx"
+    },
+    {
+      "type": "test",
+      "filename": "packages/artifacts/test/cache.test.ts",
+      "description": "Unit tests for cache: cold miss triggers fetch, warm hit skips network, tampered cache entry re-fetches"
+    },
+    {
+      "type": "test",
+      "filename": "packages/artifacts/test/registry.test.ts",
+      "description": "Validates registry entries have non-empty URLs and 64-char hex digests; fails build if entry is malformed"
+    },
+    {
+      "type": "test",
+      "filename": "packages/artifacts/test/integration.test.ts",
+      "description": "End-to-end: resolveArtifacts() for all three circuits against a local HTTP fixture server; verifies files land in temp cache dir"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Update quickstart to remove manual artifact download step; add one-liner showing proveHandshake() works with zero setup"
+    }
+  ],
+  "steps": [
+    "Create packages/artifacts/ workspace package with package.json, tsconfig.json, and empty src/; add to root npm workspaces array",
+    "Define artifact registry in registry.ts: typed ArtifactEntry = { circuit, version, filename, url, sha256 }; seed entries for HumanUniqueness, AgentPolicy, Delegation at current circuit version using GitHub Releases URLs (placeholder until first artifacts release)",
+    "Implement cache.ts: cacheDir defaults to path.join(os.homedir(), '.bolyra', 'artifacts', version); ensureDir on first access; cacheGet() reads file + recomputes SHA-256 and returns null if digest mismatches; cachePut() writes atomically via tmp file + rename",
+    "Implement fetcher.ts: fetchArtifact(entry) streams response into Buffer, computes SHA-256, throws ArtifactIntegrityError if mismatch, returns Buffer on success; add exponential backoff retry (max 3) for 5xx and network errors",
+    "Implement ArtifactResolver in index.ts: resolve(circuitName) = cacheGet ?? (fetchArtifact then cachePut then return path); resolveAll() fans out in parallel for all three circuits",
+    "Add BOLYRA_ARTIFACTS_DIR env override in ArtifactResolver.resolve(): if set, look for file in that dir first (allows CI and local-build workflows to skip CDN entirely)",
+    "Patch sdk/src/prover.ts: import ArtifactResolver; at top of proveHandshake() call resolver.resolveAll() to get { wasmPath, zkeyPath }; pass paths to snarkjs.groth16.fullProve() replacing hardcoded build/ paths",
+    "Write unit tests for fetcher (mock fetch via jest.spyOn(global, 'fetch')), cache (tmp dir per test), and registry schema validation",
+    "Write integration test against a local HTTP server (Node http.createServer serving fixture .wasm/.zkey stubs with correct digests); verify cache dir populated and resolveAll() returns valid paths",
+    "Publish CI step: after circuit compile job, compute SHA-256 of each build artifact (sha256sum), update registry.ts entries, commit with DCO sign-off, tag release and upload artifacts to GitHub Releases",
+    "Update sdk/QUICKSTART.md to remove Circom toolchain prerequisite section; verify zero-config npm install + proveHandshake() flow works end-to-end in a fresh temp directory"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Node 18+ global fetch (no node-fetch shim needed)",
+    "GitHub Releases or S3 bucket for artifact hosting (URLs TBD at first circuit release)",
+    "circuits/build/ artifacts compiled and SHA-256 digests captured as part of CI release pipeline",
+    "@bolyra/sdk workspace dependency on @bolyra/artifacts (add to sdk/package.json)",
+    "npm workspaces root config updated to include packages/artifacts"
+  ]
+}

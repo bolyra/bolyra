@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The runtime-adaptive bitmask predicate evaluated at presentation time (RS supplies requiredScopeMask as public input, circuit evaluates bitwise AND with implication-closure enforcement) is a capability the non-ZK baselines provably cannot match. The rfc7662_advocate explicitly concedes this: 'Selective disclosure via AS policy is issuance-time, not presentation-time. The construction's runtime-adaptive predicate is genuinely novel here.' BBS+ supports equality/range predicates but cannot evaluate bitmask AND with cumulative-bit implication rules inside the credential presentation. The spiffe_engineer's WIMSE+ZK-attestor counterproposal itself requires ZK, confirming the non-ZK baseline cannot replicate this property."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (Section 3: adversary controls AS, network, N-1 agents; does not control chain, vk, honest agent secrets). Five named cryptographic assumptions with reduction sketches for both soundness and privacy games. However, the cryptographer's Attack 1 fatally breaks the privacy game: agentNullifier is a public output computed as Poseidon2(credentialCommitment, requiredScopeMask), and since the adversary knows both C0* and C1*, it computes both candidate nullifiers and matches the observed output to recover b with advantage 1-negl(\u03bb). The claimed bound |Pr[A wins]-1/2| <= Adv_PLONK_zk is invalid \u2014 ZK cannot hide public outputs. Additionally, subverted SRS is not in the adversary model (cryptographer Attack 2), undermining the 'adversarial-AS soundness' claim since it silently imports equivalent trust in ceremony participants. Soundness reduction survives; privacy reduction does not."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 maps every construction element to existing Bolyra primitives: Poseidon (all circuits), EdDSAPoseidonVerifier (AgentPolicy G3), BinaryMerkleRoot depth 20 (shared), Num2Bits, LessThan. Section 6 gives detailed per-gadget constraint counts totaling ~17,650 \u2014 well within the pot16.ptau budget of 2^16=65,536. PLONK build already exists for AgentPolicy in circuits/build/. Proving time targets stated: <500ms rapidsnark, <3s snarkjs, <2ms on-chain verification. Proof size 768 bytes. No new cryptographic primitives required. The circuit is a restructured specialization of the existing AgentPolicy circuit."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 surfaced multiple real attacks that weaken claims: (1) cryptographer Attack 1 breaks the formal privacy game via public nullifier \u2014 unanswerable without construction change (blinded nullifier or game reformulation); (2) cryptographer Attack 3 identifies response-size side-channel (900 bytes vs 60 bytes) that survives constant-time budgeting, enabling the bit-extraction attack the construction claims to defeat; (3) spiffe_engineer Attack 2 shows cross-RS replay due to no audience binding (no RS nonce/identity in circuit); (4) cryptographer Attack 4 shows RS-controlled currentTimestamp enables expiry bypass and proof replay. The soundness argument survives (no attack breaks forgery resistance), and the construction does identify and partially mitigate the timing attack. But three attacks (nullifier privacy break, response-size leak, cross-RS replay) are outside the stated threat model and unanswered."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Section 7 names a concrete deployment: Columbia Credit Union (Vancouver, WA, $3.4B assets), 12-CU consortium via Northwest CU Association, AI agent loan pre-qualification across federated data lake. The adversarial-AS risk is load-bearing, not hypothetical \u2014 rival CUs do not trust each other's AS infrastructure, and a CrowdStrike-style outage is a named operational precedent. Regulatory alignment cites NCUA Letter 24-CU-03 (third-party AI risk) and FFIEC 2025 API security guidance. The minimum-necessary-permissions property is a regulatory requirement under GLBA Safeguards Rule, not a nice-to-have. While cu_ciso correctly notes these don't mandate ZK specifically, the scenario where cryptographic proof of minimum-necessary scope replaces AS trust in a multi-institution consortium is concrete and stakeholder-identified."
+    }
+  },
+  "gaps": [
+    "Privacy game is broken: agentNullifier (public output) is a deterministic function of credentialCommitment, letting the adversary trivially distinguish b=0 from b=1. Fix: blind the nullifier with private randomness (e.g., Poseidon3(credentialCommitment, requiredScopeMask, blindingNonce)) or restrict the game to single-commitment model.",
+    "Response-size side-channel: accepted proofs (~900 bytes) vs rejected errors (~60 bytes) leak the accept/reject bit through TLS record sizes, bypassing constant-time budgeting. Fix: pad all responses to constant size before transport.",
+    "No audience binding: agentNullifier and proof contain no RS identity or RS-supplied nonce, enabling cross-RS replay of valid proofs. Fix: add rsNonce or rsIdentifier as a public input constrained in the circuit.",
+    "RS-controlled currentTimestamp has no freshness anchor \u2014 a malicious RS can supply timestamp=0 to bypass expiry, or replay proofs across time. Fix: bind to on-chain block hash or make expiryTimestamp public so RS enforces expiry with its own clock.",
+    "SRS trust assumption (pot16.ptau ceremony integrity) is unstated in the threat model. Fix: name the specific ceremony, link the public transcript, and state the 1-of-N honest participant assumption.",
+    "Revocation SLA unspecified: 30-entry root history buffer creates an unbounded revocation window. Fix: specify maximum root age, cache TTL, and revocation nullifier blocklist."
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

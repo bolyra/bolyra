@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "sdk_designer_proof_envelope_codec",
+      "persona": "sdk_designer",
+      "title": "Self-describing proof envelope with content-type and version negotiation",
+      "dimension": "adoption",
+      "description": "Currently proofs are bare JSON arrays of bigints with implicit positional semantics \u2014 integrators must know that `publicSignals[0]` is `humanMerkleRoot` and `publicSignals[4]` is `nonceBinding`. Define a `BolyraEnvelope` codec (msgpack or CBOR with JSON fallback) that wraps proofs with `{ version: '0.2', circuit: 'HumanUniqueness', provingSystem: 'groth16', publicSignals: { humanMerkleRoot, nullifierHash, nonceBinding, ... }, proof: {...} }`. Add `BolyraEnvelope.encode()` / `BolyraEnvelope.decode()` to both TS and Python SDKs. This eliminates the `publicSignals[5]` positional indexing that caused the chainId mismatch bug in the cross-chain experiment.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_proof_envelope_codec",
+      "adoption": 19,
+      "standards": 18,
+      "completeness": 18,
+      "correctness": 17,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_000_sdk_designer_proof_envelope_codec",
+    "score": {
+      "experiment_id": "tier2_000_sdk_designer_proof_envelope_codec",
+      "total": 25,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 3,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 13,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Machine-readable conformance test vectors for all three circuits",
+      "dimension": "standards",
+      "description": "Create spec/test-vectors/ with JSON files covering: valid handshake (human+agent), expired agent credential, stale Merkle root, scope subset violation, cumulative bit encoding violation, delegation chain (1 and 3 hops), nonce replay, and revoked identity. Each vector includes named inputs, expected witness outputs or expected failure reason. A conformance runner (spec/conformance-runner.js) loads vectors and runs them against the circuit witness generator. This is the minimum bar for any alternative implementation to prove compatibility.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 18,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 76,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_001_standards_architect_conformance_test_vectors",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_conformance_test_vectors",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Add human tree root history buffer matching agent tree's 30-root buffer",
+      "dimension": "correctness",
+      "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but humanTree has no such buffer \u2014 any new enrollment immediately invalidates in-flight human proofs. This is an interop hazard: a compliant verifier cannot know whether a human proof was generated against a recently-valid root. Add the same ROOT_HISTORY_SIZE=30 ring buffer for humanTree roots, with an isKnownHumanRoot() view function. Update the IETF draft's Security Considerations to document the root staleness window.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 17,
+      "standards": 15,
+      "completeness": 20,
+      "correctness": 18,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_002_standards_architect_human_root_history_parity",
+    "score": {
+      "experiment_id": "tier2_002_standards_architect_human_root_history_parity",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 2,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_scope_blinding_salt",
+      "persona": "standards_architect",
+      "title": "Add blinding salt to scope commitment to prevent brute-force",
+      "dimension": "correctness",
+      "description": "scopeCommitment = Poseidon2(bitmask, credCommitment) is deterministic over a 256-value bitmask space (8 bits). An observer can precompute all 256 possible commitments for a known credCommitment and determine the exact permission set. Change to Poseidon3(bitmask, credCommitment, blindingSalt) where blindingSalt is a private random field element. Update AgentPolicy, Delegation circuits, SDK proof generation, and the IETF draft's privacy analysis section. This is a protocol-level privacy fix that must happen before any production deployment.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_scope_blinding_salt",
+      "adoption": 18,
+      "standards": 17,
+      "completeness": 21,
+      "correctness": 19,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_003_standards_architect_scope_blinding_salt",
+    "score": {
+      "experiment_id": "tier2_003_standards_architect_scope_blinding_salt",
+      "total": 24,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 2,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "sdk_designer_five_line_quickstart",
+      "persona": "sdk_designer",
+      "title": "Zero-config quickstart: 5 lines from npm install to verified handshake",
+      "dimension": "adoption",
+      "description": "The current `proveHandshake` requires the caller to resolve WASM/zkey paths, construct Merkle proof objects, and manage nonce generation. Add a `BolyraClient` class with `new BolyraClient({ provider })` that auto-discovers circuit artifacts (embedded via `postinstall` or resolved from `@bolyra/artifacts`), fetches Merkle proofs from the on-chain registry, generates session nonces, and exposes `client.handshake(humanSecret, agentCredential)` returning a verified result. Target: `npm install @bolyra/sdk && const result = await new BolyraClient({provider}).handshake(secret, cred)` \u2014 5 lines including import.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_five_line_quickstart",
+      "adoption": 24,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_004_sdk_designer_five_line_quickstart",
+    "score": {
+      "experiment_id": "tier2_004_sdk_designer_five_line_quickstart",
+      "total": 34,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 7,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 8,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "sdk_designer_structured_error_codes",
+      "persona": "sdk_designer",
+      "title": "Typed error hierarchy with machine-readable codes for SDK and contracts",
+      "dimension": "adoption",
+      "description": "The current SDK throws generic `new Error(string)` and the IdentityRegistry uses unparameterized custom errors (e.g., `StaleAgentRoot()` with no context). Replace SDK errors with a typed `BolyraError` class hierarchy carrying `code` (enum like `STALE_ROOT`, `NONCE_MISMATCH`, `SCOPE_SUBSET_VIOLATION`), `context` object, and human-readable `message`. On the Solidity side, add indexed parameters to custom errors (e.g., `StaleAgentRoot(uint256 providedRoot, uint256 latestRoot)`). Publish the error code enum in both `@bolyra/sdk` and `bolyra` Python package so integrators can programmatically catch and recover from specific failure modes without string-parsing.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_structured_error_codes",
+      "adoption": 20,
+      "standards": 16,
+      "completeness": 18,
+      "correctness": 16,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_005_sdk_designer_structured_error_codes",
+    "score": {
+      "experiment_id": "tier2_005_sdk_designer_structured_error_codes",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "sdk_designer_fluent_delegation_builder",
+      "persona": "sdk_designer",
+      "title": "Fluent delegation chain builder with compile-time scope narrowing",
+      "dimension": "adoption",
+      "description": "The existing delegation API requires manually constructing Merkle proofs, scope bitmasks, and chaining `previousScopeCommitment` across hops \u2014 a footgun-rich surface. Build a `DelegationChain.from(agentCredential).narrowScope(Permission.FINANCIAL_SMALL | Permission.READ_DATA).delegateTo(delegateeCredential).build()` fluent builder that validates cumulative bit encoding at construction time (TypeScript generics prevent expanding scope), auto-fetches Merkle proofs from the registry, and serializes the chain into the wire format the contract expects. The builder produces a `DelegationChainProof` that `verifyHandshake` already knows how to consume.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_fluent_delegation_builder",
+      "adoption": 21,
+      "standards": 14,
+      "completeness": 19,
+      "correctness": 15,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_006_sdk_designer_fluent_delegation_builder",
+    "score": {
+      "experiment_id": "tier2_006_sdk_designer_fluent_delegation_builder",
+      "total": 21,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 15,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 2,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "product_visionary_session_token_offchain",
+      "persona": "product_visionary",
+      "title": "Off-chain session token from verified handshake",
+      "dimension": "completeness",
+      "description": "After a successful on-chain handshake verification, emit a signed JWT (or SD-JWT) session token that encodes the verified scope, nullifiers, and expiry. Downstream tool calls can present this token instead of re-proving on-chain, enabling sub-100ms auth for agentic workflows. The token references the on-chain transaction hash as its trust anchor. This is the missing bridge between ZKP correctness and real-time agentic commerce latency requirements \u2014 without it, every tool call requires a fresh proof or an on-chain transaction, making Bolyra unusable for high-frequency agent-to-agent interactions.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "product_visionary_session_token_offchain",
+      "adoption": 22,
+      "standards": 14,
+      "completeness": 20,
+      "correctness": 13,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_007_product_visionary_session_token_offchain",
+    "score": {
+      "experiment_id": "tier2_007_product_visionary_session_token_offchain",
+      "total": 25,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 13,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 1,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

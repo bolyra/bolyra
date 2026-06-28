@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "persona": "standards_architect",
+  "title": "Add human tree root history buffer matching agent tree's 30-root buffer",
+  "dimension": "correctness",
+  "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but humanTree has no equivalent \u2014 any new enrollment immediately invalidates all in-flight human proofs. This is an interop hazard: a compliant prover generating a proof during an enrollment window gets a spurious rejection. Add the same ROOT_HISTORY_SIZE=30 circular buffer to humanTree with an isKnownHumanRoot() check in verifyHandshake(). This is a one-line architectural parity fix but has significant correctness impact. Deliver: contract change, updated test coverage, and a note in the IETF draft Security Considerations about root staleness windows.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "standards_architect_human_root_history_parity",
+  "adoption": 14,
+  "standards": 16,
+  "completeness": 15,
+  "correctness": 22,
+  "total": 67,
+  "verdict": "consider"
+}

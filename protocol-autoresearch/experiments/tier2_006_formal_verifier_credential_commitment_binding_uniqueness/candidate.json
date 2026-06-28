@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_credential_commitment_binding_uniqueness",
+  "persona": "formal_verifier",
+  "title": "Prove credential commitment uniquely binds all five fields",
+  "dimension": "correctness",
+  "description": "AgentPolicy computes credentialCommitment = Poseidon5(modelHash, opPkAx, opPkAy, permissionBitmask, expiryTimestamp). Poseidon with fixed arity is collision-resistant, but the circuit does not enforce that all five inputs are in the BN254 scalar field (only permissionBitmask and expiryTimestamp get Num2Bits range checks). modelHash and the pubkey components are unchecked \u2014 if modelHash exceeds the field modulus r, it wraps, creating two distinct preimages for the same commitment. Add Num2Bits(254) checks on modelHash (or assert it is a Poseidon output, which is inherently in-field), and write a property test demonstrating that no two distinct (modelHash, opPkAx, opPkAy, bitmask, expiry) tuples can produce the same credentialCommitment.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_credential_commitment_binding_uniqueness",
+  "adoption": 12,
+  "standards": 15,
+  "completeness": 19,
+  "correctness": 22,
+  "total": 68,
+  "verdict": "consider"
+}

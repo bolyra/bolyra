@@ -1,0 +1,16 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "persona": "framework_integrator",
+  "title": "Standardized proof envelope with application/bolyra+json content type",
+  "dimension": "standards",
+  "description": "Define a JSON envelope format for proof payloads that all framework integrations use: {version, circuit, publicSignals[], proof{pi_a, pi_b, pi_c}, metadata{framework, sdkVersion, provingTimeMs}}. Register application/bolyra+json as the content type. This lets any HTTP-based agent framework (MCP servers, OpenAI function calling proxies, REST tool servers) accept Bolyra proofs via a standard Authorization header (Bearer bolyra:<base64-envelope>) without framework-specific code. Include a generic Express/FastAPI middleware that validates the header, so tool servers get ZK auth in 3 lines.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "framework_integrator_proof_envelope_content_type",
+  "adoption": 20,
+  "standards": 19,
+  "completeness": 16,
+  "correctness": 14,
+  "total": 69,
+  "verdict": "consider"
+}

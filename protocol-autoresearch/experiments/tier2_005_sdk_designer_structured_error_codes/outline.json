@@ -1,0 +1,84 @@
+{
+  "id": "sdk_designer_structured_error_codes",
+  "title": "Typed error hierarchy with machine-readable codes for SDK and contracts",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/errors.ts",
+      "description": "BolyraErrorCode enum and BolyraError base class with code, context, and message fields; subclasses: StaleRootError, NonceMismatchError, ScopeSubsetViolationError, CredentialExpiredError, InvalidProofError, DIDResolutionError"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export BolyraError, BolyraErrorCode, and all subclasses from public API surface"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/verify.ts",
+      "description": "Replace generic Error throws with typed BolyraError subclasses carrying structured context objects (nonces, roots, permission bitmasks)"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/credential.ts",
+      "description": "Replace generic Error throws in credential creation/delegation paths with typed errors"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add indexed parameters to all custom errors: StaleAgentRoot(uint256 providedRoot, uint256 latestRoot), NonceMismatch(bytes32 expected, bytes32 actual), ScopeSubsetViolation(uint8 delegatedBits, uint8 parentBits), CredentialExpired(uint256 expiry, uint256 blockTimestamp)"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/errors.py",
+      "description": "BolyraErrorCode IntEnum mirroring TS enum values; BolyraError base exception with code and context dict; subclasses matching TS hierarchy for programmatic catch in Python integrations"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/__init__.py",
+      "description": "Export BolyraError, BolyraErrorCode, and subclasses from package public API"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/error-codes.md",
+      "description": "Canonical error code registry: numeric value, symbolic name, triggering condition, context fields, recovery guidance for each code"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/errors.test.ts",
+      "description": "Unit tests: each BolyraError subclass carries correct code and context fields; verify integration paths throw typed errors on invalid inputs"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistryErrors.test.ts",
+      "description": "Hardhat tests asserting revert with parameterized error payloads using ethers.js custom error decoding; assert providedRoot, latestRoot etc. in revert data"
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_errors.py",
+      "description": "Pytest: BolyraError subclasses are catchable as BolyraError; code enum values match TS counterparts; context dict populated on throw"
+    }
+  ],
+  "steps": [
+    "Audit all `throw new Error(...)` sites in sdk/src/ and all custom error definitions in contracts/src/ to build the complete error inventory",
+    "Define BolyraErrorCode numeric enum in sdk/src/errors.ts (STALE_ROOT=1, NONCE_MISMATCH=2, SCOPE_SUBSET_VIOLATION=3, CREDENTIAL_EXPIRED=4, INVALID_PROOF=5, DID_RESOLUTION_FAILED=6, INVALID_PERMISSIONS=7)",
+    "Implement BolyraError base class extending Error with readonly fields: code: BolyraErrorCode, context: Record<string, unknown>, and override name/message for structured logging",
+    "Implement typed subclasses (StaleRootError, NonceMismatchError, ScopeSubsetViolationError, CredentialExpiredError, InvalidProofError) each accepting strongly-typed context params and calling super with code + serialized context",
+    "Replace all generic throws in sdk/src/verify.ts, credential.ts, handshake.ts with the appropriate typed subclass, passing relevant context values (actual vs expected nonce, provided vs latest root, bitmasks)",
+    "Add parameterized custom errors to IdentityRegistry.sol: replace bare `StaleAgentRoot()` etc. with `StaleAgentRoot(uint256 providedRoot, uint256 latestRoot)` and update all revert sites to pass values",
+    "Regenerate TypeScript ABI bindings (typechain) for contracts so SDK can decode parameterized revert data from on-chain calls into BolyraError instances",
+    "Mirror BolyraErrorCode as IntEnum in sdk-python/bolyra/errors.py using the same numeric values as the TS enum; implement BolyraError(Exception) base and subclasses",
+    "Update subprocess bridge in sdk-python to parse structured error payloads from JS process stderr/stdout and re-raise as Python BolyraError subclasses",
+    "Write spec/error-codes.md: table with code value, name, triggering condition, context field schema, and recovery guidance",
+    "Write tests: sdk/test/errors.test.ts (unit), contracts/test/IdentityRegistryErrors.test.ts (Hardhat integration with custom error decoding), sdk-python/tests/test_errors.py",
+    "Update sdk/QUICKSTART.md and sdk-python/README.md with error handling examples showing programmatic catch by code",
+    "Run full test suite (npm test + pytest) and verify no generic Error leaks remain in the public-facing code paths"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk current throw sites audit",
+    "contracts/src/IdentityRegistry.sol custom error definitions",
+    "typechain or ethers.js v6 custom error ABI decoding support",
+    "sdk-python subprocess bridge (sdk-python/bolyra/bridge.py or equivalent)",
+    "spec/did-method-bolyra.md for DIDResolutionError context field definitions"
+  ]
+}

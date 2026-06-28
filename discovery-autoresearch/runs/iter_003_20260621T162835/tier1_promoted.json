@@ -1,0 +1,182 @@
+[
+  {
+    "id": "langchain_credential_sidecar",
+    "title": "ZKP Credential Middleware for LangChain Agent Auth",
+    "description": "LangChain's sandbox auth proxies inject credentials via sidecar to prevent exfiltration but still rely on plaintext OAuth tokens at rest. Bolyra's existing LangChain integration could replace stored tokens with ZKP proof-of-enrollment, letting agents prove service authorization without the proxy ever seeing the credential material.",
+    "category": "developer_tools",
+    "source": "langchain_auth",
+    "preliminary_demand": 20,
+    "preliminary_timing": 22,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 20,
+    "scores": {
+      "demand": 20,
+      "timing": 22,
+      "fit": 24,
+      "feasibility": 20,
+      "total": 86
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "eu_ai_act_transparency",
+    "title": "Privacy-Preserving Agent Identity Disclosure for EU AI Act Article 50",
+    "description": "The EU AI Act mandates agent identity disclosure and interaction logging by August 2026. Bolyra's human-uniqueness and agent-policy proofs let deployers satisfy transparency requirements \u2014 proving an agent's operator, model class, and permission scope \u2014 without leaking proprietary model details or user PII to regulators or counterparties.",
+    "category": "standards",
+    "source": "eu_ai_act_identity",
+    "preliminary_demand": 23,
+    "preliminary_timing": 24,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 17,
+    "scores": {
+      "demand": 23,
+      "timing": 24,
+      "fit": 22,
+      "feasibility": 17,
+      "total": 86
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "github_agent_secret_leak",
+    "title": "ZKP-Based Agent Auth for CI/CD Pipelines",
+    "description": "GitHub's agentic workflows expose secrets via environment variables susceptible to prompt injection. Bolyra's handshake protocol could let agents prove authorization without ever holding raw credentials, replacing token-in-env with a zero-knowledge proof of delegated permission scoped to the specific workflow step.",
+    "category": "developer_tools",
+    "source": "github_agent_auth",
+    "preliminary_demand": 22,
+    "preliminary_timing": 20,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 15,
+    "scores": {
+      "demand": 22,
+      "timing": 20,
+      "fit": 23,
+      "feasibility": 15,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "crewai_delegation_scope",
+    "title": "Cryptographic Delegation Narrowing for Multi-Agent Systems",
+    "description": "CrewAI's allow_delegation flag is a runtime boolean with no cryptographic enforcement \u2014 any permitted agent can pass full authority to subordinates. Bolyra's Delegation circuit enforces one-way scope narrowing on-chain, giving CrewAI operators a verifiable guarantee that sub-delegated agents can never escalate permissions beyond what their parent was granted.",
+    "category": "developer_tools",
+    "source": "crewai_delegation",
+    "preliminary_demand": 17,
+    "preliminary_timing": 19,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 19,
+    "scores": {
+      "demand": 17,
+      "timing": 19,
+      "fit": 25,
+      "feasibility": 19,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "stripe_agentic_checkout",
+    "title": "ZKP Handshake for Agent-Native Payment Authorization",
+    "description": "Stripe identifies agent-native checkout as a key agentic commerce pillar but current flows rely on API keys or OAuth scopes that agents hold in plaintext. Bolyra's mutual handshake protocol could let a shopping agent prove it holds a valid delegation from a human (with a specific FINANCIAL tier) to a merchant's payment endpoint, without exposing the human's identity or the agent's raw credentials.",
+    "category": "agentic_commerce",
+    "source": "agentic_commerce",
+    "preliminary_demand": 22,
+    "preliminary_timing": 21,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 14,
+    "scores": {
+      "demand": 22,
+      "timing": 21,
+      "fit": 23,
+      "feasibility": 14,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "vc_infra_layer_play",
+    "title": "Agent Identity Infrastructure as VC-Fundable Primitive",
+    "description": "With $300B in Q1 2026 VC and 63% going to AI, agent infrastructure is the hottest funding category. Bolyra occupies a unique niche \u2014 cryptographic identity primitive rather than application layer \u2014 that maps to the 'picks and shovels' thesis investors favor during platform shifts. The open-source SDK + on-chain verifier model mirrors the playbook that attracted infrastructure-stage capital.",
+    "category": "other",
+    "source": "agent_infra_vc",
+    "preliminary_demand": 18,
+    "preliminary_timing": 23,
+    "preliminary_fit": 19,
+    "preliminary_feasibility": 18,
+    "scores": {
+      "demand": 18,
+      "timing": 23,
+      "fit": 19,
+      "feasibility": 18,
+      "total": 78
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "oracle_spend_guardrails",
+    "title": "On-Chain Spend Policy Enforcement via Cumulative-Bit Permissions",
+    "description": "Oracle's evidence-and-control layer blocks agents that exceed budget thresholds, but enforcement is centralized and auditable only by the platform operator. Bolyra's 8-bit cumulative permission model (FINANCIAL_SMALL / MEDIUM / UNLIMITED) maps directly to tiered spend gates and can be verified on-chain, giving enterprises a tamper-proof, auditable spend ceiling that no agent or intermediary can silently escalate.",
+    "category": "enterprise_auth",
+    "source": "enterprise_ai_spending",
+    "preliminary_demand": 19,
+    "preliminary_timing": 17,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 16,
+    "scores": {
+      "demand": 19,
+      "timing": 17,
+      "fit": 24,
+      "feasibility": 16,
+      "total": 76
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "silverfort_nhi_zkp",
+    "title": "ZKP Layer for Non-Human Identity Lifecycle Management",
+    "description": "Silverfort's Fabrix acquisition signals enterprise demand for unified human + non-human + AI agent identity. Bolyra's architecture already unifies human (Semaphore-based) and agent (EdDSA credential) identity under one proof system \u2014 positioning it as the cryptographic primitive layer that identity platforms like Silverfort could embed rather than build from scratch.",
+    "category": "enterprise_auth",
+    "source": "agent_identity_funding",
+    "preliminary_demand": 20,
+    "preliminary_timing": 22,
+    "preliminary_fit": 21,
+    "preliminary_feasibility": 13,
+    "scores": {
+      "demand": 20,
+      "timing": 22,
+      "fit": 21,
+      "feasibility": 13,
+      "total": 76
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "msft_conditional_access_zkp",
+    "title": "Zero-Knowledge Agent Risk Attestation for Entra Conditional Access",
+    "description": "Microsoft's Agent Identity Perimeter evaluates agent risk at every resource touch but relies on centralized Entra telemetry. Bolyra could provide a privacy-preserving risk attestation layer where agents prove compliance with Conditional Access policies (model hash, operator identity, permission tier) without exposing the underlying credential to the identity provider.",
+    "category": "enterprise_auth",
+    "source": "microsoft_agent_identity",
+    "preliminary_demand": 21,
+    "preliminary_timing": 18,
+    "preliminary_fit": 20,
+    "preliminary_feasibility": 12,
+    "scores": {
+      "demand": 21,
+      "timing": 18,
+      "fit": 20,
+      "feasibility": 12,
+      "total": 71
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  }
+]

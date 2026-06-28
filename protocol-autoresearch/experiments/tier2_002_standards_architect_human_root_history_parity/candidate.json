@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "persona": "standards_architect",
+  "title": "Add humanTree root history buffer matching agentTree's 30-root buffer",
+  "dimension": "correctness",
+  "description": "IdentityRegistry maintains a 30-root history buffer for agentTree (preventing proof staleness during concurrent enrollments) but humanTree has no such buffer \u2014 any new human enrollment immediately invalidates in-flight proofs. Add an identical ROOT_HISTORY_SIZE=30 circular buffer for humanTree roots, update verifyHandshake to check humanMerkleRoot against the buffer instead of requiring an exact current-root match. This is a protocol-level parity bug: the IETF draft implies both trees have liveness tolerance but only one does.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "standards_architect_human_root_history_parity",
+  "adoption": 19,
+  "standards": 17,
+  "completeness": 19,
+  "correctness": 21,
+  "total": 76,
+  "verdict": "promote"
+}

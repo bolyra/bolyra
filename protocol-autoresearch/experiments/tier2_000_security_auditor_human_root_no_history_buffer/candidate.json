@@ -1,0 +1,16 @@
+{
+  "id": "security_auditor_human_root_no_history_buffer",
+  "persona": "security_auditor",
+  "title": "HumanUniqueness proofs go stale instantly \u2014 no root history buffer",
+  "dimension": "correctness",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but has NO equivalent for humanTree. The contract checks `humanTree._root()` (current root only) against the humanMerkleRoot public output. Any new enrollment between proof generation and on-chain verification invalidates the proof. This is a liveness denial-of-service: a single enrollment transaction front-runs every in-flight human proof. Add a `humanRootHistory[30]` ring buffer identical to `agentRootHistory`, update it in `enrollHuman()`, and check `humanMerkleRoot` against the buffer in `verifyHandshake()`.",
+  "candidate_id": "security_auditor_human_root_no_history_buffer",
+  "adoption": 19,
+  "standards": 16,
+  "completeness": 20,
+  "correctness": 20,
+  "total": 75,
+  "verdict": "promote"
+}

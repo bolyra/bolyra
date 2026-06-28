@@ -1,0 +1,267 @@
+[
+  {
+    "id": "cand_enablement_auditor_digital_signature_genus_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "verifying, within the circuit, a digital signature, verified within the delegation zero-knowledge proof circuit using a circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve, of the delegator over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp",
+    "claim_text": "verifying, within the circuit, an EdDSA signature of the delegator using Poseidon-based hashing on the Baby Jubjub twisted Edwards curve embedded in the BN128 scalar field, the signature being over a delegation token computed as a Poseidon hash of the previous scope commitment, the delegatee's credential commitment, the delegatee's permission bitmask, and the delegatee's expiry timestamp",
+    "rationale": "Directly matches the recommended direction by replacing the broad functional genus with the sole disclosed embodiment: EdDSA with Poseidon hashing on Baby Jubjub over BN128. This eliminates the Ariad single-species-for-genus problem and the enablement gap for unspecified curve/signature combinations. The specification at Section 9.2 fully enables this exact combination via circomlib's EdDSAPoseidonVerifier.",
+    "targets_weakness": "enablement_auditor_digital_signature_genus",
+    "tradeoffs": "Loses coverage of alternative in-circuit signature schemes (ECDSA on secp256k1 via non-native arithmetic, Schnorr variants, future curve embeddings). Competitors using a different signature algorithm in their delegation circuit would not infringe this claim element.",
+    "score": {
+      "total": 61,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 16,
+          "max_points": 20,
+          "evidence": "The claim recites specific cryptographic primitives at the hardware/circuit level: EdDSA signature verification using Poseidon-based hashing on Baby Jubjub twisted Edwards curve embedded in BN128 scalar field, performed within a ZKP circuit. This is not 'verify a signature on a computer' \u2014 it specifies curve embedding topology, hash function arity, and in-circuit constraint execution. The delegation token is a concrete Poseidon hash over four specific inputs. This reads as specific technology tied to circuit constraints, not an abstract idea.",
+          "critique": "An examiner could still argue the claim is directed to the abstract idea of 'verifying authorization in a delegation chain' with the cryptographic specifics being merely the particular technology used to implement it (Electric Power Group pattern). However, the in-circuit verification \u2014 where the signature check is itself a set of R1CS constraints within the SNARK \u2014 is a specific machine transformation that goes beyond conventional post-hoc signature verification. The BN128/Baby Jubjub embedding is a technical design choice with real engineering tradeoffs, not mere field-of-use narrowing."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 12,
+          "max_points": 20,
+          "evidence": "The individual components are known: EdDSA on Baby Jubjub (Semaphore v4, MACI), Poseidon hashing in Circom (iden3, Tornado Cash), delegation token as hash of permissions (UCAN/Biscuit in cleartext, DAC 2008 in ZK). However, the specific integration \u2014 in-circuit EdDSA verification over a Poseidon-hashed delegation token that chains scope commitments binding both permission bitmasks and credential commitments \u2014 requires combining at least 4 references: Semaphore (EdDSA/Poseidon/Baby Jubjub), UCAN/Biscuit (capability attenuation), Tornado Nova (chained Poseidon commitments in ZK), and DAC 2008 (private delegation). The motivation to combine the specific four-input delegation token structure (previous scope commitment + credential commitment + permission bitmask + expiry) within a single circuit is not obvious from any reference.",
+          "critique": "A motivated examiner would note that circomlib's EdDSAPoseidonVerifier is a publicly available library component, and hashing four fields with Poseidon before signing is a routine application of the library. The delegation token structure is somewhat predictable given the problem definition. The combination is strained but not unreachable \u2014 I'd estimate a 3-reference rejection is plausible but defensible with secondary considerations (teaching away from in-circuit signature verification due to constraint cost)."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 18,
+          "max_points": 20,
+          "evidence": "The candidate explicitly narrows to the sole disclosed embodiment: EdDSA with Poseidon hashing on Baby Jubjub over BN128 via circomlib's EdDSAPoseidonVerifier. Section 9.2 of the spec fully enables this exact combination. The four delegation token inputs (previous scope commitment, delegatee credential commitment, delegatee permission bitmask, delegatee expiry timestamp) are each defined and demonstrated in the specification. Every term in the claim maps to a concrete implementation in the codebase (Delegation.circom). This is the Ariad fix done correctly \u2014 claiming the species you actually possess.",
+          "critique": "Near-perfect support. The only minor gap: the claim says 'Poseidon-based hashing' rather than specifying the exact arity (e.g., Poseidon-4 vs Poseidon-5), but this is adequately supported since the spec discloses the specific arity used and 'Poseidon-based' is a well-defined term of art. No Nautilus definiteness concerns."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 7,
+          "max_points": 20,
+          "evidence": "The tradeoffs section of the candidate itself identifies the escape: use a different in-circuit signature scheme. A competitor could use ECDSA on secp256k1 via non-native field arithmetic (Circom ECDSA libraries exist from 0xPARC), Schnorr signatures on a different embedded curve, or BLS signatures with pairing-friendly curves. Swapping EdDSA-on-Baby-Jubjub for any alternative in-circuit signature verification escapes this claim element. This is a days-of-work escape, not hours (non-native arithmetic circuits are more complex), but it's a known, documented path.",
+          "critique": "The narrowing to EdDSA/Baby Jubjub/BN128 is the direct cause of the design-around weakness. Any competitor building a similar delegation system would simply choose a different signature primitive. The 0xPARC secp256k1 ECDSA Circom circuits are production-tested. The escape cost is moderate \u2014 maybe 1-2 weeks to swap and re-benchmark \u2014 but the path is clear and well-lit. This is the classic species-claim tradeoff: you gain 112 support but lose design-around resistance."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 8,
+          "max_points": 20,
+          "evidence": "The claim covers exactly one embodiment: EdDSA/Poseidon/Baby Jubjub/BN128 delegation circuits. This covers Bolyra's primary product implementation. It does not cover competitors using different curves, different signature schemes, different hash functions, or non-SNARK ZK systems (STARKs, folding schemes). It does not extend to future CIP candidates like recursive SNARKs (which might use different curve cycles like BLS12-381/BW6-761). The commercial coverage is limited to implementations that happen to use the exact same cryptographic stack.",
+          "critique": "This is the inevitable cost of the enablement fix. The original genus language ('circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field') would have scored 14-15 on scope but failed on 112. The narrowed claim protects only against exact copycats using the same circomlib primitives. For a protocol that aspires to be a standard (IETF draft, DID method), this is particularly limiting \u2014 if the standard gains traction, implementations on different curves would not infringe."
+        }
+      }
+    }
+  },
+  {
+    "id": "cand_competitor_attorney_baby_jubjub_lock_02",
+    "strategy": "genus_with_species",
+    "claim_refs": [
+      4
+    ],
+    "original_language": "both coordinates of the operator's EdDSA public key on the Baby Jubjub elliptic curve",
+    "claim_text": "both coordinates of the operator's public key on a twisted Edwards elliptic curve embedded in the scalar field of the proof system's pairing-friendly base curve",
+    "rationale": "Claim 4 defines the credential commitment's five-input Poseidon hash. Hardcoding 'EdDSA on Baby Jubjub' here lets a competitor swap to Schnorr-on-Bandersnatch and avoid literal infringement on the credential structure. The genus 'twisted Edwards curve embedded in the scalar field' captures the functional requirement (circuit-friendly in-field arithmetic) without naming a single curve. The specification's Section 9.2 explains why the curve must be embedded in the base field, providing written-description support for the genus.",
+    "targets_weakness": "competitor_attorney_baby_jubjub_lock",
+    "tradeoffs": "Drops explicit 'EdDSA' from Claim 4, which slightly widens the signature-scheme genus beyond EdDSA to include Schnorr and other schemes on twisted Edwards curves. This is intentional \u2014 it blocks the Schnorr design-around \u2014 but may draw a restriction requirement if the examiner considers EdDSA and Schnorr distinct species.",
+    "score": {
+      "total": 68,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "The revised language still recites a concrete cryptographic mechanism: a five-input Poseidon hash over specific inputs including both coordinates of a public key on a twisted Edwards curve embedded in the scalar field. This ties to specific mathematical structure (curve embedding, field arithmetic) rather than a pure abstract idea. However, broadening from 'EdDSA on Baby Jubjub' to a genus of twisted Edwards curves makes the claim slightly more functional \u2014 'embedded in the scalar field of the pairing-friendly base curve' describes a *result* (circuit-friendly arithmetic) rather than a specific curve identity.",
+          "critique": "An examiner citing Electric Power Group could argue that 'twisted Edwards curve embedded in the scalar field' is a mathematical relationship, not a specific machine transformation. The saving grace is the five-input Poseidon hash structure surrounding it, which anchors the claim in concrete circuit operations. Net: the genus broadening costs ~1 point versus the original Baby Jubjub specificity but doesn't collapse into abstract idea territory."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 12,
+          "max_points": 20,
+          "evidence": "The genus 'twisted Edwards curve embedded in the scalar field' is a well-known design pattern in ZK circuit engineering \u2014 it's the exact reason Baby Jubjub, Bandersnatch, and JubJub all exist. Any practitioner selecting a signature curve for in-circuit verification would independently arrive at this constraint. Semaphore v4 uses Baby Jubjub for exactly this reason; Zcash uses JubJub for the same reason. The five-input Poseidon hash structure binding (modelHash, pubkey_x, pubkey_y, permissions, expiry) remains the non-obvious integration, but the curve genus itself is a textbook requirement, not an inventive step.",
+          "critique": "A motivated examiner combines Semaphore v4 (Poseidon commitment over EdDSA keys on embedded curve) + Iden3 circuits (credential commitments with attributes in Poseidon) + any ZK textbook explaining embedded curve selection. The genus language doesn't add obviousness defense \u2014 it merely describes a constraint any skilled practitioner would apply. The novelty must come from the five-input structure and its role in the broader protocol, not from the curve genus."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The rationale claims Section 9.2 explains why the curve must be embedded in the base field, which would support the genus if the specification actually provides this explanation with sufficient detail. The specification discloses Baby Jubjub as the primary embodiment. The genus 'twisted Edwards curve embedded in the scalar field of the pairing-friendly base curve' is a well-defined mathematical class, so definiteness is adequate.",
+          "critique": "Under LizardTech v. Earth Resource Mapping, claiming a genus (all twisted Edwards embedded curves) with only one disclosed species (Baby Jubjub) is risky. The rationale asserts Section 9.2 provides support, but the provisional as excerpted doesn't show multiple worked examples with different curves \u2014 only Baby Jubjub is implemented and tested. If Section 9.2 merely explains *why* embedding is needed without demonstrating the claim works with Bandersnatch or JubJub, the examiner can reject under 112(a) for lack of enablement across the full genus. The tradeoff note about dropping 'EdDSA' to include Schnorr compounds this \u2014 the spec likely only enables EdDSA verification circuits, not Schnorr verification circuits, yet the claim now covers both."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "The original Baby Jubjub lock was a trivial design-around: swap to Bandersnatch or any other embedded curve, change two lines of code, and avoid literal infringement. The genus revision closes this specific escape route effectively. A competitor must now either (a) use a non-twisted-Edwards curve embedded in the scalar field (e.g., a Montgomery form \u2014 but these are birational to twisted Edwards, so likely still infringing), (b) use a curve NOT embedded in the scalar field (requiring expensive non-native field arithmetic, a real architectural cost), or (c) avoid the five-input Poseidon structure entirely.",
+          "critique": "Escape (c) remains viable at moderate cost: a competitor can use a six-input or four-input hash, split the commitment into two hashes, or use a different hash function (Rescue, Griffin). The claim's strength against design-around depends more on the five-input Poseidon structure than on the curve genus. The curve genus revision is necessary but not sufficient \u2014 it closes one escape while leaving the hash-arity escape intact. A sophisticated competitor spends 2-3 days restructuring the commitment scheme to use a different arity or hash topology."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 15,
+          "max_points": 20,
+          "evidence": "The genus revision meaningfully expands commercial coverage. It now covers Baby Jubjub (BN254-embedded), Bandersnatch (BLS12-381-embedded), JubJub (BLS12-381-embedded), and any future twisted Edwards curve designed for a new pairing-friendly curve. This captures all commercially viable ZK identity implementations likely to emerge in the next 5 years, since twisted Edwards curves are the dominant choice for in-circuit signature verification across every major ZK ecosystem (Ethereum, Zcash, Polygon, Aztec).",
+          "critique": "The scope gain is real but bounded by two factors: (1) the claim still requires 'pairing-friendly base curve,' which excludes STARK-based systems (no pairing) \u2014 a growing segment of the ZK market (StarkNet, RISC Zero, SP1). A competitor building on STARKs escapes entirely. (2) The claim covers the credential commitment structure only (Claim 4), not the full handshake or delegation protocol. Commercial value depends on this claim being part of a claim set where independent claims cover the broader system. As a dependent claim revision, it's well-scoped for its role."
+        }
+      }
+    }
+  },
+  {
+    "id": "cand_enablement_auditor_first_second_proving_system_genus_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "a first zero-knowledge proof of the human user's Merkle membership in a human identity tree and a second zero-knowledge proof of the AI agent's Merkle membership in an agent credential tree, wherein the on-chain verifier enforces that a session nonce embedded in each proof's public signals equals a transaction-argument session nonce, and wherein the second zero-knowledge proof outputs as a public signal an identity-bound scope commitment computed as a collision-resistant algebraic hash of the AI agent's permission bitmask and the AI agent's credential commitment, the algebraic hash being a hash function whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve",
+    "claim_text": "a Groth16 zero-knowledge proof of the human user's Merkle membership in a human identity tree and a PLONK zero-knowledge proof of the AI agent's Merkle membership in an agent credential tree, wherein the on-chain verifier enforces that a session nonce embedded in each proof's public signals equals a transaction-argument session nonce, and wherein the PLONK zero-knowledge proof outputs as a public signal an identity-bound scope commitment computed as a Poseidon hash of the AI agent's permission bitmask and the AI agent's credential commitment, the Poseidon hash being a hash function whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve",
+    "rationale": "Narrows Claim 15 to the specific Groth16+PLONK combination and Poseidon hash function that the specification actually enables. This absorbs the substance of Claim 15A into the independent claim, making Claim 15 self-sufficient against both the Ariad enablement attack and an Alice \u00a7 101 challenge. The algebraic hash genus is replaced with Poseidon specifically, matching the only hash function for which the specification provides circuit implementations.",
+    "targets_weakness": "enablement_auditor_first_second_proving_system_genus",
+    "tradeoffs": "Claim 15 loses its role as a broader independent claim. Competitors using a different algebraic hash (e.g., Rescue, Griffin) or a different SNARK combination escape infringement. However, Claim 15A already served as the narrow fallback; promoting its specificity into Claim 15 eliminates the enablement gap without reducing enforceable scope beyond what the specification supports.",
+    "score": {
+      "total": 61,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 16,
+          "max_points": 20,
+          "evidence": "The claim recites specific cryptographic primitives (Groth16, PLONK), a concrete data structure (Merkle tree), a named hash function (Poseidon) with its algebraic characterization (field-arithmetic round function native to the scalar field of the base curve), and a specific machine transformation (on-chain verifier enforcing session nonce equality across two distinct proof public signals). This is not 'verify identity on a computer' \u2014 it is a specific circuit-level mechanism with concrete mathematical operations.",
+          "critique": "An examiner could still argue the claim is directed to the abstract idea of 'mutual authentication' and the cryptographic specifics are merely implementation details of that abstract idea under Step 2A Prong One. However, the dual-proof-system architecture with cross-proof nonce binding and the identity-bound scope commitment as a public signal output constitute a specific technical improvement to authentication protocols, not just applying known crypto to a known problem. The Poseidon-specific field-arithmetic characterization helps survive Step 2A Prong Two. Moderate-to-strong 101 position."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 12,
+          "max_points": 20,
+          "evidence": "An examiner would combine: (1) Semaphore v4 for Groth16 Merkle membership proofs with Poseidon hashes; (2) Iden3 for signed ZK credentials with Merkle trees and on-chain verification; (3) Aztec Connect for batched multi-proof verification with shared nonce/context; and possibly (4) MACI for EdDSA+Poseidon in Circom. The specific combination of Groth16-for-human + PLONK-for-agent is not directly taught. However, combining two different SNARKs for two populations is a design choice a skilled artisan could reach \u2014 Groth16 for ceremony-reuse, PLONK for ceremony-free agent credentials \u2014 the motivation is straightforward. The identity-bound scope commitment (Poseidon(permissionBitmask, credentialCommitment)) as a public signal output is the strongest differentiator, but Tornado Cash Nova teaches chained Poseidon commitments as public signals. A four-reference combination is needed, and the specific topology (scope commitment binding permissions to credential identity within a PLONK proof while a separate Groth16 proof shares a nonce) strains the motivation-to-combine.",
+          "critique": "The weakest link is that each individual element exists in prior art. The combination is non-trivial but arguably predictable to a SNARK engineer. The nonce-equality enforcement across heterogeneous proof systems is the hardest piece for an examiner to source from a single reference, which pushes this above the 10-point threshold."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 17,
+          "max_points": 20,
+          "evidence": "By narrowing from the 'first/second zero-knowledge proof' genus and 'collision-resistant algebraic hash' genus to Groth16+PLONK and Poseidon specifically, the claim now matches exactly what the specification enables. The spec provides Circom circuit implementations for Poseidon, working Groth16 and PLONK builds, test vectors, and benchmark data. The identity-bound scope commitment is implemented in AgentPolicy.circom. The session nonce binding is implemented and tested. Every element of the narrowed claim has a corresponding worked implementation in the specification.",
+          "critique": "The original genus language ('first/second proving system', 'collision-resistant algebraic hash') was an Ariad enablement trap \u2014 the spec only shows Poseidon, only shows Groth16+PLONK, and doesn't enable arbitrary algebraic hashes or arbitrary SNARK pairings. The narrowing correctly eliminates that gap. Minor quibble: the claim still uses 'field-arithmetic operations native to the scalar field of the proof system's base curve' which is a characterization of Poseidon, but if challenged, the spec should define this relationship explicitly rather than relying on the reader's cryptographic knowledge. This is a definiteness nit, not a showstopper."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 7,
+          "max_points": 20,
+          "evidence": "A competitor escapes by: (1) using a different hash function for the scope commitment (Rescue, Griffin, Neptune \u2014 all are arithmetization-friendly and satisfy the algebraic hash characterization, but the claim now says 'Poseidon' specifically); (2) using two Groth16 proofs or two PLONK proofs instead of the Groth16+PLONK combination; (3) using a different commitment structure (e.g., Pedersen commitment of permissions rather than Poseidon hash of bitmask+credential). Options 1 and 2 are low-cost escapes \u2014 swapping hash functions or using a uniform proving system requires hours to days of engineering, not architectural redesign. The nonce-binding mechanism is easy to replicate with any proof system.",
+          "critique": "This is the price of the narrowing strategy. The original genus claim (algebraic hash, first/second proving system) would have scored 11-13 here if it survived 112. By pinning to Poseidon and Groth16+PLONK, you've made the claim precisely enforceable but trivially designable-around. A competitor building mutual ZK auth with Rescue+two-PLONK would deliver the same product value and escape cleanly. The tradeoffs section of the candidate acknowledges this honestly."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 9,
+          "max_points": 20,
+          "evidence": "The claim covers Bolyra's exact production implementation: Groth16 human proof + PLONK agent proof + Poseidon scope commitment + session nonce binding. It covers the primary product as built. However, it does not cover: (a) alternative hash functions, (b) alternative proving system combinations, (c) recursive SNARK architectures where the two proofs are aggregated before on-chain verification, (d) off-chain verification scenarios, (e) non-Merkle-tree credential structures. Future CIP candidates (recursive SNARKs, platform attestations, alternative curves) are outside scope.",
+          "critique": "This is a dependent-claim-grade scope masquerading as an independent claim. It protects against exact cloning but not against the commercially relevant competitors (World AgentKit could use different primitives, Indicio could add a ZK layer with non-Poseidon hashes). The claim is a picket fence around one specific implementation, not a moat around the product category."
+        }
+      }
+    }
+  },
+  {
+    "id": "cand_examiner_strict_101_mutual_auth_abstract_02",
+    "strategy": "narrow",
+    "claim_refs": [
+      15
+    ],
+    "original_language": "(a) performing a mutual authentication handshake between a human user and an AI agent by verifying, in a single blockchain transaction, a first zero-knowledge proof of the human user's Merkle membership in a human identity tree and a second zero-knowledge proof of the AI agent's Merkle membership in an agent credential tree, wherein the on-chain verifier enforces that a session nonce embedded in each proof's public signals equals a transaction-argument session nonce, and wherein the second zero-knowledge proof outputs as a public signal an identity-bound scope commitment computed as a collision-resistant algebraic hash of the AI agent's permission bitmask and the AI agent's credential commitment, the algebraic hash being a hash function whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve;",
+    "claim_text": "(a) performing a mutual authentication handshake between a human user and an AI agent by verifying, in a single blockchain transaction, a first zero-knowledge proof of the human user's Merkle membership in a human identity tree and a second zero-knowledge proof of the AI agent's Merkle membership in an agent credential tree, wherein the on-chain verifier enforces that a session nonce embedded in each proof's public signals equals a transaction-argument session nonce, wherein the on-chain verifier enforces an asymmetric root freshness requirement by requiring that the Merkle root output by the first zero-knowledge proof exactly equals the current on-chain root of the human identity tree while requiring that the Merkle root output by the second zero-knowledge proof matches any entry in a root history circular buffer maintained by the identity registry contract storing the N most recent roots of the agent credential tree, such that proof staleness arising from concurrent enrollment operations on the agent credential tree is tolerated without proof regeneration while the human identity tree requires proof generation against the latest root, and wherein the second zero-knowledge proof outputs as a public signal an identity-bound scope commitment computed as a collision-resistant algebraic hash of the AI agent's permission bitmask and the AI agent's credential commitment, the algebraic hash being a hash function whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve;",
+    "rationale": "Claim 15 is identified as the narrowest, hardest-to-design-around independent claim. Integrating asymmetric root freshness directly into step (a) strengthens it against the 101 attack by reciting a specific technical improvement to the verification mechanism itself. The asymmetric staleness tolerance is a non-obvious architectural choice that reduces on-chain re-proving costs \u2014 a concrete improvement to computer functioning under Enfish/BASCOM. The examiner cannot characterize differential root freshness policies across heterogeneous Merkle trees as 'conventional' because no prior system implements this.",
+    "targets_weakness": "examiner_strict_101_mutual_auth_abstract",
+    "tradeoffs": "Further narrows Claim 15 (already the narrowest independent) by committing to the circular buffer root history mechanism. A competitor using identical root handling for both trees would avoid infringement.",
+    "score": {
+      "total": 65,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 16,
+          "max_points": 20,
+          "evidence": "The claim recites concrete technical mechanisms: asymmetric root freshness with a circular buffer for one tree vs. exact-match for the other, collision-resistant algebraic hash with field-arithmetic-native round functions, dual ZKP verification in a single transaction with session nonce equality enforcement. These are specific machine-and-transformation steps, not abstract 'verify identity' hand-waving. The asymmetric staleness tolerance is a specific improvement to computer functioning (reduced re-proving cost) under Enfish/BASCOM.",
+          "critique": "An examiner could still argue the 'asymmetric root freshness' is a business rule ('we want agents to have stale proofs accepted') dressed in technical language \u2014 the circular buffer itself is Tornado Cash's MerkleTreeWithHistory verbatim. The novelty is in the *policy choice* to apply it asymmetrically, which edges toward abstract decision-making. However, the integration with dual heterogeneous ZKP verification, scope commitment output, and nonce binding across both proofs creates enough technical particularity to survive Step 2B. Docked points because the algebraic hash language, while specific, is still partially functional ('composed of field-arithmetic operations native to...') rather than naming Poseidon with specific arity."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "Combining references needed: (1) Semaphore v4 for human Merkle membership + Groth16, (2) Iden3 or similar for agent credential tree, (3) Tornado Cash Nova/MerkleTreeWithHistory for circular buffer root history, (4) Aztec Connect for batched multi-proof single-tx verification, (5) UCAN/Biscuit concept for permission bitmask scope commitment. That's a five-reference combination. The *asymmetric* application of root freshness \u2014 strict for humans, tolerant for agents \u2014 is not taught by any single reference. Tornado teaches the buffer; nobody teaches applying it to only one of two heterogeneous trees verified in the same transaction.",
+          "critique": "A skilled examiner would argue KSR 'obvious to try': given two Merkle trees with different update frequencies, a PHOSITA would naturally apply staleness tolerance to the high-churn tree. The motivation is straightforward engineering \u2014 agents enroll more frequently than humans, so agent proofs go stale faster. This isn't an 'unexpected result,' it's predictable engineering optimization. The scope commitment output as a public signal of the agent proof adds integration complexity but each piece (Poseidon hash of bitmask + commitment) is individually known. Held to 14 because the specific *integration topology* \u2014 asymmetric freshness + dual-tree + nonce binding + scope commitment output, all in one verification step \u2014 requires combining five references with increasingly strained motivation."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 15,
+          "max_points": 20,
+          "evidence": "The provisional describes MerkleTreeWithHistory for root staleness, the handshake protocol with nonce binding, the scope commitment as Poseidon(permissions, credentialCommitment), and the dual-tree architecture. The circular buffer of N most recent roots is a known Tornado Cash pattern that the spec can incorporate by reference. The asymmetric freshness policy (exact for human, buffer for agent) is inferrable from the architecture where human and agent trees are separate on-chain structures.",
+          "critique": "The provisional abstract and summary mention separate Merkle trees and session nonce equality but do NOT explicitly disclose the *asymmetric* root freshness requirement \u2014 human-exact vs. agent-buffered. The spec must show possession of this specific differential treatment. If the provisional only says 'roots are verified' without specifying that one tree uses exact match and the other uses a history buffer, this claim lacks written description support for the asymmetry. The phrase 'N most recent roots' needs N to be defined or bounded in the spec. Under Ariad v. Eli Lilly, the applicant must demonstrate possession of the asymmetric policy, not just the individual components. Docked to 15 because while the building blocks are described, the specific *asymmetric combination* may need stronger spec support in the non-provisional."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 11,
+          "max_points": 20,
+          "evidence": "The claim commits to a very specific mechanism: circular buffer root history for agent tree + exact match for human tree + single-transaction dual verification. The candidate's own tradeoffs section admits: 'A competitor using identical root handling for both trees would avoid infringement.' That's a day-one design-around.",
+          "critique": "Three easy escapes: (1) Use identical root freshness for both trees (both exact-match or both buffered) \u2014 trivial code change, no architectural cost. (2) Use two separate transactions instead of one \u2014 slightly worse UX but avoids 'single blockchain transaction' limitation. (3) Use a timestamp-based staleness window instead of a circular buffer of N roots \u2014 functionally equivalent but literally different. The claim has over-specified the mechanism, creating bright-line boundaries competitors can step around. The asymmetric freshness is the supposed moat, but symmetry is the easier, more obvious design choice that competitors would default to anyway. Moderate-cost escape at best for the full combination, but the easiest escape (symmetric root handling) is essentially free."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 9,
+          "max_points": 20,
+          "evidence": "The claim covers the primary Bolyra handshake product with the specific asymmetric root freshness optimization. It captures the exact production implementation.",
+          "critique": "This revision *narrows* an already-narrow independent claim (Claim 15) by adding the circular buffer + asymmetric freshness requirement. Competitors who don't implement asymmetric root handling \u2014 which is most conceivable implementations \u2014 fall outside scope entirely. The claim doesn't cover: (a) systems using the same root policy for both trees, (b) off-chain verification, (c) two-transaction handshakes, (d) non-Merkle-tree credential structures. The scope is essentially Bolyra's exact production implementation plus minor variations in buffer size N. Future CIP candidates (recursive SNARKs, platform attestations) would likely require separate claims. This is a classic case of trading scope for strength \u2014 acceptable for a dependent claim, concerning for the narrowest independent claim in the portfolio."
+        }
+      }
+    }
+  },
+  {
+    "id": "cand_examiner_strict_103_delegation_obvious_combination_01",
+    "strategy": "narrow",
+    "claim_refs": [
+      9
+    ],
+    "original_language": "(h) outputting, as a public signal, a new scope commitment computed as a two-input Poseidon hash of the delegatee's permission bitmask and the delegatee's credential commitment; and",
+    "claim_text": "(h) proving, within the circuit, Merkle membership of the delegatee's credential commitment in said agent credential tree by computing a delegatee Merkle root from the delegatee's credential commitment and a delegatee Merkle proof comprising sibling hashes and a proof index received as private inputs, and outputting said computed delegatee Merkle root as a public signal for on-chain verification against a root history buffer of the agent credential tree, and outputting, as a further public signal, a new identity-bound scope commitment computed as a two-input Poseidon hash of the delegatee's permission bitmask and the delegatee's Merkle-included credential commitment, such that the chain-linking constraint of step (d) requires each delegator to prove knowledge of a credential commitment that is simultaneously Merkle-included in the on-chain agent credential tree and a component of the two-input Poseidon hash that produced the previous scope commitment, and the present step requires each delegatee to prove Merkle inclusion of its own credential commitment, thereby requiring bilateral Merkle-included identity binding at each delegation hop; and",
+    "rationale": "This folds Claim 14A's bilateral Merkle-included identity binding directly into independent Claim 9, making it a mandatory element rather than a dependent feature. The bilateral identity binding \u2014 where BOTH the delegator's and delegatee's credential commitments must be Merkle-included leaves in the on-chain agent tree \u2014 is the specific mechanism that distinguishes from Tornado Nova (which chains value commitments without any identity-tree membership requirement) and from DAC 2008/428 (which uses pairing-based randomizable credentials without Poseidon identity binding into a Merkle tree). A POSITA combining UCAN + Tornado Nova would not arrive at bilateral Merkle-included identity binding because neither reference teaches binding commitment chain links to leaves in an on-chain identity tree.",
+    "targets_weakness": "examiner_strict_103_delegation_obvious_combination",
+    "tradeoffs": "Narrows scope by requiring delegatee Merkle membership proof within the delegation circuit itself, excluding embodiments where delegatee identity is verified outside the ZK circuit (e.g., by a separate on-chain check). Also adds implementation complexity to the independent claim.",
+    "score": {
+      "total": 69,
+      "verdict": "consider",
+      "dimensions": {
+        "alice_101": {
+          "name": "alice_101",
+          "points": 16,
+          "max_points": 20,
+          "evidence": "Claim recites specific machine-level operations: Poseidon hash with defined arity (two-input), Merkle proof computation from sibling hashes and proof index as private inputs, circuit-internal verification against a root history buffer, and bilateral identity binding enforced by circuit constraints. These are not abstract ideas applied on a computer \u2014 they are specific cryptographic transformations with defined data structures (LeanIMT, circular root buffer) and constraint-level enforcement.",
+          "critique": "An examiner could still argue the 'bilateral Merkle-included identity binding' is a functional result rather than a structural limitation \u2014 the claim says what must be proved but the circuit constraint topology (Num2Bits decomposition, LessThan comparators for hop counting) is not recited. Adding one signal-flow constraint (e.g., 'wherein the delegatee Merkle root is constrained to equal the agent credential tree root via a signal equality constraint within the arithmetic circuit') would push to 18."
+        },
+        "obviousness_103": {
+          "name": "obviousness_103",
+          "points": 15,
+          "max_points": 20,
+          "evidence": "To reject, an examiner needs at minimum: (1) UCAN/Biscuit for capability attenuation chains, (2) Tornado Nova for chained Poseidon commitments with ZK proofs, (3) Semaphore v4 for Merkle membership proofs in an identity tree, and (4) some motivation to require BILATERAL Merkle inclusion \u2014 both delegator and delegatee proving membership in the same on-chain tree within the same circuit execution. Reference (4) is the gap: neither Tornado (chains value commitments without identity tree membership) nor DAC 2008 (pairing-based, no Poseidon/Merkle binding) teaches requiring both parties to prove Merkle inclusion in an identity tree as part of the delegation proof.",
+          "critique": "A determined examiner could argue that iden3 circuits already teach 'credential commitment Merkle membership as part of a ZK proof' and that requiring it for both parties is merely 'applying the same technique twice' under KSR's 'obvious to try' rationale. The motivation? Preventing unauthorized delegation by unregistered agents \u2014 a problem a POSITA would identify. This is the strongest 103 attack vector. The defense is that no reference teaches binding the Merkle-included commitment INTO the Poseidon hash that forms the chain link, creating a cryptographic coupling between identity-tree membership and delegation-chain integrity."
+        },
+        "support_112": {
+          "name": "support_112",
+          "points": 14,
+          "max_points": 20,
+          "evidence": "The spec discloses Delegation.circom with scope commitments as Poseidon(permissionBitmask, credentialCommitment), and the circuit enforces Merkle membership for agent credentials. The bilateral binding concept is supported by the circuit architecture where both delegator (via chain-linking to previous scope commitment) and delegatee (via current hop's Merkle proof) must prove inclusion. The 'root history buffer' maps to the MerkleTreeWithHistory pattern disclosed in the contracts.",
+          "critique": "The claim introduces 'bilateral Merkle-included identity binding at each delegation hop' as a coined phrase not appearing verbatim in the spec. An examiner could issue a 112(a) written description rejection asking where the spec explicitly describes requiring the delegator to SIMULTANEOUSLY prove Merkle inclusion AND be a component of the scope commitment hash \u2014 versus these being separate verification steps. The spec likely shows this as an implicit consequence of the circuit wiring rather than an explicitly disclosed requirement. Also, 'root history buffer' should map to a specific disclosed depth (e.g., last 30 roots per Tornado pattern) for full enablement."
+        },
+        "design_around": {
+          "name": "design_around",
+          "points": 13,
+          "max_points": 20,
+          "evidence": "The claim requires bilateral Merkle-included identity binding within the ZK circuit itself. Competitors could escape by: (1) verifying delegatee Merkle membership in a separate on-chain contract call rather than inside the ZK circuit (the tradeoffs section acknowledges this), (2) using a different commitment structure where identity binding uses a three-input hash (adding a nonce) rather than two-input Poseidon, or (3) using a different tree structure (sparse Merkle tree with different proof format) that doesn't match 'sibling hashes and a proof index.' Each requires meaningful redesign but is achievable in days, not weeks.",
+          "critique": "The biggest escape: split the delegation proof into two circuits \u2014 one proving permission narrowing with scope commitment chaining, another proving Merkle membership separately \u2014 then compose them via proof aggregation. This avoids 'within the circuit' and 'bilateral Merkle-included identity binding at each delegation hop' since the binding happens across circuits, not within a single circuit. This is a days-level redesign, not weeks."
+        },
+        "scope": {
+          "name": "scope",
+          "points": 11,
+          "max_points": 20,
+          "evidence": "The claim covers the core Bolyra delegation mechanism with bilateral identity binding. It captures the primary product's delegation flow and extends to any system using Poseidon-based scope commitments with Merkle-included identity binding in a single delegation circuit.",
+          "critique": "The narrowing acknowledged in tradeoffs is real: by requiring delegatee Merkle membership 'within the circuit,' the claim excludes hybrid architectures where some verification happens on-chain outside ZK (a commercially viable alternative). It also excludes recursive SNARK compositions where inner proofs handle identity and outer proofs handle delegation chaining. The two-input Poseidon specificity excludes three-input variants (e.g., adding an expiry field to the hash). Scope is adequate for the current product but leaves significant room for competitors to build functionally equivalent systems with slightly different architectural choices."
+        }
+      }
+    }
+  }
+]

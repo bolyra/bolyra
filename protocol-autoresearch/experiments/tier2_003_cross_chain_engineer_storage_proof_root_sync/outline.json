@@ -1,0 +1,76 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "title": "Cross-chain root sync via EIP-1186 storage proofs",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/lib/RLPDecoder.sol",
+      "description": "RLP decoding library for MPT node payloads \u2014 vendor or adapt Optimism's battle-tested implementation; required before any MPT verification"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/lib/MerklePatriciaVerifier.sol",
+      "description": "Two-phase verifier: (1) account proof against state root yields contract storageHash; (2) storage proof against storageHash extracts slot value. Returns raw bytes32 slot value on success, reverts otherwise."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/CrossChainRootRelay.sol",
+      "description": "Accepts (sourceBlockNumber, accountProof[], storageProof[]) per root slot. Resolves source-chain L1 block hash via chain-specific precompile (Arbitrum ArbSys / Polygon bor opcode), calls MerklePatriciaVerifier, then writes extracted humanTreeRoot and agentTreeRoot into a 30-slot ring buffer keyed by block number."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/IdentityRegistry.sol",
+      "description": "Addendum: expose HUMAN_TREE_ROOT_SLOT and AGENT_TREE_ROOT_SLOT as public constants matching Solidity storage layout so off-chain tooling can deterministically compute proof paths without ABI gymnastics."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/deploy/03_deploy_crosschain.ts",
+      "description": "Hardhat deployment script parameterized by (sourceRegistryAddress, l1BlockHashProvider) \u2014 runs against arbitrumSepolia and polygonAmoy networks defined in hardhat.config.ts."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/crosschain.ts",
+      "description": "TypeScript helper: wraps eth_getProof RPC call against source chain, ABI-encodes the proof for CrossChainRootRelay, and exports syncRootToChain(destSigner, sourceProvider, blockNumber) convenience function."
+    },
+    {
+      "type": "test",
+      "filename": "test/CrossChainRootRelay.test.ts",
+      "description": "Hardhat fork tests: fork Base Sepolia + Arbitrum Sepolia at a matched block pair, call eth_getProof on the forked Base node, submit encoded proof to relay on forked Arbitrum, assert extracted roots equal IdentityRegistry's live values. Also tests ring-buffer boundary (slot 31 wraps to slot 1) and rejects tampered proofs."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/cross-chain-root-sync.md",
+      "description": "Protocol spec: storage slot layout, proof construction algorithm, chain-specific block hash derivation, relay trust model (trustless vs finality assumptions), 30-root latency window rationale, and reorg-safety guidance for each target chain."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-integration.md",
+      "description": "Integration guide for SDK consumers: how to call syncRootToChain, how to reference a buffered root in a ZKP handshake verifyHandshake call on Arbitrum/Polygon, and how to handle the ~30-block staleness window."
+    }
+  ],
+  "steps": [
+    "Audit IdentityRegistry.sol storage layout: identify exact slot indices for humanTreeRoot and agentTreeRoot using hardhat-storage-layout or manual slot arithmetic; add HUMAN_TREE_ROOT_SLOT and AGENT_TREE_ROOT_SLOT public constants to lock layout against future refactors",
+    "Vendor or port a Solidity RLPDecoder (Optimism's contracts-bedrock RLPDecoder.sol is Apache-2.0): add to contracts/lib/, run existing Hardhat tests to confirm no namespace collisions",
+    "Implement MerklePatriciaVerifier.sol: phase-1 account proof walks the state trie from stateRoot to the contract's account leaf and extracts storageRoot; phase-2 storage proof walks from storageRoot to the target slot leaf and returns the decoded bytes32 value",
+    "Implement CrossChainRootRelay.sol: constructor takes (address sourceRegistry, address l1BlockHashProvider, uint8 bufferSize); verifyAndSync() accepts (uint256 srcBlockNumber, bytes[] accountProof, bytes[] storageProof) for each of the two slots, resolves srcBlockHash via the provider, calls MerklePatriciaVerifier twice, writes both roots into ring buffer at index (srcBlockNumber % bufferSize)",
+    "Implement chain-specific L1BlockHashProvider adapters: ArbitrumL1HashProvider.sol (calls ArbSys(0x64).getL1BlockNumber() then blockhash) and PolygonL1HashProvider.sol (uses bor block hash opcode or the L1 block hash precompile at 0x51); deploy correct adapter per destination chain",
+    "Extend hardhat.config.ts with arbitrumSepolia and polygonAmoy network entries; add forking configs pointing at Alchemy archive nodes for both chains alongside existing baseSepolia entry",
+    "Write 03_deploy_crosschain.ts: deploys CrossChainRootRelay with the correct L1BlockHashProvider for each destination chain, records deployed addresses in deployments/ alongside existing contracts",
+    "Implement sdk/src/crosschain.ts: exportssyncRootToChain(destSigner, sourceProvider, blockNumber) \u2014 calls eth_getProof for both slot indices at blockNumber, ABI-encodes proof arrays, submits transaction to CrossChainRootRelay.verifyAndSync()",
+    "Write CrossChainRootRelay.test.ts using Hardhat network forking: fork Base Sepolia and Arbitrum Sepolia at a matched block, call eth_getProof on forked Base RPC, submit proof to relay on forked Arbitrum, assert getRoot(srcBlockNumber) returns expected roots; add negative tests for tampered account proof, tampered storage proof, and out-of-buffer block numbers",
+    "Write spec/cross-chain-root-sync.md covering: slot derivation, proof construction, per-chain block hash trust assumptions (Arbitrum has ~15min L1 finality lag, Polygon PoS has checkpoint finality), 30-root window sizing rationale, and guidance for callers on selecting a safe srcBlockNumber",
+    "Write docs/cross-chain-integration.md: end-to-end walkthrough from calling syncRootToChain on Base Sepolia to calling verifyHandshake on Arbitrum with a buffered root, including the staleness window and reorg-safety notes",
+    "Update npm run test:contracts to include CrossChainRootRelay fork tests; gate slow fork tests behind FORK_TESTS=1 env var to avoid mandatory archive-node dependency in CI"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "EIP-1186 eth_getProof JSON-RPC support on source chain archive node (Alchemy/Infura Base Sepolia)",
+    "Arbitrum ArbSys precompile at 0x0000000000000000000000000000000000000064 for L1 block hash resolution",
+    "Polygon Amoy bor block hash precompile or opcode for L1 block hash resolution",
+    "IdentityRegistry.sol storage layout stability \u2014 slot constants must be immutable post-deployment",
+    "Optimism contracts-bedrock RLPDecoder.sol (Apache-2.0) as vendored base for MPT verification",
+    "hardhat.config.ts multi-network extension with arbitrumSepolia and polygonAmoy entries",
+    "Archive node URLs for Hardhat forking (Base Sepolia + Arbitrum Sepolia + Polygon Amoy)",
+    "Existing IdentityRegistry deployment on Base Sepolia as the canonical root source"
+  ]
+}

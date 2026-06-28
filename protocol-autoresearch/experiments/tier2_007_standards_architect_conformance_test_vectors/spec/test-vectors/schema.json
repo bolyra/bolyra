@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bolyra.ai/spec/test-vectors/schema.json",
+  "title": "Bolyra Conformance Test Vector",
+  "description": "Schema for Bolyra protocol conformance test vectors",
+  "oneOf": [
+    { "$ref": "#/$defs/singleVector" },
+    { "$ref": "#/$defs/multiStepVector" }
+  ],
+  "$defs": {
+    "singleVector": {
+      "type": "object",
+      "required": ["id", "description", "circuit", "input_witnesses", "public_signals", "expected_result"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "circuit": {
+          "type": "string",
+          "enum": ["HumanUniqueness", "AgentPolicy", "Delegation", "SDK"]
+        },
+        "input_witnesses": { "type": "object" },
+        "public_signals": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9]+$" }
+        },
+        "expected_result": { "type": "string", "enum": ["pass", "fail"] },
+        "failure_reason": { "type": "string" },
+        "meta": { "$ref": "#/$defs/meta" }
+      },
+      "if": { "properties": { "expected_result": { "const": "fail" } } },
+      "then": { "required": ["failure_reason"] }
+    },
+    "multiStepVector": {
+      "type": "object",
+      "required": ["id", "description", "steps", "expected_result"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/stepVector" }
+        },
+        "expected_result": { "type": "string", "enum": ["pass", "fail"] },
+        "failure_reason": { "type": "string" },
+        "meta": { "$ref": "#/$defs/meta" }
+      },
+      "if": { "properties": { "expected_result": { "const": "fail" } } },
+      "then": { "required": ["failure_reason"] }
+    },
+    "stepVector": {
+      "type": "object",
+      "required": ["circuit", "input_witnesses", "public_signals", "expected_result"],
+      "additionalProperties": false,
+      "properties": {
+        "circuit": {
+          "type": "string",
+          "enum": ["HumanUniqueness", "AgentPolicy", "Delegation", "SDK"]
+        },
+        "input_witnesses": { "type": "object" },
+        "public_signals": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9]+$" }
+        },
+        "expected_result": { "type": "string", "enum": ["pass", "fail"] },
+        "failure_reason": { "type": "string" }
+      },
+      "if": { "properties": { "expected_result": { "const": "fail" } } },
+      "then": { "required": ["failure_reason"] }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" },
+        "generated": { "type": "string", "format": "date-time" },
+        "circuit_version": { "type": "string" },
+        "generator": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "id": "security_auditor_delegator_cred_commitment_unbound",
+  "title": "Delegation circuit does not verify delegator is enrolled in agentTree",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Add delegator Merkle inclusion proof inputs (delegatorPathElements, delegatorPathIndices, delegatorTreeDepth) and a MerkleProof component that proves delegatorCredCommitment is a leaf in agentMerkleRoot. Wire agentMerkleRoot as a public input shared with the delegatee proof."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/MerkleProof.circom",
+      "description": "Reuse or extract the existing Merkle inclusion component so both delegatee and delegator paths share the same MAX_DEPTH-parameterized template."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/DelegationVerifier.sol",
+      "description": "Regenerate from updated vkey.json after re-running trusted setup. Update calldata ABI to include the delegator Merkle root public signal. Add on-chain check that the agentMerkleRoot passed in matches the registry's current root."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/AgentRegistry.sol",
+      "description": "Expose getCurrentAgentMerkleRoot() view function so DelegationVerifier can read and validate the root at delegation-acceptance time."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation.ts",
+      "description": "Extend buildDelegationInputs() to accept delegatorMerklePath and delegatorPathIndices, query the AgentRegistry for the current agentMerkleRoot, and pass both into the circuit input object."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/delegation.py",
+      "description": "Mirror TypeScript changes: update DelegationInputs dataclass and subprocess bridge call to include delegator path fields."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Document the new public input agentMerkleRoot in the delegation proof envelope section. Update the security considerations to note that delegator enrollment is now circuit-enforced, not chain-link-only."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/Delegation.test.js",
+      "description": "Add negative test: forge a delegatorCredCommitment with valid scopeCommitment hash but no valid Merkle path \u2014 witness generation must fail. Add positive test with correct delegator path at varying depths."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/DelegationVerifier.test.js",
+      "description": "Integration test: submit delegation with stale agentMerkleRoot (root rotated after proof generated) \u2014 on-chain check must revert. Submit with current root \u2014 must accept."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Add entry under 'Broken Object Level Authorization' noting that prior to this fix, a public scopeCommitment event could be replayed by an un-enrolled delegator, and describe the mitigation."
+    }
+  ],
+  "steps": [
+    "Audit current Delegation.circom to map all existing signals; confirm delegatorCredCommitment is only used in the previousScopeCommitment recompute and is not Merkle-proven.",
+    "Extract or confirm MerkleProof.circom template is parameterized by MAX_DEPTH and returns a single root output; make it importable by both Delegation and AgentPolicy.",
+    "Add private inputs to Delegation.circom: delegatorPathElements[MAX_DEPTH], delegatorPathIndices[MAX_DEPTH]. Add public input: agentMerkleRoot.",
+    "Instantiate a second MerkleProof component in Delegation.circom for the delegator leaf; constrain its computed root === agentMerkleRoot.",
+    "Re-run powers-of-tau phase 2 for Delegation using pot16.ptau; regenerate Delegation_groth16.zkey and Delegation_plonk.zkey; export new vkey.json files.",
+    "Regenerate DelegationVerifier.sol from the new vkey.json using snarkjs exportSolidityVerifier.",
+    "Add getCurrentAgentMerkleRoot() to AgentRegistry.sol; update DelegationVerifier to call it and revert if submitted agentMerkleRoot does not match.",
+    "Update sdk/src/delegation.ts buildDelegationInputs() to require delegatorMerklePath parameter and fetch current root from AgentRegistry.",
+    "Update sdk-python delegation bridge to pass through the new fields.",
+    "Write circuit negative tests (forged delegator path must fail witness gen) and positive tests at depth 1, 8, and MAX_DEPTH.",
+    "Write contract integration tests for stale-root rejection and current-root acceptance.",
+    "Update spec and OWASP mapping docs.",
+    "Run npm run compile:circuits, npm run test:circuits:fast, npm run test:circuits:slow, npm run test:contracts to gate the change.",
+    "Regenerate landing/verify.sh expected proof-envelope shape if it checks public signal count.",
+    "DCO-sign all commits; update SECURITY.md to close the delegator-unbound advisory."
+  ],
+  "estimated_constraints": 3200,
+  "dependencies": [
+    "circuits/src/MerkleProof.circom (MAX_DEPTH parameter must be shared)",
+    "circuits/build/pot16.ptau (existing universal SRS \u2014 no new ceremony needed)",
+    "contracts/src/AgentRegistry.sol (must expose agentMerkleRoot view)",
+    "snarkjs >= 0.7.6 (for re-keying and Solidity export)",
+    "CIP-1 delegatee Merkle inclusion fix (must be merged first to avoid conflict on Delegation.circom)"
+  ]
+}

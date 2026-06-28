@@ -1,0 +1,38 @@
+## Merkle Depth Boundedness
+
+**Property:** For every satisfying witness accepted by any Bolyra circuit
+that uses `BinaryMerkleRoot`, the private input `merkleProofLength`
+satisfies `1 <= merkleProofLength <= MAX_DEPTH`.
+
+**Enforcement:** The `RangeCheckDepth(MAX_DEPTH)` template
+(`circuits/src/lib/MerkleDepthCheck.circom`) is instantiated in every
+circuit before the `BinaryMerkleRoot` call. It uses:
+
+1. `Num2Bits(NUM_BITS)` — constrains `merkleProofLength` to fit in
+   `ceil(log2(MAX_DEPTH + 1)) + 1` bits (implicitly `>= 0`).
+2. `LessThan(NUM_BITS)` — asserts `0 < merkleProofLength` (lower bound).
+3. `LessThan(NUM_BITS)` — asserts `merkleProofLength < MAX_DEPTH + 1`
+   (upper bound).
+4. `valid <== lowerBound.out * upperBound.out; valid === 1` — enforces
+   both conditions simultaneously.
+
+**Constraint cost per circuit:**
+
+| Circuit | MAX_DEPTH | NUM_BITS | Added constraints (approx) |
+|---|---|---|---|
+| HumanUniqueness | 20 | 5 | ~19 |
+| AgentPolicy | 20 | 5 | ~19 |
+| Delegation | 20 | 5 | ~19 |
+| ModelInstanceBinding | 16 | 5 | ~19 |
+
+Formula: `NUM_BITS` (Num2Bits) + `2 * (3 * NUM_BITS + 1)` (two LessThan)
++ 2 (multiplication + assertion) ≈ `7 * NUM_BITS + 4`.
+
+**Formal spec:** `circuits/formal/MerkleDepthBounded.spec` (Certora CVL
+pseudocode) declares the invariant, plus rules proving depth=0 and
+depth>MAX_DEPTH produce no satisfying witness.
+
+**Rationale:** Without this check, a malicious prover could supply
+`merkleProofLength=0` (making the leaf itself the Merkle root, bypassing
+tree membership) or `merkleProofLength > MAX_DEPTH` (reading
+uninitialized sibling array slots whose values are unconstrained).

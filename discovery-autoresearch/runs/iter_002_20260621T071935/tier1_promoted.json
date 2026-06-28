@@ -1,0 +1,162 @@
+[
+  {
+    "id": "aip_delegation",
+    "title": "Verifiable Delegation Primitive for AIP/MCP/A2A Interop",
+    "description": "The AIP paper proposes verifiable delegation across MCP and A2A using DIDs and VCs but lacks a ZKP-based scope-narrowing mechanism. Bolyra's Delegation circuit enforces one-way scope narrowing on-chain, which could become the cryptographic backbone for AIP-compliant delegation chains where sub-delegated agents provably cannot escalate privileges.",
+    "category": "standards",
+    "source": "AIP paper (arxiv 2603.24775)",
+    "preliminary_demand": 17,
+    "preliminary_timing": 23,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 20,
+    "scores": {
+      "demand": 17,
+      "timing": 23,
+      "fit": 25,
+      "feasibility": 20,
+      "total": 85
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "langchain_auth_middleware",
+    "title": "LangChain/CrewAI Agent Auth Middleware with ZKP Handshakes",
+    "description": "LangChain's State of Agent Engineering highlights authentication as a production deployment concern. Bolyra already has a LangChain integration stub; shipping a credential middleware that lets LangChain agents prove identity via mutual ZKP handshake before tool invocation would capture the framework-native developer audience.",
+    "category": "developer_tools",
+    "source": "LangChain State of Agent Engineering",
+    "preliminary_demand": 18,
+    "preliminary_timing": 20,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 22,
+    "scores": {
+      "demand": 18,
+      "timing": 20,
+      "fit": 22,
+      "feasibility": 22,
+      "total": 82
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "did_method_standard",
+    "title": "Bolyra DID Method as Reference Implementation for Agent DIDs",
+    "description": "Multiple signals (AgentGraph, AIP, Okta) converge on W3C DIDs for agent identity but none integrate ZKP-based resolution. Bolyra's did:bolyra method spec and conformance test vectors position it to become the reference DID method for privacy-preserving agent identity, especially as IETF and W3C working groups formalize agent authentication standards.",
+    "category": "standards",
+    "source": "Convergence across AgentGraph, AIP, Okta signals",
+    "preliminary_demand": 15,
+    "preliminary_timing": 21,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 21,
+    "scores": {
+      "demand": 15,
+      "timing": 21,
+      "fit": 24,
+      "feasibility": 21,
+      "total": 81
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "okta_zkp_gap",
+    "title": "Privacy-Preserving Agent Identity Layer for Enterprise IdPs",
+    "description": "Okta's Agent Identity platform treats agents as first-class identities but independent analysis notes gaps in zero-knowledge proof support and privacy-preserving credential delegation. Bolyra's AgentPolicy circuit and Delegation circuit could serve as a ZKP overlay that plugs into Okta/Entra ID token flows, letting enterprises prove agent permissions without exposing the full credential chain.",
+    "category": "enterprise_auth",
+    "source": "Okta Agent Identity launch + dev.to gap analysis",
+    "preliminary_demand": 20,
+    "preliminary_timing": 22,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 15,
+    "scores": {
+      "demand": 20,
+      "timing": 22,
+      "fit": 23,
+      "feasibility": 15,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "visa_vic_zkp",
+    "title": "Zero-Knowledge Agent Authentication for Visa Intelligent Commerce",
+    "description": "Visa's VIC sandbox has 30+ partners building agent-driven purchasing flows. Agents making financial transactions need to prove spending authority without leaking operator identity or full permission sets. Bolyra's cumulative-bit permission model and handshake protocol map directly to tiered financial authorization (FINANCIAL_SMALL/MEDIUM/UNLIMITED).",
+    "category": "agentic_commerce",
+    "source": "Visa Intelligent Commerce press release",
+    "preliminary_demand": 22,
+    "preliminary_timing": 18,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 12,
+    "scores": {
+      "demand": 22,
+      "timing": 18,
+      "fit": 24,
+      "feasibility": 12,
+      "total": 76
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "eco_agent_purchases",
+    "title": "Privacy-Preserving Agent Purchase Authentication",
+    "description": "Eco's agent identity verification for purchases uses DID-based identity with behavioral trust scoring. Bolyra's mutual handshake protocol (human proof + agent proof + nonce binding) could replace behavioral scoring with cryptographic proof that an agent is authorized by a verified human for a specific spending tier, without revealing the human's identity to the merchant.",
+    "category": "agentic_commerce",
+    "source": "Eco agent identity verification article",
+    "preliminary_demand": 16,
+    "preliminary_timing": 20,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 17,
+    "scores": {
+      "demand": 16,
+      "timing": 20,
+      "fit": 23,
+      "feasibility": 17,
+      "total": 76
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "agentgraph_trust",
+    "title": "ZKP-Backed Trust Scoring for AgentGraph-Style Registries",
+    "description": "AgentGraph provides trust scoring (0-100) and W3C DID-based identity for agents but relies on behavioral heuristics. Bolyra's HumanUniqueness circuit could anchor the human-operator root of trust, while AgentPolicy proofs could replace opaque trust scores with cryptographically verifiable permission attestations.",
+    "category": "developer_tools",
+    "source": "AgentGraph discussion on microsoft/autogen",
+    "preliminary_demand": 14,
+    "preliminary_timing": 19,
+    "preliminary_fit": 21,
+    "preliminary_feasibility": 19,
+    "scores": {
+      "demand": 14,
+      "timing": 19,
+      "fit": 21,
+      "feasibility": 19,
+      "total": 73
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "copilot_spending_gates",
+    "title": "ZKP Approval Gates for Enterprise Agentic Spending Controls",
+    "description": "Microsoft's shift to usage-based Copilot Cowork pricing with approval gates signals enterprise demand for cryptographic spending controls on agents. Bolyra's financial permission tiers (cumulative bits 2-4) and delegation circuit could enforce per-agent budget ceilings that are verifiable without revealing the enterprise's internal authorization hierarchy.",
+    "category": "enterprise_auth",
+    "source": "Copilot Cowork multi-model pricing shift",
+    "preliminary_demand": 19,
+    "preliminary_timing": 17,
+    "preliminary_fit": 20,
+    "preliminary_feasibility": 14,
+    "scores": {
+      "demand": 19,
+      "timing": 17,
+      "fit": 20,
+      "feasibility": 14,
+      "total": 70
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  }
+]

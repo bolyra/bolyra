@@ -1,0 +1,52 @@
+{
+  "id": "formal_verifier_merkle_depth_guard_underconstraint",
+  "title": "BinaryMerkleRoot depth input is underconstrained \u2014 allows depth=0 bypass",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/lib/MerkleDepthGuard.circom",
+      "description": "Reusable template that enforces 1 <= depth <= MAX_DEPTH using Num2Bits + LessThan from circomlib. Imported by all three main circuits."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add MerkleDepthGuard() component for merkleProofLength before BinaryMerkleRoot is instantiated."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add MerkleDepthGuard() component for merkleProofLength before BinaryMerkleRoot is instantiated."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Add MerkleDepthGuard() component for merkleProofLength before BinaryMerkleRoot is instantiated."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/merkle_depth_guard.test.js",
+      "description": "Attack vector tests: (1) depth=0 witness generation must throw/fail for all three circuits; (2) depth=MAX_DEPTH succeeds; (3) depth=MAX_DEPTH+1 fails; (4) depth=1 succeeds with single-sibling proof."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add invariant: 'MerkleDepthBound \u2014 for all circuits, merkleProofLength in [1, MAX_DEPTH]; depth=0 is not a valid witness.'"
+    }
+  ],
+  "steps": [
+    "Audit HumanUniqueness.circom, AgentPolicy.circom, and Delegation.circom to confirm merkleProofLength signal name and MAX_DEPTH constant in each, noting exact line where it feeds into BinaryMerkleRoot's depth parameter.",
+    "Create circuits/src/lib/MerkleDepthGuard.circom: template MerkleDepthGuard(MAX_DEPTH) with input signal 'depth'. Use Num2Bits(bitWidth) to range-limit the signal to bitWidth = ceil(log2(MAX_DEPTH+1)), then use GreaterEqThan(bitWidth) to assert depth >= 1 and LessEqThan(bitWidth) to assert depth <= MAX_DEPTH. Wire both comparator outputs to === 1 constraints.",
+    "In HumanUniqueness.circom: include MerkleDepthGuard.circom, instantiate component depthGuard = MerkleDepthGuard(MAX_DEPTH)(), assign depthGuard.depth <== merkleProofLength before the BinaryMerkleRoot component declaration.",
+    "Apply the same MerkleDepthGuard instantiation pattern to AgentPolicy.circom, using its local MAX_DEPTH constant.",
+    "Apply the same MerkleDepthGuard instantiation pattern to Delegation.circom, using its local MAX_DEPTH constant.",
+    "Write circuits/test/merkle_depth_guard.test.js using circom_tester. For each circuit: attempt calculateWitness with merkleProofLength=0 and assert it rejects; attempt with merkleProofLength=1 and assert success; attempt with merkleProofLength=MAX_DEPTH and assert success; attempt with merkleProofLength=MAX_DEPTH+1 and assert it rejects.",
+    "Run npm run test:circuits:fast to confirm all new tests pass and no existing tests regress.",
+    "Update circuits/FORMAL-PROPERTIES.md to document the MerkleDepthBound invariant: state the constraint, the attack vector it closes (depth=0 leaf-as-root bypass), and the circomlib primitives used."
+  ],
+  "estimated_constraints": 270,
+  "dependencies": [
+    "circomlib (Num2Bits, GreaterEqThan, LessEqThan)",
+    "circom_tester (for witness-only fast tests)",
+    "MAX_DEPTH constant must be defined and consistent in each circuit (currently assumed to be 20 for HumanUniqueness per Semaphore v4 compatibility)"
+  ]
+}

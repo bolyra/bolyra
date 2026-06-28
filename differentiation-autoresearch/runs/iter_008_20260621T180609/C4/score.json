@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction explicitly names AS-blind issuer hiding (\u00a73 Property 2, \u00a78 Gap 6) as a property RFC 7662 structurally cannot provide \u2014 the AS inherently knows the issuer identity. Also identifies constant-size proof vs O(|S|) BBS+ ring signatures (Gap 2), arbitrary Boolean predicates over hidden attributes (Gap 3), and revocation without issuer leak via unified sparse Merkle tree (Gap 4). The rfc7662_advocate's AS-side filtering attack is directly addressed: the construction distinguishes RS-blind (policy-based, achievable by filtered introspection) from AS-blind (cryptographic, requires ZK). The capability ruled out of the baseline is explicit and correct."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Five explicit adversary classes defined (malicious verifier, nonce-reusing verifier, honest-but-curious intermediary, revocation-tree observer, predicate substitution adversary) with precise capabilities. Seven named cryptographic assumptions (PLONK knowledge soundness in AGM+ROM, Poseidon collision resistance, Poseidon preimage resistance, Poseidon PRF, DL on Baby Jubjub, PLONK ZK/SE, on-chain nonce registry correctness). Full hybrid reduction sketch (Hybrids 0\u20134) reducing IND-ISS advantage to Adv^ZK_PLONK + 4\u00b7Adv^PRF_Poseidon. IND-ISS game definition covers adaptive queries with nonce commitment, challenge phase, and post-challenge queries. Predicate integrity reduced to Poseidon25 collision. Revocation hiding reduced to Poseidon preimage resistance with explicit low-entropy caveat."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every component maps to existing Bolyra primitives (\u00a75 table): Poseidon family (2/3/16/25-input), EdDSAPoseidonVerifier on Baby Jubjub, Lean Incremental Merkle Tree, PLONK with pot16.ptau. Detailed constraint breakdown totals ~57,600, within the 2^16=65,536 budget with 12% headroom. Proving time target: <5s PLONK on snarkjs, ~1.2s with rapidsnark. Verification: <300K gas on-chain. Proof size: 768 bytes. No new cryptographic primitives. Nonce commitment adds ~45K gas. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 surfaced multiple real attacks that weaken claims: (1) auth0_pm Attack 1 and cu_ciso Attack 2 show NCUA Part 748 / FINRA Rule 4511 require issuer disclosure for audit trails, directly conflicting with the construction's core property in its named scenarios \u2014 no selective-disclosure escape hatch is specified; (2) cryptographer Attack 1 and rfc7662 Attack 3 identify small-anonymity-set collapse (3 Wyoming CUs, early-adoption registries) with no minimum k_min parameter; (3) rfc7662 Attack 4 identifies schema-shape distinguishability via adaptive chosen-predicate attacks \u2014 construction doesn't require canonical schema padding; (4) spiffe Attack 2 notes BBS+ impossibilities don't cover SD-JWT/WIMSE. Note: several attacks (cryptographer Attacks 2-3) target the older credCommitmentBlind design from the candidate summary, not the actual construction which uses credentialId=Poseidon3(digest,Ax,Ay) and predicateHash re-derivation. The construction mitigates many attacks but the regulatory audit trail conflict is a real gap the construction cannot currently answer."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names PenFed ($36B credit union) as a concrete stakeholder for cross-CU NCUA membership proof, with detailed end-to-end walkthrough including credential issuance, predicate compilation, nonce commitment, proof generation, and verification. Issuer-blindness is load-bearing: competing CUs should not learn which CU's agent is originating loans through their platform. Cross-country KYB scenario names real jurisdictions (US, EU, UK, Singapore) where jurisdiction-hiding is a competitive requirement. FINRA-licensed agent scenario references a real regulatory body. These are not hypothetical \u2014 NCUA charter verification is a real inter-CU workflow."
+    }
+  },
+  "gaps": [
+    "Add selective-disclosure escape hatch for regulatory examination: a designated-verifier mode where the prover can optionally reveal issuer identity to an examiner (under subpoena or NCUA examination) while preserving issuer-blindness for ordinary verifiers. Address 12 CFR Part 748, FINRA Rule 4511, and FATF R.10 audit trail requirements.",
+    "Define minimum anonymity set parameter k_min and state that IND-ISS security degrades when |registry| < k_min. Recommend registry aggregation across jurisdictions for small deployments (e.g., Wyoming CUs should use the national NCUA registry, not a state-level subtree).",
+    "Address Merkle path sibling correlation: either randomize issuer commitment position in the tree (Zerocash-style insertion) or prove that the PLONK proof hides all path structure (siblings are private inputs, so clarify that sibling values never appear as public outputs).",
+    "Require canonical schema padding: all credentials must be padded to the full MAX_ATTRS=16 schema universe so that predicate success/failure does not leak which attributes exist, defeating adaptive chosen-predicate schema-shape attacks.",
+    "Add explicit impossibility item for SD-JWT: claim-name leakage in selective disclosure means SD-JWT cannot achieve predicate evaluation over hidden claim names, only hidden claim values. Without this, WIMSE reviewers will dismiss C4 as redundant to SD-JWT.",
+    "Clarify IND-ISS game scope for multi-session setting: explicitly state whether the game targets CPA (single challenge) or CCA (multi-session) and add AGM assumption if targeting multi-session SE-NIZK."
+  ],
+  "strength": 9,
+  "verdict": "consider"
+}

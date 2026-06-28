@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction's concept \u2014 client-side scope-bound nullifiers with no per-request AS involvement \u2014 is genuinely preferable to the OAuth/OIDC baseline. However, two problems cap this at 1. First, scopeCommitment = Poseidon(permissionBitmask, credentialCommitment) is a public output identical across all RSes for a fixed agent. The AS, which knows both inputs at enrollment, can precompute and match it against any proof, trivially identifying the agent (cryptographer Attack 1, spiffe_engineer Attack 1). The core unlinkability claim is broken by the construction's own public outputs. Second, \u00a78 overstates the delta: RFC 9701 signed JWT introspection already removes the AS from the verification hot path (rfc7662_advocate Attack 1), and SPIFFE SVIDs already achieve AS-free per-request auth (spiffe_engineer Attack 2). The real advantage \u2014 verifiable enforcement under adversarial AS without trusting token contents \u2014 is buried rather than led with (rfc7662_advocate Attack 2). The concept dominates but the implementation leaks a cross-RS correlation handle that the baseline's PPID scheme would not."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides a named threat model (\u00a73), four named cryptographic assumptions (P-PRF, Groth16-KS, BJJ-DL, P-CR), an IND-UNL-AS game definition, and a reduction sketch. This exceeds the bar for 1. However, three fatal flaws prevent awarding 2. (1) The IND-UNL-AS game is trivially winnable: Phase 1 allows querying each challenge agent individually to each challenge RS, prelearning all four scopeNullifier values and winning with advantage 1 (cryptographer Attack 2, rfc7662_advocate Attack 3). The freshness restriction 'not yet queried in this combination' does not exclude individual prior queries. (2) The reduction to Poseidon PRF is circular: the reducer B embeds k* as agentSecret but cannot supply it as a private witness to the Groth16 prover, and invoking the ZK simulator requires the trusted setup trapdoor \u03c4, which B does not possess (cryptographer Attack 3). (3) \u00a74 incorrectly claims blindedSessionTag masks scopeNullifier correlations across RSes, but scopeNullifier is a public output visible before the blinded tag is computed (rfc7662_advocate Attack 4). The formal machinery exists but is unsound as written."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps comprehensively to existing Bolyra primitives (\u00a75): Poseidon2/3/5 hashing, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding constraints, Num2Bits range checks, and the 30-entry on-chain root history buffer. Circuit cost is itemized at ~39,500 constraints, well within the pot16.ptau ceiling of 65,536. Proving time targets are stated: <4s PLONK on commodity hardware, <2s Groth16 with rapidsnark. The only new primitive is Poseidon3 for blindedSessionTag, which is supported by circomlib's Poseidon template. The agentSecret pattern directly mirrors the existing human secret in HumanUniqueness. All claims are within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found fatal flaws the construction cannot answer. (1) scopeCommitment is a public output that is identical across all RSes for a fixed agent; the AS can precompute it from enrollment data and de-anonymize any proof with advantage 1 (cryptographer Attack 1, spiffe_engineer Attack 1). (2) The IND-UNL-AS game is trivially winnable via Phase 1 pre-query exhaustion of scopeNullifier values (cryptographer Attack 2, rfc7662_advocate Attack 3). (3) The reduction sketch is invalid \u2014 the reducer cannot generate valid proofs without knowing agentSecret and cannot invoke the ZK simulator without the setup trapdoor (cryptographer Attack 3). (4) agentSecretCommitment is internal-only with no public binding, allowing credential multiplexing with arbitrary secrets to fork nullifiers and evade sybil detection (cryptographer Attack 4). These are not mitigated weaknesses \u2014 they are structural breaks that invalidate the core unlinkability claim as written."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named with specific stakeholders: (1) California Credit Union League consortium (140+ CUs) where CU-as-AS must not learn member merchant graph, and (2) regional HIE under HIPAA where PCP-as-AS must not learn referral network. The property (cross-scope unlinkability) is genuinely load-bearing in both. However, cu_ciso attacks demonstrate structural regulatory incompatibility: NCUA Part 748 and GLBA \u00a7314.4(b)(3) require audit trails mapping access to member identities, and HIPAA \u00a7164.312(b) requires audit controls attributing PHI access. The construction provides no reconciliation mechanism (no selective-disclosure path, no examiner-accessible mapping). The AS-free path that is the core differentiator is precisely what destroys the audit trail regulators require. The scenarios are concrete but partially hypothetical as-described because the named regulatory requirements contradict the construction's privacy guarantees."
+    }
+  },
+  "gaps": [
+    "scopeCommitment must be blinded or removed from public outputs \u2014 it is a per-agent fingerprint the AS can precompute and match across all RSes",
+    "IND-UNL-AS game must add freshness restriction: challenge RSes must not have been queried with either challenge agent in any prior phase",
+    "Reduction sketch must be rewritten: either use simulation-extractable SNARKs (SE-SNARKs) that don't require setup trapdoor for simulation, or restructure the argument to avoid invoking the ZK simulator during the PRF reduction",
+    "agentSecretCommitment must be output publicly and verified at enrollment to bind agentSecret to the credential and prevent nullifier forking via credential multiplexing",
+    "Add a selective-disclosure or examiner-reveal mechanism (e.g., member-controlled reveal key disclosed only under supervisory order) to reconcile unlinkability with NCUA/HIPAA audit requirements",
+    "\u00a78 baseline comparison must address SPIFFE/WIMSE prior art (AS-free per-request path already exists in SPIFFE; WIMSE achieves AS-invisible delegation) and narrow claims to cross-RS nullifier unlinkability + verifiable enforcement under adversarial AS",
+    "blindedSessionTag role must be correctly characterized in \u00a74 as within-RS replay prevention, not cross-RS unlinkability \u2014 separate the two arguments cleanly",
+    "Address agentSecret lifecycle: key rotation path, minimum custody requirements, revocation latency bounds, and forward secrecy for historical nullifiers"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

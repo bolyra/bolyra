@@ -1,0 +1,73 @@
+{
+  "id": "product_visionary_session_token_offchain_jwt",
+  "title": "Off-chain session token (JWT) after on-chain handshake",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/session-token-jwt.md",
+      "description": "JWT claims specification: scope_commitment (hex), human_nullifier (hex), agent_nullifier (hex), session_nonce (hex), iat (Unix), exp (Unix), iss (DID), sub (agent DID), jti (unique token ID). Defines signing algorithm (EdDSA over Ed25519 or ES256), token lifetime policy, and scope downgrade rules."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/SessionTokenIssuer.ts",
+      "description": "SessionTokenIssuer class: takes HandshakeProofOutputs (humanNullifier, agentNullifier, scopeCommitment, sessionNonce, verifiedAt), issuer private key, and optional ttlSeconds; returns a signed compact JWT. Uses jose library for EdDSA/ES256 signing."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/verifySessionToken.ts",
+      "description": "verifySessionToken(token, issuerPublicKey, expectedScope?): verifies JWT signature, checks exp, validates required claims are present, optionally asserts scope_commitment matches caller expectation. Returns decoded SessionClaims or throws typed BolyraSessionError."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/types.ts",
+      "description": "TypeScript types: SessionClaims (all JWT claims strongly typed), SessionTokenOptions (ttlSeconds, issuerDid, algorithm), BolyraSessionError (subclasses: TokenExpired, InvalidSignature, ScopeMismatch, MissingClaim)."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export SessionTokenIssuer, verifySessionToken, SessionClaims, BolyraSessionError from public API surface."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/sessionToken.test.ts",
+      "description": "Unit tests: issue token from mock handshake outputs, verify succeeds with correct key, verify fails on expired token, verify fails on tampered payload, verify fails on wrong public key, scope mismatch throws ScopeMismatch, missing required claim throws MissingClaim."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/sessionToken.integration.test.ts",
+      "description": "Integration test: full flow from proveHandshake() \u2192 on-chain verifyHandshake() \u2192 SessionTokenIssuer.issue() \u2192 verifySessionToken() round-trip without re-proving."
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add session token section: code snippet showing post-handshake JWT issuance and subsequent verifySessionToken() usage in an API middleware pattern."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-middleware.md",
+      "description": "How-to guide: integrating Bolyra session tokens into Express/Fastify middleware, bearer token extraction, scope enforcement per route, token refresh policy."
+    }
+  ],
+  "steps": [
+    "Add jose (^5.x) as a dependency in sdk/package.json; audit for CVEs and add override if needed",
+    "Define SessionClaims interface and BolyraSessionError hierarchy in sdk/src/session/types.ts",
+    "Write spec/session-token-jwt.md: claim names, types, signing algorithm choices (EdDSA primary, ES256 fallback), lifetime defaults (1h), scope_commitment binding rationale, and token revocation non-goals (stateless design)",
+    "Implement SessionTokenIssuer.issue() in sdk/src/session/SessionTokenIssuer.ts: validate HandshakeProofOutputs fields, build claims payload, sign with jose SignJWT, return compact serialization",
+    "Implement verifySessionToken() in sdk/src/session/verifySessionToken.ts: jose jwtVerify with issuer public key, extract and return SessionClaims, map jose errors to BolyraSessionError subclasses",
+    "Write unit tests in sdk/test/session/sessionToken.test.ts covering happy path, expiry, tamper, wrong key, scope mismatch, and missing claim scenarios",
+    "Write integration test in sdk/test/session/sessionToken.integration.test.ts wiring proveHandshake \u2192 verifyHandshake \u2192 issue \u2192 verifySessionToken",
+    "Export new symbols from sdk/src/index.ts and verify tsc --noEmit passes",
+    "Update sdk/QUICKSTART.md with session token usage snippet",
+    "Author docs/session-token-middleware.md with Express/Fastify middleware example",
+    "Run npm run test:circuits:fast && npm run test:contracts && cd sdk && npm test to confirm no regressions",
+    "Commit with DCO sign-off: git commit -s"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose ^5.x (JWT signing/verification)",
+    "proveHandshake() and verifyHandshake() APIs must be stable (sdk/src/index.ts)",
+    "HandshakeProofOutputs type must expose humanNullifier, agentNullifier, scopeCommitment, sessionNonce",
+    "Issuer key pair management is caller responsibility (out of scope for this feature)",
+    "On-chain verifyHandshake() must complete successfully before SessionTokenIssuer.issue() is called"
+  ]
+}

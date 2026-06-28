@@ -1,0 +1,80 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Complete DID resolution algorithm with revocation and delegation discovery",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Extend existing DID method spec with full CRUD lifecycle: Create (enrollment tx \u2192 DID Document), Read (resolve commitment \u2192 on-chain lookup + Merkle inclusion), Update (immutable \u2014 explicit non-operation), Deactivate (revocation nullifier check). Add resolution algorithm pseudocode, error codes (STALE_ROOT, REVOKED_IDENTITY, NOT_FOUND, INVALID_COMMITMENT), and delegationService endpoint definition."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-resolution-algorithm.md",
+      "description": "Standalone resolution algorithm document: input/output types, step-by-step resolver logic, caching policy for Merkle roots, conformance requirements per W3C DID Core \u00a77."
+    },
+    {
+      "type": "docs",
+      "filename": "spec/did-resolution-examples.jsonld",
+      "description": "Concrete JSON-LD DID Document examples for each lifecycle operation: freshly enrolled human identity, resolved agent credential DID, deactivated (revoked) identity with nullifier proof, and DID Document with delegationService endpoint."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-error-registry.md",
+      "description": "Error code registry: invalidDid, notFound, deactivated (maps to revocationNullifierFound), representationNotSupported, staleRoot (Merkle root lag > threshold), delegationChainBroken."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did/resolver.ts",
+      "description": "TypeScript DID resolver implementing the algorithm: resolveHuman(commitment) and resolveAgent(credentialHash) returning W3C DID Resolution Result objects, with on-chain EnrollmentRegistry lookups, nullifier checks, and delegationService URL construction."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did/types.ts",
+      "description": "DID Document type definitions: DidDocument, VerificationMethod (Ed25519 + BLS12-381), ServiceEndpoint, DelegationService, ResolutionMetadata, DocumentMetadata."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/DIDRegistry.sol",
+      "description": "On-chain registry emitting EnrollmentRegistered and IdentityDeactivated events with indexed commitment fields to support resolution queries. Exposes currentMerkleRoot() and isNullifierRevoked(bytes32) view functions."
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/did-resolution-conformance.ts",
+      "description": "Conformance test suite validating the resolver against all W3C DID Core resolution algorithm requirements: happy path, stale-root error, revoked identity error, delegation chain discovery, and representation negotiation."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/did/resolver.test.ts",
+      "description": "Unit tests for the TypeScript resolver: mock EnrollmentRegistry, nullifier state, and Merkle inclusion proofs. Covers all error code paths."
+    }
+  ],
+  "steps": [
+    "Audit existing spec/did-method-bolyra.md to inventory what syntax and DID Document structure is already defined; note gaps in CRUD lifecycle coverage",
+    "Define the canonical DID syntax: did:bolyra:<network>:<commitment-hash> for humans, did:bolyra:<network>:agent:<credential-hash> for agents",
+    "Specify Create operation: map enrollment transaction (EnrollmentRegistry.enroll(commitment)) to DID Document with Ed25519 verificationMethod derived from commitment, plus Merkle inclusion proof as documentMetadata",
+    "Specify Read (resolve) operation: (1) parse DID \u2192 extract commitment/credential hash, (2) query EnrollmentRegistry for EnrollmentRegistered event, (3) verify current Merkle inclusion via inclusion proof or on-chain root, (4) check nullifier registry for deactivation, (5) construct DID Document with current verificationMethods and serviceEndpoints",
+    "Specify Update operation explicitly as NOT SUPPORTED with rationale: commitments are cryptographic commitments, immutable by design; key rotation requires new enrollment and DID",
+    "Specify Deactivate operation: submitting a valid revocation nullifier to NullifierRegistry marks the DID as deactivated; resolver MUST return deactivated=true in documentMetadata and error code 'deactivated'",
+    "Define delegationService endpoint schema: type='BolyraD elegationChain', serviceEndpoint pointing to delegation discovery API with did parameter; describe how resolver populates this from on-chain delegation events",
+    "Define error codes and map to W3C DID resolution error vocabulary: invalidDid, notFound, deactivated, staleRoot (configurable lag threshold), delegationChainBroken, representationNotSupported",
+    "Write concrete JSON-LD examples for all operations and embed in spec/did-resolution-examples.jsonld with @context referencing did-bolyra context document",
+    "Implement DID Document types in sdk/src/did/types.ts aligned with W3C DID Core data model",
+    "Implement resolver in sdk/src/did/resolver.ts: resolveHuman and resolveAgent functions, ethers.js queries against DIDRegistry and NullifierRegistry, Merkle inclusion verification via snarkjs witness check",
+    "Add DIDRegistry.sol with EnrollmentRegistered(bytes32 indexed commitment, address enrollee, uint256 timestamp) and IdentityDeactivated(bytes32 indexed nullifier) events plus view functions currentMerkleRoot() and isNullifierRevoked(bytes32)",
+    "Write conformance test suite covering all W3C DID Core \u00a77 resolution algorithm steps",
+    "Write SDK unit tests mocking on-chain state for all error paths",
+    "Update spec/did-method-bolyra.md to reference the new resolution algorithm document and examples",
+    "Cross-reference FORMAL-PROPERTIES.md to ensure resolver's nullifier check aligns with circuit-enforced nullifier domain separation"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "spec/did-method-bolyra.md (existing DID syntax baseline)",
+    "contracts/src/EnrollmentRegistry.sol (enrollment event source)",
+    "circuits/src/HumanUniqueness.circom (nullifierHash output used as deactivation key)",
+    "circuits/src/AgentPolicy.circom (credentialHash used as agent DID identifier)",
+    "W3C DID Core 1.0 (resolution algorithm \u00a77 conformance)",
+    "W3C DID Resolution spec (resolutionMetadata + documentMetadata types)",
+    "snarkjs (Merkle inclusion witness verification in resolver)",
+    "ethers.js v6 (on-chain event and view function queries)"
+  ]
+}

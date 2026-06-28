@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real capabilities the baseline lacks (hidden intermediate scopes, concealed chain length, single aggregated proof, AS-blind auditing). However, the cryptographer and rfc7662_advocate attacks demonstrate that rootScopeCommitment and finalScopeCommitment are trivially invertible via low-entropy brute force (~200 Poseidon evaluations using on-chain credCommitments), and policyFloor is an adaptive per-bit extraction oracle (8 queries recover finalScope exactly). The baseline dominance claim on scope hiding is therefore broken in practice. The construction is preferable to baseline on chain-length hiding and single-proof aggregation, but cannot claim the baseline 'provably cannot' match when the headline privacy property (scope concealment) is defeated without cryptographic breaks."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models (CHAIN-NARROW-SOUNDNESS and CHAIN-PRIVACY games), named cryptographic assumptions (A1-A3), and reduction sketches for Theorems 1 and 2. However, multiple Tier 3 attacks expose gaps the reductions do not close: (1) cryptographer Attack 2 shows delegatorPubkeys[i] is never bound to credCommitments[i-1], breaking the chain-linking soundness argument \u2014 the reduction in Theorem 1 assumes Merkle inclusion alone suffices but it doesn't bind signing keys to enrolled credentials; (2) cryptographer Attack 3 shows actualLength=0 is underconstrained, producing vacuous soundness; (3) cryptographer Attack 1 and rfc7662_advocate Attack 1 show CHAIN-PRIVACY Theorem 2's reduction fails to account for public output inversion via on-chain enumeration; (4) the PLONK SRS ceremony is unnamed, making A3's trust assumption ungrounded. Threat model is stated but reductions have real holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps entirely to existing Bolyra primitives: Poseidon2/Poseidon4 hashes, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), cumulative-bit encoding, PLONK proving system. Circuit cost is estimated at ~209K constraints fitting within 2^18, with per-gadget breakdowns. Proving time targets (<5s PLONK, <2s rapidsnark) are stated and within the spec's agent-class budget. pot18.ptau is a standard ceremony artifact. The constraint increase from G9 is justified. All elements are Phase 1 compatible."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer: (1) cryptographer's key-commitment binding gap (Attack 2) \u2014 delegatorPubkeys are unbound to credCommitments, enabling phantom delegator chains that pass G4+G9; (2) cryptographer's actualLength=0 vacuous soundness (Attack 3) \u2014 empty chains produce accepting proofs; (3) cryptographer+rfc7662_advocate scope commitment brute-force inversion \u2014 privacy claim on root/final scopes is broken; (4) rfc7662_advocate's adaptive policyFloor oracle \u2014 8 queries fully recover finalScope; (5) cu_ciso's regulatory conflict \u2014 the NFCU scenario requires reconstructible audit trails (Part 748, BSA/AML) that the construction cryptographically forecloses; (6) auth0_pm's operator-generated proof problem \u2014 no runtime binding mechanism. Multiple unanswered attacks across all five personas."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario is concrete and names a real stakeholder (13M-member credit union, NCUA regulator). However, multiple personas (cu_ciso, rfc7662_advocate, spiffe_engineer) demonstrate the scenario is self-undermining: NCUA examination requires reconstructible event logs (Part 748), BSA/AML requires identifiable automated actors (31 U.S.C. \u00a75318(g)), and the construction's privacy properties directly conflict with these mandated transparency requirements. The whistleblower and cross-org variants are more compelling but underspecified (no cross-org registry governance, enrollment deanonymization via on-chain timing). The scenario is named but the regulatory requirements contradict the construction's core privacy claims, making it hypothetical rather than load-bearing."
+    }
+  },
+  "gaps": [
+    "Add blinding nonce to scope commitments: Poseidon3(scope, credCommitment, blindingNonce) to defeat brute-force inversion of rootScopeCommitment and finalScopeCommitment from on-chain enumeration",
+    "Add in-circuit constraint binding delegatorPubkeys[i] to the public key committed inside credCommitments[i-1] \u2014 without this, phantom delegator attacks bypass G9",
+    "Enforce actualLength >= 1 via explicit nonzero range check in circuit \u2014 currently actualLength=0 produces vacuous soundness",
+    "Address adaptive policyFloor oracle: either pre-commit policyFloor before chain assembly, or restrict verifier to one proof per chainDigest, or extend CHAIN-PRIVACY game to multi-query setting",
+    "Name the PLONK universal SRS ceremony (participants, transcript auditability) or specify ceremony requirements \u2014 current A3 assumption is ungrounded",
+    "Add a credentialed-access audit path (e.g., escrow/re-encryption mechanism) that selectively reveals the witness to privileged investigators under legal process, resolving the conflict between CHAIN-PRIVACY and BSA/AML/Part 748 mandatory disclosure",
+    "Replace or reframe the NFCU regulatory scenario as secondary; lead with whistleblower or cross-org variants where AS-blind auditing is genuinely load-bearing rather than contradicting regulatory transparency mandates",
+    "Specify cross-org registry enrollment governance model \u2014 who controls operator keys, how multi-org enrollment sovereignty works without reintroducing a trusted intermediary",
+    "Add runtime binding mechanism (TEE attestation, verifiable execution trace, or oracle) so the proof is bound to observed pipeline execution, not just a prover-assembled witness"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

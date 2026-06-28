@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps vs OAuth (AS removed from per-request path, scope-blind pseudonyms). However, multiple attackers (spiffe_engineer Attack 2, rfc7662_advocate Attack 4) correctly note that SPIFFE already removes the AS from the per-request path, and WIMSE+BBS+ provides unlinkability against honest issuers. The construction's \u00a78 'structural impossibility' framing overstates the case \u2014 SPIFFE disproves \u00a78.1 by construction. The real delta is malicious-issuer unlinkability, which is meaningful but narrower than claimed. The baseline can approximate most properties except the malicious-issuer case. Score 1, not 2, because the baseline can partially match with pre-issuance JWT + PPID + BBS+, and \u00a78 contains falsifiable claims about SPIFFE."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides a named threat model (IND-UNL-AS game), named assumptions (POS-PRF, DL-BJJ, POS-CR, KS-G16/KS-PLONK), and a reduction sketch. However, the cryptographer (Attack 1) identifies a critical gap: the IND-UNL-AS game assumes the adversary does NOT see honest-RS public signals, but on a public blockchain all public inputs are globally observable. The game definition contradicts the on-chain deployment model. The reduction sketch covers joint leakage at a single RS but not the cross-RS four-value case where the adversary sees P2 and P4 evaluations at both scopeId_A and scopeId_B. The cryptographer (Attack 3) also flags that the ROM independence claim for Poseidon2/Poseidon4 under correlated keys is an unproven modeling assumption, not a theorem. The hybrid argument defers to ROM without writing the explicit proof. These are definitional flaws in the formal argument \u2014 the intuition is sound but the proof as written has gaps. Score 1: threat model stated, assumptions named, but reduction incomplete for the actual deployment model."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/4/5 hash, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits range checks, LessThan comparator. Circuit cost is explicitly estimated: ~26,840 constraints for ScopeBlindAuth and ~27,102 for ScopeBlindDelegation, both fitting within pot16.ptau (2^16 = 65,536). Proving time targets are stated (0.6\u20134s depending on system). The net change from prior construction is +400 constraints (~1.5%). PLONK avoids per-circuit ceremony. All gadgets are Phase 1 primitives already in the codebase."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex adversary with 5 personas surfaced multiple real attacks that the construction cannot fully answer. The cryptographer's Attack 1 (on-chain signals visible to adversary contradicts game definition) is a formal gap the construction does not address \u2014 the game must be restated. The auth0_pm's Attack 3 (AS and agent operator are the same entity in enterprise deployments, collapsing the trusted-execution assumption) is a deployment-model attack the construction cannot answer without TEE requirements. The cu_ciso's Attack 1 (NCUA Part 748 audit trail requirements conflict with 'AS sees nothing') is a regulatory attack with no escrow/disclosure mechanism. The cryptographer's Attack 4 and spiffe_engineer's Attack 4 both identify the forward-secrecy failure with no rotation for scopeBlindingSecret. Multiple attacks weaken the claim materially. Score 1: Tier 3 surfaced real attacks that the construction mitigates partially but that weaken the overall claim."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "The construction names a concrete primary deployment: cross-credit-union member agent at Desert Financial / CU*Answers network (150+ credit unions). The stakeholder is named (Desert Financial Credit Union, CU*Answers CUSO). The regulatory requirement is named (NCUA Regulation V affiliate marketing opt-out, Arizona financial privacy act). The property is load-bearing: without cross-scope unlinkability, the AS (Desert Financial) can reconstruct Alice's merchant transaction graph, which is a privacy violation under named regulations. The healthcare scenario (Kaiser Permanente \u2192 Cedars-Sinai) provides a secondary named deployment. These are concrete, not hypothetical, with named institutions and regulatory frameworks."
+    }
+  },
+  "gaps": [
+    "IND-UNL-AS game must be restated to give the adversary ALL public signals from ALL RSes (on-chain model), not just compromised RS signals \u2014 then write the full 4-step cross-RS hybrid argument",
+    "Address the correlated-key usage of scopeBlindingSecret across Poseidon2 and Poseidon4: either use separate derived secrets via KDF, or provide a formal Poseidon-specific independence argument across arities",
+    "Add forward-secrecy / key-rotation protocol for scopeBlindingSecret with pseudonym migration, bounding retroactive deanonymization to a rotation epoch",
+    "Correct \u00a78 Structural Impossibility 1 to engage with SPIFFE (AS already off per-request path) and WIMSE+BBS+ (unlinkability against honest issuers) \u2014 narrow the claim to malicious-issuer unlinkability",
+    "Address enterprise deployment conflation where AS and agent operator are the same entity \u2014 either require TEE attestation or scope the unlinkability claim to exclude self-hosted agent deployments",
+    "Add regulatory audit escrow mechanism (e.g., dual-mode audit log) so credit unions can satisfy NCUA Part 748 recordkeeping while preserving cross-scope unlinkability from third-party RSes",
+    "Redesign delegation blinding-secret transfer to use delegatee-specific derived secrets rather than transmitting the root scopeBlindingSecret, closing the delegation-as-exfiltration-surface attack",
+    "Model the batch relayer as a trust principal in the threat model \u2014 it sees scopeId per proof and can correlate RS visit patterns; specify anonymous submission protocol or restrict the privacy claim"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

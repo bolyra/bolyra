@@ -1,0 +1,49 @@
+{
+  "id": "delegation_depth_2",
+  "description": "Two-hop delegation chain: operator -> agent-1 -> agent-2. Each hop narrows scope monotonically. Both Delegation circuit invocations must produce valid witnesses.",
+  "steps": [
+    {
+      "circuit": "Delegation",
+      "input_witnesses": {
+        "agentTreeRoot": "FROZEN_BY_EXTRACT",
+        "scopeCommitment": "FROZEN_BY_EXTRACT",
+        "nullifierHash": "FROZEN_BY_EXTRACT",
+        "delegatorSecret": "55555555555555555555",
+        "delegatorNonce": "3",
+        "delegateeCredCommitment": "FROZEN_BY_EXTRACT",
+        "scope": "7",
+        "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+        "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+      },
+      "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT"],
+      "expected_result": "pass"
+    },
+    {
+      "circuit": "Delegation",
+      "input_witnesses": {
+        "agentTreeRoot": "FROZEN_BY_EXTRACT",
+        "scopeCommitment": "FROZEN_BY_EXTRACT",
+        "nullifierHash": "FROZEN_BY_EXTRACT",
+        "delegatorSecret": "77777777777777777777",
+        "delegatorNonce": "4",
+        "delegateeCredCommitment": "FROZEN_BY_EXTRACT",
+        "scope": "3",
+        "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+        "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+      },
+      "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT"],
+      "expected_result": "pass"
+    }
+  ],
+  "expected_result": "pass",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "extract_vectors.js",
+    "delegation_chain": {
+      "depth": 2,
+      "scope_narrowing": ["7 (00000111)", "3 (00000011)"],
+      "monotonic": true
+    }
+  }
+}

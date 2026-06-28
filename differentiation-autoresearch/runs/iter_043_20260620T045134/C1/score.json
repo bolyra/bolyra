@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties the baseline cannot match (adversarial-AS soundness, bitwise predicate over committed bitmask with implication closure, model identity binding). However, the rfc7662_advocate's Attack 1 (RFC 8693 token exchange) and Attack 3 (BBS+ composed with Bulletproof bit decomposition) show the baseline can approximate more than \u00a78 admits. The \u00a78 table contains a factual mischaracterization of BBS+ expressiveness ('does not support bitwise AND' is wrong when composed with Sigma protocols). The adversarial-AS property is genuine and irreducible, but the construction overstates uniqueness in the honest-AS case. The claim in \u00a71 ('no composition of RFC 7662\u2026 can simultaneously achieve AS-blindness\u2026') is too broad \u2014 RFC 8693 + signed JWT introspection matches AS-blindness in the honest-AS case. Score 1 because the adversarial-AS + model-binding gap is real but the framing oversells, and the BBS+ comparison needs correction before it can claim provable impossibility."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-structured threat model (\u00a73), named assumptions (A1\u2013A5), two security games (SSU, SP), and reduction sketches. This is significantly above average. However, the cryptographer's attacks expose real formal gaps: (1) The SP game has the challenger sample blindingNonce but the protocol has the prover sample it \u2014 the game is mis-modeled for adversarial/compromised provers (Attack 2). (2) The SP reduction invokes HVZK (A4) but the game grants oracle access to proofs sent to potentially adversarial RSes with adaptive nonce selection, which HVZK does not cover (Attack 4). (3) The blinded nullifier provides no nullifier semantics \u2014 replay prevention comes solely from sessionNonce binding, making the 'replay prevention' claim for blindedNullifier false (Attack 1). (4) The Groth16 CRS trust assumption is named but not quantified \u2014 who ran the ceremony, how many parties, what threshold (Attack 3). These are not fatal but each weakens the formal argument. The threat model and assumptions exist but the reductions have gaps. Score 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon2/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits, LessThan \u2014 all present in the existing AgentPolicy circuit. \u00a76 provides a detailed constraint budget (~11,050 constraints) well within pot16.ptau capacity (65,536). Proving time targets are stated (rapidsnark <500ms, snarkjs 3\u20135s). The only new element is one additional Poseidon2 call for blinding (~150 constraints). The circuit is a refactored AgentPolicy, not a new primitive. This fits squarely within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex adversary with 5 personas produced substantial attacks. Several are acknowledged as in-threat-model or partially so: (1) spiffe_engineer Attack 3 \u2014 delegation chain reuse of blindedScopeCommitment breaks the cross-RS unlinkability claim when delegation is involved; construction's \u00a78 'full unlinkability' claim is false in delegation case. (2) cryptographer Attack 1 \u2014 blindedNullifier provides zero nullifier semantics; replay prevention claim is false. (3) cryptographer Attack 2 \u2014 SP game mis-modeled for adversarial prover controlling blindingNonce. (4) rfc7662_advocate Attack 4 and cu_ciso Attack 4 \u2014 revocation lag from 30-entry root buffer is unaddressed. (5) spiffe_engineer Attack 2 \u2014 root delivery trust (RPC provider as new AS) is unaddressed in deployment. The construction mitigates many attacks (adversarial-AS soundness holds, scope privacy core is sound, circuit constraints are correct) but multiple attacks landed that weaken claims without destroying the construction. Score 1 \u2014 Tier 3 surfaced real attacks that weaken but don't kill."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names a concrete primary scenario: cross-employer agent credentials at third-party financial RSes, with named stakeholders (Alliant Credit Union \u2014 real institution, 900K+ members; Acme Corp and Contoso Ltd as operators). The adversarial-AS property is load-bearing in this multi-operator topology \u2014 it's not nice-to-have. GLBA \u00a7501(b) data minimization and GLBA Safeguards Rule \u00a7314.4(f) are cited as regulatory requirements. The secondary scenario names Navy Federal Credit Union (13M+ members) with GLBA data minimization as the driver. The cu_ciso attacks identify real compliance gaps (NCUA Part 748, FFIEC CAT) but these are operational gaps in the construction's completeness, not evidence that the scenario is hypothetical. The scenario is concrete, names real institutions, and the property is load-bearing."
+    }
+  },
+  "gaps": [
+    "Sharpen \u00a71/\u00a78 baseline dominance claim: acknowledge RFC 8693 + signed JWT introspection matches AS-blindness in honest-AS case; correct BBS+ expressiveness characterization (BBS+ composed with bit-decomposition proofs can evaluate bitwise predicates)",
+    "Fix SP game modeling: either add assumption A6 that prover samples blindingNonce honestly and state consequences when violated, or redesign to commit blindingNonce before challenge",
+    "Drop replay-prevention claim for blindedNullifier; state explicitly that replay prevention comes from sessionNonce binding alone",
+    "Address HVZK vs malicious-verifier gap in SP reduction: either restrict SP game to honest RSes explicitly, or upgrade to simulation-extractable NIZK",
+    "Specify root delivery trust model: how does RS authenticate agentMerkleRoot? Light client, EIP-1186 storage proofs, or authenticated channel with stated trust assumptions",
+    "Define revocation mechanism: maximum root cache TTL, root rotation cadence, and explicit maximum revocation lag as protocol parameters",
+    "Fix delegation chain unlinkability: blindedScopeCommitment stored on-chain breaks cross-RS unlinkability when delegation is used; either restrict unlinkability claim to non-delegation case or redesign chain-link mechanism",
+    "Quantify CRS trust: specify ceremony details (multi-party threshold, number of participants, transcript availability) to support the 'RS trusts math' claim",
+    "Address operational gaps for CU deployment: audit trail mechanism compatible with NCUA Part 748, structured error taxonomy for proof verification failures, operator allowlisting for GLBA \u00a7314.4(f) vendor management",
+    "Acknowledge SPIFFE/WIMSE and position as WIMSE ZK profile rather than competing protocol"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

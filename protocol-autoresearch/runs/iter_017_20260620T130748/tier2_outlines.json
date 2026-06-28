@@ -1,0 +1,692 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_conformance_test_vectors_v3",
+      "persona": "standards_architect",
+      "title": "Machine-readable conformance test vectors (JSON Schema + vectors)",
+      "dimension": "standards",
+      "description": "Create a `spec/conformance/` directory with a JSON Schema defining the test vector format and 30+ vectors covering: valid handshake round-trip, expired agent credential, revoked human identity, stale root (both trees), scope subset violation, cumulative-bit encoding violation, delegation chain at max hops, nonce replay, and the phantom-delegatee attack. Each vector includes inputs, expected circuit output (accept/reject), and the specific error code. This is the minimum viable interop artifact for any alternative SDK implementation to prove compatibility.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors_v3",
+      "adoption": 14,
+      "standards": 20,
+      "completeness": 22,
+      "correctness": 17,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_test_vectors_v3",
+      "title": "Machine-readable conformance test vectors (JSON Schema + vectors)",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/conformance/vector-schema.json",
+          "description": "JSON Schema (draft-07) defining the canonical test vector format: id, category, description, inputs, expected_result (accept|reject), error_code, notes"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/vectors.json",
+          "description": "30+ concrete test vectors covering all required scenarios, each conforming to vector-schema.json"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/README.md",
+          "description": "Human-readable guide: purpose, vector categories, how alternative implementations must consume and validate vectors, error code registry"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/error-codes.json",
+          "description": "Canonical error code registry mapping symbolic names (ERR_NONCE_REPLAY, ERR_SCOPE_VIOLATION, etc.) to numeric codes and descriptions"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/validate-vectors.js",
+          "description": "Node script that validates vectors.json against vector-schema.json using ajv, exits non-zero on any schema violation \u2014 runnable in CI"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/run-vectors.js",
+          "description": "Conformance runner: feeds each vector's inputs through @bolyra/sdk (witness generation or full proof based on FULL_PROOF env), asserts expected_result and error_code match"
+        },
+        {
+          "type": "docs",
+          "filename": "spec/conformance/INTEROP.md",
+          "description": "Interoperability guidance for alternative SDK authors: how to parse vectors, what 'inputs' fields map to circuit signals, pass/fail criteria, how to report results"
+        }
+      ],
+      "steps": [
+        "Audit existing spec/ files (did-method-bolyra.md, draft-bolyra-mutual-zkp-auth-01.md) and circuits/FORMAL-PROPERTIES.md to enumerate all acceptance and rejection conditions that vectors must cover",
+        "Define error code registry (error-codes.json): assign symbolic names and numeric codes for every rejection category \u2014 ERR_EXPIRED_CREDENTIAL, ERR_REVOKED_IDENTITY, ERR_STALE_ROOT_HUMAN, ERR_STALE_ROOT_AGENT, ERR_SCOPE_SUBSET_VIOLATION, ERR_CUMULATIVE_BIT_VIOLATION, ERR_DELEGATION_MAX_HOPS, ERR_NONCE_REPLAY, ERR_PHANTOM_DELEGATEE, ERR_INVALID_SIGNATURE",
+        "Author vector-schema.json (JSON Schema draft-07) with required fields: id (string), category (enum), description (string), inputs (object with sub-schema per circuit), expected_result (enum: accept|reject), error_code (string|null for accept cases), notes (string optional)",
+        "Write vectors.json with 30+ entries grouped by category: (1) valid_handshake \u2014 3 vectors covering minimal, full-permissions, and delegation chain happy paths; (2) expired_credential \u2014 2 vectors at boundary and past expiry; (3) revoked_identity \u2014 2 vectors single and batch revocation; (4) stale_root \u2014 4 vectors covering human tree stale, agent tree stale, both stale, root just-rotated; (5) scope_violation \u2014 4 vectors strict subset, exact match, superset attempt, empty scope; (6) cumulative_bit \u2014 4 vectors valid encoding, FINANCIAL_MEDIUM without FINANCIAL_SMALL, SUB_DELEGATE chain, all bits set; (7) delegation_chain \u2014 3 vectors at max hops (accepted), max+1 hops (rejected), zero-hop passthrough; (8) nonce_replay \u2014 3 vectors same nonce same session, same nonce different session, fresh nonce; (9) phantom_delegatee \u2014 3 vectors unregistered delegatee, mismatched commitment, valid delegatee",
+        "Write validate-vectors.js using ajv to load vector-schema.json and validate all entries in vectors.json, printing per-vector PASS/FAIL and a summary count \u2014 wire into package.json as 'validate:vectors'",
+        "Write run-vectors.js conformance runner: for each vector, construct circuit inputs from vector.inputs, call @bolyra/sdk witness generation (or full snarkjs proof if FULL_PROOF=1), map SDK error to error code, assert expected_result and error_code \u2014 output JSON results suitable for CI artifact upload",
+        "Add 'test:conformance' and 'validate:vectors' scripts to root package.json; add conformance job to CI that runs validate-vectors.js unconditionally and run-vectors.js in fast (witness-only) mode",
+        "Write spec/conformance/README.md: purpose, category taxonomy, inputs schema reference per circuit (signal name \u2192 vector field mapping), error code table, CI badge instructions",
+        "Write spec/conformance/INTEROP.md: step-by-step guide for alternative SDK authors \u2014 parsing vectors.json, mapping inputs to their proving system, expected error surfacing contract, how to open a conformance PR with results JSON",
+        "Run validate-vectors.js to confirm all 30+ vectors are schema-valid; run run-vectors.js in fast mode against @bolyra/sdk to confirm all accept vectors pass and all reject vectors fail with correct error codes",
+        "Commit with DCO sign-off; add spec/conformance/ to landing page ecosystem mentions if relevant"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "spec/did-method-bolyra.md",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md",
+        "circuits/FORMAL-PROPERTIES.md",
+        "circuits/src/HumanUniqueness.circom",
+        "circuits/src/AgentPolicy.circom",
+        "circuits/src/Delegation.circom",
+        "@bolyra/sdk (sdk/)",
+        "ajv (npm \u2014 JSON Schema validator)",
+        "snarkjs (witness generation for run-vectors fast mode)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Human tree root history buffer parity with agent tree",
+      "dimension": "correctness",
+      "description": "The IdentityRegistry maintains a 30-root history buffer for agentTree but has no equivalent for humanTree \u2014 human proofs go stale the instant a new enrollment lands. This is a spec-level gap: the IETF draft's Security Considerations section claims 'proofs remain valid across concurrent enrollments' but the contract doesn't enforce it for humans. Add a matching `humanRootHistory[30]` ring buffer, update `verifyHandshake` to accept any root in the buffer, and add a conformance test vector for 'human proof against root N-15'.",
+      "priority": "high",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 19,
+      "standards": 16,
+      "completeness": 21,
+      "correctness": 19,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_human_root_history_parity",
+      "title": "Human tree root history buffer parity with agent tree",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Add humanRootHistory[30] ring buffer and humanRootHistoryIndex pointer mirroring the existing agentRootHistory pattern. Update enrollHuman() to push new roots into the ring buffer. Update verifyHandshake() to accept any humanMerkleRoot present in the buffer instead of checking only the live root."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/IdentityRegistry.test.ts",
+          "description": "Add conformance test: enroll 16 humans to advance the tree root 15 times, then verify a proof generated against root N-15 still passes verifyHandshake. Also add a negative test asserting a root older than 30 slots is rejected."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update Security Considerations section to precisely state that both humanTree and agentTree maintain a 30-root history buffer, making the 'proofs remain valid across concurrent enrollments' claim accurate and symmetric for both trees."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/test-vectors.json",
+          "description": "Add conformance test vector 'human-root-history-n-minus-15': includes a pre-generated humanMerkleRoot, proof, and nullifierHash for a tree state 15 enrollments in the past, with expected verifyHandshake result = true."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/verify.ts",
+          "description": "If verifyHandshake in the SDK performs an off-chain root check before submitting on-chain, update it to query getHumanRootHistory() and accept any root in the returned array, not just the live root."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/owasp-agentic-mapping.md",
+          "description": "Note under replay-attack mitigations that the 30-slot humanRootHistory window is the forward-validity window for human proofs, closing the spec-vs-contract gap."
+        }
+      ],
+      "steps": [
+        "Read contracts/src/IdentityRegistry.sol in full to understand the existing agentRootHistory ring buffer implementation (storage layout, index pointer, push logic, lookup in verifyHandshake).",
+        "Add storage variables: `bytes32[30] public humanRootHistory` and `uint256 private humanRootHistoryIndex` immediately adjacent to the agent counterparts to keep storage layout symmetric.",
+        "Add a view helper `getHumanRootHistory() returns (bytes32[30] memory)` for off-chain SDK queries, matching any existing `getAgentRootHistory()` helper.",
+        "In enrollHuman(), after updating the live Merkle root, push the new root into humanRootHistory at `humanRootHistoryIndex % 30` and increment the index.",
+        "In verifyHandshake(), replace the single `humanMerkleRoot == liveHumanRoot` check with a loop over humanRootHistory that returns true if any slot matches the proof's root. Keep the agent path unchanged.",
+        "Compile contracts and confirm no storage-layout conflicts: `npm run compile:contracts`.",
+        "Write Hardhat test: enroll 16 users sequentially, capture the Merkle root after the first enrollment, generate a witness+proof against that stale root, call verifyHandshake and assert it returns true.",
+        "Write negative Hardhat test: enroll 31 users to evict the oldest root, attempt to verify against that evicted root, assert verifyHandshake reverts or returns false.",
+        "Run full contract test suite: `npm run test:contracts`.",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md Security Considerations to symmetrically describe both tree history buffers and correct the accuracy of the 'proofs remain valid across concurrent enrollments' claim.",
+        "Append the new conformance test vector to spec/conformance/test-vectors.json with id 'human-root-history-n-minus-15', documenting the stale root, proof inputs, and expected outcome.",
+        "Audit sdk/src/verify.ts for any off-chain humanMerkleRoot pre-check; update it to iterate the history array returned by getHumanRootHistory() before calling the contract.",
+        "Run `cd sdk && npm run typecheck && npm run build` to confirm SDK compiles cleanly.",
+        "Run `npm test` (fast circuit tests + contracts) to confirm no regressions.",
+        "Update docs/owasp-agentic-mapping.md to reference the 30-slot window as the bounded forward-validity window for human proofs."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "contracts/src/IdentityRegistry.sol \u2014 existing agentRootHistory implementation to mirror",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 IETF draft Security Considerations section",
+        "spec/conformance/test-vectors.json \u2014 existing conformance vector format",
+        "sdk/src/verify.ts \u2014 off-chain root validation logic",
+        "pot16.ptau + AgentPolicy/HumanUniqueness .zkey artifacts (no circuit changes; proving artifacts unchanged)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_field_overflow_public_signal_binding",
+      "persona": "formal_verifier",
+      "title": "Public signal field overflow allows Solidity/circuit semantic mismatch",
+      "dimension": "correctness",
+      "description": "The IdentityRegistry contract accepts public signals as uint256 and passes them directly to verifier contracts. Circom operates over BN254's scalar field (r \u2248 2^254), but Solidity uint256 goes up to 2^256-1. Values in range [r, 2^256-1] are valid in Solidity but would wrap modulo r in the circuit, creating a semantic mismatch. Specifically, sessionNonce and currentTimestamp are user-supplied public inputs \u2014 an attacker could submit sessionNonce = n + r which the contract treats as a different nonce (bypassing usedNonces) but the circuit reduces to n. Add require(pubSignal < r) checks in IdentityRegistry for every public input before calling the verifier, matching the pattern already used inside snarkjs-generated verifiers for proof elements. Write a Certora rule proving no public signal can exceed the scalar field bound.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "formal_verifier_field_overflow_public_signal_binding",
+      "adoption": 20,
+      "standards": 14,
+      "completeness": 20,
+      "correctness": 22,
+      "total": 76,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_field_overflow_public_signal_binding",
+      "title": "Public signal field overflow allows Solidity/circuit semantic mismatch",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Add BN254 scalar field bound constant (r = 21888242871839275222246405745257275088548364400416034343698204186575808495617) and require(pubSignal < FIELD_MODULUS) checks for all public inputs (sessionNonce, currentTimestamp, humanMerkleRoot, nullifierHash, nonceBinding, agentCommitment, permissionBits, expiry) before passing to verifier contracts."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/FieldBoundLib.sol",
+          "description": "Minimal library exporting FIELD_MODULUS constant and assertInField(uint256) helper. Centralizes the bound so HumanUniquenessVerifier, AgentPolicyVerifier, and DelegationVerifier wrappers can all import from one source."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/FieldOverflow.test.ts",
+          "description": "Hardhat tests: (1) submit sessionNonce = n (valid, succeeds), (2) submit sessionNonce = n + r (reverts with FieldOverflow), (3) submit currentTimestamp = 2^256-1 (reverts), (4) submit each public signal at FIELD_MODULUS-1 (boundary pass), confirming nonce deduplication is not bypassable via modular wrap."
+        },
+        {
+          "type": "spec",
+          "filename": "contracts/certora/specs/FieldBound.spec",
+          "description": "Certora Prover CVL rule: for any call to verifyProof(), assert that all public signal arguments are strictly less than FIELD_MODULUS. Also assert that two distinct uint256 values that differ by r cannot both reach the verifier (proving usedNonces cannot be bypassed)."
+        },
+        {
+          "type": "spec",
+          "filename": "contracts/certora/confs/FieldBound.conf",
+          "description": "Certora configuration file: links IdentityRegistry + FieldBoundLib with the spec, sets solc version, loop unrolling, and optimistic fallback settings."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/security/field-overflow-mitigation.md",
+          "description": "Short security note documenting the BN254 field bound invariant, which contract functions enforce it, Certora rule reference, and why the check must happen before the verifier call (not inside it)."
+        }
+      ],
+      "steps": [
+        "Identify every public input accepted by IdentityRegistry: sessionNonce, currentTimestamp, humanMerkleRoot, nullifierHash, nonceBinding, agentCommitment, permissionBits, expiry \u2014 confirm list against circuit public output declarations in HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom.",
+        "Create contracts/src/FieldBoundLib.sol exporting FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617 and an assertInField(uint256 v) function that reverts with a named error FieldModulusExceeded(uint256 value) if v >= FIELD_MODULUS.",
+        "Import FieldBoundLib in IdentityRegistry.sol; call assertInField() on every public input parameter at the top of each external function that accepts public signals (proveHandshake, verifyHandshake, registerHuman, registerAgent, etc.) before any other logic including usedNonces checks.",
+        "Write Hardhat tests in contracts/test/FieldOverflow.test.ts covering: valid n passes, n+r reverts, 2^256-1 reverts, each individual signal at boundary (FIELD_MODULUS-1) passes, confirm usedNonces[n] is set and usedNonces[n+r] cannot bypass it.",
+        "Run npm run test:contracts to confirm all new tests pass and no existing tests regress.",
+        "Write Certora spec contracts/certora/specs/FieldBound.spec with two rules: (1) publicSignalsInField \u2014 for all reachable states, any public signal arg reaching verifier.verifyProof() is < FIELD_MODULUS; (2) nonceNonBypassable \u2014 there is no pair (n, n+r) both accepted as distinct nonces in usedNonces.",
+        "Create contracts/certora/confs/FieldBound.conf and run certoraRun to verify both rules hold; iterate on spec if counterexamples surface.",
+        "Add a note to SECURITY.md under 'Field Arithmetic Invariants' cross-referencing FieldBoundLib and the Certora spec.",
+        "Write docs/security/field-overflow-mitigation.md explaining the BN254 scalar field gap, the attack vector (nonce wrap), and the fix.",
+        "Commit with DCO sign-off: git commit -s -m 'fix(contracts): reject public signals >= BN254 field modulus to prevent nonce bypass'"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "BN254 scalar field modulus constant (r = 21888242871839275222246405745257275088548364400416034343698204186575808495617)",
+        "Hardhat test environment (contracts/)",
+        "Certora Prover CLI (certoraRun) with valid API key",
+        "Existing verifier contracts (HumanUniquenessVerifier, AgentPolicyVerifier, DelegationVerifier) generated from current .zkey files",
+        "Public input lists from HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_session_token_offchain_jwt",
+      "persona": "standards_architect",
+      "title": "JWT-encoded off-chain session token for verified handshakes",
+      "dimension": "standards",
+      "description": "Define a compact JWT profile (draft-bolyra-session-token) that encodes the verified handshake result \u2014 humanNullifier, agentNullifier, scopeCommitment, sessionNonce, and verification timestamp \u2014 as a signed JWT. This lets relying parties consume Bolyra handshake results without on-chain queries, using standard JWT libraries. The spec should define registered claims mapping, a `bolyra+jwt` media type, and an `x5c`-style proof-of-verification header pointing to the on-chain tx hash. Aligns with OAuth 2.0 DPoP (RFC 9449) binding semantics for the nonce field.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_session_token_offchain_jwt",
+      "adoption": 21,
+      "standards": 20,
+      "completeness": 18,
+      "correctness": 13,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_session_token_offchain_jwt",
+      "title": "JWT-encoded off-chain session token for verified handshakes",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-session-token-01.md",
+          "description": "IETF-style draft defining the bolyra+jwt profile: registered claims mapping (sub=humanNullifier, jti=sessionNonce, etc.), custom claims namespace (bolyra.*), bolyra+jwt media type, x5c-style proof-of-verification header carrying on-chain tx hash, and DPoP nonce binding semantics per RFC 9449."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/session-token-claims-registry.md",
+          "description": "Normative claims registry table mapping Bolyra handshake outputs to JWT registered/private claims: humanNullifier\u2192sub, agentNullifier\u2192bolyra.agn, scopeCommitment\u2192bolyra.scp, sessionNonce\u2192nonce (DPoP-bound), verificationTimestamp\u2192iat, on-chain tx hash\u2192bolyra.vtx."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session-token.ts",
+          "description": "TypeScript implementation of issueSessionToken(handshakeResult, signingKey, opts) and verifySessionToken(token, verificationKey, opts). Uses jose library. Enforces bolyra+jwt content-type header, validates scopeCommitment matches agentNullifier derivation, and checks nonce freshness window."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types/session-token.ts",
+          "description": "TypeScript type definitions: BolyraSessionTokenHeader, BolyraSessionTokenPayload, BolyraSessionTokenOptions, BolyraVerifyOptions. Extends jose JWTPayload with strict bolyra.* claim types."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session-token.test.ts",
+          "description": "Unit tests for issueSessionToken and verifySessionToken: round-trip encode/decode, claim presence validation, nonce replay rejection, expired token rejection, mismatched scopeCommitment rejection, invalid vtx header handling, DPoP nonce binding check."
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/session-token-vectors.json",
+          "description": "Normative test vectors: 3 valid tokens (minimal, full claims, with vtx header) and 5 invalid tokens (expired, replayed nonce, wrong issuer, missing bolyra.scp, tampered payload). Each vector includes the expected verification outcome and error code."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-token-quickstart.md",
+          "description": "Developer guide: how to issue a session token after proveHandshake(), how relying parties verify without on-chain queries using standard JWT libraries, how to bind to OAuth 2.0 DPoP flows, and how to resolve the on-chain tx hash in the vtx header for audit."
+        }
+      ],
+      "steps": [
+        "Define claim namespace and mapping table: map humanNullifier\u2192sub, agentNullifier\u2192bolyra.agn, scopeCommitment\u2192bolyra.scp, sessionNonce\u2192nonce, verificationTimestamp\u2192iat, expiry\u2192exp, on-chain tx hash\u2192bolyra.vtx in the JOSE protected header (x5c-style extension).",
+        "Register bolyra+jwt media type and define the JOSE protected header schema: alg (ES256 or EdDSA), typ=bolyra+jwt, and optional vtx field carrying the Base58-encoded on-chain tx hash.",
+        "Draft spec/draft-bolyra-session-token-01.md following IETF I-D format: abstract, introduction, terminology, JWT profile (header + payload), DPoP nonce binding section referencing RFC 9449 \u00a74, security considerations (replay, nullifier linkability, vtx staleness), IANA considerations (media type + claims registry).",
+        "Implement sdk/src/session-token.ts: issueSessionToken() signs a JWT with jose using ES256/EdDSA, injects bolyra.* claims and vtx header from HandshakeResult; verifySessionToken() validates signature, checks iat/exp window, asserts nonce not in replay cache, and confirms bolyra.scp matches expected scope.",
+        "Add nonce replay cache interface (NonceStore) with in-memory default implementation and a hook for callers to inject Redis/DB-backed stores for production use.",
+        "Write conformance test vectors in spec/conformance/session-token-vectors.json covering valid and invalid token cases, ensuring the SDK test suite consumes these vectors directly for spec-alignment.",
+        "Write sdk/test/session-token.test.ts covering all vector cases plus property-based checks for claim round-trip fidelity.",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md to reference draft-bolyra-session-token-01 as the RECOMMENDED session representation post-handshake.",
+        "Add issueSessionToken and verifySessionToken to the public API surface in sdk/src/index.ts and regenerate TypeScript declarations.",
+        "Write docs/session-token-quickstart.md with annotated code examples for issuance, relying-party verification, and DPoP integration.",
+        "Run npm run typecheck and npm test to confirm no regressions; verify conformance vectors pass 100%."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "jose (npm) \u2014 JOSE/JWT signing and verification library",
+        "RFC 7519 \u2014 JSON Web Token",
+        "RFC 7515 \u2014 JSON Web Signature",
+        "RFC 9449 \u2014 OAuth 2.0 DPoP (nonce binding semantics)",
+        "RFC 7517 \u2014 JSON Web Key (for x5c-style header extension pattern)",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 existing handshake spec to reference",
+        "sdk/src/types/index.ts \u2014 HandshakeResult type definition",
+        "proveHandshake() / verifyHandshake() public API \u2014 upstream outputs that feed issueSessionToken()"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "sdk_designer_session_token_offchain",
+      "persona": "sdk_designer",
+      "title": "SD-JWT session tokens for off-chain proof reuse",
+      "dimension": "adoption",
+      "description": "Every API call currently requires a fresh ZK proof (1-5s). After verifyHandshake() succeeds, the verifier should mint a compact SD-JWT token binding nullifierHash, scopeCommitment, and expiry with selective disclosure and a configurable TTL (60-3600s). Ship `SessionTokenIssuer.mint(handshakeResult)` and `SessionTokenVerifier.verify(token, { requiredClaims })` in the SDK. This eliminates the single biggest adoption blocker for real-time applications.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_session_token_offchain",
+      "adoption": 22,
+      "standards": 14,
+      "completeness": 21,
+      "correctness": 15,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "sdk_designer_session_token_offchain",
+      "title": "SD-JWT session tokens for off-chain proof reuse",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/SessionTokenIssuer.ts",
+          "description": "Mints SD-JWT tokens after verifyHandshake() succeeds, binding nullifierHash, scopeCommitment, expiry, and optional selective-disclosure claims with configurable TTL (60-3600s)"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/SessionTokenVerifier.ts",
+          "description": "Verifies SD-JWT tokens, enforces requiredClaims presence, checks expiry, validates issuer signature, and returns decoded claims"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/types.ts",
+          "description": "SessionTokenConfig, SessionTokenClaims, SessionTokenResult, SessionVerifyOptions TypeScript interfaces"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session/index.ts",
+          "description": "Barrel export for session token module"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/session-token-profile.md",
+          "description": "SD-JWT profile for Bolyra: claim namespace (bolyra.nullifierHash, bolyra.scopeCommitment, bolyra.permissionBits), TTL constraints, disclosure frame requirements, and binding to verifyHandshake output"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session/SessionTokenIssuer.test.ts",
+          "description": "Unit tests: mint with valid handshake result, TTL boundary enforcement, selective disclosure frame variations, invalid input rejection"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session/SessionTokenVerifier.test.ts",
+          "description": "Unit tests: verify valid token, reject expired token, reject missing required claims, reject tampered signature, requiredClaims partial match"
+        },
+        {
+          "type": "docs",
+          "filename": "sdk/docs/session-tokens.md",
+          "description": "Developer guide: quickstart snippet, TTL guidance, selective disclosure example, migration path from full ZK proof per request, security considerations (replay, revocation scope)"
+        }
+      ],
+      "steps": [
+        "Define spec/session-token-profile.md: pin SD-JWT draft version (draft-ietf-oauth-selective-disclosure-jwt-08), specify Bolyra claim namespace, disclosure frame schema, and binding rules to HandshakeResult fields",
+        "Add @sd-jwt/core (or jose + manual SD-JWT) dependency to sdk/package.json; audit for Apache-2.0 compatibility and add overrides entry if transitive conflicts arise",
+        "Implement sdk/src/session/types.ts: SessionTokenConfig (ttl, issuerKey, disclosureFrame), SessionTokenClaims (sub=nullifierHash, bolyra:scopeCommitment, bolyra:permissionBits, exp, iat, iss), SessionVerifyOptions (requiredClaims, clockSkew)",
+        "Implement SessionTokenIssuer.mint(handshakeResult, config): validate handshakeResult is verified, build SD-JWT payload from nullifierHash + scopeCommitment + permissionBits, apply disclosureFrame, sign with issuerKey (ES256 or EdDSA), enforce TTL clamp [60, 3600]",
+        "Implement SessionTokenVerifier.verify(token, opts): parse SD-JWT, verify issuer signature, check exp with clockSkew tolerance, assert all requiredClaims are disclosed, return typed SessionTokenClaims",
+        "Export SessionTokenIssuer and SessionTokenVerifier from sdk/src/session/index.ts and re-export from sdk/src/index.ts public API surface",
+        "Write unit tests for SessionTokenIssuer: happy path mint, TTL below minimum clamped or rejected, TTL above maximum rejected, missing handshake fields throw, disclosureFrame omits optional claims correctly",
+        "Write unit tests for SessionTokenVerifier: valid token passes, expired token rejects, tampered JWT body rejects, requiredClaims not disclosed rejects, clockSkew tolerance accepted",
+        "Run npm run typecheck and npm test in sdk/ to confirm no regressions",
+        "Write sdk/docs/session-tokens.md with a 5-line quickstart, explanation of which claims are always disclosed vs selectively disclosed, TTL guidance, and a note that session tokens do not replace on-chain nullifier checks for high-value operations",
+        "Update sdk/QUICKSTART.md to reference session tokens as the recommended pattern for real-time API integrations"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "@sd-jwt/core or jose (SD-JWT signing/verification)",
+        "HandshakeResult type from sdk/src/types.ts (nullifierHash, scopeCommitment, permissionBits)",
+        "verifyHandshake() must have completed successfully before mint() is called",
+        "ES256 or EdDSA issuer keypair (caller-supplied; SDK does not generate or store keys)",
+        "draft-ietf-oauth-selective-disclosure-jwt-08 specification"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "sdk_designer_proof_envelope_codec",
+      "persona": "sdk_designer",
+      "title": "Self-describing proof envelope with named public signals",
+      "dimension": "adoption",
+      "description": "Proofs are currently bare `{ proof, publicSignals: bigint[] }` with positional semantics \u2014 `publicSignals[0]` vs `publicSignals[4]` is a constant source of integration bugs. Ship a `BolyraEnvelope` type with `encode()`/`decode()` that wraps proofs in `{ version, circuit, provingSystem, signals: { humanMerkleRoot, nullifierHash, ... }, proof }`. Include a `fromRaw(circuit, rawSignals)` migration helper. Publish in both TS and Python SDKs so integrators never index by position again.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_proof_envelope_codec",
+      "adoption": 21,
+      "standards": 13,
+      "completeness": 19,
+      "correctness": 16,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "sdk_designer_proof_envelope_codec",
+      "title": "Self-describing proof envelope with named public signals",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/envelope.ts",
+          "description": "BolyraEnvelope type, encode(), decode(), and fromRaw() helpers for TS SDK"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/signals.ts",
+          "description": "Per-circuit signal name maps: HumanUniqueness, AgentPolicy, Delegation \u2014 maps positional index to named field"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/index.ts",
+          "description": "Re-export BolyraEnvelope, encode, decode, fromRaw from public API"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk-python/bolyra/envelope.py",
+          "description": "Python dataclass BolyraEnvelope with encode/decode (JSON-serialisable) and from_raw() migration helper"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk-python/bolyra/signals.py",
+          "description": "Python dict-of-dicts: circuit -> positional index -> field name, mirrors TS signal maps"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-v1.md",
+          "description": "Canonical schema: version, circuit, provingSystem, signals object, proof object \u2014 wire format spec with field semantics"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/envelope.test.ts",
+          "description": "Unit tests: round-trip encode/decode, fromRaw for all three circuits, unknown-circuit rejection, version mismatch error"
+        },
+        {
+          "type": "test",
+          "filename": "sdk-python/tests/test_envelope.py",
+          "description": "Python pytest: round-trip, from_raw, JSON serialisation, error cases"
+        },
+        {
+          "type": "docs",
+          "filename": "sdk/QUICKSTART.md",
+          "description": "Add migration section: fromRaw() usage, before/after example replacing publicSignals[0] with signals.humanMerkleRoot"
+        }
+      ],
+      "steps": [
+        "Define the BolyraEnvelope wire schema in spec/proof-envelope-v1.md: version string (semver), circuit enum (HumanUniqueness|AgentPolicy|Delegation), provingSystem enum (groth16|plonk), signals record keyed by name, proof object passthrough",
+        "Create sdk/src/signals.ts: export SIGNAL_MAPS constant mapping each circuit to an ordered array of field names drawn from circuit public output order in the .circom source",
+        "Implement encode(circuit, provingSystem, rawProof, rawSignals): BolyraEnvelope in sdk/src/envelope.ts \u2014 zips rawSignals array with SIGNAL_MAPS[circuit] into a named-field record",
+        "Implement decode(envelope): { proof, publicSignals } in sdk/src/envelope.ts \u2014 inverts the zip back to positional bigint[] for downstream verifyProof calls",
+        "Implement fromRaw(circuit, provingSystem, rawProof, rawSignals): BolyraEnvelope as a convenience alias for encode() \u2014 entry point for migrating existing callers",
+        "Add version validation in decode(): throw a descriptive error if envelope.version is not a recognised schema version",
+        "Wire encode/decode/fromRaw into existing proveHandshake and verifyHandshake so returned proof objects are envelopes by default; keep a rawOutput option flag for backward compat",
+        "Mirror signal maps and dataclass in sdk-python/bolyra/signals.py and sdk-python/bolyra/envelope.py; serialise/deserialise via standard json with int coercion for bigints",
+        "Write sdk/test/envelope.test.ts covering: encode then decode is identity, fromRaw produces correct field names for each circuit, wrong circuit name throws, version mismatch in decode throws",
+        "Write sdk-python/tests/test_envelope.py with equivalent coverage plus JSON round-trip test",
+        "Update sdk/QUICKSTART.md with migration guide: show old positional access pattern vs new named-field pattern, and fromRaw() one-liner for existing integrators",
+        "Bump sdk package version to 0.3.0 (minor \u2014 public API addition), update CHANGELOG"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "@bolyra/sdk >= 0.2.0",
+        "circuits/src/HumanUniqueness.circom (public signal order)",
+        "circuits/src/AgentPolicy.circom (public signal order)",
+        "circuits/src/Delegation.circom (public signal order)",
+        "snarkjs SnarkjsProof type (proof object shape)",
+        "bolyra Python SDK >= 0.1.0"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Standardized proof envelope with IANA content type registration",
+      "dimension": "standards",
+      "description": "Define an `application/bolyra-proof+cbor` content type with a CBOR-encoded envelope wrapping the Groth16/PLONK proof, public signals array, circuit identifier, and proving-system tag. Currently the SDK serializes proofs as ad-hoc JSON with no version field or circuit discriminator \u2014 consumers must guess the layout. The envelope adds a 2-byte version prefix, a circuit enum (human/agent/delegation/model-instance), and a proving-system enum (groth16/plonk). Register with IANA per RFC 6838. Include ABNF for the text fallback (`application/bolyra-proof+json`).",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 17,
+      "standards": 22,
+      "completeness": 19,
+      "correctness": 13,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "title": "Standardized proof envelope with IANA content type registration",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-content-type.md",
+          "description": "Normative specification for application/bolyra-proof+cbor and application/bolyra-proof+json, including ABNF grammar, version prefix layout, circuit enum table, and proving-system enum table. Structured per RFC 6838 registration template."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/iana-registration-bolyra-proof-cbor.md",
+          "description": "IANA media type registration request document for application/bolyra-proof+cbor per RFC 6838 Section 4. Includes type name, subtype name, required parameters, encoding considerations, security considerations, and contact."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/iana-registration-bolyra-proof-json.md",
+          "description": "IANA media type registration request document for application/bolyra-proof+json (text fallback) per RFC 6838. Includes ABNF for JSON envelope structure."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/envelope.ts",
+          "description": "TypeScript implementation of ProofEnvelope codec: encode() serializes proof+signals+circuit+proving-system into CBOR bytes with 2-byte version prefix; decode() parses and validates; toJSON()/fromJSON() for the +json fallback. Exports CircuitId and ProvingSystem enums."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types/envelope.ts",
+          "description": "TypeScript type definitions: ProofEnvelope interface, CircuitId enum (human=0, agent=1, delegation=2, model-instance=3), ProvingSystem enum (groth16=0, plonk=1), EnvelopeVersion constant (0x0001)."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/envelope.test.ts",
+          "description": "Unit tests for envelope codec: round-trip CBOR encode/decode for all CircuitId x ProvingSystem combinations, version mismatch rejection, unknown circuit enum rejection, JSON fallback round-trip, and content-type header negotiation helpers."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope-migration.md",
+          "description": "Migration guide for SDK consumers: how to upgrade from ad-hoc JSON proof objects to the versioned envelope, content-type header usage in HTTP contexts, backward-compatibility window and deprecation timeline."
+        }
+      ],
+      "steps": [
+        "Define CircuitId enum (human=0, agent=1, delegation=2, model-instance=3) and ProvingSystem enum (groth16=0, plonk=1) in sdk/src/types/envelope.ts; pin EnvelopeVersion = 0x0001.",
+        "Design CBOR envelope schema: 2-byte big-endian version prefix followed by a CBOR map with keys: version (uint), circuit (uint), provingSystem (uint), proof (bstr or map), publicSignals (array of bstr), and optional metadata map.",
+        "Implement encode() in sdk/src/envelope.ts using the cbor2 or cborg library (already a transitive dep via snarkjs where available, otherwise add cborg as a direct dep); serialize proof object fields from snarkjs output format.",
+        "Implement decode() with strict validation: reject unknown version, unknown circuit enum, unknown proving-system enum, and malformed CBOR; return typed ProofEnvelope.",
+        "Implement toJSON() / fromJSON() for the +json fallback: base64url-encode binary proof fields, include version/circuit/provingSystem as string labels for human readability; define ABNF in spec.",
+        "Write ABNF grammar for application/bolyra-proof+json envelope structure and embed it in spec/proof-envelope-content-type.md.",
+        "Author spec/proof-envelope-content-type.md covering: motivation, wire format diagrams, enum tables, ABNF, content negotiation guidance (Accept / Content-Type headers), and versioning policy.",
+        "Draft spec/iana-registration-bolyra-proof-cbor.md and spec/iana-registration-bolyra-proof-json.md using RFC 6838 Section 4 template fields; include security considerations referencing circuit-specific proof soundness.",
+        "Update sdk/src/index.ts public exports to expose encodeProofEnvelope, decodeProofEnvelope, ProofEnvelope, CircuitId, ProvingSystem.",
+        "Add CONTENT_TYPE_CBOR = 'application/bolyra-proof+cbor' and CONTENT_TYPE_JSON = 'application/bolyra-proof+json' constants to sdk/src/constants.ts for use in HTTP integrations.",
+        "Write unit tests covering all enum combinations, version rejection, JSON round-trip, and a negative test for each validation branch.",
+        "Update sdk/QUICKSTART.md and docs/proof-envelope-migration.md with before/after code samples showing migration from raw JSON proof objects.",
+        "Bump sdk package.json minor version and add changelog entry describing the new envelope API and deprecation of bare proof serialization."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "cborg or cbor2 npm package for CBOR serialization (evaluate bundle size impact on SDK before pinning)",
+        "snarkjs Groth16/PLONK proof output schema (existing sdk/src/types must match field names used in encode())",
+        "RFC 6838 \u2014 Media Type Specifications and Registration Procedures",
+        "RFC 8949 \u2014 Concise Binary Object Representation (CBOR)",
+        "RFC 5234 \u2014 ABNF for text fallback grammar",
+        "Existing spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 envelope must align with handshake wire format described there"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "sdk_designer_circuit_artifact_cdn",
+      "persona": "sdk_designer",
+      "title": "Automatic circuit artifact fetching via CDN with integrity checks",
+      "dimension": "adoption",
+      "description": "The quickstart currently requires manually downloading or building circuit artifacts (r1cs, zkey, wasm) before any proof can be generated \u2014 a multi-step process involving Circom toolchain setup. Ship a `@bolyra/artifacts` package that lazily fetches versioned circuit artifacts from a CDN (GitHub Releases or S3) with SHA-256 integrity verification and local caching in `~/.bolyra/artifacts/`. The SDK's `proveHandshake()` should auto-resolve artifacts without user configuration. This removes the biggest onboarding friction: 'I installed the SDK but I can't generate a proof.'",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_circuit_artifact_cdn",
+      "adoption": 23,
+      "standards": 11,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "sdk_designer_circuit_artifact_cdn",
+      "title": "Automatic circuit artifact fetching via CDN with integrity checks",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "packages/artifacts/src/index.ts",
+          "description": "Main entry point for @bolyra/artifacts \u2014 exports fetchArtifact(), resolveArtifacts(), and ArtifactResolver class"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/artifacts/src/registry.ts",
+          "description": "Version-pinned artifact registry mapping circuit name + version to CDN URL and expected SHA-256 digest"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/artifacts/src/fetcher.ts",
+          "description": "HTTP fetch + streaming SHA-256 verification; retries on transient failure; throws ArtifactIntegrityError on digest mismatch"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/artifacts/src/cache.ts",
+          "description": "Local disk cache backed by ~/.bolyra/artifacts/<version>/; hit check skips network; cache entries validated on read"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/artifacts/src/errors.ts",
+          "description": "Typed error classes: ArtifactIntegrityError, ArtifactFetchError, ArtifactNotFoundError"
+        },
+        {
+          "type": "sdk",
+          "filename": "packages/artifacts/package.json",
+          "description": "@bolyra/artifacts package manifest \u2014 zero runtime deps beyond node built-ins and fetch"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/prover.ts",
+          "description": "Patch proveHandshake() to call ArtifactResolver.resolve() before invoking snarkjs; falls back to locally-built artifacts if BOLYRA_ARTIFACTS_DIR is set"
+        },
+        {
+          "type": "spec",
+          "filename": "packages/artifacts/INTEGRITY.md",
+          "description": "Documents the integrity model: SHA-256 over raw bytes, digest format (hex), registry schema, and how to rotate compromised keys"
+        },
+        {
+          "type": "test",
+          "filename": "packages/artifacts/test/fetcher.test.ts",
+          "description": "Unit tests for fetcher: mock HTTP server, digest match, digest mismatch throws, retry on 5xx"
+        },
+        {
+          "type": "test",
+          "filename": "packages/artifacts/test/cache.test.ts",
+          "description": "Unit tests for cache: cold miss triggers fetch, warm hit skips network, tampered cache entry re-fetches"
+        },
+        {
+          "type": "test",
+          "filename": "packages/artifacts/test/registry.test.ts",
+          "description": "Validates registry entries have non-empty URLs and 64-char hex digests; fails build if entry is malformed"
+        },
+        {
+          "type": "test",
+          "filename": "packages/artifacts/test/integration.test.ts",
+          "description": "End-to-end: resolveArtifacts() for all three circuits against a local HTTP fixture server; verifies files land in temp cache dir"
+        },
+        {
+          "type": "docs",
+          "filename": "sdk/QUICKSTART.md",
+          "description": "Update quickstart to remove manual artifact download step; add one-liner showing proveHandshake() works with zero setup"
+        }
+      ],
+      "steps": [
+        "Create packages/artifacts/ workspace package with package.json, tsconfig.json, and empty src/; add to root npm workspaces array",
+        "Define artifact registry in registry.ts: typed ArtifactEntry = { circuit, version, filename, url, sha256 }; seed entries for HumanUniqueness, AgentPolicy, Delegation at current circuit version using GitHub Releases URLs (placeholder until first artifacts release)",
+        "Implement cache.ts: cacheDir defaults to path.join(os.homedir(), '.bolyra', 'artifacts', version); ensureDir on first access; cacheGet() reads file + recomputes SHA-256 and returns null if digest mismatches; cachePut() writes atomically via tmp file + rename",
+        "Implement fetcher.ts: fetchArtifact(entry) streams response into Buffer, computes SHA-256, throws ArtifactIntegrityError if mismatch, returns Buffer on success; add exponential backoff retry (max 3) for 5xx and network errors",
+        "Implement ArtifactResolver in index.ts: resolve(circuitName) = cacheGet ?? (fetchArtifact then cachePut then return path); resolveAll() fans out in parallel for all three circuits",
+        "Add BOLYRA_ARTIFACTS_DIR env override in ArtifactResolver.resolve(): if set, look for file in that dir first (allows CI and local-build workflows to skip CDN entirely)",
+        "Patch sdk/src/prover.ts: import ArtifactResolver; at top of proveHandshake() call resolver.resolveAll() to get { wasmPath, zkeyPath }; pass paths to snarkjs.groth16.fullProve() replacing hardcoded build/ paths",
+        "Write unit tests for fetcher (mock fetch via jest.spyOn(global, 'fetch')), cache (tmp dir per test), and registry schema validation",
+        "Write integration test against a local HTTP server (Node http.createServer serving fixture .wasm/.zkey stubs with correct digests); verify cache dir populated and resolveAll() returns valid paths",
+        "Publish CI step: after circuit compile job, compute SHA-256 of each build artifact (sha256sum), update registry.ts entries, commit with DCO sign-off, tag release and upload artifacts to GitHub Releases",
+        "Update sdk/QUICKSTART.md to remove Circom toolchain prerequisite section; verify zero-config npm install + proveHandshake() flow works end-to-end in a fresh temp directory"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "Node 18+ global fetch (no node-fetch shim needed)",
+        "GitHub Releases or S3 bucket for artifact hosting (URLs TBD at first circuit release)",
+        "circuits/build/ artifacts compiled and SHA-256 digests captured as part of CI release pipeline",
+        "@bolyra/sdk workspace dependency on @bolyra/artifacts (add to sdk/package.json)",
+        "npm workspaces root config updated to include packages/artifacts"
+      ]
+    }
+  }
+]

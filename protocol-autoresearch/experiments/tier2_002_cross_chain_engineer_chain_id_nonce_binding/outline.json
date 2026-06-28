@@ -1,0 +1,92 @@
+{
+  "id": "cross_chain_engineer_chain_id_nonce_binding",
+  "title": "Bind chain ID into sessionNonce to prevent cross-chain replay",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add chainId as a public input. Replace nonceBinding output with effectiveNonce = Poseidon2(sessionNonce, chainId). Expose chainId as a public signal."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add chainId as a public input. Bind it into the nonce commitment via Poseidon2(sessionNonce, chainId) to match HumanUniqueness binding semantics."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/BolyraVerifier.sol",
+      "description": "In verifyHandshake(), assert that the chainId public signal from both proofs equals block.chainid before calling the snarkjs verifier."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/HumanUniquenessVerifier.sol",
+      "description": "Regenerated Solidity verifier from updated HumanUniqueness.zkey after circuit change. Must be regenerated from new vkey.json."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/AgentPolicyVerifier.sol",
+      "description": "Regenerated Solidity verifier from updated AgentPolicy.zkey (both Groth16 and PLONK variants) after circuit change."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/handshake.ts",
+      "description": "Add chainId parameter to proveHandshake() and verifyHandshake(). Pass chainId as public input when generating witnesses for both circuits."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Extend HandshakeOptions and ProofInputs types to include chainId: bigint field."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Document effectiveNonce derivation: effectiveNonce = Poseidon2(sessionNonce, chainId). Add cross-chain replay prevention section. Update public signal table."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/HumanUniqueness.test.js",
+      "description": "Add test cases: (1) valid proof with correct chainId passes, (2) proof generated for chainId=1 rejected when verified with chainId=8453, (3) effectiveNonce in public output changes with chainId."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/AgentPolicy.test.js",
+      "description": "Mirror HumanUniqueness cross-chain replay test cases for AgentPolicy circuit."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/BolyraVerifier.test.ts",
+      "description": "Integration test: deploy verifier on Hardhat with mock chainId, assert revert when submitted chainId != block.chainid, assert pass when they match."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-replay-prevention.md",
+      "description": "Explain the attack vector, effectiveNonce construction, on-chain check, and implications for multi-chain deployments."
+    }
+  ],
+  "steps": [
+    "1. Update HumanUniqueness.circom: add `signal input chainId` (public), compute `signal effectiveNonce <== Poseidon2(sessionNonce, chainId)`, replace existing nonceBinding output with effectiveNonce, add equality constraint asserting nonceBinding === effectiveNonce.",
+    "2. Update AgentPolicy.circom identically: add chainId public input, bind via Poseidon2(sessionNonce, chainId), expose effectiveNonce as public output.",
+    "3. Recompile both circuits: `npm run compile:circuits`. Verify constraint counts increase by ~300 (one Poseidon2 gate + equality check per circuit).",
+    "4. Regenerate trusted setup artifacts: re-run phase 2 groth16 setup for HumanUniqueness and AgentPolicy using existing pot16.ptau. Also rebuild PLONK zkeys for AgentPolicy and Delegation if Delegation circuit references sessionNonce.",
+    "5. Export new vkey.json files and regenerate Solidity verifier contracts via snarkjs exportSolidityVerifier for HumanUniquenessVerifier.sol and AgentPolicyVerifier.sol.",
+    "6. Update BolyraVerifier.sol: in verifyHandshake(), extract chainId from both proof's public signals array, assert humanChainId == block.chainid and agentChainId == block.chainid, revert with ChainIdMismatch() if either fails.",
+    "7. Update sdk/src/types.ts: add chainId: bigint to HandshakeOptions, ProofInputs, and HandshakeProof types.",
+    "8. Update sdk/src/handshake.ts: accept chainId in proveHandshake(), pass it as a public input when computing witnesses; update verifyHandshake() to pass chainId to on-chain verifier call.",
+    "9. Update Python SDK subprocess bridge if it exposes proveHandshake() \u2014 add chainId parameter to the subprocess args and Python type stubs.",
+    "10. Write circuit-level cross-chain replay tests in HumanUniqueness.test.js and AgentPolicy.test.js (fast witness-only mode).",
+    "11. Write Hardhat integration test in BolyraVerifier.test.ts confirming on-chain chainId enforcement.",
+    "12. Run full test suite: `npm test`. Gate slow proof tests to confirm effectiveNonce changes across chainIds.",
+    "13. Update spec/draft-bolyra-mutual-zkp-auth-01.md with effectiveNonce derivation formula, updated public signal table, and new Security Considerations subsection on cross-chain replay.",
+    "14. Write docs/cross-chain-replay-prevention.md explaining attack vector and mitigation.",
+    "15. Commit with DCO sign-off: `git commit -s -m 'feat(circuits): bind chainId into sessionNonce via Poseidon2 to prevent cross-chain replay'`."
+  ],
+  "estimated_constraints": 300,
+  "dependencies": [
+    "Poseidon2 hash function available in circomlib (poseidon.circom template with nInputs=2)",
+    "pot16.ptau universal SRS (already in circuits/build/) \u2014 sufficient for added ~300 constraints",
+    "snarkjs >= 0.7.x for re-running phase 2 setup and verifier export",
+    "Hardhat with block.chainid support (EIP-1344, all supported EVM versions)",
+    "Existing sessionNonce public signal in HumanUniqueness and AgentPolicy circuits as the binding point",
+    "Delegation.circom audit: confirm whether it re-derives sessionNonce or receives it as input \u2014 if the latter, Delegation circuit may also need chainId binding"
+  ]
+}

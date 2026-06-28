@@ -1,0 +1,238 @@
+{
+  "$schema": "https://w3c.github.io/did-test-suite/schema/did-resolution-result.json",
+  "name": "did:bolyra resolution test vectors",
+  "version": "0.1.0",
+  "created": "2026-06-19",
+  "description": "W3C DID Test Suite-compatible resolution test vectors for did:bolyra",
+  "vectors": [
+    {
+      "id": "active-human-did",
+      "description": "Resolve an active human DID with valid humanMerkleRoot",
+      "input": {
+        "did": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        "resolutionOptions": {}
+      },
+      "mockChainState": {
+        "identityType": 1,
+        "humanMerkleRoot": "0x1a2b3c4d5e6f708192a3b4c5d6e7f80a1b2c3d4e5f60718293a4b5c6d7e8f901",
+        "agentMerkleRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "nullifierHash": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "isRevoked": false,
+        "registeredAtBlock": 1000,
+        "lastUpdatedBlock": 1000,
+        "version": 1
+      },
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/jws-2020/v1",
+            "https://bolyra.ai/ns/did/v1"
+          ],
+          "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+          "controller": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff#human-merkle-root",
+              "type": "BolyraHumanMerkleRoot2026",
+              "controller": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+              "publicKeyBase64url": "GiszTF5vcHCBkqO0xdbn8AobLD1PX2BxgTpLXG1-j5E"
+            }
+          ],
+          "authentication": [
+            "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff#human-merkle-root"
+          ],
+          "assertionMethod": [
+            "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff#human-merkle-root"
+          ],
+          "service": [
+            {
+              "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff#proof-submission",
+              "type": "BolyraProofSubmission",
+              "serviceEndpoint": "eip155:84532:0x1234567890abcdef1234567890abcdef12345678",
+              "proofType": "Groth16",
+              "supportedCircuits": ["HumanUniqueness"]
+            }
+          ]
+        },
+        "didDocumentMetadata": {
+          "created": 1000,
+          "updated": 1000,
+          "versionId": "1"
+        }
+      }
+    },
+    {
+      "id": "active-agent-did",
+      "description": "Resolve an active agent DID with valid agentMerkleRoot",
+      "input": {
+        "did": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee",
+        "resolutionOptions": {}
+      },
+      "mockChainState": {
+        "identityType": 2,
+        "humanMerkleRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "agentMerkleRoot": "0x2b3c4d5e6f7081a293b4c5d6e7f80a1b2c3d4e5f60718293a4b5c6d7e8f90123",
+        "nullifierHash": "0xddeeff001122334455667788aabbccddeeff001122334455667788aabbccdd00",
+        "isRevoked": false,
+        "registeredAtBlock": 2000,
+        "lastUpdatedBlock": 2500,
+        "version": 2
+      },
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/jws-2020/v1",
+            "https://bolyra.ai/ns/did/v1"
+          ],
+          "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee",
+          "controller": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee#agent-merkle-root",
+              "type": "BolyraAgentMerkleRoot2026",
+              "controller": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee",
+              "publicKeyBase64url": "KzxNXm9wgaKTtMXW5_AKGyw9T19gcYE6S1xtfo-QASM"
+            }
+          ],
+          "authentication": [
+            "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee#agent-merkle-root"
+          ],
+          "assertionMethod": [
+            "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee#agent-merkle-root"
+          ],
+          "service": [
+            {
+              "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xff00112233445566778899aabbccddeeff00112233445566778899aabbccddee#proof-submission",
+              "type": "BolyraProofSubmission",
+              "serviceEndpoint": "eip155:84532:0x1234567890abcdef1234567890abcdef12345678",
+              "proofType": ["Groth16", "PLONK"],
+              "supportedCircuits": ["AgentPolicy", "Delegation"]
+            }
+          ]
+        },
+        "didDocumentMetadata": {
+          "created": 2000,
+          "updated": 2500,
+          "versionId": "2"
+        }
+      }
+    },
+    {
+      "id": "deactivated-human-did",
+      "description": "Resolve a deactivated human DID whose nullifier has been revoked",
+      "input": {
+        "did": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xdeadbeef00000000deadbeef00000000deadbeef00000000deadbeef00000000",
+        "resolutionOptions": {}
+      },
+      "mockChainState": {
+        "identityType": 1,
+        "humanMerkleRoot": "0x1a2b3c4d5e6f708192a3b4c5d6e7f80a1b2c3d4e5f60718293a4b5c6d7e8f901",
+        "agentMerkleRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "nullifierHash": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+        "isRevoked": true,
+        "registeredAtBlock": 500,
+        "lastUpdatedBlock": 800,
+        "revokedAtBlock": 800,
+        "version": 1
+      },
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1"
+          ],
+          "id": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xdeadbeef00000000deadbeef00000000deadbeef00000000deadbeef00000000",
+          "controller": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0xdeadbeef00000000deadbeef00000000deadbeef00000000deadbeef00000000"
+        },
+        "didDocumentMetadata": {
+          "deactivated": true,
+          "updated": 800
+        }
+      }
+    },
+    {
+      "id": "unknown-subject-id",
+      "description": "Attempt to resolve a DID with an unknown subject-id",
+      "input": {
+        "did": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678:0x0000000000000000000000000000000000000000000000000000000000000001",
+        "resolutionOptions": {}
+      },
+      "mockChainState": {
+        "identityType": 0,
+        "humanMerkleRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "agentMerkleRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "nullifierHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "isRevoked": false,
+        "registeredAtBlock": 0,
+        "lastUpdatedBlock": 0,
+        "version": 0
+      },
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "error": "notFound"
+        },
+        "didDocument": null,
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "unsupported-chain-id",
+      "description": "Attempt to resolve a DID on an unsupported chain",
+      "input": {
+        "did": "did:bolyra:99999:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        "resolutionOptions": {}
+      },
+      "mockChainState": null,
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "error": "unsupportedChainId",
+          "message": "Chain 99999 is not supported"
+        },
+        "didDocument": null,
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "invalid-did-syntax",
+      "description": "Attempt to resolve a DID with invalid syntax (missing subject-id)",
+      "input": {
+        "did": "did:bolyra:84532:0x1234567890abcdef1234567890abcdef12345678",
+        "resolutionOptions": {}
+      },
+      "mockChainState": null,
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "error": "invalidDid"
+        },
+        "didDocument": null,
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "invalid-did-leading-zeros-chain",
+      "description": "Attempt to resolve a DID with leading zeros in chain-id",
+      "input": {
+        "did": "did:bolyra:084532:0x1234567890abcdef1234567890abcdef12345678:0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        "resolutionOptions": {}
+      },
+      "mockChainState": null,
+      "expectedOutput": {
+        "didResolutionMetadata": {
+          "error": "invalidDid"
+        },
+        "didDocument": null,
+        "didDocumentMetadata": {}
+      }
+    }
+  ]
+}

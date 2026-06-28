@@ -1,0 +1,16 @@
+{
+  "id": "sdk_designer_session_token_offchain",
+  "persona": "sdk_designer",
+  "title": "Ship SD-JWT session tokens for off-chain proof reuse",
+  "dimension": "adoption",
+  "description": "The tier2_003 experiment has a working SD-JWT session token implementation: after verifyHandshake() succeeds, the verifier mints a compact token binding nullifierHash, scopeCommitment, and other claims with selective disclosure and a configurable TTL (60-3600s). Subsequent API calls present the token instead of re-proving (which takes 1-5s). Integrate this into the production SDK as `SessionTokenIssuer.mint(handshakeResult)` and `SessionTokenVerifier.verify(token, { requiredClaims })`. This eliminates the biggest developer complaint: every single API call requiring a fresh ZK proof.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "sdk_designer_session_token_offchain",
+  "adoption": 22,
+  "standards": 15,
+  "completeness": 19,
+  "correctness": 15,
+  "total": 71,
+  "verdict": "consider"
+}

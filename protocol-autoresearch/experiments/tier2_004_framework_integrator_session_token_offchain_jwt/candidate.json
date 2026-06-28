@@ -1,0 +1,16 @@
+{
+  "id": "framework_integrator_session_token_offchain_jwt",
+  "persona": "framework_integrator",
+  "title": "Off-chain JWT session token from verified handshake",
+  "dimension": "adoption",
+  "description": "After a successful on-chain handshake verification, emit a signed JWT containing the nullifierHash, scopeCommitment, and expiry so that LangChain/CrewAI tool chains can pass a lightweight bearer token on subsequent calls instead of re-proving. The SDK should expose `handshakeToSessionToken(proof, signingKey) \u2192 JWT` and `verifySessionToken(jwt, pubKey) \u2192 {nullifier, scope, expiry}`. This eliminates the biggest integration friction: frameworks expect sub-100ms auth checks, not 2-second proof generation on every tool invocation.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "framework_integrator_session_token_offchain_jwt",
+  "adoption": 22,
+  "standards": 14,
+  "completeness": 18,
+  "correctness": 16,
+  "total": 70,
+  "verdict": "consider"
+}

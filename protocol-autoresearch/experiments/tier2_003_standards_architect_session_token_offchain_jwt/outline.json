@@ -1,0 +1,65 @@
+{
+  "id": "standards_architect_session_token_offchain_jwt",
+  "title": "JWT-encoded off-chain session token for verified handshakes",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-session-token-01.md",
+      "description": "IETF-style draft defining the bolyra+jwt profile: registered claims mapping (sub=humanNullifier, jti=sessionNonce, etc.), custom claims namespace (bolyra.*), bolyra+jwt media type, x5c-style proof-of-verification header carrying on-chain tx hash, and DPoP nonce binding semantics per RFC 9449."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-claims-registry.md",
+      "description": "Normative claims registry table mapping Bolyra handshake outputs to JWT registered/private claims: humanNullifier\u2192sub, agentNullifier\u2192bolyra.agn, scopeCommitment\u2192bolyra.scp, sessionNonce\u2192nonce (DPoP-bound), verificationTimestamp\u2192iat, on-chain tx hash\u2192bolyra.vtx."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session-token.ts",
+      "description": "TypeScript implementation of issueSessionToken(handshakeResult, signingKey, opts) and verifySessionToken(token, verificationKey, opts). Uses jose library. Enforces bolyra+jwt content-type header, validates scopeCommitment matches agentNullifier derivation, and checks nonce freshness window."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/session-token.ts",
+      "description": "TypeScript type definitions: BolyraSessionTokenHeader, BolyraSessionTokenPayload, BolyraSessionTokenOptions, BolyraVerifyOptions. Extends jose JWTPayload with strict bolyra.* claim types."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session-token.test.ts",
+      "description": "Unit tests for issueSessionToken and verifySessionToken: round-trip encode/decode, claim presence validation, nonce replay rejection, expired token rejection, mismatched scopeCommitment rejection, invalid vtx header handling, DPoP nonce binding check."
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/session-token-vectors.json",
+      "description": "Normative test vectors: 3 valid tokens (minimal, full claims, with vtx header) and 5 invalid tokens (expired, replayed nonce, wrong issuer, missing bolyra.scp, tampered payload). Each vector includes the expected verification outcome and error code."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-quickstart.md",
+      "description": "Developer guide: how to issue a session token after proveHandshake(), how relying parties verify without on-chain queries using standard JWT libraries, how to bind to OAuth 2.0 DPoP flows, and how to resolve the on-chain tx hash in the vtx header for audit."
+    }
+  ],
+  "steps": [
+    "Define claim namespace and mapping table: map humanNullifier\u2192sub, agentNullifier\u2192bolyra.agn, scopeCommitment\u2192bolyra.scp, sessionNonce\u2192nonce, verificationTimestamp\u2192iat, expiry\u2192exp, on-chain tx hash\u2192bolyra.vtx in the JOSE protected header (x5c-style extension).",
+    "Register bolyra+jwt media type and define the JOSE protected header schema: alg (ES256 or EdDSA), typ=bolyra+jwt, and optional vtx field carrying the Base58-encoded on-chain tx hash.",
+    "Draft spec/draft-bolyra-session-token-01.md following IETF I-D format: abstract, introduction, terminology, JWT profile (header + payload), DPoP nonce binding section referencing RFC 9449 \u00a74, security considerations (replay, nullifier linkability, vtx staleness), IANA considerations (media type + claims registry).",
+    "Implement sdk/src/session-token.ts: issueSessionToken() signs a JWT with jose using ES256/EdDSA, injects bolyra.* claims and vtx header from HandshakeResult; verifySessionToken() validates signature, checks iat/exp window, asserts nonce not in replay cache, and confirms bolyra.scp matches expected scope.",
+    "Add nonce replay cache interface (NonceStore) with in-memory default implementation and a hook for callers to inject Redis/DB-backed stores for production use.",
+    "Write conformance test vectors in spec/conformance/session-token-vectors.json covering valid and invalid token cases, ensuring the SDK test suite consumes these vectors directly for spec-alignment.",
+    "Write sdk/test/session-token.test.ts covering all vector cases plus property-based checks for claim round-trip fidelity.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md to reference draft-bolyra-session-token-01 as the RECOMMENDED session representation post-handshake.",
+    "Add issueSessionToken and verifySessionToken to the public API surface in sdk/src/index.ts and regenerate TypeScript declarations.",
+    "Write docs/session-token-quickstart.md with annotated code examples for issuance, relying-party verification, and DPoP integration.",
+    "Run npm run typecheck and npm test to confirm no regressions; verify conformance vectors pass 100%."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose (npm) \u2014 JOSE/JWT signing and verification library",
+    "RFC 7519 \u2014 JSON Web Token",
+    "RFC 7515 \u2014 JSON Web Signature",
+    "RFC 9449 \u2014 OAuth 2.0 DPoP (nonce binding semantics)",
+    "RFC 7517 \u2014 JSON Web Key (for x5c-style header extension pattern)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 existing handshake spec to reference",
+    "sdk/src/types/index.ts \u2014 HandshakeResult type definition",
+    "proveHandshake() / verifyHandshake() public API \u2014 upstream outputs that feed issueSessionToken()"
+  ]
+}

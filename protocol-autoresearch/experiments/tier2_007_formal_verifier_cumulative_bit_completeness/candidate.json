@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_cumulative_bit_completeness",
+  "persona": "formal_verifier",
+  "title": "Prove cumulative bit encoding constraints are necessary and sufficient",
+  "dimension": "correctness",
+  "description": "The Delegation circuit enforces cumulative bit invariants (bit 4 implies bits 2+3, bit 3 implies bit 2) on the delegatee scope. Formally verify two properties: (1) SOUNDNESS \u2014 no witness satisfying the circuit constraints can violate the implication rules, and (2) COMPLETENESS \u2014 every valid cumulative encoding is accepted. Write a standalone test harness that exhaustively checks all 2^8 permission byte values against the circuit constraints and confirms exact agreement with the SDK's validateCumulativeBitEncoding(). This also catches any off-by-one in bit indexing between Circom (LSB-first Num2Bits) and the Solidity/TS layer.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_cumulative_bit_completeness",
+  "adoption": 14,
+  "standards": 12,
+  "completeness": 20,
+  "correctness": 21,
+  "total": 67,
+  "verdict": "consider"
+}

@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The core idea \u2014 scopeId as a private circuit input so the AS never learns which RS a proof targets \u2014 is a genuine advantage over OAuth PPID and SPIFFE federation (where colluding RS+issuer can correlate via sub/SVID URI). However, the construction self-undermines this: scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) is scope-independent, deterministic, and publicly output. Any on-chain observer or colluding RS pair can trivially correlate cross-scope proofs from the same agent without AS involvement. The \u00a78 'structural impossibility' framing is also overstated \u2014 SPIFFE JWT SVIDs and JWT introspection responses already remove the AS from the per-request hot path. The real advantage is narrower (RS-colluding-with-issuer sub correlation) but the scopeCommitment leak negates even that in the current design."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model and IND-UNL-AS game are explicitly stated with named assumptions (Poseidon-PRF, DL-BabyJubjub, Groth16-KS, PLONK-KS, Poseidon-CR) and a reduction sketch. However, three independent formal breaks were identified: (1) scopeCommitment is a public output that gives the adversary advantage = 1 in the stated game via a one-round oracle query \u2014 the game is broken as written. (2) The reduction requires simulation-extractable Groth16 (to simulate proofs without the witness) but only claims knowledge soundness \u2014 the assumption set is insufficient for the reduction. (3) The game models agent-permutation (which-agent-visited-which-scope) rather than same-or-different (do these two proofs come from the same agent), which is the actual deployment threat. The reduction sketch is also circular: the simulator knows both secret keys and never needs the PRF oracle."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps cleanly to existing Bolyra primitives: Poseidon2 for scope nullifier, Poseidon3 for scope binding, BabyPbk for key consistency (already used in HumanUniqueness), BinaryMerkleRoot(20), EdDSAPoseidonVerifier. Total ~15,500 constraints fits comfortably within pot16.ptau (2^16 = 65,536). Proving time targets are credible based on existing AgentPolicy benchmarks (~1.5s snarkjs for 12.5K constraints). No new cryptographic primitives required. Only structural changes are operatorSecretKey as private input, scopeId as explicit private input, and two additional Poseidon calls. On-chain verification cost unchanged (~230K gas Groth16)."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple unanswered attacks that break the construction's core claim: (1) scopeCommitment leak gives adversary advantage 1 in IND-UNL-AS \u2014 three personas independently identified this (cryptographer, rfc7662_advocate). (2) operatorSecretKey is held by the AS/operator in the primary deployment scenario (NFCU), directly contradicting the threat model assumption that the adversary lacks this key \u2014 the PRF is trivially evaluable by the adversary. (3) The game formulation does not model the actual deployment threat. (4) Compliance audit requirements in both target verticals (NCUA/GLBA for CUs, HIPAA for healthcare) structurally conflict with the unlinkability property \u2014 the construction is a compliance blocker in its own named scenarios. None of these attacks are mitigated or acknowledged."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios named: cross-CU member agent (NFCU/PenFed/merchant) with specific permission bits and regulatory context, and healthcare PCP-to-specialist referral network. Named stakeholders and regulatory frameworks (NCUA Part 748, GLBA, HIPAA). However, cu_ciso and auth0_pm demonstrated that both target verticals have mandatory audit trail requirements (GLBA \u00a7314.4(e), HIPAA 45 CFR \u00a7164.528) that directly conflict with the construction's core property. A system cryptographically incapable of producing cross-scope audit logs is a compliance blocker, not a compliance win, in both named verticals. No selective-disclosure or auditor-reveal mechanism is specified."
+    }
+  },
+  "gaps": [
+    "scopeCommitment is scope-independent and publicly output \u2014 it is a permanent cross-scope fingerprint that breaks IND-UNL-AS with advantage 1. Must either remove from public outputs, rerandomize per-scope with a blinding factor, or split into a private root commitment and a scope-blinded published commitment.",
+    "operatorSecretKey vs agentSecretKey conflation: in the primary scenario AS==operator holds the PRF key. Construction must introduce an agent-specific ephemeral secret unknown to the operator, with enrollment binding the credential to this ephemeral key.",
+    "IND-UNL-AS game models agent-permutation not same-or-different. Replace with a same-or-different distinguisher game that matches the deployment claim.",
+    "PRF reduction requires simulation-extractable Groth16 (or reprove under AGM+ROM) but only claims knowledge soundness. Add SE-Groth16 to named assumptions or mandate PLONK-only for this circuit.",
+    "Reduction sketch is circular \u2014 simulator knows both secret keys and never queries the PRF oracle. Rebuild with one agent's key hidden from the simulator.",
+    "No selective-disclosure / auditor-reveal mechanism for regulatory compliance. Both target verticals (CU, healthcare) require cross-scope audit logs that the construction cryptographically prevents. Add a designated-auditor proof mode.",
+    "Trusted setup ceremony for new ScopeIsolatedAgentPolicy circuit is unspecified. Either mandate PLONK-only (avoiding per-circuit ceremony) or specify MPC ceremony and add honest-setup as an explicit assumption.",
+    "Batch relay creates a public co-occurrence oracle (same-transaction clustering). Must enforce uniform batch sizes or abandon on-chain nullifier submission for the off-chain path."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

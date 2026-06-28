@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap: proving monotonic scope narrowing over hidden intermediate state in a multi-hop chain without a trusted third party learning all scopes. However, the rfc7662_advocate's Attack 1 correctly shows the 'offline-verifiable without AS' framing is a straw man \u2014 pre-signed JWT introspection responses are already offline-verifiable. The real differentiator (no party accumulates all intermediate scopes) is buried and poorly articulated in \u00a78. Attack 4 (root authority unbound) demonstrates that the circuit proves chain consistency but not chain legitimacy \u2014 the root scope has no external trust anchor comparable to WebPKI-backed AS issuers. The baseline can approximate the audit function via AS-signed attestations; the ZK construction is preferable but the baseline is not provably excluded because the construction conflates 'no AS at verification time' with 'no omniscient party at issuance time.' Awarding 1: preferable but baseline approximates."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models (3 games), named cryptographic assumptions (A1-A5), and reduction sketches. This is substantially above average. However, the cryptographer's Attack 1 is devastating: Game 2's bound of 1/2^64 is wrong by ~2^56 because the actual scope domain is at most 256 values (8 meaningful bits), and rootCredCommitment is publicly enumerable from the on-chain Merkle tree. The correct bound is ~1/256, not 1/2^64. The reduction sketch for Game 2 claims Poseidon inversion is needed, but the adversary enumerates rather than inverts. Attack 3 (underconstrained active[h] selector bits) identifies a specification gap where binary constraints are not explicitly stated \u2014 the reduction sketch assumes binary decompositions without verifying them. Attack 4 (deterministic chain fingerprinting) shows the whistleblower privacy game is incomplete: cross-session linkability via public signal matching is unaddressed. The threat model exists and is serious but has material gaps. Awarding 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps entirely to existing Bolyra primitives: Poseidon2/4/5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64), cumulative bit constraints, PLONK with pot16.ptau SRS. No new primitives are introduced \u2014 the circuit is explicitly described as 8 unrolled instances of existing Delegation circuit logic. Circuit cost is estimated at ~102,100 constraints, fitting within 2^17 budget compatible with pot16.ptau. PLONK proving time target <5s is stated and reasonable for agent-class circuits. The primitive mapping table (\u00a75) cross-references spec sections. This is a clean 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer. The cryptographer's Attack 1 (small-domain scope extraction) breaks the stated Game 2 security bound from 1/2^64 to ~1/256 \u2014 a fundamental error in the formal claim. The cryptographer's Attack 2 and spiffe_engineer's Attack 1 independently identify the same critical gap: intermediate per-hop Merkle roots are private witnesses with no on-chain anchor, meaning intermediate agents need not be genuinely enrolled. This breaks the construction's core claim that 'every participant [is] enrolled in the agent Merkle tree.' The auth0_pm's Attack 1 (trust laundering \u2014 prover is the accused) identifies that the construction replaces self-attestation with self-generated ZK proof, with no binding between the proven chain and actual execution. The rfc7662_advocate's Attack 2 shows the whistleblower cannot generate the proof without all intermediate private inputs they don't possess. These are attacks the construction cannot answer without significant redesign. Awarding 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU deployment scenario (\u00a77) is concrete and names a real stakeholder (Navy Federal CU, 13M+ members), regulatory requirement (NCUA examination, GENIUS Act), and a specific 4-hop pipeline. However, the cu_ciso's attacks expose that the scenario is not load-bearing as described: Attack 1 shows NCUA examiners use questionnaires and AIRES, not Solidity verifier contracts \u2014 no policy-binding layer exists. Attack 2 shows incident response under Part 748 is impossible because intermediate witnesses are ephemeral. Attack 3 shows GLBA/TPRM vendor management requirements structurally conflict with hiding intermediate participants from the examiner. The scenario is named and detailed but the regulatory requirements it invokes actually contradict the construction's privacy guarantees. The whistleblower variant fails per rfc7662_advocate Attack 2 (source cannot generate the proof). Awarding 1: scenario named but operational/regulatory fit is hypothetical at best."
+    }
+  },
+  "gaps": [
+    "Game 2 security bound must be revised from 1/2^64 to account for small scope domain (~256 values) and publicly enumerable credential commitments; add scope blinding salt to Poseidon commitment",
+    "All per-hop delegateeMerkleRoot[h] must be constrained against on-chain roots (either as public signals or via single-root in-circuit equality constraint) \u2014 currently only terminal root is checked",
+    "Add explicit binary constraint `active[h] * (1 - active[h]) === 0` to spec and reference it in the reduction sketch",
+    "Address trust laundering: bind proof to actual execution via on-chain proof-at-delegation-time or neutral co-signer, not just audit-time regeneration by the accused party",
+    "Define prover role and chain material possession requirements \u2014 the whistleblower scenario requires a proof-of-chain-possession protocol since terminal participants lack intermediate private inputs",
+    "Add cross-session unlinkability game and resolve tension between deterministic chain fingerprinting and whistleblower privacy",
+    "Rewrite \u00a78 comparison: differentiator is 'no party accumulates intermediate state' not 'AS not needed at audit time' \u2014 pre-signed JWT introspection is already offline-verifiable",
+    "Add root authority binding: rootCredCommitment must be constrained against an on-chain operator registry so the circuit proves chain legitimacy, not just chain consistency",
+    "Address NCUA examiner workflow: add policy-binding layer and compliance-readable audit report format wrapping the proof",
+    "Design tiered disclosure model: regulatory auditors need selective hop-identity disclosure (TPRM compliance) while whistleblower variant maintains full anonymity"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims BBS+ cannot prove hidden bitmask subset relations, but the rfc7662_advocate (Attack 1) correctly identifies that BBS+ with commit-and-prove extensions (Camenisch-Lysyanskaya + Bulletproofs inner product) CAN prove \u2286 over committed bitmasks \u2014 collapsing the strongest row in \u00a78. The residual gap is real but narrower than claimed: a cross-org distrusting auditor who trusts no single party can verify monotonic narrowing without disclosure. However, as the rfc7662_advocate (Attack 4) notes, the NFCU scenario uses a trusted regulator with subpoena power, so the ZK property is only load-bearing for genuinely adversarial cross-org auditors \u2014 a much narrower claim than \u00a78 presents. The baseline can approximate the core property with extra configuration (BBS+ predicate proofs + per-RS introspection filtering), so this is preferable but not provably impossible for the baseline. Score: 1, not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models (three formal games), named cryptographic assumptions (A1-A4), and a reduction sketch. However, multiple formal gaps identified by the cryptographer are unresolved: (1) Attack 1 \u2014 phantom chain attack: ChainAuditProof's finalAccumulator is a private input with no contract-level binding to on-chain chainAccumulators[sessionNonce], breaking soundness reduction step 5. (2) Attack 2 \u2014 newScopeCommitment is deterministic over a small input space (few hundred valid scopes \u00d7 N enrolled agents), enabling dictionary attacks that break IntermediateAnonymity without inverting Poseidon. (3) Attack 3 \u2014 cross-session linkability via stable newScopeCommitment not covered by the single-session privacy game. (4) Attack 4 \u2014 A4 invokes HVZK but multi-proof composition requires simulation extractability (SE-NIZK), which PLONK in ROM does achieve but the construction never cites. The threat model exists and assumptions are named, but the reduction has concrete holes (phantom chain, small-domain dictionary attack). Score: 1, not 2."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "All new gadgets use only existing Bolyra primitives: Poseidon2/3 over BN254, BinaryMerkleRoot(20), EdDSAPoseidonVerifier on Baby Jubjub, Num2Bits, cumulative bit encoding. DelegationHopAccumulator is ~28,700 constraints; ChainAuditProof is ~13,100 constraints \u2014 both well within pot16.ptau 2^16=65,536 budget. Proving time targets stated (< 5s per hop, < 3s audit). PLONK with universal setup, no new ceremony required. The primitive mapping table (\u00a75) is comprehensive. The spiffe_engineer's Attack 4 notes a hopCount \u2264 MAX_HOPS range-check gap, but this is a fixable constraint addition, not a new primitive. Score: 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks remain unanswered and outside the stated threat model: (1) Cryptographer Attack 1 (phantom chain) \u2014 concrete soundness gap where the contract never checks chainDigest against stored chainAccumulators. (2) Cryptographer Attack 2 (scope commitment dictionary attack) \u2014 breaks IntermediateAnonymity for realistic deployment sizes. (3) cu_ciso Attack 1 \u2014 NCUA vendor management requirements directly conflict with the hiding property; the construction provides no selective disclosure mechanism. (4) rfc7662_advocate Attack 1 \u2014 \u00a78's strongest comparative claim (BBS+ cannot prove \u2286) is factually wrong. (5) spiffe_engineer Attack 4 \u2014 hopCount underreporting is a concrete soundness vector not constrained in the circuit. These are not mitigated attacks that weaken the claim \u2014 they are unaddressed attacks the construction cannot currently answer. Score: 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario (\u00a77) is concrete with a named stakeholder (Navy Federal, 13M members), named regulatory requirement (NCUA examination), and a specific pipeline. However, cu_ciso Attacks 1-3 demonstrate the scenario is internally contradictory: (1) NCUA requires vendor disclosure (GLBA Safeguards Rule), directly conflicting with hiding intermediate participants. (2) The NCUA examiner cannot interpret a PLONK proof \u2014 no SOC 2 mapping, no human-readable attestation layer specified. (3) The examiner has subpoena power making the ZK property non-load-bearing (rfc7662_advocate Attack 4). The whistleblower variant is hypothetical with no named stakeholder. The scenario is named and detailed but the regulatory requirements actively conflict with the construction's privacy guarantees, making the property nice-to-have rather than load-bearing in this specific deployment. Score: 1."
+    }
+  },
+  "gaps": [
+    "\u00a78 baseline comparison must acknowledge BBS+ commit-and-prove extensions (Camenisch-Lysyanskaya + Bulletproofs) CAN prove hidden bitmask subset \u2014 reframe differentiator to cross-org distrusting auditor specifically",
+    "Contract verifyChainAudit must explicitly check chainDigest == Poseidon2(chainAccumulators[sessionNonce], sessionNonce) \u2014 state this as a constraint or contract pre-check to close the phantom chain attack",
+    "Add blinding factor to newScopeCommitment: Poseidon3(delegateeScope, delegateeCredCommitment, blindingNonce) to prevent dictionary attacks over the small scope \u00d7 credential input space",
+    "Make newScopeCommitment session-specific (bind sessionNonce into the commitment) to prevent cross-session linkability, and extend the privacy game to cover multi-session adversaries",
+    "Replace A4 (HVZK) with simulation extractability of PLONK in ROM (cite Ganesh et al. 2022) and rewrite privacy reduction for joint simulatability of (\u03c0_hop_1..n, \u03c0_audit)",
+    "Add explicit circuit constraint hopCount \u2264 MAX_HOPS in ChainAuditProof to prevent hopCount underreporting",
+    "Specify dual-mode disclosure: CU can prove narrowing to a distrusting auditor AND separately produce vendor inventory for NCUA compliance \u2014 the construction needs a selective disclosure mechanism where hiding intermediates is optional",
+    "Define human-readable attestation layer wrapping the PLONK proof \u2014 a standardized document mapping to NCUA Part 748 sections that a CPA firm can sign off on",
+    "Address on-chain availability risk: specify a degraded-mode path (off-chain accumulator with reconciliation, or batched settlement) for BCP compliance",
+    "Specify enrollment authority governance: who controls the Merkle tree, key rotation, compromise recovery \u2014 currently an unnamed trusted party"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

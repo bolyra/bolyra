@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "AS-blind presentation is structurally impossible in RFC 7662 \u2014 the AS must observe the token request to filter scope. Multiple Tier 3 personas (rfc7662_advocate Attacks 1, 2, 4; spiffe_engineer Attack 2) confirmed this survives: SD-JWT leaks individual claim identity under RS collusion, PPIDs protect sub but not the permission set from the AS, and RFC 8693 delegation requires an AS roundtrip at every hop. The construction names collusion-resistant unlinkable selective disclosure and AS-blind presentation as capabilities the baseline structurally cannot provide, and these hold up."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists with two formal games (SSF, SP), three named assumptions (KS-Groth16, CR-Poseidon, EUF-CMA-EdDSA), and a 3-case reduction sketch. However: (1) KS-Groth16 requires an honestly generated CRS but the trust model never states this assumption \u2014 cryptographer Attack 1 shows an adversarial AS who ran the ceremony collapses SSF entirely. (2) The SP game claims unlinkability across RSes but provides no formal unlinkability experiment \u2014 cryptographer Attack 2 shows the AS can enumerate nullifiers offline to link presentations. (3) 'Runtime-adaptive predicate' is listed as a named property but has no game definition \u2014 cryptographer Attack 4 notes it is unfalsifiable without one. Assumptions are named but the reduction has structural holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction uses the existing AgentPolicy circuit unchanged \u2014 Poseidon hash, BabyJubjub EdDSA, Groth16/PLONK, depth-20 Merkle \u2014 all current Bolyra primitives. Stated cost: ~38,500 constraints, <0.8s rapidsnark proving, 128-byte proof, within Phase 1 budget. The underconstrained cumulative-bit issue (cryptographer Attack 3) requires only ~6 additional constraints, negligible. The FIPS concern (cu_ciso Attack 1) is a regulatory/procurement issue, not an implementability one \u2014 the primitives exist and work. Deployment environment latency (auth0_pm Attack 3) is operational, not circuit-cost."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer: (1) rfc7662_advocate Attack 3 + spiffe_engineer Attack 4: adversarial-AS claim collapses when AS=issuer \u2014 the operator key holder can issue permissionBitmask=0xFF and every predicate passes, with no second trust anchor. (2) cryptographer Attack 1: trusted setup subversion \u2014 adversary with CRS toxic waste forges arbitrary proofs, and the threat model never scopes out 'AS controlled the ceremony.' (3) auth0_pm Attack 2: no revocation mechanism \u2014 cached proofs remain valid after credential revocation with no nullifier-based revocation path described. (4) cu_ciso Attack 2: incident response requires piercing ZK privacy but no privileged-disclosure or escrow mechanism exists. (5) cryptographer Attack 3: circuit is underconstrained \u2014 cumulative bit implication rules not enforced, allowing adversarial AS to issue semantically malformed credentials that produce valid proofs."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Pacific Federal Credit Union is concretely named with 3 agent types, 3 external RSes, and NCUA/GENIUS Act compliance. However auth0_pm Attack 4 demonstrates the 8-bit PCFCU scenario does not require ZK \u2014 a well-scoped JWT with per-RS disclosure envelopes achieves identical privacy for 8 bits. The scenario does not instantiate the adversarial-AS model that would make ZK load-bearing. Additionally, cu_ciso Attacks 1-4 show the scenario's own regulatory requirements (FIPS cryptography, audit trails, SLAs, SOC 2) actively conflict with the construction's primitives and privacy guarantees. The ZK property is sufficient but not necessary in this scenario."
+    }
+  },
+  "gaps": [
+    "Separate issuance-trust from presentation-trust: either restrict adversarial-AS claim to presentation-time only (with issuer in trusted boundary) or add an on-chain credential registry that makes post-issuance inflation detectable \u2014 the AS-is-issuer collapse is the single most damaging gap",
+    "State the honest-CRS assumption explicitly in the threat model, or switch AgentPolicy to PLONK-only (universal SRS, one-honest-participant ceremony) to close the trusted-setup subversion attack",
+    "Add a revocation mechanism \u2014 either on-chain nullifier-based credential revocation (with stated RS verification latency) or epoch-based credential expiry with short TTL, and scope the threat model to exclude long-lived cached proofs",
+    "Add ~6 constraints enforcing cumulative bit implication rules in-circuit (permBits[4]*(1-permBits[3])===0 etc.) so adversarial AS cannot issue semantically malformed bitmasks",
+    "Define a formal unlinkability game (challenge: adversary links proof \u03c0\u2081 at RS\u2081 to proof \u03c0\u2082 at RS\u2082 for the same credential) \u2014 current SP game omits this experiment and the nullifier scheme leaks linkage to an enumerating AS",
+    "Add a privileged-disclosure escrow path: ZK proof for RS-facing presentation, plaintext audit record encrypted to CU's HSM key for NCUA examiner access \u2014 construction cannot simultaneously claim AS-blind privacy and examiner-legible audit without this",
+    "Replace the 8-bit PCFCU scenario with one where ZK is load-bearing: either a 2^64 permission space where AS policy tables don't scale, or a multi-AS federation where no single AS is trusted, or a scenario where the adversarial-AS model is operationally real (e.g. third-party IdP the CU does not control)",
+    "Either formalize 'runtime-adaptive predicate' as a game G_RA or retire it as a named property \u2014 it currently collapses to standard ZK selective disclosure"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

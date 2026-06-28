@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction identifies a capability the baseline provably cannot match: proving monotonic scope narrowing over hidden bitmasks across a multi-hop delegation chain, with computational hiding of small-domain (8-bit) scope values via blinded Poseidon3 commitments. Section 8 demonstrates that BBS+ selective disclosure hides attributes within a single credential but cannot prove relational properties across a sequence of credentials, and that unblinded 8-bit scope commitments are brute-forceable in 256 hash evaluations. The RFC 7662 advocate's Attack 1 (AS-issued narrowing attestation) is valid for single-org scenarios where the AS is trusted, but the construction survives for cross-org pipelines where no single AS sees all hops \u2014 a capability explicitly ruled out of the baseline. The spiffe_engineer's WIMSE attack (Attack 4) partially lands for off-chain cases but concedes the on-chain anchoring requirement is unique. The structural impossibility argument (R1CS arithmetic over hidden multi-credential state) is sound."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides two explicit security games (NarrowingAuditSoundness, ScopeRecovery), named cryptographic assumptions (PLONK knowledge soundness, Poseidon collision/preimage resistance, Baby Jubjub DLog), and detailed reduction sketches. However, the cryptographer's attacks expose real formal gaps: (1) Attack 1 shows constraint 4 (chain linking) is vacuous as written \u2014 'select(b, x, x) = x' regardless of b, and 'previousExpected' is undefined, meaning the circuit does not actually enforce chain coherence. Events from unrelated sessions can be spliced. (2) Attack 3 shows sessionNonce is a public input with no in-circuit constraint tying delegationNullifier[i] to it \u2014 the binding is asserted but not enforced. (3) The ScopeRecovery bound of 1/|F_p| is incorrect when the adversary corrupts neighboring hops (Attack 4) \u2014 the correct bound is |F|/|F_p| where |F| can be small. (4) The PLONK SRS honesty assumption is missing from the formal assumptions list (Attack 2), making the reduction sketch technically incomplete. These are real formal deficiencies that weaken the security argument, not just presentation issues."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps directly to existing Bolyra primitives: Poseidon hash (2- and 3-arity), Num2Bits(64), PLONK proving system, BabyJubjub EdDSA (not re-verified in audit circuit), cumulative bit encoding, nullifier scheme, and on-chain scope commitment mapping. Circuit cost is estimated at ~7,528 constraints with a detailed per-component breakdown (Section 6), which is 2.4x smaller than AgentPolicy (~18K) and well within the PLONK agent budget. Proving time target is <2 seconds. The upstream changes to AgentPolicy (+~100 constraints) and Delegation (+~200 constraints) are minimal. The construction explicitly uses Poseidon3 (extending existing Poseidon2), PoseidonN(8), Mux1/MultiMux, and IsZero/IsEqual from circomlib. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 adversaries from 5 personas surfaced multiple real attacks that the construction cannot fully answer: (1) The cryptographer's chain-coherence attack (constraint 4 is vacuous) is a soundness-breaking gap the construction does not mitigate. (2) The cryptographer's sessionNonce binding attack (no in-circuit enforcement) compounds the chain-splice vulnerability. (3) The cu_ciso's incident response trap (no tiered disclosure mode for regulatory compulsion) is structurally absent. (4) The auth0_pm and spiffe_engineer both independently identify the blinding salt custody lifecycle as unspecified \u2014 loss at any hop breaks audit capability with no recovery mechanism. (5) The rfc7662_advocate's salt cooperation paradox (TransUnion can refuse to provide salt, blocking audit) is unaddressed. While the construction survives on the core cryptographic claim (scope hiding via blinded commitments, monotonic narrowing proof), the chain-coherence and sessionNonce binding gaps are attacks the construction cannot answer without circuit modifications."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU/NCUA scenario is concrete and names a specific stakeholder (Navy Federal Credit Union, $176B assets) and regulatory requirement (FFIEC AI model risk management, SR 11-7). However, multiple Tier 3 personas convincingly argue this scenario is misaligned: (1) The cu_ciso shows NCUA examiners under Part 748 want maximum transparency, not minimum disclosure \u2014 hiding the pipeline from the regulator is counterproductive. (2) The rfc7662_advocate shows that in single-org regulatory audit, the AS-signed narrowing attestation covers the examiner's need without ZK. (3) The cu_ciso's vendor management attack shows the construction decouples cryptographic identity from legal identity with no bridge. The journalist/source variant is genuinely load-bearing (privacy from the auditor is essential) but is acknowledged as hypothetical/niche \u2014 no named stakeholder or regulatory requirement. The scenario where the construction is truly load-bearing (cross-org pipeline audit where no single AS exists and the auditor must not learn intermediate scopes) is described but not anchored to a specific named deployment with regulatory backing."
+    }
+  },
+  "gaps": [
+    "Constraint 4 (chain linking) is vacuous \u2014 'previousExpected' is undefined and select(b,x,x)=x trivially. Must add an in-circuit constraint that enforces sequential chain coherence, e.g. by requiring each hop's delegation proof to commit to its predecessor's scopeCommitment as a verified input",
+    "sessionNonce has no in-circuit binding to delegationNullifier[i] \u2014 add delegationTokenHash[i] as private signal and enforce delegationNullifier[i] = Poseidon2(delegationTokenHash[i], sessionNonce) for each active hop",
+    "ScopeRecovery probability bound must be corrected to |F|/|F_p| conditioned on corrupted neighbor set, with explicit acknowledgment of information-theoretic leakage when narrowing constraints are tight",
+    "Add PLONK universal SRS honesty to the named assumptions list to complete the reduction sketch",
+    "Specify blinding salt custody lifecycle: generation, storage, retention period, access control, recovery from hop failure, and cross-org coordination protocol \u2014 currently the construction's privacy guarantee and audit liveness guarantee are in unresolved tension",
+    "Add tiered disclosure mode: ZK proof for routine attestation, full plaintext chain available to regulators under legal compulsion (NCUA Part 748, GLBA Safeguards). The current construction makes regulatory disclosure cryptographically impossible",
+    "Replace or supplement the NFCU regulatory scenario with a genuinely load-bearing cross-org scenario where no single AS exists and the auditor must not learn intermediate scopes \u2014 or reframe NFCU scenario to show why the examiner would accept a ZK proof over full disclosure",
+    "Address the rfc7662_advocate's AS-signed narrowing attestation for single-org cases \u2014 either concede single-org to baseline and focus on cross-org, or explain why single-org still needs ZK",
+    "Specify how credCommitment maps to legal vendor identity for regulatory vendor management requirements without full chain disclosure"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

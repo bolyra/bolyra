@@ -1,0 +1,862 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Define application/bolyra-proof+cbor media type and proof envelope schema",
+      "dimension": "standards",
+      "description": "The protocol lacks a standardized wire format for exchanging proofs between parties. Define an IANA-registerable media type (application/bolyra-proof+cbor) with a CDDL schema specifying the proof envelope: {proof_type, public_signals[], proof_bytes, circuit_id, proving_system, nonce}. This enables HTTP-level content negotiation, middleware inspection, and cross-implementation interop. Deliver the CDDL schema, a reference encoder/decoder in the TS SDK, and an appendix for the IETF draft.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 20,
+      "standards": 21,
+      "completeness": 19,
+      "correctness": 15,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "title": "Define application/bolyra-proof+cbor media type and proof envelope schema",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-cddl.cddl",
+          "description": "Normative CDDL schema for the bolyra-proof+cbor proof envelope: proof_type, public_signals, proof_bytes, circuit_id, proving_system, nonce, and optional metadata fields."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/media-type-registration.md",
+          "description": "IANA media type registration template for application/bolyra-proof+cbor following RFC 6838 structured syntax suffix conventions."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/proof-envelope.ts",
+          "description": "Reference encoder (serializeProofEnvelope) and decoder (deserializeProofEnvelope) using cbor-x. Validates against CDDL constraints at runtime. Exports TypeScript types aligned with the CDDL schema."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types/proof-envelope.d.ts",
+          "description": "TypeScript interface definitions: ProofEnvelope, ProvingSystem enum (groth16 | plonk), ProofType enum (human_uniqueness | agent_policy | delegation)."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/proof-envelope.test.ts",
+          "description": "Round-trip encode/decode tests, schema validation error cases, content-type header negotiation helpers, and cross-version compatibility vectors."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/proof-envelope-vectors.json",
+          "description": "Canonical test vectors (hex-encoded CBOR blobs) for each proof type and proving system combination, for cross-implementation conformance testing."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Appendix A addition: wire format specification, content negotiation guidance, and CDDL schema reference embedded in the existing IETF-style draft."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope.md",
+          "description": "Developer guide: motivation, field semantics, encode/decode usage examples, HTTP Content-Type header usage, and versioning strategy."
+        }
+      ],
+      "steps": [
+        "Audit existing proof structures in sdk/src/ and circuits/ to enumerate all fields currently produced by snarkjs/rapidsnark (pi_a, pi_b, pi_c, publicSignals, protocol, curve) and map them to envelope fields.",
+        "Define the CDDL schema in spec/proof-envelope-cddl.cddl: proof_type as tstr enum, public_signals as [+ bstr], proof_bytes as bstr (CBOR-serialized Groth16/PLONK proof points), circuit_id as tstr (semver-tagged), proving_system as tstr enum, nonce as bstr (32 bytes), and optional version uint defaulting to 1.",
+        "Add cbor-x as a direct dependency in sdk/package.json; verify it does not conflict with existing snarkjs CBOR usage.",
+        "Implement serializeProofEnvelope(envelope: ProofEnvelope): Uint8Array in sdk/src/proof-envelope.ts using cbor-x encode, with field-level validation (nonce length, enum membership, non-empty public_signals).",
+        "Implement deserializeProofEnvelope(bytes: Uint8Array): ProofEnvelope in sdk/src/proof-envelope.ts using cbor-x decode, with schema conformance checks throwing ProofEnvelopeError on violations.",
+        "Export the new types and functions from sdk/src/index.ts as part of the public API surface.",
+        "Write sdk/test/proof-envelope.test.ts covering: round-trip identity, unknown proving_system rejection, truncated nonce rejection, empty public_signals rejection, and backwards-compat with a v1 vector.",
+        "Generate canonical test vectors for all three circuit types \u00d7 two proving systems (6 vectors) and commit them to spec/test-vectors/proof-envelope-vectors.json.",
+        "Write spec/media-type-registration.md following RFC 6838 section 4.2: type name, subtype name, required/optional parameters, encoding, security considerations, and contact.",
+        "Draft Appendix A in spec/draft-bolyra-mutual-zkp-auth-01.md: wire format rationale (CBOR over JSON for binary proof points), CDDL schema block, Content-Type negotiation example (Accept/Content-Type headers in handshake HTTP exchange), and versioning policy.",
+        "Write docs/proof-envelope.md: field-by-field semantics table, encode/decode code examples in TS, HTTP middleware snippet checking Content-Type, and a note on the IANA registration status.",
+        "Run npm run typecheck and npm run test:circuits:fast to confirm no regressions, then update sdk/CHANGELOG.md with the new v0.2.x export."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "cbor-x npm package",
+        "snarkjs proof output format (pi_a, pi_b, pi_c, publicSignals) as source of proof_bytes content",
+        "RFC 6838 (media type registration procedures)",
+        "RFC 8610 (CDDL \u2014 Concise Data Definition Language)",
+        "RFC 8949 (CBOR encoding)",
+        "Existing spec/draft-bolyra-mutual-zkp-auth-01.md for appendix integration",
+        "circuits/build/ artifact naming convention for circuit_id values"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete did:bolyra DID resolution with on-chain dereferencing",
+      "dimension": "standards",
+      "description": "The existing did-method-bolyra.md spec needs a concrete resolution algorithm that maps did:bolyra:<commitment> to a DID Document by querying the IdentityRegistry contract. Define the DID Document structure (verification methods for EdDSA keys, service endpoints for proof submission), the resolution metadata (root index, tree type), and the deactivation signal (revoked identities return deactivated=true). Implement a did:bolyra resolver conformant to W3C DID Resolution v1.0 as a standalone TS module exportable from @bolyra/sdk.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 20,
+      "standards": 22,
+      "completeness": 21,
+      "correctness": 14,
+      "total": 77,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "title": "Complete did:bolyra DID resolution with on-chain dereferencing",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Extend existing DID method spec with concrete resolution algorithm section: input normalization, commitment extraction, on-chain lookup, DID Document construction, deactivation signal, and resolution metadata schema."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/resolver.ts",
+          "description": "W3C DID Resolution v1.0 conformant resolver module: resolveDidBolyra(did, options) returns { didDocument, didResolutionMetadata, didDocumentMetadata }. Queries IdentityRegistry contract via ethers.js provider."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/document.ts",
+          "description": "DID Document builder: maps on-chain IdentityRecord (commitment, eddsaPubKey, merkleRoot, revoked) to W3C DID Document with Ed25519VerificationKey2020 verification methods and bolyra-proof-submission service endpoint."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/types.ts",
+          "description": "TypeScript interfaces: BolyraDidDocument, BolyraResolutionMetadata (rootIndex, treeType, blockNumber), BolyraDocumentMetadata (created, updated, deactivated), BolyraResolverOptions (provider, registryAddress, networkId)."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/index.ts",
+          "description": "Re-export resolver, document builder, and types from did/ submodule; extend sdk/src/index.ts to export createBolyraResolver factory."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Verify (or add) getIdentity(commitment) view function returning (eddsaPubKeyX, eddsaPubKeyY, merkleRoot, rootIndex, treeType, revoked, createdAt, updatedAt) \u2014 the minimal read surface required by the resolver."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/did/resolver.test.ts",
+          "description": "Unit tests with Hardhat in-process node: resolve a live identity, resolve a revoked identity (expect deactivated=true), resolve unknown commitment (expect notFound error), invalid DID syntax (expect invalidDid error), network error handling."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/did/document.test.ts",
+          "description": "Unit tests for DID Document builder: correct verificationMethod id format, controller equals subject, service endpoint URL construction, deactivated flag propagation from revoked=true, metadata timestamps from block data."
+        },
+        {
+          "type": "docs",
+          "filename": "sdk/QUICKSTART.md",
+          "description": "Add DID resolution section: how to instantiate createBolyraResolver, resolve a DID, handle notFound and deactivated cases, and wire into a universal resolver driver."
+        }
+      ],
+      "steps": [
+        "Read existing spec/did-method-bolyra.md and contracts/src/IdentityRegistry.sol to document current state of commitment storage and any existing read methods.",
+        "Define resolution algorithm in spec: (1) parse did:bolyra:<commitment>, validate hex/base58 format; (2) call IdentityRegistry.getIdentity(commitment); (3) if not found return notFound error; (4) build DID Document from on-chain fields; (5) set deactivated=true if revoked; (6) populate resolutionMetadata with rootIndex, treeType, blockNumber.",
+        "Confirm or add getIdentity() view function to IdentityRegistry.sol returning all fields needed by resolver; add corresponding ABI fragment to sdk/src/did/types.ts.",
+        "Write sdk/src/did/types.ts: BolyraDidDocument (extends W3C DIDDocument), BolyraResolutionMetadata, BolyraDocumentMetadata, BolyraResolverOptions, BolyraIdentityRecord (raw contract return).",
+        "Implement sdk/src/did/document.ts: buildDidDocument(commitment, record, options) constructing @context array [W3C DID v1, Ed25519 2020], id field, controller, Ed25519VerificationKey2020 verificationMethod from eddsaPubKeyX/Y, authentication/assertionMethod references, and bolyra-proof-submission service endpoint.",
+        "Implement sdk/src/did/resolver.ts: resolveDidBolyra(did, options) \u2014 parse DID, instantiate ethers Contract with provided provider and registryAddress, call getIdentity, handle revert/zero-address as notFound, call buildDidDocument, return W3C resolution envelope.",
+        "Export createBolyraResolver factory from sdk/src/did/index.ts and add to sdk/src/index.ts public surface.",
+        "Write resolver and document unit tests using Hardhat in-process node; cover happy path, revoked identity, not-found, invalid DID syntax, and provider network error.",
+        "Update spec/did-method-bolyra.md with formal resolution algorithm prose, DID Document example JSON, metadata field table, error code table (notFound, invalidDid, methodNotSupported, internalError), and deactivation semantics.",
+        "Run tsc --noEmit in sdk/ to verify zero type errors; run npm run test:contracts to ensure IdentityRegistry changes pass existing tests; run new resolver tests.",
+        "Update sdk/QUICKSTART.md with DID resolution usage example and note on wiring into the W3C universal resolver driver interface.",
+        "Commit with DCO sign-off (git commit -s); update tasks/todo.md and MEMORY.md with completion entry."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "ethers.js v6 (already in sdk/ dependencies)",
+        "IdentityRegistry.sol getIdentity() view function (add if missing)",
+        "W3C DID Resolution v1.0 spec (https://www.w3.org/TR/did-core/)",
+        "Ed25519VerificationKey2020 context (https://w3id.org/security/suites/ed25519-2020/v1)",
+        "Hardhat local node for resolver integration tests",
+        "@bolyra/sdk build pipeline (tsc, npm run build in sdk/)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Publish machine-readable JSON conformance test vectors",
+      "dimension": "standards",
+      "description": "Interoperability requires deterministic test vectors that any implementation can run without deploying contracts or generating real proofs. Create a spec/conformance/ directory with JSON test vectors covering: valid handshake (human + agent signals + expected outputs), expired credential rejection, revoked identity, stale root (within and outside history buffer), scope subset violations, cumulative bit encoding violations, and delegation chain at depths 1/2/3/4 (last must fail). Each vector includes input witness, expected public signals, and expected accept/reject. Reference these from the IETF draft \u00a78.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 20,
+      "standards": 23,
+      "completeness": 21,
+      "correctness": 17,
+      "total": 81,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_test_vectors",
+      "title": "Publish machine-readable JSON conformance test vectors",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/conformance/schema.json",
+          "description": "JSON Schema defining the structure of all conformance vector files"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/handshake-valid.json",
+          "description": "Valid human+agent handshake: input witness, expected public signals, expect accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/credential-expired.json",
+          "description": "Agent credential with expiry in the past; expect reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/identity-revoked.json",
+          "description": "Human identity whose nullifier appears in revocation set; expect reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/root-stale-within-buffer.json",
+          "description": "Merkle root is stale but within history buffer window; expect accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/root-stale-outside-buffer.json",
+          "description": "Merkle root is stale and outside history buffer; expect reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/scope-subset-violation.json",
+          "description": "Delegated credential claims permissions not present in parent; expect reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/cumulative-bit-violation.json",
+          "description": "Permission bitmask violates implication rules (e.g. FINANCIAL_MEDIUM without FINANCIAL_SMALL); expect reject"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/delegation-depth-1.json",
+          "description": "Single-hop delegation chain; expect accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/delegation-depth-2.json",
+          "description": "Two-hop delegation chain; expect accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/delegation-depth-3.json",
+          "description": "Three-hop delegation chain; expect accept"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/delegation-depth-4.json",
+          "description": "Four-hop delegation chain; expect reject (exceeds max depth)"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/README.md",
+          "description": "Human-readable index: vector naming conventions, field semantics, how to run against any implementation"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update \u00a78 to reference spec/conformance/ and normatively cite the vector schema"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/runner.js",
+          "description": "Node.js conformance runner: loads each vector, drives SDK verify path, asserts accept/reject matches expected verdict"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/conformance.ts",
+          "description": "Exported verifyConformanceVector() helper that accepts a parsed vector object and returns {passed, verdict, signals}"
+        }
+      ],
+      "steps": [
+        "Define and commit spec/conformance/schema.json \u2014 JSON Schema covering fields: id, description, circuit, inputs (witness fields as hex/decimal strings), publicSignals (expected array), expected (accept|reject), rejectReason (optional enum: EXPIRED, REVOKED, STALE_ROOT, SCOPE_VIOLATION, BIT_ENCODING, MAX_DEPTH)",
+        "Derive canonical numeric values for all witness fields from the existing circuit constraint definitions (HumanUniqueness, AgentPolicy, Delegation) \u2014 document field ordering to match snarkjs witness array layout",
+        "Author handshake-valid.json using a known-good witness from circuits/test/ fast-mode outputs; record publicSignals from snarkjs witness calculator output",
+        "Author credential-expired.json by setting expiry field to a Unix timestamp in the past (e.g. 1700000000) relative to a fixed sessionTimestamp in the vector",
+        "Author identity-revoked.json by including a nullifierHash that appears in the revocationLeaves array inside the vector's input block",
+        "Author root-stale-within-buffer.json with merkleRootAge = historyBuffer - 1 block; author root-stale-outside-buffer.json with merkleRootAge = historyBuffer + 1",
+        "Author scope-subset-violation.json where delegatedPermissions bitmask has bits set that are absent in parentPermissions",
+        "Author cumulative-bit-violation.json where bitmask has bit 3 (FINANCIAL_MEDIUM) set but bit 2 (FINANCIAL_SMALL) clear, violating the implication rule checked by validateCumulativeBitEncoding()",
+        "Author delegation-depth-1 through delegation-depth-4 vectors by composing nested delegationChain arrays of length 1\u20134; depth 4 vector sets expected=reject with rejectReason=MAX_DEPTH",
+        "Implement sdk/src/conformance.ts: verifyConformanceVector() calls existing verifyHandshake() or validateCumulativeBitEncoding() paths as appropriate per vector's circuit field, then compares outcome to vector.expected",
+        "Write spec/conformance/runner.js: glob all spec/conformance/*.json (excluding schema.json and README.md), parse each, call verifyConformanceVector(), print pass/fail per vector and exit non-zero on any failure",
+        "Add conformance script to root package.json: 'test:conformance': 'node spec/conformance/runner.js'",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md \u00a78 to add normative paragraph: implementations MUST pass all vectors in spec/conformance/ against the schema in spec/conformance/schema.json",
+        "Write spec/conformance/README.md: vector naming convention, field reference table, how to add new vectors, how to run runner.js, how to port to non-JS implementations",
+        "Run npm run test:conformance, confirm all 12 vectors pass (11 deterministic accepts/rejects + schema validation), commit with DCO sign-off"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "circuits/src/HumanUniqueness.circom \u2014 witness field ordering",
+        "circuits/src/AgentPolicy.circom \u2014 witness field ordering",
+        "circuits/src/Delegation.circom \u2014 delegation depth enforcement and witness layout",
+        "sdk/src/index.ts \u2014 verifyHandshake(), validateCumulativeBitEncoding() public API",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 \u00a78 to be updated with normative conformance reference",
+        "circuits/test/ \u2014 existing fast-mode witness outputs used to seed valid vector values"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_chain_id_nonce_binding",
+      "persona": "cross_chain_engineer",
+      "title": "Bind sessionNonce to chainId to prevent cross-chain replay",
+      "dimension": "correctness",
+      "description": "The current handshake nonce binding (nonceBinding = Poseidon2(nullifierHash, sessionNonce) in HumanUniqueness, and similar in AgentPolicy) does not commit to a chain identifier. A valid proof verified on Base can be replayed on an Arbitrum or Polygon deployment sharing the same Merkle roots. Fix: add a public input `chainId` to all three circuits and bind it into the nullifier or nonce commitment (e.g., nonceBinding = Poseidon3(nullifierHash, sessionNonce, chainId)). The on-chain verifier checks `chainId == block.chainid`. This is a 1-line circuit change per circuit plus a constructor/verify-time check in IdentityRegistry.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_id_nonce_binding",
+      "adoption": 18,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 22,
+      "total": 76,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_chain_id_nonce_binding",
+      "title": "Bind sessionNonce to chainId to prevent cross-chain replay",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/src/HumanUniqueness.circom",
+          "description": "Add public input `chainId`; replace Poseidon2(nullifierHash, sessionNonce) with Poseidon3(nullifierHash, sessionNonce, chainId) for nonceBinding"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/AgentPolicy.circom",
+          "description": "Add public input `chainId`; bind chainId into nonce commitment using Poseidon3"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/Delegation.circom",
+          "description": "Add public input `chainId`; bind chainId into nonce commitment using Poseidon3"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Add `require(publicSignals[chainIdIndex] == block.chainid, 'chainId mismatch')` in verifyHandshake(); update verifier interface to pass chainId as a public signal"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/verifiers/HumanUniquenessVerifier.sol",
+          "description": "Regenerated Groth16 verifier from updated HumanUniqueness.zkey with chainId public input"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/verifiers/AgentPolicyVerifier.sol",
+          "description": "Regenerated Groth16+PLONK verifiers from updated AgentPolicy.zkey with chainId public input"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/verifiers/DelegationVerifier.sol",
+          "description": "Regenerated Groth16+PLONK verifiers from updated Delegation.zkey with chainId public input"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/human.ts",
+          "description": "Add `chainId` parameter to `createHumanIdentity` and `proveHandshake`; pass chainId into witness generation inputs"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/agent.ts",
+          "description": "Add `chainId` parameter to `createAgentCredential` and handshake proof generation"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/verify.ts",
+          "description": "Accept and forward chainId in `verifyHandshake`; validate chainId matches expected network before calling on-chain verifier"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk-python/bolyra/types.py",
+          "description": "Add `chain_id: int` field to HandshakeInput and ProofRequest dataclasses"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Add section on chain-domain separation; document chainId as a mandatory public input; update public signal index tables"
+        },
+        {
+          "type": "spec",
+          "filename": "circuits/FORMAL-PROPERTIES.md",
+          "description": "Add formal property: nonceBinding is chain-scoped \u2014 two proofs with identical (nullifierHash, sessionNonce) but different chainId produce distinct nonceBinding values"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/HumanUniqueness.test.js",
+          "description": "Add fast witness tests: (a) same inputs different chainId yields different nonceBinding; (b) chainId=0 is rejected; (c) cross-chain replay witness fails constraint check"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/AgentPolicy.test.js",
+          "description": "Mirror cross-chain replay witness tests for AgentPolicy circuit"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/Delegation.test.js",
+          "description": "Mirror cross-chain replay witness tests for Delegation circuit"
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/IdentityRegistry.test.ts",
+          "description": "Add Hardhat tests: verifyHandshake reverts when publicSignals[chainIdIndex] != block.chainid; passes when they match"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/crossChainReplay.test.ts",
+          "description": "End-to-end test: proof generated for chainId=84532 (Base Sepolia) fails verifyHandshake called against a mock contract reporting chainId=137 (Polygon)"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/owasp-agentic-mapping.md",
+          "description": "Update cross-chain replay threat entry to reflect mitigated status with chainId binding; reference new formal property"
+        }
+      ],
+      "steps": [
+        "Audit current public signal indices in all three circuits to determine insertion point for chainId without breaking existing signal ordering used by deployed verifiers",
+        "Update HumanUniqueness.circom: add `signal input chainId` as a public input; replace Poseidon2(nullifierHash, sessionNonce) with Poseidon3(nullifierHash, sessionNonce, chainId) for nonceBinding output",
+        "Update AgentPolicy.circom: same Poseidon2\u2192Poseidon3 substitution binding chainId into the agent nonce commitment",
+        "Update Delegation.circom: same substitution; verify scope-narrowing constraint is not broken by the additional hash input",
+        "Run `npm run compile:circuits` to recompile all three circuits and confirm R1CS constraint counts increase by ~1 per circuit (one Poseidon3 replaces Poseidon2)",
+        "Regenerate trusted setup artifacts: re-run phase-2 contribution for HumanUniqueness (reusing Semaphore pot16.ptau), AgentPolicy, and Delegation; produce new .zkey and vkey.json files",
+        "Regenerate Solidity verifier contracts from updated vkey.json files using snarkjs exportSolidityVerifier; replace existing verifier files in contracts/src/verifiers/",
+        "Update IdentityRegistry.sol: add chainId public signal index constant; add `require(publicSignals[CHAIN_ID_INDEX] == block.chainid)` guard in verifyHandshake()",
+        "Update TS SDK (human.ts, agent.ts, verify.ts): add chainId to all proof input structures and witness generation calls; default to provider network chainId if not explicitly supplied",
+        "Update Python SDK types.py: add chain_id field to relevant dataclasses; update subprocess bridge call to pass chain_id through to the Node SDK",
+        "Write circuit-level fast witness tests covering: (a) cross-chain nonceBinding divergence, (b) chainId=0 edge case, (c) replay witness constraint failure",
+        "Write Hardhat integration tests for IdentityRegistry.verifyHandshake covering chainId match and mismatch revert cases",
+        "Write SDK end-to-end cross-chain replay test using mock verifier contracts with differing reported chainId",
+        "Run `npm run test:circuits:fast` and `npm run test:contracts`; fix any regressions",
+        "Run `npm run test:circuits:slow` (FULL_PROOF=1) to validate real Groth16 and PLONK proofs with the new public input",
+        "Update FORMAL-PROPERTIES.md with the chain-scoping property; update spec draft with new public signal table and domain-separation rationale",
+        "Update owasp-agentic-mapping.md to mark cross-chain replay as mitigated",
+        "Lint and sign all commits (`git commit -s`); open PR targeting main"
+      ],
+      "estimated_constraints": 1,
+      "dependencies": [
+        "circomlib Poseidon3 hash (poseidon.circom \u2014 already available via circomlib, same as Poseidon2)",
+        "pot16.ptau universal SRS (already present in circuits/build/ \u2014 no re-download needed)",
+        "snarkjs phase-2 ceremony tooling for regenerating .zkey artifacts",
+        "Hardhat ethers provider for block.chainid access in tests",
+        "Existing public signal index layout documentation or source comments in each circuit"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_circuit_invariant_properties",
+      "persona": "formal_verifier",
+      "title": "Write machine-checkable circuit invariant properties for CI",
+      "dimension": "correctness",
+      "description": "Define and test 12 formal invariant properties across the 4 circuits: (1) no witness satisfies constraints with permissionBitmask \u2265 2^64, (2) nullifier uniqueness \u2014 distinct (scope, secret) pairs always produce distinct nullifiers, (3) scope monotonicity \u2014 delegateeScope & ~delegatorScope == 0 is enforced (never produces a satisfying witness otherwise), (4) cumulative bit encoding \u2014 bit 4 set without bits 2+3 is unsatisfiable, (5) expiry narrowing \u2014 delegateeExpiry > delegatorExpiry is unsatisfiable. Implement as a Mocha test suite using circom_tester's witness calculator: for each property, construct a violating witness and assert that calculateWitness throws. This is the practical equivalent of property-based testing for R1CS constraints and catches regressions on every CI run.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_circuit_invariant_properties",
+      "adoption": 15,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 21,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_circuit_invariant_properties",
+      "title": "Write machine-checkable circuit invariant properties for CI",
+      "artifacts": [
+        {
+          "type": "test",
+          "filename": "circuits/test/invariants/permissionBitmask.test.js",
+          "description": "Property 1: assert no witness satisfies permissionBitmask >= 2^64 across AgentPolicy and Delegation circuits"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/invariants/nullifierUniqueness.test.js",
+          "description": "Property 2: assert distinct (scope, secret) pairs always produce distinct nullifierHash outputs in HumanUniqueness"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/invariants/scopeMonotonicity.test.js",
+          "description": "Property 3: assert delegateeScope & ~delegatorScope == 0 is enforced \u2014 witness with bits outside delegator scope must throw"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/invariants/cumulativeBitEncoding.test.js",
+          "description": "Property 4: assert bit 4 set without bits 2+3 is unsatisfiable in AgentPolicy and Delegation circuits"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/invariants/expiryNarrowing.test.js",
+          "description": "Property 5: assert delegateeExpiry > delegatorExpiry is unsatisfiable in Delegation circuit"
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/invariants/index.test.js",
+          "description": "Top-level Mocha suite that imports and sequences all 5 invariant files; tagged fast (witness-only, no real proof)"
+        },
+        {
+          "type": "docs",
+          "filename": "circuits/FORMAL-PROPERTIES.md",
+          "description": "Append a new section listing all 12 named invariants with circuit mapping, the violating-witness pattern used per invariant, and CI integration notes"
+        }
+      ],
+      "steps": [
+        "Audit existing circuits (HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom) to catalogue every signal involved in the 5 property classes; record expected constraint equations for each",
+        "Install / confirm circom_tester is available as a dev dependency and that wasm witness calculators are compiled into circuits/build/ for all three circuits (reuse existing compile:circuits script)",
+        "Implement Property 1 (permissionBitmask overflow): construct input with permissionBitmask = 2n**64n in AgentPolicy and Delegation; assert calculateWitness rejects with a constraint-violation error",
+        "Implement Property 2 (nullifier uniqueness): generate two inputs sharing the same scope but distinct secrets, compute witnesses for both, assert the nullifierHash outputs differ; then repeat with same secret/distinct scope",
+        "Implement Property 3 (scope monotonicity): construct Delegation input where delegateeScope has at least one bit set that is clear in delegatorScope; assert calculateWitness throws",
+        "Implement Property 4 (cumulative bit encoding): construct AgentPolicy and Delegation inputs with bit 4 set but bit 2 or bit 3 clear; assert calculateWitness throws for each combination",
+        "Implement Property 5 (expiry narrowing): construct Delegation input with delegateeExpiry = delegatorExpiry + 1; assert calculateWitness throws",
+        "Expand each property to cover edge cases (e.g., boundary values, all-zeros, max-valid bitmask) to reach the 12-invariant target across the 4 circuits",
+        "Wire circuits/test/invariants/index.test.js into package.json test:circuits:fast so CI runs all invariant checks without full proof generation",
+        "Update circuits/FORMAL-PROPERTIES.md with the 12 named invariants, violating-witness pattern, circuit-to-invariant mapping table, and CI badge status",
+        "Run npm run test:circuits:fast locally; confirm all invariant tests pass (valid witnesses) and all violation tests throw as expected",
+        "Commit with DCO sign-off; add a CI note to the PR that test:circuits:slow is not required for this change"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "circom_tester (already in dev deps)",
+        "circuits/build/*.wasm and *.zkey artifacts compiled via compile:circuits",
+        "HumanUniqueness.circom",
+        "AgentPolicy.circom",
+        "Delegation.circom",
+        "circuits/FORMAL-PROPERTIES.md (existing, to be extended)",
+        "mocha (existing test runner)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_scope_blinding_salt",
+      "persona": "standards_architect",
+      "title": "Add blinding salt to scopeCommitment to prevent bitmask brute-force",
+      "dimension": "correctness",
+      "description": "scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) is vulnerable to offline brute-force: permissionBitmask is only 8 meaningful bits (256 possibilities), and credentialCommitment is a public output of AgentPolicy. An observer can precompute all 256 Poseidon2 values and recover the exact permission set. Change to Poseidon3(permissionBitmask, credentialCommitment, blindingSalt) where blindingSalt is a private 254-bit random input. Update AgentPolicy, Delegation circuits, the TS SDK's proveHandshake, and add a test vector proving the old 2-input commitment is distinguishable while the 3-input version is not.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_scope_blinding_salt",
+      "adoption": 17,
+      "standards": 16,
+      "completeness": 19,
+      "correctness": 23,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_scope_blinding_salt",
+      "title": "Add blinding salt to scopeCommitment to prevent bitmask brute-force",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/src/AgentPolicy.circom",
+          "description": "Add private input blindingSalt (254-bit), replace Poseidon2(permissionBitmask, credentialCommitment) with Poseidon3(permissionBitmask, credentialCommitment, blindingSalt) for scopeCommitment output."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/Delegation.circom",
+          "description": "Thread blindingSalt as a private input through delegation scope verification; update any internal scopeCommitment recomputation to use Poseidon3."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/test/AgentPolicy.test.js",
+          "description": "Add test vectors: (1) show old 2-input Poseidon2 commitment is recoverable across all 256 bitmasks given credentialCommitment; (2) show new 3-input Poseidon3 commitment is computationally indistinguishable without blindingSalt."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/test/Delegation.test.js",
+          "description": "Add witness-level tests verifying Delegation circuit accepts valid blindingSalt and rejects mismatched salt with consistent scopeCommitment."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/agent.ts",
+          "description": "Generate cryptographically secure 254-bit blindingSalt (using randomBytes clamped to field order) in createAgentCredential; store in AgentCredential object."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/handshake.ts",
+          "description": "Update proveHandshake to pass blindingSalt as private witness input to AgentPolicy and Delegation provers."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "Extend AgentCredential type with blindingSalt: bigint field; bump AgentCredential schema version."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/BolyraVerifier.sol",
+          "description": "No public interface change required (scopeCommitment remains a single public output); regenerate Solidity verifier from new .vkey.json after circuit recompile."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update scopeCommitment definition section: document Poseidon3 construction, blindingSalt entropy requirements (\u2265128 bits effective), and rationale for brute-force resistance."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/owasp-agentic-mapping.md",
+          "description": "Add entry under credential confidentiality: bitmask enumeration attack and how blinding salt mitigates it; reference OWASP LLM09 and OWASP Top 10 A02:2021."
+        }
+      ],
+      "steps": [
+        "1. Define blindingSalt as a private signal in AgentPolicy.circom; import Poseidon from circomlib and replace the 2-input Poseidon component with a 3-input component instantiated as Poseidon(3).",
+        "2. Recompile AgentPolicy circuit (npm run compile:circuits) and confirm R1CS constraint delta; expected increase is ~50 constraints for the extra Poseidon round.",
+        "3. Regenerate AgentPolicy Groth16 and PLONK .zkey artifacts using pot16.ptau (project ceremony is sufficient \u2014 constraint count stays well under 2^16).",
+        "4. Export new vkey.json and regenerate contracts/src/AgentPolicyVerifier.sol via snarkjs zkey export solidityverifier.",
+        "5. Mirror the same Poseidon3 change in Delegation.circom wherever scopeCommitment is recomputed; recompile and regenerate Delegation .zkey and verifier contract.",
+        "6. In sdk/src/types.ts, add blindingSalt: bigint to AgentCredential and bump the credential schema version constant.",
+        "7. In sdk/src/agent.ts createAgentCredential, generate blindingSalt = randomBigInt() % SNARK_FIELD_ORDER using Node crypto.getRandomValues; store on the returned credential.",
+        "8. In sdk/src/handshake.ts proveHandshake, forward credential.blindingSalt as a private witness input to both AgentPolicy and Delegation snarkjs.groth16.fullProve calls.",
+        "9. Write test vectors in circuits/test/AgentPolicy.test.js: enumerate all 256 permissionBitmask values against a fixed credentialCommitment and confirm Poseidon3 outputs are distinct only when blindingSalt is known; confirm brute-force without salt produces no matching commitment.",
+        "10. Update circuits/test/Delegation.test.js: verify that a Delegation witness with mismatched blindingSalt (salt used during AgentPolicy \u2260 salt passed to Delegation) fails constraint satisfaction.",
+        "11. Run full test suite (npm test) including slow proof mode (FULL_PROOF=1 npm run test:circuits:slow) to validate end-to-end correctness.",
+        "12. Update spec/draft-bolyra-mutual-zkp-auth-01.md scopeCommitment section with Poseidon3 construction, entropy requirement, and security argument.",
+        "13. Update docs/owasp-agentic-mapping.md with bitmask enumeration threat entry and blinding salt countermeasure.",
+        "14. Sign and commit all changes (git commit -s); ensure Solidity verifier ABI remains backward-compatible at the public input boundary (scopeCommitment is still one field element)."
+      ],
+      "estimated_constraints": 50,
+      "dependencies": [
+        "circomlib Poseidon template (supports n-input variant via Poseidon(nInputs))",
+        "pot16.ptau universal SRS (already present in circuits/build/ \u2014 no new ceremony needed)",
+        "snarkjs >=0.7.x for .zkey generation and Solidity verifier export",
+        "Node crypto.getRandomValues or crypto.randomBytes for blindingSalt generation",
+        "Hardhat for Solidity verifier recompile and integration test"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Add humanTree root history buffer matching agentTree's 30-root buffer",
+      "dimension": "correctness",
+      "description": "The IdentityRegistry maintains a 30-root history buffer for agentTree but humanTree has no such buffer \u2014 any new enrollment immediately invalidates in-flight human proofs. This is a protocol-level correctness gap: the IETF draft's Security Considerations must document root staleness windows, and the contract must enforce symmetric freshness guarantees. Add a parallel ROOT_HISTORY_SIZE=30 ring buffer for humanTree roots, update verifyHandshake to accept any recent human root, and add a conformance test vector for stale-but-valid human root acceptance.",
+      "priority": "high",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 16,
+      "standards": 16,
+      "completeness": 18,
+      "correctness": 21,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_human_root_history_parity",
+      "title": "Add humanTree root history buffer matching agentTree's 30-root buffer",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Add ROOT_HISTORY_SIZE=30 ring buffer for humanTree roots (humanRootHistory mapping + humanRootIndex counter), update enrollHuman to push new root into the ring, update verifyHandshake to accept any root present in humanRootHistory instead of requiring exact match with current humanRoot"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/interfaces/IIdentityRegistry.sol",
+          "description": "Extend interface with isKnownHumanRoot(bytes32 root) view function to allow off-chain callers to check root validity before submitting handshake"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Add Security Considerations section on root staleness windows: define ROOT_HISTORY_SIZE, document that humanTree and agentTree both maintain 30-root ring buffers, specify that provers must refresh proof if root has been evicted, and note the symmetric freshness guarantee as a protocol invariant"
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+          "description": "Conformance tests: (1) stale-but-valid human root (within 30 enrollments) is accepted by verifyHandshake, (2) evicted human root (31+ enrollments ago) is rejected, (3) ring buffer wraps correctly at index 30, (4) isKnownHumanRoot returns correct boolean for boundary roots"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/vectors/human-root-history.json",
+          "description": "Conformance test vector: encodes a scenario where humanMerkleRoot is 15 enrollments old (within buffer) and verifyHandshake must succeed, plus a second vector where root is 31 enrollments old and must fail \u2014 format matches existing spec/conformance vector schema"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/registry.ts",
+          "description": "Expose isKnownHumanRoot(root, provider) helper so callers can pre-flight check before sending handshake transaction; add JSDoc noting the 30-root staleness window"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/owasp-agentic-mapping.md",
+          "description": "Update OWASP agentic threat mapping to note that the root history buffer mitigates proof-replay during concurrent enrollment storms; reference the symmetric freshness invariant"
+        }
+      ],
+      "steps": [
+        "Read contracts/src/IdentityRegistry.sol to locate agentTree ring buffer implementation (ROOT_HISTORY_SIZE, agentRootHistory mapping, agentRootIndex) as the reference pattern",
+        "Add humanRootHistory mapping (uint256 => bytes32) and humanRootIndex uint256 state variable to IdentityRegistry, mirroring the agentTree pattern exactly",
+        "In enrollHuman(): after updating humanRoot, push the new root into humanRootHistory[humanRootIndex % ROOT_HISTORY_SIZE] and increment humanRootIndex",
+        "In verifyHandshake(): replace the single humanRoot == proof.humanMerkleRoot equality check with a loop over humanRootHistory to accept any of the 30 buffered roots; extract into internal _isKnownHumanRoot(bytes32) for reuse",
+        "Add isKnownHumanRoot(bytes32 root) external view to IIdentityRegistry interface and implement in IdentityRegistry using _isKnownHumanRoot",
+        "Write conformance test vectors in spec/conformance/vectors/human-root-history.json covering in-window and evicted root scenarios",
+        "Write Hardhat tests in contracts/test/IdentityRegistry.humanRootHistory.test.ts covering all four conformance cases: in-window acceptance, eviction rejection, wrap-at-30, isKnownHumanRoot boundary",
+        "Run npm run test:contracts and confirm all new and existing tests pass",
+        "Update sdk/src/registry.ts to expose isKnownHumanRoot helper with correct ABI and JSDoc staleness note",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md Security Considerations with the root staleness window definition and symmetric freshness invariant",
+        "Update docs/owasp-agentic-mapping.md with the concurrent-enrollment-storm mitigation note",
+        "Run npm run test:circuits:fast to confirm no circuit regressions (HumanUniqueness circuit itself is unaffected \u2014 correctness is purely in-contract)",
+        "Sign and commit with DCO: git commit -s"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "contracts/src/IdentityRegistry.sol agentTree ring buffer pattern (ROOT_HISTORY_SIZE, agentRootHistory, agentRootIndex) must be read before implementing humanTree mirror",
+        "spec/conformance vector schema must be reviewed to ensure human-root-history.json follows existing format",
+        "IIdentityRegistry.sol interface must be kept in sync with IdentityRegistry.sol to avoid ABI mismatch in SDK",
+        "pot16.ptau and circuit build artifacts are not affected \u2014 no recompile needed",
+        "npm run test:contracts requires Hardhat local node; no external chain dependency for tests"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "dimension": "completeness",
+      "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside the existing Base Sepolia deployment. Implement a CrossChainRootRelay contract that accepts EIP-1186 storage proofs of humanTree and agentTree roots from the source chain, verified against the L1 state root available via each L2's native bridge (Arbitrum's NodeInterface, Polygon's StateSender). This lets a proof generated against the Base registry be verified on Arbitrum or Polygon without any trusted relayer \u2014 the L1 anchors the root. Estimated: ~800 lines of Solidity across relay contract + chain-specific adapters, plus Hardhat deploy scripts for each target chain.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+      "adoption": 19,
+      "standards": 17,
+      "completeness": 23,
+      "correctness": 13,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/src/CrossChainRootRelay.sol",
+          "description": "Core relay contract: accepts EIP-1186 storage proofs (account proof + storage proof) for humanTree and agentTree roots, verifies them against a trusted L1 state root, and caches the verified roots locally. Chain-agnostic base; adapters override _getL1StateRoot()."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/adapters/ArbitrumRootAdapter.sol",
+          "description": "Arbitrum-specific adapter: calls NodeInterface.findBatchContainingBlock() and ArbSys to retrieve the canonical L1 block hash, then delegates to CrossChainRootRelay with that root."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/adapters/PolygonRootAdapter.sol",
+          "description": "Polygon PoS-specific adapter: reads the confirmed L1 state root from Polygon's RootChainManager / CheckpointManager, then delegates to CrossChainRootRelay."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/interfaces/IL1StateRootProvider.sol",
+          "description": "Interface: getL1StateRoot(uint256 blockNumber) returns (bytes32 stateRoot, bool finalized). Implemented by each chain adapter."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/lib/MerklePatriciaProof.sol",
+          "description": "Pure library: RLP-decodes and verifies EIP-1186 account + storage proofs against a provided state root. Wraps ethereum-proof-verifier logic, adapted for Solidity 0.8."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/lib/RLPReader.sol",
+          "description": "Hamdi Allam-style RLP reader used by MerklePatriciaProof. Vendored with license header."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/deploy/04_deploy_relay_arbitrum.ts",
+          "description": "Hardhat deploy script for Arbitrum Sepolia: deploys ArbitrumRootAdapter + CrossChainRootRelay, wires IdentityRegistry address from Base Sepolia config."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/deploy/05_deploy_relay_polygon.ts",
+          "description": "Hardhat deploy script for Polygon Amoy testnet: deploys PolygonRootAdapter + CrossChainRootRelay."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/deploy/06_deploy_registry_arbitrum.ts",
+          "description": "Deploys a read-only IdentityRegistry mirror on Arbitrum (roots sourced from relay, no direct writes)."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/deploy/07_deploy_registry_polygon.ts",
+          "description": "Deploys a read-only IdentityRegistry mirror on Polygon Amoy."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/crossChain.ts",
+          "description": "TypeScript helpers: generateStorageProof(provider, registryAddress, blockNumber) calls eth_getProof and serialises the EIP-1186 proof into ABI-encoded bytes ready for CrossChainRootRelay.relayRoot()."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types/crossChain.ts",
+          "description": "Types: StorageProofInput, RelayedRoot, ChainAdapter enum (BASE, ARBITRUM, POLYGON)."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/cross-chain-root-sync.md",
+          "description": "Protocol spec: trust model (L1-anchored, no relayer), finality assumptions per chain, storage slot derivation for humanTree/agentTree roots, replay-protection via (chainId, blockNumber) nonce."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/CrossChainRootRelay.test.ts",
+          "description": "Hardhat unit tests: mock IL1StateRootProvider returning a fixture state root, generate real EIP-1186 proofs against a local Anvil fork of Base Sepolia, verify relay accepts valid proof and rejects tampered proof/wrong block."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/MerklePatriciaProof.test.ts",
+          "description": "Fuzz + unit tests for the RLP/MPT library: known-good proofs from mainnet, edge cases (empty trie, single-node trie, excluded keys)."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/integration/CrossChainFork.test.ts",
+          "description": "Hardhat forked-network integration test: fork Base Sepolia + Arbitrum Sepolia simultaneously (two Anvil instances), enroll a human on Base, generate proof, relay to Arbitrum fork, assert verifyHandshake passes on Arbitrum registry."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/cross-chain-root-sync.md",
+          "description": "Operator runbook: how to call generateStorageProof() and submit relayRoot() transaction, finality wait times per chain, monitoring for stale roots (staleness threshold config)."
+        }
+      ],
+      "steps": [
+        "Pin storage slot positions for humanTree and agentTree roots in IdentityRegistry (add NatSpec @custom:storage-slot annotations so SDK and relay can derive slots deterministically).",
+        "Vendor and adapt MerklePatriciaProof.sol + RLPReader.sol; write MerklePatriciaProof.test.ts against known mainnet proofs to establish correctness baseline before touching relay logic.",
+        "Define IL1StateRootProvider interface; implement ArbitrumRootAdapter reading from ArbSys.arbBlockHash() + NodeInterface to map L2 block \u2192 confirmed L1 block hash.",
+        "Implement PolygonRootAdapter reading CheckpointManager.headerBlocks() to retrieve the verified L1 state root for a given Polygon checkpoint.",
+        "Implement CrossChainRootRelay: relayRoot(bytes calldata accountProof, bytes calldata storageProof, uint256 l1BlockNumber) \u2192 verifies proof via MerklePatriciaProof against adapter's L1 state root, stores (humanTreeRoot, agentTreeRoot, l1BlockNumber) with a staleness guard.",
+        "Add replay protection: reject relayRoot calls for l1BlockNumber \u2264 lastRelayedBlock; emit RootRelayed(chainId, l1BlockNumber, humanTreeRoot, agentTreeRoot).",
+        "Write CrossChainRootRelay.test.ts with a mock adapter; assert accept/reject on valid/invalid/replayed proofs.",
+        "Write SDK generateStorageProof() using eth_getProof against a Base Sepolia RPC; serialise output to ABI-encoded bytes matching relay contract calldata.",
+        "Write Hardhat deploy scripts 04\u201307; parameterise IdentityRegistry address and adapter address via hardhat-deploy tags; add arbitrumSepolia and polygonAmoy networks to hardhat.config.ts.",
+        "Write fork integration test: spin two Anvil forks, enroll human on Base fork, call generateStorageProof, submit to Arbitrum fork relay, assert verifyHandshake accepts the proof.",
+        "Add staleness check to IdentityRegistry mirror: revert if block.timestamp - lastRelayTimestamp > STALENESS_THRESHOLD (configurable, default 1 hour).",
+        "Update spec/cross-chain-root-sync.md with finality tables (Arbitrum ~1 week L1 finality vs fast L2 confirmation, Polygon ~30 min checkpoint), trust model, and slot derivation.",
+        "Add docs/cross-chain-root-sync.md operator runbook; update sdk/QUICKSTART.md with cross-chain section.",
+        "Run npm run test:contracts on all new tests; confirm CI passes on fast path (mock proofs); gate fork tests behind FORK_TEST=1 env flag."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "EIP-1186 (eth_getProof RPC standard)",
+        "Arbitrum NodeInterface precompile (0x00000000000000000000000000000000000000C8)",
+        "ArbSys precompile (0x0000000000000000000000000000000000000064)",
+        "Polygon CheckpointManager contract (Ethereum mainnet / Goerli/Sepolia for testnet)",
+        "Merkle Patricia Trie proof library (ethereum-proof-verifier or equivalent, vendored)",
+        "RLPReader.sol (vendored, Apache-2.0 compatible)",
+        "Hardhat + hardhat-deploy for multi-chain deploy scripts",
+        "Anvil (Foundry) for forked-network integration tests",
+        "Base Sepolia RPC with eth_getProof support",
+        "Arbitrum Sepolia RPC",
+        "Polygon Amoy RPC",
+        "Existing IdentityRegistry.sol (Base Sepolia deployment address from tasks/pdlc/gateway-redis-nonce.json or contracts/deployments/)"
+      ]
+    }
+  }
+]

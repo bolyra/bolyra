@@ -290,14 +290,21 @@ def run_iteration(
     *,
     model: str = "opus",
     timeout: int = 300,
+    signals_file: str | None = None,
 ) -> dict:
     """Run one full theseus integration iteration."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     iter_dir = RUNS_DIR / f"iter_{iter_num:03d}_{ts}"
     iter_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[iter {iter_num}] Fetching signals...")
-    signals = fetch_signals(iter_dir, model=model, timeout=timeout)
+    if signals_file:
+        print(f"[iter {iter_num}] Loading pre-built signals from {signals_file}...")
+        raw = json.loads(Path(signals_file).read_text())
+        signals = {"sources": raw, "signal_count": len(raw)}
+        (iter_dir / "signals_raw.json").write_text(json.dumps(raw, indent=2))
+    else:
+        print(f"[iter {iter_num}] Fetching signals...")
+        signals = fetch_signals(iter_dir, model=model, timeout=timeout)
 
     print(f"[iter {iter_num}] Tier 1: discovering integration opportunities...")
     tier1_result = run_tier1(signals, iter_dir, model=model, timeout=timeout)
@@ -430,6 +437,8 @@ def main() -> int:
                     help="Claude model alias (default: opus)")
     ap.add_argument("--timeout", type=int, default=300,
                     help="Per-call timeout in seconds (default: 300)")
+    ap.add_argument("--signals-file", type=str, default=None,
+                    help="Pre-built signals JSON file (skips web fetch)")
     args = ap.parse_args()
 
     print("=" * 60)
@@ -458,7 +467,7 @@ def main() -> int:
             break
 
         print(f"\n{'='*40} Iteration {i} {'='*40}")
-        result = run_iteration(i, model=args.model, timeout=args.timeout)
+        result = run_iteration(i, model=args.model, timeout=args.timeout, signals_file=args.signals_file)
         results_history.append(result)
         print(f"[iter {i}] Complete. Board size: {result.get('board_size', '?')}")
 

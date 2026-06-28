@@ -1,0 +1,73 @@
+{
+  "id": "standards_architect_scope_blinding_salt",
+  "title": "Add blinding salt to scope commitment to prevent bitmask brute-force",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add blindingSalt private input; replace Poseidon2(bitmask, credCommitment) with Poseidon3(bitmask, credCommitment, blindingSalt)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Same Poseidon3 change for scopeCommitment; ensure narrowed-scope delegations also carry a fresh blindingSalt"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/agentPolicy.test.js",
+      "description": "Add witness-generation tests: valid salt produces correct commitment; tampered salt fails; verify blinding hides bitmask across all ~20 valid encodings"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/delegation.test.js",
+      "description": "Add tests verifying delegated scopeCommitment uses new Poseidon3 formula; scope-narrowing still enforced after salt addition"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/agent.ts",
+      "description": "Generate cryptographically random 128-bit blindingSalt (crypto.getRandomValues) when creating agent credentials; include salt in proof inputs and CredentialBundle type"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Add blindingSalt field to AgentCredential and CredentialBundle interfaces"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/types.py",
+      "description": "Mirror blindingSalt field in Python AgentCredential dataclass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update security considerations: document 128-bit minimum entropy requirement for blindingSalt, add rationale for Poseidon3 over Poseidon2, note salt must be stored alongside credential secret"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Note that scope-commitment blinding mitigates OWASP LLM09 (data leakage) by preventing on-chain permission enumeration"
+    }
+  ],
+  "steps": [
+    "Read current AgentPolicy.circom and Delegation.circom to confirm Poseidon2 usage and existing signal names",
+    "Add `signal input blindingSalt` as a private input in AgentPolicy.circom; replace scopeCommitment component with Poseidon3(bitmask, credCommitment, blindingSalt)",
+    "Apply identical Poseidon3 change in Delegation.circom; verify scope-narrowing constraint (delegatedBitmask & parentBitmask == delegatedBitmask) remains upstream of the commitment",
+    "Recompile both circuits with `npm run compile:circuits`; confirm new constraint counts and that build artifacts are regenerated",
+    "Update sdk/src/types.ts to add blindingSalt to AgentCredential and CredentialBundle",
+    "Update sdk/src/agent.ts: generate 128-bit random salt via crypto.getRandomValues, pass it into snarkjs input object for both AgentPolicy and Delegation proofs",
+    "Update sdk-python/bolyra/types.py to mirror the blindingSalt field so the subprocess bridge forwards it correctly",
+    "Write circuit tests in agentPolicy.test.js: valid salt round-trips, wrong salt rejects, all ~20 valid cumulative-bit encodings produce distinct commitments (brute-force resistance demo)",
+    "Write circuit tests in delegation.test.js: parent and child credentials use independent salts; narrowing constraint unaffected",
+    "Update spec IETF draft security considerations section with entropy requirement and forward-secrecy note for per-session salts",
+    "Update OWASP mapping doc to reference blinding as a mitigation for on-chain scope enumeration",
+    "Run full test suite (`npm test`) and confirm no regressions",
+    "Commit with DCO sign-off"
+  ],
+  "estimated_constraints": 280,
+  "dependencies": [
+    "circomlib Poseidon3 template (already available via circomlib)",
+    "pot16.ptau \u2014 re-run groth16 setup for AgentPolicy and Delegation with new constraint count",
+    "Regenerate Solidity verifier contracts from new vkey.json after trusted setup",
+    "crypto.getRandomValues available in Node 18+ (already required by SDK)"
+  ]
+}

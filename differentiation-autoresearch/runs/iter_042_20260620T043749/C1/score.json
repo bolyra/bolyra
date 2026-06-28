@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a genuine conjunction (AS-blind + selective disclosure + adversarial-AS soundness + bitwise predicate with implication closure) that no single baseline matches. The spiffe_engineer (Attack 2) concedes the conjunction is real. However, the adversarial-AS differentiator \u2014 positioned as the 'core impossibility' in \u00a78 \u2014 collapses in the stated NFCU deployment scenario because NFCU is simultaneously the operator and the AS (auth0_pm Attack 2, rfc7662_advocate Attack 1). The rfc7662_advocate (Attack 3) shows WIMSE JWT SVIDs already achieve AS-blind verification, and the auth0_pm (Attack 4) demonstrates SD-JWT with a single integer claim approximates the bitwise predicate. The construction is preferable but has not proven the baseline *cannot* approximate in the concrete scenario it names."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Explicit threat model in \u00a73, two formal security games (SSU, SP), five named cryptographic assumptions (A1\u2013A5), and reduction sketches for both games \u2014 this is substantially above the bar for a stated threat model. However, the cryptographer identified three structural gaps: (1) CRS/adversarial-AS inconsistency \u2014 A1 assumes honest CRS but the AS operator may have participated in the ceremony, making the adversarial-AS soundness claim internally contradictory (Attack 1); (2) the SP game does not model adaptive chosen-mask queries, and the adaptive refusal oracle recovers the full bitmask in 64 queries \u2014 information-theoretically unavoidable but unacknowledged (Attack 4); (3) the delegation chain leaks blindingNonce to the delegatee, breaking the SP reduction's assumption that blindingNonce is prover-private (Attack 3). The reduction sketches exist but have real holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "\u00a75 maps every construction element to existing Bolyra primitives (Poseidon5 credential commitment, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), cumulative bit encoding, Groth16/PLONK dual build). \u00a76 provides per-gadget constraint counts totaling ~11,050 \u2014 well within pot16.ptau's 65,536 capacity. The only new element is one additional Poseidon2 call (~150 constraints) for blinding. Proving time targets are stated: <500ms rapidsnark, 3\u20135s snarkjs. The construction is a refactored AgentPolicy circuit reusing all Phase 1 components."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "All five personas engaged. The spiffe_engineer's Attack 1 (ZK attestor inside SPIRE) is explicitly in-threat-model and survived. However, Tier 3 surfaced multiple real attacks the construction cannot fully answer: the cryptographer's adaptive chosen-mask oracle (Attack 4) recovers the full bitmask in 64 queries \u2014 an information-theoretic leakage the SP game doesn't model; the blinded nullifier destroys replay detection without specifying the RS nonce-tracking requirement (cryptographer Attack 2, rfc7662_advocate Attack 2); the delegation chain leaks blindingNonce breaking SP in chained contexts (cryptographer Attack 3); and the cu_ciso's audit trail paradox shows the privacy features destroy NCUA Part 748 forensic reconstruction. These weaken the claims materially but are fixable \u2014 not fundamental breaks."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names Navy Federal Credit Union (13M+ members), a specific API (bill-pay RS requiring FINANCIAL_SMALL bit 2), and a specific regulatory requirement (GLBA \u00a7501(b) data minimization \u2014 the bill-pay RS must NOT learn ACCESS_PII or SIGN_ON_BEHALF bits). Selective scope proof is load-bearing here: without it, the RS logs permission state that creates liability under GLBA. The cross-service unlinkability property (bill-pay RS vs. loan-origination RS) maps directly to GLBA cross-service data minimization. The cu_ciso noted gaps in audit/revocation, but the data-minimization scenario itself is concrete, named, and regulatory-load-bearing."
+    }
+  },
+  "gaps": [
+    "Adversarial-AS claim is circular for the NFCU scenario \u2014 NFCU is both operator and AS. Must add a multi-operator scenario (e.g., employer-issued credential used at third-party financial RSes) where operator/AS separation is architecturally real.",
+    "CRS trust and adversarial-AS are inconsistent \u2014 if AS operator participated in the Groth16 ceremony, soundness collapses. Must either mandate ceremony participants disjoint from AS operators with attestation chain, or promote PLONK (universal SRS) as the default for adversarial-AS deployments.",
+    "SP game must be restated as a chosen-statement game modeling adaptive requiredScopeMask queries. Acknowledge the information-theoretic leakage bound of min(|bitmask|, queries) bits and scope the privacy claim to single-presentation contexts.",
+    "Blinded nullifier eliminates replay detection \u2014 \u00a72 step 5 misleadingly lists blindedNullifier under replay prevention. Must explicitly specify that replay prevention is delegated entirely to RS-side single-use sessionNonce tracking, with bounded nonce-set lifetime.",
+    "Delegation chain leaks blindingNonce to delegatee, breaking SP in chained contexts. Must use fresh per-circuit blindingNonce with in-circuit re-derivation of the chain link, not plaintext disclosure of the initial blindingNonce.",
+    "Engage SD-JWT VC as a comparator \u2014 a single-integer-claim SD-JWT with short-lived per-RS tokens approximates the bitwise predicate without ZK. Must explain why AS-mediated issuance of the filtered claim is insufficient under the adversarial-AS model.",
+    "NCUA Part 748 audit reconstruction is impossible with fully unlinkable presentations. Must specify an audit-proof mechanism (e.g., CISO-held lookup table or audit-scoped circuit output) that preserves RS-layer privacy while enabling forensic reconstruction."
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

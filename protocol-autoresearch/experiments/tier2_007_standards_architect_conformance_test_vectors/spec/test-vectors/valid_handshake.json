@@ -1,0 +1,43 @@
+{
+  "id": "valid_handshake",
+  "description": "Happy-path handshake: valid human uniqueness proof + valid agent policy proof with fresh nonce and correct scope. Both circuits must produce valid witnesses and matching public signals.",
+  "steps": [
+    {
+      "circuit": "HumanUniqueness",
+      "input_witnesses": {
+        "identityTreeRoot": "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+        "nullifierHash": "FROZEN_BY_EXTRACT",
+        "scope": "42",
+        "secret": "12345678901234567890",
+        "identityNonce": "1",
+        "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+        "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+      },
+      "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "42"],
+      "expected_result": "pass"
+    },
+    {
+      "circuit": "AgentPolicy",
+      "input_witnesses": {
+        "agentTreeRoot": "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+        "nullifierHash": "FROZEN_BY_EXTRACT",
+        "currentTimestamp": "1719000000",
+        "expiryTimestamp": "1750000000",
+        "agentSecret": "98765432109876543210",
+        "agentNonce": "2",
+        "policyScope": "42",
+        "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+        "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+      },
+      "public_signals": ["FROZEN_BY_EXTRACT", "FROZEN_BY_EXTRACT", "1719000000", "1750000000"],
+      "expected_result": "pass"
+    }
+  ],
+  "expected_result": "pass",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "extract_vectors.js",
+    "notes": "Public signal values marked FROZEN_BY_EXTRACT must be populated by running: FULL_PROOF=1 node spec/test-vectors/scripts/extract_vectors.js"
+  }
+}

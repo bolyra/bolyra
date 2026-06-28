@@ -1,0 +1,88 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "title": "Cross-chain root sync via EIP-1186 storage proofs",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/StorageProofRootRelay.sol",
+      "description": "Relay contract deployed on Arbitrum and Polygon that accepts EIP-1186 RLP-encoded account+storage proofs, verifies them against the L1 state root, and updates mirrored humanTree/agentTree roots without a trusted relayer."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/interfaces/IL1BlockOracle.sol",
+      "description": "Unified interface abstracting L1 state root retrieval: wraps ArbSys (0x64) on Arbitrum and L1Block (0x4200000000000000000000000000000000000015) on OP-stack chains."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/lib/RLPDecoder.sol",
+      "description": "Pure-Solidity RLP decoder for account proof nodes and storage proof nodes per EIP-1186. Parses nibble-encoded MPT paths and extracts leaf values."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/lib/MerklePatriciaProof.sol",
+      "description": "Merkle Patricia Trie proof verifier. Walks the proof node array, hashes each node with keccak256, and confirms the terminal leaf value matches the claimed storage slot value."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistryMirror.sol",
+      "description": "Lightweight mirror of IdentityRegistry on Arbitrum/Polygon. Stores the latest verified humanTree and agentTree roots; proof verification is delegated to StorageProofRootRelay before any root update is accepted."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/StorageSlotLayout.sol",
+      "description": "Constants and helper to compute the deterministic storage slot positions of humanTree and agentTree roots in the canonical IdentityRegistry on Base Sepolia (using EIP-1967-style slot derivation)."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/storage-proof-root-relay.md",
+      "description": "Protocol specification: canonical chain designation, slot layout, proof encoding format, L1 oracle interface per L2, replay-protection scheme (nonce or block-number monotonicity), and security assumptions."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/StorageProofRootRelay.test.ts",
+      "description": "Hardhat tests: unit tests for RLP decoding, MPT proof verification with known-good fixtures from eth_getProof, integration test forking Base Sepolia to capture a real storage proof and replay it against the relay contract on a forked Arbitrum Sepolia node."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/fixtures/eip1186-storage-proofs.json",
+      "description": "Pre-captured EIP-1186 proof fixtures from eth_getProof against the Base Sepolia IdentityRegistry for deterministic unit testing without live RPC calls."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/crossChain/storageProofRelay.ts",
+      "description": "TypeScript helper that calls eth_getProof on the canonical chain, encodes the resulting accountProof and storageProof arrays as ABI-compatible bytes, and submits the transaction to the relay contract on the target L2."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-root-sync.md",
+      "description": "Operator guide: how to run the relay flow (permissionless), gas estimates per L2, fallback behavior when L1 oracle is stale, and architecture diagram of canonical\u2192mirror root propagation."
+    }
+  ],
+  "steps": [
+    "Audit the existing IdentityRegistry storage layout on Base Sepolia: identify exact slot indices for humanTree and agentTree roots using `hardhat-storage-layout` or manual slot computation (keccak256-based for mappings, linear for plain state vars).",
+    "Implement StorageSlotLayout.sol with constants for both slot positions so the relay and tests share a single source of truth.",
+    "Implement RLPDecoder.sol covering list and bytes decoding sufficient for Ethereum account RLP (nonce, balance, storageHash, codeHash) and MPT proof nodes.",
+    "Implement MerklePatriciaProof.sol: given (rootHash, key, proofNodes[]), walk the trie, verify node hashes at each step, and return the decoded leaf value; revert on any hash mismatch or missing node.",
+    "Implement IL1BlockOracle.sol interface with `getL1BlockHash()` and `getL1StateRoot()` selectors, then implement two concrete adapters: ArbSysOracle.sol (calls ArbSys.arbBlockHash) and OPL1BlockOracle.sol (reads L1Block.hash and stateRoot).",
+    "Implement StorageProofRootRelay.sol: constructor takes (identityRegistryAddress, l1Oracle, storageSlotLayout); `relayRoot(bytes accountProof, bytes storageProof, uint256 blockNumber)` retrieves the L1 state root from the oracle, verifies the account proof against it to obtain the contract's storageRoot, then verifies the storage proof against storageRoot to extract the Merkle root value, enforces block-number monotonicity to prevent replay, and writes the new root to IdentityRegistryMirror.",
+    "Implement IdentityRegistryMirror.sol with owner set to StorageProofRootRelay; expose `humanTreeRoot()` and `agentTreeRoot()` getters compatible with existing verifier contract interfaces.",
+    "Write EIP-1186 proof fixtures: run `eth_getProof` against a live or forked Base Sepolia node for the IdentityRegistry address and both storage slots; serialize to contracts/test/fixtures/eip1186-storage-proofs.json.",
+    "Write unit tests for RLPDecoder and MerklePatriciaProof using the fixture data; assert correct leaf extraction and revert on tampered proof bytes.",
+    "Write integration tests: fork Base Sepolia + Arbitrum Sepolia in Hardhat, deploy relay + mirror on the Arbitrum fork, capture a fresh proof via eth_getProof, call relayRoot, assert mirror roots match canonical roots.",
+    "Implement sdk/src/crossChain/storageProofRelay.ts: accepts provider, registryAddress, targetRelayContract; calls eth_getProof, ABI-encodes the proof arrays, estimates gas, and submits the relay transaction; returns tx receipt.",
+    "Deploy IdentityRegistryMirror + StorageProofRootRelay on Arbitrum Sepolia and Polygon Amoy testnets; record addresses in contracts/deployments/.",
+    "Write spec/storage-proof-root-relay.md covering trust model, oracle assumptions, slot layout, encoding, replay protection, and L2-specific precompile addresses.",
+    "Write docs/cross-chain-root-sync.md with end-to-end walkthrough, gas cost table, and architecture diagram.",
+    "Run full test suite (`npm run test:contracts`) and confirm all new and existing tests pass; update CI matrix to include Arbitrum and Polygon fork tests."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "EIP-1186 eth_getProof RPC method on Base Sepolia archive node",
+    "ArbSys precompile (0x0000000000000000000000000000000000000064) on Arbitrum",
+    "L1Block precompile (0x4200000000000000000000000000000000000015) on OP-stack / Base",
+    "Hardhat network forking for integration tests (Arbitrum Sepolia + Base Sepolia RPC endpoints)",
+    "Existing IdentityRegistry deployment on Base Sepolia with stable storage layout",
+    "snarkjs / existing verifier contracts for interface compatibility on mirror chains",
+    "ethers.js v6 provider with eth_getProof support in the SDK helper"
+  ]
+}

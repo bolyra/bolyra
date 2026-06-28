@@ -1,0 +1,62 @@
+{
+  "id": "standards_architect_session_token_offchain",
+  "title": "SD-JWT-based session token for off-chain verifiers",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/sd-jwt-session-token.md",
+      "description": "Normative claim set spec: required claims (nullifierHash, scopeCommitment, agentMerkleRoot, exp, iat, iss, sub), optional selective-disclosure claims (permissions, delegatorRoot), SD-JWT serialization format, and binding to Bolyra handshake output."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/SessionTokenRelayer.sol",
+      "description": "Companion relayer contract that accepts a verified handshake proof, mints a signed session token reference (emits event with token hash + expiry), and exposes the registry signing key via EIP-712 typed-data or a dedicated getter. Does not store JWT on-chain \u2014 only anchors the issuance event."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/sessionToken.ts",
+      "description": "issueSessionToken(handshakeResult, signingKey, opts): builds SD-JWT with mandatory claims from handshake output; verifySessionToken(token, registrySigningKey): validates signature, expiry, and claim binding; parseSessionToken(token): returns decoded claim set without verification."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "SessionTokenClaims interface, SessionTokenOptions (ttl, selectiveDisclosureClaims, audience), and SessionTokenVerifyResult extending existing VerifyResult."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/sessionToken.test.ts",
+      "description": "Unit tests: round-trip issue/verify, expired token rejection, tampered nullifierHash rejection, selective disclosure subset verification, missing mandatory claim rejection."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/SessionTokenRelayer.test.ts",
+      "description": "Hardhat integration tests: issuance event emitted after valid handshake, duplicate handshake replay blocked, signing key rotation reflected in getter."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-offchain.md",
+      "description": "How-to guide: integrate Bolyra session tokens into an API gateway or MCP server, JWKS endpoint setup, token refresh flow, and OAuth/OIDC bridge pattern."
+    }
+  ],
+  "steps": [
+    "Define normative claim set in spec/sd-jwt-session-token.md: map nullifierHash \u2192 sub, scopeCommitment \u2192 scope, agentMerkleRoot \u2192 agent_root, exp/iat/iss per RFC 7519; specify SD-JWT disclosure list for permissions bits.",
+    "Add SessionTokenClaims and SessionTokenOptions types to sdk/src/types.ts, extending existing HandshakeResult and VerifyResult interfaces.",
+    "Implement issueSessionToken() in sdk/src/sessionToken.ts using a minimal SD-JWT library (sd-jwt-vc or @sd-jwt/core); bind claims directly from HandshakeResult fields; sign with provided EdDSA or ES256 key.",
+    "Implement verifySessionToken() in sdk/src/sessionToken.ts: verify SD-JWT signature against registrySigningKey, check exp, assert nullifierHash and scopeCommitment match expected values if provided.",
+    "Write SDK unit tests in sdk/test/sessionToken.test.ts covering all acceptance and rejection cases; run npm run test:circuits:fast to confirm no regression.",
+    "Design SessionTokenRelayer.sol: accept (humanProof, agentProof, nonce) same as IdentityRegistry.verifyHandshake(), emit SessionTokenIssued(nullifierHash, scopeCommitment, agentMerkleRoot, expiry, tokenHash); expose signingKeyHash() getter for on-chain anchoring.",
+    "Implement signing key registration in SessionTokenRelayer.sol with owner-only setSigningKey(bytes32 keyHash) and key rotation event; keep JWT signing off-chain, anchoring only the key hash.",
+    "Write Hardhat integration tests in contracts/test/SessionTokenRelayer.test.ts; run npm run test:contracts.",
+    "Add JWKS endpoint reference pattern to docs/session-token-offchain.md: how an API gateway fetches the signing public key from a companion HTTP endpoint backed by the relayer's signingKeyHash.",
+    "Export issueSessionToken, verifySessionToken, parseSessionToken, SessionTokenClaims from sdk/src/index.ts; bump sdk package version and update QUICKSTART.md with a session token example.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md with a new section referencing the SD-JWT session token as the RECOMMENDED off-chain verification path."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@sd-jwt/core or sd-jwt-vc npm package for SD-JWT serialization",
+    "Existing IdentityRegistry.verifyHandshake() proof verification logic",
+    "HandshakeResult and VerifyResult types from sdk/src/types.ts",
+    "pot16.ptau and AgentPolicy/Delegation zkeys (no new circuit ceremony needed \u2014 session token is post-proof)",
+    "EdDSA or ES256 keypair for session token signing (operator-supplied, not a circuit artifact)"
+  ]
+}

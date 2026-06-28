@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps (runtime-adaptive predicate, adversarial-AS soundness) but the rfc7662_advocate's Attack 2 correctly shows Gap 1 (AS-blind presentation) collapses into Gap 2 under jwt-introspection-response offline verification, inflating the gap count. Gap 4 (constant-size proof) is premature at 8 effective permission bits where JWT scope strings are 4x smaller. The genuine differentiator is runtime-adaptive predicate evaluation (Gap 2) \u2014 the RS choosing requiredScopeMask per-request without re-issuance \u2014 which the baseline truly cannot match. But the cryptographer's Attack 1 shows this same runtime-adaptability creates an O(64)-query oracle that recovers the full bitmask, undermining the privacy claim that motivates the construction. The construction is preferable to baseline but the baseline can approximate most properties except the runtime predicate, and the runtime predicate creates its own vulnerability. Score 1, not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat model (\u00a73), named assumptions (A1-A5), two formal games (SSU, SI), and reduction sketches. This is substantially above average. However: (1) The SI game is fatally weak \u2014 it models single-proof indistinguishability, not multi-proof adaptive queries. The cryptographer's Attack 1 shows colluding RSes recover the full bitmask in 64 queries, which is in-scope per the threat model. (2) The scopeCommitment brute-force (cryptographer Attack 2) is acknowledged but mitigated only by a variant circuit with no formal game definition. (3) The Groth16 phase-2 subversion gap (cryptographer Attack 3) means the SSU reduction is incomplete under the adversarial-AS claim. Threat model is stated, assumptions are named, but the reduction has known holes and the privacy game is insufficient for the deployment model."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps entirely to existing Bolyra primitives (Poseidon, EdDSA-Poseidon, BinaryMerkleRoot, Num2Bits, LessThan, cumulative bit constraints) with no new primitives. Circuit cost is estimated at ~42,400 constraints with a detailed gadget-by-gadget breakdown. Proving time targets (<1s rapidsnark, <8s WASM, <5s PLONK) are within the spec's Phase 1 budget. Proof size is 320 bytes Groth16. The \u00a75 primitive mapping table confirms every element references an existing spec section. This is fully implementable within the current Bolyra stack."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer: (1) Cryptographer Attack 1 \u2014 adaptive scope oracle recovers full bitmask in O(64) queries, SI game is dead, and this is in-threat-model (colluding RSes). (2) Cryptographer Attack 2 \u2014 scopeCommitment brute-force with ~200 valid bitmasks recoverable in microseconds, acknowledged but not fixed in the primary circuit. (3) auth0_pm Attack 1 and cu_ciso Attack 1 \u2014 no revocation mechanism exists, which is fatal for the \u00a77 NCUA deployment scenario. (4) scopeCommitment cross-RS linkability (cryptographer Attack 4, rfc7662_advocate Attack 1, spiffe_engineer Attack 4) \u2014 stable fingerprint worse than BBS+ unlinkability, contradicting \u00a78 privacy claims. The construction's mitigations (AgentSelectiveScopeMinimal, short expiry) are either unspecified variants or operational workarounds, not formal answers. Multiple attacks are in-scope and unanswered."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The \u00a77 scenario (federated CU agent authorization under NCUA) is concrete with named stakeholders and regulatory requirements. However, cu_ciso attacks systematically dismantle its viability: (1) no revocation mechanism fails NCUA Part 748 incident response requirements, (2) no HSM anchor for Baby Jubjub keys fails FFIEC key management controls, (3) blockchain RPC dependency has no SLA for NCUA vendor management, (4) Groth16 proof blobs are examiner-illegible without a logging/translation layer. The spiffe_engineer's Attack 2 shows AS-blind presentation \u2014 the headline property \u2014 is actively harmful in the target scenario because it blinds the CU's own compliance stack. The scenario is named and real but the construction as written does not survive regulatory scrutiny in that scenario, making it hypothetical rather than load-bearing."
+    }
+  },
+  "gaps": [
+    "SI privacy game must be extended to multi-proof adaptive setting where colluding RSes choose requiredScopeMask adaptively across sessions \u2014 current single-proof game does not capture the O(64)-query bitmask recovery",
+    "AgentSelectiveScopeMinimal (dropping scopeCommitment) must be promoted to the primary circuit with its own formal game definitions, constraint cost, and deployment guidance \u2014 the default circuit leaks a stable cross-RS fingerprint",
+    "Define a credential revocation primitive: either an on-chain nullifier blocklist, a revocation leaf mechanism, or a maximum credential lifetime with forced re-enrollment \u2014 absence of revocation is fatal for NCUA scenario",
+    "Collapse \u00a78 Gap 1 (AS-blind) into Gap 2 (runtime-adaptive predicate) or acknowledge that jwt-introspection-response offline verification eliminates the AS hot-path argument",
+    "Specify Groth16 phase-2 ceremony requirements (participants, transcript, verification) or recommend PLONK as the security-prioritized proving system to close the subverted-CRS gap",
+    "Add deployment-layer requirements for examiner-readable audit logging that wraps proof verification events into structured records with human-readable scope labels, agent IDs, and timestamps",
+    "Specify operator EdDSA key custody requirements (HSM binding or KEK wrapping) and a key rotation protocol with re-enrollment procedure",
+    "Address the effective bitmask space: with cumulative implication rules the valid space is ~200 values, not 2^64 \u2014 update the \u00a74 privacy caveat accordingly"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

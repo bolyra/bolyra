@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction names five properties (AS-blind, runtime-adaptive, adversarial-AS-resilient, constant-size, model-identity-bound) and argues no baseline composition achieves all five simultaneously. The argument is strong on AS-blind presentation and adversarial-AS resilience. However, multiple Tier 3 personas (spiffe_engineer, rfc7662_advocate) correctly identify that SPIFFE federation and WIMSE local token exchange are never addressed \u2014 the baseline comparison is limited to RFC 7662/BBS+ and ignores the most relevant competing architecture for the federated CU scenario. The rfc7662_advocate's Attack 4 also correctly notes that the constant-size and implication-closure advantages are marginal at the 8-bit scale of the concrete deployment. The construction is preferable to the baseline but has not ruled out SPIFFE/WIMSE as an approximation path, so it cannot score 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model (\u00a73), named assumptions (A1\u2013A6), two formal games (SSU and SP), and reduction sketches. This is substantially above average. However, the cryptographer's Attack 1 is a genuine break of the SP game: scopeCommitment is a deterministic public output that an adversary with on-chain access (which is everyone) can compute for both candidate agents, winning SP with probability 1. The SP game as written is broken. Attack 4 (low-entropy bitmask dictionary attack with only 128 valid values) further undermines the privacy claim against an adversarial AS that knows the other credential fields. The threat model is stated and assumptions are named, but the reduction has a concrete flaw, so this scores 1 not 2."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps directly to existing Bolyra primitives: Poseidon5 credential commitment, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64), and the existing AgentPolicy circuit structure. Circuit cost is estimated at ~20,700 constraints, well within pot16.ptau's 2^16 budget. Proving time targets are stated (< 0.5 s rapidsnark, < 5 s snarkjs WASM). Both Groth16 and PLONK paths are specified. This is fully within Phase 1 budget with known primitives and concrete cost."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer. The scopeCommitment cross-RS linkability attack was identified by 4 of 5 personas (cryptographer, auth0_pm, cu_ciso, rfc7662_advocate, spiffe_engineer) \u2014 it is a deterministic public fingerprint that enables trivial cross-RS correlation, directly contradicting the privacy claims and undermining the concrete CUSO scenario. The cryptographer's Attack 1 breaks the SP game outright. The cryptographer's Attack 4 (128-value dictionary attack on the 8-bit bitmask) breaks privacy against an adversarial AS with on-chain access. These are not mitigated \u2014 the construction has no answer. The cu_ciso's audit trail inversion and revocation SLA attacks are also unanswered. Multiple fundamental attacks lie outside the stated threat model with no mitigation path."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The CUSO federated credit union scenario (\u00a77) is concrete, names a stakeholder (CUSO under NCUA \u00a7701.27), and describes a real deployment pattern. However, the cu_ciso's Attack 1 (audit trail inversion \u2014 ZK opacity conflicts with NCUA Part 748 forensic logging requirements) and Attack 2 (revocation SLA \u2014 30-root buffer with no specified update frequency) identify genuine regulatory conflicts that the construction does not resolve. The rfc7662_advocate's Attack 4 notes the 8-bit permission space makes the constant-size advantage marginal for this specific scenario. The scenario is named and plausible but has unresolved regulatory conflicts that make the property nice-to-have rather than load-bearing as described."
+    }
+  },
+  "gaps": [
+    "scopeCommitment must be session-randomized (e.g., Poseidon3(permissionBitmask, credentialCommitment, sessionNonce)) to fix the broken SP game and eliminate cross-RS linkability \u2014 this is the single most critical fix, flagged by 4/5 personas",
+    "Add a high-entropy blinding salt to credentialCommitment (e.g., Poseidon6(..., salt)) to defeat the 128-value dictionary attack on the 8-bit bitmask against adversaries with on-chain leaf access",
+    "Redefine the SP game as a multi-RS, multi-proof unlinkability game, not a single-proof indistinguishability game",
+    "Address SPIFFE federation and WIMSE explicitly in the baseline comparison \u2014 state the residual gap (trust in each domain's SPIRE CA vs. trust in on-chain root) or the comparison reads as incomplete",
+    "Specify revocation SLA: maximum root age, root update cadence, and emergency revocation mechanism (e.g., nullifier blocklist) to satisfy NCUA Part 748 incident response requirements",
+    "Address the audit trail tension: define a mechanism (e.g., optional operator-held disclosure key, regulator-scoped verifiable decryption) that allows post-hoc forensic review without collapsing scope privacy for RSes",
+    "Specify Groth16 Phase 2 ceremony parameters (minimum participant count, verifiable transcript, attestation mechanism) or elevate PLONK to primary proving system to avoid the ceremony trust gap",
+    "Bound WASM proving latency with a P99 benchmark at realistic concurrency, or explicitly scope the deployment claim to native-binary environments"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

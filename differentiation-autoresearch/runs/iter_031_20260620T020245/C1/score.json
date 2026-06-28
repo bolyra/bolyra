@@ -1,0 +1,40 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies genuine gaps (AS-blind + runtime-adaptive predicate + adversarial-AS simultaneously), but the rfc7662_advocate's Attack 1 demonstrates that AS-side per-RS scope filtering + jwt-introspection-response caching + RFC 8693 Token Exchange collectively close Gaps 1, 2, and 4 for any deployment where the AS is minimally trustworthy at provisioning time. The spiffe_engineer's Attack 3 shows WIMSE achieves AS-blind presentation via cached SVIDs without real-time AS contact, so the Gap 1 framing is overstated. The genuine residual \u2014 runtime-adaptive predicate over hidden bitmask with implication closure AND AS-blind AND adversarial-AS simultaneously \u2014 is real but narrower than \u00a78 claims. The construction does not explicitly scope its dominance claim to the adversarial-AS model, making the six-property simultaneity argument vulnerable to the observation that four of six are baseline-achievable under honest-AS. Awards 1 not 2 because the baseline can approximate most individual properties; only the conjunction under adversarial-AS is unique, and the construction overstates individual gaps."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-structured threat model (\u00a73), named assumptions (A1\u2013A6), and reduction sketches for both SSU and SP games including the hardened operator=AS case. However, the cryptographer's attacks expose four formal gaps that weaken the argument below the 2-point threshold: (1) The SP game uses challenger-chosen nonces but deployment gives nonce control to RS \u2014 Groth16 is HVZK not malicious-verifier ZK, so A6 doesn't hold under adversarially chosen public inputs. (2) Groth16 is knowledge-sound but not simulation-extractable, breaking multi-hop delegation chain soundness under composition. (3) No ZKPoK at enrollment links leafCommitment to operator-signed credCommitment \u2014 the registry accepts arbitrary field elements, enabling shadow enrollment of uncredentialed leaves. (4) RS-controlled currentTimestamp trivially bypasses expiry with no authenticated binding to an external time source. The reduction sketches are present but contain gaps that the cryptographer precisely identified. Awards 1 for stated threat model + named assumptions + partial reductions, not 2 because multiple formal gaps remain unaddressed."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/3/4/5 over BN254, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64), LessThan(64). Circuit cost is estimated at ~21,139 constraints, well under the 2^16 = 65,536 pot16.ptau budget. The blinding hardening adds only ~150 constraints over the prior construction. Proving time targets are stated (< 0.5s rapidsnark, < 5s snarkjs WASM). Proof sizes are stated (128\u2013256 bytes). The public interface is unchanged from the base AgentPolicy circuit. All gadgets reference existing Bolyra spec sections. The constraint breakdown is itemized per gadget. This is fully within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer within its current text. The cryptographer identified four unaddressed formal gaps (nonce control, simulation-extractability, enrollment integrity, timestamp binding). The rfc7662_advocate's shadow enrollment attack (Attack 2) shows operator=AS can enroll shadow agents with inflated permissions \u2014 the SSU game definition explicitly dodges this by defining forgery only against the honest agent's leaf. The cu_ciso identified that blindingFactor has no key management lifecycle specification and that privacy/audit-reconstructability are mutually exclusive by design with no resolution. The spiffe_engineer showed modelHash is self-attested with no runtime attestation binding. Multiple attacks are explicitly outside the threat model with no mitigation. The construction cannot answer the enrollment integrity attack (cryptographer Attack 3), the shadow enrollment attack (rfc7662_advocate Attack 2), or the timestamp binding attack (cryptographer Attack 4). Awards 0 because multiple Tier 3 attacks found gaps the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The CUSO federated credit union scenario (\u00a77) is concrete, names a real stakeholder type (200-member CUSO under NCUA), and identifies a load-bearing property (adversarial-AS resilience across federated CUs). However, the cu_ciso's Attack 4 demonstrates the regulatory citations are incorrect (\u00a7701.27 is incidental powers, not third-party due diligence; correct authority is \u00a7712 and 2021-04 Supervisory Guidance), and no FFIEC CAT or IT Examination Handbook mapping exists for ZKP-based authorization controls. The cu_ciso's Attack 2 shows privacy and FFIEC-required audit reconstructability are mutually exclusive by design. The auth0_pm's Attack 1 shows the per-call proof latency is unaddressed for multi-call agent sessions. The scenario is named and concrete but regulatory anchoring is wrong and operational feasibility gaps (revocation latency, L2 dependency, audit trail) make it hypothetical rather than deployable. Awards 1 not 2 because the scenario is real but the regulatory mapping is incorrect and key operational questions (revocation SLA, audit trail, key management) are unanswered."
+    }
+  },
+  "gaps": [
+    "Enrollment integrity: require a ZKPoK at enrollment proving leafCommitment = Poseidon2(credCommitment, blindingFactor) with valid operator EdDSA signature over credCommitment \u2014 without this, arbitrary leaves can be inserted into the registry",
+    "Shadow enrollment: SSU game must cover operator-controlled shadow credential enrollment, not just forgery against an honest leaf \u2014 either restrict enrollment authority or add per-CU leaf allowlisting at the RS",
+    "Nonce control in SP game: RS chooses sessionNonce in deployment but SP game uses challenger-chosen nonce \u2014 either add commit-reveal nonce protocol (agent contributes randomness) or upgrade to malicious-verifier ZK and prove SP under adversarial nonce selection",
+    "RS-controlled currentTimestamp bypasses expiry: bind timestamp to on-chain block timestamp verified in Solidity verifier, or explicitly add RS to trusted party set in \u00a73",
+    "Revocation latency: specify root transition frequency, compute worst-case revocation window in wall-clock time, and either add nullifier-based immediate revocation or bound the 30-root buffer with a MAX_ROOT_AGE parameter",
+    "blindingFactor key management lifecycle: specify storage, backup, rotation, and loss-recovery procedures mappable to NIST SP 800-57 \u2014 currently no custody mechanism is documented",
+    "Correct regulatory citations: \u00a7701.27 \u2192 \u00a7712 + NCUA 2021-04 Supervisory Guidance; add FFIEC CAT control mapping table for ZKP authorization controls",
+    "modelHash runtime attestation: modelHash is self-attested as a private witness \u2014 add TEE/TPM attestation binding or acknowledge this limitation in the threat model",
+    "Narrow baseline dominance claims: Gap 1 and Gap 2 are overstated individually \u2014 reframe as the conjunction of all properties under adversarial-AS being the differentiator, since WIMSE + RFC 8693 approximate individual properties",
+    "Multi-hop delegation soundness: Groth16 is not simulation-extractable \u2014 either cite SE-SNARK construction or restrict delegation to single-hop with explicit bounded composition proof",
+    "Per-session proof amortization: address multi-call agent sessions where per-call proof generation creates 5-50x latency regression vs bearer tokens"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction survives against RFC 7662/8693/9701/9728 baselines (rfc7662_advocate attacks 1, 2, 4 all confirm survival \u2014 predicate is fixed at issuance or requires live AS). However, auth0_pm Attack 4 shows BBS+ selective disclosure + RS-local ABAC decomposes the joint property without ZK: agent selects which bits to disclose (AS-blind), RS evaluates its own predicate at call time (runtime-adaptive). spiffe_engineer Attack 1 shows WIMSE WTS sidecar achieves the same decomposition at the infrastructure layer. The construction survives these only if it requires *input-private* predicate evaluation (RS learns nothing about which permissions exist, not even the evaluated scope name), but this stronger claim is never stated in \u00a71 or \u00a73. Baseline can approximate unless input-privacy is foregrounded."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is stated in prose ('adversary controls the AS') but not as a formal game. No named cryptographic assumptions or reduction sketch. cryptographer Attack 1: Merkle root custody is unspecified \u2014 adversarial AS controls the anonymity set. cryptographer Attack 3: Groth16 trusted setup under adversarial-AS is internally inconsistent \u2014 adversary who participated in setup can forge proofs, collapsing soundness. cryptographer Attack 4: adaptive predicate extraction via repeated querying across sessions can reconstruct the full 8-bit bitmask in 8 queries with no simulation argument bounding multi-round leakage. Threat model exists but is too vague and self-contradictory to score 2."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps to existing Bolyra primitives (Poseidon hash, Groth16/PLONK AgentPolicy circuit, BabyJubjub EdDSA, 8-bit cumulative bitmask, nullifier scheme). However, no circuit cost is stated \u2014 no constraint count, no proving time target, no latency budget. auth0_pm Attack 3 highlights that ~15s Groth16 proving latency is unaddressed with no pre-computation strategy or rapidsnark benchmark. Maps to primitives but cost unknown."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: (1) auth0_pm #4 \u2014 BBS+ + ABAC decomposes the joint property, marked 'No' in-threat-model; (2) spiffe_engineer #1 \u2014 WIMSE WTS sidecar collapses Axis 0, marked 'No'; (3) cryptographer #3 \u2014 Groth16 setup trust inconsistent with adversarial-AS model, marked 'No'; (4) cryptographer #4 \u2014 adaptive predicate extraction reconstructs full bitmask, marked 'No'; (5) cu_ciso #1 \u2014 AS-blind is a compliance liability under NCUA 748, marked 'No'; (6) cu_ciso #2 \u2014 runtime-adaptive inverts least-privilege issuance under GLBA, marked 'No'; (7) auth0_pm #3 \u2014 15s proof latency is a product non-starter with no mitigation, marked 'No'. Construction cannot answer attacks from any persona except rfc7662_advocate."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Credit union scenario is named with specifics (CrowdStrike outage, loan officer agent, FINANCIAL_SMALL predicate selection based on loan amount). However, cu_ciso attacks 1-4 systematically dismantle the scenario: AS-blind creates an NCUA audit gap (no authorization log), runtime-adaptive inverts least-privilege issuance under GLBA, operator key custody is unspecified, and on-chain registry has no SLA for FFIEC BCP. The named stakeholder (CU CISO) rejects the construction's premise. Scenario is concrete but only hypothetically viable \u2014 the regulatory requirements of the named deployment context contradict the construction's lead properties."
+    }
+  },
+  "gaps": [
+    "Tighten \u00a71/\u00a73 claim from 'AS-blind + runtime-adaptive' to 'input-private predicate satisfaction' \u2014 RS learns only boolean pass/fail, not which permission was evaluated. This is the only property BBS+ + ABAC and WIMSE WTS cannot replicate.",
+    "Close the BBS+ + ABAC composition attack explicitly: if RS knowing 'agent disclosed FINANCIAL_SMALL' is acceptable, BBS+ wins. The construction must require that RS learns zero bits about which predicate was checked.",
+    "Address WIMSE WTS sidecar decomposition \u2014 either require input-privacy (which WTS inspection cannot provide) or concede the enterprise-infrastructure case and restrict to consumer/mobile agent deployments.",
+    "Write a formal security game: define adversary's capabilities (controls AS, does NOT control trusted setup, does NOT control Merkle root publication if on-chain). Name assumptions: Poseidon collision resistance, BabyJubjub DLP, Groth16 knowledge soundness under honest setup.",
+    "Resolve the Groth16 trusted setup inconsistency: adversarial-AS + Groth16 SRS trapdoor = soundness collapse. Either mandate PLONK (universal updateable SRS) for adversarial-AS deployments, or explicitly restrict adversarial-AS to post-setup adversaries.",
+    "Add scope_id freshness requirement and domain separation to defeat nullifier precomputation (cryptographer Attack 2).",
+    "Bound multi-round information leakage: either rate-limit predicate diversity per credential epoch, or provide a simulation argument showing that k adaptive predicate queries leak at most k bits (which for 8-bit bitmask means 8 queries reconstruct everything \u2014 may need to commit predicate at issuance or introduce predicate blinding).",
+    "State circuit cost: constraint count for the predicate-evaluation extension to AgentPolicy, proving time target with rapidsnark, and a pre-computation or caching strategy that brings wall-clock latency under 500ms.",
+    "Add a cooperative-AS deployment mode with examiner-readable authorization log (nullifier registry + CU-readable mapping) to satisfy NCUA 748 and FFIEC audit requirements. AS-blind and auditable are not mutually exclusive if the CU holds a decryption key for its own agents' nullifier mappings.",
+    "Define operator key custody requirements (HSM class, FIPS 140-2 level), rotation policy, and revocation path independent of blockchain liveness.",
+    "Specify on-chain registry fallback: nullifier cache staleness bound, RPC SLA, fail-open vs fail-closed policy for FFIEC BCP compliance.",
+    "Retire the '2^64 permission space scaling' framing (spiffe Attack 3 shows JWT claim is also constant-size). Replace with input-privacy framing: ZK proves predicate satisfaction without revealing which other permissions the agent holds."
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

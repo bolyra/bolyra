@@ -1,0 +1,9 @@
+# Write machine-checkable circuit invariant properties document
+
+## Abstract
+
+Formalize the 12 core safety properties across all 4 circuits (HumanUniqueness, AgentPolicy, Delegation, ModelInstanceBinding) as machine-checkable assertions: (1) no field overflow on uint64 inputs, (2) nullifier uniqueness per identity per scope, (3) scope monotonicity across delegation chain, (4) expiry monotonic narrowing, (5) Merkle root determinism, (6) nonce binding freshness, (7) EdDSA signature completeness, (8) cumulative bit invariant, (9) provider key binding (MIB), (10) delegation subset correctness, (11) credential commitment preimage binding, (12) no witness malleability on public outputs. Deliver as a structured markdown spec (circuits/FORMAL-PROPERTIES.md update) with each property stated in first-order logic and a companion test that checks the property via witness generation.
+
+## Normative Requirements
+
+Implementations MUST ...

@@ -1,0 +1,216 @@
+{
+  "id": "standards_architect_conformance_test_vectors",
+  "title": "Publish deterministic JSON test vectors for cross-implementation conformance",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Index of all test vectors, naming conventions, and how to run the conformance suite"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/schema.json",
+      "description": "JSON Schema for the test vector envelope: inputs, intermediates, expected_outcome, error_code"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-001-valid-handshake.json",
+      "description": "Happy-path: valid HumanUniqueness + AgentPolicy proofs, fresh nonce, pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-002-expired-agent-credential.json",
+      "description": "Agent credential expiry in the past, expect fail CREDENTIAL_EXPIRED"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-003-stale-merkle-root.json",
+      "description": "HumanUniqueness proof against an old root not in the on-chain window, expect fail STALE_ROOT"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-004-scope-subset-violation.json",
+      "description": "Delegation requests permission bits not present in parent credential, expect fail SCOPE_EXPANSION"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-005-cumulative-bit-4-without-3.json",
+      "description": "Permissions byte has bit 4 set (FINANCIAL_UNLIMITED) without bit 3 (FINANCIAL_MEDIUM), expect fail INVALID_CUMULATIVE_ENCODING"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-006-cumulative-bit-3-without-2.json",
+      "description": "Permissions byte has bit 3 set (FINANCIAL_MEDIUM) without bit 2 (FINANCIAL_SMALL), expect fail INVALID_CUMULATIVE_ENCODING"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-007-delegation-max-depth.json",
+      "description": "Delegation chain at max allowed depth (e.g. 3 hops), expect pass; one beyond max, expect fail DELEGATION_DEPTH_EXCEEDED"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-008-nullifier-replay.json",
+      "description": "Same nullifierHash submitted twice, second attempt must fail NULLIFIER_ALREADY_USED"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-009-valid-delegation-narrowing.json",
+      "description": "Delegation narrows READ_DATA+WRITE_DATA to READ_DATA only, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-010-nonce-mismatch.json",
+      "description": "sessionNonce in human proof does not match agent proof binding, expect fail NONCE_MISMATCH"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-011-agent-invalid-signature.json",
+      "description": "EdDSA signature on agent credential corrupted (single bit flip), expect fail INVALID_CREDENTIAL_SIGNATURE"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-012-human-wrong-merkle-path.json",
+      "description": "Merkle inclusion path is for a different leaf, witness fails, expect fail INVALID_PROOF"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-013-zero-permissions.json",
+      "description": "Permissions byte is 0x00, agent credential with no bits set, expect fail per policy (NO_PERMISSIONS)"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-014-all-permissions-valid.json",
+      "description": "Permissions byte 0xFF with all cumulative rules satisfied, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-015-sign-on-behalf-bit5.json",
+      "description": "SIGN_ON_BEHALF (bit 5) with valid cumulative state, delegation narrows it out, expect fail on subsequent use"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-016-sub-delegate-bit6.json",
+      "description": "SUB_DELEGATE (bit 6) present, chain produces a second-level delegation, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-017-access-pii-bit7.json",
+      "description": "ACCESS_PII (bit 7) present in credential but stripped by delegation, downstream verifier rejects PII access"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-018-commitment-hash-intermediate.json",
+      "description": "Checks that commitment = Poseidon(secret, nullifier_trapdoor) matches the expected hex; validates hash function alignment across implementations"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-019-nullifier-hash-intermediate.json",
+      "description": "Validates nullifierHash = Poseidon(nullifierTrapdoor, externalNullifier) matches expected hex"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-020-agent-credential-commitment.json",
+      "description": "AgentPolicy commitment = Poseidon(modelHash, permByte, expiry, operatorPubKey) matches expected hex"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-021-delegation-scope-hash.json",
+      "description": "Delegation circuit scope hash intermediate matches expected, validates hash chaining across implementations"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-022-valid-plonk-agent-proof.json",
+      "description": "Same as tv-001 but using PLONK proving system for AgentPolicy, validates both proof systems"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-023-valid-plonk-delegation-proof.json",
+      "description": "Delegation proof via PLONK, expect pass, validates dual-build circuit parity"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-024-financial-small-only.json",
+      "description": "Permissions = 0b00000100 (bit 2 only), valid minimal financial credential, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-025-financial-medium-implies-small.json",
+      "description": "Permissions = 0b00001100 (bits 2+3), valid cumulative encoding, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-026-financial-unlimited-implies-2-and-3.json",
+      "description": "Permissions = 0b00011100 (bits 2+3+4), valid, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-027-read-write-combo.json",
+      "description": "Permissions = 0b00000011 (bits 0+1), basic read+write, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-028-delegation-depth-1.json",
+      "description": "Single-hop delegation (depth 1), valid, expect pass; intermediate commitment hash included"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-029-delegation-depth-2.json",
+      "description": "Two-hop delegation chain, valid, expect pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-030-delegation-depth-3-boundary.json",
+      "description": "Three-hop delegation at max depth boundary, expect pass; four-hop variant included as negative case"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-031-wrong-operator-pubkey.json",
+      "description": "AgentPolicy proof uses a different operator public key than the one in the on-chain registry, expect fail OPERATOR_MISMATCH"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/tv-032-model-hash-mismatch.json",
+      "description": "Model hash in credential does not match the declared model, expect fail MODEL_HASH_MISMATCH"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/run-conformance.js",
+      "description": "Node.js runner: loads all tv-*.json, calls @bolyra/sdk verify functions, asserts expected_outcome matches actual, outputs TAP format"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/generate-vectors.js",
+      "description": "Deterministic generator: uses fixed seed (documented in README) to produce all test vector JSON files via snarkjs witness generation + Poseidon hashing"
+    },
+    {
+      "type": "docs",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Append Appendix A referencing spec/test-vectors/ with table of vector IDs, categories, and expected outcomes"
+    }
+  ],
+  "steps": [
+    "Define the JSON envelope schema (schema.json): fields = {id, title, category, inputs, intermediates, expected_outcome, error_code, proving_system}",
+    "Document the canonical fixed secret/key pair in README.md (deterministic BabyJubJub operator keypair, fixed human secret, fixed nullifier trapdoor, fixed externalNullifier)",
+    "Implement generate-vectors.js: use snarkjs + circomlibjs Poseidon to compute all intermediate hashes from fixed inputs and write each tv-*.json file deterministically",
+    "Generate tv-001 through tv-009 (core happy-path and primary failure modes) first, validate outputs manually against sdk verification functions",
+    "Generate tv-010 through tv-021 (nonce, signature, Merkle, intermediate hash alignment vectors)",
+    "Generate tv-022 through tv-023 (PLONK proving system parity vectors)",
+    "Generate tv-024 through tv-030 (cumulative bit encoding suite + delegation depth suite)",
+    "Generate tv-031 through tv-032 (operator mismatch, model hash mismatch)",
+    "Implement run-conformance.js TAP runner: import @bolyra/sdk, iterate all tv-*.json, invoke verifyHandshake or relevant verify primitive, assert outcome and error_code",
+    "Run conformance suite against current @bolyra/sdk v0.2.0, fix any discrepancies found (spec vs implementation drift)",
+    "Add conformance suite to package.json scripts as `test:conformance` and wire into CI alongside test:circuits:fast",
+    "Append Appendix A to spec/draft-bolyra-mutual-zkp-auth-01.md with a normative table of all vector IDs, their category, and expected outcome",
+    "Validate that all 30+ vectors are self-consistent: re-run generate-vectors.js with same seed produces byte-identical outputs"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk v0.2.0 (verifyHandshake, createAgentCredential, createHumanIdentity public API)",
+    "circomlibjs (Poseidon hash function \u2014 must match circuit implementation exactly)",
+    "snarkjs (witness generation for intermediate value extraction)",
+    "circuits/build/ artifacts (.zkey, .vkey for Groth16 and PLONK AgentPolicy + Delegation)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md (target document for Appendix A)",
+    "validateCumulativeBitEncoding() from sdk (reference implementation for bit encoding rules)",
+    "Fixed BabyJubJub keypair documented and committed to README (never rotated \u2014 these are test-only keys)"
+  ]
+}

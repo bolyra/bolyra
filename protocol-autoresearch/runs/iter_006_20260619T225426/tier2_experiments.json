@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "formal_verifier_scope_monotonicity_chain",
+      "persona": "formal_verifier",
+      "title": "End-to-end scope monotonicity proof across delegation chain",
+      "dimension": "correctness",
+      "description": "The Delegation circuit enforces delegateeScope & ~delegatorScope == 0 per hop, but there is no formal proof that composing N hops preserves monotonicity end-to-end (i.e., that the final delegatee's scope is a subset of the original delegator's scope). Write a formal inductive proof: base case (hop 0 scope \u2286 AgentPolicy scope via scopeCommitment binding), inductive step (if hop k scope \u2286 hop k-1 scope, then hop k+1 scope \u2286 hop k scope). Encode as machine-checkable properties using either Lean 4 or as Circom witness-generation test vectors covering 1-, 2-, and 3-hop chains with attempted scope escalation at each hop.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_scope_monotonicity_chain",
+      "adoption": 14,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 23,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_000_formal_verifier_scope_monotonicity_chain",
+    "score": {
+      "experiment_id": "tier2_000_formal_verifier_scope_monotonicity_chain",
+      "total": 22,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 1,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Publish deterministic test vectors for all three circuits",
+      "dimension": "standards",
+      "description": "Create a spec/test-vectors/ directory with JSON files containing known-good inputs, expected public signals, and expected verification results for each circuit (HumanUniqueness, AgentPolicy, Delegation). Include negative cases: expired credential, stale root, scope superset violation, cumulative bit encoding violation. Pin the BN254 curve parameters and Poseidon round constants explicitly. Any independent implementation must be able to reproduce identical outputs from these vectors to claim conformance.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 15,
+      "standards": 22,
+      "completeness": 19,
+      "correctness": 17,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_001_standards_architect_conformance_test_vectors",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_conformance_test_vectors",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "framework_integrator_session_token_offchain",
+      "persona": "framework_integrator",
+      "title": "Off-chain session token for multi-step agent chains",
+      "dimension": "adoption",
+      "description": "LangChain/CrewAI agent chains make 10-50 tool calls per task. Requiring an on-chain handshake per call is prohibitively slow and expensive. Add an SDK-level session token: one on-chain verifyHandshake() mints a signed session token (JWT with proof digest + expiry + scope), and subsequent tool calls verify the token off-chain via the SDK's verifySessionToken(). The on-chain contract gets a batchCheckpoint(bytes32 sessionRoot) for periodic anchoring. This is the single biggest adoption blocker for framework users.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_session_token_offchain",
+      "adoption": 23,
+      "standards": 16,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_002_framework_integrator_session_token_offchain",
+    "score": {
+      "experiment_id": "tier2_002_framework_integrator_session_token_offchain",
+      "total": 40,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 11,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 21,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_chain_id_nonce_binding",
+      "persona": "cross_chain_engineer",
+      "title": "Bind chain ID into sessionNonce to prevent cross-chain proof replay",
+      "dimension": "correctness",
+      "description": "The current sessionNonce is chain-agnostic: a valid handshake proof generated for Base can be replayed on Arbitrum or Polygon if both chains share the same Merkle roots. Fix this by defining sessionNonce = Poseidon2(verifierNonce, chainId) and requiring the contract to enforce block.chainid matches the chainId embedded in the nonce. This is a single-line change in HumanUniqueness and AgentPolicy circuits (add a chainId public input, bind it into the nonce hash), plus a require(chainId == block.chainid) in IdentityRegistry.verifyHandshake().",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_chain_id_nonce_binding",
+      "adoption": 20,
+      "standards": 18,
+      "completeness": 19,
+      "correctness": 21,
+      "total": 78,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_003_cross_chain_engineer_chain_id_nonce_binding",
+    "score": {
+      "experiment_id": "tier2_003_cross_chain_engineer_chain_id_nonce_binding",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Formalize did:bolyra resolution algorithm with DID Core conformance",
+      "dimension": "standards",
+      "description": "spec/did-method-bolyra.md exists but lacks the required resolution algorithm per W3C DID Core \u00a77.1. Define the concrete steps: parse did:bolyra:<commitment>, query IdentityRegistry for enrollment status and current Merkle root, construct the DID Document with verificationMethod (BabyJubJub key for humans, EdDSA operator key for agents), and authentication/assertionMethod relationships. Include the CRUD operations matrix (Create=enroll, Read=resolve, Update=N/A for humans, Deactivate=revoke). Without this, no universal resolver can implement did:bolyra.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 16,
+      "standards": 21,
+      "completeness": 20,
+      "correctness": 13,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_004_standards_architect_did_resolution_algorithm",
+    "score": {
+      "experiment_id": "tier2_004_standards_architect_did_resolution_algorithm",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "framework_integrator_proof_envelope_content_type",
+      "persona": "framework_integrator",
+      "title": "Standard proof envelope with application/bolyra+json content type",
+      "dimension": "standards",
+      "description": "Framework integrations all need to serialize/deserialize proof payloads, but each will invent its own format without a standard envelope. Define a JSON schema for BolyraProofEnvelope: {version, circuit, publicSignals[], proof{pi_a, pi_b, pi_c}, metadata{prover, timestamp, chainId}}. Register application/bolyra+json as the content type. All SDK methods (TS and Python) should accept and return this envelope. This prevents every framework adapter from reinventing serialization and makes proofs portable across LangChain\u2194CrewAI\u2194AutoGen pipelines.",
+      "priority": "high",
+      "estimated_effort": "hours",
+      "candidate_id": "framework_integrator_proof_envelope_content_type",
+      "adoption": 19,
+      "standards": 20,
+      "completeness": 17,
+      "correctness": 15,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_005_framework_integrator_proof_envelope_content_type",
+    "score": {
+      "experiment_id": "tier2_005_framework_integrator_proof_envelope_content_type",
+      "total": 30,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 12,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain Merkle root sync via EIP-1186 storage proofs",
+      "dimension": "completeness",
+      "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside the existing Base Sepolia deployment. Implement a CrossChainRootRelay contract that accepts EIP-1186 storage proofs of the humanTree and agentTree roots from the canonical chain (Base) and validates them against the L1 state root available via each L2's precompile (ArbSys.arbBlockHash on Arbitrum, StateSender on Polygon). This eliminates reliance on trusted relayers \u2014 any party can relay a root update by submitting the storage proof. The relay contract maintains the same 30-root history buffer as the primary registry.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+      "adoption": 18,
+      "standards": 17,
+      "completeness": 21,
+      "correctness": 15,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_006_cross_chain_engineer_storage_proof_root_sync",
+    "score": {
+      "experiment_id": "tier2_006_cross_chain_engineer_storage_proof_root_sync",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "product_visionary_human_root_history_buffer",
+      "persona": "product_visionary",
+      "title": "Human tree root history buffer (parity with agent tree)",
+      "dimension": "correctness",
+      "description": "The agentTree has a 30-root history buffer preventing proof staleness during concurrent enrollments, but humanTree has none \u2014 any new human enrollment instantly invalidates all in-flight human proofs. Add the same `uint256[30] humanRootHistory` ring buffer to IdentityRegistry.sol and update `verifyHandshake` to check membership in the buffer. Without this, production deployments with >1 human enrolling concurrently will see random handshake failures, which is a dealbreaker for any real adoption.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "product_visionary_human_root_history_buffer",
+      "adoption": 19,
+      "standards": 14,
+      "completeness": 19,
+      "correctness": 18,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_007_product_visionary_human_root_history_buffer",
+    "score": {
+      "experiment_id": "tier2_007_product_visionary_human_root_history_buffer",
+      "total": 22,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 1,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

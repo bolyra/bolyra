@@ -1,0 +1,103 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "title": "Cross-chain Merkle root sync via EIP-1186 storage proofs with Base/Arbitrum/Polygon adapters",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/crosschain/CrossChainRootRelay.sol",
+      "description": "Abstract base contract: 30-slot ring buffer for root history, replay protection via (chainId, blockNumber) bitmap, submitRoot() entry point, getRootAt() lookup, and emits RootRelayed events"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/crosschain/adapters/ArbitrumRootAdapter.sol",
+      "description": "Arbitrum-specific adapter: validates L2-to-L1 message via ArbSys inbox proof, decodes humanTree/agentTree slot values from EIP-1186 accountProof+storageProof, calls CrossChainRootRelay.submitRoot()"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/crosschain/adapters/PolygonRootAdapter.sol",
+      "description": "Polygon-specific adapter: validates inclusion against CheckpointManager stateRoot, decodes EIP-1186 storage proof for humanTree/agentTree slots, calls CrossChainRootRelay.submitRoot()"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/crosschain/IdentityRegistryMirror.sol",
+      "description": "Read-only mirror deployed on Arbitrum and Polygon: exposes latestHumanRoot(), latestAgentRoot(), and isRootValid(root, maxAge) by querying the chain-local CrossChainRootRelay ring buffer"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/crosschain/lib/StorageProofVerifier.sol",
+      "description": "Pure library: RLP-decodes EIP-1186 account proof and storage proof, verifies Merkle-Patricia trie inclusion against a given stateRoot, returns decoded slot value"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/crosschain/generateStorageProof.ts",
+      "description": "SDK helper wrapping eth_getProof: takes provider, registryAddress, blockTag; returns typed StorageProof object with accountProof, storageProofs for humanTree (slot 0) and agentTree (slot 1), plus RLP-encoded calldata ready for submitRoot()"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/crosschain/relayRoot.ts",
+      "description": "High-level relay helper: calls generateStorageProof(), selects correct adapter address by chainId, estimates gas, submits transaction, awaits RootRelayed confirmation"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/crosschain/CrossChainRootRelay.test.ts",
+      "description": "Hardhat unit tests: ring buffer wrap-around at slot 30, replay rejection on duplicate (chainId, blockNumber), getRootAt() boundary conditions, owner-gated submitRoot() access control"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/crosschain/StorageProofVerifier.test.ts",
+      "description": "Unit tests for StorageProofVerifier library using pre-generated EIP-1186 fixtures: valid proof acceptance, tampered value rejection, wrong root rejection"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/crosschain/adapters/ArbitrumRootAdapter.fork.test.ts",
+      "description": "Hardhat fork test against Arbitrum Sepolia: snapshots a real block, calls eth_getProof on Base Sepolia registry, verifies adapter accepts proof and mirror reflects updated roots"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/crosschain/adapters/PolygonRootAdapter.fork.test.ts",
+      "description": "Hardhat fork test against Polygon Amoy: mirrors same flow for CheckpointManager-based proof validation"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/crosschain/generateStorageProof.test.ts",
+      "description": "SDK unit tests with mocked eth_getProof responses: correct slot selection, RLP encoding round-trip, error on missing block, error on unrecognized chainId"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-relay-runbook.md",
+      "description": "Operator runbook: relay bot setup (cron vs event-driven), required RPC endpoints per chain, gas budget guidelines, monitoring alerts for stale root age, emergency pause procedure, and ring buffer capacity planning"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/cross-chain-root-sync.md",
+      "description": "Protocol spec: storage slot layout for IdentityRegistry (humanTree=slot0, agentTree=slot1), security model (trusted L1 finality vs optimistic window), ring buffer eviction policy, replay protection scheme, and trust assumptions per chain bridge"
+    }
+  ],
+  "steps": [
+    "Audit IdentityRegistry.sol storage layout: confirm humanTree root is slot 0, agentTree root is slot 1; document in spec/cross-chain-root-sync.md",
+    "Implement StorageProofVerifier.sol library: RLP decode EIP-1186 accountProof and storageProof arrays, verify Merkle-Patricia trie path against stateRoot, return uint256 slot value",
+    "Implement CrossChainRootRelay.sol: 30-element ring buffer (writeIndex pointer, mapping index\u2192RootEntry{humanRoot,agentRoot,srcBlock,timestamp}), replay bitmap keyed on keccak(srcChainId,srcBlockNumber), onlyRelayer modifier, submitRoot() and getRootAt()",
+    "Implement IdentityRegistryMirror.sol: stores address of local CrossChainRootRelay, exposes latestHumanRoot() returning ring buffer head, isRootValid(root, maxAge) scanning backward through buffer within age window",
+    "Implement ArbitrumRootAdapter.sol: inherit CrossChainRootRelay, constructor takes L2 ArbSys inbox address, submitFromArbitrum() accepts RLP-encoded EIP-1186 proof + L2 block header, calls StorageProofVerifier, then submitRoot()",
+    "Implement PolygonRootAdapter.sol: inherit CrossChainRootRelay, constructor takes CheckpointManager address, submitFromPolygon() accepts checkpoint data + EIP-1186 storage proof, verifies stateRoot via CheckpointManager.headerBlocks(), then submitRoot()",
+    "Write Hardhat deploy scripts: deploy StorageProofVerifier lib, ArbitrumRootAdapter on Arbitrum Sepolia, PolygonRootAdapter on Polygon Amoy, IdentityRegistryMirror on each pointing to its local adapter",
+    "Implement SDK generateStorageProof.ts: wrap eth_getProof with slot list [0,1], parse response into typed StorageProof, RLP-encode accountProof+storageProofs into ABI-compatible bytes for adapter submitRoot() calldata",
+    "Implement SDK relayRoot.ts: orchestrate generateStorageProof() \u2192 adapter.submitRoot() flow with chainId dispatch table, gas estimation, receipt polling, and typed RootRelayed event return",
+    "Write unit tests for CrossChainRootRelay (ring buffer, replay protection) and StorageProofVerifier (fixture-based EIP-1186 proof acceptance/rejection)",
+    "Write Hardhat fork integration tests for Arbitrum and Polygon adapters using real eth_getProof snapshots from testnets",
+    "Write SDK unit tests for generateStorageProof with mocked provider responses and RLP round-trip assertions",
+    "Write operator runbook: relay bot cron setup, per-chain RPC config, gas budget, stale-root alerting, emergency pause flow",
+    "Update bolyra/CLAUDE.md crosschain section and add crosschain deploy commands to package.json"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "EIP-1186 eth_getProof RPC (Base, Arbitrum, Polygon nodes)",
+    "ArbSys precompile (0x0000000000000000000000000000000000000064) on Arbitrum L2",
+    "Polygon CheckpointManager contract on Ethereum mainnet/Goerli",
+    "OpenZeppelin contracts v5 (Ownable, ReentrancyGuard)",
+    "ethers.js v6 RLP utilities (ethers.encodeRlp)",
+    "Hardhat multichain deploy plugin (hardhat-deploy or ignition)",
+    "Existing IdentityRegistry.sol deployed on Base Sepolia",
+    "L1 finality assumptions: Arbitrum ~7-day challenge window (use fast finality for testnet), Polygon checkpoint interval ~30 min"
+  ]
+}

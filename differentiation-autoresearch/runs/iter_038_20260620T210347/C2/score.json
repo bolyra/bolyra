@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction targets AS-level unlinkability, which PPIDs provably cannot provide (rfc7662_advocate Attack 1 confirms AS holds the deanonymization map). However, multiple Tier 3 attacks show the construction itself may not achieve it: nonce steganography lets an adversarial AS embed covert identifiers (rfc7662_advocate Attack 2), scopeId equivocation collapses scope separation (spiffe_engineer Attack 1), and credAux linkage creates a cross-proof fingerprint (cryptographer Attack 2). The construction is preferable to baseline in intent but has not demonstrated it delivers the claimed property."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is stated (adversarial AS correlating traffic graphs), Poseidon2 PRF assumption is named with citation (Grassi et al. USENIX 2021), and a two-step hybrid reduction to 2*\u03b5_PRF is sketched. However: (a) the IND-UNL-AS game is the candidate's own admitted gap \u2014 it is not formally defined; (b) the cryptographer's Attack 3 shows PRF security does not imply IND-UNL-AS because the reduction covers only the nullifier component, not the full proof transcript (permBitmask, cc, Groth16 elements); (c) sbs entropy bounds are never stated (cryptographer Attack 1); (d) ceremony trust assumptions for AgentPolicy/Delegation zkeys are absent (cryptographer Attack 4). Reduction has identified structural gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to existing Bolyra primitives: Poseidon2 hash (available in circomlib), Groth16/PLONK AgentPolicy circuit, BabyJubjub EdDSA, existing nullifier scheme. The Poseidon4 \u2192 Poseidon2-tree substitution is explicitly stated as 'zero constraint cost change.' Circuit cost is within Phase 1 budget using pot16.ptau. No new primitives required."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer. Nearly every attack across all 5 personas is marked 'not in threat model' or 'construction does not survive': cryptographer shows nullifier precomputation via AS-controlled scopeId (Attack 1), credAux as public linkage anchor (Attack 2), PRF \u2260 IND-UNL-AS (Attack 3); rfc7662_advocate shows nonce steganography bypasses all nullifier separation (Attack 2, explicitly in-scope, construction does not survive); spiffe_engineer shows scopeId equivocation collapses scope separation (Attack 1); cu_ciso shows BSA/AML regulatory conflict defeats the primary scenario (Attack 1). The construction has no mitigations for any of these."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: cross-CU member agent and healthcare referral delegation, with named stakeholders (credit unions, healthcare providers). However, auth0_pm Attack 1 and cu_ciso Attack 1 demonstrate the CU scenario directly conflicts with BSA/AML/FinCEN obligations \u2014 12 CFR Part 748 requires the very cross-system correlation the construction prevents. cu_ciso Attack 2 adds NCUA Part 748 Appendix B incident response requirements. The scenarios are concrete but regulatory viability is challenged, making them hypothetical as currently scoped."
+    }
+  },
+  "gaps": [
+    "Define the IND-UNL-AS game formally: specify adversary oracle access (authorized sessions?), whether sbs is stateful/stateless, whether cc/permBitmask are public or secret, and the advantage bound",
+    "Address AS-controlled scopeId equivocation: add a scope-binding ceremony or public registry not controlled by the AS so the adversary cannot collapse two scopes into one",
+    "Specify entropy lower bound on sbs (\u2265128 bits, independently sampled) and prove the nullifier precomputation table is infeasible given that bound",
+    "Address nonce steganography: require agent-contributed randomness (e.g., XOR of agent nonce with AS nonce, agent contribution committed before AS nonce revealed)",
+    "Clarify credAux signal visibility: publish a signal-visibility table proving credAux values are strictly private witnesses with no derivation path from public signals + known credential fields",
+    "Extend PRF reduction to cover full proof transcript (Groth16 elements, permBitmask, cc) not just the nullifier component \u2014 or prove these are simulatable",
+    "Split CU-as-adversary model into (a) CU-as-privileged-auditor with audit-key escrow for BSA/AML and (b) external-RS-as-adversary \u2014 current single-AS model is incompatible with regulatory requirements",
+    "Add recoverable audit path under CU-held master key for NCUA incident response, computationally hidden from RS operators",
+    "Specify ceremony trust assumptions for AgentPolicy/Delegation zkeys and exclude AS from ceremony participation, or cite simulation-extractability results"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

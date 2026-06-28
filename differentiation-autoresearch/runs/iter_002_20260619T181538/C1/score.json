@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties the baseline lacks (AS-blind presentation, adversarial-AS soundness). However, the rfc7662_advocate's Attack 2 shows 'runtime-adaptive predicate' is overstated \u2014 AS-side per-RS policy filtering already achieves minimum-disclosure scope. The spiffe_engineer's Attack 4 demonstrates that a SPIFFE ZK workload attestor could layer the same ZK mechanism inside the existing SPIFFE protocol, achieving Properties 1-5 without a new protocol stack. The construction never addresses this layering argument. The genuine category difference narrows to post-issuance adversarial-AS + predicate-at-presentation-time, which is real but not explicitly isolated from the inflated claims. Baseline can approximate most properties; the construction is preferable but has not cleanly ruled out the baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model, named cryptographic assumptions (PLONK knowledge soundness, Poseidon collision resistance, Baby Jubjub DL, EdDSA-Poseidon unforgeability, ROM), and reduction sketches for both soundness and privacy. However, the cryptographer's attacks expose three fatal gaps: (1) Attack 1 \u2014 the ScopeExtraction privacy game is single-round and does not model chosen-predicate bit extraction, where 64 oracle queries reconstruct the full bitmask with probability 1, breaking the 'reveals nothing beyond predicate satisfaction' claim. (2) Attack 2 \u2014 timestamp freshness is ambiguous; the verification protocol does not mandate RS asserts currentTimestamp == now(), enabling indefinite proof replay. The nullifier excludes currentTimestamp, so replay is not rate-limited. (3) Attack 3 \u2014 the adversarial-AS claim is inconsistent with using pot16.ptau from a ceremony the AS may have participated in, which would break PLONK knowledge soundness entirely. Threat model stated but assumptions have identified gaps and reduction has known failures."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon hash, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits(64), LessThan(64) \u2014 all present in current AgentPolicy.circom. Circuit cost is estimated at ~17,650 constraints, well within pot16.ptau's 2^16 = 65,536 budget. Proving time targets (< 500ms rapidsnark, < 3s snarkjs) are consistent with existing benchmarks. PLONK build infrastructure already exists in circuits/build/. The construction is explicitly described as a specialization of the existing AgentPolicy circuit. No new cryptographic primitives are introduced. Phase 1 budget is met."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer: (1) cryptographer Attack 1 \u2014 chosen-predicate bit extraction breaks the privacy claim and the construction has no mitigation (no constant response for unsatisfied predicates specified). (2) cryptographer Attack 2 \u2014 proof replay via unbound currentTimestamp is unaddressed. (3) cryptographer Attack 4 / rfc7662_advocate Attack 3 / spiffe_engineer Attack 1 \u2014 adversarial operator can enroll fraudulent elevated-permission credentials; the security game (Case 2b) explicitly lets this through, collapsing the adversarial-AS claim when AS == operator. (4) cu_ciso Attack 4 \u2014 cross-RS nullifier correlation violates consortium privacy claims. These are not mitigated or acknowledged as in-threat-model. Multiple attacks lie outside the stated threat model with no construction response."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The Columbia CU consortium scenario (Section 7) is concrete, names a real institution ($3.4B assets), identifies a specific regulatory requirement (NCUA Letter 24-CU-03), and describes a load-bearing use case (cross-CU agent loan pre-qualification where scope privacy is essential). However, the cu_ciso's attacks expose that the scenario is not deployment-ready: (1) Attack 1 \u2014 zero-knowledge audit gap means NCUA Part 748 incident response requirements are unmet (no break-glass deanonymization). (2) Attack 3 \u2014 Base L2 sequencer dependency has no documented SLA/RPO/RTO for NCUA Part 749. (3) auth0_pm Attack 4 \u2014 no SOC 2, no vendor risk management artifacts, no SLA. The scenario is named and motivated but remains hypothetical due to unaddressed regulatory and operational gaps."
+    }
+  },
+  "gaps": [
+    "Upgrade ScopeExtraction privacy game to chosen-predicate ZK definition; specify agent behavior (constant-time simulated response) when predicate is unsatisfied, preventing 64-query bit extraction",
+    "Mandate challenge-response protocol: RS supplies (requiredScopeMask, nonce_timestamp) before proof generation; include currentTimestamp in nullifier or require RS to assert currentTimestamp_in_proof == RS_clock \u00b1 delta",
+    "Explicitly specify pot16.ptau ceremony provenance (e.g., Hermez/Ethereum ceremony with documented honest participant) to maintain adversarial-AS soundness under SRS subversion",
+    "Separate operator and AS as distinct trust principals; add enrollment policy layer (consortium multisig, governance contract) that validates permission claims before on-chain enrollment, or tighten adversarial-AS claim to 'cannot modify already-enrolled commitments'",
+    "Make nullifier RS-specific: agentNullifier = Poseidon3(credentialCommitment, requiredScopeMask, rsIdentifier) to prevent cross-RS correlation in consortium deployments",
+    "Address SPIFFE ZK attestor layering argument: explain why predicate-at-presentation-time and post-issuance adversarial-AS require a standalone protocol rather than a SPIRE attestor plugin",
+    "Add break-glass audit mechanism (operator-published nullifier-to-agentId mapping in regulator-accessible registry) to satisfy NCUA Part 748 incident response requirements",
+    "Document Base L2 RPC SLA, root history buffer TTL policy, and RPO/RTO for NCUA Part 749 business continuity compliance",
+    "Qualify modelHash as operator-attested (not runtime-verified) unless TEE attestation is added; retract 'cryptographic binding to runtime model identity' or scope it precisely"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

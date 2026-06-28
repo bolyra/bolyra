@@ -1,0 +1,65 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "title": "Define application/bolyra-proof+cbor content type and envelope format",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-proof-content-type.cddl",
+      "description": "CDDL schema defining the bolyra-proof envelope: proof bytes, public signals array, circuit identifier, proving system tag, and protocol version"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-proof-http-negotiation.abnf",
+      "description": "ABNF grammar for HTTP Content-Type and Accept header negotiation for application/bolyra-proof+cbor"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-proof-envelope-00.md",
+      "description": "IETF-style draft specifying the media type registration template (per RFC 6838), envelope semantics, versioning policy, and interop requirements"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "Reference encoder/decoder: serializes ProofResult to CBOR envelope and parses incoming envelopes with schema validation"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.test.ts",
+      "description": "Unit tests: round-trip encode/decode for groth16 and plonk proof types, version field handling, malformed input rejection"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/envelope-vectors.json",
+      "description": "Canonical test vectors (hex-encoded CBOR blobs) for each circuit/proving-system combination, used by conformance runner"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/wire-format.md",
+      "description": "Developer-facing guide: how to set Content-Type, consume the envelope in middleware, migrate from raw proof bytes"
+    }
+  ],
+  "steps": [
+    "Audit existing SDK ProofResult shape and HTTP headers used in examples/mcp-demo to identify all fields currently exchanged ad-hoc",
+    "Draft CDDL schema: define bolyra-proof-envelope as a CBOR map with required keys: version (uint), circuit-id (tstr), proving-system (tstr enum groth16/plonk), public-signals (array of bstr), proof (bstr), and optional metadata map",
+    "Write ABNF for Content-Type parameter negotiation: circuit-id and proving-system as optional type parameters (e.g. application/bolyra-proof+cbor; circuit=AgentPolicy; ps=groth16)",
+    "Compose IETF-style media type registration draft following RFC 6838 section 4.2: type name, subtype, required parameters, encoding considerations, security considerations, interoperability notes",
+    "Implement encode(proof: ProofResult): Uint8Array in sdk/src/envelope.ts using cbor-x (already a transitive dep via snarkjs); map ProofResult fields to CDDL-defined keys",
+    "Implement decode(buf: Uint8Array): ProofResult with CDDL-conformant validation: reject unknown proving-system values, enforce version semver range, verify public-signals length matches circuit arity",
+    "Generate canonical test vectors for HumanUniqueness/groth16, AgentPolicy/groth16, AgentPolicy/plonk, Delegation/groth16, Delegation/plonk using the fast (mock) proof path",
+    "Write unit tests covering: round-trip fidelity, unknown version rejection, wrong circuit-id detection, truncated CBOR rejection",
+    "Integrate envelope encode/decode into verifyHandshake() and expose encodeProofEnvelope()/decodeProofEnvelope() as public SDK API",
+    "Update bolyra-proxy.js MCP server to set Content-Type: application/bolyra-proof+cbor on proof responses",
+    "Write docs/wire-format.md with curl examples, middleware routing snippet, and migration notes for consumers currently using raw proof bytes",
+    "Run conformance runner against test vectors to confirm spec and implementation agree before marking complete"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cbor-x (transitive via snarkjs \u2014 verify it is directly importable in sdk/)",
+    "RFC 6838 (media type registration procedures)",
+    "RFC 8949 (CBOR specification)",
+    "RFC 9165 or CDDL toolchain (cddl npm package or cddl-codegen) for schema validation in tests",
+    "Existing sdk/src/types.ts ProofResult interface",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md (IETF draft to reference/link from the new envelope draft)",
+    "circuits/build/ zkey artifacts (needed to generate conformance test vectors via fast proof path)"
+  ]
+}

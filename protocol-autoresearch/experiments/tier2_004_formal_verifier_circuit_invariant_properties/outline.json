@@ -1,0 +1,65 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "title": "Write machine-checkable circuit invariant properties for CI",
+  "artifacts": [
+    {
+      "type": "test",
+      "filename": "circuits/test/invariants/permissionBitmask.test.js",
+      "description": "Property 1: assert no witness satisfies permissionBitmask >= 2^64 across AgentPolicy and Delegation circuits"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/invariants/nullifierUniqueness.test.js",
+      "description": "Property 2: assert distinct (scope, secret) pairs always produce distinct nullifierHash outputs in HumanUniqueness"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/invariants/scopeMonotonicity.test.js",
+      "description": "Property 3: assert delegateeScope & ~delegatorScope == 0 is enforced \u2014 witness with bits outside delegator scope must throw"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/invariants/cumulativeBitEncoding.test.js",
+      "description": "Property 4: assert bit 4 set without bits 2+3 is unsatisfiable in AgentPolicy and Delegation circuits"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/invariants/expiryNarrowing.test.js",
+      "description": "Property 5: assert delegateeExpiry > delegatorExpiry is unsatisfiable in Delegation circuit"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/invariants/index.test.js",
+      "description": "Top-level Mocha suite that imports and sequences all 5 invariant files; tagged fast (witness-only, no real proof)"
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Append a new section listing all 12 named invariants with circuit mapping, the violating-witness pattern used per invariant, and CI integration notes"
+    }
+  ],
+  "steps": [
+    "Audit existing circuits (HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom) to catalogue every signal involved in the 5 property classes; record expected constraint equations for each",
+    "Install / confirm circom_tester is available as a dev dependency and that wasm witness calculators are compiled into circuits/build/ for all three circuits (reuse existing compile:circuits script)",
+    "Implement Property 1 (permissionBitmask overflow): construct input with permissionBitmask = 2n**64n in AgentPolicy and Delegation; assert calculateWitness rejects with a constraint-violation error",
+    "Implement Property 2 (nullifier uniqueness): generate two inputs sharing the same scope but distinct secrets, compute witnesses for both, assert the nullifierHash outputs differ; then repeat with same secret/distinct scope",
+    "Implement Property 3 (scope monotonicity): construct Delegation input where delegateeScope has at least one bit set that is clear in delegatorScope; assert calculateWitness throws",
+    "Implement Property 4 (cumulative bit encoding): construct AgentPolicy and Delegation inputs with bit 4 set but bit 2 or bit 3 clear; assert calculateWitness throws for each combination",
+    "Implement Property 5 (expiry narrowing): construct Delegation input with delegateeExpiry = delegatorExpiry + 1; assert calculateWitness throws",
+    "Expand each property to cover edge cases (e.g., boundary values, all-zeros, max-valid bitmask) to reach the 12-invariant target across the 4 circuits",
+    "Wire circuits/test/invariants/index.test.js into package.json test:circuits:fast so CI runs all invariant checks without full proof generation",
+    "Update circuits/FORMAL-PROPERTIES.md with the 12 named invariants, violating-witness pattern, circuit-to-invariant mapping table, and CI badge status",
+    "Run npm run test:circuits:fast locally; confirm all invariant tests pass (valid witnesses) and all violation tests throw as expected",
+    "Commit with DCO sign-off; add a CI note to the PR that test:circuits:slow is not required for this change"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circom_tester (already in dev deps)",
+    "circuits/build/*.wasm and *.zkey artifacts compiled via compile:circuits",
+    "HumanUniqueness.circom",
+    "AgentPolicy.circom",
+    "Delegation.circom",
+    "circuits/FORMAL-PROPERTIES.md (existing, to be extended)",
+    "mocha (existing test runner)"
+  ]
+}

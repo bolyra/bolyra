@@ -1,0 +1,65 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Complete DID method resolution algorithm per W3C DID Core \u00a77",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Extend existing DID method spec with \u00a77-conformant resolution algorithm: resolve(), dereference(), and error code table (invalidDid, notFound, deactivated, methodNotSupported, internalError)"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "TypeScript implementation of resolve(did, resolutionOptions) returning {didDocument, didResolutionMetadata, didDocumentMetadata}. Parses did:bolyra:<commitment>, queries IdentityRegistry, builds DID Document with BabyJubjub verificationMethod (JsonWebKey2020, crv=Baby-Jubjub), sets deactivated flag for revoked identities"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did-document-builder.ts",
+      "description": "Constructs the DID Document object: id, @context, verificationMethod array, authentication, assertionMethod. Encodes BabyJubjub public key as JWK with crv=Baby-Jubjub"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add getIdentityStatus(bytes32 commitment) view returning (bool enrolled, bool revoked, uint256 enrolledAt, bytes32 babyJubjubPubKeyX, bytes32 babyJubjubPubKeyY) to support on-chain resolution queries"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Unit tests covering: valid DID resolves to correct document, revoked DID sets deactivated=true, invalid DID syntax returns invalidDid error, unknown DID returns notFound error, verificationMethod encodes correct JWK"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/did-resolution-conformance.test.ts",
+      "description": "W3C DID Test Suite conformance runner: validates resolve() return shape matches DID Core \u00a77.1 exactly, checks all required metadata fields, runs against W3C test vectors"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-resolution.md",
+      "description": "Developer guide: how to instantiate the resolver, configure RPC endpoint for IdentityRegistry, handle resolution errors, integrate with did-resolver universal resolver interface"
+    }
+  ],
+  "steps": [
+    "Audit spec/did-method-bolyra.md to inventory what DID syntax and commitment derivation are already defined; identify gaps against W3C DID Core \u00a77.1 resolution algorithm requirements",
+    "Add getIdentityStatus() view function to IdentityRegistry.sol returning enrollment bool, revocation bool, enrolledAt timestamp, and packed BabyJubjub pubkey coordinates (X, Y as uint256)",
+    "Implement DID parser in sdk/src/resolver.ts: validate did:bolyra:<commitment> syntax, extract commitment string, return invalidDid metadata on parse failure",
+    "Implement did-document-builder.ts: construct @context array ([https://www.w3.org/ns/did/v1, crv extension context]), build verificationMethod entry with type=JsonWebKey2020 and publicKeyJwk.crv=Baby-Jubjub using X/Y coordinates from registry",
+    "Implement resolve(did, resolutionOptions) core: call IdentityRegistry.getIdentityStatus(), handle not-enrolled (notFound), build DID Document via builder, set didDocumentMetadata.deactivated=true if revoked, populate didResolutionMetadata.contentType=application/did+ld+json",
+    "Implement resolutionOptions.accept content negotiation: support application/did+ld+json and application/did+json; return representationNotSupported error for unknown types",
+    "Wire resolver to an ethers.js provider so RPC endpoint is configurable at instantiation; expose BolyraResolver class with constructor({ rpcUrl, registryAddress })",
+    "Write unit tests in sdk/test/resolver.test.ts using Hardhat in-process network: mock IdentityRegistry, test all error branches and the happy path",
+    "Write W3C conformance tests in spec/conformance/did-resolution-conformance.test.ts validating exact shape of return triple against DID Core \u00a77.1 normative requirements",
+    "Update spec/did-method-bolyra.md with Resolution section: algorithm pseudocode, error code table, verificationMethod encoding spec for BabyJubjub JWK, and deactivation semantics",
+    "Export resolver from sdk/src/index.ts as part of public API; update sdk/QUICKSTART.md with resolver usage example",
+    "Run full test suite (npm test) and confirm all resolver tests pass; verify no regressions in circuit or contract tests"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "IdentityRegistry.sol deployed with getIdentityStatus() view function",
+    "BabyJubjub public key stored in IdentityRegistry at enrollment time",
+    "W3C DID Core \u00a77 spec (https://www.w3.org/TR/did-core/#resolution)",
+    "JsonWebKey2020 context and Baby-Jubjub JWK crv value registration",
+    "ethers.js v6 for contract interaction",
+    "did-resolver npm package interface (for universal resolver compatibility)",
+    "Hardhat local network for integration tests"
+  ]
+}

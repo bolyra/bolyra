@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_nullifier_domain_separation",
+  "persona": "formal_verifier",
+  "title": "Add domain separation tags to all Poseidon nullifier derivations",
+  "dimension": "standards",
+  "description": "The protocol uses Poseidon2(scope, secret) for human nullifiers, Poseidon2(credentialCommitment, sessionNonce) for agent nullifiers, and Poseidon2(delegateeCredCommitment, sessionNonce) for delegation nullifiers. All three share the same Poseidon2 template with no domain separator. If a credentialCommitment happens to equal a scope value and a sessionNonce equals a secret, cross-circuit nullifier collisions become possible. Add a constant domain tag as the first Poseidon input (e.g., Poseidon3(0x01, scope, secret) for human, Poseidon3(0x02, cred, nonce) for agent). This aligns with IETF hash-to-curve domain separation conventions and is a 1-line change per circuit.",
+  "priority": "medium",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_nullifier_domain_separation",
+  "adoption": 14,
+  "standards": 20,
+  "completeness": 17,
+  "correctness": 19,
+  "total": 70,
+  "verdict": "consider"
+}

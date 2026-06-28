@@ -1,0 +1,42 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap \u2014 proving monotonic narrowing over hidden intermediate scopes in a single artifact without AS trust. However, the rfc7662_advocate's Attack 1 correctly notes RFC 9701 collapses the 'offline-verifiable without AS' claim, and Attack 3 shows Bulletproofs can theoretically achieve bitwise subset over hidden committed values. The construction's \u00a78 'structural gap is irreducible' is overstated. The residual advantage is trustless narrowing verification with succinctness and Poseidon/EdDSA gadget availability \u2014 real but not cleanly ruled out of baseline. The spiffe_engineer's Attack 1 further notes that in the actual NCUA deployment scenario, the examiner has legal authority to see scope values, so the privacy property may be a non-requirement at the claimed deployment layer. Baseline can approximate with extra configuration (RFC 9701 + Bulletproofs), though not via standardized composition."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat model, three game definitions, named assumptions (A1-A5), and reduction sketches for soundness and ZK. This is substantially above baseline. However, the cryptographer's Attack 1 identifies a critical gap: the root delegator has no Merkle membership proof \u2014 the enrollment claim in \u00a71 is formally false. Attack 2 shows EdDSA signing keys are unbound to enrolled credentials, breaking repudiation resistance claims. Attack 3 shows auditSessionNonce is prover-controlled, making chainIntegrityDigest prover-malleable. Attack 4 (echoed by spiffe_engineer Attack 2) identifies that the SRS trust assumption is never given a game definition despite being load-bearing for all security properties. The reduction sketch has real holes \u2014 not just vague assumptions but missing constraints that invalidate stated claims. Score 1: threat model stated but reduction has identified gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2/3/4/5, EdDSAPoseidonVerifier on BabyJubjub, BinaryMerkleRoot(20), cumulative bit encoding, scope subset constraints, PLONK with pot16.ptau. Only one new primitive variant (Poseidon3 at t=3, same hash family). Detailed per-hop constraint breakdown totals ~106,200 constraints, fitting within 2^17 budget. PLONK proving time target <5s is stated and consistent with agent-class circuit budget. The 4-hop variant at ~54,200 constraints is offered for the common case. All circuit signals, gadgets, and constraint equations are specified. This is clearly within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary and 5 personas found multiple attacks the construction cannot answer without modification. Cryptographer Attack 1 (root delegator unenrolled) is a soundness hole \u2014 not mitigated, directly contradicts \u00a71's enrollment claim. Cryptographer Attack 3 (prover-controlled nonce) breaks the chainIntegrityDigest fingerprint claim. Auth0_pm Attacks 1 and 3 (examiner can't read proof, on-chain verifier unusable by regulators) collapse the \u00a77 deployment scenario. Cu_ciso Attack 2 (prover controls witness = self-attestation) is unaddressed. Spiffe_engineer Attack 3 (terminalMerkleRoot deanonymizes terminal agent) breaks whistleblower anonymity. Multiple attacks are explicitly marked 'not in threat model' and the construction has no answer. Score 0: Tier 3 found attacks the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU multi-tool AI pipeline scenario is concrete, names a real stakeholder (Navy Federal, NCUA), and identifies regulatory requirements. However, auth0_pm Attack 1 correctly shows the examiner receives blinded commitments they cannot interpret \u2014 the proof proves narrowing, not adequacy. Auth0_pm Attack 3 shows NCUA examiners don't run Ethereum transactions. Auth0_pm Attack 4 shows the procurement barrier (no SOC 2, solo founder). Cu_ciso Attack 1 echoes that FFIEC CAT requires human-readable audit logs. Cu_ciso Attack 3 shows NCUA third-party vendor risk inventory requires disclosure of what the construction hides. The scenario is named but the construction's privacy property actively conflicts with the examiner's legal authority and operational workflow. The whistleblower variant is weakened by spiffe_engineer Attack 3 (terminal agent deanonymization). Scenario named but not load-bearing as described \u2014 more hypothetical given operational gaps."
+    }
+  },
+  "gaps": [
+    "Add Merkle membership proof for rootCredCommitment with public rootMerkleRoot signal \u2014 root delegator enrollment is currently unverified (cryptographer Attack 1)",
+    "Constrain delegatorPubkeyAx/Ay against fields of delegatorCredCommitment inside the circuit to bind signing keys to enrolled credentials (cryptographer Attack 2)",
+    "Specify auditSessionNonce as a verifier-generated challenge via commit-then-prove protocol, not a prover-controlled public input (cryptographer Attack 3)",
+    "Reference specific verifiable MPC ceremony for pot16.ptau (e.g., Hermez Phase 1) and state SRS trust assumption explicitly in threat model (cryptographer Attack 4, spiffe_engineer Attack 2)",
+    "Revise \u00a78 'structural gap is irreducible' \u2014 restate as 'no standardized composition' and acknowledge Bulletproofs can theoretically achieve bitwise subset (rfc7662_advocate Attack 3)",
+    "Retract 'offline-verifiable without AS' as differentiator given RFC 9701; restate as 'trustless narrowing verification without AS attestation' (rfc7662_advocate Attack 1)",
+    "Address regulatory intelligibility: specify how ZK proof integrates with human-readable audit artifact for FFIEC/NCUA examination workflow (auth0_pm Attack 1, cu_ciso Attack 1)",
+    "Specify proof generation temporal model (inline vs deferred) and witness storage architecture (auth0_pm Attack 2)",
+    "Address self-attestation problem: how is the proving witness anchored to actual runtime delegation events, not fabricated post-hoc? (cu_ciso Attack 2)",
+    "Hide or replace terminalMerkleRoot with a commitment to root history membership to prevent terminal agent deanonymization via sparse enrollment correlation (spiffe_engineer Attack 3)",
+    "Add per-audit blinding factor to delegation nullifier to prevent cross-session chain linkability in whistleblower scenarios (spiffe_engineer Attack 4)",
+    "Add prover trust section: specify who holds proving authority per scenario, acknowledge prover holds all intermediate state, define witness-destruction protocol for whistleblower case (rfc7662_advocate Attack 4)",
+    "Articulate a concrete scenario where auditor has legal authority to verify narrowing but NOT legal authority to see scope values \u2014 the NCUA examiner can subpoena scopes directly (spiffe_engineer Attack 1)"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

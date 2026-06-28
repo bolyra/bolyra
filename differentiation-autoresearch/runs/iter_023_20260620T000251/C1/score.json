@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps (adversarial-AS soundness, runtime-adaptive predicate, constant-size proof). However, the rfc7662_advocate correctly shows Gap 1 (AS-blind) is misframed \u2014 jwt-introspection-response already eliminates AS from the verification hot path. Gap 6 (privacy beyond predicate outcome) does not distinguish from RFC 7662 binary introspection, only from BBS+. Gap 5 (cumulative implication) collapses into Gap 3. The spiffe_engineer shows WIMSE transaction tokens already cover the sessionNonce pattern and are omitted from the baseline comparison. What survives is Gap 3 (adversarial-AS soundness) and Gap 4 (constant-size proof), which are real but the construction overclaims by presenting 6 gaps when only 2-3 are structurally independent. The baseline can approximate most claimed properties; the construction is preferable but not provably unique across all claimed dimensions."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a detailed threat model, named assumptions (A1-A6), and reduction sketches for both SSU and SI. However, three independent reviewers (cryptographer, rfc7662_advocate, spiffe_engineer) all identify the same fatal flaw: the SI game's indistinguishability claim is false. The nullifier hash Poseidon2(credComm_b, sessionNonce_j) is a public output, both credComm values are public Merkle leaves, and the adversary trivially distinguishes b by computing both candidate hashes. The construction's appeal to Groth16 ZK (A6) is a category error \u2014 ZK hides the witness given a fixed public statement, not the public outputs themselves. The cryptographer also identifies that the SSU theorem needs simulation-extractable knowledge soundness (not standard), and the per-circuit trusted setup is unspecified, making A1's hypothesis vacuous in deployment. Threat model is stated and assumptions are named, but the core reduction (SI) is unsound."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon hash, EdDSA on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64), cumulative bit implication constraints. Circuit cost is estimated at ~42,400 constraints with proving times <8s (snarkjs WASM) or <1s (rapidsnark). This is within the Phase 1 budget and the spec's PLONK agent budget of <5s. The standalone vs delegation-capable mode distinction is a compile-time output wiring change, not a new primitive. Proof size is 288 bytes (Groth16 standalone). No new primitives are introduced beyond what is already in draft-bolyra-mutual-zkp-auth-01."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Three of five personas (cryptographer, rfc7662_advocate, spiffe_engineer) independently identified the same attack that the construction cannot answer: the nullifier hash trivially distinguishes which credential was used because both credentialCommitment values are public Merkle leaves and the adversary can compute both candidate Poseidon2 hashes. This breaks the SI game with probability 1 at zero computational cost. The construction's defense (appealing to Groth16 ZK property A6) is a category error \u2014 ZK does not hide public outputs. Additionally, the auth0_pm and cu_ciso identify unaddressed operational gaps (revocation, key custody, audit trails, on-chain vendor risk) that are outside the threat model entirely. The construction's core privacy claim (SI security) is vacuous as stated."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The credit union loan agent scenario in \u00a77 is concrete and names a specific stakeholder (NCUA-regulated credit union), a specific regulatory requirement (NCUA examination), and a specific flow (loan disbursement via core banking RS). However, the cu_ciso and auth0_pm attacks expose that the scenario is incomplete: revocation is unaddressed (NCUA Part 748 requires timely access termination), the audit trail is a cryptographic assertion rather than the human-readable log examiners expect, operator key custody is unspecified, and the on-chain dependency fails FFIEC third-party vendor risk assessment. The scenario names a real stakeholder and regulatory requirement but the deployment as described would not survive procurement review at the named institution."
+    }
+  },
+  "gaps": [
+    "SI game is broken: nullifier hash Poseidon2(credComm_b, sessionNonce) trivially distinguishes credentials when both credComm values are public Merkle leaves. Must decouple nullifier from permissionBitmask (e.g., identitySecret = Poseidon3(modelHash, Ax, Ay) independent of bitmask) or reformulate SI game to single-credential variant.",
+    "Gap 1 (AS-blind) must acknowledge jwt-introspection-response eliminates AS from verification hot path; reframe as a consequence of Gap 3 (adversarial-AS soundness), not an independent structural gap.",
+    "Gap 6 (privacy beyond predicate outcome) does not distinguish from RFC 7662 binary introspection \u2014 only from BBS+. Must restrict claim or redirect to adversarial-AS argument.",
+    "WIMSE transaction tokens (draft-ietf-wimse-arch \u00a75-6) cover the sessionNonce binding pattern and are absent from the baseline comparison in \u00a78.",
+    "SSU reduction needs simulation-extractable knowledge soundness, not standard Groth16 knowledge soundness, especially for the PLONK path.",
+    "Per-circuit trusted setup ceremony is unspecified \u2014 SSU theorem's A1 hypothesis is vacuous without specifying who generates the CRS and how the trapdoor is destroyed.",
+    "Emergency credential revocation is unaddressed \u2014 30-entry root history buffer provides no revocation SLA. Must define a revocation mechanism or revocation list checked by RS.",
+    "Operator EdDSA key custody requirements are unspecified \u2014 no HSM requirement, rotation policy, or compromise response procedure.",
+    "Deployment scenario must address FFIEC/NCUA third-party risk for on-chain registry dependency and specify fallback behavior under L2 outage.",
+    "Predicate-channel leakage bound should be corrected from 64 bits to ~61 bits accounting for cumulative implication rules."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

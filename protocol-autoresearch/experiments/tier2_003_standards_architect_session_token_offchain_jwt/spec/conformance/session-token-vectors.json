@@ -1,0 +1,169 @@
+{
+  "$schema": "https://bolyra.ai/schemas/session-token-vectors-v1.json",
+  "description": "Normative test vectors for draft-bolyra-session-token-01",
+  "version": "0.1.0",
+  "valid": [
+    {
+      "id": "valid-minimal",
+      "description": "Minimal valid token with required claims only",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1750000000,
+        "exp": 1750000300,
+        "jti": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+      },
+      "expected_outcome": "valid"
+    },
+    {
+      "id": "valid-full-claims",
+      "description": "Full token with all optional claims and permissions",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt",
+        "vtx": "0x1234abcd5678ef901234abcd5678ef901234abcd5678ef901234abcd5678ef90"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1750000000,
+        "exp": 1750000300,
+        "jti": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
+        "bolyra.vtx": "0x1234abcd5678ef901234abcd5678ef901234abcd5678ef901234abcd5678ef90",
+        "bolyra.perm": 7
+      },
+      "expected_outcome": "valid"
+    },
+    {
+      "id": "valid-es256",
+      "description": "Valid token using ES256 algorithm",
+      "header": {
+        "alg": "ES256",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1750000000,
+        "exp": 1750000120,
+        "jti": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xfeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface"
+      },
+      "expected_outcome": "valid"
+    }
+  ],
+  "invalid": [
+    {
+      "id": "invalid-expired",
+      "description": "Token with exp in the past",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1700000000,
+        "exp": 1700000300,
+        "jti": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+      },
+      "expected_outcome": "invalid",
+      "expected_error": "TOKEN_EXPIRED"
+    },
+    {
+      "id": "invalid-replayed-nonce",
+      "description": "Token whose bolyra.nonce was already consumed",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1750000000,
+        "exp": 1750000300,
+        "jti": "d4e5f6a7-b8c9-0123-defa-234567890123",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+      },
+      "expected_outcome": "invalid",
+      "expected_error": "NONCE_REPLAYED"
+    },
+    {
+      "id": "invalid-wrong-issuer",
+      "description": "Token with unexpected iss claim",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://evil.example.com",
+        "iat": 1750000000,
+        "exp": 1750000300,
+        "jti": "e5f6a7b8-c9d0-1234-efab-345678901234",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xbaadf00dbaadf00dbaadf00dbaadf00dbaadf00dbaadf00dbaadf00dbaadf00d"
+      },
+      "expected_outcome": "invalid",
+      "expected_error": "INVALID_SIGNATURE"
+    },
+    {
+      "id": "invalid-missing-scp",
+      "description": "Token missing required bolyra.scp claim",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1750000000,
+        "exp": 1750000300,
+        "jti": "f6a7b8c9-d0e1-2345-fabc-456789012345",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.nonce": "0xfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeed"
+      },
+      "expected_outcome": "invalid",
+      "expected_error": "CLAIMS_MISSING"
+    },
+    {
+      "id": "invalid-tampered-payload",
+      "description": "Token with modified payload (signature mismatch)",
+      "header": {
+        "alg": "EdDSA",
+        "typ": "bolyra+jwt"
+      },
+      "payload": {
+        "sub": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "iss": "https://verify.bolyra.ai",
+        "iat": 1750000000,
+        "exp": 1750000300,
+        "jti": "a7b8c9d0-e1f2-3456-abcd-567890123456",
+        "bolyra.agn": "0x5566778899aabbcc5566778899aabbcc5566778899aabbcc5566778899aabbcc",
+        "bolyra.scp": "0x1122334455667788112233445566778811223344556677881122334455667788",
+        "bolyra.nonce": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "note": "In a real test, the JWS signature is computed over the original payload; a modified payload invalidates the signature.",
+      "expected_outcome": "invalid",
+      "expected_error": "INVALID_SIGNATURE"
+    }
+  ]
+}

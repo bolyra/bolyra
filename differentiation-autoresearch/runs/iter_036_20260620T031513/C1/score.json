@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real differentiators (runtime-adaptive bitmask predicates, in-circuit implication closure, constant-size proof), but the rfc7662_advocate's Attack 4 shows that operator-signed BBS+ credentials with selective disclosure achieve AS-blind presentation comparably. The construction's \u00a78 analysis attacks RFC 7662 classic + AS-issued BBS+, not operator-signed BBS+ with DPoP+RFC 8707. Additionally, WIMSE token exchange is not addressed at all. The residual unique properties (in-circuit cumulative-bit enforcement the operator cannot bypass at issuance, constant-size proof at 192B vs ~400B) are real but incremental \u2014 baseline can approximate with extra configuration. The adversarial-AS claim would elevate this to 2, but it is conditional on operator key isolation (Attack 3 from rfc7662_advocate) which is not mandated in the spec."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit, assumptions are named (A1-A4), and two formal games (SSU, SSZK) are defined with reduction sketches. However, three critical gaps prevent a score of 2: (1) The cryptographer's Attack 1 shows the SSZK game is trivially won \u2014 nullifierHash is computable from public on-chain credentialCommitments and the public sessionNonce, giving the adversary advantage 1 in distinguishing credentials. The game definition is broken. (2) The cryptographer's Attack 2 shows scopeCommitment is brute-forceable in O(256) Poseidon evaluations due to the small effective permission space (~8 bits with cumulative constraints), making the Poseidon preimage resistance argument inapplicable. (3) The cryptographer's Attack 3 notes the SSU reduction cites knowledge soundness but the game gives the adversary oracle access to prior proofs, requiring simulation-extractability (not cited) for Groth16."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps precisely to existing Bolyra primitives: Poseidon5 for credential commitment, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits(64), cumulative bit enforcement \u2014 all from the AgentPolicy circuit. Circuit cost is estimated at ~8,500 constraints, well within pot16.ptau (2^16). Proving time targets are stated: <0.5s rapidsnark, <3s snarkjs for Groth16; <5s snarkjs for PLONK. Both systems are already built in the Bolyra codebase. The spiffe_engineer's compute-environment critique (Attack 3 from auth0_pm) is a deployment concern, not a primitive-availability concern. Phase 1 budget is met."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found critical flaws the construction cannot answer: (1) scopeCommitment is a permanent cross-RS tracking handle \u2014 identified independently by auth0_pm, cryptographer, cu_ciso, rfc7662_advocate, and spiffe_engineer. The construction claims 'RS learns NOTHING else' but scopeCommitment is a stable pseudonym across all RSes, directly contradicting the SSZK privacy claim. (2) The cryptographer proved the SSZK game is trivially broken with advantage 1 via forward Poseidon evaluation on public inputs. (3) The effective permission space is ~256 values, making scopeCommitment a full permission oracle via brute force. (4) The Groth16 trusted setup is not in the adversary model \u2014 the adversarial-AS claim collapses if ZKProva ran the ceremony. These are not mitigated attacks; they are unanswered structural breaks in the core privacy claim."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario (\u00a77) is concrete and names a specific stakeholder with a real multi-RS agent deployment pattern. However, the cu_ciso identified two regulatory compliance failures that make the scenario hypothetical rather than load-bearing: (1) NCUA Part 748 audit trail requirements cannot be met because modelHash is private and nullifierHash is semantically opaque \u2014 examiners cannot reconstruct access events. (2) Emergency revocation is undefined \u2014 GLBA \u00a7314.4(e) requires the ability to terminate unauthorized access, but the construction provides no revocation mechanism faster than credential expiry. The scenario is well-motivated but incomplete for the named regulatory context."
+    }
+  },
+  "gaps": [
+    "scopeCommitment must be session-bound (e.g., Poseidon3(permBitmask, credCommitment, sessionNonce)) to prevent cross-RS correlation \u2014 currently a permanent tracking handle that breaks SSZK",
+    "SSZK game definition is broken: nullifierHash is computable from public on-chain credentialCommitment + public sessionNonce, giving adversary advantage 1. Game must either hide credential commitments or use a blinded nullifier scheme",
+    "Effective permission space is ~256 values due to 8-bit semantics + cumulative constraints \u2014 scopeCommitment is brute-forceable in O(256) Poseidon evals. Must add high-entropy blinding factor to scopeCommitment",
+    "SSU reduction must cite simulation-extractability (not just knowledge soundness) for the adaptive-oracle setting, or add AGM assumption for PLONK",
+    "Groth16 trusted setup must be explicitly in the adversary model: either mandate PLONK-only for the adversarial-AS claim, or document a public MPC ceremony for circuit-specific phase 2",
+    "Specify operator key rotation protocol and credential migration path \u2014 currently a silent single point of failure",
+    "Add revocation primitive (nullifier accumulator, on-chain revocation list, or mandatory short-lived expiry \u226424h) with bounded revocation latency for NCUA/GLBA compliance",
+    "Specify audit trail architecture: how modelHash is surfaced to authorized auditors, what RS logs alongside verified proofs, mapping operator keys to business units",
+    "Engage WIMSE (draft-ietf-wimse-arch) in baseline comparison \u2014 current \u00a78 only analyzes RFC 7662 classic, missing the active IETF WG directly scoped to this problem",
+    "Narrow baseline dominance claim: analyze operator-signed BBS+ with DPoP+RFC 8707 composition, not just AS-issued BBS+"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

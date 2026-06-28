@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction identifies a specific capability the baseline provably cannot match: proving monotonic scope narrowing over hidden permission bitmasks without revealing any intermediate scope value to the auditor. BBS+ provides selective disclosure of individual claims but cannot prove bitwise-subset relationships over hidden values. RFC 8693 act chains are plaintext. All five Tier 3 personas converge on this as the irreducible ZK advantage (rfc7662_advocate Attack 4 explicitly concedes 'the one property it cannot provide is hiding intermediate scope values from the auditor'). The false cross-org and no-trusted-party claims in \u00a78 are correctly demolished by attackers, but the core scope-hiding-during-narrowing-verification capability is genuinely ruled out of the baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (PPT adversary, colluding agents, untrusted auditor). Six named assumptions (DL-BJJ, CR-Poseidon, KS-Groth16, ZK-Groth16, ROM, REG-INTEGRITY). Four formal games with reduction sketches. However, GAME-HIDE is self-contradictory: the proof note claims two chains can have 'different credentialCommitments but identical delegation tokens,' but delegateeCredCommitment is an explicit Poseidon4 input, so under CR-Poseidon different commitments yield different tokens and different nullifiers \u2014 the challenge distribution is empty (cryptographer Attack 1, spiffe_engineer Attack 4, rfc7662_advocate Attack 2 all converge). The reduction for the construction's central privacy claim is not merely informal \u2014 it is internally inconsistent. GAME-NARROW and GAME-FORGE reductions are sound; GAME-FAITHFUL's reduction is sound but the game definition is incomplete (see Dim 4)."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every gadget maps to existing Bolyra/circomlib primitives: Poseidon2/4, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot from zk-kit, Num2Bits, LessThan/LessEqThan. \u00a75 provides a complete primitive mapping table with spec references. \u00a76 provides per-gadget constraint counts: ~17,723 per hop, ~70,900 total for 4-hop (fits pot16.ptau), ~141,800 for 8-hop (needs pot18). Proving time targets stated (<3s for 4-hop, <5s for 8-hop). The 4-hop compact configuration fits within existing Phase 1 budget. PLONK verification cost (~300K gas) is within on-chain budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "GAME-NARROW survives all attacks \u2014 no persona broke the monotonic narrowing proof. The core scope-hiding property (private inputs hidden by ZK) survives at the circuit level. However, Tier 3 surfaced two attacks the construction cannot fully answer: (1) GAME-HIDE's nullifiers enable closed-world deanonymization \u2014 an adversary enumerating enrolled agents can precompute candidate nullifiers and match against public outputs, breaking participant privacy for the whistleblower scenario (cryptographer Attack 1, auth0_pm Attack 4). The formal proof is self-contradictory, not just weak. (2) GAME-FAITHFUL proves each presented hop is real but not that the presented chain is complete \u2014 an adversary can pre-register shortcut delegation paths and present a sanitized 2-hop audit when the operational pipeline was 4 hops (cryptographer Attack 4). These weaken but do not destroy the construction: narrowing-without-disclosure survives; participant-hiding and chain-completeness do not."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Navy Federal Credit Union and NCUA examination are named concretely with a real stakeholder and regulatory requirement (GENIUS Act, NCUA Part 748). However, the ZK privacy property \u2014 the core differentiator \u2014 is not load-bearing in the stated regulatory context. NCUA examiners have full access rights to examined institution data and want transparency, not privacy from the auditor (cu_ciso Attack 1, auth0_pm Attack 1). The scenario where scope-hiding IS load-bearing (cross-org pipeline, whistleblower) is undermined by the single-Merkle-root constraint (no cross-org support per constraint 2h) and nullifier metadata leakage (whistleblower deanonymization). No alternative scenario is named where scope-hiding is a regulatory or stakeholder requirement rather than a design preference."
+    }
+  },
+  "gaps": [
+    "GAME-HIDE proof note is self-contradictory under CR-Poseidon: delegateeCredCommitment is a Poseidon4 input, so different participants yield different nullifiers. Fix by either (a) blinding nullifiers with a per-audit secret salt (but must preserve GAME-FAITHFUL registry check) or (b) separating participant identity from delegation-token commitment via a restructured credential scheme",
+    "GAME-FAITHFUL lacks chain completeness \u2014 add GAME-COMPLETE preventing hop omission. Fix by binding a hash-chain of all hop events to the session on-chain at execution time, so the audit proof must cover exactly the recorded execution path, not a shortcut",
+    "Single allDelegateesMerkleRoot makes cross-org chains structurally impossible. Add per-hop root verification against a root-of-roots registry or per-org root inputs, then update \u00a78 cross-org claim accordingly",
+    "Scenario fit: identify a deployment where scope-hiding from the auditor is a regulatory or contractual requirement (not just nice-to-have). The NCUA scenario is backwards \u2014 examiners want full visibility. Consider cross-org data-sharing under GDPR Art 28 (processor must prove scope compliance to controller without revealing other clients' scopes) or privacy-preserving supply-chain audit under EU AI Act Art 61",
+    "Specify the SRS ceremony: name the pot18.ptau source (e.g. Hermez perpetual ceremony), provide verification transcript reference, and document what enterprise buyers must vet \u2014 all four game reductions assume honest CRS",
+    "Address the GAME-HIDE vs GAME-FAITHFUL tension: nullifiers must be public for faithfulness but deterministic nullifiers enable deanonymization. Resolve with a commitment-then-reveal scheme or stealth-address-style nullifier registry"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

@@ -1,0 +1,103 @@
+{
+  "id": "standards_architect_conformance_test_vectors",
+  "title": "Machine-readable conformance test vector suite",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Schema documentation: field meanings, how to run vectors, conformance levels"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/schema.json",
+      "description": "JSON Schema for all vector files \u2014 validates input_witnesses, public_signals, expected_result"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_handshake.json",
+      "description": "Happy-path handshake: valid human + agent credential, fresh nonce, correct scope"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/expired_agent_credential.json",
+      "description": "Agent credential with expiry timestamp in the past \u2014 must fail"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/revoked_human_identity.json",
+      "description": "Human nullifier present in revocation set \u2014 must fail"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/stale_merkle_root.json",
+      "description": "humanMerkleRoot not in the accepted root window \u2014 must fail"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/scope_subset_violation.json",
+      "description": "Delegated credential claims bits not present in parent \u2014 must fail"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/cumulative_bit_violation.json",
+      "description": "FINANCIAL_MEDIUM set without FINANCIAL_SMALL \u2014 must fail validateCumulativeBitEncoding"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/delegation_depth_1.json",
+      "description": "Single-hop delegation chain \u2014 must pass"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/delegation_depth_2.json",
+      "description": "Two-hop delegation chain \u2014 must pass with narrowed scope"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/delegation_depth_3.json",
+      "description": "Three-hop delegation chain \u2014 must pass; scope monotonically narrows"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/nonce_replay.json",
+      "description": "Replayed (humanProof, agentProof) pair with previously-used sessionNonce \u2014 must fail"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/scripts/extract_vectors.js",
+      "description": "Node script that runs circuit tests with FULL_PROOF=1, captures witness + public signals, and writes frozen JSON vector files"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/scripts/validate_vectors.js",
+      "description": "Conformance runner: reads each vector, re-runs witness generation, compares public_signals, asserts expected_result matches actual"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/scripts/validate_schema.js",
+      "description": "AJV-based schema validator \u2014 runs over all *.json in test-vectors/ as a pre-commit check"
+    }
+  ],
+  "steps": [
+    "Audit existing circuit tests in circuits/test/ to identify which test cases already produce full witnesses (fast vs slow split); note the 8 scenarios that map to required vectors",
+    "Define the canonical JSON schema (schema.json): fields = { id, description, circuit, input_witnesses, public_signals, expected_result: 'pass'|'fail', failure_reason? }",
+    "Write extract_vectors.js: wrap snarkjs fullProve for each scenario, capture { proof, publicSignals }, write to spec/test-vectors/<id>.json with frozen values",
+    "Run extract_vectors.js with FULL_PROOF=1 against HumanUniqueness, AgentPolicy, and Delegation circuits to produce the 11 frozen vector files",
+    "Hand-author or derive the four negative-path vectors (expired credential, revoked identity, stale root, nonce replay) by mutating valid witness inputs and asserting constraint failure",
+    "Write validate_vectors.js: for each vector, call snarkjs.wtns.calculate + check publicSignals match; for expected_result='fail', assert witness generation or proof verification throws",
+    "Write validate_schema.js using AJV to gate malformed vector files in CI",
+    "Add 'test:vectors' npm script to root package.json: node spec/test-vectors/scripts/validate_schema.js && node spec/test-vectors/scripts/validate_vectors.js",
+    "Add README.md explaining schema, conformance levels (L1=schema-valid, L2=witness-match, L3=full-proof-match), and how a third-party SDK can run the suite",
+    "Verify all 11 vectors pass validate_vectors.js; confirm 3 negative vectors correctly trigger failures",
+    "Commit all files with DCO sign-off; update spec/CONFORMANCE.md to reference the new test-vectors/ directory"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circuits/build/ artifacts (HumanUniqueness.zkey, AgentPolicy.zkey, Delegation.zkey, *.vkey.json)",
+    "circuits/build/pot16.ptau",
+    "snarkjs (dev dependency, already present)",
+    "circom_tester (for witness-only fast path in validate_vectors.js)",
+    "ajv (add as dev dependency for schema validation)",
+    "FULL_PROOF=1 environment flag for extract_vectors.js \u2014 requires ~2min proving time per vector"
+  ]
+}

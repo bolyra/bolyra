@@ -1,0 +1,23 @@
+{
+  "id": "cumulative_bit_violation",
+  "description": "Permission bitmask with FINANCIAL_MEDIUM (bit 3) set but FINANCIAL_SMALL (bit 2) unset. This violates the cumulative-bit encoding rule and must be rejected by validateCumulativeBitEncoding().",
+  "circuit": "SDK",
+  "input_witnesses": {
+    "function": "validateCumulativeBitEncoding",
+    "bitmask": 8,
+    "bitmask_binary": "00001000",
+    "explanation": "bit 3 (FINANCIAL_MEDIUM) is set, bit 2 (FINANCIAL_SMALL) is unset — violates implication rule"
+  },
+  "public_signals": [],
+  "expected_result": "fail",
+  "failure_reason": "FINANCIAL_MEDIUM (bit 3) requires FINANCIAL_SMALL (bit 2) to be set — validateCumulativeBitEncoding returns false",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "hand-authored",
+    "additional_invalid_bitmasks": [
+      { "bitmask": 16, "binary": "00010000", "reason": "FINANCIAL_UNLIMITED without FINANCIAL_MEDIUM" },
+      { "bitmask": 24, "binary": "00011000", "reason": "FINANCIAL_UNLIMITED + FINANCIAL_MEDIUM without FINANCIAL_SMALL" }
+    ]
+  }
+}

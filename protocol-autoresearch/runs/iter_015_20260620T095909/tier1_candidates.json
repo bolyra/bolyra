@@ -1,0 +1,362 @@
+[
+  {
+    "id": "circuit_optimizer_shared_poseidon_dedup",
+    "persona": "circuit_optimizer",
+    "title": "Deduplicate Poseidon instances in Delegation circuit",
+    "dimension": "correctness",
+    "description": "The Delegation circuit recomputes delegatorCredCommitment via a full Poseidon5 hash internally, but also takes delegatorCredCommitment as a private input signal. The circuit should either derive it or take it as input \u2014 not both. Removing the redundant Poseidon5 saves ~600 constraints. Additionally, the scopeCommitment in AgentPolicy uses Poseidon2(bitmask, credCmt) while Delegation uses Poseidon2(scope, credCmt) \u2014 unifying these to a single Poseidon3(bitmask, credCmt, salt) across both circuits (per the seed candidate) would save one hash instantiation in the delegation chain verification path while fixing the brute-force vulnerability.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "circuit_optimizer_merkle_depth_specialization",
+    "persona": "circuit_optimizer",
+    "title": "Specialize Delegation Merkle depth to reduce unused sibling constraints",
+    "dimension": "correctness",
+    "description": "Delegation uses BinaryMerkleRoot(MAX_DEPTH=20) for the delegatee inclusion proof, but the agent tree is unlikely to reach depth 20 in early deployment. The unused sibling slots still generate constraints (hash + mux per level). Introduce a compile-time DELEGATION_DEPTH parameter (e.g., 12) separate from AGENT_DEPTH. At depth 12 vs 20, this saves ~8 \u00d7 (Poseidon2 + Mux1) \u2248 4,800 constraints \u2014 a 7-8% reduction in the Delegation circuit. The on-chain registry already validates the root against a known set, so a shallower tree is safe as long as it matches the deployed tree depth.",
+    "priority": "medium",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "circuit_optimizer_expiry_lessthan_reuse",
+    "persona": "circuit_optimizer",
+    "title": "Reuse Num2Bits decomposition for LessThan comparators",
+    "dimension": "correctness",
+    "description": "Both AgentPolicy and Delegation run Num2Bits(64) for range-checking expiryTimestamp and currentTimestamp, then separately instantiate a LessThan(64) comparator for the expiry check \u2014 which internally allocates its own Num2Bits(64). This double-decomposition wastes 128 constraints per duplicated field. By wiring the already-computed bit decompositions from the range check directly into a manual bitwise subtraction check (borrow-chain comparator), we eliminate 256 constraints in AgentPolicy and ~384 in Delegation (which checks both delegator and delegatee expiry). Small per-circuit but compounds across all three proof types in a handshake.",
+    "priority": "medium",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "circuit_optimizer_plonk_custom_gate_eddsa",
+    "persona": "circuit_optimizer",
+    "title": "Replace EdDSAPoseidonVerifier with custom-gate PLONK EdDSA for AgentPolicy",
+    "dimension": "completeness",
+    "description": "EdDSA verification accounts for ~30k of AgentPolicy's ~50k constraints \u2014 over 60% of the circuit. The circomlib EdDSAPoseidonVerifier uses generic R1CS-friendly Baby Edwards arithmetic. For the PLONK build path (which AgentPolicy already supports), switching to a PLONK-native EdDSA verifier using custom gates for scalar multiplication can reduce EdDSA to ~12-15k equivalent constraints, cutting total proving time by ~35%. Concrete artifact: a new `EdDSAPlonk.circom` template using windowed scalar mul with lookup tables, plus updated compile script to use it only in the PLONK build target.",
+    "priority": "high",
+    "estimated_effort": "week"
+  },
+  {
+    "id": "circuit_optimizer_nullifier_domain_separation",
+    "persona": "circuit_optimizer",
+    "title": "Add domain separation tag to nullifier hash across all circuits",
+    "dimension": "correctness",
+    "description": "HumanUniqueness computes nullifier as Poseidon2(scope, secret), AgentPolicy uses Poseidon2(credentialCommitment, sessionNonce), and Delegation uses Poseidon2(delegatorCredCommitment, sessionNonce). All three use Poseidon2 with no domain separator, creating a theoretical collision risk if any two circuits' input pairs happen to overlap in the field. Adding a per-circuit domain tag \u2014 e.g., Poseidon3(DOMAIN_HUMAN, scope, secret) with DOMAIN_HUMAN = hash('bolyra.human.nullifier') \u2014 costs only ~150 extra constraints per circuit (one additional Poseidon input) but eliminates cross-circuit nullifier collision by construction. This is a correctness invariant that should be enforced before mainnet.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "cross_chain_engineer_storage_proof_root_sync",
+    "persona": "cross_chain_engineer",
+    "title": "Cross-chain Merkle root sync via EIP-1186 storage proofs",
+    "dimension": "completeness",
+    "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside Base Sepolia. Implement a RootRelay contract that accepts EIP-1186 storage proofs of the humanTree and agentTree roots from the canonical Base deployment, verified against the L1 state root available via each L2's precompile (ArbSys on Arbitrum, StateSender on Polygon). This eliminates any trusted relayer \u2014 a proof generated on Base is verifiable on Arbitrum/Polygon within one L1 finality window (~12 min). Requires: RootRelay.sol (~200 LOC), per-chain deploy scripts, and a cross-chain handshake integration test.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "cross_chain_engineer_chain_scoped_nullifier",
+    "persona": "cross_chain_engineer",
+    "title": "Chain-scoped nullifier domain separation",
+    "dimension": "correctness",
+    "description": "The current nullifierHash = Poseidon2(scope, secret) in HumanUniqueness and Poseidon2(credentialCommitment, sessionNonce) in AgentPolicy are chain-agnostic. A valid proof on Base can be replayed on Arbitrum if both chains share the same root. Add chainId as a third input to both nullifier computations: Poseidon3(scope, secret, chainId) and Poseidon3(credCmt, nonce, chainId). Update the IdentityRegistry to pass block.chainid as a public input and assert it matches. This is a breaking circuit change but prevents cross-chain replay before multi-chain launch.",
+    "priority": "critical",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "cross_chain_engineer_human_root_history_buffer",
+    "persona": "cross_chain_engineer",
+    "title": "Add human tree root history buffer (parity with agentTree)",
+    "dimension": "correctness",
+    "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but none for humanTree. In a multi-chain setting, root relay latency means proofs generated against a recent-but-not-current humanTree root will fail verification on any chain. Add the same ROOT_HISTORY_SIZE=30 circular buffer to humanTree (mirroring the agentTree pattern already in the contract). Update verifyHandshake to check humanMerkleRoot against the buffer. This is ~30 LOC in IdentityRegistry.sol plus test coverage.",
+    "priority": "high",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "cross_chain_engineer_multichain_nonce_registry",
+    "persona": "cross_chain_engineer",
+    "title": "Cross-chain nonce binding with origin chain attestation",
+    "dimension": "completeness",
+    "description": "Session nonces are currently per-contract (usedNonces mapping). When the same identity operates across Base, Arbitrum, and Polygon, nonces are independent \u2014 a verifier on chain A cannot detect a nonce collision on chain B. Extend the nonce to include the origin chainId: nonceBinding = Poseidon3(nullifier, sessionNonce, chainId). Add a NonceRegistry contract that can receive cross-chain messages (via native bridges) to propagate used-nonce sets. For phase 1, a simple view function `isNonceUsedAnywhere(nonce)` backed by relayed events is sufficient.",
+    "priority": "medium",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "cross_chain_engineer_l2_gas_benchmark",
+    "persona": "cross_chain_engineer",
+    "title": "Multi-chain gas benchmark suite for handshake verification",
+    "dimension": "adoption",
+    "description": "Groth16 verification gas costs differ significantly across L2s due to precompile pricing (ecPairing is 113k on Base vs different on Arbitrum Nitro vs Polygon zkEVM). Build a benchmark script that deploys the three verifier contracts to Base Sepolia, Arbitrum Sepolia, and Polygon Amoy, runs identical handshake+delegation flows, and outputs a comparison table of gas costs per operation. This informs which chain to recommend for high-throughput use cases and whether PLONK's larger proof size is worth the ceremony-free tradeoff on specific chains.",
+    "priority": "medium",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "standards_architect_session_token_offchain_jwt",
+    "persona": "standards_architect",
+    "title": "Define JWT-based off-chain session token format for verified handshakes",
+    "dimension": "standards",
+    "description": "After a successful on-chain handshake verification, there is no standardized way to carry the result into off-chain API calls. Define a JWT profile (RFC 7519) where the payload includes the humanNullifier, agentNullifier, sessionNonce, scopeCommitment, and chain of delegation nullifiers. The JWT is signed by the relayer/verifier and has a short TTL (e.g., 5 minutes). This lets services accept Bolyra auth results without querying on-chain state per request, and gives framework integrations (LangChain, Vercel AI) a standard bearer token to pass. Deliverable: a spec document in spec/ with ABNF for the JWT claims, a reference TS implementation in sdk/, and 10+ test vectors.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "standards_architect_proof_envelope_content_type",
+    "persona": "standards_architect",
+    "title": "Register application/bolyra-proof+cbor media type and define proof envelope format",
+    "dimension": "standards",
+    "description": "The protocol currently has no canonical serialization for proof payloads exchanged between prover and verifier. Define a CBOR-based proof envelope (leveraging RFC 9052 COSE structure patterns) with fields for proof type (human/agent/delegation), public signals array, proof bytes (a/b/c points), protocol version, and an optional delegation chain. Register the application/bolyra-proof+cbor media type per RFC 6838. This is critical for interop: without a wire format, every integration reinvents serialization. Deliverable: spec/proof-envelope.md with CDDL schema, SDK encode/decode functions, and conformance test vectors.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "standards_architect_did_resolution_algorithm",
+    "persona": "standards_architect",
+    "title": "Complete DID method resolution algorithm with revocation and delegation discovery",
+    "dimension": "standards",
+    "description": "The existing did-method-bolyra.md defines the DID scheme but lacks a complete resolution algorithm per W3C DID Core \u00a77.1. Specifically: (1) resolving did:bolyra:<commitment> must query the IdentityRegistry to check enrollment and revocation status, (2) the DID Document should include a verificationMethod referencing the on-chain Merkle root and a service endpoint for proof submission, (3) delegation relationships should appear as delegateOf entries linking to the delegator's DID. Without this, no DID resolver can implement the method. Deliverable: updated spec/did-method-bolyra.md with resolution pseudocode, error handling for revoked/unknown DIDs, and 5 resolution test vectors (enrolled human, enrolled agent, revoked, delegated, unknown).",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "standards_architect_conformance_test_vectors",
+    "persona": "standards_architect",
+    "title": "Publish machine-readable conformance test vector suite",
+    "dimension": "standards",
+    "description": "No independent implementation can validate correctness without canonical test vectors. Create a spec/test-vectors/ directory with JSON files covering: valid handshake (human + agent), expired agent credential, stale Merkle root (both trees), scope subset violation in delegation, cumulative bit encoding violation (bit 4 without bits 2+3), delegation chain at max depth (3 hops), nonce replay rejection, and revoked human nullifier. Each vector includes all circuit inputs, expected public outputs, and expected contract revert reason. This is table-stakes for any IETF submission. Deliverable: 30+ test vectors in JSON with a conformance runner script in spec/conformance/.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "standards_architect_human_root_history_parity",
+    "persona": "standards_architect",
+    "title": "Add human tree root history buffer matching agent tree's 30-root buffer",
+    "dimension": "correctness",
+    "description": "The IdentityRegistry maintains a 30-root history buffer for agentTree but humanTree has no equivalent \u2014 any new human enrollment instantly invalidates in-flight proofs. This is a correctness gap that also blocks interop: a conformance-testing implementation cannot reliably run concurrent enrollment + verification tests. The fix mirrors the existing agentTree pattern: a circular buffer of the last 30 humanTree roots, checked in verifyHandshake alongside the current root. Deliverable: contract changes to IdentityRegistry.sol (add humanRootHistory mapping + isValidHumanRoot helper), updated spec language documenting the staleness window, and Hardhat tests proving a proof against root N-1 still verifies after enrollment N.",
+    "priority": "high",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "product_visionary_session_token_offchain_jwt",
+    "persona": "product_visionary",
+    "title": "Off-chain session token (JWT) after handshake verification",
+    "dimension": "adoption",
+    "description": "After a successful on-chain handshake verification, emit a signed JWT session token containing the nullifierHash, scopeCommitment, and expiry. This lets downstream API calls skip on-chain verification for the session duration, reducing per-request cost from ~200k gas to zero. Every agentic commerce flow (payments, data access, tool calls) needs sub-100ms auth after the initial handshake \u2014 JWT bridging is table stakes for adoption beyond crypto-native users.",
+    "priority": "critical",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "product_visionary_payment_receipt_proof_envelope",
+    "persona": "product_visionary",
+    "title": "Proof envelope content-type for payment receipts",
+    "dimension": "completeness",
+    "description": "Define a standardized proof envelope (application/bolyra-proof+json) that bundles the ZK proof, public signals, session token, and an optional payment receipt hash. Agentic commerce requires agents to prove they paid AND are authorized in a single round-trip. Without a canonical envelope format, every integration (Stripe ACP, payment protocols, MCP tool servers) invents its own serialization, fragmenting the ecosystem.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "product_visionary_delegation_spending_limits",
+    "persona": "product_visionary",
+    "title": "Per-delegation spending limit fields in Delegation circuit",
+    "dimension": "completeness",
+    "description": "Extend the Delegation circuit to include a spendingLimitCents private input committed into the scopeCommitment alongside the permission bitmask. Currently FINANCIAL_SMALL/MEDIUM/UNLIMITED are coarse 3-tier buckets. Real agentic commerce needs operators to delegate 'spend up to $47.50 on cloud compute' \u2014 a continuous range, not a tier. The circuit would enforce delegatee limit <= delegator limit via LessThan(64), and the scope commitment binds the limit to the credential.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "product_visionary_human_root_history_buffer",
+    "persona": "product_visionary",
+    "title": "Human tree root history buffer (matching agent tree)",
+    "dimension": "correctness",
+    "description": "The agentTree has a 30-root history buffer but humanTree has none \u2014 any new human enrollment instantly invalidates all in-flight human proofs. In a production agentic commerce scenario with continuous enrollments, this means handshakes fail unpredictably. Add the same 30-root ring buffer to humanTree in IdentityRegistry.sol and a corresponding isValidHumanRoot() check. This is a blocking correctness issue for any deployment beyond demo scale.",
+    "priority": "critical",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "product_visionary_mcp_tool_scope_mapping",
+    "persona": "product_visionary",
+    "title": "MCP tool-to-scope mapping registry",
+    "dimension": "adoption",
+    "description": "Build a lightweight registry (JSON config + SDK helper) that maps MCP tool names to required Bolyra permission bitmask bits. When an MCP server receives a tool call, it looks up the required scope, checks the agent's scopeCommitment covers it, and either proceeds or returns a structured 'insufficient-scope' error with the missing bits. This is the integration primitive that makes Bolyra useful for the MCP ecosystem \u2014 without it, every MCP server author has to manually interpret the 8-bit bitmask.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "formal_verifier_nullifier_scope_binding_independence",
+    "persona": "formal_verifier",
+    "title": "Prove nullifier independence from scope commitment across circuits",
+    "dimension": "correctness",
+    "description": "The AgentPolicy circuit derives nullifierHash = Poseidon2(credentialCommitment, sessionNonce) and scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) independently, but both share credentialCommitment as an input. A formal property should assert that knowledge of (nullifierHash, scopeCommitment) for two different sessions cannot be linked to the same agent \u2014 i.e., the Poseidon2 pre-image resistance assumption is explicitly stated and tested via a Circomspect-style analysis or a Halo2-MockProver equivalence check. Write a property file enumerating the binding and unlinkability invariants for all three circuits' nullifier constructions.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "formal_verifier_delegation_expiry_transitivity",
+    "persona": "formal_verifier",
+    "title": "Verify delegation expiry transitivity is enforced end-to-end",
+    "dimension": "correctness",
+    "description": "The Delegation circuit checks delegateeExpiry <= delegatorExpiry via LessThan(64), but across a multi-hop chain (up to 3 hops), each hop only checks against its immediate delegator. There is no circuit-level or contract-level check that the final delegatee's expiry is <= the original AgentPolicy credential's expiryTimestamp. Write a formal invariant proving that the transitive property holds by induction over hops: for any chain of length k, hop_k.expiry <= hop_0.expiry. Implement as a Circomspect annotation plus a Hardhat property test that constructs a 3-hop chain and asserts the final expiry cannot exceed the root credential's.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "formal_verifier_underconstrained_merkle_depth_guard",
+    "persona": "formal_verifier",
+    "title": "Add under-constrained Merkle depth range check",
+    "dimension": "correctness",
+    "description": "All three circuits pass merkleProofLength to BinaryMerkleRoot(MAX_DEPTH) but do not range-check that merkleProofLength <= MAX_DEPTH or merkleProofLength >= 1. If merkleProofLength is 0 or exceeds MAX_DEPTH, BinaryMerkleRoot may silently produce a root from an empty or truncated path. Add explicit Num2Bits + LessThan constraints ensuring 1 <= merkleProofLength <= MAX_DEPTH in HumanUniqueness, AgentPolicy, Delegation, and ModelInstanceBinding. Write a witness-generation test that attempts merkleProofLength = 0 and merkleProofLength = MAX_DEPTH + 1 and asserts constraint failure.",
+    "priority": "critical",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "formal_verifier_cumulative_bit_completeness_all_circuits",
+    "persona": "formal_verifier",
+    "title": "Exhaustive cumulative-bit encoding completeness test",
+    "dimension": "correctness",
+    "description": "The cumulative bit invariant (bit 4 implies bits 2+3, bit 3 implies bit 2) is enforced in AgentPolicy and Delegation circuits, but there is no exhaustive test that ALL 256 possible 8-bit bitmask values are correctly accepted or rejected by the constraint system. Build a test harness that iterates all 256 values for permissionBitmask (with valid witnesses for all other signals), attempts witness generation, and asserts exactly the 192 valid encodings succeed and the 64 invalid ones fail. This catches any under-constrained or over-constrained bit logic that a handful of spot-checks would miss.",
+    "priority": "medium",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "formal_verifier_field_overflow_public_signal_binding",
+    "persona": "formal_verifier",
+    "title": "Prove no field-overflow on public signal round-trip to Solidity",
+    "dimension": "standards",
+    "description": "The circuits use Num2Bits(64) for permissionBitmask, expiryTimestamp, and currentTimestamp, but sessionNonce, scope, modelHash, and requiredScopeMask have NO range checks \u2014 they are full field elements (< BN254 r \u2248 2^254). The Solidity verifier passes these as uint256, so values near r could alias modularly. Add Num2Bits(253) constraints on all unranged public inputs to guarantee they are canonical field elements, and document in FORMAL-PROPERTIES.md which signals are range-checked and to what width. This closes the class of 'modular aliasing' attacks where a malicious prover submits p + x instead of x.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "security_auditor_nullifier_scope_independence",
+    "persona": "security_auditor",
+    "title": "AgentPolicy nullifier is not bound to requiredScopeMask \u2014 cross-scope replay",
+    "dimension": "correctness",
+    "description": "In AgentPolicy.circom, nullifierHash is computed as Poseidon(credentialCommitment, sessionNonce). The requiredScopeMask public input is NOT mixed into the nullifier. An agent who proves scope {READ, WRITE} for nonce N can replay the same nullifier against a verifier checking scope {READ} for the same nonce, because the nullifier collision won't flag it \u2014 different scope checks, same nullifier accepted. Fix: compute nullifierHash = Poseidon3(credentialCommitment, sessionNonce, requiredScopeMask). This binds the nullifier to the exact policy checked, preventing cross-scope replay within the same session.",
+    "priority": "high",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "security_auditor_human_root_no_history_buffer",
+    "persona": "security_auditor",
+    "title": "Human tree has no root history buffer \u2014 proofs go stale on any enrollment",
+    "dimension": "correctness",
+    "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but none for humanTree. When a new human enrolls, the Merkle root changes and any in-flight human proofs (generated seconds earlier against the old root) become invalid because verifyHandshake checks the live root. This is a liveness DoS: any attacker who can enroll a human identity (the enroll function is owner-gated, but multi-operator setups or future permissionless enrollment amplify this) can invalidate all in-flight human proofs. Fix: add a matching `humanRootHistory[30]` ring buffer updated on each `enrollHuman`, and check human proof roots against the buffer in `verifyHandshake`.",
+    "priority": "high",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "security_auditor_delegation_expiry_clock_skew",
+    "persona": "security_auditor",
+    "title": "Delegation and Agent timestamp liveness checks lack minimum-age floor",
+    "dimension": "correctness",
+    "description": "IdentityRegistry checks `AgentTimestampStale` and `DelegationTimestampStale` by requiring the proof's `currentTimestamp` to be within some delta of `block.timestamp`. However, the circuit itself only enforces `currentTimestamp < expiryTimestamp` (a LessThan check). There is no circuit constraint preventing `currentTimestamp` from being set far in the past \u2014 the prover can set it to 1 to trivially pass the expiry check for any non-expired credential, and rely on the on-chain delta check to catch it. If the on-chain delta is generous (e.g., 5 minutes) a prover can set `currentTimestamp = block.timestamp - 299` and pass both checks while using a credential that would otherwise fail an honest timestamp. Fix: add a circuit constraint `currentTimestamp >= expiryTimestamp - MAX_CREDENTIAL_LIFETIME` (e.g., 1 year in seconds) to bound the input from below, not just above.",
+    "priority": "medium",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "security_auditor_scope_commitment_brute_force",
+    "persona": "security_auditor",
+    "title": "scopeCommitment is brute-forceable \u2014 256 possible bitmask values leak permissions",
+    "dimension": "correctness",
+    "description": "scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) is a public output. The permissionBitmask is only 8 meaningful bits (256 values after cumulative encoding reduces it further to ~30 valid combinations). An observer can precompute Poseidon2(mask, credCmt) for all valid masks and match against the public scopeCommitment to recover the agent's exact permissions. This breaks the privacy model stated in the Delegation circuit comments ('scope bits are PRIVATE'). Fix: add a random blinding salt as a third Poseidon input \u2014 scopeCommitment = Poseidon3(permissionBitmask, credentialCommitment, blindingSalt) \u2014 where blindingSalt is a private input. Cost: ~300 extra constraints.",
+    "priority": "high",
+    "estimated_effort": "hours"
+  },
+  {
+    "id": "security_auditor_delegation_chain_no_delegator_tree_check",
+    "persona": "security_auditor",
+    "title": "Delegation circuit does not prove delegator is enrolled \u2014 phantom delegator attack",
+    "dimension": "correctness",
+    "description": "The Delegation circuit takes `delegatorCredCommitment` as a private input and verifies the delegator's EdDSA signature over the delegation token, but never proves that `delegatorCredCommitment` exists in the agent Merkle tree. The chain-link is via `previousScopeCommitment` (a public input matched on-chain), but a first-hop delegation from a fabricated agent whose credential was never enrolled can produce a valid `previousScopeCommitment` if the attacker controls the AgentPolicy proof (e.g., in a compromised relayer scenario where the relayer submits both proofs). Fix: add a Merkle inclusion proof for `delegatorCredCommitment` against the agent tree root, similar to the existing delegatee inclusion check (CIP-1). Cost: one additional BinaryMerkleRoot(20) (~6k constraints).",
+    "priority": "critical",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "framework_integrator_session_token_offchain_jwt",
+    "persona": "framework_integrator",
+    "title": "Off-chain JWT session token to eliminate per-call proving overhead",
+    "dimension": "adoption",
+    "description": "After a successful on-chain verifyHandshake(), emit a signed JWT containing nullifierHash, scopeCommitment, and sessionNonce with a configurable TTL (default 5 min). Framework middleware (LangChain CallbackHandler, CrewAI step_callback, AutoGen middleware) verifies this JWT locally for subsequent tool calls without re-proving. The JWT issuer key derives from the operator EdDSA key so verification stays self-sovereign. This is the single biggest adoption blocker: multi-second Groth16 proving per tool invocation makes agent chains unusable in practice.",
+    "priority": "critical",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "framework_integrator_langchain_scope_gated_tool_wrapper",
+    "persona": "framework_integrator",
+    "title": "LangChain BolyraAuthTool wrapper with declarative scope-to-tool mapping",
+    "dimension": "adoption",
+    "description": "Build a LangChain BaseTool wrapper and CallbackHandler that intercepts tool invocations, maps tool names to Bolyra permission bitmask bits via a YAML config (e.g., SQLDatabaseTool \u2192 READ_DATA bit 0, StripeChargeTool \u2192 FINANCIAL_SMALL bit 2), and requires a valid AgentPolicy proof before execution. First call runs proveHandshake() and caches the session JWT; subsequent calls in the same nonce lifetime verify locally. Publish as @bolyra/langchain (npm) and bolyra-langchain (PyPI) with a 5-line quickstart wrapping an existing AgentExecutor.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "framework_integrator_proof_envelope_content_type",
+    "persona": "framework_integrator",
+    "title": "Standardize application/bolyra+json proof envelope across all SDK outputs",
+    "dimension": "standards",
+    "description": "Ship the ProofEnvelope JSON schema (version, proofType, publicSignals, proof object with protocol/curve, metadata with issuedAt/nonce) as a first-class SDK export. Every method that produces a proof (proveHandshake, delegate, proveAgentPolicy) must return a ProofEnvelope. Add a validate() function and JSON Schema file so framework integrators can deserialize and validate envelopes without importing the full SDK. Without a canonical wire format, every integration re-invents parsing and each one gets the publicSignals ordering wrong.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "framework_integrator_crewai_delegation_task_callback",
+    "persona": "framework_integrator",
+    "title": "CrewAI task delegation with circuit-enforced scope narrowing",
+    "dimension": "adoption",
+    "description": "Build a CrewAI step_callback that automatically generates a Delegation proof when a crew member delegates a task to another agent. Map CrewAI's task.expected_output permissions to Bolyra bitmask bits, enforce that the delegatee's scope is a strict subset of the delegator's via the Delegation circuit, and attach the ProofEnvelope to the task context. This gives CrewAI users cryptographic proof that no agent in a multi-agent pipeline exceeded its granted permissions \u2014 a feature no competing framework offers.",
+    "priority": "medium",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "framework_integrator_python_sdk_pydantic_models",
+    "persona": "framework_integrator",
+    "title": "Python SDK with Pydantic proof models for LangChain structured output",
+    "dimension": "adoption",
+    "description": "Extend the bolyra Python SDK so all proof artifacts (ProofEnvelope, HandshakeResult, DelegationResult) are Pydantic BaseModel instances with proper validators. This enables LangChain's StructuredOutputParser and CrewAI's task result system to consume proof artifacts directly without manual JSON wrangling. Add async variants (prove_handshake_async, verify_handshake_async) using asyncio.create_subprocess_exec for the snarkjs bridge so agent chains don't block the event loop during proof generation.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "sdk_designer_session_token_jwt_bridge",
+    "persona": "sdk_designer",
+    "title": "JWT session token bridge for HTTP APIs",
+    "dimension": "adoption",
+    "description": "After a successful handshake, developers need to carry the verified result through standard HTTP middleware. Add a `client.toSessionToken(handshakeResult)` method that mints a short-lived JWT (HS256, 15min default) containing `nullifierHash`, `scopeCommitment`, and `agentMerkleRoot` as claims. Pair it with `BolyraMiddleware.verify(token)` for Express/Fastify. This bridges the ZKP world to REST/GraphQL without requiring downstream services to understand proofs.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "sdk_designer_proof_envelope_codec",
+    "persona": "sdk_designer",
+    "title": "Self-describing proof envelope with named public signals",
+    "dimension": "adoption",
+    "description": "Proofs are currently bare `{ proof, publicSignals: bigint[] }` with positional semantics \u2014 `publicSignals[0]` vs `publicSignals[4]` is a constant source of integration bugs. Ship a `BolyraEnvelope` type with `encode()`/`decode()` that wraps proofs in `{ version, circuit, provingSystem, signals: { humanMerkleRoot, nullifierHash, ... }, proof }`. Include a `fromRaw(circuit, rawSignals)` migration helper. Publish in both TS and Python SDKs so integrators never index by position again.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "sdk_designer_fluent_delegation_builder",
+    "persona": "sdk_designer",
+    "title": "Fluent delegation chain builder with scope safety",
+    "dimension": "adoption",
+    "description": "The delegation API requires manually constructing Merkle proofs, scope bitmasks, and threading `previousScopeCommitment` across hops. Build a `DelegationChain.from(agentCredential).narrowScope(Permission.READ_DATA | Permission.FINANCIAL_SMALL).delegateTo(delegatee).build()` fluent API that validates cumulative bit encoding at construction time, auto-fetches Merkle proofs from the registry, and produces the serialized chain the contract expects. TypeScript's type system should make scope-expanding chains a compile error.",
+    "priority": "high",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "sdk_designer_dry_run_mode",
+    "persona": "sdk_designer",
+    "title": "Dry-run mode for handshake debugging",
+    "dimension": "adoption",
+    "description": "Add `client.handshake(human, agent, { dryRun: true })` that runs witness generation, checks Merkle inclusion, validates expiry/scope, and verifies the proof locally \u2014 but never submits on-chain. Returns a structured `DryRunResult` with per-step pass/fail status, gas estimate, and the exact revert reason that would fire. This lets integrators debug handshake failures in CI without spending gas or needing a testnet connection.",
+    "priority": "medium",
+    "estimated_effort": "days"
+  },
+  {
+    "id": "sdk_designer_permission_enum_helpers",
+    "persona": "sdk_designer",
+    "title": "Permission bitmask ergonomics and pretty-printing",
+    "dimension": "adoption",
+    "description": "The 8-bit cumulative permission model is powerful but raw bitmask manipulation (`0b00000101`) is error-prone and unreadable in logs. Ship a `Permission` enum with `Permission.FINANCIAL_SMALL | Permission.READ_DATA`, a `Permission.parse(bitmask)` that returns human-readable labels, `Permission.validate(bitmask)` that checks cumulative encoding rules, and `Permission.isSubset(child, parent)` for pre-flight delegation checks. Include the same helpers in the Python SDK as a `PermissionSet` class.",
+    "priority": "medium",
+    "estimated_effort": "hours"
+  }
+]

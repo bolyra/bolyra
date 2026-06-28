@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_field_overflow_public_signal_binding",
+  "persona": "formal_verifier",
+  "title": "Public signal field overflow allows Solidity/circuit semantic mismatch",
+  "dimension": "correctness",
+  "description": "The IdentityRegistry contract accepts public signals as uint256 and passes them directly to verifier contracts. Circom operates over BN254's scalar field (r \u2248 2^254), but Solidity uint256 goes up to 2^256-1. Values in range [r, 2^256-1] are valid in Solidity but would wrap modulo r in the circuit, creating a semantic mismatch. Specifically, sessionNonce and currentTimestamp are user-supplied public inputs \u2014 an attacker could submit sessionNonce = n + r which the contract treats as a different nonce (bypassing usedNonces) but the circuit reduces to n. Add require(pubSignal < r) checks in IdentityRegistry for every public input before calling the verifier, matching the pattern already used inside snarkjs-generated verifiers for proof elements. Write a Certora rule proving no public signal can exceed the scalar field bound.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_field_overflow_public_signal_binding",
+  "adoption": 20,
+  "standards": 14,
+  "completeness": 20,
+  "correctness": 22,
+  "total": 76,
+  "verdict": "consider"
+}

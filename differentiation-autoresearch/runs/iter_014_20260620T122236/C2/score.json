@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a genuine architectural separation: local ZK proof generation eliminates the AS token-issuance step entirely, which OAuth 2.0 cannot do by definition. However, as written, scopeId is listed as a PUBLIC input (\u00a72 signal table) AND appears in the on-chain registry submission (\u00a72 step 3). The AS reads scopeId directly from the chain. Combined with the AS knowing all credentialCommitments from enrollment (it computed every leaf), the AS can build a complete lookup table Poseidon2(cc_i, scopeId_j) and fully de-anonymize every proof. The \u00a78 claim 'AS never learns which RS the proof targets' is false under the construction's own signal classification. Additionally, rfc7662_advocate correctly notes JWT introspection response + DPoP already removes the AS from the per-request hot path, and spiffe_engineer notes WIMSE is never compared. The concept is preferable but the construction as written does not deliver the claimed categorical separation."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat model (\u00a73), named assumptions (Poseidon PRF A1, Groth16 knowledge soundness A2, DL on Baby Jubjub A3), a formal IND-UNL-AS game definition, and a reduction sketch. However, the reduction is unsound: it claims 'cc is hidden as a private input' (\u00a74 step 1), but the AS enrolled every agent and holds every credentialCommitment \u2014 the PRF key is known to the distinguisher, making assumption A1 inapplicable (cryptographer Attack 1, rfc7662_advocate Attack 2). The game restriction (\u00a73 step 4) excludes same-scope queries because scopePseudonym is deterministic for fixed (cc, scopeId), which is a design flaw masked by game construction, not a trivial-distinguisher exclusion (cryptographer Attack 3). The reduction structure exists but its core assumption contradicts the stated adversary capabilities."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps cleanly to existing Bolyra primitives: Poseidon2/3/5 hashes, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot depth 20, cumulative bit encoding, PLONK universal setup. Constraint estimate of ~10,714 fits within pot16.ptau (2^16). Proving time targets stated (<3s PLONK, <2s Groth16 with rapidsnark). Delegation compatibility addressed with a one-constraint adapter. Component-level constraint breakdown provided. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 personas found attacks the construction cannot answer: (1) scopeId is a public circuit input AND appears in on-chain submissions \u2014 the AS reads it directly, collapsing the core unlinkability claim (auth0_pm Attack 1, rfc7662_advocate Attack 1, spiffe_engineer Attack 1, cryptographer Attack 2). (2) AS-as-enrollor knows every credentialCommitment, so combined with known scopeIds, it builds a complete de-anonymization table in O(N\u00d7K) Poseidon evaluations (auth0_pm Attack 2, cryptographer Attack 1, rfc7662_advocate Attack 2). (3) The IND-UNL-AS game restriction conceals rather than fixes the deterministic scopePseudonym vulnerability (cryptographer Attack 3). (4) requiredScopeMask as public input partitions the anonymity set by permission tier (rfc7662_advocate Attack 4, spiffe_engineer Attack 4). (5) cu_ciso identified unaddressed regulatory incompatibilities (audit trail destruction, incident response black hole) that undermine the named deployment scenario. These are not mitigable within the current construction \u2014 they require fundamental redesign (blind enrollment, private scopeId, scope-mask hiding)."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "DFCU scenario is concrete with named stakeholder ($9B CU, 400K members), specific regulatory citations (NCUA \u00a7748, CFPB \u00a71033), and a load-bearing privacy requirement. Healthcare scenario names Kaiser Permanente with HIPAA \u00a7164.502(b). However, cu_ciso demonstrated that the construction creates new regulatory problems it does not solve: NCUA Part 748 Appendix A requires access audit trails the construction explicitly destroys (Attack 1), FFIEC CAT requires anomaly detection tied to specific accounts which unlinkability prevents (Attack 3), and the on-chain registry has no SLA or right-to-audit under NCUA vendor management guidance (Attack 4). The scenario is named and regulatory requirements are cited, but the construction is shown to be incompatible with other regulatory requirements at the same stakeholder \u2014 making it hypothetical rather than deployable as described."
+    }
+  },
+  "gaps": [
+    "scopeId must become a private circuit input \u2014 define a verifier-local consistency check so the RS can confirm the proof targets its scope without the AS seeing scopeId on-chain",
+    "credentialCommitment must include a user-supplied blinding secret (analogous to Semaphore's identityTrapdoor) that the AS never sees during enrollment \u2014 otherwise the AS holds all PRF keys and the reduction is vacuous",
+    "scopePseudonym must be rerandomized per proof (not deterministic for fixed cc\u00d7scopeId) so same-scope proofs from the same agent are unlinkable \u2014 the current game restriction masks this design flaw",
+    "requiredScopeMask should be a private input with in-circuit satisfaction proof, or the anonymity-set claim must be bounded per permission-tier partition rather than total tree size",
+    "Add a regulatory compatibility section: define a dual-mode audit mechanism (e.g., member-consented CU-private mapping of cc\u2192memberID in HSM-backed storage, accessible under dual-control for breach investigation) that satisfies NCUA Part 748 audit trail requirements without breaking unlinkability for the AS in normal operation",
+    "Compare against WIMSE draft-ietf-wimse-arch sender-constrained token exchange, not just OAuth 2.0 \u2014 the baseline in \u00a78 ignores the most relevant IETF work",
+    "Specify Phase 2 ceremony requirements for ScopeBlindedAgent Groth16 keys (verifiable multi-party ceremony with AS exclusion) or commit exclusively to PLONK with a publicly verifiable universal CRS",
+    "Address the canary root attack: AS-controlled tree insertions can narrow the anonymity set to 1 by timing root transitions \u2014 bound the adversary's tree-write cadence in the threat model or add a root-batching protocol"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

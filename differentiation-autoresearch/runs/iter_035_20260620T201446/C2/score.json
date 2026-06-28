@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "scopePseudonym = Poseidon2(scopeId, scopeBlindingSecret) provides deterministic-within-scope + unlinkable-across-scopes + verifiable-without-AS pseudonyms. All five personas confirm no OAuth/SPIFFE equivalent exists: PPID is AS-computed (AS holds the mapping), BBS+ assumes honest issuer, SPIFFE SVIDs are globally unique or lack continuity. The spiffe_engineer explicitly concedes 'no SPIFFE equivalent without exactly the ZK primitive Bolyra is proposing.' \u00a78 overstates per-request AS involvement (RFC 9701 eliminates it) but issuance-time correlation remains structurally impossible to remove in OAuth, which is the genuine gap."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "IND-UNL-AS game (\u00a73) is well-defined with explicit adversary capabilities, challenge phase, and delegation extension. Four named assumptions (POS-PRF, DL-BJJ, POS-CR, KS-G16/KS-PLONK) are stated. However, the reduction sketch is critically flawed: cryptographer, rfc7662_advocate, and spiffe_engineer all independently identify that the AS (the defined adversary) holds the PRF key for scopeBoundDelegationAnchor = Poseidon3(scopeId, permBitmask, credCommitment) because the AS computed credCommitment and issued permBitmask at enrollment. The \u00a74 reduction treats (permBitmask, cc) as secret from the distinguisher, which is false. The joint leakage argument (step 3) also lacks a formal joint-PRF theorem. Static corruption model is insufficient for multi-RS deployment. Threat model and assumptions are present but the core reduction is broken."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every construction element maps to existing Bolyra primitives: Poseidon2/3/5 hashes, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits range checks, LessThan comparator. Constraint costs are explicitly enumerated: ScopeBlindAuth ~26,440 constraints, ScopeBlindDelegation ~25,800 constraints, both fitting within pot16.ptau (2^16 = 65,536). Proving time targets stated: PLONK <4s snarkjs / <0.8s rapidsnark, Groth16 <3s / <0.6s. On-chain verification gas costs stated (220k Groth16, 300k PLONK). Net change from prior construction is +400 constraints (~1.5%). All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer. Critical: (1) AS holds PRF key for scopeBoundDelegationAnchor \u2014 AS can precompute Poseidon3(scopeId_X, permBitmask, cc) for all known RS domains and match against on-chain anchors, reconstructing the merchant graph with zero cryptographic effort. Found independently by cryptographer, rfc7662_advocate, and spiffe_engineer. (2) scopeId is a public circuit input \u2014 any on-chain observer (including AS) sees which RS scopes are being accessed, directly contradicting \u00a77's 'zero visibility' claim. The \u00a77 salting mitigation is informal parenthetical, not in the circuit or game. (3) Batch relayer is an unmodeled trusted third party \u2014 sees all public inputs including scopeId, creating a new correlating entity that replaces the AS. Found by all five personas. These are not in-threat-model failures; they are unaddressed attacks."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Desert Financial CU scenario names specific stakeholders (Desert Financial, CU*Answers, member 'Alice'), specific regulation (NCUA Regulation V affiliate marketing opt-out, Arizona financial privacy act), and explains why cross-scope unlinkability is load-bearing (AS reconstructing merchant graph violates member privacy obligations). Healthcare scenario names Kaiser Permanente and Cedars-Sinai with HIPAA referral-network privacy. cu_ciso raises valid audit-trail concerns (NCUA Part 748) but these are addressable deployment constraints, not negation of the scenario's load-bearing nature \u2014 the property itself is demanded by the regulatory environment."
+    }
+  },
+  "gaps": [
+    "scopeBoundDelegationAnchor PRF key is held by AS (issuer knows permBitmask and credCommitment) \u2014 must include scopeBlindingSecret in anchor derivation e.g. Poseidon4(scopeId, scopeBlindingSecret, permBitmask, credCommitment)",
+    "scopeId is a public input visible on-chain \u2014 must either make it private with a commitment scheme or formalize scopeId salting with an RS-agent shared secret in the circuit definition and IND-UNL-AS game",
+    "batch relayer is an unmodeled trusted third party that sees all public inputs \u2014 must formally model relayer in threat model (semi-honest or adversarial) and either prove construction survives or replace with oblivious submission",
+    "POS-PRF reduction sketch step 3 (joint leakage) claims independence of scopePseudonym and scopeBoundDelegationAnchor derivations but both share credentialCommitment \u2014 needs formal joint-PRF security statement",
+    "static corruption model in IND-UNL-AS game is insufficient for long-lived multi-RS deployment \u2014 must address adaptive corruption or explicitly scope the security claim",
+    "key lifecycle for scopeBlindingSecret (rotation, recovery, custody) is unspecified \u2014 loss breaks account continuity at all scopes",
+    "regulatory audit trail gap \u2014 NCUA Part 748 requires access logs that the log-nothing architecture cannot produce without a privacy-preserving disclosure protocol"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

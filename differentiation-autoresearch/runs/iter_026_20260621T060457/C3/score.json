@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real structural gap: BBS+ cannot prove relational predicates (scope_i+1 \u2286 scope_i) across a chain of credentials from different issuers, and the single-artifact cross-issuer chain proof is genuine. However, the rfc7662_advocate's Attack 1 (signed JWT introspection) correctly shows that for the NCUA regulatory audit scenario \u2014 the primary deployment \u2014 an AS-signed JWT asserting narrowing_valid=true is operationally equivalent and deployable today without ZK. The 'no trusted third party' claim is overstated (spiffe_engineer Attack 4 and rfc7662_advocate Attack 2: the on-chain registry IS a trusted third party). The 'irreducible gap' against BBS+ is too strong given BBS+DP trajectory (rfc7662_advocate Attack 4), though the cross-issuer residual advantage survives. The baseline can approximate the NCUA scenario; only the journalist/source scenario (adversarial-AS) is structurally out of reach for the baseline \u2014 but that scenario has its own problems (chainLengthOut leaks, infrastructure-layer identity exposure). Score 1: preferable but baseline can approximate with extra configuration for the primary deployment."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides an explicit threat model (DAF and DAP games), names cryptographic assumptions (PLONK knowledge soundness in AGM+ROM, Poseidon collision resistance over BN254, Baby Jubjub DLP), and gives reduction sketches. However, the cryptographer's Attack 1 (Execution Binding Gap) is devastating and unaddressed: the circuit proves existence of a valid narrowing chain, not identity of the chain that actually executed. The reduction for 'chain injection \u2192 Poseidon collision' only covers endpoint forgery, not alternative interior witnesses \u2014 no collision is needed to present a fabricated intermediate chain consistent with the same endpoints. This is a fundamental soundness gap in the DAF game's win condition 2 reduction. Additionally, the DAP game is one-shot (cu_ciso Attack 4: no cross-session unlinkability), the history buffer creates unbounded revocation windows (spiffe_engineer Attack 2, auth0_pm Attack 3), and the audit nullifier doesn't prevent alternative-witness proofs (cryptographer Attack 4). Threat model is stated but the reduction has a real hole."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon2, BinaryMerkleRoot from @zk-kit, Num2Bits/LessThan from circomlib, PLONK proving system (agent/delegation class), BN254 field, Baby Jubjub curve. The circuit cost estimate is detailed (~60,734 constraints) and fits within the existing pot16.ptau SRS (2^16 = 65,536). Proving time target (<5s with rapidsnark) is within Phase 1 budget. The 8-bit cumulative permission scheme matches the existing AgentPolicy/Delegation constraints. All gadgets are inventoried with per-instance counts. This is a thorough and feasible mapping."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks that the construction cannot answer. The cryptographer's Attack 1 (execution binding gap \u2014 circuit proves existence, not actuality of the chain that ran) is fundamental and outside the stated threat model. The construction's chain injection reduction explicitly fails for alternative interior witnesses. The auth0_pm's Attack 2 (single agentTreeRoot makes cross-org impossible without Bolyra as centralized trust anchor) contradicts a core \u00a78 claim. The spiffe_engineer's Attack 2 (unbounded history buffer revocation window) means revoked agents pass enrollment checks indefinitely. The cu_ciso's Attack 1 (scope narrowing \u2260 audit trail) invalidates the NCUA deployment scenario positioning. Multiple attacks lie outside the stated threat model with no mitigation path in the current construction."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Navy Federal Credit Union is named as a concrete deployment with NCUA examiner as stakeholder and specific regulatory requirements (GLBA, NCUA Part 748). However, cu_ciso Attack 1 correctly identifies that scope narrowing is not an audit trail \u2014 NCUA Part 748 Appendix B and FFIEC CAT require audit of actions, not just authorization bounds. The construction proves the agent had permission; it does not prove what the agent did with that permission. The NCUA examiner scenario as positioned is not fully load-bearing because the construction addresses only one component (authorization scope) of a multi-component regulatory requirement. The journalist/source scenario is hypothetical and has unresolved privacy leaks (chainLengthOut, infrastructure-layer exposure). Scenarios are named but only partially load-bearing."
+    }
+  },
+  "gaps": [
+    "Execution binding gap: circuit proves existence of a valid narrowing chain, not that the specific chain presented is the one that actually executed. Must anchor intermediate scope commitments on-chain at delegation time (e.g., Merkle accumulator over all hop commitments) or weaken the claim to 'a valid chain could exist'",
+    "Single agentTreeRoot assumption breaks cross-org claim. Must either support per-hop roots (agentTreeRoots[MAX_CHAIN_LEN] with a forest-of-roots design) or explicitly scope cross-org to shared-registry deployments and drop 'no trusted third party' differentiation",
+    "History buffer revocation window is unbounded. Must add in-circuit constraint binding agentTreeRoot recency to auditTimestamp (e.g., root must have been current within K blocks of auditTimestamp)",
+    "chainLengthOut as public output leaks pipeline topology. Must either remove it from public signals, always output MAX_CHAIN_LEN with in-circuit padding enforcement, or explicitly exclude journalist/source scenario from privacy guarantees",
+    "NCUA scenario overstates regulatory fit: scope narrowing proof \u2260 action audit trail. Must either layer a complementary access-log commitment (Merkle root over signed access events per hop) or scope the regulatory claim to 'authorization bounds verification' rather than 'NCUA examination compliance'",
+    "\u00a78 'irreducible gap' against BBS+ is too strong. Narrow to cross-issuer chain predicates and acknowledge single-issuer BBS+DP trajectory",
+    "DAP game is one-shot \u2014 no cross-session unlinkability property. Repeated audits correlate rootScopeCommitment across sessions. Must define whether unlinkability is in scope and if so add commitment rotation",
+    "Witness storage lifecycle unspecified. The prover's compliance system holding full private chain data is a high-value target. Must specify storage model, retention policy (vs NCUA Part 749 6-year retention), and encryption requirements"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

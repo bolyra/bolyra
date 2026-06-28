@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "persona": "standards_architect",
+  "title": "Standardize proof envelope wire format with IANA content type",
+  "dimension": "standards",
+  "description": "The SDK currently passes proof objects as ad-hoc JSON blobs with no schema versioning or content negotiation. Define a versioned proof envelope (`application/bolyra-proof+cbor` / `+json`) with fields: `version`, `circuitId`, `provingSystem` (groth16|plonk), `publicSignals[]`, `proof` (\u03c0_A, \u03c0_B, \u03c0_C or equivalent), and `metadata` (chain, registryAddress). Add an ABNF grammar to the IETF draft \u00a74. This is prerequisite for any multi-implementation interop \u2014 without it, each SDK reinvents serialization.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "standards_architect_proof_envelope_content_type",
+  "adoption": 21,
+  "standards": 20,
+  "completeness": 16,
+  "correctness": 14,
+  "total": 71,
+  "verdict": "consider"
+}

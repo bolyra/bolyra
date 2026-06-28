@@ -1,0 +1,56 @@
+{
+  "id": "formal_verifier_underconstrained_merkle_depth",
+  "title": "Prove BinaryMerkleRoot depth parameter cannot be manipulated to accept invalid proofs",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add hard equality constraint: merkleProofLength === TREE_DEPTH (20) so witness generation rejects any proof path shorter than the deployed depth."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add merkleProofLength === TREE_DEPTH constraint mirroring HumanUniqueness fix."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Add merkleProofLength === TREE_DEPTH constraint mirroring HumanUniqueness fix."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add invariant P-DEPTH-01: For all accepted witnesses, merkleProofLength equals the compile-time TREE_DEPTH constant. Document the subtree-root attack vector this closes and why a constant-equality constraint is sufficient."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/merkle_depth_invariant.test.js",
+      "description": "Mocha tests (fast/slow split) covering: (1) valid proof at full depth succeeds, (2) witness generation with merkleProofLength < TREE_DEPTH throws a constraint error, (3) witness generation with merkleProofLength > TREE_DEPTH throws, (4) subtree-root replay attack vector is rejected."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Cross-reference update: link P-DEPTH-01 to the audit finding, note which circuit lines enforce the constraint, and describe the class of attacks prevented."
+    }
+  ],
+  "steps": [
+    "Read circuits/src/HumanUniqueness.circom, AgentPolicy.circom, and Delegation.circom to locate the merkleProofLength signal declarations and BinaryMerkleRoot component instantiations.",
+    "Confirm the existing TREE_DEPTH compile-time parameter name used in each circuit (likely a template parameter or top-level constant).",
+    "In each circuit, immediately after the merkleProofLength signal is declared, add: `merkleProofLength === TREE_DEPTH;` as a circom assert (equivalently, an R1CS equality constraint via a zero-signal: `signal depthCheck; depthCheck <== merkleProofLength - TREE_DEPTH; depthCheck === 0;`).",
+    "Run `npm run compile:circuits` to confirm the added constraints compile without errors and that constraint counts increase by exactly 1 per circuit.",
+    "Write circuits/test/merkle_depth_invariant.test.js with four test cases: full-depth valid witness, short-path (depth-1) witness expect failure, over-depth witness expect failure, and a simulated subtree-root replay showing witness generation fails.",
+    "Run `npm run test:circuits:fast` (witness-only mode) to confirm all four cases pass.",
+    "Run `npm run test:circuits:slow` (full Groth16 proof) on the valid case to confirm proof generation and verification still succeed end-to-end.",
+    "Update circuits/FORMAL-PROPERTIES.md: add invariant P-DEPTH-01 with formal statement, attack vector description, enforcement location (circuit line numbers), and proof sketch (constant equality in R1CS cannot be satisfied by any assignment where merkleProofLength differs from TREE_DEPTH).",
+    "Regenerate Solidity verifier contracts from updated .zkey artifacts if constraint count changes alter the verification key (`cd contracts && npm run compile:contracts`).",
+    "Run full test suite `npm test` and confirm zero regressions.",
+    "Commit with DCO sign-off: `git commit -s -m 'fix(circuits): constrain merkleProofLength === TREE_DEPTH in all three circuits (P-DEPTH-01)'`."
+  ],
+  "estimated_constraints": 3,
+  "dependencies": [
+    "circom 2.x BinaryMerkleRoot template (must expose depth as a template parameter, not a signal)",
+    "pot16.ptau (existing \u2014 no new ceremony needed; constraint addition does not exceed 2^16)",
+    "snarkjs >= 0.7.6 (existing dev dependency for witness generation in fast tests)",
+    "Hardhat + existing verifier integration tests to catch any vkey mismatch after recompile"
+  ]
+}

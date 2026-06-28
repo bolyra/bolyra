@@ -1,0 +1,81 @@
+{
+  "id": "sdk_designer_handshake_error_diagnostics",
+  "title": "Integrate revert decoder and structured error codes into @bolyra/sdk",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/errors.ts",
+      "description": "BolyraError base class, ErrorCode enum (STALE_ROOT, SCOPE_MISMATCH, CREDENTIAL_EXPIRED, NULLIFIER_SEEN, PROOF_INVALID, WITNESS_GEN_FAILED, DELEGATION_OVERFLOW, NONCE_REPLAY, UNKNOWN_REVERT), and recovery hint interpolation logic"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/revert-decoder.ts",
+      "description": "ethers-based revert decoder: parses custom error selectors from IdentityRegistry and DelegationVerifier ABI, maps 4-byte selectors to ErrorCode instances, decodes error arguments for hint interpolation"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/handshake.ts",
+      "description": "Wrap proveHandshake and verifyHandshake with try/catch that funnels raw ethers ContractError and snarkjs failures through the revert decoder and BolyraError factory"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export BolyraError, ErrorCode, and decodeRevert from the public surface"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Audit custom error declarations (StaleRoot, ScopeMismatch, CredentialExpired, NullifierSeen) to confirm ABI encoding matches decoder expectations \u2014 no changes expected, read-only audit"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/errors.test.ts",
+      "description": "Unit tests for ErrorCode enum coverage, hint interpolation with known argument sets, and fallback to UNKNOWN_REVERT for unrecognized selectors"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/revert-decoder.test.ts",
+      "description": "Integration tests: simulate each IdentityRegistry custom error via ethers provider mock, assert decoded BolyraError has correct .code and non-empty .hint"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/handshake-errors.test.ts",
+      "description": "End-to-end handshake tests that inject invalid proofs and stale roots, assert BolyraError is thrown with expected .code instead of raw revert data"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/docs/error-handling.md",
+      "description": "Developer guide: ErrorCode reference table, programmatic branching patterns, recovery hint examples for each error class, migration note for callers currently catching generic Error"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/error-codes.md",
+      "description": "Normative error code registry for the Bolyra protocol: stable integer identifiers, semantic definitions, required fields (.code, .hint, .cause), and versioning policy"
+    }
+  ],
+  "steps": [
+    "Read contracts/src/IdentityRegistry.sol and DelegationVerifier.sol to extract all custom error signatures and their ABI-encoded argument types",
+    "Define ErrorCode enum in sdk/src/errors.ts covering all on-chain custom errors plus off-chain failure modes (witness gen, proof invalid, nonce replay, delegation overflow)",
+    "Implement BolyraError class extending Error with fields: code: ErrorCode, hint: string, cause?: unknown; add static factory fromCode(code, args) with per-code hint templates",
+    "Build revert-decoder.ts: compute 4-byte selectors for each custom error using ethers.id, create selector\u2192ErrorCode map, parse ContractError.data to extract and decode arguments, return BolyraError",
+    "Add snarkjs error normalization in revert-decoder.ts: detect known snarkjs exception messages (e.g. 'Constraint doesn't match') and map to ErrorCode.PROOF_INVALID or WITNESS_GEN_FAILED",
+    "Wrap verifyHandshake in sdk/src/handshake.ts: catch ethers ContractError, pipe through decodeRevert, rethrow as BolyraError; catch snarkjs errors and normalize similarly",
+    "Wrap proveHandshake in sdk/src/handshake.ts: catch witness generation and proving errors, map to BolyraError with WITNESS_GEN_FAILED or PROOF_INVALID codes",
+    "Update sdk/src/index.ts to export BolyraError, ErrorCode, and decodeRevert",
+    "Write unit tests in sdk/test/errors.test.ts covering all ErrorCode values and hint interpolation edge cases",
+    "Write revert decoder tests in sdk/test/revert-decoder.test.ts using ethers provider mocks that return crafted revert data for each custom error",
+    "Write handshake integration tests in sdk/test/handshake-errors.test.ts with Hardhat local node, trigger each contract revert path, assert BolyraError.code matches",
+    "Run npm run typecheck and npm test in sdk/ \u2014 fix any type errors, ensure all new tests pass",
+    "Write sdk/docs/error-handling.md with ErrorCode reference table, branching examples, and migration guide",
+    "Write spec/error-codes.md as normative registry with stable identifiers and versioning policy",
+    "Update sdk/CHANGELOG.md and bump minor version to reflect public API addition"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "ethers v6 (already in sdk/package.json for on-chain calls)",
+    "snarkjs (already in sdk/package.json for proving)",
+    "contracts/artifacts/IdentityRegistry.json ABI (generated by Hardhat compile)",
+    "contracts/artifacts/DelegationVerifier.json ABI (generated by Hardhat compile)",
+    "Hardhat local node for integration tests (dev dependency, already present)"
+  ]
+}

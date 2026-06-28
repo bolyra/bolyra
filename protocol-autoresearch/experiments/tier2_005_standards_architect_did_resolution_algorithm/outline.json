@@ -1,0 +1,64 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Complete DID method resolution algorithm with revocation and delegation discovery",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Updated DID method spec with W3C DID Core \u00a77.1-compliant resolution algorithm, pseudocode, error codes, and 5 resolution test vectors"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-resolution-algorithm.md",
+      "description": "Standalone resolution algorithm document: input/output types, registry query steps, revocation check, delegation discovery, DID Document construction"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/did-resolution-vectors.json",
+      "description": "5 canonical resolution test vectors: enrolled human, enrolled agent, revoked identity, delegated credential, unknown DID"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Extend IdentityRegistry with revocationStatus(commitment) view and delegateOf(commitment) view to support resolver queries"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "TypeScript DID resolver implementing the resolution algorithm against IdentityRegistry, returns W3C DIDResolutionResult"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Unit + integration tests for all 5 resolution test vector cases using Hardhat local node"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-resolver-quickstart.md",
+      "description": "Operator guide: how to run a did:bolyra resolver node, configure RPC endpoint, interpret resolution errors"
+    }
+  ],
+  "steps": [
+    "Audit spec/did-method-bolyra.md to identify gaps against W3C DID Core \u00a77.1 (resolution input, metadata, error codes, DID Document structure)",
+    "Define the canonical resolution input: did:bolyra:<commitment>, optional resolutionOptions (versionId, accept media type)",
+    "Specify IdentityRegistry query sequence: (1) parse commitment from DID, (2) call isEnrolled(commitment), (3) call revocationStatus(commitment), (4) call delegateOf(commitment) to discover delegation chain",
+    "Add revocationStatus(bytes32 commitment) view and delegateOf(bytes32 commitment) view to IdentityRegistry.sol; emit RevocationStatusChanged and DelegateRegistered events",
+    "Define DID Document JSON-LD structure: id, verificationMethod (type BolyraZKProofKey2026, controller, onChainMerkleRoot), authentication array, service endpoint for proof submission API",
+    "Write pseudocode resolution algorithm covering: valid DID \u2192 enrolled \u2192 revoked \u2192 delegated \u2192 unknown, with W3C error codes (invalidDid, notFound, representationNotSupported, internalError)",
+    "Define delegateOf DID Document extension: add delegateOf relationship array linking to delegator DID with commitment reference and scope hash",
+    "Author 5 resolution test vectors as JSON with input DID, expected DIDDocument or error, and resolutionMetadata fields",
+    "Implement TypeScript resolver in sdk/src/resolver.ts using ethers.js to call IdentityRegistry view functions and construct DIDResolutionResult",
+    "Write Hardhat integration tests for all 5 vectors: deploy IdentityRegistry, seed test state (enroll, revoke, delegate), run resolver, assert output matches test vector",
+    "Update spec/did-method-bolyra.md with the algorithm section, error table, and cross-references to test vectors and resolver SDK",
+    "Write docs/did-resolver-quickstart.md covering npm install, RPC config, resolver instantiation, and error handling patterns"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol (existing enrollment registry)",
+    "spec/did-method-bolyra.md (existing DID scheme definition)",
+    "W3C DID Core \u00a77.1 resolution specification",
+    "ethers.js v6 (used in existing SDK)",
+    "Hardhat local node for integration tests",
+    "snarkjs / circuits build artifacts (for verificationMethod merkleRoot reference)"
+  ]
+}

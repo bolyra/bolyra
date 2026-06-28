@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Specify human tree root history buffer matching agent tree",
+      "dimension": "correctness",
+      "description": "IdentityRegistry.sol maintains a 30-root history buffer for agentTree but has no equivalent for humanTree \u2014 human proofs go stale the instant a new enrollment lands. The IETF draft should normatively require (RFC 2119 MUST) a root history buffer for all identity trees, with a RECOMMENDED depth of 30. Implementation: add the same rootHistory/rootIndex pattern from agentTree to humanTree in IdentityRegistry.sol, update verifyHandshake to check against the buffer, and add a test vector for 'proof generated against root N-15 still verifies'.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 17,
+      "standards": 20,
+      "completeness": 21,
+      "correctness": 22,
+      "total": 80,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_000_standards_architect_human_root_history_parity",
+    "score": {
+      "experiment_id": "tier2_000_standards_architect_human_root_history_parity",
+      "total": 28,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_scope_commitment_binding",
+      "persona": "formal_verifier",
+      "title": "Prove scope commitment chain is unforgeable across delegation hops",
+      "dimension": "correctness",
+      "description": "The delegation chain links hops via scopeCommitment = Poseidon(scope, credCommitment). Formally verify the binding property: given a valid delegation proof where previousScopeCommitment matches the prior hop's output, it is infeasible to produce a witness where the delegatee's actual scope exceeds the delegator's scope. This requires proving that Poseidon is used as a commitment scheme (binding under collision resistance) and that the subset check in the circuit is correctly wired to the same signals that feed the commitment. Produce a Halo2-style MockProver test or a Circom witness-gen adversarial harness that attempts to break the chain link.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_scope_commitment_binding",
+      "adoption": 16,
+      "standards": 17,
+      "completeness": 21,
+      "correctness": 21,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_001_formal_verifier_scope_commitment_binding",
+    "score": {
+      "experiment_id": "tier2_001_formal_verifier_scope_commitment_binding",
+      "total": 24,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 3,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 9,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Publish machine-readable conformance test vectors (JSON)",
+      "dimension": "standards",
+      "description": "No independent implementation can verify compatibility without canonical test vectors. Produce a JSON file with 30+ vectors covering: valid handshake (human+agent), expired credential rejection, stale Merkle root, scope subset violation, cumulative bit encoding violation, delegation chain (1-hop and 3-hop), nonce replay, and revoked identity. Each vector includes input witness, expected public signals, and expected pass/fail. This is the minimum bar for any IETF-track specification and directly supports the conformance runner stub in spec/.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 16,
+      "standards": 23,
+      "completeness": 20,
+      "correctness": 19,
+      "total": 78,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_002_standards_architect_conformance_test_vectors",
+    "score": {
+      "experiment_id": "tier2_002_standards_architect_conformance_test_vectors",
+      "total": 24,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 6,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "cross_chain_engineer_storage_proof_root_sync",
+      "persona": "cross_chain_engineer",
+      "title": "Cross-chain root sync via EIP-1186 storage proofs",
+      "dimension": "completeness",
+      "description": "Deploy IdentityRegistry on Arbitrum and Polygon alongside Base Sepolia, then implement a CrossChainRootRelay contract that accepts EIP-1186 storage proofs to sync humanTree and agentTree roots across chains without a trusted relayer. The relay verifies the source chain's state root (available via L1 block hash precompiles on L2s) and extracts the registry's root slot value. This lets a proof generated against Base's tree verify on Arbitrum or Polygon with ~30-root-buffer latency.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "cross_chain_engineer_storage_proof_root_sync",
+      "adoption": 21,
+      "standards": 20,
+      "completeness": 23,
+      "correctness": 14,
+      "total": 78,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_003_cross_chain_engineer_storage_proof_root_sync",
+    "score": {
+      "experiment_id": "tier2_003_cross_chain_engineer_storage_proof_root_sync",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_underconstrained_merkle_depth",
+      "persona": "formal_verifier",
+      "title": "Prove merkleProofLength is bounded and non-zero across all circuits",
+      "dimension": "correctness",
+      "description": "BinaryMerkleRoot accepts merkleProofLength as a private input with no range check enforcing 1 <= depth <= MAX_DEPTH. A prover can supply depth=0 (making the leaf itself the root, bypassing tree membership) or depth > MAX_DEPTH (reading uninitialized sibling slots). Add Num2Bits + LessThan constraints bounding depth in HumanUniqueness, AgentPolicy, Delegation, and ModelInstanceBinding. Write a formal property file (Certora-style invariant spec) asserting that for any satisfying witness, 1 <= merkleProofLength <= MAX_DEPTH.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_underconstrained_merkle_depth",
+      "adoption": 16,
+      "standards": 17,
+      "completeness": 20,
+      "correctness": 21,
+      "total": 74,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_004_formal_verifier_underconstrained_merkle_depth",
+    "score": {
+      "experiment_id": "tier2_004_formal_verifier_underconstrained_merkle_depth",
+      "total": 18,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 3,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 4,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_cumulative_bit_completeness",
+      "persona": "formal_verifier",
+      "title": "Prove cumulative bit encoding is exhaustively enforced",
+      "dimension": "correctness",
+      "description": "The Delegation circuit enforces bit4 => bits 2+3 and bit3 => bit2 on the delegatee scope. Verify this is also enforced in AgentPolicy (it should be, since an agent minting a credential with bit4=1, bit3=0 would violate the invariant). Write an exhaustive property: for every satisfying assignment, the 64-bit decomposition of permissionBitmask satisfies all implication rules. Additionally verify that the subset check (delegateeScope & ~delegatorScope == 0) composes correctly with cumulative encoding \u2014 i.e., if delegatorScope is valid and delegateeScope is a subset, then delegateeScope is also valid.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "formal_verifier_cumulative_bit_completeness",
+      "adoption": 15,
+      "standards": 17,
+      "completeness": 20,
+      "correctness": 20,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_005_formal_verifier_cumulative_bit_completeness",
+    "score": {
+      "experiment_id": "tier2_005_formal_verifier_cumulative_bit_completeness",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 1,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete did:bolyra resolution algorithm per W3C DID Core \u00a77",
+      "dimension": "standards",
+      "description": "spec/did-method-bolyra.md exists but the resolution algorithm is underspecified \u2014 it doesn't define how a resolver maps did:bolyra:<commitment> to a DID Document, which verification methods to include (Ed25519VerificationKey2020 for operators, JsonWebKey2020 for providers), or how revocation status maps to the deactivated metadata property. Write the full CRUD operation definitions per W3C DID Core \u00a77, including Read (resolve against on-chain humanTree/agentTree roots), Deactivate (revocation event), and the DID Document JSON-LD context. No Create/Update since commitments are immutable.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 18,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 15,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_006_standards_architect_did_resolution_algorithm",
+    "score": {
+      "experiment_id": "tier2_006_standards_architect_did_resolution_algorithm",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Define application/bolyra-proof+cbor content type and envelope format",
+      "dimension": "standards",
+      "description": "The protocol lacks a standardized wire format for proof exchange. Define an IANA-registrable media type (application/bolyra-proof+cbor) with a CDDL schema specifying the envelope structure: proof bytes, public signals array, circuit identifier, proving system tag (groth16/plonk), and protocol version. This enables interop between independent SDK implementations and lets HTTP middleware route/validate proofs without parsing internals. Deliverable: CDDL schema file, ABNF for the HTTP header negotiation, and a reference encoder/decoder in the TS SDK.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 17,
+      "standards": 21,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 72,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_007_standards_architect_proof_envelope_content_type",
+    "score": {
+      "experiment_id": "tier2_007_standards_architect_proof_envelope_content_type",
+      "total": 54,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 13,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 22,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

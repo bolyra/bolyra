@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_scope_blinding_salt",
+  "persona": "standards_architect",
+  "title": "Add blinding salt to scope commitment to prevent bitmask enumeration",
+  "dimension": "correctness",
+  "description": "scopeCommitment = Poseidon(permissionBitmask, credentialCommitment) in AgentPolicy.circom uses only two inputs. Since permissionBitmask is 8 meaningful bits (256 values), an observer can brute-force all possible commitments against a known credentialCommitment to recover the exact permission set. Add a random blinding salt as a third Poseidon input: Poseidon3(bitmask, credCommitment, blindingSalt). The salt becomes a private input; the commitment remains public. Update Delegation.circom to thread the salt through the chain. Document the enumeration attack and mitigation in the IETF draft \u00a79 Security Considerations.",
+  "priority": "medium",
+  "estimated_effort": "days",
+  "candidate_id": "standards_architect_scope_blinding_salt",
+  "adoption": 15,
+  "standards": 17,
+  "completeness": 18,
+  "correctness": 18,
+  "total": 68,
+  "verdict": "consider"
+}

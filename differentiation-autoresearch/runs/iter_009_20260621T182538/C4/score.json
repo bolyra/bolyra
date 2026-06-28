@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction demonstrates real advantages over BBS+ (issuer key visibility, O(n) proof size, no arbitrary predicate compilation). However, Tier 3 adversaries identified critical unaddressed baselines: (1) rfc7662_advocate showed RFC 7662 filtered introspection already hides the issuer from the RS when the AS is honest, and the construction never models the AS as an adversary; (2) spiffe_engineer showed NCUA-operated SPIFFE trust domain achieves issuer-blindness structurally at zero circuit cost; (3) auth0_pm showed draft-ietf-oauth-attestation-based-client-auth achieves the operational property without strict IND-ISS. Section 8 compares exclusively against BBS+/W3C VC-DI and never addresses RFC 7662 filtered introspection, JWT introspection response (RFC 9701), RFC 8693 token exchange, Client Attestation, or WIMSE. The construction is preferable to these baselines (AS-independence, no trusted intermediary) but the baselines can approximate the operational property with extra configuration, and the construction never argues why AS-knowledge of the issuer-verifier mapping is harmful. Score 1, not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides three well-defined games (IND-ISS, DV-SOUND, DV-PRIV), names five cryptographic assumptions (PLONK ZK/KS under AGM+ROM, Poseidon CR, DL on Baby Jubjub, DDH on Baby Jubjub), and provides reduction sketches. However, the cryptographer persona identified three concrete gaps that weaken the argument below the '2' threshold: (1) The IND-ISS reduction is a proof sketch missing an explicit hybrid argument \u2014 it jumps from 'ZK simulator exists' to 'A can't distinguish' without constructing the hybrid chain and addressing ROM programming for adversarially chosen public inputs. (2) The IssuerReveal circuit specification omits sessionNonce from the private input list while Constraint 1 references it \u2014 this is a concrete soundness gap making the DV-SOUND reduction non-implementable as specified. (3) The nullifier design produces identical nullifiers for different agents with matching attributes, and the IND-ISS game is single-prover with no multi-principal model. The threat model is stated and assumptions are named, but the reduction has gaps \u2014 score 1."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 provides a complete primitive mapping to existing Bolyra components: Poseidon2 node hash, EdDSA on Baby Jubjub, PLONK agent proving system with pot16.ptau SRS, Lean Incremental Merkle Tree, Baby Jubjub scalar multiplication (already in Circom stdlib). Section 6 provides detailed per-gadget constraint counts: IssuerBlindPredicate at ~53K constraints, IssuerReveal at ~11.7K constraints, with proving times <4.5s WASM / <0.8s rapidsnark for the main circuit. Both circuits fit within the PLONK agent budget. Combined workflow stays under 5s even in worst-case sequential WASM. All primitives are Phase 1 Bolyra primitives. Cost is stated and within budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with 5 personas surfaced multiple attacks the construction cannot answer: (1) cryptographer found sessionNonce missing from IssuerReveal witness \u2014 a concrete circuit specification bug that breaks DV-SOUND; (2) cryptographer found nullifier conflation enabling griefing across agents with matching attributes; (3) cu_ciso found no credential-level revocation mechanism \u2014 stolen credentials run until expiry with no kill switch; (4) cu_ciso found examiner key registry has no governance model, rotation protocol, or recovery path; (5) spiffe_engineer found prover-initiated disclosure collapses under adversarial examination (prover can withhold); (6) auth0_pm found regulatory compliance claims are unverified author interpretations, not agency guidance; (7) rfc7662_advocate and spiffe_engineer identified unaddressed baselines (RFC 7662 filtered introspection, WIMSE, SPIFFE trust domains). The construction cannot answer the sessionNonce omission or the credential revocation gap \u2014 these are not inside the stated threat model and represent real attacks. Score 0."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Section 7 names three concrete deployment scenarios with named stakeholders and regulatory requirements: (1) PenFed\u2194NavyFed cross-CU NCUA membership proof under 12 CFR \u00a7741/\u00a7748, with a detailed 9-step operational workflow including examination compliance; (2) German fintech proving EU-KYB to Singapore MAS-regulated entity under FATF R.10; (3) Schwab robo-advisory agent proving FINRA Series 65 licensing under FINRA Rule 4511. The NCUA scenario is load-bearing \u2014 issuer-blindness is the core property enabling competitive interaction between peer-regulated CUs, and examination compliance is a hard regulatory requirement. While the auth0_pm and cu_ciso attacks question whether these regulations actually require ZK-level guarantees, the scenarios themselves are concrete, named, and identify real stakeholders with real regulatory mandates."
+    }
+  },
+  "gaps": [
+    "Add sessionNonce as a private input to the IssuerReveal circuit \u2014 without it, Constraint 1 (nullifier binding) is unimplementable and DV-SOUND reduction is broken",
+    "Add a per-agent blinding factor (identity commitment or secret salt) to the nullifier derivation to prevent cross-agent nullifier collision when attributes match",
+    "Add credential-level revocation mechanism (e.g., credential commitment added to on-chain revocation set) with a defined revocation latency SLA",
+    "Complete the IND-ISS reduction with an explicit hybrid argument (Hybrid\u2080: real proof \u2192 Hybrid\u2081: simulated proof \u2192 independence from b) and address ROM programming for adversarially chosen public inputs",
+    "Add \u00a78 comparison rows for RFC 7662 filtered introspection, JWT introspection response (RFC 9701), RFC 8693 token exchange, Client Attestation (draft-ietf-oauth-attestation-based-client-auth), and WIMSE \u2014 not just BBS+",
+    "Add an AS-compromise or AS-knowledge adversary to the threat model games to justify why AS-independence is load-bearing, not just nice-to-have",
+    "Define examiner key registry governance: enrollment authority, key rotation protocol, recovery path for stale keys, and root-of-trust chain",
+    "Define issuer key lifecycle protocol: rotation, revocation, root update propagation, and maximum acceptable proof age relative to registry root age",
+    "Add a canonical predicate language specification, a compiler, and a predicate-soundness game to the formal model \u2014 without this, 'arbitrary-schema support' is operationally undefined",
+    "Scope regulatory compliance claims explicitly as 'technically sufficient if agency accepts ZK proofs' rather than asserting satisfaction of 12 CFR \u00a7748 / FINRA Rule 4511 / FATF R.10"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

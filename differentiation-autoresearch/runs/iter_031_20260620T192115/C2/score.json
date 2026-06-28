@@ -1,0 +1,35 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The non-delegation flow achieves AS-side unlinkability post-enrollment \u2014 the AS/operator holds all operator private keys and credential fields yet cannot compute any scopedNullifier because scopeBlindingSecret is independently generated. This is structurally impossible in OAuth/OIDC (AS sees every token issuance), in BBS+ (issuer maintains correlation), and in WIMSE/SPIFFE (SPIRE operator sees SVID issuance). Multiple Tier 3 personas (rfc7662_advocate Attack 1/3, spiffe_engineer Attack 3) confirmed the baseline cannot match AS=operator adversarial unlinkability specifically. The rfc7662_advocate noted the \u00a78 table overstates the hot-path claim but confirmed the AS-side property is genuine and unreachable by the baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model (\u00a73.1) is explicit: adversary controls AS/operator with all private keys, colluding RSes, on-chain observation. Named assumptions (A-PRF Poseidon, A-CR, A-KS PLONK, A-DL Baby Jubjub) are specific. Reduction sketch (\u00a74.2 hybrid argument) is stated. However, cryptographer Attack 1 demonstrated an advantage-1 attack within the game's own stated rules: the adversary can legally query (j\u2080, S_b) in the query phase, then compare the deterministic scopedNullifier against the challenge proof \u03c0_b in world b=0. The game restriction is insufficient \u2014 it forbids (j\u2080, S\u2090) and (j\u2081, S_b) but permits (j\u2080, S_b), which is exactly the challenge pair in world b=0. Additionally, cryptographer Attack 2 identified that the A-PRF assumption claims Poseidon2 is symmetric in its arguments without justification \u2014 scopedNullifier keys s_b at position 2 while entryNullifier keys it at position 1, and no known result establishes joint PRF security across argument positions. These gaps make the reduction sketch not tight as stated."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every construction element maps to existing Bolyra primitives: Poseidon2/Poseidon5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), PLONK with pot16.ptau, cumulative bit encoding. Circuit costs are stated: ScopedAgentAuth ~17,124 constraints, DelegationEntry ~16,928 constraints \u2014 both within 2^16 (65,536) pot16.ptau budget. Proving time targets (<3s PLONK, <2s Groth16 with rapidsnark) are within Phase 1 budget. \u00a75 provides a complete primitive mapping table. No new primitives introduced \u2014 scopeBlindingSecret is a standard field element managed identically to the existing human secret scalar."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: (1) cryptographer Attack 1 \u2014 IND-UNL-AS game has advantage-1 attack within stated rules, game is broken as defined; (2) rfc7662_advocate Attack 2 \u2014 scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) is an O(N) deanonymization oracle for delegation initiators since both inputs are adversary-known, directly contradicting the construction's claim that 'NFCU cannot determine which agent initiated the chain'; (3) cryptographer Attack 2 \u2014 dual PRF orientation is an unsubstantiated assumption gap; (4) cryptographer Attack 3 \u2014 scopeCommitment leaks the 8-bit permissionBitmask in O(256) work. The entryNullifier fix closed one O(N) oracle while leaving scopeCommitment as an identical oracle in the same circuit. These are not mitigated \u2014 they require redesign."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named with specific stakeholders: (1) NFCU member agent at Amazon/Costco where CU-as-AS must not learn merchant graph; (2) Kaiser Permanente patient agent across Quest Diagnostics and Cedars-Sinai. However, auth0_pm Attack 1 and cu_ciso Attack 1 identified that BSA/AML (31 U.S.C. \u00a75318(g)) legally requires credit unions to monitor member transaction patterns and file SARs \u2014 the very property the construction provides (hiding merchant graph from CU) conflicts with the CU's regulatory obligations. The construction has no selective-disclosure or compliance-escrow mechanism. The healthcare scenario faces analogous HIPAA BAA requirements. The property is load-bearing in theory but creates compliance violations in the named deployments, making them hypothetical as described."
+    }
+  },
+  "gaps": [
+    "IND-UNL-AS game restriction must be extended to prohibit ALL four (challenge_agent, challenge_scope) pairs: (j\u2080, S\u2090), (j\u2080, S_b), (j\u2081, S\u2090), (j\u2081, S_b) \u2014 the current restriction permits (j\u2080, S_b) enabling an advantage-1 attack via deterministic nullifier comparison",
+    "scopeCommitment = Poseidon2(permissionBitmask, credentialCommitment) must incorporate scopeBlindingSecret to close the O(N) deanonymization oracle for delegation initiators \u2014 both current inputs are adversary-known, making the entryNullifier fix incomplete",
+    "Dual PRF orientation must be resolved: either prove Poseidon2 is PRF-secure when the key appears in both argument positions, or normalize to a fixed key position via domain separation (e.g., Poseidon2(s_b, Poseidon2(0, scopeId)) and Poseidon2(s_b, Poseidon2(1, sessionNonce)))",
+    "Add a regulatory compliance mode \u2014 selective disclosure or compliance-escrow gadget that allows BSA/AML audit under legal trigger (subpoena, SAR threshold) without real-time surveillance, so the CU scenario is not structurally incompatible with 31 U.S.C. \u00a75318(g)",
+    "Specify TEE/secure-enclave requirements for scopeBlindingSecret storage in cloud-native deployments where operator controls infrastructure \u2014 the trust boundary assumption does not hold in operator-managed Kubernetes/Lambda environments",
+    "scopeCommitment leaks the 8-bit permissionBitmask in O(256) Poseidon evaluations on-chain \u2014 must blind with scopeBlindingSecret or accept and document this as an explicit information leak in the delegation path"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

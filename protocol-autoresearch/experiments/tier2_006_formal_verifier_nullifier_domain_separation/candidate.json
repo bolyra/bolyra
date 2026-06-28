@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_nullifier_domain_separation",
+  "persona": "formal_verifier",
+  "title": "Add domain separation tags to all nullifier hash computations",
+  "dimension": "correctness",
+  "description": "HumanUniqueness computes nullifier as Poseidon2(scope, secret) and AgentPolicy computes it as Poseidon2(secret, sessionNonce). Both use Poseidon2 with no domain separator, meaning a collision is possible if an agent's (secret, sessionNonce) pair equals a human's (scope, secret) pair \u2014 the nullifier spaces overlap. Prepend a unique domain tag constant (e.g., 0xHUMAN, 0xAGENT, 0xDELEG) as the first Poseidon input to each nullifier computation across all three circuits. This is a standard formal verification finding: hash function domain separation prevents cross-protocol nullifier confusion.",
+  "priority": "high",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_nullifier_domain_separation",
+  "adoption": 14,
+  "standards": 16,
+  "completeness": 15,
+  "correctness": 21,
+  "total": 66,
+  "verdict": "consider"
+}

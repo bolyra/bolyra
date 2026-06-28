@@ -1,0 +1,37 @@
+; bolyra-proof-content-type.cddl
+; CDDL schema for application/bolyra-proof+cbor envelope
+; Reference: RFC 8610 (CDDL), RFC 8949 (CBOR)
+;
+; This schema defines the canonical wire format for exchanging
+; zero-knowledge proofs in the Bolyra identity protocol.
+
+bolyra-proof-envelope = {
+  version:        uint,                ; Protocol envelope version (currently 1)
+  circuit-id:     circuit-identifier,   ; Which circuit produced this proof
+  proving-system: proving-system-tag,   ; Proving system used
+  proof:          bstr,                 ; Serialized proof bytes (opaque to envelope layer)
+  public-signals: [+ tstr],            ; Public signals as decimal string array
+  ? metadata:     metadata-map,        ; Optional extension point
+}
+
+circuit-identifier = "HumanUniqueness" / "AgentPolicy" / "Delegation"
+
+proving-system-tag = "groth16" / "plonk"
+
+metadata-map = {
+  ? nonce:      bstr,                  ; Session nonce binding (32 bytes)
+  ? timestamp:  uint,                  ; Unix epoch seconds when proof was generated
+  ? chain-id:   uint,                  ; EVM chain ID for on-chain verification
+  * tstr => any,                       ; Future extension keys
+}
+
+; Key name definitions (CBOR map uses text string keys)
+version        = "version"
+circuit-id     = "circuitId"
+proving-system = "provingSystem"
+proof          = "proof"
+public-signals = "publicSignals"
+metadata       = "metadata"
+nonce          = "nonce"
+timestamp      = "timestamp"
+chain-id       = "chainId"

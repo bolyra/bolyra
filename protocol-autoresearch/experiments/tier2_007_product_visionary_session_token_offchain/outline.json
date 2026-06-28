@@ -1,0 +1,64 @@
+{
+  "id": "product_visionary_session_token_offchain",
+  "title": "Off-chain session token from verified handshake",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/session-token-bolyra.md",
+      "description": "Session token specification: JWT/SD-JWT claim schema, trust anchor (txHash), nullifier binding, scope encoding, expiry policy, and revocation semantics."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session.ts",
+      "description": "issueSessionToken(verifiedHandshake, signingKey, opts): produces a signed SD-JWT encoding nullifierHash, humanMerkleRoot, agentPermissions bitmap, txHash, iat, exp. Also exports verifySessionToken(token, verifyingKey) for downstream fast-path auth."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "SessionTokenPayload interface: nullifierHash, humanMerkleRoot, agentPermissions, txHash, sessionNonce, iat, exp, iss. Extend VerifyHandshakeResult to carry txHash."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/session.py",
+      "description": "Python mirror: issue_session_token() and verify_session_token() calling the JS subprocess bridge. Thin wrapper \u2014 no re-implementation of crypto."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session.test.ts",
+      "description": "Unit tests: happy-path issuance after mock verifyHandshake, tampered-payload rejection, expired token rejection, permission-bitmap round-trip, txHash claim presence."
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_session.py",
+      "description": "Python-side tests: issue \u2192 verify round-trip via subprocess bridge, expired token, missing txHash."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-tokens.md",
+      "description": "Usage guide: how to issue after verifyHandshake, present to downstream tool calls, validate latency profile, token lifetime recommendations, and revocation via nullifier registry."
+    }
+  ],
+  "steps": [
+    "Define SessionTokenPayload schema in spec/session-token-bolyra.md: mandatory claims (nullifierHash, humanMerkleRoot, agentPermissions, txHash, sessionNonce, iat, exp, iss), optional SD-JWT disclosures for individual permission bits.",
+    "Extend VerifyHandshakeResult in sdk/src/types.ts to include txHash (on-chain transaction hash returned by the verifier contract call).",
+    "Implement issueSessionToken() in sdk/src/session.ts using jose (ES256 or EdDSA): pack payload, sign with operator signing key, return compact SD-JWT string.",
+    "Implement verifySessionToken() in sdk/src/session.ts: verify signature, check exp, assert txHash non-empty, decode agentPermissions bitmap, return typed SessionTokenPayload.",
+    "Add selective-disclosure layer: wrap agentPermissions individual bits as SD-JWT disclosures so downstream tools receive only the scope they need, not the full bitmap.",
+    "Wire issueSessionToken into the public SDK API (sdk/src/index.ts exports) and update sdk/QUICKSTART.md with a two-line example.",
+    "Implement Python bridge in sdk-python/bolyra/session.py: call JS SDK via existing subprocess bridge pattern, parse returned JSON, expose typed dataclass.",
+    "Write TypeScript tests (sdk/test/session.test.ts): happy path, tampered payload, expired, wrong key, missing txHash, permission bitmap round-trip.",
+    "Write Python tests (sdk-python/tests/test_session.py): round-trip via subprocess, error propagation.",
+    "Run full test suite (npm test + pytest -v), fix any failures, then verify sub-100ms cold-path verification with a quick benchmark in the test output.",
+    "Add docs/session-tokens.md: issuance flow diagram, lifetime guidance (recommend \u226415 min for agentic sessions), revocation note (nullifier blacklist on verifier contract).",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md to reference the session token as the fast-path auth layer in Section 5 (Protocol Flow)."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "verifyHandshake() must return the on-chain txHash from the verifier contract call",
+    "jose library (npm) for JWT/SD-JWT signing \u2014 already a common peer dep, confirm it is present or add to sdk/package.json",
+    "sd-jwt-vc or @sd-jwt/core for selective disclosure layer (evaluate against jose's built-in SD-JWT support in jose >=5.x)",
+    "Operator signing key management: caller must supply an ES256 or EdDSA private key; spec must define key registration / rotation semantics",
+    "On-chain nullifier registry (contracts/) must be queryable for revocation checks \u2014 tie to existing BolyraRegistry if present",
+    "Python subprocess bridge (sdk-python/bolyra/_bridge.py or equivalent) must be stable before Python session module is added"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "id": "standards_architect_conformance_test_vectors_v2",
+  "title": "Machine-readable conformance test vectors (JSON fixtures)",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Index of all test vector categories, fixture schema definition, and conformance runner usage"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/schema.json",
+      "description": "JSON Schema for fixture files \u2014 defines input_witness, expected_public_signals, expected_result, and metadata fields"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/01_handshake_valid.json",
+      "description": "10+ fixtures: successful human+agent handshake round-trips with varying permission bitmasks"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/02_credential_expired.json",
+      "description": "5+ fixtures: agent credentials where expiryTimestamp < currentTimestamp \u2014 expected_result: FAIL"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/03_identity_revoked.json",
+      "description": "5+ fixtures: human identity nullifiers present in revocation set \u2014 expected_result: FAIL"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/04_stale_merkle_root.json",
+      "description": "5+ fixtures: humanMerkleRoot not within the 30-root sliding buffer \u2014 expected_result: FAIL"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/05_delegation_scope_violation.json",
+      "description": "5+ fixtures: delegated credential claims permissions superset of parent \u2014 expected_result: FAIL"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/06_cumulative_bit_violation.json",
+      "description": "5+ fixtures: bit 4 (FINANCIAL_UNLIMITED) set without bits 2+3, and other implication violations \u2014 expected_result: FAIL"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/07_delegation_max_depth.json",
+      "description": "5+ fixtures: delegation chain at exactly 3 hops (pass) and 4 hops (fail)"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/08_nonce_replay.json",
+      "description": "5+ fixtures: (humanProof, agentProof) replayed with same sessionNonce \u2014 expected_result: FAIL"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/runner.js",
+      "description": "Node.js conformance runner: loads all fixture JSON files, runs witness generation via snarkjs, compares public signals and pass/fail to expected values, reports per-fixture PASS/FAIL with diff on mismatch"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/runner.test.js",
+      "description": "Mocha wrapper so `npm run test:conformance` drives the runner and exits non-zero on any fixture failure"
+    }
+  ],
+  "steps": [
+    "Define JSON fixture schema in schema.json: fields are id, category, description, circuit, input_witness (object), expected_public_signals (array of hex strings or null for FAIL cases), expected_result ('PASS'|'FAIL'), and expected_error_hint (string, optional)",
+    "Enumerate all valid-handshake parameter combinations (3 permission levels \u00d7 3 expiry deltas \u00d7 2 Merkle root ages) to generate 10 PASS fixtures for 01_handshake_valid.json using real circuit public signal values from a reference run",
+    "For 02_credential_expired.json: produce fixtures where expiryTimestamp is set to currentTimestamp-1, currentTimestamp-3600, and currentTimestamp-86400; confirm AgentPolicy circuit outputs FAIL on witness generation",
+    "For 03_identity_revoked.json: insert nullifierHash values into the revocation Merkle tree and provide matching membership witnesses that should fail the non-membership proof check",
+    "For 04_stale_merkle_root.json: construct a 31-element root history buffer and use the oldest root (index 30) as the humanMerkleRoot input; expect FAIL from the buffer-range constraint",
+    "For 05_delegation_scope_violation.json: set delegated permissionBits to a superset of parent permissionBits (e.g., parent=0x01, child=0x03); expect Delegation circuit to reject scope expansion",
+    "For 06_cumulative_bit_violation.json: enumerate all illegal bit patterns per the implication table (bit4 without bit2, bit4 without bit3, bit3 without bit2); one fixture per violation pattern",
+    "For 07_delegation_max_depth.json: build a 3-hop chain with valid scope narrowing at each step (PASS fixture), then a 4-hop chain (FAIL fixture); record full witness chain for each hop",
+    "For 08_nonce_replay.json: generate a valid handshake, then copy the proof with identical sessionNonce into a second fixture with expected_result FAIL, documenting that the verifier must check nonce freshness externally",
+    "Implement runner.js: iterate spec/test-vectors/*.json (excluding schema.json and README.md), for each fixture call snarkjs.wtns.calculate then snarkjs.groth16.fullProve (or witness-only for FAIL cases), compare outputs to expected_public_signals, assert expected_result matches actual circuit outcome",
+    "Add npm script `test:conformance` in root package.json pointing to `mocha spec/test-vectors/runner.test.js`",
+    "Validate all 40+ fixtures against schema.json using ajv in a pre-run schema check step inside runner.js",
+    "Write spec/test-vectors/README.md: fixture format spec, how to add new vectors, how to run the conformance suite, and cross-reference to circuits/FORMAL-PROPERTIES.md"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circuits/src/HumanUniqueness.circom",
+    "circuits/src/AgentPolicy.circom",
+    "circuits/src/Delegation.circom",
+    "circuits/build/*.zkey",
+    "circuits/build/pot16.ptau",
+    "snarkjs",
+    "ajv",
+    "mocha"
+  ]
+}

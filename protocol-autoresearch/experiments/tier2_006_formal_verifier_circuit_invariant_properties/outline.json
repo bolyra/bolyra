@@ -1,0 +1,42 @@
+{
+  "id": "formal_verifier_circuit_invariant_properties",
+  "title": "Write machine-checkable circuit invariant properties document",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Updated spec with all 12 safety properties stated in first-order logic, covering HumanUniqueness, AgentPolicy, Delegation, and ModelInstanceBinding circuits. Each property includes a formal statement, circuit location reference, and violation condition."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/formal-properties.test.js",
+      "description": "Mocha test suite exercising all 12 properties via witness generation (no full proof required). Each test constructs a valid witness, then mutates exactly the relevant input to trigger a constraint violation and asserts that witness generation fails."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/helpers/property-harness.js",
+      "description": "Shared test harness: wasm witness generator loader, valid-input fixture factory per circuit, and a mustFail(circuit, inputs) helper that asserts circom_tester throws on constraint check."
+    }
+  ],
+  "steps": [
+    "Audit existing circuits/FORMAL-PROPERTIES.md for any pre-existing property stubs and collect all constraint names from HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom, and ModelInstanceBinding.circom.",
+    "For each of the 12 properties, draft a first-order logic statement referencing circuit signal names (e.g., 'forall x: uint64, x < 2^64 => field(x) = x') and identify the specific constraint or template that enforces it.",
+    "Expand circuits/FORMAL-PROPERTIES.md: add a top-level table mapping each property to its circuit(s), FOL statement, enforcement mechanism (constraint name or template line), and companion test ID.",
+    "Write property-harness.js: loadWasm(circuitName) using circom_tester, buildValidInputs(circuitName) returning a known-good input object per circuit, and mustFail(circuitName, inputs) asserting witness generation throws.",
+    "Implement formal-properties.test.js with one describe block per property (12 total). Each block: (a) generates valid witness with buildValidInputs to confirm baseline passes, (b) applies a targeted mutation (e.g., set uint64 input to 2^64 for overflow check, replay nullifier for uniqueness check) and calls mustFail.",
+    "Cover property 3 (scope monotonicity) and property 4 (expiry narrowing) with multi-step delegation chain inputs in Delegation circuit tests, verifying that parent_scope \u2287 child_scope and parent_expiry \u2265 child_expiry are both enforced.",
+    "Cover property 8 (cumulative bit invariant) by testing that setting a higher-tier bit without its implied lower bits fails the AgentPolicy circuit witness.",
+    "Cover property 12 (no witness malleability) by verifying that two distinct private inputs producing identical public outputs are rejected \u2014 use duplicate nullifier inputs across different scope signals.",
+    "Run npm run test:circuits:fast to confirm all 12 property tests pass and no pre-existing tests regress.",
+    "Update circuits/FORMAL-PROPERTIES.md header with a 'Test Coverage' section listing each property ID and its companion test file + test name for traceability."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circom_tester npm package (already in devDependencies)",
+    "HumanUniqueness.circom compiled wasm in circuits/build/",
+    "AgentPolicy.circom compiled wasm in circuits/build/",
+    "Delegation.circom compiled wasm in circuits/build/",
+    "ModelInstanceBinding.circom compiled wasm in circuits/build/ (must exist or tests are skipped with a pending marker)",
+    "circuits/FORMAL-PROPERTIES.md (existing file to update, not replace)"
+  ]
+}

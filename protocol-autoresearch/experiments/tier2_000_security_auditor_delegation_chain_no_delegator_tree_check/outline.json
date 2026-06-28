@@ -1,0 +1,77 @@
+{
+  "id": "security_auditor_delegation_chain_no_delegator_tree_check",
+  "title": "Delegation circuit does not prove delegator is enrolled \u2014 phantom delegator attack",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Add Merkle inclusion proof for delegatorCredCommitment against agentTreeRoot; introduce agentTreeRoot as a new public input and delegatorMerklePath/delegatorMerklePathIndices as private inputs; instantiate BinaryMerkleRoot(20) component and assert root equality."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/BinaryMerkleRoot.circom",
+      "description": "Existing shared Merkle component reused for the delegator inclusion check \u2014 no changes needed, confirm depth-20 parameterization is compatible."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/DelegationVerifier.sol",
+      "description": "Regenerated Groth16/PLONK verifier from updated Delegation.circom vkey after re-running trusted setup; public signal array gains one additional element (agentTreeRoot)."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/BolyraRegistry.sol",
+      "description": "Update verifyDelegation() call-site to pass agentTreeRoot as part of the public inputs array; enforce that agentTreeRoot matches the on-chain committed agent tree root."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation.ts",
+      "description": "Extend DelegationInputs type to include delegatorMerklePath and delegatorMerklePathIndices; update proveDelegation() to fetch and include these Merkle witness fields before calling snarkjs."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Document CIP-1: delegator enrollment requirement; add agentTreeRoot to Delegation proof public signal table; describe phantom delegator attack vector and mitigation."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add formal property: delegatorCredCommitment \u2208 agentTree(agentTreeRoot); reference new constraint count and BinaryMerkleRoot depth."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/delegation.test.js",
+      "description": "Add fast witness tests: (1) valid delegator path passes; (2) fabricated delegatorCredCommitment not in tree fails constraint; (3) mismatched agentTreeRoot fails. Add slow proof test for full Groth16 round-trip with delegator inclusion."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/BolyraRegistry.test.js",
+      "description": "Add integration test: submit delegation proof with phantom delegator (credential not enrolled) \u2014 expect revert; submit with enrolled delegator \u2014 expect success."
+    }
+  ],
+  "steps": [
+    "Audit Delegation.circom to identify all existing public/private signals and document current constraint count baseline.",
+    "Add agentTreeRoot as a new public input to Delegation.circom.",
+    "Add delegatorMerklePath[20] and delegatorMerklePathIndices[20] as private inputs.",
+    "Instantiate BinaryMerkleRoot(20) component; wire delegatorCredCommitment as leaf and delegatorMerklePath/delegatorMerklePathIndices as siblings/path; assert computed root === agentTreeRoot.",
+    "Re-run trusted setup: npm run compile:circuits to regenerate .r1cs, then snarkjs groth16 setup and plonk setup against pot16.ptau to produce new .zkey files for Delegation.",
+    "Export new vkey.json and regenerate DelegationVerifier.sol via snarkjs generateverifier; replace the existing verifier contract.",
+    "Update BolyraRegistry.sol verifyDelegation() to include agentTreeRoot in the public signals array and validate it against the on-chain committed root.",
+    "Extend DelegationInputs TypeScript type with Merkle witness fields; update proveDelegation() in sdk/src/delegation.ts to accept and pass these fields to snarkjs.groth16.fullProve.",
+    "Write failing circuit tests (witness-only) covering phantom delegator rejection, valid delegator acceptance, and root mismatch rejection.",
+    "Run npm run test:circuits:fast \u2014 confirm new tests fail on unpatched circuit, then pass after patch.",
+    "Write Hardhat integration tests in contracts/test/BolyraRegistry.test.js covering phantom and enrolled delegator paths.",
+    "Run npm run test:contracts \u2014 confirm all pass.",
+    "Run npm run test:circuits:slow (FULL_PROOF=1) for full Groth16 proof round-trip on Delegation.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md public signals table and security considerations section with CIP-1 phantom delegator attack description.",
+    "Update circuits/FORMAL-PROPERTIES.md with new formal property and revised constraint count.",
+    "Commit with DCO sign-off: git commit -s -m 'fix(circuits): add delegator Merkle inclusion proof to Delegation circuit (CIP-1)'"
+  ],
+  "estimated_constraints": 84000,
+  "dependencies": [
+    "BinaryMerkleRoot(20) component already in circuits/src/",
+    "pot16.ptau (2^16 constraints) \u2014 verify headroom after adding ~6k constraints",
+    "snarkjs for re-running trusted setup and verifier export",
+    "Existing agentTreeRoot on-chain commitment in BolyraRegistry (must be stored/accessible at delegation verification time)",
+    "SDK Merkle witness generation utility (getMerkleProof against agent tree) \u2014 may need to be added to sdk/src/merkle.ts if not present"
+  ]
+}

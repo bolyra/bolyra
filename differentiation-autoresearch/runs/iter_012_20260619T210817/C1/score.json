@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties the baseline cannot match in a single-AS deployment \u2014 particularly G5 (predicate evaluation over hidden bitmask) and G6 (circuit-enforced implication closure). However, the rfc7662_advocate's Attack 3 (threshold AS federation) is not rebutted: a k-of-n threshold-signed JWT architecture with offline RS verification structurally matches the adversarial-AS governance claim, narrowing the gap to G5+G6 uniqueness. Additionally, Attack 4 shows G6 is incomplete \u2014 only 3 of the implied implication relationships are encoded, and a well-configured AS enforcing the full lattice is strictly more complete. The construction is preferable to the baseline but the baseline can approximate with threshold federation + complete policy enforcement, leaving only per-presentation predicate ZK (G5) and constant-size proof (Property 4) as unmatched. These are real but the construction overstates the gap by never engaging with threshold AS architectures."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models, named cryptographic assumptions (PLONK knowledge soundness, Poseidon collision resistance, Baby Jubjub DL, ECDSA unforgeability), formal security games (SelectiveScopeForgery, RogueEnrollmentForgery, ImplicationClosureForgery, ppSE-IND), and reduction sketches. This is substantially above average. However, three unaddressed gaps prevent a score of 2: (1) The cryptographer's Attack 1 \u2014 no SRS ceremony reference or sub-game for trusted setup compromise; the reduction assumes honest setup without formalizing it. (2) The cryptographer's Attack 2 \u2014 the 1-bit-per-query privacy bound is incorrect under G6 implication constraints; a single failed query on bit 2 leaks 3 bits (bits 2, 3, 4), contradicting the Shannon argument applied to independent bits. The q_max parameterization is therefore miscalibrated. (3) The cryptographer's Attack 3 \u2014 the blinded nullifier design contradicts RS-side rate limiting; the construction lists RS rate-limit checking (step 5) as a protocol step but the blinded nullifier makes it useless. The threat model is stated but key assumptions are missing or the reduction has gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon hash (all circuits), EdDSA on Baby Jubjub (AgentPolicy G3), BinaryMerkleRoot depth 20 (shared), Num2Bits, LessThan, PLONK proving with pot16.ptau. Section 5 provides an explicit primitive mapping table. Section 6 provides a detailed constraint budget: ~18,150 constraints, well within 2^16 = 65,536 (pot16.ptau). Proving time targets are stated: <500ms rapidsnark, <3s snarkjs. No new cryptographic primitives are introduced. The enrollment governance uses standard EIP-712 + ecrecover, already available in the contracts layer. The rate-limit mechanism is a plain SDK counter. This is squarely within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex adversary with 5 personas produced substantive attacks. Several attacks the construction cannot fully answer: (1) cryptographer Attack 1 (SRS ceremony gap) \u2014 no ceremony cited, no sub-game; (2) cryptographer Attack 2 (implication-amplified leakage) \u2014 the 1-bit bound is mathematically wrong under G6 constraints; (3) cryptographer Attack 3 (blinded nullifier vs RS rate limiting) \u2014 design contradiction acknowledged by construction's own protocol steps; (4) rfc7662_advocate Attack 3 (threshold AS federation) \u2014 never engaged; (5) rfc7662_advocate Attack 4 (incomplete G6) \u2014 only 3 of implied relationships encoded; (6) cu_ciso Attack 1 (audit trail vs unlinkability) \u2014 direct contradiction with NCUA examination requirements; (7) cu_ciso Attack 3 (revocation marked future work) \u2014 critical gap for regulated deployment. Some attacks are mitigated (auth0_pm procurement is out-of-scope for a protocol construction; spiffe_engineer Attack 2 is partially addressed by the predicate-evaluation distinction). But the cryptographer's mathematical attacks on the privacy bound and the design contradiction in the nullifier scheme weaken core claims."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Section 7 names a concrete deployment: Pacific Northwest Credit Union Consortium with Columbia Credit Union ($3.4B assets, Vancouver WA), 12-member consortium, AI agent loan pre-qualification across federated data lake. The scenario is load-bearing \u2014 adversarial-AS risk between rival consortium members is a real operational concern, not hypothetical. NCUA Letter to Credit Unions 24-CU-03 and FFIEC 2025 API security guidance are cited as regulatory requirements. The agent needs READ_DATA + FINANCIAL_SMALL without revealing FINANCIAL_UNLIMITED + ACCESS_PII \u2014 a concrete minimum-necessary-permissions requirement driven by consortium data-sharing agreements. The enrollment governance maps to consortium board structure. Despite operational gaps (L2 availability, revocation), the scenario itself is concrete, named, and load-bearing."
+    }
+  },
+  "gaps": [
+    "Cite a specific MPC ceremony for the PLONK universal SRS (pot16.ptau) with a verifiable transcript, or add a RogueSetupForgery sub-game",
+    "Fix the 1-bit-per-query privacy bound to account for implication-amplified leakage under G6 constraints \u2014 a failed query on bit 2 leaks bits 2, 3, and 4 simultaneously; recalibrate q_max accordingly",
+    "Resolve the blinded nullifier design contradiction: either introduce a separate deterministic epoch-keyed nullifier for RS-side rate limiting, or remove the RS rate-limit step (Section 2, step 5) from the verification protocol",
+    "Engage with threshold AS federation (k-of-n threshold-signed JWTs with offline RS verification) as a baseline comparator and narrow the adversarial-AS claim to single-AS deployments or isolate G5+G6 as the actual differentiators",
+    "Extend G6 to cover the complete implication lattice for all 8 permission bits (e.g., WRITE_DATA\u2192READ_DATA, ACCESS_PII implications) or explicitly scope the unconditional enforcement claim to the 3 currently-encoded implications",
+    "Add on-chain implication-closure validation to BolyraRegistry.enroll() to prevent enrollment of structurally invalid bitmasks that the circuit cannot prove",
+    "Define a separate linkable audit channel for NCUA Part 748 compliance that does not compromise per-presentation unlinkability \u2014 the construction currently claims both full unlinkability and full audit defensibility, which are contradictory",
+    "Address revocation within Phase 1 scope \u2014 'future work' is not acceptable for regulated deployment; specify the non-membership accumulator or an alternative immediate-revocation mechanism",
+    "Require the agent to validate RS-supplied currentTimestamp against its local clock within a bounded skew window before generating a proof, to close the adversary-controlled expiry input attack"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

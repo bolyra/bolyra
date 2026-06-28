@@ -1,0 +1,38 @@
+; bolyra-proof-http-negotiation.abnf
+; ABNF grammar for HTTP Content-Type and Accept header negotiation
+; for application/bolyra-proof+cbor
+;
+; Reference: RFC 5234 (ABNF), RFC 9110 (HTTP Semantics), RFC 6838 (Media Types)
+
+; --- Media type ---
+bolyra-proof-type = "application/bolyra-proof+cbor" *( ";" SP parameter )
+
+parameter        = circuit-param / ps-param / version-param / extension-param
+
+circuit-param    = "circuit=" circuit-value
+circuit-value    = "HumanUniqueness" / "AgentPolicy" / "Delegation"
+
+ps-param         = "ps=" ps-value
+ps-value         = "groth16" / "plonk"
+
+version-param    = "v=" 1*DIGIT
+
+extension-param  = token "=" ( token / quoted-string )
+
+; --- Accept header example ---
+; Accept: application/bolyra-proof+cbor; circuit=AgentPolicy; ps=groth16,
+;         application/bolyra-proof+cbor; ps=plonk; q=0.8,
+;         application/json; q=0.5
+;
+; Servers MUST honor circuit and ps parameters when present.
+; If the client omits circuit/ps, the server SHOULD use the
+; values from the enclosed CBOR envelope.
+
+; --- Content-Type response example ---
+; Content-Type: application/bolyra-proof+cbor; circuit=AgentPolicy; ps=groth16; v=1
+
+; Imported rules
+token          = <token per RFC 9110 Section 5.6.2>
+quoted-string  = <quoted-string per RFC 9110 Section 5.6.4>
+SP             = %x20
+DIGIT          = %x30-39

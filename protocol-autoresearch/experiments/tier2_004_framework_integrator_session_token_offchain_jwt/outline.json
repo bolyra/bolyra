@@ -1,0 +1,50 @@
+{
+  "id": "framework_integrator_session_token_offchain_jwt",
+  "title": "Off-chain JWT session token from verified handshake",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session.ts",
+      "description": "Core session token module: handshakeToSessionToken(proof, signingKey) -> JWT and verifySessionToken(jwt, pubKey) -> {nullifier, scope, expiry}. Uses jose library for ES256 signing."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export handshakeToSessionToken and verifySessionToken from public API surface."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-schema.md",
+      "description": "JWT payload schema: sub=nullifierHash, scope=hex-encoded scopeCommitment, exp=expiry unix timestamp, iss='bolyra', aud=['langchain'|'crewai'|'*']. Documents signing algorithm (ES256), key format requirements, and replay-prevention via nullifier uniqueness."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session.test.ts",
+      "description": "Unit tests: round-trip encode/decode, expiry enforcement, tampered payload rejection, wrong key rejection, scope mismatch detection, integration with mock handshake proof output."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-integration.md",
+      "description": "Integration guide for LangChain and CrewAI: one-time handshake -> token issuance -> bearer token on subsequent tool calls. Includes code snippets, token lifetime recommendations, and revocation guidance via nullifier registry."
+    }
+  ],
+  "steps": [
+    "Add 'jose' as a dependency in sdk/package.json for standards-compliant JWT sign/verify (ES256, compact serialization).",
+    "Define the JWT payload TypeScript interface: { nullifier: string, scope: string, exp: number, iss: string, aud: string | string[] } in sdk/src/types.ts.",
+    "Implement handshakeToSessionToken(proof: VerifiedHandshakeProof, signingKey: CryptoKey, options?: { ttlSeconds?: number, audience?: string }) -> Promise<string> in sdk/src/session.ts. Extract nullifierHash and scopeCommitment from proof, set exp = now + ttlSeconds (default 3600), sign with ES256.",
+    "Implement verifySessionToken(jwt: string, pubKey: CryptoKey) -> Promise<{ nullifier: string, scope: string, expiry: number }> in sdk/src/session.ts. Verify signature, check exp, return structured claims. Throw typed errors on expiry or invalid signature.",
+    "Export both functions from sdk/src/index.ts alongside existing public API.",
+    "Write spec/session-token-schema.md documenting JWT structure, key requirements, recommended TTLs (3600s for agent sessions), and the security model (token is a session cache\u2014on-chain nullifier check remains the ground truth).",
+    "Write sdk/test/session.test.ts with Mocha/Chai covering: valid round-trip, expired token rejection, tampered payload rejection, wrong public key rejection, missing claims rejection.",
+    "Write docs/session-token-integration.md with LangChain Python snippet (requests + Authorization: Bearer header) and CrewAI tool wrapper example.",
+    "Run npm run typecheck and npm run test:sdk to verify no regressions.",
+    "Update sdk/QUICKSTART.md with a 'Session Tokens' section pointing to the new integration guide."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose >= 5.0 (JWT sign/verify, ES256, Web Crypto API compatible)",
+    "Existing verifyHandshake() output shape (nullifierHash, scopeCommitment fields must be present)",
+    "Node 18+ Web Crypto API (SubtleCrypto) for key import \u2014 no native crypto module dependency",
+    "sdk/src/types.ts VerifiedHandshakeProof type must expose nullifierHash and scopeCommitment as top-level fields"
+  ]
+}

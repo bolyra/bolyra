@@ -1,0 +1,72 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Specify deterministic DID resolution algorithm for did:bolyra",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Extend existing DID method spec with a normative Section 4: Resolution Algorithm \u2014 covering ABNF for did:bolyra:<commitment>, the three-phase resolution flow (parse \u2192 membership check \u2192 document construction), error codes (invalidDid, notFound, deactivated), and W3C DID Resolution metadata fields (contentType, created, updated, deactivated)."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-resolution-algorithm.md",
+      "description": "Standalone normative reference document detailing the deterministic resolver algorithm: (1) commitment extraction from DID string, (2) IdentityRegistry.rootHistory[] scan to confirm Merkle membership, (3) nullifier revocation check via RevokedNullifiers mapping, (4) minimal DID Document construction with Ed25519VerificationKey2020 on BabyJubJub, (5) metadata population. Includes pseudo-code and JSON-LD context binding."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add view functions required by the resolver: getMembershipProof(bytes32 commitment) returns (bool exists, uint256 rootIndex, uint256 timestamp) and isNullifierRevoked(bytes32 nullifierHash) returns (bool). Emit MembershipAnchored(bytes32 root, uint256 timestamp) so off-chain indexers can reconstruct created/updated timestamps."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "Implement DIDResolver conforming to the did-resolver npm interface. Exports resolve(did, options, resolutionOptions) \u2192 DIDResolutionResult. Phases: parse DID \u2192 call IdentityRegistry view functions \u2192 construct DIDDocument with verificationMethod (type: JsonWebKey2020, crv: BabyJubJub) \u2192 populate ResolutionMetadata and DocumentMetadata (contentType: application/did+ld+json, created, updated, deactivated)."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/did-document-builder.ts",
+      "description": "Pure function buildDIDDocument(commitment, pubkey, metadata) \u2192 DIDDocument. Constructs minimal W3C DID Document: id, verificationMethod array (EdDSA/BabyJubJub key), authentication, assertionMethod, and capabilityInvocation references. No optional service endpoints in v1."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Unit and integration tests: (1) valid DID resolves to well-formed DIDDocument with correct contentType, (2) unknown commitment returns notFound error, (3) revoked nullifier sets deactivated=true in DocumentMetadata, (4) malformed DID string returns invalidDid, (5) stale root (not in rootHistory) returns notFound."
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/did-resolution-vectors.json",
+      "description": "W3C DID Resolution conformance test vectors: five input DIDs (valid, not-found, deactivated, malformed, empty commitment) with expected DIDResolutionResult JSON including metadata fields. Used by the conformance runner in spec/conformance/."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-resolution-quickstart.md",
+      "description": "Developer-facing how-to: install @bolyra/sdk, call resolve(), interpret DIDDocument and metadata, handle error codes. Includes Node.js snippet and note on BabyJubJub key encoding (compressed point as base64url)."
+    }
+  ],
+  "steps": [
+    "Read spec/did-method-bolyra.md in full to identify current gaps \u2014 specifically what is already defined for identifier syntax, key material encoding, and any partial resolution prose.",
+    "Read contracts/src/IdentityRegistry.sol to understand current storage layout: root history buffer structure, revocation mappings, and any existing view functions.",
+    "Define the normative ABNF for did:bolyra identifiers: did:bolyra:<method-specific-id> where method-specific-id = 64HEXDIG (32-byte Pedersen/Poseidon commitment, lowercase hex).",
+    "Specify the three-phase deterministic resolution algorithm in spec/did-resolution-algorithm.md: Phase 1 \u2014 parse and validate commitment from DID string; Phase 2 \u2014 call IdentityRegistry.getMembershipProof(commitment) and scan rootHistory buffer for membership confirmation with timestamp; Phase 3 \u2014 call isNullifierRevoked(nullifierHash) where nullifierHash is derived deterministically from commitment.",
+    "Add getMembershipProof() and isNullifierRevoked() view functions to IdentityRegistry.sol; add MembershipAnchored event emission on every root update to enable off-chain created/updated timestamp reconstruction.",
+    "Define the minimal DID Document schema: id (the DID), verificationMethod (one entry, type JsonWebKey2020 with crv=BabyJub and x/y as base64url-encoded field elements), authentication/assertionMethod/capabilityInvocation arrays pointing to the verificationMethod id.",
+    "Specify W3C DID Resolution metadata output contract: ResolutionMetadata fields (error code or absent, contentType='application/did+ld+json'), DocumentMetadata fields (created as ISO8601 from first MembershipAnchored event timestamp, updated from latest root anchor, deactivated boolean from nullifier check).",
+    "Define all error codes and conditions: invalidDid (malformed string), notFound (commitment not in any root in history buffer), deactivated (nullifier revoked \u2014 document still returned with deactivated=true, not an error).",
+    "Implement sdk/src/did-document-builder.ts as a pure function with no I/O; implement sdk/src/resolver.ts wiring the builder to ethers.js contract calls against IdentityRegistry.",
+    "Write conformance test vectors in spec/conformance/did-resolution-vectors.json covering all five cases (valid, not-found, deactivated, malformed, empty commitment).",
+    "Write sdk/test/resolver.test.ts using Hardhat in-process network with a deployed IdentityRegistry fixture; cover all five vector cases plus root-history boundary (commitment enrolled under old root still resolves).",
+    "Update spec/did-method-bolyra.md Section 4 with a normative pointer to did-resolution-algorithm.md and add the W3C DID Core metadata table.",
+    "Run tsc --noEmit and npm test to verify no regressions; sign commits with DCO."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 root history buffer and revocation mapping must be deployed and accessible via ethers.js provider",
+    "spec/did-method-bolyra.md \u2014 existing identifier syntax and key encoding conventions must be stable before extending",
+    "W3C DID Core 1.0 spec and DID Resolution 1.0 spec \u2014 normative conformance requirements for metadata fields and error codes",
+    "did-resolver npm package (^4.x) \u2014 resolver interface DIDResolver and DIDResolutionResult types",
+    "BabyJubJub public key derivation \u2014 commitment must encode or deterministically derive the compressed public key point; clarify whether commitment = H(pubkey, secret) or pubkey itself",
+    "Poseidon/Pedersen hash choice \u2014 nullifierHash derivation from commitment must be pinned to the same hash used in HumanUniqueness.circom",
+    "ethers.js v6 \u2014 contract call interface for getMembershipProof and isNullifierRevoked view functions",
+    "spec/conformance/ runner \u2014 existing conformance infrastructure must support JSON vector files for did-resolution vectors"
+  ]
+}

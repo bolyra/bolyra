@@ -1,0 +1,56 @@
+{
+  "id": "standards_architect_session_token_offchain",
+  "title": "Off-chain session token format with JWT-compatible envelope",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/session-token-format.md",
+      "description": "Normative specification for the Bolyra off-chain session token: JWT claims registry (humanNullifier, agentNullifier, scopeCommitment, sessionNonce, bolyra_proof_tx), iss/nbf/exp/jti requirements, signing algorithm constraints (ES256K / EdDSA), and token lifecycle rules."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Amend to add relayer DID document structure: verificationMethod entries that downstream verifiers use to resolve the iss claim and validate the JWT signature."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session-token.ts",
+      "description": "issueSessionToken(handshakeResult, relayerPrivKey, opts): signs and returns a compact JWT. verifySessionToken(jwt, relayerDID): resolves DID, verifies signature, validates nbf/exp window, and returns typed claims object. Exports BolyraSessionClaims interface."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Add BolyraSessionClaims interface: extends standard JWT claims with humanNullifier, agentNullifier, scopeCommitment, sessionNonce, bolyra_proof_tx fields. Add SessionTokenOptions type."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session-token.test.ts",
+      "description": "Unit tests: round-trip issue/verify, expired token rejection, nbf-future rejection, tampered claim rejection, missing bolyra_proof_tx rejection, scope commitment mismatch, and DID resolution failure path."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-quickstart.md",
+      "description": "Integration guide for downstream HTTP services: how to validate a Bolyra JWT without on-chain calls, middleware snippet for Express/Fastify, and guidance on caching the relayer DID document."
+    }
+  ],
+  "steps": [
+    "Define the BolyraSessionClaims schema: registered JWT claims (iss, sub, nbf, exp, jti) plus private claims (humanNullifier, agentNullifier, scopeCommitment, sessionNonce, bolyra_proof_tx). Namespace private claims under 'https://bolyra.ai/claims/' per RFC 7519 \u00a74.3.",
+    "Write the normative spec in spec/session-token-format.md covering: claim semantics, mandatory vs optional fields, signing algorithm selection (ES256K preferred, EdDSA allowed), iss MUST be a did:bolyra: URI, exp MUST NOT exceed 1 hour, bolyra_proof_tx MUST be a valid tx hash on the configured chain.",
+    "Amend spec/did-method-bolyra.md to add a 'relayer' role with a verificationMethod of type EcdsaSecp256k1VerificationKey2019 or Ed25519VerificationKey2020, enabling downstream verifiers to resolve the public key from the iss DID.",
+    "Add BolyraSessionClaims and SessionTokenOptions types to sdk/src/types.ts.",
+    "Implement issueSessionToken() in sdk/src/session-token.ts: accept HandshakeResult + relayer private key, construct claims object, sign with jose (ES256K/EdDSA), return compact JWT string.",
+    "Implement verifySessionToken() in sdk/src/session-token.ts: parse and validate JWT header/signature using resolved relayer DID public key, enforce nbf <= now < exp, assert presence of all required Bolyra private claims, return typed BolyraSessionClaims.",
+    "Write unit tests in sdk/test/session-token.test.ts covering happy path, all rejection conditions, and boundary conditions on nbf/exp windows.",
+    "Export issueSessionToken, verifySessionToken, and BolyraSessionClaims from sdk/src/index.ts public API.",
+    "Write docs/session-token-quickstart.md with a middleware snippet showing how a downstream Express service validates the JWT using only verifySessionToken (no RPC call needed).",
+    "Run npm run typecheck and npm run test:contracts (no new circuits involved) to confirm no regressions."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose (JWT signing/verification library, JOSE RFC 7515/7519 compliant)",
+    "did:bolyra DID method resolution (spec/did-method-bolyra.md must define relayer verificationMethod)",
+    "verifyHandshake() returning HandshakeResult with humanNullifier, agentNullifier, scopeCommitment, sessionNonce fields",
+    "on-chain settlement tx hash (bolyra_proof_tx) available to the relayer at token issuance time",
+    "RFC 7519 (JWT), RFC 7515 (JWS), RFC 8037 (EdDSA in JOSE)"
+  ]
+}

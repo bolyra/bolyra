@@ -1,0 +1,16 @@
+{
+  "id": "framework_integrator_session_token_offchain",
+  "persona": "framework_integrator",
+  "title": "Off-chain session token for multi-step agent chains",
+  "dimension": "adoption",
+  "description": "LangChain/CrewAI agent chains make 10-50 tool calls per task. Requiring an on-chain handshake per call is prohibitively slow and expensive. Add an SDK-level session token: one on-chain verifyHandshake() mints a signed session token (JWT with proof digest + expiry + scope), and subsequent tool calls verify the token off-chain via the SDK's verifySessionToken(). The on-chain contract gets a batchCheckpoint(bytes32 sessionRoot) for periodic anchoring. This is the single biggest adoption blocker for framework users.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "framework_integrator_session_token_offchain",
+  "adoption": 23,
+  "standards": 16,
+  "completeness": 20,
+  "correctness": 14,
+  "total": 73,
+  "verdict": "consider"
+}

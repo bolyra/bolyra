@@ -1,0 +1,71 @@
+{
+  "id": "formal_verifier_nullifier_domain_separation",
+  "title": "Add domain separation tags to all nullifier hash computations",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Prepend DOMAIN_HUMAN constant (e.g. 0x48554d414e = ASCII 'HUMAN' as field element) as first input to Poseidon2 nullifier hash: Poseidon3(DOMAIN_HUMAN, scope, secret)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Prepend DOMAIN_AGENT constant as first input to Poseidon2 nullifier hash: Poseidon3(DOMAIN_AGENT, secret, sessionNonce)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Prepend DOMAIN_DELEG constant as first input to any nullifier hash in the delegation circuit: Poseidon3(DOMAIN_DELEG, ...inputs)"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/DomainTags.circom",
+      "description": "Shared include file defining DOMAIN_HUMAN, DOMAIN_AGENT, DOMAIN_DELEG as BN254 field-safe constants. Single source of truth to avoid divergence."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/nullifier_domain_separation.test.js",
+      "description": "Test that nullifiers for human and agent with identical raw inputs (scope==secret, secret==sessionNonce) differ after domain tag introduction. Also verify no regression on valid witness generation for all three circuits."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update nullifier computation section to document domain tag constants and their rationale. Add formal note that nullifier spaces are disjoint by construction."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add formal property: NullifierDomainDisjointness \u2014 for any inputs, H_human(...) != H_agent(...) != H_deleg(...). Reference domain tag constants."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/nullifier.ts",
+      "description": "If the TS SDK computes or validates nullifier hashes outside the circuit (e.g. for indexing), update to include domain tag in the same Poseidon3 arrangement."
+    }
+  ],
+  "steps": [
+    "Audit all three circuits (HumanUniqueness, AgentPolicy, Delegation) to enumerate every Poseidon call that produces a nullifier hash and record current input arity",
+    "Choose domain tag constants: pick three distinct BN254 field elements well outside the range of normal inputs (e.g. keccak256('bolyra.human.nullifier.v1') mod p, same pattern for agent and deleg)",
+    "Create circuits/src/DomainTags.circom exporting DOMAIN_HUMAN, DOMAIN_AGENT, DOMAIN_DELEG as template-less signal constants (or plain circom `var` values)",
+    "Update HumanUniqueness.circom: include DomainTags.circom, change Poseidon2(scope, secret) to Poseidon3(DOMAIN_HUMAN, scope, secret), verify output signal name unchanged",
+    "Update AgentPolicy.circom: change Poseidon2(secret, sessionNonce) to Poseidon3(DOMAIN_AGENT, secret, sessionNonce)",
+    "Update Delegation.circom: identify nullifier computation(s) and prepend DOMAIN_DELEG constant in the same manner",
+    "Recompile all three circuits via `npm run compile:circuits` and confirm R1CS constraint counts increase by ~3 per nullifier hash (one additional Poseidon round)",
+    "Update circuit test witnesses in circuits/test/ to pass the new expected nullifier values (existing witnesses will now be stale)",
+    "Write nullifier_domain_separation.test.js: generate witnesses where raw inputs overlap across circuit types and assert nullifiers are distinct",
+    "Run full test suite: `npm run test:circuits:fast` for witness-only, then `npm run test:circuits:slow` for full proof regression",
+    "Audit sdk/src/nullifier.ts (and any Python sdk-python equivalent) for off-circuit nullifier computation; apply matching Poseidon3 with domain tag",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md with the new nullifier computation formula and domain tag constant values",
+    "Update circuits/FORMAL-PROPERTIES.md with the NullifierDomainDisjointness property",
+    "Regenerate trusted setup artifacts if necessary (pot16.ptau is reused but per-circuit .zkey files must be regenerated after circuit changes)",
+    "Regenerate Solidity verifier contracts from new .vkey.json files via snarkjs and verify Hardhat tests still pass",
+    "DCO-sign commit: `git commit -s -m 'feat(circuits): add domain separation tags to all nullifier hash computations'`"
+  ],
+  "estimated_constraints": 6,
+  "dependencies": [
+    "circomlib Poseidon3 template (or equivalent arity-3 variant available in circomlib)",
+    "pot16.ptau \u2014 must accommodate any constraint increase (2^16 budget; +6 constraints is negligible)",
+    "snarkjs >= 0.7.6 for .zkey regeneration",
+    "Existing Poseidon2 usage confirmed in HumanUniqueness and AgentPolicy before patching Delegation"
+  ]
+}

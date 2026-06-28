@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction hides the full bitmask from the RS (predicate-hiding), which RFC 7662 per-RS introspection policy cannot do if the predicate is chosen at presentation time. However, rfc7662_advocate Attack 1 correctly identifies that the construction does not clearly exhibit a runtime-adaptive predicate \u2014 the bitmask is fixed at enrollment and the circuit checks a static mask comparison. If the required mask is known at issuance, the AS can mint a JWT encoding exactly the needed subset. WIMSE/SPIFFE cover AS-blind presentation. The genuine gap (predicate-hiding from RS) exists but is not sharply articulated as the primary claim, and the baseline can approximate with per-RS scoped tokens for the static case."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "A threat model exists (adversarial AS, on-chain observers), an SP game is described, and a reduction sketch covers credential commitment hiding via assumption A5. However: (a) cryptographer Attack 1 \u2014 no simulator is exhibited, public inputs/outputs of the circuit are never enumerated, and HVZK vs SE-ZK is not stated; (b) cryptographer Attack 2 \u2014 Groth16 trusted setup combined with an adversarial-AS threat model is a fundamental category error (adversarial AS that participated in the ceremony can forge proofs via toxic waste); (c) cryptographer Attack 3 \u2014 nullifier precomputation under predictable scope_id is unaddressed. The reduction sketch exists but critical assumptions are vague or contradictory."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to existing Bolyra primitives: Poseidon2 and Poseidon5 (existing arities), Num2Bits(128) (standard Circom gadget), BabyJubjub EdDSA (existing), Groth16 over BN254 (existing). Circuit cost is explicitly stated at ~11,330 constraints, well within the pot16.ptau (2^16) budget. The change is surgical \u2014 one new private input, one Poseidon2 wrap, one range check. Phase 1 compatible."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer: (1) cryptographer Attack 2 \u2014 Groth16 + adversarial-AS is a category error; toxic waste holder can forge any proof, destroying the core differentiator; (2) cryptographer Attack 4 \u2014 cumulative encoding invariant is NOT enforced in AgentPolicy circuit, only in Delegation, allowing a malicious operator to prove predicates over structurally invalid bitmasks; (3) spiffe_engineer Attack 1 \u2014 the operator key IS the AS, making the adversarial-AS claim circular; (4) rfc7662_advocate Attack 1 \u2014 the runtime-adaptive predicate that would separate this from per-RS JWT scoping is never exhibited in the circuit. These are not mitigated weaknesses \u2014 they are unanswered structural flaws."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named ('regulated agent with 2^64 permission space', 'AS is semi-trusted') but both are hypothetical. No concrete deployment with a named stakeholder or specific regulatory requirement is identified. The actual bitmask is 8 bits (not 2^64). The CU scenario is actively undermined by cu_ciso attacks (FIPS non-compliance, audit trail destruction, missing key custody spec). No named credit union, fintech, or agent platform is cited as a concrete adopter where this property is load-bearing."
+    }
+  },
+  "gaps": [
+    "Groth16 + adversarial-AS is a category error: either switch to PLONK/transparent SRS for this circuit or narrow the threat model to passive-AS only",
+    "Exhibit the runtime-adaptive predicate that the RS cannot know at issuance time \u2014 without this, per-RS JWT scoping matches the construction",
+    "Add cumulative-encoding constraints (bitmask[3]*(1-bitmask[2])===0 etc.) to AgentPolicy circuit, not just Delegation",
+    "Enumerate all public inputs/outputs of the circuit and state whether ZK is HVZK or SE-ZK; exhibit or cite the simulator",
+    "Address nullifier precomputation: if AS knows scope_ids and observes enrollments, deterministic nullifiers enable linkability",
+    "Clarify that adversarial-AS means honest-but-curious (learns RS-presented scope) not actively malicious (issues false credentials) \u2014 the operator key IS the issuing authority",
+    "Name a concrete deployment with a specific stakeholder (e.g., a named fintech platform, agent framework, or CU core provider) where predicate-hiding is load-bearing",
+    "Add FIPS bridge argument or explicitly scope out regulated financial deployments where Poseidon/BN254 are non-compliant",
+    "Add auditor-escrow architecture for the hidden bitmask to satisfy NCUA/FFIEC audit trail requirements if CU deployment is in scope",
+    "Specify key custody requirements for credentialBlinding (HSM, rotation semantics, blast radius on compromise)"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

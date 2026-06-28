@@ -1,0 +1,70 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "title": "Add humanTree root history buffer matching agentTree's 30-root buffer",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add ROOT_HISTORY_SIZE=30 circular buffer for humanTree roots (humanRootHistory mapping + humanRootIndex counter), populate buffer on every human enrollment, update verifyHandshake to check humanMerkleRoot against buffer instead of exact current-root match"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IIdentityRegistry.sol",
+      "description": "Extend interface to expose isKnownHumanRoot(bytes32 root) view function mirroring existing isKnownAgentRoot pattern"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "No circuit changes required \u2014 humanMerkleRoot is already a public output; the registry-side buffer check is purely in the verifier contract"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update Section on humanTree liveness: document ROOT_HISTORY_SIZE=30 parity with agentTree, clarify that verifiers MUST accept any root within the rolling window"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Add note under humanTree state transitions that enrollment does not immediately invalidate in-flight proofs due to 30-root history buffer"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+      "description": "Tests: (1) proof with current root passes, (2) proof with root N-1 through N-29 passes after 30 new enrollments, (3) proof with root N-30 (evicted) fails, (4) circular wrap-around at slot 30, (5) isKnownHumanRoot view returns correct boolean for boundary cases"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/registry.ts",
+      "description": "Expose isKnownHumanRoot helper in TS SDK client to allow off-chain staleness checks before submitting proofs"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/root-history-parity.md",
+      "description": "Short doc explaining the liveness guarantee, window size rationale, and how operators should size their proof submission timeout relative to expected enrollment rate"
+    }
+  ],
+  "steps": [
+    "Audit IdentityRegistry.sol agentTree buffer implementation (humanRootHistory mapping, ROOT_HISTORY_SIZE constant, circular index logic) to extract exact pattern for replication",
+    "Add uint256 public humanRootIndex and mapping(uint256 => bytes32) public humanRootHistory storage variables to IdentityRegistry alongside existing agentTree equivalents",
+    "In the human enrollment function (enrollHuman or equivalent), after updating the Merkle root, write the new root into humanRootHistory[humanRootIndex % ROOT_HISTORY_SIZE] and increment humanRootIndex",
+    "Add internal _isKnownHumanRoot(bytes32 root) view that iterates the circular buffer (up to ROOT_HISTORY_SIZE slots) and returns true if root matches any entry \u2014 mirror _isKnownAgentRoot pattern exactly",
+    "Add public isKnownHumanRoot(bytes32 root) external view function that wraps the internal helper, update IIdentityRegistry.sol interface",
+    "Update verifyHandshake: replace require(humanMerkleRoot == currentHumanRoot) with require(_isKnownHumanRoot(humanMerkleRoot), 'stale human root')",
+    "Write test file covering: current root accepted, roots 1\u201329 positions back accepted after N enrollments, root 30 positions back rejected, circular index wrap at slot boundary, isKnownHumanRoot view correctness",
+    "Run npm run test:contracts and confirm all existing tests still pass plus new buffer tests pass",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md: add humanTree liveness section documenting ROOT_HISTORY_SIZE=30 parity, reference agentTree section for consistency",
+    "Update spec/did-method-bolyra.md: note that humanTree state transitions preserve 30-root window",
+    "Expose isKnownHumanRoot in sdk/src/registry.ts TS client for off-chain pre-flight checks",
+    "Write docs/root-history-parity.md explaining liveness guarantee and operator guidance on proof submission timing",
+    "Run npm run compile:contracts to regenerate ABI artifacts, verify no breaking ABI changes to existing interface",
+    "Commit with DCO sign-off: git commit -s -m 'fix(registry): add 30-root history buffer for humanTree matching agentTree parity'"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol (existing agentTree ROOT_HISTORY_SIZE=30 implementation as reference pattern)",
+    "contracts/src/IIdentityRegistry.sol (interface must be updated atomically with implementation)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md (IETF draft liveness section)",
+    "Hardhat test environment (npm run test:contracts)",
+    "sdk/src/registry.ts (TS SDK registry client for isKnownHumanRoot exposure)"
+  ]
+}

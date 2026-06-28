@@ -1,0 +1,3 @@
+# Placeholder tests for: Register application/bolyra-proof+cbor media type and define proof envelope
+def test_placeholder():
+    assert True  # TODO: implement real tests

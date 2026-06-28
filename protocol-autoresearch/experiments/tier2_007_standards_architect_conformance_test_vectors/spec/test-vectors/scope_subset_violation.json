@@ -1,0 +1,24 @@
+{
+  "id": "scope_subset_violation",
+  "description": "Delegated credential claims a scope value that does not match the scopeCommitment binding. The Delegation circuit enforces scopeCommitment = Poseidon(delegatorCredCommitment, delegateeCredCommitment, scope). Providing a mismatched scope causes the constraint to fail.",
+  "circuit": "Delegation",
+  "input_witnesses": {
+    "agentTreeRoot": "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+    "scopeCommitment": "123456789",
+    "nullifierHash": "0",
+    "delegatorSecret": "55555555555555555555",
+    "delegatorNonce": "3",
+    "delegateeCredCommitment": "FROZEN_BY_EXTRACT",
+    "scope": "999",
+    "merklePathElements": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"],
+    "merklePathIndices": ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+  },
+  "public_signals": [],
+  "expected_result": "fail",
+  "failure_reason": "scopeCommitment mismatch: Poseidon(delegatorCredCommitment, delegateeCredCommitment, scope) does not equal the provided scopeCommitment public input — the delegation circuit rejects scope values not committed by the delegator",
+  "meta": {
+    "version": "1.0.0",
+    "circuit_version": "2.0.0",
+    "generator": "hand-authored"
+  }
+}

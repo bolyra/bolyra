@@ -1,0 +1,40 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction's unique property is predicate proof with full-bitmask hiding (not selective reveal), which SD-JWT and BBS+ cannot match. However, the construction text conflates 'selective disclosure' with 'predicate proof' \u2014 spiffe_engineer Attack 1 and Attack 4 both demonstrate that the written claim ('agent chooses what to disclose') is satisfied by SD-JWT and BBS+ respectively. The sharpened claim ('prove predicate without revealing which bits satisfy it') is never explicitly stated in the candidate text. RFC 9701 removes the AS roundtrip, RFC 8693 provides runtime scope narrowing. The construction is preferable but has not articulated the discriminating property precisely enough to rule out baseline approximation."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The revised single-credential SI game is valid with a clean reduction to Poseidon preimage resistance (A3) + Groth16 ZK (A6). Assumptions are named. However: (1) cryptographer Attack 4 shows the SI game proves bitmask indistinguishability, not the claimed differentiator (runtime-adaptive predicate, AS-blindness); (2) Attack 2 shows no soundness game is stated \u2014 an adversary controlling enrollment can prove arbitrary predicates; (3) Attack 1 shows no UNL game exists for cross-session unlinkability; (4) Attack 3 shows no CRS trust model for the AS-blindness claim under Groth16. Threat model is partially stated but reduction does not cover the claimed properties."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Maps to existing Bolyra primitives (Poseidon, Groth16/PLONK AgentPolicy circuit, ~20K constraints, <5s per proof). But: (1) auth0_pm Attack 3 shows workflow-level latency is unaddressed \u2014 6 RS calls \u00d7 5s = 30s per loan origination vs 300ms for OAuth; (2) auth0_pm Attack 2 shows scopeCommitment per-session randomization breaks delegation circuit, creating an unresolved architectural tension between two core properties. Circuit cost is stated but incomplete for real deployment."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All 5 personas found attacks the construction cannot answer. cryptographer: credComm linkability (no UNL game), no soundness game, subverted setup unaddressed, SI game proves wrong property \u2014 all marked 'No/Partially in threat model.' rfc7662_advocate: trust substitution (AS\u2192registry operator) unaddressed. spiffe_engineer: SD-JWT and BBS+ rebuttals unaddressed due to imprecise claims. auth0_pm: 64-bit brute-force framing arms incumbents, delegation-vs-unlinkability tension conceded but unresolved. cu_ciso: zero regulatory mapping, opaque audit trail contradicts GLBA, key custody undefined. The overwhelming majority of attacks are marked 'No \u2014 not in threat model' with 'must address.'"
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named ('regulated agent with 2^64 permission space', 'AS is semi-trusted') but both are hypothetical. No specific credit union, no named stakeholder, no specific regulatory requirement cited as load-bearing. cu_ciso Attack 1 confirms zero regulatory mapping \u2014 no Part 748 or GLBA control is cited. The scenarios are plausible but not concrete."
+    }
+  },
+  "gaps": [
+    "Sharpen the claim from 'selective disclosure' to 'predicate proof with full-bitmask hiding' \u2014 the current text is defeated by SD-JWT and BBS+ which satisfy the written claim",
+    "Add a soundness game: define what 'validly issued credential' means and either check operator EdDSA signature inside the circuit or formalize the enrollment trust boundary",
+    "Add a UNL (unlinkability) game for cross-session presentations \u2014 credComm as a stable Merkle leaf is a persistent pseudonym that links all sessions",
+    "Specify which proof system (Groth16 vs PLONK) is used for the AS-blindness claim and address the subverted-setup threat under Groth16 (toxic waste enables witness extraction)",
+    "Resolve the delegation-vs-unlinkability tension: per-session randomization of scopeCommitment breaks delegation chain anchoring \u2014 pick one or design a compatible scheme",
+    "Address workflow-level latency: either propose proof caching/batching, a session-token hybrid for N calls, or bound the use case to infrequent high-value authorizations",
+    "Add a one-page regulatory control mapping: C1 \u2192 NCUA Part 748 \u00a7III.C.1, GLBA \u00a7314.4(c)(3), FFIEC CAT domain \u2014 the examiner needs named controls, not cryptographic primitives",
+    "Design a separable audit mode: blinded proof for RS at runtime + institution-side encrypted audit log revealing full bitmask post-hoc to authorized examiners (GLBA audit obligation)",
+    "Specify key custody architecture for operatorPrivKey: HSM requirement, rotation cadence, credential revocation path after key rotation",
+    "Formalize the trust boundary between the AS (distrusted) and the Merkle root authority (trusted) \u2014 without this separation the adversarial-AS claim is trust substitution, not trust elimination",
+    "Name a concrete deployment (e.g., 'SECU's AI loan origination agents must prove FINANCIAL_MEDIUM to FiServ DNA without SECU's OAuth AS learning which loans the agent services') with a named regulatory driver"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

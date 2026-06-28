@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims AS-removal + cross-scope unlinkability as structurally impossible for OAuth baselines. This is true for vanilla RFC 7662 but overstated against the full baseline: (a) spiffe_engineer Attack 2 shows SPIFFE JWT SVIDs already achieve AS-removal from the auth hot path \u2014 the novel delta is anonymity, not AS-removal; (b) rfc7662_advocate Attack 3 shows BBS+ anonymous credentials achieve unlinkable presentations without per-authentication AS contact, narrowing the gap to nullifier-based sybil detection; (c) most critically, the credCommitment enrollment oracle attack (cryptographer Attack 1, confirmed by rfc7662_advocate Attack 1 and spiffe_engineer Attack 1) means the construction as written does NOT actually achieve the claimed unlinkability against the AS \u2014 the AS can trivially recompute all scopedNullifiers via forward enumeration. The construction is preferable in concept but does not provably do something the baseline cannot."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (\u00a73 lists adversary capabilities), assumptions are named (Poseidon PRF, DLog on Baby Jubjub, Groth16/PLONK KS), and the IND-UNL-AS game is defined with a reduction sketch. However, the reduction is fundamentally broken: cryptographer Attack 1 shows credCommitment (the PRF 'key') is fully known to the AS since the AS computed it at enrollment \u2014 all 5 inputs are public or AS-controlled. Cryptographer Attack 3 shows the game definition never gives A an enrollment oracle, proving security against a weaker adversary than the one described in the same \u00a73 threat model. The reduction proves the wrong theorem. This is not a vague assumption \u2014 it is a structurally incorrect proof."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps cleanly to existing Bolyra primitives: Poseidon2/5 for commitments and nullifiers, EdDSAPoseidonVerifier from circomlib, BinaryMerkleRoot(20), cumulative bit encoding. Circuit cost estimated at ~11,617 constraints, well within 2^14 (uses pot16.ptau). Proving time targets (Groth16 rapidsnark <1.5s, PLONK snarkjs <5s) are within Phase 1 budget. ScopedAgentAuth is specified as a drop-in replacement for AgentPolicy. scopeBlinder malleability (cryptographer Attack 4) is a fixable implementation issue, not a primitive gap."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer without fundamental redesign. The critical attack \u2014 independently identified by cryptographer (Attack 1), rfc7662_advocate (Attack 1), and spiffe_engineer (Attack 1) \u2014 is that the AS knows every credCommitment because it computed them at enrollment. Forward enumeration over the enrollment roster (O(N) Poseidon calls, ~130ms for 13M agents) breaks cross-scope linkability completely. The construction's \u00a74 step 5 claims 'recovering credCommitment requires inverting Poseidon' but no inversion is needed \u2014 the AS has a complete lookup table. The IND-UNL-AS game is trivially broken by its own adversary definition (cryptographer Attack 3, rfc7662_advocate Attack 2). Additionally, auth0_pm Attack 3 and cu_ciso Attack 1 show the credit union deployment scenario violates BSA/AML audit obligations (31 USC \u00a75318(g), NCUA Part 748) \u2014 the privacy property creates a more serious regulatory violation than it solves. These are not weakened claims; they are unresolvable without adding agent-side entropy to credCommitment (Semaphore-style trapdoor) and a lawful audit access mechanism."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "The cross-credit-union member agent scenario (\u00a77) names a specific stakeholder (federal credit union, Navy Federal as example with 13M members), a specific regulatory requirement (FCRA \u00a7604, Reg V prohibiting merchant graph reconstruction), and demonstrates the property is load-bearing \u2014 the AS's visibility into per-agent per-RS traffic is a regulatory violation in the baseline, not a nice-to-have improvement. The healthcare delegation scenario names Intermountain Health and HIPAA referral network privacy. Both scenarios correctly identify where cross-scope unlinkability is a hard requirement. The competing BSA/AML obligation is a construction gap (scored in Dim 4), not a scenario fit issue \u2014 the need is genuine."
+    }
+  },
+  "gaps": [
+    "CRITICAL: credCommitment contains no agent-side secret \u2014 AS computed it at enrollment and can forward-evaluate Poseidon2(scopeId, credCommitment) for all enrolled agents, breaking unlinkability in O(N) time. Must add agent-generated blinding entropy (e.g., Poseidon6(..., agentSecret)) with a blind enrollment protocol so AS inserts commitment without learning preimage.",
+    "IND-UNL-AS game must model an enrollment oracle that gives A the credCommitments (or prove security under blind enrollment where A does not receive them). Current game proves security against a weaker adversary than the threat model defines.",
+    "Reduction sketch step 5 ('colluding AS+RS requires inverting Poseidon') is false \u2014 forward enumeration over known enrollment set suffices. Must reformulate after blind enrollment fix.",
+    "No lawful audit access mechanism for regulated CU deployment \u2014 BSA/AML (31 USC \u00a75318(g)) and NCUA Part 748 require reconstructible auth event logs. Must propose regulatory disclosure circuit, agent-held audit log, or HSM-escrowed credCommitment recovery.",
+    "Revocation latency unbounded \u2014 30-entry root history buffer \u00d7 30s batch interval = up to 15min post-revocation validity window. Must specify emergency revocation path with bounded SLA compatible with GLBA Safeguards Rule.",
+    "RS nullifier storage consistency requirements unspecified \u2014 distributed RS deployments (Amazon's payment cluster) need linearizable nullifier stores or replay within the batch window succeeds.",
+    "\u00a78 baseline comparison omits SPIFFE JWT SVIDs (already achieve AS-removal from auth hot path) and BBS+ anonymous credentials (achieve unlinkable presentations). Must add both rows and narrow the novelty claim to anonymity+nullifiers, not AS-removal alone.",
+    "scopeBlinder freshness is unenforceable \u2014 circuit has no constraint preventing scopeBlinder=0 across all presentations. Must bind an RS-supplied challenge as a public input.",
+    "requiredScopeMask as public output enables cohort-narrowing when colluding RSes share proof transcripts with AS. Consider making it a private input with boolean-only public output."
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

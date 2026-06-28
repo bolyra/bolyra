@@ -1,0 +1,120 @@
+{
+  "id": "cross_chain_engineer_chain_id_nonce_binding",
+  "title": "Bind chain ID into sessionNonce to prevent cross-chain proof replay",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add public input `chainId`, change sessionNonce computation from Poseidon(verifierNonce) to Poseidon2(verifierNonce, chainId). Output chainId as a public signal so the verifier contract can check it."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Same change as HumanUniqueness: add public input `chainId`, rebind sessionNonce = Poseidon2(verifierNonce, chainId), expose chainId as public output."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Propagate chainId public input through delegation proof so delegated credentials also carry chain binding. Delegation sessionNonce must commit to the same chainId as the parent credential."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "In verifyHandshake(): extract chainId from proof public signals, add require(chainId == block.chainid, 'chain mismatch'). Update ABI accordingly."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/verifiers/HumanUniquenessVerifier.sol",
+      "description": "Regenerate Solidity Groth16 verifier from updated .vkey.json after re-running trusted setup with new circuit (extra public input shifts signal indices)."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/verifiers/AgentPolicyVerifier.sol",
+      "description": "Regenerate both Groth16 and PLONK verifiers from updated .vkey.json files for AgentPolicy circuit."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/verifiers/DelegationVerifier.sol",
+      "description": "Regenerate Groth16 and PLONK verifiers for Delegation circuit."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/humanIdentity.ts",
+      "description": "Accept optional `chainId` parameter in createHumanIdentity() and proveHandshake(). Default to current chain via provider.getNetwork().chainId. Compute sessionNonce = poseidon2([verifierNonce, chainId]) before passing inputs to snarkjs."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/agentCredential.ts",
+      "description": "Accept `chainId` in createAgentCredential() and proveHandshake(). Include chainId in proof inputs. Update ProofInputs type definition."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Add chainId: bigint field to HandshakeProofInputs, ProofResult, and VerifyHandshakeOptions interfaces."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/types.py",
+      "description": "Add chain_id: int field to HandshakeProofInputs and VerifyHandshakeOptions dataclasses. Pass through to subprocess bridge."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/humanUniqueness.test.js",
+      "description": "Add fast witness tests: valid chainId matches, mismatched chainId produces different nonce, cross-chain replay scenario where same verifierNonce + different chainId yields different sessionNonce."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/agentPolicy.test.js",
+      "description": "Parallel tests to humanUniqueness: chainId binding in sessionNonce for both Groth16 and PLONK paths."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.test.js",
+      "description": "Integration tests: (1) valid proof with matching block.chainid succeeds, (2) proof generated for chainId=8453 submitted to a mock chain with chainId=42161 reverts with 'chain mismatch', (3) delegated proof with wrong chainId also reverts."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update sessionNonce definition in Section 4.2 to sessionNonce = Poseidon2(verifierNonce, chainId). Add new Section 4.3 'Chain Binding' describing why chainId is a mandatory public input and how verifiers enforce it."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Update proof resolution algorithm to note that proof verification is chain-scoped; resolvers MUST check chainId matches the target chain's network identifier."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/quickstart.md",
+      "description": "Update proveHandshake() example to show chainId parameter. Add a note explaining cross-chain replay protection and that proofs are chain-scoped by default."
+    }
+  ],
+  "steps": [
+    "Update HumanUniqueness.circom: add `signal input chainId` (public), change sessionNonce computation to component nonceHasher = Poseidon(2); nonceHasher.inputs[0] <== verifierNonce; nonceHasher.inputs[1] <== chainId; sessionNonce <== nonceHasher.out; add `signal output chainIdOut <== chainId`",
+    "Apply identical chainId public input + nonce rebinding to AgentPolicy.circom and Delegation.circom",
+    "Recompile all three circuits: npm run compile:circuits \u2014 confirms constraint counts and regenerates .r1cs files",
+    "Re-run project-specific Groth16 trusted setup for AgentPolicy and Delegation using existing pot16.ptau (HumanUniqueness reuses Semaphore ceremony \u2014 verify depth-20 ceremony still covers new constraint count before proceeding)",
+    "Run snarkjs plonk setup for AgentPolicy and Delegation PLONK variants with updated .r1cs",
+    "Regenerate all Solidity verifier contracts from new .vkey.json files via snarkjs generateverifier; copy into contracts/src/verifiers/",
+    "Update IdentityRegistry.sol: in verifyHandshake(), read chainId from the humanProof and agentProof public signals arrays (new index after existing outputs), add require(humanChainId == block.chainid && agentChainId == block.chainid, 'BolyraRegistry: chain mismatch')",
+    "Update sdk/src/types.ts: add chainId field to all affected interfaces",
+    "Update sdk/src/humanIdentity.ts and agentCredential.ts: accept chainId, default to provider.getNetwork().chainId, compute nonce with poseidon2([verifierNonce, chainId])",
+    "Update sdk-python types and subprocess bridge to pass chain_id through",
+    "Write circuit fast tests covering: same verifierNonce + different chainId \u2192 different sessionNonce; matching chainId \u2192 witness generation succeeds",
+    "Write Hardhat integration tests: cross-chain replay reverts, same-chain succeeds, delegated proof cross-chain reverts",
+    "Regenerate spec/conformance-test-vectors.json with new chainId field in all proof fixtures",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md Section 4.2\u20134.3 and did-method-bolyra.md resolution algorithm",
+    "Run full test suite: npm run test:circuits:fast && npm run test:contracts",
+    "Run slow proof tests to confirm end-to-end witness + proof + on-chain verify: npm run test:circuits:slow",
+    "Bump SDK minor version (breaking change to proof inputs API), update CHANGELOG"
+  ],
+  "estimated_constraints": 12,
+  "dependencies": [
+    "pot16.ptau \u2014 must confirm 2^16 capacity still covers HumanUniqueness with the additional Poseidon2 constraint; new constraint count is baseline + ~2",
+    "Semaphore v4 ceremony reuse \u2014 HumanUniqueness reuses public ceremony; the extra chainId input adds ~2 constraints; verify ceremony capacity before regenerating zkey",
+    "snarkjs >=0.7.6 \u2014 already pinned in repo; Poseidon2 component available in circomlib",
+    "circomlib Poseidon component \u2014 already a dependency; Poseidon(2) is a 2-input variant, confirm import path in existing circuits matches",
+    "Hardhat network config \u2014 test suite needs a mock chain with a non-default chainId to exercise the mismatch revert path; add a named network entry in hardhat.config.js",
+    "Existing .zkey artifacts in circuits/build/ \u2014 will be replaced; CI artifact cache must be invalidated after this change",
+    "IdentityRegistry ABI \u2014 any external consumers of the ABI (landing demo, integration tests, MCP proxy) must be updated to pass chainId in proof public signals"
+  ]
+}

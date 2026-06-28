@@ -1,0 +1,16 @@
+{
+  "id": "security_auditor_delegator_cred_commitment_unbound",
+  "persona": "security_auditor",
+  "title": "Delegation circuit does not verify delegator is enrolled in agentTree",
+  "dimension": "correctness",
+  "priority": "high",
+  "estimated_effort": "days",
+  "description": "The Delegation circuit takes `delegatorCredCommitment` as a private input and uses it to recompute the previousScopeCommitment check, but it never proves that `delegatorCredCommitment` is a leaf in the agentTree Merkle tree. The CIP-1 fix added a Merkle inclusion proof for the *delegatee*, but the *delegator* side relies entirely on chain-linking (previousScopeCommitment matching). An attacker who knows a valid previousScopeCommitment (emitted publicly in events) can forge a delegatorCredCommitment that hashes to the right scopeCommitment without being an enrolled agent. Add a delegator Merkle inclusion proof (reusing the same MAX_DEPTH parameter), or alternatively verify the delegator's AgentPolicy proof on-chain before accepting the delegation and pass the verified agentMerkleRoot as a public input to the delegation circuit.",
+  "candidate_id": "security_auditor_delegator_cred_commitment_unbound",
+  "adoption": 18,
+  "standards": 15,
+  "completeness": 20,
+  "correctness": 21,
+  "total": 74,
+  "verdict": "consider"
+}

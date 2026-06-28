@@ -1,0 +1,54 @@
+{
+  "id": "standards_architect_session_token_offchain_jwt",
+  "title": "JWT-encoded off-chain session token for verified handshakes",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add Section 7: Off-Chain Session Token Profile \u2014 JWT claim namespace (iss, sub, scope, nonce, exp, iat, jti, bolyra_root), signing algorithm (ES256), JOSE header extension x-bolyra-registry linking to on-chain registry address, token TTL policy, and revocation model."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/sessionToken.ts",
+      "description": "Implement encodeSessionToken(handshakeResult, relayerPrivKey, ttl) and verifySessionToken(jwt, relayerPubKey, expectedRegistry) helpers. Uses jose library for ES256 sign/verify. Validates nullifierHash, scopeCommitment, sessionNonce binding."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export encodeSessionToken and verifySessionToken from public API surface."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/sessionToken.test.ts",
+      "description": "Unit tests: roundtrip encode/verify, expired token rejection, wrong registry rejection, tampered claim rejection, nonce mismatch rejection, scope commitment integrity check."
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add section: 'Minting and verifying off-chain session tokens' with code snippet showing post-handshake JWT issuance and API gateway verification pattern."
+    }
+  ],
+  "steps": [
+    "Define claim namespace in spec: map nullifierHash -> sub, scopeCommitment -> scope (base64url), sessionNonce -> nonce, registry contract address -> iss, block-derived expiry -> exp, uuid -> jti for replay prevention",
+    "Specify JOSE header: alg=ES256, typ=JWT, x-bolyra-registry=<checksummed registry address>, x-bolyra-chain-id=<EIP-155 chain id>",
+    "Define signing key lifecycle: relayer generates secp256k1 key, publishes compressed pubkey to registry via setRelayerKey(), rotates on compromise \u2014 spec rotation and grace period",
+    "Spec token TTL policy: default 15 minutes, max 1 hour, must not exceed on-chain session expiry; exp MUST be <= handshake block timestamp + maxSessionTTL",
+    "Spec revocation model: stateless (rely on short TTL) for MVP; note jti-based blocklist as future extension; document tradeoff explicitly in spec",
+    "Implement encodeSessionToken() in sdk/src/sessionToken.ts: accepts HandshakeResult type, relayer ES256 JWK, ttlSeconds; constructs payload; signs with jose SignJWT; returns compact JWT string",
+    "Implement verifySessionToken() in sdk/src/sessionToken.ts: accepts compact JWT, relayer public JWK, expected registry address, expected chainId; verifies signature, exp, iss, x-bolyra-registry header; returns typed SessionTokenClaims",
+    "Add SessionTokenClaims and RelayerKey types to sdk/src/types.ts",
+    "Wire re-exports through sdk/src/index.ts and update sdk/package.json exports map if needed",
+    "Write unit tests covering: valid roundtrip, expired token, future iat rejected, wrong iss, wrong x-bolyra-registry, tampered sub, tampered scope, nonce field present and matches",
+    "Update sdk/QUICKSTART.md with post-handshake JWT minting example and API gateway verification snippet",
+    "Run tsc --noEmit and npm test in sdk/, fix any type errors",
+    "Commit with DCO sign-off: 'feat(sdk): add encodeSessionToken / verifySessionToken for off-chain session JWTs'"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose npm package (^5.x) for ES256 JWT sign/verify",
+    "Existing HandshakeResult type from sdk/src/types.ts",
+    "verifyHandshake() return shape must include nullifierHash, scopeCommitment, sessionNonce, registryAddress",
+    "EIP-155 chain ID available at SDK call site (passed in or read from provider)",
+    "Relayer key management out of scope for MVP \u2014 caller responsible for key material"
+  ]
+}

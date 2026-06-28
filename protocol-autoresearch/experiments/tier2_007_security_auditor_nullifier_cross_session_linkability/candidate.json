@@ -1,0 +1,16 @@
+{
+  "id": "security_auditor_nullifier_cross_session_linkability",
+  "persona": "security_auditor",
+  "title": "HumanUniqueness nullifier is constant across sessions, enabling cross-verifier linkability",
+  "dimension": "correctness",
+  "description": "The HumanUniqueness nullifier is `Poseidon2(scope, secret)` where scope is a constant like `hash('bolyra-handshake-v1')`. This means every handshake by the same human produces the identical nullifier, allowing colluding verifiers (or a single verifier across sessions) to link all activity to the same pseudonymous identity. The nonceBinding output prevents replay but does NOT prevent linkability. Fix: derive the nullifier as `Poseidon3(scope, secret, sessionNonce)` so each session produces a unique nullifier. Then use a separate `externalNullifier = Poseidon2(scope, secret)` checked on-chain only for revocation/sybil gating, not exposed to the verifier. This preserves sybil resistance while breaking cross-session linkability.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "security_auditor_nullifier_cross_session_linkability",
+  "adoption": 16,
+  "standards": 14,
+  "completeness": 18,
+  "correctness": 19,
+  "total": 67,
+  "verdict": "consider"
+}

@@ -1,0 +1,79 @@
+{
+  "id": "framework_integrator_session_token_offchain_jwt",
+  "title": "Off-chain JWT session token after on-chain handshake verification",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/SessionTokenIssuer.ts",
+      "description": "TS class that accepts a verified on-chain handshake result and issues a signed JWT (HS256 or ES256) encoding nullifierHash, scopeCommitment, bolyra_session_nonce, permissions bitmask, and exp. Exposes issue() and verify() methods."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/types.ts",
+      "description": "TypeScript interfaces: BolyraSessionClaims (JWT payload shape), SessionTokenConfig (algorithm, secret/key, ttlSeconds), VerifiedHandshakeResult (input from verifyHandshake())."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export SessionTokenIssuer and BolyraSessionClaims from the public SDK surface."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/session.py",
+      "description": "Python verify_session_token() helper. Validates JWT signature (HS256/ES256), checks exp, extracts BolyraSessionClaims as a dataclass. Does not issue tokens \u2014 issuance is TS-only."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/types.py",
+      "description": "Python dataclass BolyraSessionClaims mirroring the TS interface: nullifier_hash, scope_commitment, bolyra_session_nonce, permissions, exp, iat."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-profile.md",
+      "description": "Specification for the Bolyra session token JWT profile: required claims, algorithm constraints, nonce binding semantics, expiry window recommendations, and replay-prevention model."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/SessionTokenIssuer.test.ts",
+      "description": "Mocha/Chai tests: issue-then-verify round-trip (HS256 and ES256), expired token rejection, tampered claim rejection, mismatched nonce rejection, permissions claim fidelity."
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_session.py",
+      "description": "pytest tests for verify_session_token(): valid token acceptance, expired rejection, bad signature rejection, missing required claim rejection."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-tokens.md",
+      "description": "Developer guide: why session tokens exist (gas cost per tool call), integration pattern for LangChain/LangGraph agent loops, token lifecycle diagram, security considerations (short TTL, nonce binding, no refresh tokens)."
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Update existing quickstart with a session-token section showing the 3-step flow: verifyHandshake() \u2192 issuer.issue() \u2192 verify_session_token() per tool call."
+    }
+  ],
+  "steps": [
+    "Define BolyraSessionClaims interface and SessionTokenConfig in sdk/src/session/types.ts; align claim names with existing verifyHandshake() output fields (nullifierHash, scopeCommitment, sessionNonce).",
+    "Add jsonwebtoken (or jose for ESM compatibility) as a dependency in sdk/package.json; audit for CVEs before pinning.",
+    "Implement SessionTokenIssuer.issue(handshakeResult, config): validate input, build JWT payload with required claims (nullifier_hash, scope_commitment, bolyra_session_nonce, permissions, iat, exp), sign with HS256 or ES256 based on config.",
+    "Implement SessionTokenIssuer.verify(token, config): decode and verify signature, check exp, assert bolyra_session_nonce claim is present, return typed BolyraSessionClaims.",
+    "Re-export SessionTokenIssuer and types from sdk/src/index.ts; run tsc --noEmit to confirm no type regressions.",
+    "Write Mocha tests covering round-trip, expiry, tampering, nonce mismatch, and both HS256/ES256 algorithm paths; all tests must pass under npm run test:circuits:fast (no on-chain dependency).",
+    "Implement Python BolyraSessionClaims dataclass in sdk-python/bolyra/types.py.",
+    "Implement verify_session_token(token, secret_or_pubkey, algorithms) in sdk-python/bolyra/session.py using PyJWT; return BolyraSessionClaims or raise BolyraSessionError.",
+    "Write pytest suite for the Python helper covering the same failure modes as the TS tests.",
+    "Author spec/session-token-profile.md documenting required claims, forbidden claims (no sub, no aud ambiguity), algorithm allow-list (HS256, ES256 only \u2014 RS256 explicitly excluded), recommended TTL (300s\u2013900s), and nonce binding semantics.",
+    "Update docs/session-tokens.md with LangChain integration pattern: one verifyHandshake per session, issue token, pass token in tool call headers, middleware calls verify_session_token() before executing tool.",
+    "Update sdk/QUICKSTART.md with the 3-step session-token section.",
+    "Run full test suite (npm test + pytest -v) and confirm zero regressions before marking complete."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jsonwebtoken or jose (TS JWT library)",
+    "PyJWT (Python JWT library)",
+    "verifyHandshake() \u2014 existing SDK function whose output is the input to SessionTokenIssuer.issue()",
+    "BolyraHandshakeResult type \u2014 must expose nullifierHash, scopeCommitment, sessionNonce, permissions as typed fields",
+    "On-chain verifyMutualHandshake contract \u2014 session tokens are only valid downstream of a successful on-chain verification; this implementation does not replace that step"
+  ]
+}

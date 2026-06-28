@@ -1,0 +1,77 @@
+{
+  "id": "standards_architect_scope_blinding_salt",
+  "title": "Add blinding salt to scope commitment to prevent bitmask enumeration",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Replace Poseidon(permissionBitmask, credentialCommitment) with Poseidon3(permissionBitmask, credentialCommitment, blindingSalt). Add blindingSalt as a private signal input. Update scopeCommitment output accordingly."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Thread blindingSalt as a private input through the delegation chain. Ensure the delegated scopeCommitment is recomputed with its own fresh blindingSalt, enforcing one-way scope narrowing while maintaining blinding at each delegation hop."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/BolyraVerifier.sol",
+      "description": "Regenerate Solidity verifier from updated AgentPolicy vkey after re-running trusted setup with new 3-input Poseidon constraint. No ABI surface change \u2014 scopeCommitment remains the single public output."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/agent.ts",
+      "description": "Generate cryptographically random 32-byte blindingSalt during createAgentCredential(). Store salt alongside credential in AgentCredential type. Pass salt as private witness input when calling proveHandshake()."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Extend AgentCredential interface with blindingSalt: bigint field. Bump internal schema version to reflect breaking change in credential structure."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/AgentPolicy.test.ts",
+      "description": "Add test cases: (1) valid witness with random salt succeeds, (2) same bitmask + credCommitment but different salts produce distinct scopeCommitments, (3) brute-force of 256 bitmask values with wrong salt fails to match published commitment."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/Delegation.test.ts",
+      "description": "Update delegation tests to supply blindingSalt at each hop. Verify scope narrowing still enforced when salt changes between parent and delegated credential."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add \u00a79 Security Considerations subsection: describe the 8-bit bitmask enumeration attack (256 trial commitments against known credentialCommitment), explain how blindingSalt closes it, and specify that salt MUST be generated with a CSPRNG and MUST NOT be reused across credentials."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Document new formal property: scopeCommitment binding \u2014 an adversary with (permissionBitmask, credentialCommitment) cannot recover the committed bitmask without blindingSalt (computationally binding under Poseidon collision resistance)."
+    }
+  ],
+  "steps": [
+    "Audit current Poseidon usage in AgentPolicy.circom and Delegation.circom to confirm exact signal names and constraint count baseline",
+    "Import or confirm availability of Poseidon3 template (3-input) from circomlib; verify it is already pulled as a dependency",
+    "Modify AgentPolicy.circom: add private signal blindingSalt, replace 2-input Poseidon component with Poseidon3, wire (permissionBitmask, credentialCommitment, blindingSalt) as inputs",
+    "Modify Delegation.circom: add blindingSalt as private input, recompute delegated scopeCommitment with Poseidon3 using the delegated credential's own salt, verify scope narrowing constraint still holds on bitmask before commitment",
+    "Re-run trusted setup: generate new .r1cs and .zkey for AgentPolicy and Delegation using pot16.ptau; regenerate .vkey and Solidity verifier contract",
+    "Update sdk/src/types.ts: add blindingSalt: bigint to AgentCredential; bump schema version",
+    "Update sdk/src/agent.ts createAgentCredential(): generate random 32-byte salt via crypto.getRandomValues, convert to bigint, store in returned credential",
+    "Update sdk/src/agent.ts proveHandshake(): extract blindingSalt from AgentCredential and pass as private witness input to snarkjs fullProve",
+    "Update Python SDK subprocess bridge: ensure AgentCredential serialization/deserialization round-trips blindingSalt correctly",
+    "Write circuit tests: same-bitmask/different-salt produces distinct commitments; brute-force attack test confirms 256 wrong-salt attempts all fail",
+    "Update Delegation circuit tests to supply per-hop salts and verify chained commitments are consistent",
+    "Run npm run test:circuits:fast to validate witness generation, then npm run test:circuits:slow for full Groth16/PLONK proof verification",
+    "Run npm run test:contracts to confirm Hardhat verifyProof integration tests pass against newly generated verifier",
+    "Add \u00a79 Security Considerations to IETF draft covering enumeration attack, salt requirements (CSPRNG, no reuse), and salt secrecy",
+    "Update FORMAL-PROPERTIES.md with scopeCommitment binding property",
+    "Commit with DCO sign-off; note breaking change in credential schema in commit message"
+  ],
+  "estimated_constraints": 280,
+  "dependencies": [
+    "circomlib Poseidon3 template (3-input variant)",
+    "pot16.ptau universal SRS (already in circuits/build/)",
+    "snarkjs for re-running trusted setup and witness generation",
+    "crypto.getRandomValues (Node 18+ Web Crypto API) for salt generation",
+    "Hardhat for Solidity verifier regeneration and integration tests"
+  ]
+}

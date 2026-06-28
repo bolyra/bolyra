@@ -1,0 +1,87 @@
+{
+  "id": "cross_chain_engineer_storage_proof_root_sync",
+  "title": "Cross-chain Merkle root sync via EIP-1186 storage proofs",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Core registry holding humanTree and agentTree Merkle roots; deploy on Base Sepolia, Arbitrum One, and Polygon PoS"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/RootRelay.sol",
+      "description": "Accepts EIP-1186 storage proofs and L1 block hash anchors to sync humanTree/agentTree roots from source chain without a trusted relayer"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/L1BlockHashOracle.sol",
+      "description": "Thin adapter interface over each L2's native L1 state oracle (ArbSys on Arbitrum, StateCommitmentChain/StateSender on Polygon) to retrieve finalized L1 block hashes"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/StorageProofVerifier.sol",
+      "description": "Pure library implementing EIP-1186 Merkle-Patricia trie proof verification (account proof + storage proof) against a given stateRoot"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/interfaces/IL1BlockHashOracle.sol",
+      "description": "Shared interface for L1 block hash oracle adapters across supported L2s"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/RootRelay.test.ts",
+      "description": "Hardhat tests: unit tests with forked Base Sepolia state, proof fixture generation via eth_getProof, and end-to-end relay simulation"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/StorageProofVerifier.test.ts",
+      "description": "Unit tests for MPT proof verification library against known-good EIP-1186 proof vectors"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/fixtures/storage_proofs/",
+      "description": "Captured eth_getProof JSON fixtures for humanTreeRoot and agentTreeRoot slots across Base Sepolia, Arbitrum, Polygon"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/crossChain.ts",
+      "description": "TypeScript helpers: fetchStorageProof(rpcUrl, registryAddr, blockTag), encodeRelayCalldata(proof), and pollRootSync(targetChain) utility"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/cross-chain-root-sync.md",
+      "description": "Protocol spec: slot layout, proof encoding format, security assumptions (L1 finality window, reorg depth), and oracle trust model per L2"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/cross-chain-deployment.md",
+      "description": "Operator guide: deploying IdentityRegistry + RootRelay on each chain, configuring oracle addresses, and running the relay flow"
+    }
+  ],
+  "steps": [
+    "Pin storage slot indices for humanTreeRoot and agentTreeRoot in IdentityRegistry using a fixed layout (avoid mappings at top-level); document slot numbers in spec",
+    "Implement StorageProofVerifier.sol: decode RLP-encoded EIP-1186 account proof and storage proof, verify against provided stateRoot using MPT trie node hashing",
+    "Implement IL1BlockHashOracle interface; write ArbSysAdapter (calls ArbSys.arbBlockHash for L1 block numbers) and PolygonStateAdapter (reads from Polygon's L1 state commitment contract)",
+    "Implement RootRelay.sol: accept (l1BlockNumber, accountProof, storageProof[humanRoot], storageProof[agentRoot]), retrieve stateRoot via L1BlockHashOracle, delegate verification to StorageProofVerifier, then write verified roots to local IdentityRegistry",
+    "Add staleness guard in RootRelay: reject relays where l1BlockNumber is older than MAX_ROOT_AGE blocks to prevent replaying stale roots",
+    "Deploy IdentityRegistry to Base Sepolia (source), Arbitrum Sepolia, and Polygon Amoy testnets; record addresses in contracts/deployments/",
+    "Deploy RootRelay + oracle adapters on Arbitrum Sepolia and Polygon Amoy pointing at Base Sepolia as source",
+    "Capture eth_getProof fixtures: call eth_getProof on Base Sepolia IdentityRegistry for both root slots at a finalized block; store as JSON test fixtures",
+    "Write StorageProofVerifier unit tests against captured fixtures, including malformed-proof and wrong-root negative cases",
+    "Write RootRelay integration tests using Hardhat's network forking: fork Base Sepolia state, simulate ArbSys returning the forked block hash, call relayRoot with real proof, assert local registry updated",
+    "Implement SDK fetchStorageProof() using ethers/viem eth_getProof RPC call and encodeRelayCalldata() to ABI-encode the proof structs for RootRelay",
+    "Write cross-chain spec: document slot layout, finality assumptions per L2 (Arbitrum ~12 L1 blocks, Polygon checkpoint ~256 blocks), proof encoding, and oracle upgrade path",
+    "Add Hardhat deploy scripts for all three chains with network-specific oracle adapter selection",
+    "Write operator docs covering full relay flow: fetch proof from source RPC, call relayRoot on destination, verify roots match"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "EIP-1186 eth_getProof RPC support on Base Sepolia, Arbitrum Sepolia, and Polygon Amoy nodes",
+    "ArbSys precompile (0x0000000000000000000000000000000000000064) available on Arbitrum",
+    "Polygon L1 state commitment contract address on Amoy testnet",
+    "Hardhat network forking with archive node RPC for integration tests",
+    "RLP decoding library for Solidity (e.g., Hamdiallah/RLP or custom) \u2014 audit before use",
+    "Finalized IdentityRegistry storage layout locked before deployment (slot numbers must not shift)",
+    "pot16.ptau and existing circuit artifacts unaffected \u2014 this is contract-only scope"
+  ]
+}

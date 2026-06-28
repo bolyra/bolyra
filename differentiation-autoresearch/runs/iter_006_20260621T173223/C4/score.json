@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C4",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction names AS-blind issuer hiding (Property 2) as a capability RFC 7662 filtered introspection structurally cannot provide \u2014 the AS inherently knows the issuer identity. Gap 6 in \u00a78 explicitly rules this out of the baseline. The rfc7662_advocate's Attack 1 (threshold-MPC AS with Privacy Pass) partially narrows the gap but concedes stable token handles remain linkable without per-session rotation and AS-side session logs persist. Attack 4 (ephemeral DPoP) similarly concedes AS interaction creates a session log side-channel. The construction also names constant-size proof for issuer-set hiding (Gap 2) which BBS+ cannot match without becoming a ZK circuit. These are specific capabilities explicitly ruled out of the best non-ZK alternatives."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction defines an explicit IND-ISS game with four adversary classes, names six cryptographic assumptions (PLONK knowledge soundness, Poseidon CR/preimage/PRF, DL on Baby Jubjub, PLONK ZK), and provides a 4-hybrid reduction sketch with a concrete bound. However, the cryptographer's Attack 3 identifies that the reduction requires simulation-extractable ZK (SE-ZK) for the multi-proof adaptive setting but the construction cites only 'zero-knowledge property of PLONK' without specifying HVZK vs SE-ZK or citing Ganesh et al. Attack 1 identifies that nonce-pinning by a malicious verifier (who controls sessionNonce) destroys cross-session unlinkability \u2014 the PRF argument assumes distinct nonces but the protocol does not enforce freshness. Attack 2 shows the low-entropy credentialId PRF-key enumeration via blindNullifier is acknowledged for revocation but not addressed for the nullifier surface. Attack 4 notes the SRS provenance (pot16.ptau) is unspecified with no ceremony transcript. These are real gaps in the formal argument: the threat model is stated but the reduction has identified holes (SE-ZK vs HVZK, nonce freshness enforcement, SRS trust). Score 1 rather than 0 because the threat model, assumptions, and reduction sketch are present and substantive \u2014 they are incomplete rather than absent."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 maps every component to existing Bolyra primitives: Poseidon (all arities including sponge-mode Poseidon25), EdDSAPoseidonVerifier on Baby Jubjub, PLONK with pot16.ptau, lean incremental Merkle tree, sparse Merkle tree. Section 6 provides a detailed constraint breakdown totaling ~57,600 constraints within the 2^16 = 65,536 budget with 12% headroom. Proving time targets are stated: <5s snarkjs, ~1.2s rapidsnark, <300K gas on-chain, 768-byte proof. All within Phase 1 budget. No new cryptographic primitives required."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Five personas attacked the construction. The cryptographer found real unaddressed gaps: nonce-pinning destroys cross-session unlinkability (Attack 1), low-entropy credentialId enumeration via blindNullifier (Attack 2), SE-ZK vs HVZK confusion in the hybrid argument (Attack 3), and unspecified SRS provenance (Attack 4) \u2014 all marked 'not in threat model, must address.' The cu_ciso found operational gaps around GLBA breach notification (Attack 2) and key custody (Attack 3). The spiffe_engineer found the schema-index agreement gap (Attack 1) and registry governance gap (Attack 3). The rfc7662_advocate's attacks largely survived (Attacks 2 and 4 marked 'in-threat-model, construction survives') but Attack 3 (revocation tree operator trust) is unaddressed. The auth0_pm found the proving latency gap (Attack 1) and registry operator trust gap (Attack 2). Multiple Tier 3 attacks surfaced real weaknesses that the construction cannot currently answer \u2014 particularly the cryptographer's nonce-pinning and SE-ZK attacks which weaken the core IND-ISS claim. Score 1: Tier 3 surfaced real attacks that the construction mitigates partially but that weaken the formal claims."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "The cross-CU NCUA membership proof scenario (\u00a77) names a concrete stakeholder (PenFed, $36B assets), a specific regulatory context (NCUA-chartered credit unions, 4,600+ institutions), a load-bearing property (issuer anonymity prevents the NCUA from learning real-time transaction patterns of individual CUs), and a detailed workflow from credential issuance through proof generation to verification. The property is load-bearing: without issuer-blind proving, the NCUA or CUSO intermediary learns which CU is transacting with which partner, creating information asymmetry in a regulated environment. The cu_ciso's Attack 3 (GLBA breach notification) challenges whether the property is desirable for all CU contexts, but the scenario itself is concrete, named, and load-bearing for the privacy use case. The KYB extension scenario adds cross-jurisdictional deployment."
+    }
+  },
+  "gaps": [
+    "Nonce freshness enforcement: the protocol does not prevent a malicious verifier from reusing sessionNonce across sessions, collapsing cross-session unlinkability via blindNullifier pinning. Add an on-chain nonce commitment or derive nonce from block hash.",
+    "SE-ZK vs HVZK: the hybrid argument requires simulation-extractable ZK for the multi-proof adaptive IND-ISS game. Cite Ganesh et al. CRYPTO 2022 or equivalent, specify the model (AGM+ROM), and confirm pot16.ptau satisfies SE-PLONK structural requirements.",
+    "Low-entropy credentialId enumeration via blindNullifier: the low-entropy mitigation (per-credential nonce in attrValues[15]) is stated for revocation-tree hiding but not for blindNullifier. State the entropy lower-bound requirement uniformly.",
+    "SRS provenance: cite the specific pot16.ptau ceremony transcript, state the honest-generation assumption explicitly, and discuss degraded security under subverted SRS.",
+    "Schema-index agreement: no mechanism ensures all issuers in the registry use the same attribute schema mapping. Add a schemaHash public input or schema registry commitment linked to issuerRegistryRoot.",
+    "Registry governance: no adversary class models a malicious registry operator who inserts rogue issuer keys or delays updates. Define governance (multisig, timelock) or add a Class 5 adversary.",
+    "Revocation tree operator trust: no adversary class models a malicious revocation tree operator who omits revocations. Reduce to a transparency log assumption or acknowledge trust equivalence with AS.",
+    "Operational forensics appendix: nullifier collisions and breach scenarios produce only opaque field elements. Provide monitoring guidance, escalation paths, and GLBA-compliant incident response procedures.",
+    "Proving latency in multi-hop MCP workflows: no proof caching or session-scoped ticket mechanism. Address the latency-unlinkability tradeoff for interactive agent chains.",
+    "WIMSE engagement: \u00a78 does not address WIMSE (draft-ietf-wimse-arch). Explain why a WIMSE ZK attestor extension is insufficient or reframe the construction as a WIMSE extension profile."
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

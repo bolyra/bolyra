@@ -1,0 +1,16 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "persona": "framework_integrator",
+  "title": "Standardized proof envelope with application/bolyra+json content type",
+  "dimension": "standards",
+  "description": "Define a canonical JSON envelope format for Bolyra proofs that framework integrations can rely on: `{\"version\": \"1.0\", \"circuit\": \"AgentPolicy|Delegation|HumanUniqueness\", \"proof\": {...}, \"publicSignals\": [...], \"metadata\": {\"provingSystem\": \"groth16\", \"timestamp\": ...}}`. Register `application/bolyra+json` as the content type. LangChain tool outputs, CrewAI task results, and AutoGen message payloads all need a consistent serialization to pass proofs between agents. Without this, each integration invents its own format and interop breaks. Add schema validation to both SDKs via `validateProofEnvelope()` and include 10+ test vectors in `spec/test-vectors/`.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "framework_integrator_proof_envelope_content_type",
+  "adoption": 21,
+  "standards": 20,
+  "completeness": 21,
+  "correctness": 16,
+  "total": 78,
+  "verdict": "promote"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "persona": "standards_architect",
+  "title": "Specify human tree root history buffer matching agent tree parity",
+  "dimension": "correctness",
+  "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but has no equivalent for humanTree \u2014 the contract comment says 'humanTree uses Semaphore's' but the code uses a standalone LeanIMT with no history. This means any new human enrollment instantly invalidates all in-flight human proofs. Add a `humanRootHistory[30]` ring buffer with the same `isKnownHumanRoot()` check pattern used by `isKnownAgentRoot()`. Document the staleness window (30 enrollments \u2248 N minutes at expected throughput) in the IETF draft Security Considerations \u00a77.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "standards_architect_human_root_history_parity",
+  "adoption": 17,
+  "standards": 16,
+  "completeness": 19,
+  "correctness": 21,
+  "total": 73,
+  "verdict": "consider"
+}

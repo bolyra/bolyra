@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction explicitly removes the AS from the per-request auth path \u2014 agents prove enrollment locally and present proofs directly to RSes. \u00a78 names the specific capability baseline cannot match: even a compromised/coerced AS cannot reconstruct cross-RS traffic graphs because it is never contacted after enrollment. PPID+DPoP achieves RS-level unlinkability but the AS remains on the critical path and retains full per-request visibility. The rfc7662_advocate (Attack 3) concedes the genuine claim (AS-level unlinkability under compromise) survives; the spiffe_engineer (Attack 4) concedes cross-RS unlinkability is genuinely novel and structurally impossible without ZK. The \u00a78 table overstates the RS-level gap vs PPID but the AS-level gap is provably ruled out of the baseline."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "\u00a73 defines an explicit IND-UNL-AS game with adversary capabilities (controls AS, up to n-1 RSes, network metadata) and non-capabilities (agent local environment, on-chain contract, computational assumptions). \u00a74 names six assumptions (Poseidon PRF A-PRF, Baby Jubjub DL A-DL, Poseidon CR A-CR, Groth16 knowledge soundness A-KS-G16, PLONK knowledge soundness A-KS-PLONK, ZK property A-ZK) and provides a five-step reduction sketch concluding Adv_A \u2264 Adv_PRF + Adv_ZK + negl(\u03bb). The reduction has real gaps (credentialSecret unbinding breaks honest-prover assumption, game is static not adaptive, SRS trust assumption unstated) but all three rubric elements \u2014 threat model, named assumptions, reduction sketch \u2014 are explicitly present."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "\u00a75 maps every construction element to existing Bolyra primitives: Poseidon2/3/5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding, 30-entry root history buffer, PLONK proving system. \u00a76 provides a detailed constraint breakdown totaling ~16,390 constraints \u2014 well within pot16.ptau (2^16 = 65,536). Proving time targets stated: <3s PLONK on consumer hardware, <500ms via rapidsnark. Circuit is comparable to existing AgentPolicy (~15K constraints). All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Cryptographer Attack 1 (credentialSecret-leaf unbinding) is a real soundness gap: credentialSecret does not appear in credentialCommitment, making it a free variable in the circuit. A single enrolled agent can pick arbitrary credentialSecret values to generate unlimited distinct scopeNullifiers at the same RS (nullifier splitting), and any party who knows a Merkle leaf can produce valid proofs with an arbitrary credentialSecret (credential hijacking). The construction cannot answer this without modifying the circuit to include credentialSecret in the commitment hash. Additionally, scopeId has no cryptographic binding to RS identity (spiffe Attack 1) \u2014 colluding RSes can converge on a shared scopeId to collapse unlinkability. The construction survives several attacks (rfc7662 Attack 1 with spec amendment, Attack 3 for AS-level claim, spiffe Attack 4 re WIMSE), but the credentialSecret unbinding is a fundamental flaw that weakens the entire security argument."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "\u00a77 names NFCU as a concrete stakeholder with a specific regulatory requirement: GLBA prohibits the CU-as-AS from building member merchant interaction graphs. The scenario is load-bearing \u2014 under current OAuth architecture NFCU sees every token issuance and can reconstruct the full merchant graph, which creates GLBA liability. The healthcare variant names Kaiser Permanente, LabCorp, and Radiology Associates with HIPAA referral-network privacy as the load-bearing requirement. Both scenarios name real institutions and real regulatory frameworks where cross-scope unlinkability is a compliance necessity, not a nice-to-have."
+    }
+  },
+  "gaps": [
+    "credentialSecret must be included in credentialCommitment (Poseidon6 with secret as 6th input) to bind the nullifier-generating secret to the enrolled identity \u2014 without this, nullifier splitting and credential hijacking break soundness",
+    "scopeId needs a cryptographic binding mechanism (on-chain registry mapping RS public key to scopeId, or RS proves domain ownership) so colluding RSes cannot converge on a shared scopeId to collapse unlinkability",
+    "IND-UNL-AS game must be extended to adaptive multi-session (q-query) variant \u2014 the static one-shot game does not capture repeated deterministic nullifier observation and timing correlation across sessions",
+    "PLONK SRS trust assumption must be explicitly stated (e.g., honest-majority MPC with t-of-n threshold) \u2014 subverted SRS collapses all PLONK-verified circuits",
+    "Revocation mechanism needed: either a ZK-compatible revocation accumulator (non-membership proof against revocation tree) or explicit TTL-vs-correlation tradeoff with bounded revocation latency for GLBA/Reg E compliance",
+    "credentialSecret key generation ceremony must be specified: client-side CSPRNG with proof of entropy or commit-and-reveal protocol to exclude operator from learning the secret",
+    "Enrollment timing side channel: on-chain Merkle leaf insertions are public timestamped events \u2014 batched epoch-based enrollment needed to prevent AS+RS narrowing the anonymity set",
+    "\u00a78 comparison table should stop claiming RS-level unlinkability failure against PPID+DPoP (baseline achieves this) and focus the differential on AS-level unlinkability under compromise/coercion"
+  ],
+  "strength": 9,
+  "verdict": "consider"
+}

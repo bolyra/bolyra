@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap: proving monotonic narrowing over hidden scope values across a multi-hop chain without a trusted aggregator. Section 8's comparison table articulates why BBS+ cannot prove relational invariants over hidden multi-credential state. However, the rfc7662_advocate (Attack 2) and spiffe_engineer (Attack 2) demonstrate the baseline comparison overstates limitations \u2014 WIMSE self-contained tokens with nested act claims are offline-verifiable and enforce narrowing at issuance without live AS queries, contradicting a key Section 8 claim. The auth0_pm (Attack 3) shows the NCUA examiner baseline is SOC 2 + audit logs, not raw token chain disclosure. The genuine delta is narrower than claimed: hiding intermediate scope *values* from a legitimate auditor in AS-coercion scenarios (journalist/source). This is real but the baseline can approximate with PPIDs + DPoP + audience binding for identity unlinkability, leaving only scope-value hiding as the irreducible advantage. Preferable but not provably impossible for baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is stated (Section 3) with explicit adversary capabilities, two named security games (NarrowingAuditSoundness, AuditPrivacy), three named cryptographic assumptions (PLONK knowledge soundness, Poseidon collision resistance, Baby Jubjub DLog), and reduction sketches for both soundness and privacy. However, the cryptographer's attacks reveal fatal gaps: (1) Attack 1 \u2014 nullifier-scope decoupling means the reduction argues about extracted witness values, not actual delegation chain values, because no constraint binds delegationNullifier[i] to scopeCommit[i]; (2) Attack 4 \u2014 Constraint 4 is a tautology for interior hops, so the scope commitment chain is unlinked; (3) Attack 2 \u2014 chainLength is prover-controlled with no on-chain binding, enabling chain truncation. The soundness reduction is formally structured but argues about the wrong object. The privacy argument claims HVZK suffices but the cryptographer (Attack 3) correctly notes the journalist scenario requires protection against a malicious auditor, necessitating SE-PLONK or full ZK. Threat model exists but assumptions/reductions have identified holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 provides explicit mapping to every Bolyra primitive: Poseidon2 for scope commitments, PLONK proving system (already used for Agent/Delegation), BabyJubjub EdDSA, Num2Bits from circomlib, nullifier scheme matching existing delegation circuit outputs. Section 6 provides detailed constraint breakdown totaling ~4,300 constraints \u2014 2.8x smaller than HumanUniqueness, 4.2x smaller than AgentPolicy \u2014 well within Phase 1 budget. Proving time target <1s for PLONK is credible given the constraint count. The circuit reuses existing gadgets (Poseidon2, Num2Bits, Mux1) from circomlib. No new primitives required."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary across 5 personas found multiple construction-breaking attacks that the construction cannot answer. The cryptographer identified three soundness breaks: (1) nullifier-scope decoupling \u2014 the circuit proves narrowing of a fabricated witness, not the actual chain; (2) chain truncation via prover-controlled chainLength; (3) Constraint 4 is a tautology. These are independently confirmed by rfc7662_advocate (Attack 2) and spiffe_engineer (Attack 1). The cu_ciso identified that proof-of-structure \u2260 proof-of-enforcement (Attack 2) and that retroactive incident response breaks the privacy model (Attack 3). The auth0_pm identified that the prover IS the trusted third party (Attack 1). Multiple attacks lie outside the stated threat model and the construction cannot answer them \u2014 the soundness game itself argues about the wrong object. This is not a weakened claim; it is a broken one."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: NFCU loan origination pipeline (Section 7) with specific stakeholder (NCUA examiner) and regulatory requirement (FFIEC AI model risk management), and journalist/source relay chain. However, the cu_ciso (Attacks 1, 3, 4) demonstrates the NFCU scenario is not viable as described: the NCUA examiner cannot consume a PLONK proof (no mapping to FFIEC CAT controls), retroactive proof generation conflicts with data retention requirements, and the on-chain registry is an unvetted third party under NCUA TRM. The auth0_pm (Attack 3) shows the real NCUA baseline is SOC 2, not scope chain disclosure. The NFCU scenario is named with regulatory specificity but collapses under operational scrutiny \u2014 it is hypothetical rather than load-bearing. The journalist scenario is genuinely novel but remains niche and unvalidated."
+    }
+  },
+  "gaps": [
+    "Nullifier-scope binding: add in-circuit constraint deriving delegationNullifier[i] from scopeCommit[i] (or prove membership in a Merkle tree of on-chain (nullifier, scopeCommit) pairs) so the soundness reduction argues about actual chain scopes, not fabricated witnesses",
+    "Fix Constraint 4 tautology: interior hop scope commitments must be bound to on-chain DelegationVerified event data, not self-consistently derived from unconstrained private inputs",
+    "Bind chainLength to on-chain state: registry must record total hop count per sessionNonce, and the circuit must enforce the public input matches, preventing chain truncation",
+    "Upgrade privacy argument from HVZK to simulation-extractable PLONK or full ZK for the journalist/source scenario where the auditor may be adversarial",
+    "Address the prover-is-the-trusted-party gap: the compliance agent choosing private inputs is the entity under audit \u2014 need a mechanism binding circuit inputs to actual runtime enforcement (e.g., TEE attestation, co-signed witness from independent observer)",
+    "Mandate MAX_HOPS padding for chainLength in privacy-sensitive scenarios to prevent anonymity set collapse from chain topology fingerprinting",
+    "Add examiner workflow compatibility: specify who runs the verifier, what human-readable output it produces, and how it maps to FFIEC CAT or NIST 800-53 control families",
+    "Narrow the 'no trusted third party' claim to 'no application-layer trusted third party' and explicitly enumerate the full trusted computing base (chain consensus, contract upgradeability, PLONK ceremony)",
+    "Address data retention tension: specify private input lifecycle, retention policy, and incident response playbook for retroactive proof generation"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

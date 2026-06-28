@@ -1,0 +1,695 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Define application/bolyra-proof+cbor content type and envelope format",
+      "dimension": "standards",
+      "description": "The protocol lacks a standardized wire format for proof exchange. Define an IANA-registrable media type application/bolyra-proof+cbor with a CDDL schema covering the three proof types (human, agent, delegation). The envelope should include: proof bytes, public signals array, circuit identifier, proving system tag (groth16/plonk), and a version field. This enables interop between implementations without out-of-band coordination on serialization. Artifact: spec/proof-envelope.cddl + updates to draft-bolyra-mutual-zkp-auth-01.md Section 6.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 15,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 16,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "title": "Define application/bolyra-proof+cbor content type and envelope format",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope.cddl",
+          "description": "CDDL schema defining the bolyra-proof+cbor envelope: proof bytes, public signals array, circuit identifier enum (human-uniqueness/agent-policy/delegation), proving system tag (groth16/plonk), version field, and optional metadata map"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update Section 6 to reference the new content type, embed the CDDL schema, document IANA registration template (type/subtype, required/optional params, encoding), and add wire-format examples for each proof type"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/iana-media-type-registration.md",
+          "description": "Standalone IANA registration template for application/bolyra-proof+cbor per RFC 6838 and RFC 7049 structured-syntax suffix rules (+cbor)"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/envelope.ts",
+          "description": "TypeScript encode/decode helpers: serializeProofEnvelope() and deserializeProofEnvelope() using cbor2 or @ipld/dag-cbor, enforcing schema version compatibility"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/envelope.test.ts",
+          "description": "Unit tests covering round-trip encode/decode for all three proof types, version field validation, unknown-field tolerance, and malformed-input rejection"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/conformance/envelope-vectors.json",
+          "description": "Golden hex-encoded CBOR vectors for each proof type and proving system combination, used by conformance runner and cross-implementation testing"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope-guide.md",
+          "description": "Developer guide explaining when to use application/bolyra-proof+cbor, HTTP Content-Type header usage, versioning policy, and migration path from any prior ad-hoc serialization"
+        }
+      ],
+      "steps": [
+        "Audit existing proof serialization in sdk/src/ and spec/ to inventory all fields currently produced by snarkjs (proof bytes layout, publicSignals array shape, vkey references)",
+        "Define CDDL top-level group: envelope = { version: uint, circuit-id: circuit-id-enum, proving-system: proving-system-enum, public-signals: [+ bstr], proof: proof-bytes, ? metadata: { * tstr => any } }",
+        "Define circuit-id-enum as CBOR integer tags: 1=human-uniqueness, 2=agent-policy, 3=delegation; define proving-system-enum: 1=groth16, 2=plonk",
+        "Write spec/proof-envelope.cddl with the complete CDDL schema including all three proof type variants and a discriminated union on circuit-id",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md Section 6: add subsection 6.1 (media type definition), 6.2 (CDDL normative schema), 6.3 (HTTP usage), 6.4 (versioning and extension points)",
+        "Draft spec/iana-media-type-registration.md following RFC 6838 Section 4 template: type name, subtype name, required parameters (version), encoding considerations (CBOR per RFC 8949), security considerations, interoperability considerations, author contact",
+        "Implement sdk/src/envelope.ts with serializeProofEnvelope(proof, publicSignals, circuitId, provingSystem, version?) returning Uint8Array and deserializeProofEnvelope(bytes) returning typed EnvelopeResult with runtime schema validation",
+        "Generate golden CBOR vectors for all 6 combinations (3 circuit types x 2 proving systems) using mock proof bytes and known public signals; write to spec/conformance/envelope-vectors.json",
+        "Write sdk/test/envelope.test.ts covering: round-trip fidelity for all 6 combinations, version=1 default, rejection of unknown circuit-id, rejection of malformed CBOR, metadata optional field presence/absence",
+        "Run npm run test:circuits:fast and sdk tests to confirm no regressions; verify golden vectors decode correctly against CDDL using a CBOR validator",
+        "Write docs/proof-envelope-guide.md with HTTP header examples (Content-Type: application/bolyra-proof+cbor), fetch/axios snippet for sending a proof, and versioning policy (minor=backward-compatible fields, major=breaking)",
+        "Update spec/conformance runner (if present) to validate submitted proofs against envelope-vectors.json golden tests",
+        "Open tracking issue or update spec/ changelog noting content type is provisional pending IANA submission; mark draft section as normative once vectors pass"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "cbor2 or @ipld/dag-cbor npm package for CBOR encode/decode in sdk/",
+        "snarkjs proof output schema (existing sdk/src/ serialization to audit)",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md existing Section 6 structure",
+        "RFC 8949 (CBOR), RFC 6838 (media type registration), RFC 8610 (CDDL)",
+        "spec/conformance/ runner if already present for vector integration"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete DID resolution algorithm with verification method binding",
+      "dimension": "standards",
+      "description": "spec/did-method-bolyra.md defines did:bolyra but lacks a concrete resolution algorithm mapping on-chain state to DID Documents. Specify: (1) how humanMerkleRoot and agentMerkleRoot map to verification methods, (2) the service endpoint for proof submission, (3) deactivation semantics when a nullifier is revoked. Without this, no universal resolver can implement did:bolyra. Artifact: updated spec/did-method-bolyra.md with Resolution, Deactivation, and Security Considerations sections per W3C DID Core \u00a77-8.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 14,
+      "standards": 22,
+      "completeness": 19,
+      "correctness": 15,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "title": "Complete DID resolution algorithm with verification method binding",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Updated DID method spec with W3C DID Core \u00a77-8 compliant Resolution, Deactivation, and Security Considerations sections"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-resolution-algorithm.md",
+          "description": "Standalone normative reference for the resolution algorithm: input DID \u2192 on-chain state lookup \u2192 DID Document construction steps"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/did-resolution-vectors.json",
+          "description": "W3C DID test suite\u2013compatible resolution test vectors covering human DID, agent DID, deactivated DID, and unknown DID cases"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/resolver.ts",
+          "description": "Reference implementation of the resolution algorithm against the on-chain BolyraRegistry; returns DID Document or DID Resolution Result per W3C spec"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/did-resolution-explainer.md",
+          "description": "Developer-facing explainer: how to integrate did:bolyra with universal resolvers (did-resolver, uniresolver)"
+        }
+      ],
+      "steps": [
+        "Read spec/did-method-bolyra.md in full to inventory what is already specified and identify gaps in resolution, deactivation, and security sections",
+        "Read contracts/ to understand BolyraRegistry interface: which on-chain functions/events expose humanMerkleRoot, agentMerkleRoot, nullifier revocation state, and service endpoint registry",
+        "Define the DID syntax and identifier components for did:bolyra:<chain-id>:<registry-address>:<subject-id> and normalization rules (case folding, canonicalization)",
+        "Specify the Read (resolve) algorithm step-by-step: (1) parse DID into components, (2) select RPC endpoint for chain-id, (3) call registry.getIdentity(subject-id) to retrieve humanMerkleRoot or agentMerkleRoot + metadata block, (4) check revocation bitmap / nullifier list, (5) construct DID Document",
+        "Define verification method binding: humanMerkleRoot maps to a 'BolyraHumanMerkleRoot2026' verification method type; agentMerkleRoot maps to 'BolyraAgentMerkleRoot2026'; include key material format (base64url-encoded root bytes), controller, and proof purpose (authentication, assertionMethod)",
+        "Specify the service endpoint entry for proof submission: type 'BolyraProofSubmission', serviceEndpoint points to the on-chain registry contract address encoded as a CAIP-10 URI, with additional 'proofType' and 'supportedCircuits' properties",
+        "Define deactivation semantics: a DID is deactivated when its nullifierHash appears in the registry's revocation set; deactivated DID Documents MUST include 'deactivated: true' in the DID Document metadata and omit verification methods",
+        "Write Security Considerations section covering: nullifier linkability across contexts, Merkle root staleness window (block finality), key compromise and revocation latency, replay attacks on resolution responses, and resolver trust model",
+        "Author spec/did-resolution-algorithm.md as a normative companion doc with MUST/SHOULD/MAY language and a pseudocode listing of the algorithm",
+        "Create spec/conformance/did-resolution-vectors.json with at minimum: (a) active human DID, (b) active agent DID, (c) deactivated human DID (nullifier revoked), (d) DID with unknown subject-id returning error 'notFound', (e) DID on unsupported chain-id",
+        "Implement sdk/src/did/resolver.ts: thin wrapper around ethers.js contract call \u2192 DID Document construction following the spec algorithm exactly; export a did-resolver\u2013compatible Resolver factory",
+        "Run the W3C DID test suite (did-spec-registries conformance runner) against the conformance vectors to validate spec completeness",
+        "Update docs/did-resolution-explainer.md with uniresolver driver config snippet and did-resolver v4 integration example",
+        "Update spec/did-method-bolyra.md with the new Resolution (\u00a77), Deactivation (\u00a78), and Security Considerations (\u00a79) sections, preserving all existing normative text"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "contracts/BolyraRegistry.sol \u2014 must expose getIdentity(), isNullifierRevoked(), and getServiceEndpoint() read functions before the resolution algorithm can be fully specified",
+        "W3C DID Core 1.0 (https://www.w3.org/TR/did-core/) \u2014 \u00a77 Resolution, \u00a78 Deactivation, \u00a79 Security Considerations are the normative template",
+        "CAIP-10 account addressing \u2014 used to encode registry contract as a service endpoint URI",
+        "spec/did-method-bolyra.md \u2014 existing file; new sections must integrate without breaking prior normative text",
+        "circuits/src/HumanUniqueness.circom and AgentPolicy.circom \u2014 verification method types are derived from the public outputs (humanMerkleRoot, agentMerkleRoot) defined in these circuits",
+        "did-resolver npm package (^4.x) \u2014 TypeScript resolver interface the SDK implementation must satisfy for uniresolver compatibility"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "product_visionary_session_token_offchain",
+      "persona": "product_visionary",
+      "title": "Off-chain session token with on-chain checkpoint batching",
+      "dimension": "completeness",
+      "description": "After a successful handshake, emit a signed session token (JWT/SD-JWT with the nullifier, scopeCommitment, and expiry embedded) that parties can verify off-chain for subsequent calls within the session window. Batch session roots on-chain every N minutes. This eliminates per-call proving cost \u2014 the single biggest adoption blocker for agentic commerce where agents make dozens of tool calls per minute. Implement in the TS SDK as `createSessionToken()` and `verifySessionToken()`, with a new `SessionCheckpoint.sol` contract that accepts Merkle roots of verified sessions.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "product_visionary_session_token_offchain",
+      "adoption": 23,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "product_visionary_session_token_offchain",
+      "title": "Off-chain session token with on-chain checkpoint batching",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session.ts",
+          "description": "createSessionToken() and verifySessionToken() \u2014 signs a SD-JWT embedding nullifierHash, scopeCommitment, sessionNonce, expiry, and agentDID after a successful handshake proof"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/checkpoint.ts",
+          "description": "SessionCheckpointBatcher \u2014 accumulates verified session token hashes in a local Merkle tree and flushes the root to SessionCheckpoint.sol every N minutes or every M sessions"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/SessionCheckpoint.sol",
+          "description": "Accepts Merkle roots of batched session hashes from an authorized flusher address; emits CheckpointAnchored(root, timestamp, count); allows anyone to verify session inclusion via a Merkle path"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/session-token-format.md",
+          "description": "SD-JWT claim schema: standard header, protected claims (nullifierHash, scopeCommitment, sessionNonce, agentDID, humanMerkleRoot, expiry), selective-disclosure frame, and signing key derivation rules"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session.test.ts",
+          "description": "Unit tests: createSessionToken round-trip, expiry enforcement, replay rejection via nonce mismatch, scope narrowing reflected in token claims"
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/SessionCheckpoint.test.ts",
+          "description": "Hardhat integration tests: anchor root, verify Merkle inclusion path, reject unauthorized flusher, test batch overflow edge case"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-tokens.md",
+          "description": "Developer guide: why per-call proving is eliminated, session lifecycle diagram, createSessionToken / verifySessionToken API reference, checkpoint batching tuning parameters"
+        }
+      ],
+      "steps": [
+        "Define SD-JWT claim schema for session tokens in spec/session-token-format.md \u2014 pin claim names (nullifierHash, scopeCommitment, sessionNonce, agentDID, humanMerkleRoot, expiry) and selective-disclosure frame",
+        "Add jose / @sd-jwt/core dependency to sdk/package.json; confirm no flat-override collision with existing snarkjs overrides",
+        "Implement createSessionToken(handshakeResult, signingKey, ttlSeconds): SessionToken in sdk/src/session.ts \u2014 sign SD-JWT with operator EdDSA key, embed all required claims, set expiry",
+        "Implement verifySessionToken(token, verificationKey): VerifiedSession in sdk/src/session.ts \u2014 validate signature, check expiry, return decoded claims; throw typed errors on failure",
+        "Write sdk/test/session.test.ts covering happy path, expired token, tampered nullifier, and scope claim presence",
+        "Implement in-memory MerkleTree helper in sdk/src/checkpoint.ts using poseidon2 hashes (reuse existing poseidon dependency from circuits) to accumulate session token hashes",
+        "Implement SessionCheckpointBatcher class: add(sessionTokenHash), flush(signer, contract) \u2014 builds root, calls SessionCheckpoint.sol.anchorRoot, clears buffer; expose flushEveryN and flushEveryMs config knobs",
+        "Author contracts/src/SessionCheckpoint.sol: owner-settable flusherAddress, anchorRoot(bytes32 root, uint256 count) with event CheckpointAnchored, verifyInclusion(bytes32 root, bytes32 leaf, bytes32[] proof) pure helper",
+        "Write contracts/test/SessionCheckpoint.test.ts with Hardhat \u2014 anchor, verify inclusion, reject wrong flusher, test empty batch guard",
+        "Wire createSessionToken into the existing proveHandshake return value as an optional sessionToken field \u2014 gated behind a createSession: true option so callers opt in",
+        "Export createSessionToken, verifySessionToken, SessionCheckpointBatcher from sdk/src/index.ts public API surface",
+        "Update sdk/QUICKSTART.md and write docs/session-tokens.md with lifecycle diagram, tuning guidance, and security considerations (token revocation caveat, checkpoint lag window)",
+        "Run npm run test:circuits:fast && npm run test:contracts to confirm no regressions; run tsc --noEmit in sdk/",
+        "DCO sign-off all commits with git commit -s"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "Successful proveHandshake() output (nullifierHash, scopeCommitment, sessionNonce) as token input source",
+        "jose or @sd-jwt/core library for SD-JWT signing and verification",
+        "Poseidon hash function available in SDK (already used by circuits via circomlibjs)",
+        "Operator EdDSA key pair for signing session tokens (same key that signs AgentCredential)",
+        "Deployed SessionCheckpoint.sol address and ethers.js provider for on-chain flush",
+        "pot16.ptau and existing .zkey artifacts unchanged \u2014 session tokens bypass proving entirely, no new circuit needed",
+        "Hardhat environment for SessionCheckpoint.sol tests"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Machine-readable conformance test vectors for all three circuits",
+      "dimension": "standards",
+      "description": "No independent implementation can verify compatibility without standardized test vectors. Produce a spec/test-vectors/ directory with JSON files covering: valid handshake (human+agent), expired credential rejection, stale root rejection, scope subset violation, cumulative bit encoding violation, delegation chain (1-hop and 3-hop), and nonce replay. Each vector includes input signals, expected outputs, and expected pass/fail. This is the minimum bar for any second implementation to claim conformance.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 15,
+      "standards": 21,
+      "completeness": 19,
+      "correctness": 14,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_test_vectors",
+      "title": "Machine-readable conformance test vectors for all three circuits",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/README.md",
+          "description": "Schema definition and usage guide for all test vector files, including field semantics, pass/fail conventions, and how to run vectors against an implementation"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/schema.json",
+          "description": "JSON Schema (draft-07) defining the structure of every test vector file \u2014 input signals, expected outputs, expected_result enum (pass|fail), and optional error_code"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/human-uniqueness.json",
+          "description": "HumanUniqueness circuit vectors: valid enrollment, stale Merkle root rejection, nullifier replay (nonce reuse), and tampered identity commitment"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/agent-policy.json",
+          "description": "AgentPolicy circuit vectors: valid credential, expired credential (expiry < blockTimestamp), cumulative bit encoding violation (bit 3 set without bit 2), and scope superset attempt"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/delegation.json",
+          "description": "Delegation circuit vectors: valid 1-hop delegation, valid 3-hop chain, scope subset violation (delegatee bits not subset of delegator), SUB_DELEGATE bit absent on intermediate hop, and cumulative implication breach"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/test-vectors/handshake.json",
+          "description": "End-to-end handshake vectors combining HumanUniqueness + AgentPolicy: valid handshake, nonce replay attack (same sessionNonce reused), mismatched humanMerkleRoot between circuits, and agent credential expired during handshake"
+        },
+        {
+          "type": "test",
+          "filename": "spec/test-vectors/runner.js",
+          "description": "Node.js conformance runner \u2014 loads each JSON vector file, generates witnesses via snarkjs, checks pass/fail against expected_result, and prints a per-vector report with PASS/FAIL/SKIP"
+        },
+        {
+          "type": "test",
+          "filename": "spec/test-vectors/runner_test.py",
+          "description": "Python conformance runner wrapping the JS runner via subprocess bridge, matching the Python SDK's proving interface so Python implementations can self-test"
+        }
+      ],
+      "steps": [
+        "Audit circuits/src/ (HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom) to enumerate every public input signal and output signal that a conformance vector must supply",
+        "Define JSON Schema in spec/test-vectors/schema.json: top-level fields are id, circuit, description, input_signals (object), expected_output_signals (object or null for fail cases), expected_result (pass|fail), error_code (optional string), and spec_ref (pointer to relevant spec section)",
+        "Generate human-uniqueness.json: (1) valid enrollment with correct Merkle path and fresh nonce, (2) stale root \u2014 swap root to an old value, (3) nullifier replay \u2014 duplicate the nullifierHash from vector 1, (4) identity commitment tampered \u2014 flip one bit in the commitment leaf",
+        "Generate agent-policy.json: (1) valid credential with all permissions correctly encoded, (2) expired credential \u2014 set expiry to blockTimestamp - 1, (3) cumulative bit violation \u2014 set bit 3 (FINANCIAL_MEDIUM) without bit 2 (FINANCIAL_SMALL), (4) ACCESS_PII bit set but operator key does not carry that permission in the credential",
+        "Generate delegation.json: (1) valid 1-hop \u2014 delegator has bits {0,1,2}, delegatee receives {0,1}, (2) valid 3-hop chain \u2014 each hop narrows scope, (3) scope superset violation \u2014 delegatee bits not a subset of delegator, (4) missing SUB_DELEGATE bit on intermediate hop in 3-hop chain, (5) cumulative implication breach in delegatee encoding",
+        "Generate handshake.json combining both circuits: (1) valid full handshake with fresh sessionNonce, (2) nonce replay \u2014 reuse sessionNonce from vector 1, (3) root mismatch \u2014 humanMerkleRoot in agent proof differs from human proof, (4) agent credential expired at handshake time",
+        "Write spec/test-vectors/runner.js: iterate all JSON files matching schema, call snarkjs.wtns.calculate + snarkjs.groth16.verify (or plonk.verify) per circuit, compare actual outputs to expected_output_signals, assert pass/fail matches expected_result, exit non-zero on any mismatch",
+        "Write spec/test-vectors/runner_test.py: thin subprocess wrapper calling runner.js, capturing stdout/stderr, asserting zero exit code; this proves the Python SDK environment can execute conformance checks",
+        "Add npm script in root package.json: 'test:conformance': 'node spec/test-vectors/runner.js' and wire it into CI so conformance runs on every PR",
+        "Update spec/did-method-bolyra.md and spec/draft-bolyra-mutual-zkp-auth-01.md with a Conformance section pointing to spec/test-vectors/ and stating that any implementation claiming Bolyra compatibility MUST pass all vectors with expected_result=pass and MUST reject all vectors with expected_result=fail",
+        "Add spec/test-vectors/README.md documenting: how to add new vectors, the naming convention (circuit-name_scenario-slug.json or inline array entries), how to regenerate witness fixtures when circuit parameters change, and the versioning policy (vector files are semver-tagged alongside the circuit build artifacts)"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "circuits/build/HumanUniqueness.wasm and HumanUniqueness.zkey must exist (npm run compile:circuits)",
+        "circuits/build/AgentPolicy_groth16.zkey and AgentPolicy_plonk.zkey must exist",
+        "circuits/build/Delegation_groth16.zkey and Delegation_plonk.zkey must exist",
+        "snarkjs >=0.7.6 available in node_modules (used by runner.js for witness + verify)",
+        "circuits/FORMAL-PROPERTIES.md \u2014 used as spec_ref source for each vector's error_code mapping",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 conformance section will be added here",
+        "spec/did-method-bolyra.md \u2014 conformance normative reference will be added here",
+        "validateCumulativeBitEncoding() in sdk/src \u2014 reference implementation for bit encoding vectors"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Specify human tree root history buffer matching agent tree",
+      "dimension": "correctness",
+      "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but none for humanTree. The contract comment says 'humanTree uses Semaphore's' but the deployed code uses a standalone LeanIMT with no history. Any new human enrollment immediately invalidates in-flight proofs. Add a parallel ROOT_HISTORY_SIZE buffer for humanTree roots in the registry, and update the IETF draft's Security Considerations to document the staleness window. This is a protocol-level correctness gap, not just an implementation detail.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 18,
+      "standards": 14,
+      "completeness": 16,
+      "correctness": 20,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_human_root_history_parity",
+      "title": "Specify human tree root history buffer matching agent tree",
+      "artifacts": [
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Add ROOT_HISTORY_SIZE constant and humanRootHistory ring buffer mirroring the existing agentRootHistory pattern; update _updateHumanRoot to push into the buffer; update isKnownHumanRoot to check the ring buffer instead of a single slot."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/IIdentityRegistry.sol",
+          "description": "Extend interface with isKnownHumanRoot(bytes32 root) view function and emit HumanRootHistoryUpdated event for indexers."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+          "description": "Hardhat tests verifying: (1) proofs against the N most recent human roots are accepted, (2) a root older than ROOT_HISTORY_SIZE enrollments is rejected, (3) ring-buffer wrapping is correct at boundary, (4) parity with existing agentRootHistory acceptance window."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update Security Considerations section: document the ROOT_HISTORY_SIZE staleness window for humanTree roots, define maximum proof validity period as a function of enrollment rate, and note that verifiers MUST call isKnownHumanRoot with the proof's claimed root before accepting."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Add note under DID Resolution / Proof Freshness: human-tree root proofs carry an implicit validity window bounded by ROOT_HISTORY_SIZE. Resolvers should surface root age metadata."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/verifier.ts",
+          "description": "Update verifyHandshake to call isKnownHumanRoot on-chain (or against a locally cached root set) and surface a HumanRootStale error code when the attested root has aged out."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/owasp-agentic-mapping.md",
+          "description": "Add entry under 'Replay / Staleness Attacks': humanTree root history window closes the unlimited-validity gap; cross-reference IETF draft staleness window section."
+        }
+      ],
+      "steps": [
+        "Read existing agentRootHistory implementation in IdentityRegistry.sol to understand ring-buffer pattern (slot layout, push logic, lookup loop).",
+        "Add `uint256 private _humanRootIndex` and `bytes32[ROOT_HISTORY_SIZE] private _humanRootHistory` storage variables immediately below the analogous agent fields to preserve storage slot ordering.",
+        "Refactor (or add) `_updateHumanRoot(bytes32 newRoot)` internal function: store new root at `_humanRootHistory[_humanRootIndex % ROOT_HISTORY_SIZE]`, increment index, emit `HumanRootHistoryUpdated(newRoot, block.number)`.",
+        "Add `isKnownHumanRoot(bytes32 root) public view returns (bool)` that iterates the ring buffer \u2014 identical logic to `isKnownAgentRoot`.",
+        "Update every call site that previously compared against a single `humanRoot` slot to use `isKnownHumanRoot`; grep for `humanMerkleRoot` and `humanTree.root()` across contracts.",
+        "Extend IIdentityRegistry.sol with the new view function and event signatures.",
+        "Write Hardhat tests: enroll N+1 humans, assert roots 1..N pass isKnownHumanRoot, assert root 0 (evicted) fails; test boundary at exactly ROOT_HISTORY_SIZE enrollments.",
+        "Update IETF draft Security Considerations: define staleness window T_stale = ROOT_HISTORY_SIZE \u00d7 avg_enrollment_interval, recommend verifiers reject proofs with root age > T_stale, add normative MUST for on-chain root check.",
+        "Update did-method-bolyra.md Proof Freshness subsection with the root validity window.",
+        "Update SDK verifyHandshake to call isKnownHumanRoot and throw HumanRootStale (new error code) on mismatch; add to structured error codes enum.",
+        "Run `npm run test:contracts` and `npm run test:circuits:fast` to confirm no regressions.",
+        "Update SECURITY.md to document the staleness window as an accepted protocol invariant (not a vulnerability)."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "contracts/src/IdentityRegistry.sol \u2014 agentRootHistory ring-buffer implementation (reference pattern)",
+        "contracts/src/IIdentityRegistry.sol \u2014 interface must be versioned consistently",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 IETF draft Security Considerations section",
+        "sdk/src/errors.ts \u2014 structured error code registry for new HumanRootStale code",
+        "ROOT_HISTORY_SIZE constant (currently 30 for agentTree) \u2014 must match or be independently configurable with rationale"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_scope_blinding_salt",
+      "persona": "standards_architect",
+      "title": "Add blinding salt to scope commitment to prevent bitmask enumeration",
+      "dimension": "correctness",
+      "description": "scopeCommitment = Poseidon(permissionBitmask, credentialCommitment) in AgentPolicy.circom uses only two inputs. Since permissionBitmask is 8 meaningful bits (256 values), an observer can brute-force all possible commitments against a known credentialCommitment to recover the exact permission set. Add a random blinding salt as a third Poseidon input: Poseidon3(bitmask, credCommitment, blindingSalt). The salt becomes a private input; the commitment remains public. Update Delegation.circom to thread the salt through the chain. Document the enumeration attack and mitigation in the IETF draft \u00a79 Security Considerations.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_scope_blinding_salt",
+      "adoption": 15,
+      "standards": 17,
+      "completeness": 18,
+      "correctness": 18,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_scope_blinding_salt",
+      "title": "Add blinding salt to scope commitment to prevent bitmask enumeration",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/src/AgentPolicy.circom",
+          "description": "Replace Poseidon(permissionBitmask, credentialCommitment) with Poseidon3(permissionBitmask, credentialCommitment, blindingSalt). Add blindingSalt as a private signal input. Update scopeCommitment output accordingly."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/Delegation.circom",
+          "description": "Thread blindingSalt as a private input through the delegation chain. Ensure the delegated scopeCommitment is recomputed with its own fresh blindingSalt, enforcing one-way scope narrowing while maintaining blinding at each delegation hop."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/BolyraVerifier.sol",
+          "description": "Regenerate Solidity verifier from updated AgentPolicy vkey after re-running trusted setup with new 3-input Poseidon constraint. No ABI surface change \u2014 scopeCommitment remains the single public output."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/agent.ts",
+          "description": "Generate cryptographically random 32-byte blindingSalt during createAgentCredential(). Store salt alongside credential in AgentCredential type. Pass salt as private witness input when calling proveHandshake()."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "Extend AgentCredential interface with blindingSalt: bigint field. Bump internal schema version to reflect breaking change in credential structure."
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/AgentPolicy.test.ts",
+          "description": "Add test cases: (1) valid witness with random salt succeeds, (2) same bitmask + credCommitment but different salts produce distinct scopeCommitments, (3) brute-force of 256 bitmask values with wrong salt fails to match published commitment."
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/Delegation.test.ts",
+          "description": "Update delegation tests to supply blindingSalt at each hop. Verify scope narrowing still enforced when salt changes between parent and delegated credential."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Add \u00a79 Security Considerations subsection: describe the 8-bit bitmask enumeration attack (256 trial commitments against known credentialCommitment), explain how blindingSalt closes it, and specify that salt MUST be generated with a CSPRNG and MUST NOT be reused across credentials."
+        },
+        {
+          "type": "docs",
+          "filename": "circuits/FORMAL-PROPERTIES.md",
+          "description": "Document new formal property: scopeCommitment binding \u2014 an adversary with (permissionBitmask, credentialCommitment) cannot recover the committed bitmask without blindingSalt (computationally binding under Poseidon collision resistance)."
+        }
+      ],
+      "steps": [
+        "Audit current Poseidon usage in AgentPolicy.circom and Delegation.circom to confirm exact signal names and constraint count baseline",
+        "Import or confirm availability of Poseidon3 template (3-input) from circomlib; verify it is already pulled as a dependency",
+        "Modify AgentPolicy.circom: add private signal blindingSalt, replace 2-input Poseidon component with Poseidon3, wire (permissionBitmask, credentialCommitment, blindingSalt) as inputs",
+        "Modify Delegation.circom: add blindingSalt as private input, recompute delegated scopeCommitment with Poseidon3 using the delegated credential's own salt, verify scope narrowing constraint still holds on bitmask before commitment",
+        "Re-run trusted setup: generate new .r1cs and .zkey for AgentPolicy and Delegation using pot16.ptau; regenerate .vkey and Solidity verifier contract",
+        "Update sdk/src/types.ts: add blindingSalt: bigint to AgentCredential; bump schema version",
+        "Update sdk/src/agent.ts createAgentCredential(): generate random 32-byte salt via crypto.getRandomValues, convert to bigint, store in returned credential",
+        "Update sdk/src/agent.ts proveHandshake(): extract blindingSalt from AgentCredential and pass as private witness input to snarkjs fullProve",
+        "Update Python SDK subprocess bridge: ensure AgentCredential serialization/deserialization round-trips blindingSalt correctly",
+        "Write circuit tests: same-bitmask/different-salt produces distinct commitments; brute-force attack test confirms 256 wrong-salt attempts all fail",
+        "Update Delegation circuit tests to supply per-hop salts and verify chained commitments are consistent",
+        "Run npm run test:circuits:fast to validate witness generation, then npm run test:circuits:slow for full Groth16/PLONK proof verification",
+        "Run npm run test:contracts to confirm Hardhat verifyProof integration tests pass against newly generated verifier",
+        "Add \u00a79 Security Considerations to IETF draft covering enumeration attack, salt requirements (CSPRNG, no reuse), and salt secrecy",
+        "Update FORMAL-PROPERTIES.md with scopeCommitment binding property",
+        "Commit with DCO sign-off; note breaking change in credential schema in commit message"
+      ],
+      "estimated_constraints": 280,
+      "dependencies": [
+        "circomlib Poseidon3 template (3-input variant)",
+        "pot16.ptau universal SRS (already in circuits/build/)",
+        "snarkjs for re-running trusted setup and witness generation",
+        "crypto.getRandomValues (Node 18+ Web Crypto API) for salt generation",
+        "Hardhat for Solidity verifier regeneration and integration tests"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "formal_verifier_nullifier_domain_separation",
+      "persona": "formal_verifier",
+      "title": "Add domain separation tags to all nullifier hash computations",
+      "dimension": "correctness",
+      "description": "HumanUniqueness computes nullifier as Poseidon2(scope, secret) and AgentPolicy computes it as Poseidon2(secret, sessionNonce). Both use Poseidon2 with no domain separator, meaning a collision is possible if an agent's (secret, sessionNonce) pair equals a human's (scope, secret) pair \u2014 the nullifier spaces overlap. Prepend a unique domain tag constant (e.g., 0xHUMAN, 0xAGENT, 0xDELEG) as the first Poseidon input to each nullifier computation across all three circuits. This is a standard formal verification finding: hash function domain separation prevents cross-protocol nullifier confusion.",
+      "priority": "high",
+      "estimated_effort": "hours",
+      "candidate_id": "formal_verifier_nullifier_domain_separation",
+      "adoption": 14,
+      "standards": 16,
+      "completeness": 15,
+      "correctness": 21,
+      "total": 66,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "formal_verifier_nullifier_domain_separation",
+      "title": "Add domain separation tags to all nullifier hash computations",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/src/HumanUniqueness.circom",
+          "description": "Prepend DOMAIN_HUMAN constant (e.g. 0x48554d414e = ASCII 'HUMAN' as field element) as first input to Poseidon2 nullifier hash: Poseidon3(DOMAIN_HUMAN, scope, secret)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/AgentPolicy.circom",
+          "description": "Prepend DOMAIN_AGENT constant as first input to Poseidon2 nullifier hash: Poseidon3(DOMAIN_AGENT, secret, sessionNonce)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/Delegation.circom",
+          "description": "Prepend DOMAIN_DELEG constant as first input to any nullifier hash in the delegation circuit: Poseidon3(DOMAIN_DELEG, ...inputs)"
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/DomainTags.circom",
+          "description": "Shared include file defining DOMAIN_HUMAN, DOMAIN_AGENT, DOMAIN_DELEG as BN254 field-safe constants. Single source of truth to avoid divergence."
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/nullifier_domain_separation.test.js",
+          "description": "Test that nullifiers for human and agent with identical raw inputs (scope==secret, secret==sessionNonce) differ after domain tag introduction. Also verify no regression on valid witness generation for all three circuits."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update nullifier computation section to document domain tag constants and their rationale. Add formal note that nullifier spaces are disjoint by construction."
+        },
+        {
+          "type": "docs",
+          "filename": "circuits/FORMAL-PROPERTIES.md",
+          "description": "Add formal property: NullifierDomainDisjointness \u2014 for any inputs, H_human(...) != H_agent(...) != H_deleg(...). Reference domain tag constants."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/nullifier.ts",
+          "description": "If the TS SDK computes or validates nullifier hashes outside the circuit (e.g. for indexing), update to include domain tag in the same Poseidon3 arrangement."
+        }
+      ],
+      "steps": [
+        "Audit all three circuits (HumanUniqueness, AgentPolicy, Delegation) to enumerate every Poseidon call that produces a nullifier hash and record current input arity",
+        "Choose domain tag constants: pick three distinct BN254 field elements well outside the range of normal inputs (e.g. keccak256('bolyra.human.nullifier.v1') mod p, same pattern for agent and deleg)",
+        "Create circuits/src/DomainTags.circom exporting DOMAIN_HUMAN, DOMAIN_AGENT, DOMAIN_DELEG as template-less signal constants (or plain circom `var` values)",
+        "Update HumanUniqueness.circom: include DomainTags.circom, change Poseidon2(scope, secret) to Poseidon3(DOMAIN_HUMAN, scope, secret), verify output signal name unchanged",
+        "Update AgentPolicy.circom: change Poseidon2(secret, sessionNonce) to Poseidon3(DOMAIN_AGENT, secret, sessionNonce)",
+        "Update Delegation.circom: identify nullifier computation(s) and prepend DOMAIN_DELEG constant in the same manner",
+        "Recompile all three circuits via `npm run compile:circuits` and confirm R1CS constraint counts increase by ~3 per nullifier hash (one additional Poseidon round)",
+        "Update circuit test witnesses in circuits/test/ to pass the new expected nullifier values (existing witnesses will now be stale)",
+        "Write nullifier_domain_separation.test.js: generate witnesses where raw inputs overlap across circuit types and assert nullifiers are distinct",
+        "Run full test suite: `npm run test:circuits:fast` for witness-only, then `npm run test:circuits:slow` for full proof regression",
+        "Audit sdk/src/nullifier.ts (and any Python sdk-python equivalent) for off-circuit nullifier computation; apply matching Poseidon3 with domain tag",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md with the new nullifier computation formula and domain tag constant values",
+        "Update circuits/FORMAL-PROPERTIES.md with the NullifierDomainDisjointness property",
+        "Regenerate trusted setup artifacts if necessary (pot16.ptau is reused but per-circuit .zkey files must be regenerated after circuit changes)",
+        "Regenerate Solidity verifier contracts from new .vkey.json files via snarkjs and verify Hardhat tests still pass",
+        "DCO-sign commit: `git commit -s -m 'feat(circuits): add domain separation tags to all nullifier hash computations'`"
+      ],
+      "estimated_constraints": 6,
+      "dependencies": [
+        "circomlib Poseidon3 template (or equivalent arity-3 variant available in circomlib)",
+        "pot16.ptau \u2014 must accommodate any constraint increase (2^16 budget; +6 constraints is negligible)",
+        "snarkjs >= 0.7.6 for .zkey regeneration",
+        "Existing Poseidon2 usage confirmed in HumanUniqueness and AgentPolicy before patching Delegation"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "security_auditor_nullifier_cross_session_linkability",
+      "persona": "security_auditor",
+      "title": "HumanUniqueness nullifier is constant across sessions, enabling cross-verifier linkability",
+      "dimension": "correctness",
+      "description": "The HumanUniqueness nullifier is `Poseidon2(scope, secret)` where scope is a constant like `hash('bolyra-handshake-v1')`. This means every handshake by the same human produces the identical nullifier, allowing colluding verifiers (or a single verifier across sessions) to link all activity to the same pseudonymous identity. The nonceBinding output prevents replay but does NOT prevent linkability. Fix: derive the nullifier as `Poseidon3(scope, secret, sessionNonce)` so each session produces a unique nullifier. Then use a separate `externalNullifier = Poseidon2(scope, secret)` checked on-chain only for revocation/sybil gating, not exposed to the verifier. This preserves sybil resistance while breaking cross-session linkability.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "security_auditor_nullifier_cross_session_linkability",
+      "adoption": 16,
+      "standards": 14,
+      "completeness": 18,
+      "correctness": 19,
+      "total": 67,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "security_auditor_nullifier_cross_session_linkability",
+      "title": "HumanUniqueness nullifier is constant across sessions, enabling cross-verifier linkability",
+      "artifacts": [
+        {
+          "type": "circuit",
+          "filename": "circuits/src/HumanUniqueness.circom",
+          "description": "Change public nullifierHash output to Poseidon3(scope, secret, sessionNonce) for per-session unlinkability. Add new private signal externalNullifier = Poseidon2(scope, secret) passed only to an on-chain commitment hash, not exposed as a public output."
+        },
+        {
+          "type": "circuit",
+          "filename": "circuits/src/HumanUniquenessRevocation.circom",
+          "description": "New helper circuit (or inline in HumanUniqueness) that proves knowledge of externalNullifier without revealing it \u2014 outputs a Poseidon commitment used by the registry for sybil/revocation gating."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/HumanRegistry.sol",
+          "description": "Update verifyAndRegister to accept the new public outputs: per-session nullifierHash (used for replay prevention) and externalNullifierCommitment (used for sybil/revocation). Store commitment in mapping, not raw nullifier."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/IHumanVerifier.sol",
+          "description": "Update interface to reflect the new proof public signals: humanMerkleRoot, nullifierHash, nonceBinding, externalNullifierCommitment."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/human.ts",
+          "description": "Update proveHandshake and verifyHandshake to pass sessionNonce into the circuit witness for nullifierHash derivation. Expose externalNullifierCommitment in the proof output type for registry calls."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "Add externalNullifierCommitment to HumanProof type. Deprecate the old flat nullifierHash field in a backwards-compatible way for the transition."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Document the two-nullifier architecture: per-session nullifierHash for replay prevention (visible to verifier) vs externalNullifierCommitment for sybil gating (committed on-chain only). Add privacy threat model section covering cross-verifier linkability."
+        },
+        {
+          "type": "test",
+          "filename": "circuits/test/HumanUniqueness.test.js",
+          "description": "Add test: same (scope, secret) with different sessionNonce values produces distinct nullifierHash values. Add test: externalNullifierCommitment is stable across sessions for the same identity. Add linkability regression test asserting no two sessions share nullifierHash."
+        },
+        {
+          "type": "test",
+          "filename": "contracts/test/HumanRegistry.test.js",
+          "description": "Update integration tests for new public signal layout. Add test: two proofs from the same identity with different nonces both accepted by registry (replay guard uses session nullifier, sybil guard uses commitment)."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/privacy-nullifier-design.md",
+          "description": "New doc explaining the two-layer nullifier design, the cross-session linkability threat, and why the fix breaks linkability without sacrificing sybil resistance. Include before/after signal diagrams."
+        }
+      ],
+      "steps": [
+        "Audit current HumanUniqueness.circom: document existing signals, constraints, and public outputs to establish a baseline before changes.",
+        "Design the two-nullifier signal layout on paper: (1) sessionNullifier = Poseidon3(scope, secret, sessionNonce) as the public nullifierHash output, (2) externalNullifier = Poseidon2(scope, secret) as a private intermediate, (3) externalNullifierCommitment = Poseidon1(externalNullifier) as a new public output for on-chain registry.",
+        "Update HumanUniqueness.circom: add sessionNonce as a private input signal, replace the Poseidon2(scope, secret) nullifier computation with Poseidon3(scope, secret, sessionNonce), add the externalNullifierCommitment signal, and update the public output declaration.",
+        "Re-run trusted setup: since public outputs changed, the existing .zkey is invalid. Generate a new project-specific Groth16 key against pot16.ptau and regenerate the vkey.json. Do NOT use the Semaphore v4 ceremony for this \u2014 HumanUniqueness no longer shares the same constraint shape.",
+        "Regenerate Solidity verifier from the new vkey.json using snarkjs exportSolidityVerifier. Replace contracts/src/generated/HumanUniquenessVerifier.sol.",
+        "Update HumanRegistry.sol: change the verifyAndRegister function signature to accept externalNullifierCommitment as a separate parameter. Use the session nullifierHash for per-session replay prevention (revert if seen in sessionNullifiers mapping). Use externalNullifierCommitment for sybil/revocation gating (revert if commitment is revoked).",
+        "Update sdk/src/types.ts: add externalNullifierCommitment to HumanProof. Mark old nullifierHash as the session-scoped value (not the sybil key) in JSDoc.",
+        "Update sdk/src/human.ts: pass sessionNonce into the circuit witness builder. Surface externalNullifierCommitment from proof publicSignals. Ensure verifyHandshake validates both the session nullifier (replay) and optionally the commitment (revocation check).",
+        "Write circuit tests covering: (a) distinct sessionNonce \u2192 distinct nullifierHash, (b) same identity \u2192 same externalNullifierCommitment across sessions, (c) invalid witness (wrong secret) rejected.",
+        "Write contract integration tests covering: (a) first handshake accepted, (b) replay of same session nullifier rejected, (c) second handshake with new nonce accepted for same identity, (d) revoked commitment rejected.",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md with the new signal table, a privacy threat model subsection, and a note that verifiers MUST NOT log externalNullifierCommitment for linkability prevention.",
+        "Write docs/privacy-nullifier-design.md with before/after signal diagrams and the threat model rationale.",
+        "Run full test suite (npm run test:circuits:fast, npm run test:contracts) and fix any failures.",
+        "Run npm run test:circuits:slow (full Groth16 proof) to validate the new zkey end-to-end.",
+        "Update CHANGELOG and bump SDK minor version (breaking change to HumanProof type and circuit public outputs)."
+      ],
+      "estimated_constraints": 2200,
+      "dependencies": [
+        "circomlib Poseidon3 (3-input hash) \u2014 verify it is available in the imported circomlib version",
+        "pot16.ptau \u2014 must have capacity for ~2200 constraints; current pot16 supports 2^16, sufficient",
+        "snarkjs exportSolidityVerifier \u2014 required to regenerate verifier contract from new vkey",
+        "Hardhat \u2014 contract recompile and test re-run after verifier replacement",
+        "Semaphore v4 ceremony no longer usable for HumanUniqueness after this change \u2014 project must maintain its own Groth16 ceremony artifact"
+      ]
+    }
+  }
+]

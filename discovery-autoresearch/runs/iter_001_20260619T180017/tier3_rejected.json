@@ -1,0 +1,904 @@
+[
+  {
+    "id": "github_agent_credential_leak",
+    "title": "ZKP-Based Agent Auth to Prevent Credential Exposure",
+    "description": "OpenAI's coding agent leaked GitHub passwords because agents held long-lived secrets. Bolyra's AgentPolicy circuit lets agents prove authorization via ZKP without ever holding or transmitting the underlying credential, eliminating the credential-exposure attack surface entirely.",
+    "category": "developer_tools",
+    "source": "OpenAI coding agent flaw exposed GitHub passwords",
+    "scores": {
+      "demand": 14,
+      "timing": 14,
+      "fit": 20,
+      "feasibility": 16,
+      "total": 64
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "The OpenAI credential leak is a single high-profile incident confirming the attack surface exists, but web search evidence failed entirely \u2014 no verified URLs, no named buyers seeking ZKP-based agent auth, and no funded competitors building this specific solution.",
+      "timing": "The incident creates a news-cycle window but no standard body, regulatory deadline, or competitor launch date is cited with specifics; agent auth standards (draft-klrc-aiagent) are 18+ months from finalization, making the window real but not closing.",
+      "fit": "AgentPolicy, Delegation, and HumanUniqueness map directly to the credential-less agent auth story with only minor extensions needed, and the handshake nonce binding already prevents replay \u2014 strong primitive coverage.",
+      "feasibility": "8.5 days and 78% reuse is plausible for a solo founder, but the GitHub App gateway requires ongoing maintenance, GitHub API compatibility work, and the demo value depends on GitHub actually accepting proof-gated tokens \u2014 integration risk is moderate."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive. Agent proves it holds a valid operator-signed credential with sufficient permission bits (e.g. WRITE_DATA for git push, READ_DATA for clone) without revealing the credential itself. The selective disclosure capability means the agent proves requiredScopeMask bits are set without exposing the full bitmask or the underlying secret key. Expiry enforcement ensures credentials auto-expire, eliminating the long-lived secret problem entirely.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The human developer who authorized the agent proves enrollment in the organization's Semaphore tree. This binds the agent's delegated authority to a real human identity without revealing which human, preventing unauthorized agents from self-enrolling. The nullifier provides sybil resistance \u2014 one human can't create unlimited agent authorizations within the same scope.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Models the developer\u2192agent authorization chain. Developer (human identity) delegates a scope-narrowed credential to the coding agent. Scope narrowing ensures the agent can only get a bitwise subset of the developer's permissions (e.g. WRITE_DATA to specific repos, not SIGN_ON_BEHALF). Expiry narrowing means the agent's credential expires before or at the developer's session boundary. Max 3 hops covers developer\u2192orchestrator\u2192coding-agent\u2192sub-agent chains.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain verification of the handshake between human and agent. The atomic handshake verification (Groth16 + PLONK in single tx) lets a gateway verify that both the human authorization and agent credential are valid before granting access to the protected resource (GitHub API). Delegation nullifier replay protection prevents a revoked agent from reusing a previously valid delegation proof.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake() generates the proof pair that a GitHub gateway would verify before proxying API calls. createAgentCredential() with scoped permissions replaces the long-lived GitHub PAT. The existing error classes (ExpiredCredentialError, ScopeEscalationError, StaleProofError) already model the failure modes relevant to this use case.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "GitHub OAuth/App gateway adapter: a proxy that sits between the coding agent and GitHub API, accepts Bolyra proofs instead of PATs, verifies them, then issues short-lived (seconds) GitHub installation tokens scoped to the proven permission set. Similar pattern to the existing OpenClaw adapter but targeting GitHub's App installation token API.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Agent SDK convenience layer for coding-agent runtimes (OpenAI Codex, Claude Code, Cursor): a lightweight client that wraps proveHandshake() calls so the agent can generate proofs transparently when making GitHub API requests, without the agent framework needing to understand ZKP internals.",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "Extension to draft-bolyra-mutual-zkp-auth-01 defining the 'credential proxy' flow: how a verifier gateway translates a valid Bolyra proof into a short-lived platform-specific token. This is the generic pattern that GitHub is the first instance of, but applies to any API provider.",
+        "complexity": "low"
+      },
+      {
+        "type": "contract",
+        "description": "Optional: scope-registry contract that maps GitHub repository IDs to Bolyra scope identifiers, enabling nullifier-based rate limiting per repo (prevents a compromised agent from mass-cloning). Not required for MVP but strengthens the story.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. GitHub is the incumbent platform; Bolyra does not compete with it but slots underneath as the auth layer that GitHub (or any API provider) can adopt without changing their core product. The value proposition to GitHub: 'your agent ecosystem gets credential-exposure immunity without you rebuilding your auth stack \u2014 just verify Bolyra proofs at the gateway and issue scoped installation tokens.' This matches the strategy of making incumbents' existing agent ecosystems more secure rather than asking developers to switch platforms. The OpenAI coding agent incident provides urgent, concrete demand that makes the pitch timely rather than theoretical.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "github-gateway",
+          "type": "integration",
+          "description": "Express proxy that accepts Bolyra AgentPolicy proofs, verifies via on-chain registry, then mints short-lived GitHub installation tokens (scoped to proven permission bits). Maps READ_DATA\u2192contents:read, WRITE_DATA\u2192contents:write. Stateless \u2014 no credential storage.",
+          "days": 4,
+          "reuses": "AgentPolicy + IdentityRegistry + @bolyra/sdk"
+        },
+        {
+          "name": "sdk-github-helpers",
+          "type": "sdk",
+          "description": "createGitHubAgentCredential(operatorKey, repos, permissions, expirySeconds) convenience wrapper in @bolyra/sdk. Maps GitHub permission strings to Bolyra bitmask. Adds GitHubScopeMapper utility.",
+          "days": 1,
+          "reuses": "createAgentCredential"
+        },
+        {
+          "name": "e2e-demo",
+          "type": "demo",
+          "description": "CLI script: human enrolls \u2192 delegates to coding agent \u2192 agent clones private repo via gateway \u2192 pushes commit \u2192 proof expires \u2192 retry fails. Single README-executable flow.",
+          "days": 2,
+          "reuses": "proveHandshake + HumanUniqueness"
+        },
+        {
+          "name": "threat-model-doc",
+          "type": "docs",
+          "description": "Technical comparison: PAT-based agent auth vs Bolyra ZKP auth. Attack surface analysis referencing the OpenAI incident. Maps to OWASP Agentic Top 10 (extends existing owasp-agentic-mapping.md).",
+          "days": 1,
+          "reuses": "docs/owasp-agentic-mapping.md"
+        },
+        {
+          "name": "github-app-manifest",
+          "type": "spec",
+          "description": "GitHub App configuration (app.yml) with minimal permissions. Installation guide for self-hosted gateway. Terraform optional.",
+          "days": 0.5,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 8.5,
+      "reuse_percentage": 78,
+      "risks": [
+        "GitHub App rate limits on installation token minting may bottleneck high-throughput agent workflows (1 token/min/installation)",
+        "Feasibility score is lowest (18) \u2014 the gateway requires GitHub App approval for production use beyond personal repos",
+        "Web search evidence returned nothing \u2014 demand signal is inferred from one incident, not validated by market pull",
+        "Solo founder capacity: 8.5 days assumes no context-switching; realistic calendar time is 2-3 weeks",
+        "On-chain verification latency (~2-4s on Base Sepolia) adds friction vs instant PAT auth \u2014 may need off-chain verifier fallback for demo credibility"
+      ],
+      "success_criteria": "Demo video showing: (1) agent with expired/revoked credential gets rejected by gateway, (2) agent with valid Bolyra proof clones and pushes to a private repo, (3) no secret appears in agent memory or logs at any point. Secondary: one external developer reproduces the demo from README alone within 30 minutes."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND: Zero verified procurement signals. The OpenAI credential leak is a news-cycle event, not a buying signal. Nobody has asked for ZKP-based agent auth \u2014 the industry response is shorter-lived tokens, better secret scanning (GitHub already ships this), and OAuth device flow improvements. No named buyer, no RFP, no funded competitor validates this market exists.",
+      "DEMAND: Free alternatives already solve this adequately. GitHub fine-grained PATs with expiry, GitHub App installation tokens (already short-lived and scoped), and OIDC federation for CI/CD (GitHub Actions already uses this) eliminate credential exposure without ZKP. The 'just rotate tokens faster' approach is simpler and already shipping.",
+      "COMPETITIVE MOAT: GitHub itself is the competitor. They shipped fine-grained PATs, Copilot-specific scoped tokens, and secret scanning auto-revocation. Their response to credential leaks is platform-native \u2014 they don't need an external auth layer. Microsoft/GitHub can add ephemeral agent-scoped tokens as a feature in weeks, with 100M+ developer distribution.",
+      "COMPETITIVE MOAT: No technical moat. The ZKP layer is solving a problem GitHub doesn't have \u2014 they control both the identity provider and the resource server. They can scope and expire tokens natively. A privacy-preserving proxy in front of an API you don't control is a liability, not a moat.",
+      "TECHNICAL FIT: ZKP is not needed here. The credential leak problem is solved by not giving agents long-lived credentials \u2014 use OAuth 2.0 device flow, short-lived installation tokens, or OIDC federation. ZKP adds proof generation latency (~1-5s) to every git operation for a property (proof without revelation) that GitHub doesn't need \u2014 they already know who the developer is. The 'agent proves authorization without holding the credential' property is achieved more simply by a token exchange service.",
+      "TECHNICAL FIT: The GitHub App gateway is the actual product, and it's just an OAuth proxy with extra steps. Strip away the ZKP and the architecture is: developer authorizes agent \u2192 gateway issues scoped token \u2192 agent uses token. This is exactly what GitHub App installation tokens already do.",
+      "TIMING: Agent auth standards (draft-klrc-aiagent) are 18+ months from finalization per the card's own assessment. Building a GitHub-specific gateway now means building to GitHub's current API, which will change as they respond to the agent auth landscape. High rework risk.",
+      "TIMING: Enterprise AI agent deployments are still POC-stage. The coding agents that would benefit (Codex, Claude Code, Cursor) manage their own credential flows and have no integration point for third-party auth layers. You'd need these platforms to adopt Bolyra's proof flow \u2014 a chicken-and-egg problem with no leverage.",
+      "EXECUTION: The 8.5-day estimate is fantasy for a solo founder. The GitHub App gateway alone requires GitHub API compatibility work, webhook handling, installation token lifecycle management, and ongoing maintenance as GitHub changes their API. This is a product, not a demo.",
+      "EAD: Card is self-classified GREY_ZONE. The GitHub gateway is clearly a product/service, not a pure protocol contribution. Positioning this as 'open source tooling' while it's obviously a commercial play creates immigration risk. A blog post about the concept is fine; building and promoting a gateway service is not."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "CONCERN",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "A news-cycle-driven opportunity with zero verified demand, where the incumbent (GitHub) already ships simpler solutions natively, ZKP adds complexity without necessity, and the solo-founder execution cost is underestimated \u2014 kill it.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "agent_passport_competitor_gap",
+    "title": "Privacy-Preserving Alternative to Agent Passport / AID",
+    "description": "Agent Passport and AgentIDs.org offer OAuth-like agent identity but expose agent metadata (operator, model, permissions) to every verifier. Bolyra's selective-disclosure ZKP proofs let agents prove 'I have FINANCIAL_SMALL permission' without revealing their full credential or operator identity \u2014 a clear privacy moat.",
+    "category": "enterprise_auth",
+    "source": "Agent Passport (HN) and AgentIDs.org open protocol",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 22,
+      "feasibility": 18,
+      "total": 58
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs were provided \u2014 demand rests entirely on the existence of Agent Passport/AgentIDs.org without citing named buyers, funding rounds, or engagement metrics.",
+      "timing": "No concrete competitor launch dates, standard milestones, or regulatory deadlines were cited; the timing argument is directional but unanchored beyond general awareness that agent identity is emerging.",
+      "fit": "All three core circuits (AgentPolicy, HumanUniqueness, Delegation) plus the SDK and IETF draft map directly with only minor modifications needed \u2014 selective disclosure via requiredScopeMask is already built.",
+      "feasibility": "MVP spec is well-scoped at ~9 days reusing existing primitives, but the opportunity's value depends on unvalidated demand, making the build speculative despite low technical risk."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Already supports selective disclosure via requiredScopeMask \u2014 agent proves specific permission bits are set without revealing the full 8-bit bitmask or operator identity. This is the core privacy moat vs Agent Passport's plaintext metadata exposure.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Proves the human principal behind a delegated agent credential is unique within a scope (e.g., per-enterprise sybil resistance) without revealing who they are. Agent Passport has no human-binding primitive at all.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables human\u2192agent\u2192sub-agent chains with scope narrowing. An enterprise verifier confirms 'this agent was delegated FINANCIAL_SMALL by a valid human' without learning the human's identity or the agent's full permission set. Directly counters Agent Passport's flat, fully-visible delegation model.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root history buffers let verifiers check Merkle membership without querying the operator's infrastructure \u2014 removes the phone-home trust assumption that Agent Passport inherits from OAuth. Atomic handshake verification handles the full human+agent proof in one tx.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createAgentCredential + proveHandshake already produce the selective-disclosure proofs needed. The error taxonomy (InvalidPermissionError, ScopeEscalationError) maps cleanly to enterprise auth failure modes. SDK is the developer surface for the Agent Passport alternative pitch.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft gives standards credibility against Agent Passport's ad-hoc spec. Positioning as 'the privacy-preserving alternative with a standards track' is stronger than 'just another agent ID system'.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "Agent Passport compatibility profile: a mapping document showing how Bolyra proofs can satisfy Agent Passport/AID verification endpoints. Defines a translation layer so enterprises already evaluating Agent Passport can adopt Bolyra as a drop-in privacy upgrade without changing their verifier API surface.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Credential presentation API for verifier-specified scope queries. Current SDK lets provers choose what to reveal; enterprise verifiers need to specify 'prove you have bits 0+2' and get back a yes/no with a ZK proof. This is a thin wrapper over existing requiredScopeMask but needs a clean request/response format.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "OAuth 2.0 / OpenID Connect bridge: Agent Passport is OAuth-native. Enterprises won't rip out their OAuth infra. Build a token exchange flow where a Bolyra ZK proof is exchanged for a short-lived OAuth token scoped to the proven permissions. This is the adoption wedge.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "Privacy comparison test vectors: side-by-side demonstrations showing exactly what metadata leaks in an Agent Passport flow vs a Bolyra flow for identical permission checks. These become the sales engineering artifact.",
+        "complexity": "low"
+      },
+      {
+        "type": "contract",
+        "description": "Verifier registry contract: a lightweight on-chain registry where enterprise verifiers register their accepted scope masks, so agents can pre-compute proofs for known verifier requirements. Reduces proof latency in the enterprise auth hot path.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "This is the canonical instance of the privacy-layer-under-incumbents strategy. Agent Passport and AID are building the identity plumbing; Bolyra slots underneath as the privacy engine. The play is NOT 'replace Agent Passport' \u2014 it's 'Agent Passport verifiers upgrade to Bolyra proofs and stop leaking metadata.' The OAuth bridge makes this concrete: enterprises keep their Agent Passport integration, add Bolyra as the proof backend, and get selective disclosure for free. This positions Bolyra as infrastructure rather than competitor, which is critical because Agent Passport has the ecosystem momentum and Bolyra has the cryptographic moat. The IETF draft and on-chain verification give credibility signals that pure-OAuth approaches can't match in regulated verticals (fintech, healthcare) where 'prove without revealing' isn't a nice-to-have but a compliance requirement.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "Scope-query presentation API",
+          "type": "sdk",
+          "description": "Thin SDK wrapper: verifier sends a ScopeQuery (required permission bits + nonce), prover returns a ZK proof of membership. Wraps existing requiredScopeMask in AgentPolicy with a clean request/response shape: createScopeResponse(credential, scopeQuery) \u2192 ScopeProof",
+          "days": 3,
+          "reuses": "AgentPolicy circuit + @bolyra/sdk createAgentCredential"
+        },
+        {
+          "name": "Agent Passport compatibility profile",
+          "type": "spec",
+          "description": "Mapping document showing how Bolyra selective-disclosure proofs satisfy Agent Passport / AID verification semantics. Defines field-by-field translation: AP's agent_id \u2192 Bolyra nullifierHash, AP's permissions \u2192 scopeMask proof, AP's operator \u2192 omitted (privacy gain). Includes a comparison table of what each protocol reveals to the verifier.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "Privacy comparison demo",
+          "type": "demo",
+          "description": "CLI script that runs the same 3 scenarios (check permission, verify delegation chain, confirm human-binding) side-by-side: shows what Agent Passport would expose vs what Bolyra reveals. Produces a markdown report. No UI \u2014 just a compelling terminal output for blog/conference use.",
+          "days": 2,
+          "reuses": "@bolyra/sdk proveHandshake + existing test fixtures"
+        },
+        {
+          "name": "Selective disclosure blog post",
+          "type": "docs",
+          "description": "Technical blog post: 'Agent Identity Without the Metadata Leak \u2014 How ZKP Selective Disclosure Beats OAuth-Style Agent Passports'. Walks through the 3 demo scenarios, explains the circuit mechanics, links to the compatibility profile. Educational framing, no CTA.",
+          "days": 1,
+          "reuses": "spec + demo output"
+        },
+        {
+          "name": "IdentityRegistry scope-query event",
+          "type": "contract",
+          "description": "Add a ScopeVerified event to the on-chain registry so verifiers can check scope proofs without querying the operator's infrastructure. Minor addition to existing verifyHandshake \u2014 emit event with scopeMask hash and proof validity, no new storage.",
+          "days": 1,
+          "reuses": "IdentityRegistry contract"
+        }
+      ],
+      "total_days": 9,
+      "reuse_percentage": 85,
+      "risks": [
+        "Agent Passport is early-stage and may pivot, making the compatibility profile stale before it matters",
+        "Enterprise buyers evaluating agent identity may not yet care about privacy \u2014 'works with existing IdP' beats 'private but unfamiliar'",
+        "Selective disclosure adds proof generation latency (~200ms snarkjs, ~15ms rapidsnark) that OAuth token inspection doesn't have",
+        "Solo founder capacity: 9 days assumes no interruptions from other Bolyra/ZKProva/GeniusComply work"
+      ],
+      "success_criteria": "SDK scope-query API passes integration tests with all 8 permission bits, compatibility profile is published to spec/ and referenced from the IETF draft, demo script runs end-to-end producing a diff report, and at least one HN/dev-community post gets substantive technical engagement (>5 comments discussing the privacy tradeoff)"
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND: Zero verified evidence of demand. Web search returned nothing. No named buyers, no funding rounds for Agent Passport or AgentIDs.org, no procurement signals. The entire opportunity is built on the premise that these competitors exist and have traction, yet the evidence array is literally empty. This is textbook phantom demand \u2014 excitement about a category, not a purchase order.",
+      "DEMAND: The card's own demand_strength field says 'none' and timing_assessment says '18_plus_months'. The opportunity self-reports that nobody is buying this yet and won't be for 18+ months. A 9-day MVP build against zero demand is speculative R&D, not opportunity capture.",
+      "MOAT: The positioning as 'privacy layer under Agent Passport' assumes Agent Passport wins and becomes the standard. If Agent Passport doesn't achieve adoption, the compatibility profile and OAuth bridge are wasted work targeting a dead integration point. If Agent Passport does win, they can add selective disclosure themselves \u2014 ZKP libraries are open source, and Agent Passport could integrate any Circom circuit or adopt SD-JWT (already in IETF pipeline) for selective disclosure without needing Bolyra.",
+      "MOAT: SD-JWT (Selective Disclosure JWT, draft-ietf-oauth-selective-disclosure-jwt) provides selective disclosure within the existing OAuth ecosystem without ZKP overhead. Enterprise buyers evaluating agent auth will encounter SD-JWT first because it lives in the OAuth stack they already use. Bolyra's ZKP approach is a harder sell against a JWT-native alternative.",
+      "TECHNICAL FIT: The core claim is 'prove permission without revealing full credential.' SD-JWT selective disclosure does exactly this within OAuth. For the specific use case of 'prove I have FINANCIAL_SMALL permission without revealing my full permission set,' a simple SD-JWT claim with a hash commitment achieves the same result at 1000x lower computational cost. ZKP is justified only if you need to hide the credential issuer AND the permission structure simultaneously \u2014 a requirement the card never validates with actual buyer interviews.",
+      "TIMING: The card's own timing_assessment is '18_plus_months'. Enterprise agent deployments are in POC/pilot phase. Building an Agent Passport compatibility layer for a protocol that may not exist in its current form in 18 months is premature optimization. The IETF agent auth landscape is moving \u2014 draft-klrc-aiagent is early, Agent Passport specs may pivot.",
+      "EAD: Classified as GREY_ZONE. The 'privacy comparison demo' and 'compatibility profile' are technically open-source artifacts, but the positioning_alignment section explicitly describes this as a 'sales engineering artifact' and an 'adoption wedge' \u2014 language that signals commercial intent. The OAuth bridge is an enterprise integration play, not a protocol contribution. Under EAD constraints, the commercial framing must be stripped entirely, and even then the grey zone classification means this carries immigration risk for unclear benefit.",
+      "EXECUTION: Building an OAuth token exchange bridge (rated 'high' complexity) for a competitor whose existence is unverified, targeting buyers who don't exist yet, under immigration constraints that prohibit the go-to-market motion \u2014 this is a poor use of scarce founder time."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "CONCERN",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Zero verified demand, self-reported 18+ month timing, SD-JWT solves the core use case without ZKP overhead, and EAD constraints prohibit the commercial positioning that makes this opportunity coherent \u2014 kill it.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "github_agent_load_identity",
+    "title": "Cryptographic Agent Identity for Platform Load Management",
+    "description": "GitHub's agent traffic crisis broke enterprise SLAs because the platform couldn't distinguish or throttle misbehaving agent clients. Bolyra's nullifier-based identity lets platforms rate-limit per-agent-identity without storing API keys, enabling shed-load decisions based on verified agent provenance.",
+    "category": "enterprise_auth",
+    "source": "GitHub AI agent crisis / platform stability issues",
+    "scores": {
+      "demand": 10,
+      "timing": 12,
+      "fit": 17,
+      "feasibility": 16,
+      "total": 55
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "GitHub's agent traffic issues are real and widely reported, but web search evidence returned zero URLs \u2014 no named buyers, no RFPs, no procurement cycles for cryptographic agent identity specifically, putting this squarely in anecdotal territory.",
+      "timing": "GitHub's rate-limiting crisis creates a plausible near-term hook and agent auth standards are in motion, but no competitor has shipped a ZKP-based rate-limiting product, and no standard milestone directly targets this use case within 6 months.",
+      "fit": "Strong primitive mapping \u2014 AgentPolicy, nullifier-as-rate-limit-key, Delegation for sub-agent chains, and IdentityRegistry all apply directly with minor modifications, though the unilateral 'load-identity' mode is new work not yet in the spec.",
+      "feasibility": "MVP is achievable in ~10 days reusing existing circuits and SDK infra, but the middleware package and adoption by actual platforms adds go-to-market risk beyond pure engineering effort."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Each agent proves it holds a valid credential with operator-signed permissions and unexpired timestamp. The platform verifies the PLONK proof to confirm agent provenance without learning the operator's private key or full permission set \u2014 only that the agent is authorized and within scope.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The nullifier mechanism (Poseidon2(scope, secret)) is directly applicable: scope = platform endpoint or rate-limit bucket. Same agent hitting the same endpoint produces the same nullifier, enabling per-identity rate limiting without storing API keys or correlating across endpoints.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain agentTree membership proves the credential was enrolled by a legitimate operator. Root history buffer (30 entries) allows slightly stale proofs during high-traffic bursts without on-chain reads per request. Platform can cache recent roots and verify offline.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Sub-agents spawned by a primary agent (e.g., Devin spawning child workers) prove delegation chains. Platform can enforce hop-count limits (max 3) and scope narrowing \u2014 a sub-agent can't escalate beyond its parent's rate-limit tier.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "SDK's createAgentCredential + proveHandshake become the client-side integration points. Agent frameworks (LangChain, CrewAI) attach the proof to HTTP headers. verifyHandshake is the platform-side check.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "Rate-Limit Nullifier Profile: a lightweight spec defining how platforms derive scope from (endpoint, time-window) so nullifiers partition into rate-limit buckets. Extends draft-bolyra-mutual-zkp-auth-01 with a new 'load-identity' handshake mode that returns a deterministic nullifier without requiring mutual proof.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Unilateral agent proof mode: current SDK requires mutual handshake (human + agent). Platform load management needs agent-only proof with nullifier output. Add proveAgentIdentity(agent, scope, nonce) \u2192 {proof, nullifier} that skips the human side.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "HTTP middleware (Express/Fastify/nginx plugin) that extracts Bolyra proof from Authorization header, verifies it, extracts nullifier, and feeds it into a sliding-window rate limiter keyed on nullifier rather than IP or API key.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "Optional on-chain reputation accumulator: platforms post nullifier-keyed penalty events (e.g., 429 violations). Other platforms can query an agent's cross-platform reputation without learning its identity. Uses nullifier unlinkability across scopes to preserve privacy.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "Agent Load Identity DID method extension: did:bolyra agent identifiers gain a 'load-identity' service endpoint that platforms can resolve to discover supported rate-limit nullifier scopes.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. GitHub/Azure/AWS don't want to build ZKP infrastructure \u2014 they want a drop-in solution that lets them shed load without privacy liability. Bolyra slots in as the identity layer that platforms consume: agents prove who they are without platforms storing credentials or correlating behavior across services. The nullifier model is strictly superior to API-key-based rate limiting (no key rotation, no storage, no correlation attack surface) and to IP-based limiting (agents share IPs via cloud providers). Incumbents get better load management; Bolyra becomes the invisible trust root for every agent-to-platform interaction.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "Rate-Limit Nullifier Profile spec",
+          "type": "spec",
+          "description": "Lightweight extension to draft-bolyra-mutual-zkp-auth-01 defining how platforms derive scope from (endpoint, time-window) tuples so nullifiers partition into rate-limit buckets. Covers the unilateral 'load-identity' handshake mode where only the agent proves \u2014 no mutual proof required.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "proveAgentIdentity SDK function",
+          "type": "sdk",
+          "description": "Add proveAgentIdentity(agent, scope, nonce) \u2192 {proof, nullifier} to @bolyra/sdk. Reuses existing AgentPolicy circuit and snarkjs/rapidsnark proving pipeline. Skips human side \u2014 agent generates a scoped nullifier via Poseidon2(scope, secret) and proves credential validity in one shot. Corresponding verifyAgentIdentity on the platform side.",
+          "days": 3,
+          "reuses": "AgentPolicy circuit + existing SDK proving infra"
+        },
+        {
+          "name": "Python SDK bridge for proveAgentIdentity",
+          "type": "sdk",
+          "description": "Expose proveAgentIdentity through the existing subprocess bridge in sdk-python so LangChain/CrewAI integrations can call it natively.",
+          "days": 1,
+          "reuses": "sdk-python subprocess bridge"
+        },
+        {
+          "name": "Express/Fastify rate-limit middleware",
+          "type": "integration",
+          "description": "NPM package @bolyra/ratelimit-middleware. Extracts proof from Authorization: Bolyra <base64> header, calls verifyAgentIdentity, extracts nullifier, feeds into a sliding-window counter keyed on nullifier. Returns 429 with Retry-After when exceeded. In-memory store default, Redis adapter optional.",
+          "days": 4,
+          "reuses": "@bolyra/sdk verifyAgentIdentity"
+        },
+        {
+          "name": "End-to-end demo: GitHub-style API with agent load shedding",
+          "type": "demo",
+          "description": "Minimal Express API (3 endpoints) protected by the middleware. Demo script spawns 5 agents with different credentials hitting the same endpoint \u2014 shows per-identity rate limiting working (misbehaving agent gets 429, others unaffected). Includes a delegated sub-agent to show hop-count enforcement. All local, no real GitHub integration.",
+          "days": 2,
+          "reuses": "middleware + SDK + Delegation circuit"
+        },
+        {
+          "name": "Technical blog post",
+          "type": "docs",
+          "description": "'Solving the Agent Traffic Crisis with Cryptographic Load Identity' \u2014 explains the nullifier-as-rate-limit-key insight, walks through the demo, compares to API-key-based approaches. Published on bolyra.ai/blog. No pricing, no CTA, purely technical.",
+          "days": 1,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 13,
+      "reuse_percentage": 78,
+      "risks": [
+        "Web search evidence returned nothing \u2014 demand signal is inferred from GitHub's public statements, not validated by actual enterprise buyer conversations",
+        "Unilateral agent proof mode changes the trust model (no mutual handshake) \u2014 need to ensure nullifier unlinkability still holds when scope is platform-controlled rather than jointly derived",
+        "Enterprise platforms (GitHub, Vercel) may prefer simpler solutions (just better API key management) over ZKP-based identity \u2014 the cryptographic elegance may not clear the 'is this worth integrating?' bar",
+        "Rate-limit nullifier scope derivation (endpoint \u00d7 time-window) needs careful design to prevent nullifier grinding attacks where agents vary scope parameters to get fresh identities",
+        "13 days assumes no circuit modifications \u2014 if AgentPolicy needs changes to support unilateral mode cleanly, add 3-5 days for recompile + trusted setup"
+      ],
+      "success_criteria": "Demo video showing 5 concurrent agents hitting the same endpoint where one misbehaving agent gets rate-limited (429) while others continue unaffected \u2014 with all identity verification happening via ZK proofs and nullifiers, zero API keys stored. Secondary: at least one agent-framework maintainer (LangChain, CrewAI) engages with the spec or middleware on GitHub."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND AXIS FAIL: The opportunity card itself admits 'web search evidence returned zero URLs \u2014 no named buyers, no RFPs, no procurement cycles' and demand_strength is literally 'none'. GitHub's agent traffic issues are real but GitHub's response has been conventional rate-limiting and API key tiering \u2014 nobody at GitHub, Azure, or AWS has publicly expressed interest in cryptographic agent identity for load management. This is a solution invented by reading a news cycle, not by hearing a buyer say 'I need this.' The 'demand: 10' score with demand_strength 'none' is self-contradictory.",
+      "COMPETITIVE MOAT FAIL: GitHub/Azure already solved their immediate load problem with conventional API key rate-limiting and tiered access. They have zero incentive to adopt ZKP-based identity when API keys + OAuth scopes work fine for their purposes. Cloudflare, which actually sells rate-limiting infrastructure, would be the natural vendor here \u2014 and they'd use conventional techniques because their customers don't care about privacy-preserving rate limiting, they care about stopping abuse. No platform operator has ever said 'I wish I could rate-limit agents without knowing who they are' \u2014 they WANT to know who the agents are.",
+      "TECHNICAL FIT FAIL: API key + sliding window rate limiting is strictly simpler, already deployed everywhere, and solves 100% of GitHub's stated problem. The 'nullifier is superior to API keys' argument collapses under scrutiny: platforms WANT to correlate agent behavior across endpoints for abuse detection \u2014 nullifier unlinkability is a bug, not a feature, from the platform's perspective. ZKP adds ~200ms proving latency per request for a property (privacy) that the buyer actively doesn't want.",
+      "TIMING FAIL: The card's own timing_assessment is '18_plus_months'. GitHub's crisis was solved with conventional tooling. There are no production agentic systems at scale that need privacy-preserving rate limiting. The on-chain reputation accumulator (new_components_needed, complexity: high) requires an ecosystem that doesn't exist. Building middleware for platforms that haven't asked for it and won't adopt it for 18+ months is pure speculative engineering.",
+      "EAD CONCERN: Card self-classifies as GREY_ZONE. The middleware package (@bolyra/ratelimit-middleware) and 'platform adoption' framing push this toward commercial product development. The spec work and SDK additions are defensible as open-source, but the 10-day MVP culminates in an NPM package explicitly designed for enterprise platform adoption \u2014 that's product development with commercial intent, not pure technical contribution."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Zero verified demand, platforms actively prefer knowing agent identity over privacy-preserving alternatives, API keys already solve the stated problem, and the card's own metadata (demand_strength: none, timing: 18+ months) contradicts a GO recommendation \u2014 kill this opportunity.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "human_agent_linking",
+    "title": "Privacy-Preserving Human-Agent Linking Protocol",
+    "description": "BillionsNetwork's verified-agent-identity uses signed DID challenges for human-agent linking but exposes the human's DID to the agent operator. Bolyra's HumanUniqueness circuit proves the human endorsed the agent without revealing which human, using nullifier-based uniqueness \u2014 directly solving the linking problem the market is building toward.",
+    "category": "standards",
+    "source": "BillionsNetwork verified-agent-identity repo",
+    "scores": {
+      "demand": 6,
+      "timing": 7,
+      "fit": 22,
+      "feasibility": 20,
+      "total": 55
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and the only source is a single GitHub repo (BillionsNetwork) with no engagement metrics, named buyers, or independent corroboration.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were cited; the single repo has no shipping timeline and the timing assessment itself says 18+ months out.",
+      "fit": "All three core circuits (HumanUniqueness, AgentPolicy, Delegation) map directly with no modification needed, and the SDK already exposes proveHandshake/verifyHandshake \u2014 this is essentially a relabeling of existing capability.",
+      "feasibility": "MVP is 5 days of mostly demo/docs/spec work reusing existing primitives with only minor SDK wrappers, making execution low-risk."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Core primitive for the linking problem. Human generates a nullifier scoped to the agent's credential commitment (or operator DID). This proves 'a unique human endorsed this agent' without revealing which human. The nullifier prevents the same human from endorsing the same agent twice (sybil resistance) while remaining unlinkable across different agent endorsements.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "The agent side of the link. Agent proves it holds a valid, non-expired credential with the required permission bits. The selective disclosure capability means the agent can prove it has SIGN_ON_BEHALF (bit 5) without revealing its full permission set \u2014 critical for the linking handshake where the verifier only needs to confirm the agent is authorized to act.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables the endorsed-agent to further delegate narrowed scope to sub-agents while preserving the human endorsement chain. BillionsNetwork's DID challenge approach has no delegation story \u2014 each sub-agent would need a fresh human interaction. Bolyra's delegation circuit proves scope narrowing without revealing the original human or the full permission set.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain verification of the linking proof via atomic handshake verification. The dual Merkle tree design (humanTree + agentTree) already supports the enrollment model. Nonce equality enforcement prevents replay of linking proofs. Root history buffers allow slightly stale proofs (accommodates latency between proof generation and on-chain submission).",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake() already implements the bilateral proof flow needed for linking \u2014 human proves uniqueness, agent proves policy, both bind to the same nonce. verifyHandshake() validates both sides atomically. The existing error classes (ExpiredCredentialError, ScopeEscalationError) cover the failure modes of a linking protocol.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft already specifies the mutual ZKP auth flow. Human-agent linking is a named use case within the draft's scope. The wire format (proof envelope + nonce binding) maps directly to a linking attestation format.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "The DID method can represent linked human-agent pairs as DID relationships without exposing the human's identifier. A linked agent's DID document could include a verificationMethod that references the nullifier hash (proving human endorsement) without containing the human's DID \u2014 the exact privacy gap BillionsNetwork's approach fails to close.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "Linking attestation format: a standardized envelope that bundles (humanProof, agentProof, nonce, scope, timestamp) into a portable, verifiable linking attestation. Should align with the IETF draft wire format and include a revocation mechanism (human can revoke endorsement by publishing a revocation nullifier scoped to the agent).",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "High-level linkAgent(humanIdentity, agentCredential, scope) convenience function that wraps proveHandshake with linking-specific defaults (scope set to agent's credentialCommitment, permissions defaulting to SIGN_ON_BEHALF). Returns a LinkingAttestation object with revoke() method.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "BillionsNetwork compatibility adapter: accepts their DID challenge format as input, translates to a Bolyra linking flow, and returns a response that their verified-agent-identity consumers can verify. This is the trojan horse \u2014 drop-in replacement that upgrades their privacy model.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Revocation sub-protocol: human publishes a revocation nullifier (Poseidon2(revocation_scope, secret)) to unlink from an agent. Needs a sparse nullifier set on-chain or a revocation accumulator. Without this, linking is irrevocable, which is a non-starter for production use.",
+        "complexity": "high"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. BillionsNetwork is building the market category (verified agent identity) and acquiring early adopters. Their architecture has a known, structural privacy flaw (human DID exposure) that they cannot fix without rebuilding around ZKPs. Bolyra slots in as the privacy layer: (1) a compatibility adapter lets their existing users upgrade without switching stacks, (2) the IETF draft gives Bolyra standards legitimacy that a startup repo cannot match, (3) once the linking attestation format is adopted, the delegation circuit becomes the natural extension \u2014 locking in Bolyra as the trust infrastructure beneath their application layer. The revocation sub-protocol is the long-term moat: any competitor that copies the linking flow still needs to solve revocation, which requires either Bolyra's nullifier algebra or a bespoke ZKP accumulator.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "linking-example",
+          "type": "demo",
+          "description": "End-to-end demo script showing human-agent linking via existing proveHandshake/verifyHandshake \u2014 human proves uniqueness scoped to agent's operator DID, agent proves policy, verifier confirms link without learning human identity. Wraps existing SDK calls with clear narrative comments.",
+          "days": 1,
+          "reuses": "@bolyra/sdk proveHandshake + verifyHandshake"
+        },
+        {
+          "name": "human-agent-linking spec section",
+          "type": "spec",
+          "description": "Add a 'Human-Agent Linking' section to draft-bolyra-mutual-zkp-auth-01.md formalizing the nullifier-scoped-to-operator pattern as a named protocol flow. Define the linking attestation format (proof envelope + nullifier hash + agent credential commitment). Reference BillionsNetwork's DID-challenge approach as the non-private baseline.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "linking test vectors",
+          "type": "spec",
+          "description": "Add test vectors to spec/test-vectors/ covering: (1) valid link, (2) replay detection via nullifier collision, (3) expired agent credential rejection, (4) scope escalation rejection. Machine-readable JSON consumed by conformance runner.",
+          "days": 1,
+          "reuses": "spec/conformance-runner"
+        },
+        {
+          "name": "blog post: linking without leaking",
+          "type": "docs",
+          "description": "Technical blog post comparing DID-challenge linking (BillionsNetwork pattern) vs nullifier-based linking (Bolyra). Show the privacy gap with a concrete example. Pure educational content \u2014 no CTA, no pricing.",
+          "days": 1,
+          "reuses": "new"
+        },
+        {
+          "name": "SDK linking convenience wrapper",
+          "type": "sdk",
+          "description": "Add linkAgentToHuman() and verifyLink() thin wrappers in @bolyra/sdk that call proveHandshake/verifyHandshake with the correct nullifier scope (operator DID as external nullifier). Typed return includes nullifierHash for on-chain anchoring. No new circuit logic.",
+          "days": 1,
+          "reuses": "@bolyra/sdk"
+        }
+      ],
+      "total_days": 6,
+      "reuse_percentage": 85,
+      "risks": [
+        "BillionsNetwork's approach may evolve to add privacy features, reducing the differentiation window",
+        "Demand signal is weak (score 15) \u2014 the market may not yet care about privacy in human-agent linking",
+        "Grey zone risk on the blog post if it reads as marketing rather than technical education \u2014 keep it purely comparative with code examples",
+        "Nullifier-scoped-to-operator-DID is a novel pattern that hasn't been validated by external cryptographers yet"
+      ],
+      "success_criteria": "Demo script runs end-to-end in under 5 seconds (fast mode), spec section passes editorial review, test vectors pass conformance runner, and at least one external developer (GitHub issue or Discord) references the linking flow within 60 days of publication."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND: Zero independent corroboration. The entire opportunity is sourced from a single GitHub repo (BillionsNetwork) with no engagement metrics, no stars cited, no forks, no issues, no named users. The Tier 2 validation itself admits 'web search evidence returned zero results.' This is phantom demand \u2014 a GitHub repo is not a market.",
+      "DEMAND: The 'human-agent linking' problem is a researcher's abstraction, not a buyer's pain point. No enterprise has ever issued an RFP for 'privacy-preserving human-agent linking.' The people who care about this (crypto/identity researchers) are not the people who buy infrastructure ($0 budget).",
+      "COMPETITIVE MOAT: The positioning as 'privacy layer under BillionsNetwork' is fantasy architecture. BillionsNetwork is itself an unknown startup with no apparent traction. Building a layer under a layer that has no users yields zero users. You cannot draft behind a car that isn't moving.",
+      "COMPETITIVE MOAT: If human-agent linking ever becomes a real market need, Microsoft Entra Verified ID or Google's Android Identity Credentials already have the distribution and trust to ship a 'linked agent credential' feature in weeks. They won't use ZKPs \u2014 they'll use standard attestations with their existing PKI, and enterprises will accept it because they already trust Microsoft/Google as the identity provider.",
+      "TECHNICAL FIT: The card itself admits this is 'essentially a relabeling of existing capability.' If proveHandshake/verifyHandshake already does this, there is no new technical work \u2014 just marketing. And if it's just marketing, it fails the EAD filter.",
+      "TECHNICAL FIT: The privacy argument ('human DID exposure') assumes the buyer cares about hiding the human's identity from the agent operator. In practice, enterprises WANT to know which human authorized which agent for audit, compliance, and liability. Privacy-preserving linking solves a problem most buyers actively don't want solved.",
+      "TIMING: The card's own timing assessment says '18+ months out.' The Tier 2 validation found no competitor launch dates, no standard milestones, no regulatory deadlines. Building a demo for a market that doesn't exist yet and won't for 18 months is pure opportunity cost waste.",
+      "TIMING: Production AI agents with real authorization needs are still in POC/pilot at most enterprises. The 'linking' problem presupposes a world where agents are autonomous enough to need human endorsement chains \u2014 that world is 2-3 years away at minimum.",
+      "EAD: Classified as GREY_ZONE. The 'BillionsNetwork compatibility adapter' and 'trojan horse \u2014 drop-in replacement' language is explicitly commercial strategy, not open-source contribution. The demo and spec work might be permissible, but the framing reveals commercial intent that makes the grey zone greyer.",
+      "EXECUTION: The revocation sub-protocol is flagged as 'high complexity' and described as 'non-starter for production use' without it. So the MVP without revocation is a toy, and the MVP with revocation is no longer 5 days of work. This is a classic complexity iceberg."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Zero-evidence opportunity built on a single unknown GitHub repo, solving a problem nobody is buying, for a market that won't exist for 18+ months, positioned as infrastructure under infrastructure that itself has no users \u2014 classic solution looking for a problem.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "human_verified_gateway",
+    "title": "ZKP Upgrade for HTTP Message Signature Gateways",
+    "description": "HUMAN Security's Verified AI Agent framework uses RFC 9421 HTTP signatures at the gateway, but every request reveals the signing key's identity. Bolyra's gateway can verify agent ZKP proofs instead, proving the agent is authorized without linking requests to a persistent public key \u2014 defeating cross-service tracking.",
+    "category": "enterprise_auth",
+    "source": "HUMAN Verified AI Agent open-source framework",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 20,
+      "feasibility": 16,
+      "total": 54
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs were provided; HUMAN's Verified AI Agent framework exists but no named buyers or procurement signals for ZKP-based gateway auth were cited.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were concretely cited; RFC 9421 is published but the ZKP-upgrade demand timeline is speculative with no anchored events.",
+      "fit": "All three core circuits (AgentPolicy, HumanUniqueness, Delegation) plus IdentityRegistry and SDK map directly with only minor modifications needed, representing genuine ZKP advantage over persistent-key HTTP signatures.",
+      "feasibility": "MVP spec is well-scoped at ~12 days reusing existing PLONK verifiers and SDK internals, but the truncated spec and failed web search leave integration complexity and adoption path partially unvalidated."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive. The agent proves it holds a valid operator-signed credential with the required permission bits (e.g. READ_DATA, WRITE_DATA) without revealing the operator's public key or the full bitmask. The gateway verifies the PLONK proof instead of an RFC 9421 HTTP signature, so no persistent public key is exposed across requests.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Optional upgrade path. When a gateway needs to verify that a human delegated to the agent (not just that the agent has a valid credential), the human's Groth16 proof anchors the trust chain. The nullifier's scope-binding means the human is unlinkable across different gateway deployments.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables the full value prop: human \u2192 agent delegation with scope narrowing. A gateway can require proof that the agent's permissions were narrowed from a human principal, not self-issued. The one-way scope narrowing enforced in-circuit prevents an agent from escalating beyond what the human authorized.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The gateway can optionally check on-chain root history to confirm the agent's credential commitment is in the current agent Merkle tree, providing revocation support. The 30-entry root history buffer gives a ~30-block grace period for in-flight proofs during tree updates.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "Gateway integration calls verifyHandshake() or a new single-proof verify function. The existing proveHandshake flow bundles human+agent proofs with nonce binding, which maps directly to per-request gateway verification with replay protection.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "HTTP gateway middleware (Express/Fastify/nginx-lua) that intercepts inbound requests, extracts the Bolyra proof from a new HTTP header (e.g. Bolyra-Proof), verifies it via the SDK, and forwards on success. Replaces RFC 9421 Signature/Signature-Input headers. Must handle proof deserialization, nonce freshness checks, and permission-scope matching against route-level policies.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Single-proof verification mode: verifyAgentProof(proof, requiredScope, nonce) that skips the human side for pure agent-to-service calls. Currently the SDK only exposes the paired verifyHandshake. This is a thin wrapper over the existing PLONK verifier.",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "HTTP binding specification: defines which headers carry the proof, how the nonce is derived (e.g. from request method + path + timestamp), and how a gateway advertises required permission scopes via a WWW-Authenticate challenge. Should reference draft-bolyra-mutual-zkp-auth-01 and position as a privacy-preserving alternative to RFC 9421 Section 3.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "HUMAN Verified AI Agent compatibility shim: adapter that lets existing HUMAN framework deployments add Bolyra as an alternative verification backend alongside their existing RFC 9421 path, enabling incremental migration.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. HUMAN Security has enterprise distribution and brand trust for bot detection \u2014 they define the gateway pattern and the HTTP signature format. Bolyra doesn't compete with their gateway; it replaces the verification primitive inside it. HUMAN's framework is open-source, so Bolyra can ship a drop-in verification backend that upgrades their architecture from 'signed and linkable' to 'proven and unlinkable' without requiring HUMAN to change their gateway routing, policy engine, or customer contracts. This positions Bolyra as infrastructure that makes incumbents' products better rather than a competitor, which is the fastest path to enterprise adoption. The cross-service unlinkability story is also a regulatory tailwind: as EU AI Act and CCPA enforcement tighten, enterprises will need to prove their AI agents aren't being tracked across services \u2014 Bolyra's nullifier scoping provides this by construction.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "verifyAgentProof SDK function",
+          "type": "sdk",
+          "description": "Single-proof verification mode: verifyAgentProof(proof, requiredPermissions, nonce) that verifies an AgentPolicy PLONK proof without requiring the paired human proof. Thin wrapper over existing PLONK verifier in @bolyra/sdk.",
+          "days": 2,
+          "reuses": "AgentPolicy PLONK verifier + existing sdk verify internals"
+        },
+        {
+          "name": "HTTP proof binding spec",
+          "type": "spec",
+          "description": "Specification defining Bolyra-Proof and Bolyra-Nonce HTTP headers, proof serialization format (base64url-encoded JSON), nonce derivation (SHA-256 of method + path + timestamp window), required permission scope declaration via Bolyra-Scope header, and error response codes. Positioned as companion to draft-bolyra-mutual-zkp-auth-01.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01 structure"
+        },
+        {
+          "name": "Express gateway middleware",
+          "type": "integration",
+          "description": "@bolyra/gateway-middleware Express/Connect middleware. Extracts Bolyra-Proof header, deserializes proof, checks nonce freshness (configurable window, default 30s), matches route-level permission policies, calls verifyAgentProof, forwards on success or returns 401/403. Drops in where RFC 9421 signature verification currently sits.",
+          "days": 4,
+          "reuses": "@bolyra/sdk verifyAgentProof + AgentPolicy circuit"
+        },
+        {
+          "name": "Gateway demo",
+          "type": "demo",
+          "description": "Standalone Express server with 3 protected routes at different permission tiers (READ_DATA, WRITE_DATA, FINANCIAL_SMALL). Includes a client script that generates AgentPolicy proofs and makes authenticated requests. README shows side-by-side comparison: RFC 9421 (key exposed) vs Bolyra (ZKP, unlinkable).",
+          "days": 2,
+          "reuses": "existing examples/mcp-demo patterns + AgentPolicy test fixtures"
+        },
+        {
+          "name": "Integration guide",
+          "type": "docs",
+          "description": "How-to guide: migrating an HTTP signature gateway to Bolyra ZKP verification. Covers middleware installation, route policy configuration, nonce window tuning, and optional upgrade path to full human-delegated proofs via Delegation circuit.",
+          "days": 1,
+          "reuses": "existing docs/quickstart structure"
+        }
+      ],
+      "total_days": 11,
+      "reuse_percentage": 78,
+      "risks": [
+        "Proof size overhead: a Groth16/PLONK proof (~800B-1.2KB base64) in an HTTP header per request adds latency vs a 256B Ed25519 signature \u2014 must benchmark and document the tradeoff",
+        "Nonce freshness window is a UX/security tradeoff: too tight and clock skew causes false rejections, too loose and replay window grows \u2014 needs tuning guidance in docs",
+        "No web search evidence of actual demand \u2014 HUMAN Security's Verified AI Agent framework is new and adoption is unproven, so this MVP could land with zero users",
+        "Gateway middleware is Express-only initially \u2014 real enterprise gateways run nginx/Envoy/Kong, so the Express version is a proof-of-concept, not a production integration",
+        "EAD grey zone means no outbound promotion \u2014 the middleware ships but sits undiscovered until EAD clears or organic discovery happens"
+      ],
+      "success_criteria": "A developer can npm install @bolyra/gateway-middleware, add 3 lines to an Express app, define per-route permission policies, and have agent requests verified via ZKP proofs instead of HTTP signatures \u2014 demonstrated end-to-end in the demo with proof generation, transmission, and verification completing in under 500ms on a laptop."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "DEMAND: Zero procurement signals. The card itself admits 'web search evidence returned zero results' and 'no named buyers.' HUMAN Security's Verified AI Agent framework is open-source infrastructure, not a product with paying customers demanding ZKP upgrades. The 'demand' is entirely constructed from a theoretical privacy gap, not from anyone actually asking for cross-service unlinkability at the gateway layer. No enterprise has publicly stated that RFC 9421 HTTP signature linkability is a purchasing blocker.",
+      "DEMAND: The 'regulatory tailwind' argument (EU AI Act, CCPA) is speculative hand-waving. Neither regulation requires agents to be unlinkable across services. CCPA covers consumer PII; an agent's signing key is not PII. EU AI Act focuses on risk classification and transparency, not cryptographic unlinkability of API callers. This is a solution constructed for a regulation that doesn't exist.",
+      "COMPETITIVE MOAT: HUMAN Security has the distribution, the enterprise relationships, and the open-source framework. If cross-service unlinkability ever becomes a real requirement, HUMAN can add key rotation or ephemeral keys to their existing RFC 9421 flow in a week \u2014 no ZKP needed. Ephemeral per-request signing keys + a simple attestation endpoint achieves 90% of the unlinkability story without circuit overhead.",
+      "COMPETITIVE MOAT: Cloudflare, Akamai, and Fastly all operate at the gateway layer with orders of magnitude more deployment surface. If gateway-level agent verification becomes a real market, they will build it natively into their edge platforms. Bolyra cannot out-distribute an edge CDN.",
+      "TECHNICAL FIT: The core unlinkability claim does not require ZKP. Blind signatures (Chaum-style), ephemeral key pairs rotated per-request, or even simple bearer tokens with a trusted issuer all defeat cross-service tracking. ZKP adds 100-500ms proof generation latency per request \u2014 unacceptable for high-frequency API gateway traffic. The card waves this away but never addresses the latency budget.",
+      "TECHNICAL FIT: 'Proving the agent is authorized without linking requests to a persistent public key' can be achieved with a blinded credential scheme (e.g., anonymous credentials \u00e0 la Idemix) that is far more mature and performant than Groth16/PLONK proof generation on every HTTP request.",
+      "TIMING: The card's own Tier 2 assessment rates timing as '18_plus_months.' Enterprises are not deploying AI agents with production authorization requirements at scale today. Building a ZKP gateway middleware for a framework with no named production users is building infrastructure for infrastructure that doesn't exist yet.",
+      "TIMING: RFC 9421 was published but agent-specific HTTP authentication standards are still in early draft. The 'HTTP proof binding spec' deliverable would be building to a moving target with no standards body backing.",
+      "EAD COMPLIANCE: Classified as GREY_ZONE. The 'HUMAN Verified AI Agent compatibility shim' and 'gateway demo' deliverables are clearly positioned as adoption tools \u2014 they exist to get HUMAN's users to switch to Bolyra's verification backend. This is product-market-fit work, not pure open-source contribution. The positioning statement explicitly says 'fastest path to enterprise adoption,' which is commercial strategy, not technical research.",
+      "FEASIBILITY: The 12-day MVP estimate is optimistic. Single-proof verification mode, HTTP binding spec, Express middleware with nonce freshness and permission matching, plus a demo \u2014 each touching different layers (SDK, spec, middleware, demo) \u2014 is realistically 3-4 weeks of focused work for a solo founder, and the result serves zero validated users."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "Phantom demand built on a theoretical privacy gap that no buyer has articulated, solvable without ZKP by simpler alternatives, targeting a framework with no named production users, 18+ months from market readiness \u2014 kill it.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "github_pre_agent_steps",
+    "title": "ZKP Pre-Agent-Steps for CI/CD Agent Authentication",
+    "description": "GitHub's pre-agent-steps hook runs custom auth setup before agents execute. Bolyra could provide a pre-agent-step action that generates a scoped ZKP proof of the agent's permissions, replacing static tokens with per-session proofs that auto-expire and can't be replayed.",
+    "category": "developer_tools",
+    "source": "GitHub Agentic Workflows weekly update \u2014 pre-agent-steps",
+    "scores": {
+      "demand": 7,
+      "timing": 8,
+      "fit": 17,
+      "feasibility": 18,
+      "total": 50
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search returned zero evidence; GitHub pre-agent-steps is a nascent feature with no verifiable public demand for ZKP-based CI agent auth \u2014 the preliminary score of 16 had no URLs backing it.",
+      "timing": "No competitor launches, standard milestones, or regulatory deadlines could be verified; pre-agent-steps itself is early-stage with no confirmed GA timeline, making the 'closing window' framing speculative.",
+      "fit": "AgentPolicy, Delegation, and the SDK map cleanly \u2014 scoped permissions, expiry, and nonce binding are native Bolyra primitives requiring only minor integration work, though the use case substitutes ZKP where a simpler OIDC/JWT approach likely suffices for most CI teams.",
+      "feasibility": "The MVP is well-scoped at ~8 days using existing circuits and SDK with PLONK (no ceremony), but depends on GitHub shipping and stabilizing pre-agent-steps hooks, which is outside Bolyra's control."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core proving primitive. The GitHub Action generates an AgentPolicy PLONK proof at the start of pre-agent-steps, binding the CI agent's model hash, operator key (GitHub org), and scoped permissions (e.g. READ_DATA + WRITE_DATA for a PR bot, FINANCIAL_SMALL for a deploy bot). The expiry timestamp is set to the workflow run timeout, giving auto-expiration for free.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables the org owner (human) \u2192 CI agent delegation chain. The org admin holds the root credential; the GitHub Action proves a delegation token that narrows scope to exactly the permissions the workflow needs. Max 3 hops covers org-owner \u2192 repo-admin \u2192 CI-agent naturally.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Used once during org setup: the human admin proves uniqueness to anchor the delegation chain root. Not invoked per-workflow-run \u2014 only when bootstrapping the org's Bolyra identity.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain verification endpoint. The pre-agent-step proof can be verified against the registry's agentTree root and delegation nullifier replay protection. The 30-entry root history buffer accommodates the lag between proof generation in CI and downstream verification.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "The GitHub Action wraps createAgentCredential() and proveHandshake() calls. The action outputs the serialized proof as a step output that downstream steps/services consume via verifyHandshake().",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "GitHub Action (bolyra/pre-agent-step) that wraps the SDK: reads org credentials from GitHub secrets, generates a scoped AgentPolicy proof, and exports it as BOLYRA_PROOF step output. Needs to bundle snarkjs WASM prover (not rapidsnark) since GitHub runners are ephemeral Linux VMs.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Lightweight proof serialization format for CI artifacts \u2014 a compact base64url encoding of (proof, publicSignals, nonce) that can be passed as an environment variable or step output without hitting shell escaping issues.",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "GitHub-specific profile of draft-bolyra-mutual-zkp-auth-01 defining the CI agent identity model: how GitHub org maps to operator key, how workflow permissions map to the 8-bit bitmask, and how run timeout maps to expiry.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "Verification middleware for downstream services (API gateways, deploy targets) that validates the BOLYRA_PROOF from the CI agent before granting access \u2014 analogous to the existing OpenClaw adapter but for generic HTTP services.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "Directly reinforces the privacy-layer-under-incumbents strategy. GitHub is the incumbent CI/CD platform; Bolyra slots in as an invisible auth layer via a marketplace Action. GitHub agents currently use static PATs or GITHUB_TOKEN with coarse org-level scopes \u2014 Bolyra replaces these with per-session, scope-narrowed, auto-expiring proofs that GitHub never needs to change its architecture to support. The delegation chain model (human org-owner \u2192 CI agent) is a natural enterprise upsell path: security teams get cryptographic proof that no CI agent exceeded its granted permissions, with on-chain audit trail. This is the same wedge pattern as the OpenClaw integration \u2014 ride the incumbent's distribution, own the trust layer.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "proof-envelope-base64url",
+          "type": "sdk",
+          "description": "Compact base64url serialization of (proof, publicSignals, nonce) tuple that survives shell variable expansion and GitHub step output piping. Add serialize/deserialize to @bolyra/sdk.",
+          "days": 1,
+          "reuses": "@bolyra/sdk"
+        },
+        {
+          "name": "bolyra/pre-agent-step GitHub Action",
+          "type": "integration",
+          "description": "Composite GitHub Action that reads BOLYRA_OPERATOR_KEY and BOLYRA_PERMISSIONS from secrets/inputs, calls createAgentCredential() + proveHandshake() via bundled snarkjs WASM prover, and exports BOLYRA_PROOF as a step output. Uses AgentPolicy PLONK (no ceremony needed). Expiry defaults to github.event.repository.default_branch == 'main' ? 1h : 15m.",
+          "days": 4,
+          "reuses": "AgentPolicy circuit, @bolyra/sdk"
+        },
+        {
+          "name": "verify-proof companion action",
+          "type": "integration",
+          "description": "Lightweight GitHub Action (or standalone Node script) that downstream steps call to verify the BOLYRA_PROOF output. Checks proof validity, expiry, permission bitmask, and nonce freshness. No on-chain call \u2014 pure snarkjs verify against bundled vkey.",
+          "days": 1,
+          "reuses": "AgentPolicy vkey, @bolyra/sdk verifyHandshake()"
+        },
+        {
+          "name": "ci-agent-profile spec",
+          "type": "spec",
+          "description": "One-page GitHub-specific profile of draft-bolyra-mutual-zkp-auth-01: maps GitHub org ID to operator key derivation, workflow permission labels to 8-bit bitmask values, and run timeout to proof expiry. Covers the 3 common archetypes: PR-bot (READ+WRITE), deploy-bot (READ+WRITE+FINANCIAL_SMALL), admin-bot (full delegation).",
+          "days": 1,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "end-to-end demo workflow",
+          "type": "demo",
+          "description": "Public repo with a .github/workflows/demo.yml that uses bolyra/pre-agent-step, then a downstream job that verifies the proof before deploying a dummy service. README walks through the output logs showing proof generation, serialization, and verification.",
+          "days": 1,
+          "reuses": "both actions above"
+        },
+        {
+          "name": "docs: quickstart guide",
+          "type": "docs",
+          "description": "docs/integrations/github-pre-agent-step.md \u2014 setup instructions covering: (1) generate operator keypair, (2) store in GitHub secrets, (3) add the action to pre-agent-steps, (4) consume BOLYRA_PROOF in downstream steps. Includes permission mapping table.",
+          "days": 0.5,
+          "reuses": "existing docs structure"
+        }
+      ],
+      "total_days": 8.5,
+      "reuse_percentage": 82,
+      "risks": [
+        "snarkjs WASM proving in GitHub runners may be slow (15-30s for PLONK) \u2014 could annoy users with long pre-agent-step times; mitigate by defaulting to AgentPolicy PLONK which is smaller than Delegation",
+        "GitHub pre-agent-steps is new and the API surface may change \u2014 pin to a specific GitHub Actions runner version and document the minimum required version",
+        "Without on-chain verification the proof is only as trustworthy as the vkey bundled in the action \u2014 a compromised action could ship a fake vkey; mitigate with GitHub Action pinning (SHA-based) and publishing vkey checksums",
+        "Demand signal is unvalidated (web search failed) \u2014 this may be a solution looking for a problem; the demo repo's GitHub stars and forks in the first 30 days will be the real signal"
+      ],
+      "success_criteria": "A developer can add bolyra/pre-agent-step@v1 to their workflow, configure two secrets, and have every CI agent run produce a verifiable, scoped, auto-expiring ZKP proof in under 30 seconds \u2014 demonstrated end-to-end in the public demo repo with passing CI."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "Zero verified demand: Tier 2 already confirmed web search returned no evidence of anyone requesting ZKP-based CI agent auth. The 'demand' is entirely invented by projecting Bolyra's capabilities onto a feature that doesn't exist yet in GA.",
+      "GitHub already solves this without ZKP: GitHub Actions OIDC federation (actions/create-oidc-token) already issues short-lived, audience-scoped JWT tokens for CI-to-cloud auth. AWS, GCP, and Azure all accept these. This is the exact same value prop \u2014 no static secrets, per-session, auto-expiring \u2014 without any ZKP overhead.",
+      "GitHub can trivially extend fine-grained PATs to agent workflows: GitHub shipped fine-grained personal access tokens in 2023 with per-repo, per-permission scoping. Extending this to agent workflows is a product feature, not an infrastructure gap. They have the distribution, trust, and existing token infrastructure.",
+      "ZKP adds 3-8 seconds of proof generation latency to every CI run for zero user-facing benefit: No CI team cares that their runner's permissions are 'zero-knowledge verified.' They care that permissions are scoped and short-lived, which OIDC already provides. The privacy property of ZKP (verifier doesn't learn the input) is meaningless when the CI platform already knows the runner's identity.",
+      "pre-agent-steps has no confirmed GA timeline: The opportunity's own timing_assessment says 18_plus_months. Building a GitHub Action for a hook that may never ship or may ship with a completely different API is speculative engineering.",
+      "Chicken-and-egg: Downstream services need verification middleware to validate BOLYRA_PROOF, but no service will integrate a novel ZKP verification endpoint when they already accept GitHub OIDC tokens via standard JWKS endpoints.",
+      "EAD classification is WAIT_FOR_EAD, meaning the commercial integration (GitHub Marketplace Action) cannot be pursued under current immigration status anyway, making the 8-day MVP timeline irrelevant."
+    ],
+    "tier3_axis_scores": {
+      "demand_falsification": "FAIL",
+      "competitive_moat": "FAIL",
+      "timing_risk": "FAIL",
+      "execution_feasibility": "CONCERN",
+      "ead_compliance": "CONCERN"
+    },
+    "tier3_summary": "GitHub Actions OIDC federation already provides short-lived, scoped, per-session tokens without ZKP overhead \u2014 this opportunity solves a problem that doesn't exist for buyers who wouldn't choose a ZKP-based solution even if it did.",
+    "tier3_source": "claude_cli"
+  }
+]

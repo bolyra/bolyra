@@ -1,0 +1,182 @@
+[
+  {
+    "id": "agent_credential_theft_prevention",
+    "title": "ZKP-Based Agent Authentication to Prevent Credential Theft",
+    "description": "OpenAI's Codex agent flaw exposed GitHub passwords by passing external text into OS commands. Bolyra's ZKP handshake eliminates long-lived credentials entirely\u2014agents prove identity via zero-knowledge proofs without exposing secrets, making credential theft attacks structurally impossible. This is a direct fit for the GitGuardian-identified pattern of shared tokens across agents.",
+    "category": "enterprise_auth",
+    "source": "OpenAI Codex credential theft (bankinfosecurity) + GitGuardian agent auth blog",
+    "preliminary_demand": 22,
+    "preliminary_timing": 23,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 20,
+    "scores": {
+      "demand": 22,
+      "timing": 23,
+      "fit": 24,
+      "feasibility": 20,
+      "total": 89
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "langchain_auth_middleware",
+    "title": "LangChain/Framework-Native ZKP Auth Middleware",
+    "description": "LangChain's agent authorization explainer signals framework-level demand for authentication primitives. Bolyra's existing LangChain integration path (integrations/langchain/) positions it to offer drop-in middleware that replaces API-key-based auth with ZKP handshakes, giving framework users cryptographic guarantees without protocol expertise.",
+    "category": "developer_tools",
+    "source": "LangChain agent authorization blog",
+    "preliminary_demand": 21,
+    "preliminary_timing": 23,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 23,
+    "scores": {
+      "demand": 21,
+      "timing": 23,
+      "fit": 22,
+      "feasibility": 23,
+      "total": 89
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "scoped_delegation_for_sub_agents",
+    "title": "One-Way Scope Narrowing for Multi-Agent Delegation Chains",
+    "description": "ZeroID implements RFC 8693 token exchange for delegation chains but relies on plaintext JWT claims visible to all parties. Bolyra's Delegation circuit enforces scope narrowing cryptographically\u2014sub-agents provably cannot escalate permissions, and the delegation chain is verifiable without revealing the full permission set. Direct replacement for token-exchange-based delegation.",
+    "category": "agentic_commerce",
+    "source": "ZeroID (helpnetsecurity) + GitGuardian overly broad scopes concern",
+    "preliminary_demand": 20,
+    "preliminary_timing": 22,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 18,
+    "scores": {
+      "demand": 20,
+      "timing": 22,
+      "fit": 25,
+      "feasibility": 18,
+      "total": 85
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "human_agent_mutual_auth",
+    "title": "Mutual ZKP Authentication for Human-Agent Interactions",
+    "description": "Multiple signals show agent-to-service auth, but none address the human-in-the-loop verification gap. Bolyra's mutual handshake protocol (HumanUniqueness + AgentPolicy) uniquely proves both that the human is a real enrolled member AND the agent has valid scoped credentials\u2014solving the 'who authorized this agent?' audit problem enterprises face.",
+    "category": "enterprise_auth",
+    "source": "GitHub community discussion on AI security headaches + GitGuardian blog",
+    "preliminary_demand": 20,
+    "preliminary_timing": 19,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 19,
+    "scores": {
+      "demand": 20,
+      "timing": 19,
+      "fit": 25,
+      "feasibility": 19,
+      "total": 83
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "privacy_preserving_agent_identity",
+    "title": "Privacy-Preserving Agent Identity vs. Transparent DID/Signature Schemes",
+    "description": "HUMAN Verified AI Agent and Microsoft's Agent Governance Toolkit both use Ed25519 signatures with public key registries, making every agent interaction linkable and traceable. Bolyra's nullifier-based approach lets agents prove valid credentials without revealing identity across sessions, solving the surveillance-by-default problem in current agent identity protocols.",
+    "category": "standards",
+    "source": "HUMAN Verified AI Agent (humansecurity) + Microsoft Agent Governance Toolkit",
+    "preliminary_demand": 17,
+    "preliminary_timing": 20,
+    "preliminary_fit": 25,
+    "preliminary_feasibility": 19,
+    "scores": {
+      "demand": 17,
+      "timing": 20,
+      "fit": 25,
+      "feasibility": 19,
+      "total": 81
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "github_agentic_workflow_auth",
+    "title": "Pre-Agent Authentication for GitHub Agentic Workflows",
+    "description": "GitHub's pre-agent-steps frontmatter shows platform demand for structured agent authentication before autonomous code execution. Bolyra could provide a ZKP-based authentication step that proves agent identity and scope without exposing credentials in CI/CD environments, integrating as a pre-agent-step action.",
+    "category": "developer_tools",
+    "source": "GitHub Agentic Workflows weekly update (2026-04-20)",
+    "preliminary_demand": 19,
+    "preliminary_timing": 21,
+    "preliminary_fit": 18,
+    "preliminary_feasibility": 22,
+    "scores": {
+      "demand": 19,
+      "timing": 21,
+      "fit": 18,
+      "feasibility": 22,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "agent_passport_alternative",
+    "title": "ZKP Alternative to OAuth-Like Agent Passport Flows",
+    "description": "Agent Passport offers 'Sign in with Google, but for Agents' using standard OAuth flows. Bolyra differentiates by proving agent identity without a centralized identity provider\u2014no single point of trust, no token revocation race conditions, and cryptographic scope enforcement rather than policy-based access control.",
+    "category": "agentic_commerce",
+    "source": "Agent Passport HN discussion (hn 47096131)",
+    "preliminary_demand": 18,
+    "preliminary_timing": 22,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 17,
+    "scores": {
+      "demand": 18,
+      "timing": 22,
+      "fit": 23,
+      "feasibility": 17,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "cumulative_bit_permissions_standard",
+    "title": "Standardized Cumulative-Bit Permission Encoding for Agent Scopes",
+    "description": "AgentIDs uses scoped JWT tokens and Microsoft uses IATP, but neither enforces permission hierarchies cryptographically. Bolyra's 8-bit cumulative encoding with circuit-enforced implication rules (FINANCIAL_MEDIUM implies FINANCIAL_SMALL) could become the interop standard for agent permission scoping, especially for financial services where scope escalation is a regulatory concern.",
+    "category": "standards",
+    "source": "AgentIDs (agentids.org) + Microsoft Agent Governance Toolkit",
+    "preliminary_demand": 15,
+    "preliminary_timing": 18,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 16,
+    "scores": {
+      "demand": 15,
+      "timing": 18,
+      "fit": 24,
+      "feasibility": 16,
+      "total": 73
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "secure_code_game_zkp_track",
+    "title": "Security Training Track for ZKP Agent Authentication",
+    "description": "GitHub's Secure Code Game teaches agentic AI security skills including prompt injection and credential theft. A Bolyra-powered training track would let developers learn ZKP-based agent auth hands-on, driving adoption through education while positioning Bolyra as the reference implementation for secure agent identity.",
+    "category": "developer_tools",
+    "source": "GitHub Secure Code Game",
+    "preliminary_demand": 12,
+    "preliminary_timing": 17,
+    "preliminary_fit": 16,
+    "preliminary_feasibility": 21,
+    "scores": {
+      "demand": 12,
+      "timing": 17,
+      "fit": 16,
+      "feasibility": 21,
+      "total": 66
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE"
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction explicitly identifies and demonstrates a capability the baseline cannot match: proving a bitwise subset relationship over hidden values across a multi-hop chain without disclosing intermediate scopes or participants. \u00a78's comparison table details 7 specific capabilities. The rfc7662_advocate's Attack 2 (RFC 9701 signed introspection) acknowledges this holds in adversarial-AS settings. The spiffe_engineer's Attack 4 concedes 'the ZK narrowing primitive is novel and not replaceable by WIMSE.' The baseline requires either disclosing scope values to the auditor or trusting an AS attestation \u2014 neither achieves simultaneous narrowing proof + scope hiding + participant hiding without a trusted third party for scope enforcement."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model (\u00a73) with 4 security games, named assumptions (A1-A4), and reduction sketches (Theorems 1-4). However, the cryptographer's attacks expose real gaps: (1) Attack 1 shows Theorem 4's chain integrity breaks with non-contiguous active hops \u2014 missing contiguous-prefix constraint. (2) Attack 2 shows the EdDSA key is not bound to the credential commitment in-circuit \u2014 missing binding constraint breaks the reduction. (3) Attack 3 shows Theorem 3's preimage argument is not tight for low-entropy bitmasks. (4) Attack 4 identifies HVZK vs full ZK gap for malicious auditors. Additionally, the rfc7662_advocate's Attack 1 shows the Merkle root is never anchored as a public input \u2014 enrollment proof is vacuous. These are not theoretical quibbles; they are missing constraints that break stated theorems. The threat model and assumptions are stated (earning above 0) but the reductions have concrete holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "\u00a75 maps every construction element to existing Bolyra primitives (Poseidon2/4/5, EdDSAPoseidonVerifier, BinaryMerkleRoot, Num2Bits, cumulative bit encoding). \u00a76 provides detailed per-gadget constraint counts totaling ~55,032, fitting within pot16.ptau's 2^16 budget. Proving time targets (1.5s Groth16, 3s PLONK with rapidsnark) are stated and grounded in existing Bolyra benchmarks at 50K-constraint scale. The circuit uses MAX_HOPS=4 and MAX_DEPTH=20, matching existing Bolyra parameters. All gadgets are already implemented in the Bolyra circuit library."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer without modification: (1) cryptographer Attack 1 \u2014 non-contiguous hop splicing breaks Chain Integrity (Game 4); (2) cryptographer Attack 2 \u2014 missing key-binding constraint allows delegation forgery without delegator's private key; (3) rfc7662_advocate Attack 1 / spiffe_engineer Attack 1 \u2014 Merkle root never anchored, enrollment proof is vacuous. These are soundness-breaking gaps, not mitigations that weaken claims. The construction as written fails its own security games. All five personas found attacks outside the threat model that the construction cannot currently answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named (NFCU loan pipeline, journalist/source chain). However, the auth0_pm (Attack 4) and cu_ciso (Attacks 1, 2, 4) convincingly argue the NFCU scenario is contraindicated: NCUA examiners require disclosure of authorization policy and vendor identity, not concealment. The journalist/source scenario is legitimate but treated as a variant rather than the primary deployment, lacks a named buyer/stakeholder, and the cryptographer's Attack 3 shows scope privacy degrades when the adversary controls N-1 hops. The NFCU scenario names a real stakeholder and regulatory requirement but the requirement (NCUA compliance) actually conflicts with the privacy property offered."
+    }
+  },
+  "gaps": [
+    "Add contiguous-prefix constraint: hopActive[i] * (1 - hopActive[i-1]) === 0 for i > 0, fixing non-contiguous hop splicing (cryptographer Attack 1)",
+    "Add credential-key binding constraint: Poseidon5(modelHash[i], delegatorPubkeyAx[i], delegatorPubkeyAy[i], delegatorScope[i], delegatorExpiry[i]) === delegatorCredCommitment[i] per active hop (cryptographer Attack 2)",
+    "Promote agentMerkleRoot to a public input and constrain root_i against it: hopActive[i] * (root_i - agentMerkleRoot) === 0 (rfc7662_advocate Attack 1, spiffe_engineer Attack 1)",
+    "Add blinding salt to scope commitments and per-hop nullifiers to prevent low-entropy brute-force: Poseidon3(scope, credCommitment, blindingRand) and Poseidon3(token, sessionNonce, blindingRand) (cryptographer Attack 3, rfc7662_advocate Attack 3)",
+    "Elevate journalist/source or cross-org agent pipeline (where AS collusion is the threat) as the primary scenario with a named buyer; demote NCUA compliance scenario where privacy guarantee conflicts with regulatory disclosure obligation (auth0_pm Attack 4, cu_ciso Attacks 1/4)",
+    "Specify simulation-extractable NIZK requirement (PLONK with Fiat-Shamir in ROM) for participant privacy against malicious auditors; scope Groth16 to narrowing soundness only (cryptographer Attack 4)",
+    "Name assumption A5 (registry integrity) and correct \u00a78 claim from 'no trust anchor' to 'trust anchor cannot forge historical chain proofs' (spiffe_engineer Attack 2)"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

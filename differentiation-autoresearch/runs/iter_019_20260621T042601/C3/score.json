@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap: proving monotonic scope narrowing over hidden intermediate values without a trusted AS. However, the rfc7662_advocate's Attack 1 shows that signed JWT introspection responses can approximate the auditor-sees-only-a-boolean property without any circuit \u2014 the AS can filter claims per requesting RS. The construction's \u00a78 correctly notes this is attestation (trusted AS) vs. proof (trustless), but the primary NFCU scenario has a trusted AS (NFCU operates it), so the ZK advantage is only load-bearing when the AS is adversarial (journalist/source scenario). The baseline can approximate the NFCU case with extra configuration. The construction does not sharply delineate where the AS-trust assumption fails, so it earns 1 (preferable but baseline can approximate) rather than 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model (\u00a73), named assumptions (A1-A4), four security games, and reduction sketches. However, the cryptographer's attacks expose three material gaps that weaken the formal argument: (1) Attack 1 \u2014 agentMerkleRoot is never bound as a public input, so BinaryMerkleRoot enrollment is vacuous (phantom agents verify). (2) Attack 3 \u2014 currentTimestamp is a public input used in no constraint, so expired credentials verify. (3) Attack 4 \u2014 the 128-element effective scope keyspace makes Game 3's reduction to Poseidon preimage resistance unsound without blinding. These are not presentation issues; they are missing constraints that invalidate stated theorems. The threat model exists and assumptions are named, but the reduction is broken for Games 3 and 4 due to missing circuit constraints. Score 1: threat model stated but reduction has gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps every element to existing Bolyra primitives (Poseidon2/4/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits, LessEqThan, cumulative bit encoding). \u00a76 provides a detailed per-gadget constraint count totaling ~55,040, fitting within pot16.ptau's 2^16 budget. Proving time targets (< 5s PLONK, ~1.5s Groth16 with rapidsnark) are stated and benchmarked against existing Bolyra data. The auth0_pm latency attack is operational, not about whether the circuit fits Phase 1 budget. The circuit cost is concrete and within budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer within its current text: (1) cryptographer Attack 1 (phantom Merkle enrollment \u2014 root never bound) is a soundness-breaking bug, not a mitigated weakness. (2) cryptographer Attack 3 (currentTimestamp unused \u2014 expired creds verify) breaks the claimed expiry enforcement. (3) rfc7662_advocate Attack 2 (finalScopeCommitment is a stable cross-session correlation oracle) and Attack 3 (chainSeedScopeCommitment backward-links to handshake) are genuine privacy regressions the construction does not mitigate. (4) cu_ciso attacks 1-3 show the NFCU scenario structurally conflicts with regulatory requirements (Part 748 attribution, vendor oversight, incident response). These are not attacks 'inside the stated threat model' \u2014 they are attacks the construction cannot answer. Score 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: NFCU multi-tool AI pipeline audit and journalist/source delegation chain. However, the NFCU scenario is undermined by cu_ciso and spiffe_engineer attacks showing it structurally conflicts with NCUA Part 748 requirements (examiner needs attribution, vendor identity, incident forensics \u2014 all hidden by design). The auth0_pm Attack 4 correctly notes the privacy claim inverts the enterprise buyer's actual problem. The journalist/source scenario is concrete and load-bearing (intermediate node anonymity is mandatory), but it is acknowledged as niche in the candidate metadata. The NFCU scenario is named with a real stakeholder and regulatory requirement, but the construction cannot actually satisfy that requirement as currently designed. Score 1: scenario named but the primary one is structurally incompatible with its own regulatory claims."
+    }
+  },
+  "gaps": [
+    "Add agentMerkleRoot as public input and constrain root_i === agentMerkleRoot per active hop (fixes phantom enrollment)",
+    "Add per-hop constraint currentTimestamp <= delegateeExpiry[i] so expired credentials fail verification",
+    "Blind finalScopeCommitment with session-varying entropy (e.g. Poseidon3 with sessionNonce) to prevent cross-session correlation",
+    "Blind or nullifier-transform chainSeedScopeCommitment before public output to prevent backward-linking to handshake session",
+    "Add a selective disclosure mode: operator/compliance officer can reveal intermediate scopes and identities to designated auditors while keeping them hidden from public verifiers \u2014 resolves the structural conflict between Game 2 (participant privacy) and NCUA Part 748 attribution requirements",
+    "Strengthen \u00a78 BBS+ dismissal with a precise impossibility argument for cross-issuer auditor-blind narrowing, not just 'BBS+ is single-credential'",
+    "Sharpen baseline dominance claim: ZK is load-bearing only when AS is untrusted or absent; acknowledge baseline approximation when AS is trusted",
+    "Address chain truncation: bind chainLength to an on-chain commitment at delegation-token issuance so prover cannot suppress trailing hops"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

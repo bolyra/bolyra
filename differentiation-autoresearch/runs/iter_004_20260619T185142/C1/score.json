@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The rfc7662_advocate's own summary table confirms three properties no RFC 7662 configuration can match: (1) predicate privacy \u2014 RS learns a single bit, not the scope list; (2) intra-RS per-presentation unlinkability via blindingNonce \u2014 stable PPIDs cannot provide this; (3) zero-AS-roundtrip with zero-metadata-leakage \u2014 RFC 8693 token exchange requires AS involvement and leaks RS targeting patterns. These are explicitly named and ruled out of the baseline. The SPIFFE+ZK-attestor counterargument itself uses ZK, so it is not a non-ZK alternative."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "A 4-hybrid reduction sketch exists with named assumptions (Adv_PLONK_zk + 4\u00b7Adv_Poseidon_prf). However, the cryptographer identified four unaddressed gaps, all marked not-in-threat-model: (1) the hybrid invokes a PLONK simulator but PLONK is HVZK, not SE-NIZK \u2014 the bound is vacuous for multi-query adversaries; (2) the privacy game doesn't specify whether the adversary is adaptive or how many proofs it collects; (3) Groth16 phase-2 trusted setup assumption is unstated, conflicting with the adversarial-AS claim; (4) an adaptive RS can binary-search the 8-bit permission space in 8 rounds, collapsing the ZK guarantee. The threat model exists but has critical gaps in query model, setup assumptions, and adaptive adversary specification."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The blindingNonce fix maps directly to existing Bolyra primitives: Poseidon3/Poseidon4 (already in the hash library), PLONK proving (AgentPolicy already ships PLONK builds), BabyJubjub EdDSA (existing). Cost is +500 constraints (~2.8%), well within pot16.ptau budget. No new primitives, no new ceremony. The 8-bit permisson model is already implemented in the AgentPolicy circuit. Phase 1 feasible."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 personas found attacks the construction cannot answer: (1) cryptographer Attack 1 \u2014 HVZK vs SE-NIZK gap makes the privacy reduction vacuous for multi-query settings, not in threat model; (2) cryptographer Attack 4 \u2014 adaptive RS probing collapses 8-bit privacy in 8 rounds, not in threat model; (3) auth0_pm Attack 2 \u2014 rate-limiting mode deterministic nonce breaks the privacy reduction the fix claims to repair, not in threat model; (4) cu_ciso Attacks 1-2 \u2014 no audit trail for examiners (GLBA \u00a7314.4(c)(3)) and no FIPS 140-2 validated primitives (NCUA Part 748), both not in threat model; (5) rfc7662_advocate Attack 3 \u2014 adversarial-AS claim is circular (AS honest at issuance required), not in threat model. The construction has unanswered attacks across all five personas."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: (1) 2^64 permission space and (2) semi-trusted AS. However, the 2^64 scenario is unsupported \u2014 the construction is 8-bit with no constant-size argument for arbitrary width (spiffe_engineer Attack 4). The adversarial-AS scenario is commercially questionable \u2014 CU CISOs want AS-auditable presentations for compliance, not AS-blind ones (auth0_pm Attack 1). No named stakeholder or specific regulatory requirement makes the ZK property load-bearing. The cu_ciso attacks show the construction actively conflicts with GLBA audit trail requirements and FIPS 140-2, undermining the credit union deployment scenario."
+    }
+  },
+  "gaps": [
+    "Upgrade privacy game to SE-NIZK or restrict to single-use credentials \u2014 HVZK is insufficient for multi-query adversaries (cryptographer Attack 1)",
+    "Define adaptive RS query model \u2014 8 probing rounds fully determine 8-bit permissions; either bound RS queries or prove adaptive security (cryptographer Attack 4)",
+    "Separate rateLimitingTag from agentNullifier as an independent third public output so the privacy reduction holds unconditionally regardless of rate-limiting mode (auth0_pm Attack 2)",
+    "Scope adversarial-AS to verification-time-only \u2014 the construction requires honest issuance, same as RFC 7662; current claim is circular (rfc7662_advocate Attack 3)",
+    "Add deterministic per-(agent, RS, session) audit token for GLBA/FFIEC examiner compliance without breaking AS-blindness (cu_ciso Attack 1)",
+    "Address FIPS 140-2 gap \u2014 either map to a FIPS-validated path or document the innovation-exception with compensating controls (cu_ciso Attack 2)",
+    "Add key custody spec for agentSecret: HSM requirement, rotation policy, revocation on compromise (cu_ciso Attack 3)",
+    "State Groth16 phase-2 ceremony assumption (1-of-N honest) or mandate PLONK-only for adversarial-AS scenario (cryptographer Attack 3)",
+    "Either deliver constant-size proof for arbitrary bitmask width or retract the 2^64 scenario from C1 (spiffe_engineer Attack 4)",
+    "Specify a hosted proving API as default onboarding path to close the developer experience gap against WorkOS/Auth0 (auth0_pm Attack 4)",
+    "Add structured error taxonomy for proof failures so CU Tier 1 ops can diagnose without a cryptographer (cu_ciso Attack 4)",
+    "Explicitly address SPIFFE-as-carrier \u2014 explain why SPIRE server privileged view is incompatible with adversarial-AS model (spiffe_engineer Attack 1)"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

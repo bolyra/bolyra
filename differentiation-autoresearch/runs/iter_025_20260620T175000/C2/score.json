@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction explicitly identifies capabilities the baseline cannot match: (1) AS is structurally excluded from the presentation path, preventing per-scope access logging \u2014 RFC 9068 JWTs still require per-scope token issuance where AS logs (agent, RS, scope, timestamp), while Bolyra's enrollment-only AS contact prevents future scope enumeration; (2) BBS+ exposes issuer public key, enabling issuer-linkability across RSes; (3) colluding RSes can correlate BBS+ sessions via issuer key + schema metadata, while SES-UNL formally proves cross-scope unlinkability under Poseidon PRF. The rfc7662_advocate's Attack 2 correctly narrows the AS-bypass claim (RFC 9068 also has no AS in presentation path), but the construction's actual advantage \u2014 AS cannot learn which scopes are accessed post-enrollment \u2014 survives. The spiffe_engineer's Attack 1 notes SPIFFE SVIDs also bypass AS at verification, but SVIDs expose a permanent cross-scope linkable SPIFFE ID, which the ZK construction does not. The baseline dominance claim holds on the specific axis of combined issuer-anonymity + cross-scope session unlinkability."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Construction defines explicit threat model (\u00a73): adversary controls AS + up to N-1 RSes + network timing. Two formal games (IND-UNL-AS and SES-UNL) with precise setup/challenge/guess phases. Five named cryptographic assumptions (P-PRF, G16-ZK, PLONK-ZK, P-CR, DL-BJJ). Two reduction sketches with hybrid arguments (H\u2080\u2192H\u2082 for IND-UNL-AS, H\u2080\u2192H\u2083 for SES-UNL) reducing to P-PRF and ZK advantages. The cryptographer's Attack 3 (P-PRF3 assumption unstated for Poseidon3 third-argument keying) is a genuine gap in the reduction statement but the construction has enough structure that a fix is straightforward (reorder Poseidon3 inputs or add P-PRF3 as named assumption). Attack 2 (Phase 2 ceremony trust) is a missing assumption but not a break of the reduction logic. Attack 4 (timing oracle not in hybrid argument) is acknowledged by the construction's own timing extension. These are gaps the mutator can close without restructuring the argument. The core reduction sketch is present and substantive \u2014 awarding 2."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps every element to existing Bolyra primitives (\u00a75 table): Poseidon2/3/5, EdDSA on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding. Circuit cost estimated at ~13,043 constraints for ScopedPresentation, ~15,300 for ScopedDelegation \u2014 both within 2^14 = 16,384 (pot16.ptau). Proving time targets stated with rationale from existing bench_rapidsnark.js benchmarks. The only new primitive is scopeBlinder (a random field element). PLONK chosen for ScopedPresentation to avoid per-circuit ceremony. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 surfaced multiple real attacks that the construction cannot fully answer as written: (1) cryptographer's Attack 1 (scopeId collision by adversarial RSes) is within the stated adversary capabilities \u2014 adversary controls N-1 RSes and chooses scopeId, can force identical scopeId to collapse unlinkability \u2014 construction has no defense; (2) rfc7662_advocate's Attack 4 and spiffe_engineer's Attack 3 (scopeBlinder hosted on AS-controlled infrastructure for cloud AI agents) directly contradicts the threat model assumption for the flagship deployment scenario; (3) cryptographer's Attack 4 (variable Merkle depth timing oracle) is not closed by the formal reduction; (4) cu_ciso's Attack 1 (GLBA/BSA regulatory conflict) and auth0_pm's Attack 2 (BSA/AML contradiction) challenge the deployment scenario's viability without an audit overlay. The scopeId collision attack (cryptographer Attack 1, spiffe_engineer Attack 4) is the most damaging \u2014 it is squarely within the threat model and breaks SES-UNL without requiring any cryptographic assumption to fail. This weakens the claim but the construction can be fixed (bind scopeId to RS public key). Awarding 1: real attacks found that weaken but don't destroy the construction."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios named (CU cross-merchant unlinkability with Navy Federal, Kaiser healthcare referral privacy) with specific stakeholders and regulatory references (NCUA \u00a7701.36). However, multiple Tier 3 personas (cu_ciso, auth0_pm) demonstrated that the CU scenario has a direct regulatory contradiction: BSA/AML obligations under 31 CFR \u00a71020.210 require the CU to maintain transaction records, which AS-impotence architecturally prevents. The GLBA Safeguards Rule (16 CFR \u00a7314.4(c)(3)) requires audit trails of access to member information \u2014 also incompatible with the construction's core property. The scenario is named and specific but the regulatory conflict makes it aspirational rather than load-bearing as currently written. The healthcare scenario has similar issues (HIPAA audit requirements). Awarding 1: scenarios are concrete but regulatory viability is challenged."
+    }
+  },
+  "gaps": [
+    "scopeId collision attack: adversarial RSes can choose identical scopeId values to force nullifier linkage \u2014 must bind scopeId derivation to RS public key or on-chain identifier as a circuit-level public input",
+    "scopeBlinder custody for cloud-hosted AI agents: flagship CU scenario has agent running on CU infrastructure where CU is the adversarial AS \u2014 must specify TEE/enclave requirement or scope the claim to deployments where agent runtime is operated by a distinct party",
+    "BSA/AML regulatory conflict: CU deployment scenario contradicts Bank Secrecy Act obligations \u2014 must define a compliant audit overlay (e.g., ZK range proofs for AML thresholds) or scope deployment to non-financial agent-to-agent RSes",
+    "P-PRF3 assumption unstated: blindedScopeCommitment uses Poseidon3 keyed on third argument \u2014 must either add P-PRF3 as named assumption or restructure input ordering",
+    "Groth16 Phase 2 ceremony trust (G16-SETUP) not listed as named assumption in theorem statements",
+    "variable Merkle depth timing oracle not closed in hybrid argument \u2014 should pad all Merkle paths to depth 20 for constant-time proving",
+    "agentMerkleRoot leaks deployment identity across RSes \u2014 need root-of-roots or scope the unlinkability claim to within-deployment",
+    "revocation SLA unspecified: 30-entry root buffer has no wall-clock staleness cap"
+  ],
+  "strength": 8,
+  "verdict": "consider"
+}

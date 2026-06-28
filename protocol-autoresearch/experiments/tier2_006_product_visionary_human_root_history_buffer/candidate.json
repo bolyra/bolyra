@@ -1,0 +1,16 @@
+{
+  "id": "product_visionary_human_root_history_buffer",
+  "persona": "product_visionary",
+  "title": "Human tree root history buffer (parity with agentTree)",
+  "dimension": "correctness",
+  "description": "The IdentityRegistry maintains a 30-root history buffer for agentTree but humanTree has no equivalent \u2014 any new human enrollment instantly invalidates all in-flight human proofs. For a protocol targeting production commerce, this is a showstopper: during onboarding surges, human proofs generated seconds ago become stale. Add the same rootHistory[30] ring buffer pattern already used for agentTree. This is a 1-day fix with high correctness impact, directly unblocking any deployment with >1 concurrent user.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "product_visionary_human_root_history_buffer",
+  "adoption": 20,
+  "standards": 13,
+  "completeness": 17,
+  "correctness": 20,
+  "total": 70,
+  "verdict": "consider"
+}

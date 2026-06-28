@@ -1,0 +1,92 @@
+{
+  "id": "sdk_designer_fluent_delegation_builder",
+  "title": "Fluent delegation chain builder with compile-time scope narrowing",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation/PermissionSet.ts",
+      "description": "Branded numeric type `PermissionSet<N extends number>` with `narrowTo<M extends N>` that enforces M \u2286 N at compile time via conditional types; exports `Permission` const enum for all 8 bits."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation/DelegationChain.ts",
+      "description": "Fluent builder class: `from(agentCredential)` seeds root scope, `narrowScope(permissions)` emits a compile-time error when expanding, `delegateTo(delegateeCredential)` appends a hop and chains `previousScopeCommitment`, `build()` resolves Merkle proofs and serializes the `DelegationChainProof` wire object."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation/MerkleProofFetcher.ts",
+      "description": "Async fetcher that queries the on-chain registry (via ethers provider) for Merkle proofs keyed by credential commitment hash; result is cached per session to avoid redundant RPC calls."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation/DelegationChainProof.ts",
+      "description": "Wire-format type `DelegationChainProof` with `hops: DelegationHop[]`, each carrying `groth16Proof`, `publicSignals`, `scopeCommitment`, `nullifierHash`, and `delegateeCommitment`; includes a `serialize()` method for ABI encoding."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/delegation/index.ts",
+      "description": "Re-exports `DelegationChain`, `Permission`, `PermissionSet`, and `DelegationChainProof` as the public delegation API surface."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Add `DelegationChain` and related exports to the top-level SDK barrel; bump to v0.4.0 reflecting new public API."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Verify (or extend if needed) that the existing Delegation circuit accepts `previousScopeCommitment` as a public input and enforces the cumulative-bit subset constraint on-chain; no new circuit if invariants already hold."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/DelegationRegistry.sol",
+      "description": "Add `getCommitmentProof(bytes32 commitment) returns (bytes32[] memory path, uint256 index)` view function so the SDK fetcher can pull Merkle proofs without a separate indexer."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/delegation/DelegationChain.test.ts",
+      "description": "Unit tests: single-hop narrowing succeeds, multi-hop chain accumulates commitments correctly, scope expansion rejected at compile time (tsd type assertion), invalid cumulative encoding throws at runtime, Merkle proof fetch is mocked via ethers stub."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/delegation/DelegationChain.integration.test.ts",
+      "description": "Integration test against local Hardhat node: builds a 2-hop chain, submits to `verifyHandshake`, asserts on-chain verification passes; uses `FULL_PROOF=1` flag to generate real Groth16 proofs."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add section 6.4 'Delegation Chain Wire Format' describing `DelegationChainProof` structure, hop ordering, and how `verifyHandshake` consumes the chain."
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add 'Delegating Credentials' section with end-to-end fluent builder example, Permission enum table, and note on compile-time scope narrowing guarantees."
+    }
+  ],
+  "steps": [
+    "Audit existing Delegation.circom to confirm `previousScopeCommitment` is already a public input and the cumulative-bit subset constraint is enforced; document any gaps.",
+    "Add `getCommitmentProof` view function to DelegationRegistry.sol; regenerate ABI and TypeChain bindings; write Hardhat unit test for the new view.",
+    "Define `Permission` const enum and `PermissionSet<N>` branded type in PermissionSet.ts; write tsd compile-time assertions that narrowing compiles and expansion fails.",
+    "Implement `MerkleProofFetcher` with ethers provider injection, keyed by commitment hash, session-scoped LRU cache.",
+    "Implement `DelegationChainProof` wire type with `serialize()` producing ABI-encoded bytes matching what `verifyHandshake` expects.",
+    "Implement `DelegationChain` fluent builder: `from()` captures root AgentCredential and its scope, `narrowScope()` validates subset at both compile time (conditional type) and runtime (`validateCumulativeBitEncoding`), `delegateTo()` appends a hop and links `previousScopeCommitment`, `build()` awaits Merkle proof fetches and invokes the Delegation circuit prover.",
+    "Wire builder into the existing `proveHandshake` / `verifyHandshake` flow so `DelegationChainProof` is consumed transparently when present.",
+    "Write unit tests with mocked ethers provider and mocked snarkjs prover; assert chain structure and error conditions.",
+    "Write integration test on local Hardhat node with real Groth16 proofs gated behind FULL_PROOF=1.",
+    "Update spec section 6.4 with wire format and hop-ordering semantics.",
+    "Update sdk/QUICKSTART.md with delegation builder example.",
+    "Bump SDK to v0.4.0, update CHANGELOG, run `tsc --noEmit` and full test suite, verify DCO sign-off on all commits."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Delegation.circom with previousScopeCommitment public input",
+    "DelegationRegistry.sol on-chain Merkle commitment storage",
+    "validateCumulativeBitEncoding() in sdk/src/permissions.ts",
+    "snarkjs Groth16 prover (dev/test) and rapidsnark_prover binary (production)",
+    "ethers v6 provider for registry RPC calls",
+    "TypeScript 5.x (conditional types for compile-time scope narrowing)",
+    "tsd for compile-time type assertion tests",
+    "Hardhat local node for integration tests",
+    "pot16.ptau + Delegation.zkey build artifacts"
+  ]
+}

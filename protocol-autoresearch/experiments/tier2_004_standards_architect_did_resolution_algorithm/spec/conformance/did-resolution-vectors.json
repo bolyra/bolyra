@@ -1,0 +1,166 @@
+{
+  "$schema": "https://bolyra.ai/schemas/did-resolution-vectors/v1",
+  "description": "Conformance test vectors for did:bolyra resolution algorithm",
+  "version": "1.0.0",
+  "vectors": [
+    {
+      "id": "valid-agent",
+      "description": "Resolve a registered agent DID — expects full DID Document with JsonWebKey2020",
+      "input": {
+        "did": "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      },
+      "registry": {
+        "commitment": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "keyType": 1,
+        "publicKey": "0x0101010101010101010101010101010101010101010101010101010101010101020202020202020202020202020202020202020202020202020202020202020202",
+        "merkleRoot": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "timestamp": 1719849600,
+        "active": true
+      },
+      "expected": {
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/jws-2020/v1",
+            "https://bolyra.ai/ns/did/v1"
+          ],
+          "id": "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+          "controller": "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef#agent-key-1",
+              "type": "JsonWebKey2020",
+              "controller": "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+              "publicKeyJwk": {
+                "kty": "OKP",
+                "crv": "Baby-Jubjub",
+                "x": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+                "y": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+              }
+            }
+          ],
+          "authentication": [
+            "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef#agent-key-1"
+          ],
+          "assertionMethod": [
+            "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef#agent-key-1"
+          ],
+          "service": [
+            {
+              "id": "did:bolyra:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef#registry",
+              "type": "BolyraRegistryService",
+              "serviceEndpoint": {
+                "registryAddress": "__REGISTRY_ADDRESS__",
+                "chainId": "__CHAIN_ID__",
+                "chainName": "__CHAIN_NAME__"
+              }
+            }
+          ]
+        },
+        "didDocumentMetadata": {
+          "created": "2024-07-01T16:00:00.000Z",
+          "deactivated": false
+        }
+      }
+    },
+    {
+      "id": "valid-human",
+      "description": "Resolve a registered human DID — expects DID Document with BolyraZkpAuthentication2024",
+      "input": {
+        "did": "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+      },
+      "registry": {
+        "commitment": "0xaabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+        "keyType": 0,
+        "publicKey": "0x",
+        "merkleRoot": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "timestamp": 1719849600,
+        "active": true
+      },
+      "expected": {
+        "didResolutionMetadata": {
+          "contentType": "application/did+ld+json"
+        },
+        "didDocument": {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/jws-2020/v1",
+            "https://bolyra.ai/ns/did/v1"
+          ],
+          "id": "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+          "controller": "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+          "verificationMethod": [
+            {
+              "id": "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344#human-auth-1",
+              "type": "BolyraZkpAuthentication2024",
+              "controller": "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+              "nullifierCommitment": "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344",
+              "proofPurpose": "authentication",
+              "merkleTreeDepth": 20
+            }
+          ],
+          "authentication": [
+            "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344#human-auth-1"
+          ],
+          "assertionMethod": [],
+          "service": [
+            {
+              "id": "did:bolyra:aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344#registry",
+              "type": "BolyraRegistryService",
+              "serviceEndpoint": {
+                "registryAddress": "__REGISTRY_ADDRESS__",
+                "chainId": "__CHAIN_ID__",
+                "chainName": "__CHAIN_NAME__"
+              }
+            }
+          ]
+        },
+        "didDocumentMetadata": {
+          "created": "2024-07-01T16:00:00.000Z",
+          "deactivated": false
+        }
+      }
+    },
+    {
+      "id": "malformed",
+      "description": "Attempt to resolve a malformed DID — expects invalidDid error",
+      "input": {
+        "did": "did:bolyra:NOT_VALID_HEX!!!"
+      },
+      "expected": {
+        "didResolutionMetadata": {
+          "error": "invalidDid"
+        },
+        "didDocument": null,
+        "didDocumentMetadata": {}
+      }
+    },
+    {
+      "id": "deactivated",
+      "description": "Resolve a revoked DID — expects deactivated error and metadata flag",
+      "input": {
+        "did": "did:bolyra:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+      },
+      "registry": {
+        "commitment": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "keyType": 1,
+        "publicKey": "0x0101010101010101010101010101010101010101010101010101010101010101020202020202020202020202020202020202020202020202020202020202020202",
+        "merkleRoot": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "timestamp": 1719849600,
+        "active": false
+      },
+      "expected": {
+        "didResolutionMetadata": {
+          "error": "deactivated"
+        },
+        "didDocument": null,
+        "didDocumentMetadata": {
+          "deactivated": true
+        }
+      }
+    }
+  ]
+}

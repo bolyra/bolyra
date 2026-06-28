@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real properties the baseline lacks (bitwise predicate with implication closure over committed private data, adversarial-AS soundness). However, the rfc7662_advocate's Attack 4 correctly shows RFC 8693 + RFC 8707 + DPoP achieves AS-blind scope minimization for the non-adversarial case, and Attack 1 demonstrates the adversarial-AS claim is circular when operator == AS (the common enterprise case). The spiffe_engineer's Attack 3 shows WIMSE already achieves AS-blind workload-to-workload auth. The genuine residual gap \u2014 in-proof bitwise implication closure \u2014 is real but the construction leads with overstated claims (AS-blindness, constant-size proof) rather than this narrower true differentiator. Baseline can approximate most stated properties; only the committed bitfield predicate with implication closure is genuinely beyond reach. Score 1: preferable but baseline approximates with configuration for most claimed properties."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-structured threat model (\u00a73), named assumptions (A1-A4), and two security games (SSU, SP) with reduction sketches. However, the cryptographer's Attack 1 is devastating: the SP game is trivially broken by the scopeCommitment public output. The adversary can precompute Poseidon2(b_i, CC_i) for both enrolled agents and match against the observed scopeCommitment with probability 1. The \u00a74 reduction explicitly claims 'permissionBitmask does not appear in any public output' which is false \u2014 scopeCommitment is listed as a public output in \u00a72. The cu_ciso and spiffe_engineer attacks on scopeCommitment under low-entropy bitmask spaces (8 bits, ~256 valid configs) compound this. Additionally, the cryptographer's Attack 4 shows the blindedNullifier conflates replay prevention with rate limiting. The threat model and assumptions are stated (avoiding 0), but the SP reduction has a concrete hole and the scopeCommitment issue is unresolved in the formal argument."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps cleanly to existing Bolyra primitives: Poseidon5 credential commitment, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Poseidon2 for nullifiers and scope commitment, Num2Bits for range checks, cumulative bit encoding constraints \u2014 all documented in AgentPolicy circuit and spec. Circuit cost is estimated at ~10,900 constraints, well within pot16.ptau's 65,536 capacity. Proving time targets (rapidsnark <500ms, snarkjs 3-5s) are stated and consistent with existing benchmarks. The SelectiveScopeProof is described as a refactored AgentPolicy \u2014 no new primitives required. This fits Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks remain unanswered: (1) cryptographer Attack 1 \u2014 scopeCommitment breaks SP game trivially, construction inconsistent with its own reduction; (2) cryptographer Attack 2 \u2014 cross-RS linkability via unblinded scopeCommitment contradicts \u00a78 unlinkability claim; (3) rfc7662_advocate Attack 1 \u2014 adversarial-AS claim is circular when operator == AS; (4) cu_ciso Attack 2 \u2014 blindedNullifier defeats incident reconstruction with no dual-mode solution; (5) spiffe_engineer Attack 1 \u2014 modelHash is self-asserted, not attested. These are not mitigated or acknowledged within the stated threat model. The scopeCommitment issue alone is a formal break in the privacy claim that the construction cannot answer without modification."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "NFCU is named as a concrete stakeholder with GLBA \u00a7501(b) data minimization as the regulatory requirement. However, the cu_ciso's Attack 1 (CRS ceremony unauditable for NCUA examiners), Attack 2 (blindedNullifier defeats incident reconstruction required by GLBA Safeguards Rule), Attack 3 (Base Sepolia has no SLA vs Fiserv DNA at 99.98%), and the auth0_pm's Attack 4 (GLBA data minimization already satisfied by AS-side scope filtering in RFC 7662) collectively undermine the scenario. The GLBA argument as written does not survive compliance review \u2014 the cu_ciso demonstrates the RS only sees what the AS returns, so the privacy gap doesn't exist in the claimed form. The scenario is named but the regulatory argument is weakened to hypothetical/niche status."
+    }
+  },
+  "gaps": [
+    "scopeCommitment as unconditional public output trivially breaks the SP game \u2014 must be omitted by default or blinded with a per-presentation nonce; fix the SP reduction accordingly",
+    "Adversarial-AS claim is circular when operator == AS; construction must either require operator \u2260 AS with enforcement mechanism or narrow the claim to 'AS cannot retroactively forge scope for already-enrolled credentials'",
+    "Lead with the genuine differentiator (in-proof bitwise implication closure over committed bitfield) rather than AS-blindness, which WIMSE and RFC 8693+8707+DPoP approximate",
+    "Address modelHash attestation gap \u2014 currently self-asserted by operator, not grounded in TEE/SPIRE/TPM measurement",
+    "Specify maximum root cache age in wall-clock time, minimum root update frequency, and RS staleness rejection policy to bound the revocation window",
+    "Add dual-mode design for forensic traceability: ZK privacy for real-time RS verification plus a linkable audit channel (e.g., rawNullifier logged by CU-controlled nonce oracle) for incident reconstruction",
+    "Address CRS ceremony auditability \u2014 link to public MPC transcript or specify ceremony requirements for enterprise deployment",
+    "GLBA \u00a7501(b) argument must be tightened: AS-side scope filtering already achieves data minimization in the non-adversarial case; reframe around cryptographic audit trail independent of AS logs",
+    "Provide end-to-end latency model including RS-side chain read, challenge-response overhead, and cold-start costs \u2014 not just proving time"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

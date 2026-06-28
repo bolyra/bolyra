@@ -1,0 +1,1233 @@
+[
+  {
+    "id": "capability_based_delegation",
+    "title": "One-Way Scope Narrowing for Agent Delegation Chains",
+    "description": "Better-auth's capability-based authorization and Composio's infrastructure guide both identify delegation as unsolved. Bolyra's Delegation circuit enforces one-way scope narrowing on-chain \u2014 sub-agents provably cannot escalate beyond their parent's permissions.",
+    "category": "enterprise_auth",
+    "source": "Agent Auth Protocol - Open-source standard for AI agent authentication and capability-based authorization",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 22,
+      "feasibility": 18,
+      "total": 58
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and the opportunity cites only two sources (better-auth, Composio) without URLs, engagement metrics, or named buyers \u2014 firmly anecdotal.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were provided; the general sense that delegation is 'unsolved' lacks any dated anchors.",
+      "fit": "Delegation circuit, AgentPolicy bitmask, IdentityRegistry, and HumanUniqueness map directly with no new circuits needed \u2014 the opportunity literally describes what Bolyra already built, with the SDK stub as the only major gap.",
+      "feasibility": "MVP is ~8 days of wiring existing primitives with no new cryptographic work, but the delegate() SDK end-to-end integration is real engineering, not trivial glue."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "Delegation",
+        "usage": "Core circuit already enforces one-way scope narrowing (delegateeScope must be bitwise subset of delegatorScope), expiry narrowing, and composable chains up to 3 hops \u2014 this IS the primitive the opportunity describes",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Provides the cumulative-bit permission bitmask (8-bit, implication-enforced) that Delegation narrows. Selective disclosure lets sub-agents prove they hold required scope bits without revealing full bitmask to the relying party",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain delegation verification with chain-state tracking, delegation nullifier replay protection, and hop count enforcement (max 3). Already deployed on Base Sepolia",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Root of every delegation chain \u2014 human proves enrollment without revealing identity, then delegates to agent. Nullifier prevents same human from spawning parallel sybil delegation trees within the same scope",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "delegate() exists as a v0.3 stub. The SDK already exposes permissionsToBitmask(), validateCumulativeBitEncoding(), and the full error hierarchy including ScopeEscalationError \u2014 the type system is ready, the proving pipeline is not wired",
+        "modification_needed": "major"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "sdk",
+        "description": "Implement delegate() end-to-end: build delegation token, generate Delegation proof via snarkjs/rapidsnark, verify chain locally, submit to IdentityRegistry. This is the main gap \u2014 circuit and contract exist, SDK wiring does not",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "LangChain and CrewAI tool wrappers need delegation-aware credential passing \u2014 when an agent sub-delegates to a tool-calling sub-agent, the wrapper must carry the narrowed proof and attach it to outbound requests",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Extend draft-bolyra-mutual-zkp-auth-01 with a Delegation section: wire format for delegation tokens, HTTP header conventions for carrying chained proofs, and interop with better-auth's capability model",
+        "complexity": "low"
+      },
+      {
+        "type": "contract",
+        "description": "IdentityRegistry needs a view function to expose delegation chain state for off-chain verification (current on-chain verification works, but relying parties doing off-chain checks need a queryDelegationChain() read path)",
+        "complexity": "low"
+      },
+      {
+        "type": "sdk",
+        "description": "Python SDK subprocess bridge needs delegation support \u2014 expose delegate() through the Node bridge so Python-native agent frameworks (CrewAI, AutoGen) can generate delegation proofs",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "Delegation chains are where Bolyra slots under incumbents rather than competing with them. Better-auth, Composio, and enterprise IAM vendors handle the OAuth/OIDC/SAML layer \u2014 Bolyra provides the cryptographic enforcement layer underneath. An enterprise using better-auth for agent auth can add Bolyra delegation proofs as a trust anchor without replacing their auth stack. This is the privacy-layer-under-incumbents strategy: incumbents handle policy expression and UX, Bolyra handles policy enforcement via ZKP. The 3-hop chain limit maps cleanly to real enterprise topologies (human \u2192 orchestrator agent \u2192 tool-calling sub-agent) and the scope-narrowing guarantee is the thing no incumbent can offer without circuit-level enforcement.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "SDK delegate() end-to-end",
+          "type": "sdk",
+          "description": "Wire the existing v0.3 stub to actually build delegation tokens, generate Delegation circuit proofs via snarkjs, verify the chain locally, and return a serializable DelegationProof. Includes unit tests with mock and full proofs.",
+          "days": 3,
+          "reuses": "Delegation circuit, AgentPolicy bitmask, validateCumulativeBitEncoding(), ScopeEscalationError"
+        },
+        {
+          "name": "Python SDK delegation bridge",
+          "type": "sdk",
+          "description": "Extend the subprocess bridge in sdk-python so Python callers can invoke delegate() and verifyDelegation() through the existing Node spawning pattern. Thin wrapper \u2014 no reimplementation.",
+          "days": 1,
+          "reuses": "sdk-python subprocess bridge pattern"
+        },
+        {
+          "name": "IdentityRegistry queryDelegationChain() view",
+          "type": "contract",
+          "description": "Add a read-only Solidity view function that returns the delegation chain state (delegator, delegatee, narrowed scope bitmask, expiry, hop count) for off-chain relying parties. Deploy to Base Sepolia.",
+          "days": 1,
+          "reuses": "IdentityRegistry contract"
+        },
+        {
+          "name": "Delegation spec section in draft-bolyra-mutual-zkp-auth-01",
+          "type": "spec",
+          "description": "Add Section 6: Delegation \u2014 wire format for delegation tokens, HTTP header convention (X-Bolyra-Delegation-Proof), chain serialization, and interop notes for capability-based auth systems.",
+          "days": 1,
+          "reuses": "existing IETF-style draft structure"
+        },
+        {
+          "name": "LangChain delegation-aware tool wrapper",
+          "type": "integration",
+          "description": "Extend the existing LangChain integration so that when an agent sub-delegates to a tool-calling sub-agent, the narrowed proof is attached to outbound requests via the spec'd header convention. Single framework first.",
+          "days": 2,
+          "reuses": "integrations/langchain/ existing wrapper"
+        },
+        {
+          "name": "Delegation chain demo",
+          "type": "demo",
+          "description": "CLI demo showing: human enrolls \u2192 delegates to Agent A (READ+WRITE) \u2192 Agent A sub-delegates to Agent B (READ only) \u2192 Agent B tries to escalate (fails) \u2192 Agent B proves READ to a relying party. Runs against local Hardhat node.",
+          "days": 1,
+          "reuses": "examples/ pattern, HumanUniqueness + Delegation circuits"
+        }
+      ],
+      "total_days": 9,
+      "reuse_percentage": 82,
+      "risks": [
+        "Delegation circuit proving time may be slow without rapidsnark \u2014 demo needs native binary or patience",
+        "SDK delegate() wiring may surface edge cases in chain verification that require circuit tweaks (hop count boundary, expiry edge cases)",
+        "LangChain integration depends on their tool-calling API stability \u2014 pin to a specific version",
+        "queryDelegationChain() gas costs could surprise if chain state grows; view function is free but storage layout matters for future on-chain verifiers"
+      ],
+      "success_criteria": "A single CLI command runs the full 3-hop delegation chain (human \u2192 agent \u2192 sub-agent), proves scope narrowing at each hop, rejects an escalation attempt, and verifies the final narrowed proof both on-chain (Hardhat) and off-chain (SDK). All tests pass in CI under test:circuits:fast."
+    }
+  },
+  {
+    "id": "mcp_policy_proxy",
+    "title": "ZKP Policy Enforcement for MCP Tool Calls",
+    "description": "Agent Identity Protocol shows demand for policy enforcement proxies on MCP. Bolyra's AgentPolicy circuit can prove permission compliance without revealing the full credential, enabling zero-knowledge tool authorization at the MCP gateway layer.",
+    "category": "developer_tools",
+    "source": "Agent Identity Protocol - Zero-trust security layer for AI agents with policy enforcement proxy for MCP",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 21,
+      "feasibility": 18,
+      "total": 57
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no URLs were provided; the sole source is one project ('Agent Identity Protocol') with no verifiable engagement metrics, named buyers, or funding data.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were cited; MCP policy enforcement is an emerging concept with no concrete timeline anchors beyond general ecosystem momentum.",
+      "fit": "All four core Bolyra primitives (AgentPolicy, Delegation, HumanUniqueness, IdentityRegistry) plus the SDK map directly with only minor modifications needed, and the existing mcp-demo provides a working starting point.",
+      "feasibility": "MVP is well-scoped at ~10 days across 5 deliverables that heavily reuse existing SDK and circuit infrastructure, though the lack of validated demand makes build priority questionable."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive \u2014 agent proves it holds required permission bits (e.g. READ_DATA, FINANCIAL_SMALL) for a specific MCP tool call via selective disclosure. The requiredScopeMask input maps directly to per-tool permission requirements. Proof is generated client-side, verified at the gateway, credential never leaves the agent.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables delegated tool access \u2014 a human delegates a scoped subset of permissions to an agent, agent presents delegation proof at the MCP gateway. Sub-delegation (agent\u2192sub-agent) supports multi-hop agentic workflows where an orchestrator agent delegates narrower scope to specialist tool-calling agents.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Anchors the trust root \u2014 the human who authorized the agent can optionally co-sign the handshake or be referenced in the delegation chain origin. Also enables rate-limiting per-human (nullifier-based) to prevent a single human from spawning unlimited policy-exempt agents.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root verification for the MCP gateway \u2014 gateway checks humanTree/agentTree roots and delegation chain state without needing to trust the agent's self-report. Root history buffer (30 entries) gives the gateway tolerance for slightly stale proofs during high-throughput tool-call bursts.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "SDK's createAgentCredential + proveHandshake become the client-side library that MCP clients call before issuing tool requests. permissionsToBitmask maps tool-level permissions to circuit inputs. Error classes (ExpiredCredentialError, ScopeEscalationError) provide actionable feedback when policy checks fail.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "MCP Policy Proxy \u2014 a Transport-layer middleware (stdio or SSE) that intercepts MCP tool calls, extracts the Bolyra proof from the request metadata, verifies it against the tool's required permission mask, and forwards or rejects. Wraps the existing @modelcontextprotocol/sdk server. This is the primary deliverable.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Tool Permission Manifest \u2014 a JSON schema that maps MCP tool names to required Bolyra permission bitmasks (e.g. 'read_database' \u2192 0x01, 'transfer_funds' \u2192 0x1C). Declarative config that the proxy loads at startup. Needs a spec so third-party MCP servers can publish their own manifests.",
+        "complexity": "low"
+      },
+      {
+        "type": "sdk",
+        "description": "SDK helper: proveToolCall(credential, toolName, manifest) \u2014 convenience wrapper that looks up the tool's required bitmask from the manifest, generates an AgentPolicy proof with that requiredScopeMask, and returns a serialized proof attachment for the MCP request. Thin layer over existing proving functions.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "MCP Client Interceptor \u2014 client-side hook (for Claude Desktop, Cursor, etc.) that automatically attaches Bolyra proofs to outgoing tool calls. Needs to integrate with the MCP client transport layer without forking the protocol.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Extension to draft-bolyra-mutual-zkp-auth-01 \u2014 new section on MCP transport binding, defining how proofs are carried in MCP request metadata, replay protection via MCP request IDs as nonce source, and error semantics for rejected tool calls.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This is the canonical privacy-layer-under-incumbents play. MCP is becoming the standard tool-call protocol (Anthropic, OpenAI, Google adopting it). Agent Identity Protocol and similar projects handle policy enforcement with traditional identity \u2014 OAuth tokens, API keys, RBAC policies \u2014 all of which leak the agent's full credential and permission set to the gateway operator. Bolyra slots underneath as the ZKP layer: the MCP gateway verifies the agent is authorized for a specific tool without learning what else it can do, who issued the credential, or what other tools it has accessed. This makes Bolyra complementary to (not competitive with) existing MCP infrastructure \u2014 gateway operators add Bolyra verification without replacing their auth stack. The delegation chain adds a unique capability no competitor offers: proving human-authorized scope narrowing on-chain, which matters for regulated environments (financial tools, PII access) where audit trail + privacy are both required.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "Tool Permission Manifest Schema",
+          "type": "spec",
+          "description": "JSON schema mapping MCP tool names to required Bolyra permission bitmasks. Declarative config file the proxy loads at startup. Example: {\"read_database\": 1, \"transfer_funds\": 28, \"send_email\": 34}. Includes a JSON Schema validator and 3 example manifests for common MCP servers.",
+          "days": 1,
+          "reuses": "permissions model (8-bit cumulative encoding)"
+        },
+        {
+          "name": "MCP Policy Proxy",
+          "type": "integration",
+          "description": "Transport-layer middleware that wraps any @modelcontextprotocol/sdk server. Intercepts tools/call requests, extracts Bolyra proof from request params._bolyra field, verifies AgentPolicy proof against the tool's required permission mask from the manifest, forwards valid calls or returns structured error. Supports stdio transport only for MVP. ~400 lines.",
+          "days": 4,
+          "reuses": "@bolyra/sdk verifyHandshake + AgentPolicy verifier"
+        },
+        {
+          "name": "SDK helper: proveToolCall()",
+          "type": "sdk",
+          "description": "Thin wrapper in @bolyra/sdk that takes an agent credential + tool name + permission manifest and returns the proof payload to attach to MCP requests. Calls existing createAgentCredential and proveHandshake internally, binds the tool name as the session nonce.",
+          "days": 2,
+          "reuses": "@bolyra/sdk createAgentCredential + proveHandshake"
+        },
+        {
+          "name": "Demo: protected file-server",
+          "type": "demo",
+          "description": "Fork the existing mcp-demo bolyra-proxy.js into a self-contained example: an MCP file-server where read_file requires READ_DATA proof and write_file requires WRITE_DATA proof. Includes a test script that shows access granted vs denied. Serves as the README walkthrough.",
+          "days": 2,
+          "reuses": "examples/mcp-demo/bolyra-proxy.js"
+        },
+        {
+          "name": "Integration tests",
+          "type": "integration",
+          "description": "Mocha test suite: (1) proxy rejects calls with no proof, (2) proxy rejects calls with insufficient permission bits, (3) proxy accepts valid proof and forwards, (4) proxy rejects expired credentials, (5) delegation chain narrows scope correctly. Uses fast witness-only mode.",
+          "days": 2,
+          "reuses": "circuits/test infrastructure"
+        },
+        {
+          "name": "Docs: MCP Policy Proxy quickstart",
+          "type": "docs",
+          "description": "README + quickstart guide showing how to wrap any MCP server with Bolyra policy enforcement in <20 lines of config. Includes architecture diagram, permission mapping examples, and troubleshooting.",
+          "days": 1,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 12,
+      "reuse_percentage": 75,
+      "risks": [
+        "MCP transport layer is still evolving \u2014 stdio works today but SSE/Streamable HTTP may become dominant, requiring proxy rework",
+        "No web search evidence of demand validated \u2014 the 'Agent Identity Protocol' signal may be a single project, not a trend",
+        "Proof verification latency (~200-500ms per tool call with snarkjs) may be unacceptable for latency-sensitive MCP workflows; rapidsnark helps but adds a native binary dependency",
+        "MCP spec has no standardized metadata/extension field \u2014 stuffing proofs into params._bolyra is fragile and may break with spec updates",
+        "Solo-founder 12-day estimate assumes no yak-shaving; realistic calendar time is 3-4 weeks given context switching across 3 products"
+      ],
+      "success_criteria": "A developer can npm install @bolyra/mcp-policy-proxy, point it at any existing MCP server with a 5-line permission manifest, and tool calls without valid Bolyra proofs are rejected \u2014 demonstrated end-to-end in the file-server demo with <1s overhead per call. Measured by: (1) demo runs without manual setup beyond npm install, (2) all 5 integration tests pass in CI, (3) at least 2 external developers can follow the quickstart and get it working (validated via GitHub issue feedback on the repo)."
+    }
+  },
+  {
+    "id": "agent_commerce_identity",
+    "title": "ZKP Purchase Authentication for AI Agent Commerce",
+    "description": "Eco's agent identity verification for purchases shows commercial demand. Bolyra's cumulative-bit permissions (FINANCIAL_SMALL/MEDIUM/UNLIMITED) map directly to purchase authorization tiers, proving spending authority without revealing the full delegation chain.",
+    "category": "agentic_commerce",
+    "source": "Agent Identity Verification: How AI Agents Authenticate Purchases in 2026",
+    "scores": {
+      "demand": 8,
+      "timing": 8,
+      "fit": 22,
+      "feasibility": 18,
+      "total": 56
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs; the sole source ('Eco's agent identity verification') is unverified and no named buyers, funding rounds, or analyst reports are cited.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines are cited; the timing assessment from evidence gathering itself says 18+ months, and the 'closing window' preliminary score of 21 is unsupported by any concrete dated events.",
+      "fit": "All three core circuits (AgentPolicy, Delegation, HumanUniqueness) plus the SDK and IdentityRegistry map directly with no or minor modifications \u2014 cumulative-bit financial tiers were literally designed for this use case.",
+      "feasibility": "MVP spec is well-scoped at ~10 days reusing existing primitives, but the X402 adapter depends on a payment protocol format that is itself pre-standard, adding integration risk."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Cumulative-bit permissions (bits 2-4: FINANCIAL_SMALL/MEDIUM/UNLIMITED) directly encode purchase authorization tiers. Selective disclosure via requiredScopeMask lets a merchant verify 'this agent can spend up to $10K' without revealing the full 8-bit bitmask or operator identity. Expiry enforcement prevents stale credentials from authorizing purchases.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Human-to-agent delegation chain proves spending authority was granted by a real human principal. Scope narrowing ensures a sub-agent delegated for $100 purchases cannot escalate to $10K. The 3-hop limit maps naturally to human \u2192 primary agent \u2192 commerce sub-agent flows. Expiry narrowing lets humans issue time-bounded shopping sessions.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Anchors the delegation chain root to a unique human. Nullifier-based sybil resistance prevents one human from creating multiple agent trees to circumvent aggregate spending limits. Scope-based unlinkability means purchase proofs at Merchant A are unlinkable to Merchant B.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain atomic handshake verification confirms both the human root and agent credential in a single transaction. Delegation nullifier replay protection prevents double-spending of one-time purchase authorizations. Root history buffers allow slightly stale Merkle roots during high-throughput commerce windows.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake() already produces the paired human+agent proof bundle a merchant needs. permissionsToBitmask() and validateCumulativeBitEncoding() handle the financial tier logic. Error classes (ExpiredCredentialError, ScopeEscalationError, InvalidPermissionError) cover the exact failure modes commerce integrations surface.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "sdk",
+        "description": "Purchase authorization helper: wrappers like authorizePurchase(agent, amountUsd, merchantScope) that select the correct permission tier, bind the merchant's session nonce, and return a self-contained proof bundle a merchant can verify without understanding ZKP internals. Includes amount-to-tier resolution and human-readable error messages for declined transactions.",
+        "complexity": "low"
+      },
+      {
+        "type": "integration",
+        "description": "Payment protocol adapter (Stripe Agent Toolkit / X402 / A2A PaymentRequired flow): translates Bolyra proof bundles into the authorization artifacts these payment rails expect. Needs adapters for at least one L402/X402-style protocol and one traditional payment gateway webhook format.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "Commerce profile extension to draft-bolyra-mutual-zkp-auth-01: defines the purchase-authorization handshake variant, merchant nonce binding semantics, amount-tier mapping, and aggregate spending limit signaling. Should reference Eco's agent identity model as prior art and differentiate on privacy properties.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "Optional on-chain aggregate spending tracker: a lightweight contract that accumulates nullifier-keyed spend counters per epoch, enabling daily/weekly spending caps without revealing individual transaction amounts. Not strictly required for MVP but closes the 'unlimited agent spending' objection.",
+        "complexity": "high"
+      },
+      {
+        "type": "integration",
+        "description": "LangChain/CrewAI commerce tool completion: upgrade the existing stubs to production wrappers that let agent frameworks call authorizePurchase() as a tool, returning structured proof bundles that the framework can attach to outbound purchase requests.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "Agent commerce authentication is the highest-leverage instantiation of the privacy-layer-under-incumbents strategy. Stripe, Shopify, and payment processors need to verify agent spending authority but don't want to build ZKP infrastructure. Bolyra slots underneath as the trust layer: merchants call verifyHandshake() and get a boolean, never touching circuits. Eco's approach (centralized identity verification) validates demand but creates a single point of compromise \u2014 Bolyra's ZKP proofs let the human remain anonymous to the merchant while still proving delegation chain validity. This positions Bolyra as the privacy-preserving alternative that incumbents can adopt without changing their payment flows, only adding a proof-verification step at the authorization boundary.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "authorizePurchase() SDK helper",
+          "type": "sdk",
+          "description": "Thin wrapper in @bolyra/sdk: takes agent credential + amount USD + merchant nonce, resolves amount to permission tier (bits 2-4), calls proveHandshake() with scopeMask bound to the financial tier, returns a self-contained proof bundle. Includes amount-to-tier resolution and human-readable decline reasons.",
+          "days": 3,
+          "reuses": "AgentPolicy + @bolyra/sdk proveHandshake + permissionsToBitmask"
+        },
+        {
+          "name": "verifyPurchaseAuth() merchant-side helper",
+          "type": "sdk",
+          "description": "Companion function: merchant passes proof bundle + expected amount ceiling + their session nonce, gets back {authorized: bool, tier: string, expiresAt: number}. No ZKP knowledge required by integrator.",
+          "days": 2,
+          "reuses": "@bolyra/sdk verifyHandshake + validateCumulativeBitEncoding"
+        },
+        {
+          "name": "Commerce delegation example",
+          "type": "demo",
+          "description": "End-to-end script: human creates identity, delegates to shopping agent with FINANCIAL_MEDIUM + 1hr expiry, agent authorizes a $50 purchase at a mock merchant, merchant verifies. Shows the full flow in ~60 lines.",
+          "days": 1,
+          "reuses": "Delegation circuit + existing demo patterns"
+        },
+        {
+          "name": "X402 proof adapter",
+          "type": "integration",
+          "description": "Translates Bolyra proof bundle into X402 PaymentRequired response format: adds proof as Bearer-style header, maps tier to X402 maxAmount field, includes verification endpoint URL. Single-file adapter.",
+          "days": 3,
+          "reuses": "integrations/payment-protocols/ scaffold"
+        },
+        {
+          "name": "Purchase auth test vectors",
+          "type": "spec",
+          "description": "JSON test vectors covering: tier boundary ($99 vs $100 vs $101), expired credential rejection, scope escalation attempt (agent with SMALL trying MEDIUM), valid 3-hop delegation chain, nullifier replay rejection. Added to spec/test-vectors/.",
+          "days": 1,
+          "reuses": "spec/conformance-runner"
+        },
+        {
+          "name": "Agent commerce quickstart doc",
+          "type": "docs",
+          "description": "docs/agent-commerce-quickstart.md \u2014 tutorial showing a merchant how to accept Bolyra-authenticated agent purchases in <20 lines of code. References the demo.",
+          "days": 1,
+          "reuses": "sdk/QUICKSTART.md pattern"
+        }
+      ],
+      "total_days": 11,
+      "reuse_percentage": 82,
+      "risks": [
+        "X402 protocol still evolving \u2014 adapter may need rework if spec changes before standardization",
+        "No real merchant integration to validate the DX claims \u2014 relying on demo + docs feedback from open-source users",
+        "Agent commerce market may not materialize for 12-18mo \u2014 early infrastructure without immediate adoption signal",
+        "Web search evidence failed so demand signal is unvalidated beyond the single Eco source article"
+      ],
+      "success_criteria": "authorizePurchase() round-trip works end-to-end in the demo (human delegate \u2192 agent prove \u2192 merchant verify) in under 2 seconds with mock proofs; test vectors pass in CI; at least one external developer (via GitHub issue or Discord) successfully runs the quickstart within 30 days of publish"
+    }
+  },
+  {
+    "id": "iam_nonhuman_identity",
+    "title": "ZKP-Native IAM for Non-Human Identities",
+    "description": "OpenA2A's AIM 1.0 reaching gate criteria proves enterprise readiness for agent IAM. Bolyra adds what they lack: privacy-preserving capability proofs where agents demonstrate authorization without exposing their full identity graph or operator relationships.",
+    "category": "enterprise_auth",
+    "source": "Agent Identity Management: IAM layer for AI agents with cryptographic identity and capability authorization",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 19,
+      "feasibility": 16,
+      "total": 53
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no URLs were provided; 'non-human identity' is a buzzy category but no named buyers, RFPs, or verifiable demand sources are cited.",
+      "timing": "OpenA2A AIM 1.0 is referenced but no launch date, draft version, or competitor ship dates are provided \u2014 the timeline is speculative with no dated milestones.",
+      "fit": "AgentPolicy, Delegation, and HumanUniqueness map directly to IAM capability proofs with only minor modifications, and the SDK already exposes the right error classes and verification surface.",
+      "feasibility": "The 12-day MVP is realistic given heavy reuse of existing primitives, though the OPA/Rego bridge adds integration surface area that may require more testing than estimated."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core primitive \u2014 agents prove they hold required permission bits (READ_DATA, FINANCIAL_SMALL, SIGN_ON_BEHALF, etc.) via selective disclosure without revealing full bitmask or operator identity. The existing requiredScopeMask mechanism directly implements IAM-style capability authorization checks.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enterprise IAM requires hierarchical authorization: org \u2192 team \u2192 agent \u2192 sub-agent. The existing 3-hop delegation circuit with scope narrowing and expiry narrowing maps directly to RBAC/ABAC policy inheritance. Delegator key binding (UC3.1 fix) already prevents lateral privilege movement.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Human-in-the-loop authorization anchor \u2014 proves a unique human approved the agent's enrollment without revealing which human. Nullifier scoping prevents one human from enrolling unlimited agents within the same IAM domain.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain dual-tree structure (humanTree + agentTree) serves as the trust anchor for IAM policy verification. Root history buffers allow agents to prove membership against slightly stale roots, critical for distributed IAM where propagation delay is unavoidable. Atomic handshake verification proves human-agent binding in a single tx.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createAgentCredential + proveHandshake form the SDK surface for IAM integration. Enterprise consumers call verifyHandshake to gate API access. Error classes (InvalidPermissionError, ScopeEscalationError, ExpiredCredentialError) already map to standard IAM denial reasons.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "DID method provides the identity layer that enterprise IAM systems expect \u2014 resolvable agent identifiers with verifiable credential bindings, compatible with W3C DID standards that enterprise identity vendors already support.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "IETF draft provides the wire protocol for ZKP-based auth flows, giving enterprise architects a standards-track reference rather than a proprietary SDK dependency.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "sdk",
+        "description": "IAM policy adapter: translate RBAC/ABAC policies (e.g., Cedar, OPA/Rego, XACML) into Bolyra permission bitmasks and scope constraints. Enterprises won't rewrite policies \u2014 they need a bridge from existing policy engines to Bolyra's 8-bit cumulative encoding.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "OIDC/OAuth2 bridge: enterprise IAM (Okta, Entra ID, Auth0) issues tokens; Bolyra needs a token-exchange flow where an agent trades an OAuth2 client_credentials token for a Bolyra AgentCredential proof. This is the adoption wedge \u2014 enterprises keep their IdP, Bolyra adds the privacy layer underneath.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "Non-Human Identity Profile: a conformance profile of draft-bolyra-mutual-zkp-auth-01 specifically for machine-to-machine flows \u2014 no human proof required for service accounts, but delegation chain must terminate at a human root within N hops. Aligns with emerging NHI standards (OWASP NHI Top 10, Astrix/Clutch threat models).",
+        "complexity": "medium"
+      },
+      {
+        "type": "circuit",
+        "description": "GroupPolicy circuit: batched capability proof where an agent proves membership in multiple IAM groups simultaneously without revealing which groups. Current AgentPolicy proves one scope at a time \u2014 enterprise IAM checks often require intersection of multiple group memberships.",
+        "complexity": "high"
+      },
+      {
+        "type": "contract",
+        "description": "PolicyRegistry contract: on-chain registry mapping scope identifiers to required permission bitmasks, allowing verifiers to look up what capabilities a given API endpoint requires without hardcoding. Extends IdentityRegistry with a policy dimension.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "SPIFFE/SPIRE adapter: workload identity is the dominant NHI pattern in cloud-native environments. An adapter that binds SPIFFE IDs to Bolyra agent credentials lets existing service meshes (Istio, Linkerd) gate traffic on ZKP-verified capability proofs.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "This is the canonical 'privacy layer under incumbents' play. Enterprises keep Okta/Entra ID as their IdP and Cedar/OPA as their policy engine \u2014 Bolyra slots underneath as the cryptographic verification layer that adds two properties incumbents cannot: (1) agents prove capabilities without revealing their operator, model, or organizational affiliation to the verifier, and (2) delegation chains are cryptographically bound so no middleware can escalate scope. OpenA2A's AIM 1.0 validates market timing but uses conventional credential exchange \u2014 Bolyra's ZKP approach means the verifier learns 'this agent can do X' without learning 'this agent belongs to Acme Corp running GPT-5.' This is the wedge: privacy-preserving NHI verification is a net-new category that incumbent IAM vendors will take 18-24 months to replicate, and by then Bolyra's verifier contracts and SDK are the embedded standard.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "iam-policy-adapter",
+          "type": "sdk",
+          "description": "TypeScript module that translates OPA/Rego policy decisions into Bolyra 8-bit permission bitmasks and scope constraints. Accepts a policy evaluation result (allow/deny + attributes) and returns the inputs needed for AgentPolicy circuit proving. Covers the 8 standard permission bits with configurable mapping.",
+          "days": 4,
+          "reuses": "AgentPolicy circuit + @bolyra/sdk createAgentCredential"
+        },
+        {
+          "name": "hierarchical-delegation-example",
+          "type": "demo",
+          "description": "End-to-end demo showing 3-hop org\u2192team\u2192agent delegation with scope narrowing at each level. Uses existing Delegation circuit. Demonstrates IAM-style RBAC where an org admin delegates FINANCIAL_MEDIUM to a team, team narrows to FINANCIAL_SMALL for a specific agent, agent cannot escalate.",
+          "days": 2,
+          "reuses": "Delegation circuit + existing SDK delegation stubs"
+        },
+        {
+          "name": "iam-verify-middleware",
+          "type": "integration",
+          "description": "Express.js middleware that accepts a Bolyra handshake proof in the Authorization header, verifies it against on-chain roots, and populates req.agent with verified permission bits. Drop-in replacement for OAuth token introspection in agent-to-API flows.",
+          "days": 3,
+          "reuses": "@bolyra/sdk verifyHandshake + IdentityRegistry"
+        },
+        {
+          "name": "opa-rego-bridge",
+          "type": "integration",
+          "description": "Rego policy file + Node adapter that evaluates OPA policies and feeds results into iam-policy-adapter. Ships with 3 example policies: read-only agent, financial agent with spending cap, PII-access agent requiring human approval anchor.",
+          "days": 3,
+          "reuses": "iam-policy-adapter (new)"
+        },
+        {
+          "name": "iam-spec-appendix",
+          "type": "spec",
+          "description": "Appendix to draft-bolyra-mutual-zkp-auth-01 covering IAM integration: how permission bitmasks map to RBAC roles, how delegation chains encode policy inheritance, and how nullifier scoping prevents agent proliferation within an IAM domain.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "nonhuman-identity-did-profile",
+          "type": "spec",
+          "description": "did:bolyra method profile for non-human identities: DID document structure for agents including capability fields, delegation chain references, and operator binding without operator identity disclosure.",
+          "days": 2,
+          "reuses": "did:bolyra spec"
+        },
+        {
+          "name": "iam-integration-tests",
+          "type": "sdk",
+          "description": "Test suite covering: policy-to-bitmask translation correctness, delegation chain scope narrowing enforcement, middleware auth flow with valid/invalid/expired proofs, and OPA policy evaluation round-trip.",
+          "days": 2,
+          "reuses": "existing circuit test infrastructure"
+        }
+      ],
+      "total_days": 18,
+      "reuse_percentage": 75,
+      "risks": [
+        "OPA/Rego bridge adds a runtime dependency on OPA \u2014 enterprises may use Cedar or XACML instead, requiring additional adapters that blow up scope",
+        "8-bit permission encoding may be too coarse for real enterprise RBAC policies with hundreds of fine-grained permissions \u2014 need to validate that hierarchical delegation compensates",
+        "No web search evidence found for demand \u2014 this MVP is spec-driven, not demand-validated, risking building for a market that doesn't exist yet",
+        "Express middleware assumes server-side verification, but many agent-to-agent flows are peer-to-peer \u2014 middleware pattern may not fit the dominant deployment model"
+      ],
+      "success_criteria": "Three independent developers can clone the repo, run the hierarchical delegation demo end-to-end, and integrate the Express middleware into a sample API server \u2014 all without reading source code beyond the README. The OPA bridge correctly translates at least 3 distinct policy shapes into valid circuit inputs that produce verifiable proofs. Spec appendix receives at least one substantive review from an external identity/auth practitioner."
+    }
+  },
+  {
+    "id": "autogen_trust_layer",
+    "title": "Verifiable Trust Scoring for Multi-Agent Systems",
+    "description": "AgentGraph and AutoGen discussions show demand for trust verification in multi-agent orchestration. Bolyra's delegation circuit enables provable trust chains where each agent cryptographically demonstrates its authority was narrowed from a human root, with on-chain audit.",
+    "category": "developer_tools",
+    "source": "AgentGraph \u2014 open-source trust verification for AI agents",
+    "scores": {
+      "demand": 8,
+      "timing": 9,
+      "fit": 20,
+      "feasibility": 16,
+      "total": 53
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs were provided \u2014 demand claims rest entirely on vague references to 'AgentGraph and AutoGen discussions' without links, engagement metrics, or named buyers.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines cited; the timing assessment from evidence gathering itself says 18+ months, contradicting the preliminary score of 20.",
+      "fit": "All three core circuits (Delegation, AgentPolicy, HumanUniqueness) plus IdentityRegistry map directly with only minor modification needed for Delegation completion, and the scope-narrowing trust chain model is genuinely well-suited to multi-agent orchestration.",
+      "feasibility": "MVP spec is realistic at ~15 days reusing existing primitives and patterns, but the delegate() v0.3 stub completion is real engineering work and the AutoGen plugin API stability is unverified."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "Delegation",
+        "usage": "Core primitive. Multi-agent orchestration requires provable authority chains: human \u2192 orchestrator agent \u2192 sub-agents. The Delegation circuit already enforces scope narrowing (delegatee permissions \u2286 delegator permissions), expiry narrowing, and max 3 hops \u2014 exactly the trust chain depth AutoGen/AgentGraph topologies need. Each agent in a CrewAI crew or AutoGen group chat can carry a delegation proof showing its authority was narrowed from a human root.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Each agent in the multi-agent system proves its credential (operator signature, permission bitmask, expiry) without revealing the full bitmask. Selective disclosure via requiredScopeMask lets an orchestrator verify an agent has FINANCIAL_SMALL permission without learning it also has WRITE_DATA. This maps directly to AutoGen's role-based agent capabilities.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Anchors every trust chain to a unique human root. In multi-agent systems, the critical question is 'which human authorized this swarm?' HumanUniqueness provides sybil-resistant proof that exactly one human is at the root, with scope-bound nullifiers preventing the same human from spawning conflicting authority chains within the same scope.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain audit trail for trust chains. The contract's delegation verification with chain-state tracking and hop count enforcement (max 3) provides the immutable audit log that enterprise multi-agent deployments need. Root history buffers (30 entries) allow verification against recent-but-not-current roots, handling the latency between agent enrollment and proof generation in distributed orchestration.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "SDK's createAgentCredential \u2192 delegate \u2192 proveHandshake flow maps to the agent lifecycle in AutoGen/AgentGraph. However, delegate() is currently a v0.3 stub \u2014 this opportunity forces its completion. The error classes (ScopeEscalationError, ExpiredCredentialError) already model the failure modes multi-agent trust verification encounters.",
+        "modification_needed": "major"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "AutoGen/AG2 trust adapter: a Python package that wraps Bolyra's delegation and agent policy proving into AutoGen's agent lifecycle hooks. On agent spawn, generates a delegation proof from the parent agent. On message send, attaches a compact proof bundle. On message receive, verifies the sender's trust chain. Uses the existing Python SDK subprocess bridge to Node for proving.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "AgentGraph trust verification plugin: implements AgentGraph's trust scoring interface backed by Bolyra delegation proofs. Trust score = f(hop_count, scope_width, time_to_expiry) where all inputs are extracted from verified ZK proofs rather than self-reported metadata.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Complete the delegate() stub in @bolyra/sdk v0.3. Needs: delegation token generation, chain construction (linking scope commitments across hops), and multi-hop verification that walks the chain back to a human root. The circuit exists; the SDK wrapper does not.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "Trust chain serialization format for multi-agent message passing. Define a compact binary envelope that bundles {humanProof, delegationProof[], agentProof, nonce} for attachment to inter-agent messages. Extend draft-bolyra-mutual-zkp-auth-01 with a 'chain mode' section.",
+        "complexity": "low"
+      },
+      {
+        "type": "contract",
+        "description": "TrustChainRegistry: lightweight contract that indexes active delegation chains by human root nullifier, enabling orchestrators to query 'show me all agents authorized by human X in scope Y' without breaking privacy (queries go through the nullifier, not the identity). Could be an extension to IdentityRegistry rather than a new contract.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "Direct alignment with privacy-layer-under-incumbents strategy. AutoGen (Microsoft) and AgentGraph are open-source orchestration frameworks with large install bases but zero native trust verification. Bolyra slots in as the cryptographic trust layer these frameworks delegate to \u2014 not competing with their orchestration logic, but providing the privacy-preserving authority proof that no incumbent offers. This is the identical pattern to how Bolyra positions under LangChain and CrewAI: the incumbents own the workflow, Bolyra owns the proof that the workflow was authorized. Multi-agent trust is especially compelling because it converts Bolyra's delegation circuit from a theoretical differentiator into a load-bearing primitive that orchestration frameworks depend on at runtime, creating deep integration lock-in without requiring Bolyra to compete on orchestration features.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "delegate() SDK completion",
+          "type": "sdk",
+          "description": "Complete the v0.3 stub: generate delegation proofs with scope narrowing, expiry narrowing, hop-count tracking. Wire into createAgentCredential \u2192 delegate \u2192 proveHandshake flow. Add chain serialization for multi-hop (up to 3).",
+          "days": 5,
+          "reuses": "Delegation circuit + @bolyra/sdk scaffold"
+        },
+        {
+          "name": "Delegation proof chain verification",
+          "type": "sdk",
+          "description": "SDK-side verifyDelegationChain() that validates a full proof bundle (human root \u2192 agent\u2081 \u2192 agent\u2082) in one call, checking each hop's scope narrowing and expiry constraints.",
+          "days": 2,
+          "reuses": "Delegation circuit verifier + existing verifyHandshake"
+        },
+        {
+          "name": "Python SDK delegation bridge",
+          "type": "sdk",
+          "description": "Extend the subprocess bridge in sdk-python to expose delegate() and verifyDelegationChain(). Pure types + subprocess call to Node, no reimplementation.",
+          "days": 2,
+          "reuses": "sdk-python subprocess bridge pattern"
+        },
+        {
+          "name": "AutoGen trust adapter",
+          "type": "integration",
+          "description": "Python package (bolyra-autogen) that hooks into AG2's agent lifecycle: on_agent_spawn generates delegation proof from parent, on_message_send attaches proof bundle, on_message_receive verifies trust chain. Thin wrapper over sdk-python.",
+          "days": 4,
+          "reuses": "sdk-python + AG2 plugin API"
+        },
+        {
+          "name": "Multi-agent trust demo",
+          "type": "demo",
+          "description": "3-agent AutoGen group chat where a human-rooted orchestrator delegates to a researcher agent (READ_DATA) and a writer agent (READ_DATA+WRITE_DATA). Each message carries a verifiable trust chain. CLI script, not a UI.",
+          "days": 2,
+          "reuses": "AutoGen trust adapter + existing examples pattern"
+        },
+        {
+          "name": "Trust chains technical spec",
+          "type": "spec",
+          "description": "Extend draft-bolyra-mutual-zkp-auth with a 'Multi-Agent Delegation Chains' section covering proof bundle format, verification order, and failure modes. IETF-style, no commercial language.",
+          "days": 1,
+          "reuses": "spec/draft-bolyra-mutual-zkp-auth-01.md"
+        },
+        {
+          "name": "Integration tests",
+          "type": "sdk",
+          "description": "End-to-end tests: human enrollment \u2192 delegate to agent\u2081 \u2192 delegate to agent\u2082 \u2192 verify full chain. Both fast (witness-only) and slow (full proof) variants.",
+          "days": 2,
+          "reuses": "existing test harness + circuits/test patterns"
+        }
+      ],
+      "total_days": 18,
+      "reuse_percentage": 72,
+      "risks": [
+        "Demand is unvalidated \u2014 web search returned zero evidence. AutoGen/AgentGraph trust verification may be a researcher wish, not a builder need. Gate at day 5: if delegate() works but nobody engages with the spec PR, stop.",
+        "delegate() completion is the critical path and touches circuit integration \u2014 estimate could slip 2-3x if Delegation circuit edge cases surface during real proof generation.",
+        "AG2 plugin API is unstable (v0.4\u21920.5 breaking changes) \u2014 adapter may need rework within months.",
+        "Multi-agent ZKP verification latency: 3-hop chain = 3 proof verifications. snarkjs in subprocess may be too slow for real-time chat. rapidsnark helps but adds binary distribution complexity for the Python package.",
+        "No paying customers can validate this until EAD \u2014 risk of building in a vacuum."
+      ],
+      "success_criteria": "Demo script runs end-to-end: human enrolls, delegates to 2 agents with narrowed scope, agents exchange messages with attached proofs, receiver verifies full trust chain in <2s. Published as OSS with passing CI. At least 3 GitHub stars or 1 external contributor within 30 days of release signals organic interest worth continuing."
+    }
+  },
+  {
+    "id": "agentic_receipt_proofs",
+    "title": "Privacy-Preserving Agent Transaction Receipts",
+    "description": "The commerce authentication signal combined with Composio's infrastructure guide reveals need for auditable but private agent actions. Bolyra's handshake nonce binding creates non-repudiable receipts proving an authorized agent acted within scope, without revealing the operator or user identity.",
+    "category": "agentic_commerce",
+    "source": "From Auth to Action: The Complete Guide to Secure, Scalable AI Agent Infrastructure (2026)",
+    "scores": {
+      "demand": 6,
+      "timing": 8,
+      "fit": 20,
+      "feasibility": 18,
+      "total": 52
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs were provided; the only source is a single Composio guide, placing this squarely in anecdotal territory.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were cited; the timing assessment from evidence gathering itself says 18+ months out.",
+      "fit": "All three circuits (AgentPolicy, HumanUniqueness, Delegation) plus IdentityRegistry and the SDK map directly with only minor modifications needed \u2014 the handshake triple already IS the receipt payload.",
+      "feasibility": "MVP is well-scoped at ~10 days using existing primitives with no new circuits, though the lack of validated demand makes the build speculative."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Agent proves it held the required permission bits (e.g. FINANCIAL_SMALL, WRITE_DATA) at the moment of the transaction without revealing its full bitmask or operator identity. The selective-disclosure capability (requiredScopeMask) is exactly what receipts need: verifier confirms 'agent was authorized for this action class' without learning what else it can do.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The human who delegated authority can be linked to the receipt via nullifierHash scoped to the transaction context (e.g. merchant + session). This proves a unique, authorized human stood behind the agent without revealing who. Sybil resistance prevents one human from manufacturing fake receipt chains.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Receipt must prove the chain of authority: human \u2192 agent \u2192 sub-agent. The existing scope-narrowing and expiry-narrowing guarantees mean a receipt automatically encodes that the acting agent could not have exceeded its delegated permissions. The 3-hop limit bounds receipt chain verification cost.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain atomic handshake verification already binds human + agent proofs with nonce equality. This becomes the receipt anchor: a verified handshake tx hash on Base is a tamper-proof, timestamped receipt root. Root history buffers (30 entries) allow slightly-stale proofs, which is critical for async commerce flows where proof generation and settlement aren't simultaneous.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake already returns {humanProof, agentProof, nonce} \u2014 this triple IS the receipt payload. verifyHandshake confirms it. The SDK needs a thin wrapper that packages this into a standardized receipt envelope with metadata (action type, amount range, timestamp, merchant scope).",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft already defines the mutual ZKP auth flow. Receipt proofs are the natural 'proof of completed auth' artifact that the draft should reference. Aligns with IETF's preference for non-repudiation mechanisms.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "sdk",
+        "description": "ReceiptEnvelope type and createReceipt(handshakeResult, actionMetadata) \u2192 ReceiptProof function. Wraps existing handshake output with action context (amount range bucket, action type enum, merchant scope hash). No new cryptography \u2014 just structured packaging of existing proof artifacts with a content-addressed receipt ID (Poseidon hash of nonce + action metadata).",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "Receipt proof format specification: defines the envelope schema, verification algorithm, and selective disclosure rules for receipts. Should specify which fields are public (receipt ID, timestamp, permission class proved) vs private (operator identity, exact amount, human identity). Extends the existing IETF draft as a companion document.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "ReceiptRegistry contract (or extension to IdentityRegistry): stores receipt commitment hashes on-chain for auditability. Minimal: just a mapping from receiptId \u2192 block.timestamp with an event log. Auditors can verify a receipt existed without learning its contents. Optional: batch anchoring via Merkle root of N receipts to amortize gas.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "Receipt verification adapters for payment protocols (A2A, MCP tool-use confirmations). The existing integrations/payment-protocols/ directory suggests this is already on the radar. Adapter translates Bolyra receipt envelope into protocol-specific confirmation format.",
+        "complexity": "medium"
+      },
+      {
+        "type": "circuit",
+        "description": "NOT strictly needed for v1 \u2014 existing circuits cover the cryptographic requirements. However, a future ReceiptBinding circuit could add amount-range proofs (prove transaction was under $100 without revealing exact amount) by combining AgentPolicy's permission bits with a Num2Bits range check on an amount input. This would upgrade receipts from 'agent was authorized' to 'agent was authorized AND acted within amount bounds'.",
+        "complexity": "high"
+      }
+    ],
+    "positioning_alignment": "Receipt proofs are the ideal privacy-layer-under-incumbents play. Stripe, Adyen, and Shopify need agent transaction auditability for compliance but cannot ask merchants to reveal customer identities to achieve it. Bolyra slots underneath: the payment processor sees a verified receipt proving 'an authorized agent of a unique human executed a scoped action within permission bounds' \u2014 enough for audit trails, dispute resolution, and regulatory reporting \u2014 without learning who the human is, which operator runs the agent, or what other permissions exist. This is a wedge that incumbents cannot build themselves (they lack ZKP infrastructure) and cannot ignore (PCI-DSS, PSD2 SCA, and emerging AI agent liability frameworks all require non-repudiation). The receipt becomes the natural upsell from handshake: auth gets you in the door, receipts make you sticky in the transaction flow.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "ReceiptEnvelope type + createReceipt()",
+          "type": "sdk",
+          "description": "TypeScript type ReceiptEnvelope wrapping existing HandshakeResult with action metadata (actionType enum, amountBucket, merchantScopeHash, timestamp). createReceipt(handshakeResult, metadata) produces a content-addressed receipt ID via Poseidon(nonce, actionType, amountBucket, merchantScopeHash). verifyReceipt() confirms the underlying handshake proofs plus metadata binding. No new circuits \u2014 pure structured packaging.",
+          "days": 3,
+          "reuses": "@bolyra/sdk proveHandshake + verifyHandshake"
+        },
+        {
+          "name": "ReceiptEnvelope Python types",
+          "type": "sdk",
+          "description": "Mirror ReceiptEnvelope, ActionType enum, and AmountBucket in sdk-python with Pydantic models. createReceipt delegates to the TS subprocess bridge. Keeps Python SDK parity without reimplementing crypto.",
+          "days": 1,
+          "reuses": "sdk-python subprocess bridge"
+        },
+        {
+          "name": "On-chain receipt anchor event",
+          "type": "contract",
+          "description": "Add a ReceiptAnchored(bytes32 receiptId, bytes32 handshakeHash, uint256 timestamp) event to IdentityRegistry. Emitted when verifyHandshake succeeds and caller passes optional receipt metadata. No new storage \u2014 events are log-only, cheap. Indexers can reconstruct receipt history from event logs.",
+          "days": 2,
+          "reuses": "IdentityRegistry verifyHandshake"
+        },
+        {
+          "name": "Receipt spec section in IETF draft",
+          "type": "spec",
+          "description": "Add Section 7 'Transaction Receipt Proofs' to draft-bolyra-mutual-zkp-auth-01. Defines ReceiptEnvelope wire format (CBOR), content-addressed ID construction, verification algorithm, and privacy properties (what verifier learns vs. what stays hidden). References existing Sections 4-5 for the underlying mutual auth flow.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "Receipt demo: MCP tool purchase flow",
+          "type": "demo",
+          "description": "Extend examples/mcp-demo to show an agent purchasing a tool via MCP, generating a receipt proving it was authorized for FINANCIAL_SMALL, and a merchant verifying the receipt without learning the operator identity. CLI script that walks through the full flow with colored output. Doubles as integration test.",
+          "days": 2,
+          "reuses": "examples/mcp-demo bolyra-proxy.js"
+        },
+        {
+          "name": "Receipt docs + blog post",
+          "type": "docs",
+          "description": "Technical blog post explaining the receipt primitive: why existing handshake output is already 90% of a receipt, what the envelope adds, privacy properties, and how it compares to traditional audit logs. Plus SDK reference docs for createReceipt/verifyReceipt.",
+          "days": 1,
+          "reuses": "docs/ existing structure"
+        }
+      ],
+      "total_days": 11,
+      "reuse_percentage": 85,
+      "risks": [
+        "Receipt envelope format may need revision once real integrators give feedback \u2014 design for one iteration of breakage",
+        "On-chain event emission adds gas cost to every anchored receipt; need to benchmark and confirm it stays under 30k gas overhead",
+        "Without web search evidence of demand, this is a 'build it and they will come' bet \u2014 mitigate by keeping scope tiny and reusable",
+        "AmountBucket granularity (e.g. <$100, <$10K, unlimited) is a design choice that affects privacy vs. auditability tradeoff \u2014 pick wrong and receipts leak too much or prove too little",
+        "MCP demo may bitrot if @modelcontextprotocol/sdk changes \u2014 pin version"
+      ],
+      "success_criteria": "A developer can npm install @bolyra/sdk, run createReceipt() after a handshake, get back a ReceiptEnvelope with a deterministic receiptId, verify it with verifyReceipt(), and anchor it on Base Sepolia \u2014 all within 10 lines of code. The MCP demo runs end-to-end without manual steps. The spec section passes editorial review for internal consistency with existing sections."
+    }
+  },
+  {
+    "id": "okta_enterprise_bridge",
+    "title": "Enterprise IdP to Agent ZKP Credential Bridge",
+    "description": "Okta's AI agent security guidance shows enterprise buyers want existing IdP integration. Bolyra can bridge enterprise OIDC tokens into ZKP credentials \u2014 agents prove they were authorized by an Okta-authenticated human without leaking the human's identity to service providers.",
+    "category": "enterprise_auth",
+    "source": "Okta - AI Agent Data Privacy and Security",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 18,
+      "feasibility": 15,
+      "total": 51
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no URLs were cited; the opportunity rests on a single Okta guidance doc with no named buyers, RFPs, or funding data backing enterprise demand for ZKP-bridged OIDC credentials.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were provided; the general sense that enterprises care about agent security lacks any dated anchors or closing-window evidence.",
+      "fit": "All three core circuits (HumanUniqueness, AgentPolicy, Delegation) map directly with minor or no modification, and the SDK already exposes the needed API surface \u2014 the new OIDCClaimBinding circuit extends existing Poseidon patterns rather than introducing novel primitives.",
+      "feasibility": "The 13-day MVP is plausible given circuit and SDK reuse, but deterministic secret derivation from OIDC claims introduces a subtle security surface (claim stability, rotation) that needs careful design, and enterprise integration testing against real IdPs adds unscoped work."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "After Okta OIDC login, the human's identity secret is derived (or bound) to produce a Semaphore commitment inserted into the humanTree. The nullifier mechanism lets the human prove 'I authenticated via this enterprise IdP' without revealing which Okta user they are \u2014 scope-bound unlinkability across service providers.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "The agent credential issued post-OIDC-bridge carries the operator's EdDSA signature over a commitment that includes the enterprise-scoped permission bitmask. Selective disclosure lets the agent prove 'I have FINANCIAL_SMALL permission from an Okta-authenticated human' without revealing the full bitmask or the human's Okta identity.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "The OIDC-to-ZKP bridge is naturally a delegation: human (Okta-authenticated) delegates to agent with scope narrowing. The existing circuit enforces that the agent cannot escalate permissions beyond what the enterprise admin granted. The 3-hop chain supports human \u2192 primary agent \u2192 sub-agent workflows common in enterprise automation.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root history buffers allow enterprise agents to verify proofs against recent Merkle roots without requiring synchronous IdP availability. Atomic handshake verification lets service providers confirm both human-authorization and agent-policy in a single transaction.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createHumanIdentity and createAgentCredential form the post-bridge credential issuance flow. proveHandshake is the runtime proof that the agent was authorized by an enterprise-authenticated human. The error classes (ExpiredCredentialError, ScopeEscalationError) map directly to enterprise revocation and policy enforcement.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft provides the wire format for the ZKP handshake. Enterprise buyers need a standards-track specification to justify procurement \u2014 the existing draft covers the proof exchange protocol but needs an appendix for the OIDC claim binding.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "Enterprise agents get a did:bolyra identifier that encodes their delegation chain origin without exposing the Okta tenant or user. Resolvers can verify the DID without calling back to Okta.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "OIDCClaimBinding circuit: takes an OIDC id_token's sub/iss/aud claims as private inputs, hashes them with Poseidon to produce an identity commitment compatible with HumanUniqueness. Must verify the OIDC signature (RS256 or EdDSA) inside the circuit or accept a trusted attestation from the bridge service. RS256 in-circuit is expensive (~500K constraints); pragmatic v1 uses a trusted bridge attestation with the operator's EdDSA signature binding the OIDC session to the ZKP commitment.",
+        "complexity": "high"
+      },
+      {
+        "type": "sdk",
+        "description": "Enterprise bridge SDK module: OktaBolyraProvider class that handles the OIDC authorization code flow, extracts claims, derives the identity secret, and calls createHumanIdentity + createAgentCredential. Wraps the Okta SDK (@okta/okta-auth-js) and maps Okta app-level scopes to Bolyra permission bitmasks.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "Okta Event Hook receiver: listens for user.session.end and user.account.lock events to trigger on-chain revocation (nullifier insertion or root rotation). Required for enterprise compliance \u2014 agents must lose authorization when the human's Okta session is revoked.",
+        "complexity": "medium"
+      },
+      {
+        "type": "spec",
+        "description": "OIDC-to-ZKP Binding Profile: an appendix to draft-bolyra-mutual-zkp-auth-01 specifying claim-to-commitment derivation, scope mapping conventions, and the trust model for the bridge attestation (trusted vs trustless). Needed for enterprise security review.",
+        "complexity": "low"
+      },
+      {
+        "type": "contract",
+        "description": "BridgeAttestationRegistry: on-chain registry of authorized bridge operators (enterprise IdP connectors) whose EdDSA keys are trusted to attest OIDC-to-commitment bindings. Includes a timelock for key rotation and an admin multisig for bridge operator enrollment. Minimal \u2014 extends existing IdentityRegistry patterns.",
+        "complexity": "medium"
+      }
+    ],
+    "positioning_alignment": "This is the canonical privacy-layer-under-incumbents play. Okta owns the enterprise identity graph \u2014 Bolyra does not compete with that. Instead, Bolyra sits beneath Okta as the privacy-preserving credential layer that converts enterprise identity assertions into ZKP proofs. Enterprise buyers keep their existing IdP investment (Okta, Entra ID, Ping) and get agent authorization with zero-knowledge properties they cannot build internally. This mirrors the strategy against RFC 7662 introspection: incumbents do identity management, Bolyra does privacy-preserving proof of authorization. The bridge pattern is also extensible to Entra ID and any OIDC-compliant IdP, making Okta the wedge customer but not a lock-in.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "OIDCClaimBinding circuit",
+          "type": "circuit",
+          "description": "Circom circuit that takes OIDC id_token claims (sub, iss, aud) as private inputs, hashes them into a commitment that binds to the existing HumanUniqueness identity secret. Outputs a claim_binding_hash public signal that the SDK can thread into createHumanIdentity. Uses Poseidon hashing already in the repo.",
+          "days": 5,
+          "reuses": "HumanUniqueness + Poseidon from circuits/src/"
+        },
+        {
+          "name": "OIDC-to-Bolyra bridge SDK module",
+          "type": "sdk",
+          "description": "New sdk/src/oidc-bridge.ts module: accepts a verified OIDC id_token (JWT already validated by the enterprise's existing middleware), extracts sub/iss/aud, derives the identity secret deterministically, calls createHumanIdentity, then createAgentCredential with the enterprise-scoped permission bitmask. No OIDC discovery or token validation \u2014 that stays in the enterprise's existing stack.",
+          "days": 4,
+          "reuses": "@bolyra/sdk createHumanIdentity + createAgentCredential"
+        },
+        {
+          "name": "Enterprise delegation flow",
+          "type": "sdk",
+          "description": "Thin wrapper around existing Delegation circuit: human (Okta-authenticated) delegates to agent with enterprise-admin-capped permissions. Wire up proveHandshake so the agent can prove authorization without leaking the Okta user identity. Mostly glue code \u2014 the circuit and SDK already handle scope narrowing.",
+          "days": 2,
+          "reuses": "Delegation circuit + proveHandshake"
+        },
+        {
+          "name": "OIDC claim binding spec appendix",
+          "type": "spec",
+          "description": "Appendix to draft-bolyra-mutual-zkp-auth-01 specifying the OIDC claim binding: how sub/iss/aud map to circuit inputs, the deterministic secret derivation, and the proof-of-enterprise-authorization flow. Pure technical specification work.",
+          "days": 2,
+          "reuses": "draft-bolyra-mutual-zkp-auth-01"
+        },
+        {
+          "name": "Integration test suite",
+          "type": "demo",
+          "description": "End-to-end test using a mock OIDC provider (static JWTs with known claims): OIDC login \u2192 identity creation \u2192 agent credential issuance \u2192 delegation \u2192 handshake verification. Runs in CI alongside existing test:circuits:fast. No real Okta tenant needed.",
+          "days": 3,
+          "reuses": "existing Mocha test infrastructure"
+        },
+        {
+          "name": "Enterprise bridge example",
+          "type": "demo",
+          "description": "examples/enterprise-oidc-bridge/ \u2014 standalone Node script demonstrating the full flow with a mock IdP. README with architecture diagram. Publishable as open-source technical reference.",
+          "days": 2,
+          "reuses": "examples/mcp-demo pattern"
+        }
+      ],
+      "total_days": 18,
+      "reuse_percentage": 72,
+      "risks": [
+        "OIDC secret derivation must be deterministic but not reversible \u2014 if the mapping from sub/iss to identity secret leaks, an attacker who knows the OIDC claims can impersonate. Needs proper domain separation in Poseidon hash.",
+        "Enterprise buyers may expect full OIDC discovery/validation inside the SDK, but that bloats scope and duplicates what their middleware already does. Must document the trust boundary clearly.",
+        "No real enterprise validation possible pre-EAD \u2014 the mock IdP tests prove correctness but not product-market fit. Risk of building something enterprises don't actually want to integrate.",
+        "Circuit compilation adds ~2min to CI for slow tests. OIDCClaimBinding is small (~500 constraints) but still needs zkey generation and verifier contract if on-chain verification is needed later."
+      ],
+      "success_criteria": "A developer can run the example script, see a complete OIDC-to-ZKP flow with mock tokens, and verify that: (1) the agent proof does not reveal the OIDC sub/iss, (2) scope narrowing is enforced by the delegation circuit, (3) handshake verification passes without any callback to the IdP, and (4) the spec appendix is self-contained enough for an independent implementation."
+    }
+  },
+  {
+    "id": "zeroid_interop",
+    "title": "ZKP Credential Bridge for Multi-Framework Agent Identity",
+    "description": "ZeroID, AIP, and OpenA2A all ship incompatible identity schemes. Bolyra's DID method and mutual-ZKP-auth draft can serve as the interop layer \u2014 agents prove credentials from any registry without revealing which one, enabling cross-framework trust.",
+    "category": "standards",
+    "source": "ZeroID: Open-source identity platform for autonomous AI agents",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 18,
+      "feasibility": 14,
+      "total": 50
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "WAIT_FOR_EAD",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no verifiable URLs were provided \u2014 ZeroID, AIP, and OpenA2A are nascent projects with no documented enterprise demand or named buyers seeking a cross-framework identity bridge.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were cited; these frameworks are pre-v1 with no published interop timeline, putting real demand 18+ months out.",
+      "fit": "AgentPolicy, Delegation, HumanUniqueness, and IdentityRegistry map directly with only minor modifications, and the framework-blind property is a genuine ZKP advantage over conventional federation.",
+      "feasibility": "The 8-day MVP is plausible given existing primitives, but depends on three external frameworks stabilizing their credential formats \u2014 adapter schemas against moving targets carry integration risk."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core proving primitive for cross-framework credential bridge. Agents from ZeroID, AIP, or OpenA2A register operator-signed credentials in Bolyra's agent tree, then prove policy compliance (permissions, expiry) without revealing which source registry issued the original credential. The selective disclosure capability (requiredScopeMask) lets a verifier confirm an agent has e.g. FINANCIAL_SMALL permission without learning the full bitmask or origin framework.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables cross-framework delegation chains. A human authenticated via ZeroID can delegate to an agent registered via AIP, with scope narrowing enforced at the circuit level. The 3-hop limit and one-way narrowing prevent privilege escalation across framework boundaries. The delegation token signature binds the chain regardless of which framework's identity primitive was used at each hop.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Anchors the human end of cross-framework handshakes. Semaphore v4 compatibility means any framework that supports Semaphore groups can interop at the human identity layer without modification. The scope-based nullifier prevents sybil attacks across frameworks while preserving unlinkability.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root of trust for the bridge. The dual-tree architecture (humanTree + agentTree) with root history buffers allows agents from different frameworks to be enrolled in the same Merkle tree. Atomic handshake verification ensures cross-framework trust is settled in a single transaction. Delegation nullifier replay protection prevents credential reuse across framework boundaries.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "The DID method is the interop identifier layer. Agents from ZeroID, AIP, or OpenA2A resolve to did:bolyra identifiers, abstracting away the source registry. DID resolution returns the credential commitment and Merkle proof without revealing the origin framework \u2014 this is the key privacy property that makes the bridge useful rather than just another wrapper.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The IETF draft defines the wire protocol for mutual ZKP authentication. For multi-framework interop, it provides a standardized handshake that any framework can implement without adopting Bolyra's full stack. The nonce binding and proof envelope format are framework-agnostic by design.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "SDK functions (createAgentCredential, proveHandshake, verifyHandshake) provide the developer-facing API for the bridge. Framework adapters (LangChain, CrewAI, OpenClaw) call these functions, so agents using any supported framework get ZKP-based trust verification without framework-specific code.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "RegistryBlinding circuit \u2014 proves an agent's credential commitment exists in one of N external registry Merkle trees without revealing which one. Takes N roots as public inputs, proves membership in exactly one via a multiplexer over N parallel Merkle membership checks. This is the core privacy primitive that makes 'prove credentials from any registry without revealing which one' possible. Estimated ~35K constraints for N=4 registries.",
+        "complexity": "high"
+      },
+      {
+        "type": "spec",
+        "description": "Credential Bridge Profile for draft-bolyra-mutual-zkp-auth \u2014 a profile document defining how ZeroID, AIP, and OpenA2A credentials map to Bolyra's credential commitment format (Poseidon hash of normalized fields), how external Merkle roots are attested on-chain, and the DID resolution algorithm for bridged identities. Includes registry root attestation cadence and staleness policy.",
+        "complexity": "medium"
+      },
+      {
+        "type": "contract",
+        "description": "ExternalRootOracle contract \u2014 accepts attested Merkle roots from ZeroID, AIP, and OpenA2A registries (via governance multisig or oracle). Stores the latest N roots per external registry. The RegistryBlinding circuit references these roots as public inputs. Includes a root expiry mechanism to bound staleness.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "bridgeCredential(externalCredential, sourceRegistry) \u2192 BridgedAgentCredential \u2014 normalizes an external credential into Bolyra's commitment format, generates the RegistryBlinding proof, and enrolls the bridged identity in the agent tree. Wraps the complexity of multi-registry proving behind a single function call.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "Framework-specific credential importers for ZeroID, AIP, and OpenA2A \u2014 thin adapters that extract the relevant identity fields (public key, permissions, expiry) from each framework's native format and pass them to bridgeCredential(). Each is ~200 lines; the complexity is in understanding each framework's identity model, not in the code.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. ZeroID, AIP, and OpenA2A each want to be the identity standard \u2014 Bolyra doesn't compete with them, it makes them interoperable. The key positioning insight: no framework will adopt a competitor's identity scheme, but all of them benefit from cross-framework trust. Bolyra becomes the neutral interop layer precisely because it's a privacy primitive, not an identity platform. The 'prove credentials from any registry without revealing which one' property is uniquely enabled by ZKP \u2014 no token-exchange or federation protocol can offer this. This positions Bolyra as infrastructure that grows with the number of incompatible frameworks rather than competing against them, turning fragmentation from a threat into a growth driver.",
+    "mvp": {
+      "deliverables": [
+        {
+          "name": "credential-adapter schema",
+          "type": "spec",
+          "description": "JSON schema defining how ZeroID, AIP, and OpenA2A credentials map to Bolyra's AgentPolicy inputs (modelHash, operatorPubKey, permissions bitmask, expiry). One adapter interface, three reference mappings.",
+          "days": 2,
+          "reuses": "AgentPolicy circuit + did:bolyra spec"
+        },
+        {
+          "name": "cross-framework enrollment SDK functions",
+          "type": "sdk",
+          "description": "Add enrollExternalAgent(credentialAdapter, sourceProof) to @bolyra/sdk that accepts a normalized credential from any supported framework, derives the Poseidon commitment, and inserts into the existing agentTree. Thin wrapper over createAgentCredential with adapter pre-processing.",
+          "days": 3,
+          "reuses": "@bolyra/sdk createAgentCredential + IdentityRegistry"
+        },
+        {
+          "name": "framework-blind proof demo",
+          "type": "demo",
+          "description": "CLI demo: enroll one agent via a mock ZeroID credential and one via a mock AIP credential, then run proveHandshake + verifyHandshake showing the verifier cannot distinguish which framework issued either credential. Uses existing circuits with no modifications.",
+          "days": 2,
+          "reuses": "HumanUniqueness + AgentPolicy circuits + proveHandshake/verifyHandshake"
+        },
+        {
+          "name": "DID resolution with source-blind metadata",
+          "type": "spec",
+          "description": "Extend did:bolyra resolution spec to include an optional frameworkHint field (for the credential holder only) while ensuring resolved DID documents never leak source registry. Document the privacy properties.",
+          "days": 1,
+          "reuses": "did:bolyra spec"
+        },
+        {
+          "name": "interop test vectors",
+          "type": "spec",
+          "description": "Conformance test vectors: 3 frameworks \u00d7 2 permission levels \u00d7 handshake success/failure = 12 vectors in spec/test-vectors/interop/. Machine-readable JSON matching existing conformance runner format.",
+          "days": 2,
+          "reuses": "spec/conformance runner"
+        },
+        {
+          "name": "technical blog post",
+          "type": "docs",
+          "description": "Blog post explaining the credential bridge architecture, why ZKP-based interop beats wrapper approaches, with diagrams. Educational framing, no commercial CTA.",
+          "days": 1,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 11,
+      "reuse_percentage": 82,
+      "risks": [
+        "ZeroID, AIP, and OpenA2A credential formats are moving targets \u2014 adapter schemas may need frequent updates before any framework stabilizes",
+        "No web search evidence of actual demand; the 18+ month timing assessment means early work may sit unused",
+        "Solo founder time spent on interop spec competes with core protocol hardening (circuit audits, contract deployment)",
+        "Without real framework partners testing the bridge, test vectors are self-referential \u2014 they prove internal consistency, not actual interop"
+      ],
+      "success_criteria": "A developer holding credentials from any of the three frameworks can run the CLI demo end-to-end: enroll \u2192 prove \u2192 verify, with the verifier unable to determine the source framework. Conformance test vectors pass. At least one external developer (from ZeroID, AIP, or OpenA2A community) reviews the adapter schema and confirms it accurately represents their credential format."
+    }
+  },
+  {
+    "id": "langchain_zkp_auth",
+    "title": "ZKP Auth Middleware for LangChain/LangGraph Agents",
+    "description": "Arcade and LangChain docs reveal that OAuth token management kills production agents. Bolyra's handshake protocol can replace per-service OAuth with a single ZKP credential that proves authorization scope without exposing tokens to the agent runtime.",
+    "category": "developer_tools",
+    "source": "Agent Auth: The Problem That Kills Production Agents",
+    "scores": {
+      "demand": 8,
+      "timing": 10,
+      "fit": 18,
+      "feasibility": 10,
+      "total": 46
+    },
+    "verdict": "DROP",
+    "ead_classification": "GREY_ZONE",
+    "rationale": {
+      "demand": "Web search evidence returned zero results and no URLs were provided \u2014 the claim that OAuth token management kills production agents is plausible but entirely unsubstantiated by verifiable sources.",
+      "timing": "No competitor launch dates, standard milestones, or regulatory deadlines were cited; the timing argument is speculative with no concrete anchors.",
+      "fit": "AgentPolicy, Delegation, and HumanUniqueness map directly to the LangChain agent authorization use case with minimal new circuit work needed, though the advantage over conventional OAuth scoping remains unproven in practice.",
+      "feasibility": "MVP spec generation failed entirely, producing zero deliverables and no timeline, making it impossible to assess build effort or reuse percentage."
+    },
+    "evidence": [],
+    "demand_strength": "none",
+    "timing_assessment": "18_plus_months",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "LangChain agents prove they hold specific permission scopes (e.g. FINANCIAL_SMALL, READ_DATA) to downstream tool APIs via PLONK proof \u2014 replaces per-service OAuth tokens with a single ZKP credential. The selective disclosure capability lets agents prove requiredScopeMask bits without revealing full permissions, which is exactly what tool-level authorization needs.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The human operator who deployed the LangChain agent proves enrollment once; this anchors the delegation chain. The nullifier prevents the same human from spawning unlimited unlinked agent identities within a given scope (sybil resistance for agent fleets).",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Human operator delegates a narrowed permission subset to the LangChain agent, which can sub-delegate further to LangGraph sub-agents (tool-calling nodes). The 3-hop limit maps naturally to operator \u2192 orchestrator agent \u2192 tool-calling sub-agent. Scope narrowing ensures a sub-agent calling a payments API can never escalate beyond the permissions the orchestrator was granted.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "On-chain root history buffers let tool APIs verify agent proofs against recent Merkle roots without needing a direct connection to the operator. Atomic handshake verification enables a tool endpoint to verify both the human anchor and the agent credential in a single call.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createAgentCredential and proveHandshake are the direct API surface the LangChain integration wraps. The existing error classes (ExpiredCredentialError, ScopeEscalationError, InvalidPermissionError) map 1:1 to LangChain tool error handling patterns.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "langchain-bolyra-tool",
+        "usage": "Stub already exists in integrations/langchain/. This is the exact integration point \u2014 needs to be promoted from stub to a working BaseTool that wraps credential presentation and proof generation.",
+        "modification_needed": "major"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "integration",
+        "description": "LangChain auth middleware (CallbackHandler or RunnableBinding) that intercepts tool invocations, generates AgentPolicy proofs scoped to the tool's required permissions, and attaches proof artifacts to the request. Must handle proof caching (proofs valid for same scope+nonce window shouldn't regenerate) and graceful degradation when circuit artifacts aren't available.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "LangGraph checkpoint-aware credential manager \u2014 stores delegation tokens in LangGraph's State so sub-graph nodes inherit narrowed credentials without re-proving. Needs to hook into LangGraph's state serialization and handle credential expiry across long-running graph executions.",
+        "complexity": "medium"
+      },
+      {
+        "type": "sdk",
+        "description": "Server-side verification middleware (Express/FastAPI) that tool API providers install to verify incoming Bolyra proofs instead of validating OAuth tokens. Essentially a verifyHandshake wrapper with HTTP request/response bindings and standard error responses.",
+        "complexity": "low"
+      },
+      {
+        "type": "spec",
+        "description": "Extension to draft-bolyra-mutual-zkp-auth-01 defining the HTTP header format for carrying ZKP proofs in tool API calls (e.g. Authorization: Bolyra <proof-bundle>), including proof freshness requirements and scope negotiation flow between agent and tool endpoint.",
+        "complexity": "medium"
+      },
+      {
+        "type": "integration",
+        "description": "LangSmith/LangFuse observability hooks that log proof generation events, scope narrowing decisions, and verification failures as trace metadata \u2014 critical for production debugging without leaking private inputs.",
+        "complexity": "low"
+      }
+    ],
+    "positioning_alignment": "This is a textbook privacy-layer-under-incumbents play. LangChain has 90K+ GitHub stars and massive framework lock-in but zero auth infrastructure \u2014 they explicitly punt to Arcade/OAuth. By shipping as a middleware package that LangChain developers pip-install, Bolyra becomes the invisible auth layer without competing for framework mindshare. The key strategic wedge: OAuth tokens in agent runtimes are a known attack surface (prompt injection \u2192 token exfiltration). Bolyra's ZKP approach means the agent runtime never holds bearer tokens \u2014 it holds a proving key that can only generate scope-limited proofs. This is a security property OAuth fundamentally cannot provide, giving Bolyra a defensible technical moat rather than just a convenience wrapper. The LangChain integration also creates a distribution flywheel: every tool API that accepts Bolyra proofs (instead of OAuth) becomes a pull signal for more agents to adopt the middleware, and vice versa \u2014 classic two-sided network effect seeded from the agent framework side where adoption friction is lowest.",
+    "mvp": {
+      "deliverables": [],
+      "total_days": 0,
+      "reuse_percentage": 0,
+      "risks": [
+        "no JSON object found in response"
+      ],
+      "success_criteria": "unknown"
+    }
+  }
+]

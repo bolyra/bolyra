@@ -1,0 +1,56 @@
+{
+  "id": "formal_verifier_field_overflow_public_signal_binding",
+  "title": "Public signal field overflow allows Solidity/circuit semantic mismatch",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add BN254 scalar field bound constant (r = 21888242871839275222246405745257275088548364400416034343698204186575808495617) and require(pubSignal < FIELD_MODULUS) checks for all public inputs (sessionNonce, currentTimestamp, humanMerkleRoot, nullifierHash, nonceBinding, agentCommitment, permissionBits, expiry) before passing to verifier contracts."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/FieldBoundLib.sol",
+      "description": "Minimal library exporting FIELD_MODULUS constant and assertInField(uint256) helper. Centralizes the bound so HumanUniquenessVerifier, AgentPolicyVerifier, and DelegationVerifier wrappers can all import from one source."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/FieldOverflow.test.ts",
+      "description": "Hardhat tests: (1) submit sessionNonce = n (valid, succeeds), (2) submit sessionNonce = n + r (reverts with FieldOverflow), (3) submit currentTimestamp = 2^256-1 (reverts), (4) submit each public signal at FIELD_MODULUS-1 (boundary pass), confirming nonce deduplication is not bypassable via modular wrap."
+    },
+    {
+      "type": "spec",
+      "filename": "contracts/certora/specs/FieldBound.spec",
+      "description": "Certora Prover CVL rule: for any call to verifyProof(), assert that all public signal arguments are strictly less than FIELD_MODULUS. Also assert that two distinct uint256 values that differ by r cannot both reach the verifier (proving usedNonces cannot be bypassed)."
+    },
+    {
+      "type": "spec",
+      "filename": "contracts/certora/confs/FieldBound.conf",
+      "description": "Certora configuration file: links IdentityRegistry + FieldBoundLib with the spec, sets solc version, loop unrolling, and optimistic fallback settings."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/security/field-overflow-mitigation.md",
+      "description": "Short security note documenting the BN254 field bound invariant, which contract functions enforce it, Certora rule reference, and why the check must happen before the verifier call (not inside it)."
+    }
+  ],
+  "steps": [
+    "Identify every public input accepted by IdentityRegistry: sessionNonce, currentTimestamp, humanMerkleRoot, nullifierHash, nonceBinding, agentCommitment, permissionBits, expiry \u2014 confirm list against circuit public output declarations in HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom.",
+    "Create contracts/src/FieldBoundLib.sol exporting FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617 and an assertInField(uint256 v) function that reverts with a named error FieldModulusExceeded(uint256 value) if v >= FIELD_MODULUS.",
+    "Import FieldBoundLib in IdentityRegistry.sol; call assertInField() on every public input parameter at the top of each external function that accepts public signals (proveHandshake, verifyHandshake, registerHuman, registerAgent, etc.) before any other logic including usedNonces checks.",
+    "Write Hardhat tests in contracts/test/FieldOverflow.test.ts covering: valid n passes, n+r reverts, 2^256-1 reverts, each individual signal at boundary (FIELD_MODULUS-1) passes, confirm usedNonces[n] is set and usedNonces[n+r] cannot bypass it.",
+    "Run npm run test:contracts to confirm all new tests pass and no existing tests regress.",
+    "Write Certora spec contracts/certora/specs/FieldBound.spec with two rules: (1) publicSignalsInField \u2014 for all reachable states, any public signal arg reaching verifier.verifyProof() is < FIELD_MODULUS; (2) nonceNonBypassable \u2014 there is no pair (n, n+r) both accepted as distinct nonces in usedNonces.",
+    "Create contracts/certora/confs/FieldBound.conf and run certoraRun to verify both rules hold; iterate on spec if counterexamples surface.",
+    "Add a note to SECURITY.md under 'Field Arithmetic Invariants' cross-referencing FieldBoundLib and the Certora spec.",
+    "Write docs/security/field-overflow-mitigation.md explaining the BN254 scalar field gap, the attack vector (nonce wrap), and the fix.",
+    "Commit with DCO sign-off: git commit -s -m 'fix(contracts): reject public signals >= BN254 field modulus to prevent nonce bypass'"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "BN254 scalar field modulus constant (r = 21888242871839275222246405745257275088548364400416034343698204186575808495617)",
+    "Hardhat test environment (contracts/)",
+    "Certora Prover CLI (certoraRun) with valid API key",
+    "Existing verifier contracts (HumanUniquenessVerifier, AgentPolicyVerifier, DelegationVerifier) generated from current .zkey files",
+    "Public input lists from HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom"
+  ]
+}

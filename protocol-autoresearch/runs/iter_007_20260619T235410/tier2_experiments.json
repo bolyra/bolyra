@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Define application/bolyra-proof+cbor content type and envelope format",
+      "dimension": "standards",
+      "description": "The protocol lacks a standardized wire format for proof exchange. Define an IANA-registrable media type application/bolyra-proof+cbor with a CDDL schema covering the three proof types (human, agent, delegation). The envelope should include: proof bytes, public signals array, circuit identifier, proving system tag (groth16/plonk), and a version field. This enables interop between implementations without out-of-band coordination on serialization. Artifact: spec/proof-envelope.cddl + updates to draft-bolyra-mutual-zkp-auth-01.md Section 6.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 15,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 16,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_000_standards_architect_proof_envelope_content_type",
+    "score": {
+      "experiment_id": "tier2_000_standards_architect_proof_envelope_content_type",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete DID resolution algorithm with verification method binding",
+      "dimension": "standards",
+      "description": "spec/did-method-bolyra.md defines did:bolyra but lacks a concrete resolution algorithm mapping on-chain state to DID Documents. Specify: (1) how humanMerkleRoot and agentMerkleRoot map to verification methods, (2) the service endpoint for proof submission, (3) deactivation semantics when a nullifier is revoked. Without this, no universal resolver can implement did:bolyra. Artifact: updated spec/did-method-bolyra.md with Resolution, Deactivation, and Security Considerations sections per W3C DID Core \u00a77-8.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 14,
+      "standards": 22,
+      "completeness": 19,
+      "correctness": 15,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_001_standards_architect_did_resolution_algorithm",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_did_resolution_algorithm",
+      "total": 52,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 13,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 20,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "product_visionary_session_token_offchain",
+      "persona": "product_visionary",
+      "title": "Off-chain session token with on-chain checkpoint batching",
+      "dimension": "completeness",
+      "description": "After a successful handshake, emit a signed session token (JWT/SD-JWT with the nullifier, scopeCommitment, and expiry embedded) that parties can verify off-chain for subsequent calls within the session window. Batch session roots on-chain every N minutes. This eliminates per-call proving cost \u2014 the single biggest adoption blocker for agentic commerce where agents make dozens of tool calls per minute. Implement in the TS SDK as `createSessionToken()` and `verifySessionToken()`, with a new `SessionCheckpoint.sol` contract that accepts Merkle roots of verified sessions.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "product_visionary_session_token_offchain",
+      "adoption": 23,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 14,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_002_product_visionary_session_token_offchain",
+    "score": {
+      "experiment_id": "tier2_002_product_visionary_session_token_offchain",
+      "total": 26,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 12,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 3,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Machine-readable conformance test vectors for all three circuits",
+      "dimension": "standards",
+      "description": "No independent implementation can verify compatibility without standardized test vectors. Produce a spec/test-vectors/ directory with JSON files covering: valid handshake (human+agent), expired credential rejection, stale root rejection, scope subset violation, cumulative bit encoding violation, delegation chain (1-hop and 3-hop), and nonce replay. Each vector includes input signals, expected outputs, and expected pass/fail. This is the minimum bar for any second implementation to claim conformance.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 15,
+      "standards": 21,
+      "completeness": 19,
+      "correctness": 14,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_003_standards_architect_conformance_test_vectors",
+    "score": {
+      "experiment_id": "tier2_003_standards_architect_conformance_test_vectors",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Specify human tree root history buffer matching agent tree",
+      "dimension": "correctness",
+      "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but none for humanTree. The contract comment says 'humanTree uses Semaphore's' but the deployed code uses a standalone LeanIMT with no history. Any new human enrollment immediately invalidates in-flight proofs. Add a parallel ROOT_HISTORY_SIZE buffer for humanTree roots in the registry, and update the IETF draft's Security Considerations to document the staleness window. This is a protocol-level correctness gap, not just an implementation detail.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 18,
+      "standards": 14,
+      "completeness": 16,
+      "correctness": 20,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_004_standards_architect_human_root_history_parity",
+    "score": {
+      "experiment_id": "tier2_004_standards_architect_human_root_history_parity",
+      "total": 46,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 10,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 17,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_scope_blinding_salt",
+      "persona": "standards_architect",
+      "title": "Add blinding salt to scope commitment to prevent bitmask enumeration",
+      "dimension": "correctness",
+      "description": "scopeCommitment = Poseidon(permissionBitmask, credentialCommitment) in AgentPolicy.circom uses only two inputs. Since permissionBitmask is 8 meaningful bits (256 values), an observer can brute-force all possible commitments against a known credentialCommitment to recover the exact permission set. Add a random blinding salt as a third Poseidon input: Poseidon3(bitmask, credCommitment, blindingSalt). The salt becomes a private input; the commitment remains public. Update Delegation.circom to thread the salt through the chain. Document the enumeration attack and mitigation in the IETF draft \u00a79 Security Considerations.",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_scope_blinding_salt",
+      "adoption": 15,
+      "standards": 17,
+      "completeness": 18,
+      "correctness": 18,
+      "total": 68,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_005_standards_architect_scope_blinding_salt",
+    "score": {
+      "experiment_id": "tier2_005_standards_architect_scope_blinding_salt",
+      "total": 46,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 13,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 16,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 15,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_nullifier_domain_separation",
+      "persona": "formal_verifier",
+      "title": "Add domain separation tags to all nullifier hash computations",
+      "dimension": "correctness",
+      "description": "HumanUniqueness computes nullifier as Poseidon2(scope, secret) and AgentPolicy computes it as Poseidon2(secret, sessionNonce). Both use Poseidon2 with no domain separator, meaning a collision is possible if an agent's (secret, sessionNonce) pair equals a human's (scope, secret) pair \u2014 the nullifier spaces overlap. Prepend a unique domain tag constant (e.g., 0xHUMAN, 0xAGENT, 0xDELEG) as the first Poseidon input to each nullifier computation across all three circuits. This is a standard formal verification finding: hash function domain separation prevents cross-protocol nullifier confusion.",
+      "priority": "high",
+      "estimated_effort": "hours",
+      "candidate_id": "formal_verifier_nullifier_domain_separation",
+      "adoption": 14,
+      "standards": 16,
+      "completeness": 15,
+      "correctness": 21,
+      "total": 66,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_006_formal_verifier_nullifier_domain_separation",
+    "score": {
+      "experiment_id": "tier2_006_formal_verifier_nullifier_domain_separation",
+      "total": 24,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 2,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "security_auditor_nullifier_cross_session_linkability",
+      "persona": "security_auditor",
+      "title": "HumanUniqueness nullifier is constant across sessions, enabling cross-verifier linkability",
+      "dimension": "correctness",
+      "description": "The HumanUniqueness nullifier is `Poseidon2(scope, secret)` where scope is a constant like `hash('bolyra-handshake-v1')`. This means every handshake by the same human produces the identical nullifier, allowing colluding verifiers (or a single verifier across sessions) to link all activity to the same pseudonymous identity. The nonceBinding output prevents replay but does NOT prevent linkability. Fix: derive the nullifier as `Poseidon3(scope, secret, sessionNonce)` so each session produces a unique nullifier. Then use a separate `externalNullifier = Poseidon2(scope, secret)` checked on-chain only for revocation/sybil gating, not exposed to the verifier. This preserves sybil resistance while breaking cross-session linkability.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "security_auditor_nullifier_cross_session_linkability",
+      "adoption": 16,
+      "standards": 14,
+      "completeness": 18,
+      "correctness": 19,
+      "total": 67,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_007_security_auditor_nullifier_cross_session_linkability",
+    "score": {
+      "experiment_id": "tier2_007_security_auditor_nullifier_cross_session_linkability",
+      "total": 46,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 15,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 14,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 15,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

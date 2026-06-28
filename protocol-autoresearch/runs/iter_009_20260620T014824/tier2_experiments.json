@@ -1,0 +1,338 @@
+[
+  {
+    "candidate": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Machine-readable conformance test vectors (JSON, 50+ cases)",
+      "dimension": "standards",
+      "description": "No independent implementation can verify compatibility without canonical test vectors. Create a spec/test-vectors/ directory with JSON files covering: valid handshake (human+agent), expired credential rejection, revoked human nullifier, stale Merkle root (both trees), scope subset violation, cumulative bit encoding violation, delegation chain at depths 1/2/3 and rejection at depth 4, nonce replay, and the phantom delegatee attack (now fixed by CIP-1). Each vector includes: circuit inputs, expected public outputs or expected failure reason, and a ground-truth proof for positive cases. Deliver: JSON schema for test vector format, 50+ vectors, and a runner script that validates against snarkjs.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 15,
+      "standards": 24,
+      "completeness": 20,
+      "correctness": 20,
+      "total": 79,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_000_standards_architect_conformance_test_vectors",
+    "score": {
+      "experiment_id": "tier2_000_standards_architect_conformance_test_vectors",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_session_token_offchain",
+      "persona": "standards_architect",
+      "title": "SD-JWT-based session token for off-chain verifiers",
+      "dimension": "standards",
+      "description": "On-chain verification is expensive and unnecessary for many use cases (API gateways, MCP servers). Define a standardized SD-JWT (IETF draft-ietf-oauth-selective-disclosure-jwt) session token that an on-chain verifier mints after a successful handshake: claims include nullifierHash, scopeCommitment, agentMerkleRoot, and exp. Off-chain verifiers check the JWT signature against the registry's signing key without touching the chain. This bridges Bolyra into the existing OAuth/OIDC ecosystem. Deliver: JWT claim set spec, issuance flow in IdentityRegistry (or a companion Relayer contract), and SDK method verifySessionToken().",
+      "priority": "medium",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_session_token_offchain",
+      "adoption": 21,
+      "standards": 20,
+      "completeness": 19,
+      "correctness": 16,
+      "total": 76,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_001_standards_architect_session_token_offchain",
+    "score": {
+      "experiment_id": "tier2_001_standards_architect_session_token_offchain",
+      "total": 29,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 5,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 11,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Define application/bolyra-proof+cbor content type and envelope format",
+      "dimension": "standards",
+      "description": "The protocol lacks a standardized wire format for transmitting proofs between parties. Define a CBOR-based proof envelope with registered IANA media type application/bolyra-proof+cbor, containing fields: proof_system (groth16|plonk), circuit_id, public_signals[], proof_bytes, and metadata (version, timestamp). This enables HTTP-based interop without bespoke JSON parsing and aligns with IETF draft Section 6 (Wire Format) which is currently a stub. Deliver: ABNF grammar, CDDL schema, and a conformance check in the test vectors runner.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 17,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 75,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_002_standards_architect_proof_envelope_content_type",
+    "score": {
+      "experiment_id": "tier2_002_standards_architect_proof_envelope_content_type",
+      "total": 54,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 13,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 16,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 23,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "sdk_designer_session_token_offchain",
+      "persona": "sdk_designer",
+      "title": "SD-JWT session token for off-chain proof reuse",
+      "dimension": "adoption",
+      "description": "After a successful handshake, emit an SD-JWT (Selective Disclosure JWT) session token that encodes the verified nullifiers, scope commitment, and expiry. Subsequent API calls within the session present the compact JWT instead of re-running the full ZKP verification. This bridges the gap between ZKP correctness and practical latency requirements: the initial handshake takes ~2s with rapidsnark, but follow-up calls verify in <1ms. The Python SDK already depends on PyJWT; add sd-jwt support to both SDKs with a verifySessionToken() helper.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_session_token_offchain",
+      "adoption": 21,
+      "standards": 17,
+      "completeness": 20,
+      "correctness": 16,
+      "total": 74,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_003_sdk_designer_session_token_offchain",
+    "score": {
+      "experiment_id": "tier2_003_sdk_designer_session_token_offchain",
+      "total": 43,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 9,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 18,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 14,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete DID method resolution algorithm per W3C DID Core \u00a77.1",
+      "dimension": "standards",
+      "description": "spec/did-method-bolyra.md defines the DID syntax (did:bolyra:<commitment>) but lacks the required resolution algorithm: how a resolver maps a DID to a DID Document by querying the IdentityRegistry contract's Merkle roots and revocation status. Implement the read() method per W3C DID Resolution spec, define the DID Document structure (verificationMethod using JsonWebKey2020 for the Baby Jubjub key, service endpoints for handshake initiation), and add deactivated metadata when IdentityRevoked fires. Deliver: updated spec file, a reference resolver in TypeScript, and 5 test vectors (active human, active agent, revoked, not-found, stale-root).",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 16,
+      "standards": 23,
+      "completeness": 21,
+      "correctness": 17,
+      "total": 77,
+      "verdict": "promote"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_004_standards_architect_did_resolution_algorithm",
+    "score": {
+      "experiment_id": "tier2_004_standards_architect_did_resolution_algorithm",
+      "total": 46,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 12,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 17,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 15,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "formal_verifier_circuit_invariant_properties",
+      "persona": "formal_verifier",
+      "title": "Machine-checkable circuit invariant property file for all circuits",
+      "dimension": "standards",
+      "description": "Create a circuits/FORMAL-PROPERTIES.md (or extend the existing stub) with machine-checkable invariant properties expressed in a format compatible with Circomspect or Picus. Properties to cover: (1) no signal can exceed BN254 field order r, (2) nullifierHash is deterministic given (identity, scope/nonce), (3) credentialCommitment uniquely binds all 5 credential fields, (4) Merkle root output changes if any sibling changes (non-malleability), (5) scope commitment binds both the bitmask and the credential identity. Provide a CI script that runs Circomspect --sarif on all .circom files and gates on zero high-severity findings.",
+      "priority": "medium",
+      "estimated_effort": "week",
+      "candidate_id": "formal_verifier_circuit_invariant_properties",
+      "adoption": 14,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 17,
+      "total": 70,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_005_formal_verifier_circuit_invariant_properties",
+    "score": {
+      "experiment_id": "tier2_005_formal_verifier_circuit_invariant_properties",
+      "total": 22,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 4,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 5,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "standards_architect_human_root_history_parity",
+      "persona": "standards_architect",
+      "title": "Add human tree root history buffer matching agent tree's 30-root buffer",
+      "dimension": "correctness",
+      "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but humanTree has no equivalent \u2014 any new enrollment immediately invalidates all in-flight human proofs. This is an interop hazard: a compliant prover generating a proof during an enrollment window gets a spurious rejection. Add the same ROOT_HISTORY_SIZE=30 circular buffer to humanTree with an isKnownHumanRoot() check in verifyHandshake(). This is a one-line architectural parity fix but has significant correctness impact. Deliver: contract change, updated test coverage, and a note in the IETF draft Security Considerations about root staleness windows.",
+      "priority": "critical",
+      "estimated_effort": "hours",
+      "candidate_id": "standards_architect_human_root_history_parity",
+      "adoption": 14,
+      "standards": 16,
+      "completeness": 15,
+      "correctness": 22,
+      "total": 67,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_006_standards_architect_human_root_history_parity",
+    "score": {
+      "experiment_id": "tier2_006_standards_architect_human_root_history_parity",
+      "total": 23,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 8,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 11,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 2,
+          "max_points": 25
+        }
+      }
+    }
+  },
+  {
+    "candidate": {
+      "id": "sdk_designer_proof_envelope_codec",
+      "persona": "sdk_designer",
+      "title": "Type-safe proof envelope codec with serialize/deserialize",
+      "dimension": "adoption",
+      "description": "The SDK currently passes raw proof arrays and public signal tuples between proveHandshake() and verifyHandshake(). Add a BolyraProofEnvelope type with toJSON()/fromJSON()/toBytes()/fromBytes() methods that bundle the proof, public signals, circuit type, and protocol version into a single portable object. This eliminates the most common integration mistake: misaligning signal indices when passing proofs across service boundaries (HTTP, message queues, MCP tool results).",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_proof_envelope_codec",
+      "adoption": 22,
+      "standards": 14,
+      "completeness": 17,
+      "correctness": 18,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "experiment_dir": "/Users/lordviswa/Projects/bolyra/protocol-autoresearch/experiments/tier2_007_sdk_designer_proof_envelope_codec",
+    "score": {
+      "experiment_id": "tier2_007_sdk_designer_proof_envelope_codec",
+      "total": 25,
+      "verdict": "drop",
+      "dimensions": {
+        "correctness": {
+          "points": 2,
+          "max_points": 25
+        },
+        "completeness": {
+          "points": 3,
+          "max_points": 25
+        },
+        "adoption": {
+          "points": 13,
+          "max_points": 25
+        },
+        "standards": {
+          "points": 7,
+          "max_points": 25
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bolyra.ai/schemas/proof-envelope/v1",
+  "title": "Bolyra Proof Envelope v1",
+  "description": "Versioned proof envelope for application/bolyra-proof+json and application/bolyra-proof+cbor media types",
+  "type": "object",
+  "required": ["version", "circuitId", "provingSystem", "publicSignals", "proof", "metadata"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+      "description": "Semantic version of the envelope schema"
+    },
+    "circuitId": {
+      "type": "string",
+      "format": "uri",
+      "description": "URI identifying the circuit (e.g. bolyra:circuit:HumanUniqueness)",
+      "enum": [
+        "bolyra:circuit:HumanUniqueness",
+        "bolyra:circuit:AgentPolicy",
+        "bolyra:circuit:Delegation"
+      ]
+    },
+    "provingSystem": {
+      "type": "string",
+      "enum": ["groth16", "plonk"],
+      "description": "Zero-knowledge proving system used to generate the proof"
+    },
+    "publicSignals": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9]+$"
+      },
+      "description": "Array of public signal values as decimal strings"
+    },
+    "proof": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/groth16Proof"
+        },
+        {
+          "$ref": "#/$defs/plonkProof"
+        }
+      ],
+      "description": "Proof object whose shape depends on provingSystem"
+    },
+    "metadata": {
+      "$ref": "#/$defs/envelopeMetadata"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "provingSystem": { "const": "groth16" } }
+      },
+      "then": {
+        "properties": { "proof": { "$ref": "#/$defs/groth16Proof" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "provingSystem": { "const": "plonk" } }
+      },
+      "then": {
+        "properties": { "proof": { "$ref": "#/$defs/plonkProof" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "circuitId": { "const": "bolyra:circuit:HumanUniqueness" } }
+      },
+      "then": {
+        "properties": { "provingSystem": { "const": "groth16" } }
+      }
+    }
+  ],
+  "$defs": {
+    "groth16Proof": {
+      "type": "object",
+      "required": ["pi_a", "pi_b", "pi_c", "protocol"],
+      "additionalProperties": false,
+      "properties": {
+        "pi_a": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "G1 point [x, y, z]"
+        },
+        "pi_b": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "G2 point [[x0, x1], [y0, y1], [z0, z1]]"
+        },
+        "pi_c": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "G1 point [x, y, z]"
+        },
+        "protocol": {
+          "type": "string",
+          "const": "groth16"
+        },
+        "curve": {
+          "type": "string",
+          "const": "bn128"
+        }
+      }
+    },
+    "plonkProof": {
+      "type": "object",
+      "required": ["A", "B", "C", "Z", "T1", "T2", "T3", "Wxi", "Wxiw", "eval_a", "eval_b", "eval_c", "eval_s1", "eval_s2", "eval_zw", "protocol"],
+      "additionalProperties": false,
+      "properties": {
+        "A": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "B": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "C": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "Z": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "T1": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "T2": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "T3": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "Wxi": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "Wxiw": { "type": "array", "items": { "type": "string" }, "minItems": 3, "maxItems": 3 },
+        "eval_a": { "type": "string" },
+        "eval_b": { "type": "string" },
+        "eval_c": { "type": "string" },
+        "eval_s1": { "type": "string" },
+        "eval_s2": { "type": "string" },
+        "eval_zw": { "type": "string" },
+        "eval_r": { "type": "string" },
+        "protocol": {
+          "type": "string",
+          "const": "plonk"
+        },
+        "curve": {
+          "type": "string",
+          "const": "bn128"
+        }
+      }
+    },
+    "envelopeMetadata": {
+      "type": "object",
+      "required": ["issuedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "chain": {
+          "type": "integer",
+          "description": "EIP-155 chain ID (e.g. 84532 for Base Sepolia)"
+        },
+        "registryAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$",
+          "description": "On-chain registry contract address"
+        },
+        "issuedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix timestamp in milliseconds when proof was generated"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_underconstrained_merkle_depth",
+  "persona": "formal_verifier",
+  "title": "Prove BinaryMerkleRoot depth parameter cannot be manipulated to accept invalid proofs",
+  "dimension": "correctness",
+  "description": "The `merkleProofLength` input in all three circuits controls how many siblings are actually used by BinaryMerkleRoot, but there is no constraint that `merkleProofLength` matches the expected tree depth. An attacker could supply a shorter proof path against a subtree root that happens to be in the root history buffer. Write a formal property (Certora-style invariant or circom assert) proving that for any accepted witness, the Merkle root output corresponds to a tree of exactly the deployed depth, or add an equality constraint `merkleProofLength === EXPECTED_DEPTH` to each circuit.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_underconstrained_merkle_depth",
+  "adoption": 14,
+  "standards": 15,
+  "completeness": 18,
+  "correctness": 22,
+  "total": 69,
+  "verdict": "consider"
+}

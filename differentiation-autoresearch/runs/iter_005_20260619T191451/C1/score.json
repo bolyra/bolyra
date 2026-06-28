@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps vs RFC 7662 \u2014 AS-blind presentation, runtime-supplied predicates unknown at issuance, and proof malleation resistance. The rfc7662_advocate confirms the construction survives on adversarial-AS and RS-supplied runtime predicates. However, the spiffe_engineer's Attack 1 shows SD-JWT+WIMSE already delivers AS-blind selective disclosure; the construction conflates no-roundtrip with zero-knowledge without explicitly naming 'RS learns only pred(perm_set)=1' as the differentiator. The auth0_pm's Attack 2 shows RFC 8707+RFC 9068 covers per-RS offline scope filtering. The surviving differentiator (ZK predicate evaluation where RS learns nothing beyond the bit, + adversarial-AS model) is real but not crisply stated as the primary claim. Baseline can approximate with extra configuration (SD-JWT gets close), but cannot fully match ZK predicate evaluation. Score 1, not 2, because the construction as described does not cleanly rule out the baseline \u2014 it leaves the conflation unresolved."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The refinement summary describes a threat model (multi-query adversary), names cryptographic assumptions (PLONK SE in AGM+ROM per Faust et al. 2022, Poseidon PRF security), provides a reduction bound (|Pr[A wins] - 1/2| \u2264 Adv_PLONK_SE_ZK + 4q\u00b7Adv_Poseidon_PRF), and extends the hybrid argument to 7 steps. However, the cryptographer's Attack 1 shows the mqSE-IND game does not model AS+RS collusion despite the candidate claiming 'AS is semi-trusted' \u2014 the PRF key recovery via 8-bit brute force is devastating. Attack 2 shows the model mismatch: Poseidon's PRF security in AGM is not established, and the reduction mixes model-dependent assumptions without clean separation. Attack 3 shows the adversarial-AS claim collapses if AS controls the SRS. The threat model is stated but assumptions are vague or the reduction has identified gaps. Score 1."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The construction maps to existing Bolyra primitives \u2014 PLONK AgentPolicy circuit, Poseidon hash, BabyJubjub EdDSA, 8-bit cumulative bitmask. The refinement explicitly states 'no new gadgets, no new claims' and leverages the existing PLONK choice. However, circuit cost is not stated in the construction. The auth0_pm's Attack 4 notes proving latency of 10-30s per proof with no batching or pre-computation strategy proposed. The spiffe_engineer's Attack 2 notes the 2^64 scenario is not backed by an actual circuit. The cryptographer's Attack 4 confirms proof generation cost is superlinear in predicate complexity. Cost is unknown or exceeds budget for the agentic latency use case. Score 1."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex adversary ran 5 personas. The rfc7662_advocate's 4 attacks all conclude 'in-threat-model: Yes' \u2014 the construction survives those, though with caveats requiring restructuring. However, multiple attacks across other personas are explicitly 'in-threat-model: No': cryptographer Attack 1 (AS+RS collusion breaks PRF assumption on 8-bit space), cryptographer Attack 2 (AGM+ROM model mismatch for Poseidon), cryptographer Attack 3 (subverted SRS breaks adversarial-AS claim), auth0_pm Attack 1 (audit trail gap), cu_ciso Attacks 1-4 (regulatory mapping vacuum), spiffe_engineer Attack 1 (SD-JWT covers AS-blind). The construction mitigates some attacks but real attacks weaken multiple claims. Score 1."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: (1) regulated agent with 2^64 permission space, (2) semi-trusted AS. The spiffe_engineer's Attack 2 dismantles scenario 1 as a strawman \u2014 the circuit only handles 8 bits, and the 2^64 claim is marketing. The cu_ciso attacks show the credit union deployment scenario has fatal regulatory gaps (no audit trail, no FFIEC CAT mapping, no FIPS validation, no BCP for on-chain dependency). The rfc7662_advocate's Attack 4 suggests replacing with 'RS-supplied runtime predicate unknown to AS at issuance' \u2014 a real pattern but not yet named in the construction. Scenarios are named but only hypothetical or niche as currently framed. Score 1."
+    }
+  },
+  "gaps": [
+    "Tighten baseline differentiator: replace 'AS-blind presentation' with 'zero-knowledge predicate evaluation where RS learns only pred(perm_set)=1, not any individual bit or structural hint' \u2014 SD-JWT cannot match this",
+    "Close the 8-bit brute-force attack: model AS+RS collusion formally in the mqSE-IND game, or add a blinding factor independent of the bitmask that the AS cannot enumerate (e.g., agent-held entropy unknown to AS)",
+    "Specify the exact model (AGM+ROM) in the theorem statement; separate Poseidon's role as circuit-efficient hash from its role as a PRF in the security reduction \u2014 consider HMAC-SHA256 for blindingNonce derivation outside the circuit",
+    "Add SRS trust model: state whether adversarial-AS means adversarial at presentation-time only (honest SRS) or at setup-time; reference a public ceremony Bolyra does not control",
+    "Bound proving latency: cite rapidsnark benchmarks for the 8-bit AgentPolicy circuit, propose proof caching or pre-computation strategy with stated linkability consequences",
+    "Drop or qualify the 2^64 scenario \u2014 replace with 'RS-supplied runtime predicate unknown to AS at issuance' which is the irreducible gap RFC 8693 cannot close",
+    "Add an audit commitment layer: blinded log commitment the RS countersigns and reports to a designated audit endpoint, mapped to FFIEC CAT Domain 3 and GLBA \u00a7314.4(c)(3)",
+    "Address key custody and revocation: define credential expiry or on-chain revocation registry with stated SLA, compatible with AS-blind design",
+    "Map controls to NIST SP 800-53 or NIST CSF; propose a path to SOC 2 Type II attestation for proof infrastructure",
+    "Restructure Section 8: lead with proof malleation resistance as the primary SE-NIZK motivation, not multi-query resistance (which key rotation partially addresses)"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

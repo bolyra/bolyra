@@ -1,0 +1,34 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Section 8 argues the AS is structurally in the OAuth token-issuance path and can reverse any PPID it generated \u2014 a real architectural gap. However, rfc7662_advocate Attack 2 (RFC 8693 Token Exchange chains through a resource-owned AS, removing the original AS from the hot path) and spiffe_engineer Attacks 1-2 (WIMSE token exchange and SPIFFE federation achieve per-trust-domain unlinkability without ZK) are not rebutted. The construction does not engage with Token Exchange or WIMSE as counterfactuals. The baseline can approximate the RS-level property via federation + per-RS token exchange; the construction is preferable but has not proved these alternatives insufficient."
+    },
+    "formal_security_argument": {
+      "points": 2,
+      "justification": "Section 3 defines explicit adversary capabilities (controls AS, colludes with k-1 RS, network observation), a complete IND-UNL-AS game with setup/challenge/guess phases (lines 109-134), parameterized timing oracle (T-none/T-batch/T-real). Section 4 names four assumptions (Poseidon-PRF, PLONK knowledge soundness, Poseidon collision resistance, DLP on Baby Jubjub) and gives a 5-hybrid reduction sketch with a concrete bound: Adv(A) \u2264 2\u00b7Adv_PRF + negl_ZK(\u03bb). The argument has real flaws (cryptographer Attack 1 shows agentSecret may be AS-derivable), but the rubric requires the argument to exist and be stated, not to be flawless. Game, assumptions, and reduction are all present."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 maps every construction element to existing Bolyra primitives: Poseidon2/5, BinaryMerkleRoot(20), PLONK with universal SRS, LessThan(64), Num2Bits. Section 6 provides a detailed constraint breakdown totaling ~15,600 constraints with < 3s PLONK proving time on commodity hardware \u2014 comparable to existing AgentPolicy (~16,000) and within Phase 1 budget. No new primitives are introduced; the only novelty is circuit topology."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks the construction cannot answer: (1) Cryptographer Attack 1 \u2014 agentSecret is derived as Poseidon2(operatorSecret, modelHash) per line 94; if the operator IS the AS (the standard case per createAgentCredential), AS knows operatorSecret and modelHash, can precompute the full nullifier table for all scopes, completely defeating unlinkability. The construction never addresses this. (2) Cryptographer Attack 4 / rfc7662_advocate Attack 4 \u2014 AS issues sessionNonce and can embed covert timing signals or correlate nonce-request timestamps; the T-batch model covers proof generation timing but not nonce-issuance correlation. (3) cu_ciso Attack 1 \u2014 BSA/AML requires the CU-as-AS to correlate member activity across channels, directly conflicting with the unlinkability guarantee; the construction makes no regulatory partition between home-CU and peer-CU adversary models. These are construction-fatal, not merely weakening."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Section 7 names SECU (State Employees' Credit Union, North Carolina) as a concrete stakeholder, with GLBA financial privacy and Reg P as named regulatory requirements. The property is load-bearing: SECU-as-AS must not learn which merchants a member's agent transacts with. A healthcare variant (Kaiser Permanente, provider referral network privacy) provides a second concrete scenario. cu_ciso's BSA tension is real but does not negate that GLBA privacy is a genuine regulatory obligation \u2014 the gap is the missing partition, not the absence of a scenario."
+    }
+  },
+  "gaps": [
+    "agentSecret derivation fatal flaw: agentSecret = Poseidon2(operatorSecret, modelHash) is AS-computable when operator IS the AS \u2014 must introduce a client-generated secret component (e.g., blindingSalt) into the nullifier derivation that AS provably never sees",
+    "Nonce-issuance correlation: AS issues sessionNonce and can correlate nonce-request timestamps or embed covert tags \u2014 must specify agent-generated nonces with AS receiving only a commitment, or a commit-reveal nonce protocol",
+    "Token Exchange / WIMSE counterfactual: Section 8 must explicitly argue why RFC 8693 Token Exchange (resource-owned AS off the original AS hot path) and WIMSE token exchange do not achieve the same property \u2014 or narrow the claim to scenarios where federation is unavailable",
+    "BSA/AML regulatory partition: threat model must distinguish home-CU AS (which has BSA correlation obligations) from peer-CU AS (which must not see cross-CU merchant graph) \u2014 unlinkability within same-institution RS fleet is a regulatory liability, not a feature",
+    "SPIFFE federation dominance argument: must explain why SPIFFE trust-domain isolation (per-domain SVIDs, no shared key material) is insufficient for the cross-CU scenario, or scope construction to environments without SPIFFE infrastructure"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

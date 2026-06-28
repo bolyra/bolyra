@@ -1,0 +1,51 @@
+{
+  "id": "formal_verifier_cumulative_bit_completeness",
+  "title": "Prove cumulative bit encoding constraints are necessary and sufficient",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/CumulativeBitCheck.circom",
+      "description": "Standalone sub-circuit that encodes exactly the cumulative-bit implication rules (bit4\u2192bits2+3, bit3\u2192bit2) as Circom constraints, importable by Delegation.circom and independently testable."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/cumulative_bit_completeness.test.js",
+      "description": "Exhaustive harness: iterates all 256 permission byte values, computes expected validity via SDK validateCumulativeBitEncoding(), generates a witness for each value against CumulativeBitCheck, and asserts exact agreement. Failures surface bit-indexing mismatches between Circom LSB-first Num2Bits and the TS/Solidity layer."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/permissions.ts",
+      "description": "Reference to (or minor audit of) the existing validateCumulativeBitEncoding() function \u2014 the ground truth for the completeness check. No changes expected; function is treated as oracle."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Append two formally stated properties: SOUNDNESS (no satisfying witness violates implication rules) and COMPLETENESS (every valid encoding is accepted). Include table mapping Circom bit indices to permission names."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/test/README.md",
+      "description": "Document how to run the completeness harness, what a failure means, and how to extend when new permission bits are added."
+    }
+  ],
+  "steps": [
+    "Audit Delegation.circom: extract the exact Circom constraints that enforce cumulative-bit implications; note the Num2Bits signal ordering (LSB = bit index 0 = READ_DATA).",
+    "Audit sdk/src/permissions.ts validateCumulativeBitEncoding(): document which bit indices it checks and the exact implication rules it applies; confirm LSB vs MSB convention matches Circom.",
+    "Create circuits/src/CumulativeBitCheck.circom as a standalone template(1 input: permByte[8] bits) that encodes only the implication constraints; add assert-style IsZero/IsEqual gates for each rule.",
+    "Wire CumulativeBitCheck into Delegation.circom via component instantiation so the Delegation circuit delegates (pun intended) its scope-validation to the sub-circuit \u2014 single source of truth.",
+    "Write circuits/test/cumulative_bit_completeness.test.js: for each v in 0..255, (a) call validateCumulativeBitEncoding(v) to get expected boolean, (b) attempt witness generation on CumulativeBitCheck with input bits derived from v, (c) assert witness success iff SDK returns valid.",
+    "Run the harness in fast mode (witness-only, no proof) to get the exhaustive 256-case result; log any disagreement with full bit breakdown.",
+    "Fix any discovered mismatches: if a Circom constraint is too tight (rejects valid encoding) or too loose (accepts invalid), correct CumulativeBitCheck.circom; if SDK is wrong, fix validateCumulativeBitEncoding().",
+    "Re-run full 256-case sweep to confirm zero disagreements.",
+    "Append SOUNDNESS and COMPLETENESS properties to circuits/FORMAL-PROPERTIES.md with the bit-index table and reference to the exhaustive test as the proof artifact.",
+    "Update circuits/test/README.md with run instructions and a note that any new permission bit requires extending both CumulativeBitCheck.circom and the SDK validator in lockstep."
+  ],
+  "estimated_constraints": 24,
+  "dependencies": [
+    "circom_tester (npm, dev)",
+    "snarkjs ^0.7.x",
+    "@bolyra/sdk (validateCumulativeBitEncoding as oracle)",
+    "circuits/src/Delegation.circom (existing cumulative-bit constraints to audit)",
+    "circuits/build/pot16.ptau (only needed for slow/proof mode, not for witness-only sweep)"
+  ]
+}

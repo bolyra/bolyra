@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction demonstrates a clear capability gap: proving monotonic scope narrowing over hidden bitmasks without a trusted AS. The \u00a78 table is detailed and names specific baseline limitations. However, the rfc7662_advocate's Attack 1 (CRS replaces AS as trusted third party) and Attack 4 (Merkle tree administrator is an unnamed trust anchor) weaken the 'no trusted third party' claim. The spiffe_engineer's Attack 1 (SPIRE ZK attestor plugin covers 80%) is not fully rebutted \u2014 the construction never argues why it must live below the SPIFFE layer rather than as an extension within it. The baseline dominance claim is preferable but not provably exclusive: a SPIFFE+ZK-attestor hybrid could approximate the core property with extra configuration. Score 1, not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-structured threat model (\u00a73) with three named games, four named cryptographic assumptions (\u00a74), and reduction sketches for narrowing soundness and chain integrity. The hop-skip fix is properly argued. However, the cryptographer's Attack 1 (phantom intermediate agents \u2014 intermediate Merkle roots unconstrained against any canonical registry) is a genuine soundness gap: the circuit proves membership in *some* tree, not *the* canonical tree. Game 1/3 do not capture this. Attack 2 (chain prefix suppression \u2014 rootScopeCommitment selection is out-of-circuit) identifies another gap not covered by Game 3. Attack 3 (audit nullifier equivocation) shows multiple valid proofs per session with the same nullifier. These are real formal gaps that weaken the security argument below the 2-point threshold. The assumptions and reductions are named but the games are incomplete."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every construction element maps to existing Bolyra primitives (\u00a75 table): Poseidon2/4/5, EdDSAPoseidonVerifier, BinaryMerkleRoot(20), LessThan from circomlib. Circuit cost is stated precisely: ~13,865 constraints/hop, ~111K for 8 hops, fitting pot17.ptau. Proving times estimated at ~6s (rapidsnark) for 8 hops. PLONK proof size ~800 bytes. The hop-skip fix adds only ~126 constraints. All within Phase 1 budget. No new primitives introduced."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks remain unanswered and fall outside the stated threat model. The cryptographer's Attack 1 (phantom intermediate agents) is a structural circuit gap \u2014 intermediate Merkle roots are unconstrained against any canonical registry. The cryptographer's Attack 2 (chain prefix suppression) shows rootScopeCommitment selection enables hiding early-chain violations. The cryptographer's Attack 3 (nullifier equivocation) allows multiple contradictory proofs per session. The cu_ciso's Attack 1 (third-party identity erasure) and Attack 2 (legal hold reconstruction) show the NCUA scenario is fundamentally incompatible with full ZK privacy. The spiffe_engineer's Attack 2 independently confirms the phantom agent gap. These are not mitigated attacks \u2014 they are open, construction-breaking gaps. Score 0."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: Navy Federal CU loan pipeline (with NCUA Letter 23-CU-15 citation) and journalist/whistleblower chain. However, the cu_ciso and rfc7662_advocate attacks demonstrate that the NCUA scenario is self-defeating: the ZK privacy property directly conflicts with NCUA third-party risk examination requirements (examiner must know vendor identities and actual scopes). The whistleblower scenario leaks chainLength and finalDelegateeMerkleRoot as stable cross-session identifiers (rfc7662_advocate Attack 3). Both scenarios are named with stakeholders but neither survives scrutiny as load-bearing \u2014 the construction's core privacy property undermines the regulatory scenario, and metadata leakage undermines the whistleblower scenario. Score 1: scenarios named but only partially viable."
+    }
+  },
+  "gaps": [
+    "Intermediate Merkle roots are unconstrained: add a public input `enrollmentMerkleRoot` and constrain `delegateeMerkleRoot[i] === enrollmentMerkleRoot` for all active hops, or surface all intermediate roots as public outputs",
+    "Audit nullifier equivocation: change to `auditNullifier = Poseidon4(rootScopeCommitment, sessionNonce, chainLength, finalScopeCommitment)` to bind the nullifier to the specific audit result",
+    "Chain prefix suppression: define what makes a `rootScopeCommitment` a valid genesis anchor (e.g., require on-chain session-genesis uniqueness or encode session genesis into the commitment)",
+    "Witness custody gap: specify who assembles private inputs for multi-org chains, where they are stored, and what trust boundary the prover operates within \u2014 currently the prover is an unnamed trusted third party",
+    "Regulatory scenario is self-defeating: the NCUA examiner needs to know vendor identities and actual scopes (NCUA Letter 23-CU-15, Part 748), which are explicitly hidden. Define a layered disclosure model: ZK proof for narrowing + selective disclosure mechanism for root scope and participant identities under regulator-only access",
+    "finalDelegateeMerkleRoot is a stable cross-session pseudonym: replace with a per-session terminal identifier (e.g., Poseidon2(delegateeCredCommitment[last], sessionNonce)) to break cross-session correlation, especially for the whistleblower scenario",
+    "CRS trust assumption unacknowledged: cite ceremony provenance for pot16/pot17.ptau and explicitly name CRS integrity as a trust assumption in \u00a73, or argue the trust equivalence with AS operational trust",
+    "SPIFFE+ZK-attestor counter not addressed: argue explicitly why the protocol must be a standalone layer rather than a SPIRE attestor plugin extension",
+    "chainLength is prover-supplied with no external oracle: add on-chain delegation events or a public commitment to the full chain so the auditor can independently verify chain completeness"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

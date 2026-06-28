@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The only surviving differentiator is the adversarial-AS predicate proof (rfc7662_advocate Attack 3 concedes 'no AS-side filter can produce a predicate proof over inputs the AS does not observe at filter time'). However, the construction does not lead with this as a formal theorem. RAR + JWT introspection (auth0_pm Attack 1), SD-JWT (spiffe_engineer Attack 1), and WIMSE sender-constrained tokens all approximate selective disclosure for the non-adversarial-AS case. The adversarial-AS property is real but not yet formally stated as the distinguishing claim \u2014 baseline can approximate the other claimed properties."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model exists (adversarial AS sees all credentialCommitments), named assumption (Poseidon PRF, A2), and SSZK game sketch with the nullifierSecret fix. However: (1) public input set is not enumerated \u2014 cryptographer Attack 1 shows credentialCommitment linkability is unproven without specifying which inputs are public vs private; (2) HVZK vs MVZK distinction not addressed \u2014 cryptographer Attack 2 shows a malicious RS choosing structured nonces can reduce ZK guarantees; (3) nonce generation oracle unspecified; (4) trusted setup trust model for AgentPolicy/Delegation Groth16 keys not documented (cryptographer Attack 3). Reduction sketch is present but incomplete on multiple axes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to existing Bolyra primitives: Poseidon3 hash (already in circuit stack), Groth16 proving (existing AgentPolicy circuit), BabyJubjub EdDSA (existing credential signing). Cost is explicitly stated: ~25 extra constraints for nullifierSecret addition (0.3% increase over existing circuit). This is well within Phase 1 budget. The nullifier scheme reuses the existing sessionNonce binding pattern."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer: (1) cryptographer \u2014 credentialCommitment linkability across RS sessions unaddressed, HVZK insufficient against malicious RS, trusted setup trust model undocumented; (2) cu_ciso \u2014 NCUA Part 748 audit trail void (boolean proof receipt insufficient), Poseidon has no FIPS 140-3 certification (existential gap for CU market), nullifierSecret has no key management SOP; (3) spiffe_engineer \u2014 WIMSE sender-constrained tokens already provide AS-blind presentation, two-identity-planes operational cost unaddressed; (4) auth0_pm \u2014 nullifierSecret key lifecycle unspecified, revocation latency gap vs RFC 7662. The majority of persona attacks are marked 'No \u2014 construction must address' and remain unanswered."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios named but neither is load-bearing with a named stakeholder: (1) '2^64 permission space' is explicitly demolished by auth0_pm Attack 3 as non-market \u2014 no production system uses 2^64 permissions, and Bolyra's own model is 8-bit; (2) 'semi-trusted AS' is the real scenario but lacks a named credit union, regulatory requirement reference, or concrete deployment. The cu_ciso attacks show the CU deployment path has existential gaps (FIPS, audit trails, revocation SLA). No named stakeholder or regulatory mandate is tied to the surviving adversarial-AS property."
+    }
+  },
+  "gaps": [
+    "Lead with adversarial-AS predicate proof as a formal theorem \u2014 state it as: 'no AS-side filter can produce a predicate proof over inputs the AS does not observe at filter time' and prove baseline cannot match",
+    "Enumerate the full public input set of the circuit (which values does the RS see?) and prove RS-side unlinkability via an anonymity game",
+    "Specify nonce generation: who generates sessionNonce, how its distribution is constrained, and prove security against malicious-verifier (MVZK) RS",
+    "Document the AgentPolicy/Delegation Groth16 trusted setup ceremony (participants, threshold, transparency log) or restrict claims to PLONK path",
+    "Add nullifierSecret key lifecycle: generation method, storage requirements, rotation policy, compromise impact, and mapping to GLBA \u00a7314.4(c) key management",
+    "Add a FIPS compliance bridge: e.g., wrap the ZK proof output in a FIPS-approved signature (ECDSA/EdDSA) so the cryptographic module presented to examiners is NIST-approved",
+    "Define a proof-receipt audit schema for NCUA Part 748: {circuitId, merkleRoot, nullifierHash, predicateSatisfied, timestamp} with reconstruction guarantees",
+    "Address revocation latency: specify on-chain revocation SLA, operator runbook for Tier 1 ops, and comparison column vs RFC 7662 real-time revocation",
+    "Replace the 2^64 permission space scenario with a concrete CU deployment: e.g., AI treasury agent holding FINANCIAL_SMALL + READ_DATA where RS must not learn higher permissions exist, with named regulatory driver",
+    "Address WIMSE/SPIFFE integration: either specify a SPIRE workload attestor plugin bridge or argue why a separate identity plane is justified for the target deployer"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,230 @@
+{
+  "description": "Conformance test vectors for ProofEnvelope (spec/proof-envelope.md)",
+  "schemaVersion": "1.0",
+  "valid": [
+    {
+      "id": "handshake",
+      "description": "Valid handshake envelope with nonce",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "handshake",
+        "publicSignals": ["12345678901234567890", "98765432109876543210", "11111111111111111111"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": {
+          "issuedAt": 1719878400,
+          "nonce": "session-nonce-abc123"
+        }
+      }
+    },
+    {
+      "id": "delegation",
+      "description": "Valid delegation envelope without nonce",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "delegation",
+        "publicSignals": ["42", "255", "1719878400"],
+        "proof": {
+          "pi_a": ["10", "20", "1"],
+          "pi_b": [["30", "40"], ["50", "60"], ["1", "0"]],
+          "pi_c": ["70", "80", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": {
+          "issuedAt": 1719878400
+        }
+      }
+    },
+    {
+      "id": "agent_policy",
+      "description": "Valid agent_policy envelope with PLONK proof",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "agent_policy",
+        "publicSignals": ["9999"],
+        "proof": {
+          "pi_a": ["100", "200", "1"],
+          "pi_b": [["300", "400"], ["500", "600"], ["1", "0"]],
+          "pi_c": ["700", "800", "1"],
+          "protocol": "plonk",
+          "curve": "bn128"
+        },
+        "metadata": {
+          "issuedAt": 1719878400,
+          "sdkVersion": "0.2.0"
+        }
+      }
+    },
+    {
+      "id": "minor_version_bump",
+      "description": "Valid envelope with compatible minor version 1.1",
+      "envelope": {
+        "version": "1.1",
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": {
+          "issuedAt": 1719878400
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "missing_version",
+      "description": "Envelope with no version field",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 }
+      }
+    },
+    {
+      "id": "unsupported_major_version",
+      "description": "Envelope with major version 2",
+      "expectedError": "UNSUPPORTED_VERSION",
+      "envelope": {
+        "version": "2.0",
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 }
+      }
+    },
+    {
+      "id": "unknown_proof_type",
+      "description": "Envelope with unrecognized proofType",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "unknown_circuit",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 }
+      }
+    },
+    {
+      "id": "empty_public_signals",
+      "description": "Envelope with empty publicSignals array",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "handshake",
+        "publicSignals": [],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 }
+      }
+    },
+    {
+      "id": "malformed_proof_pi_a",
+      "description": "Proof with pi_a having wrong number of elements",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 }
+      }
+    },
+    {
+      "id": "missing_metadata_issuedAt",
+      "description": "Metadata object without required issuedAt field",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": {}
+      }
+    },
+    {
+      "id": "additional_top_level_property",
+      "description": "Envelope with unexpected top-level field (additionalProperties: false)",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 },
+        "rogue": true
+      }
+    },
+    {
+      "id": "invalid_protocol",
+      "description": "Proof with unsupported protocol value",
+      "expectedError": "SCHEMA_VIOLATION",
+      "envelope": {
+        "version": "1.0",
+        "proofType": "handshake",
+        "publicSignals": ["1"],
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "fflonk",
+          "curve": "bn128"
+        },
+        "metadata": { "issuedAt": 1719878400 }
+      }
+    }
+  ]
+}

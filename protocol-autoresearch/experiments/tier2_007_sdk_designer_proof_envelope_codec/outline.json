@@ -1,0 +1,70 @@
+{
+  "id": "sdk_designer_proof_envelope_codec",
+  "title": "Type-safe proof envelope codec with serialize/deserialize",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/ProofEnvelope.ts",
+      "description": "BolyraProofEnvelope interface and CircuitType/ProtocolVersion enums; toJSON/fromJSON/toBytes/fromBytes static codec methods; signal index validation per circuit type"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/codec/index.ts",
+      "description": "Codec implementation: JSON serialization (base64url-encoded proof bigints), length-prefixed binary frame (4-byte magic + 1-byte version + CBOR-ish payload), schema validation with zod or hand-rolled type guards"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export BolyraProofEnvelope, encodeEnvelope, decodeEnvelope from public SDK surface"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/handshake.ts",
+      "description": "Update proveHandshake() return type to BolyraProofEnvelope; update verifyHandshake() to accept BolyraProofEnvelope; keep legacy tuple overload for backwards compatibility"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-codec.md",
+      "description": "Wire format spec: magic bytes (0x424F4C59 = BOLY), version byte, circuit type enum, public signal field ordering per circuit, binary frame layout, JSON schema"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/codec/ProofEnvelope.test.ts",
+      "description": "Round-trip tests for toJSON/fromJSON and toBytes/fromBytes; signal index mismatch rejection; version mismatch rejection; cross-circuit type confusion rejection; fuzz boundary (empty/null/truncated)"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/codec/backwards-compat.test.ts",
+      "description": "Verify legacy raw-array callers still work through the tuple overload; verify envelope created at version N deserializes under version N+1 with defined migration path"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add envelope usage section: construct, transmit over HTTP/MCP, reconstruct, verify; show common mistake (raw signal index misalignment) and how envelope prevents it"
+    }
+  ],
+  "steps": [
+    "Define CircuitType enum (HUMAN_UNIQUENESS | AGENT_POLICY | DELEGATION) and ProtocolVersion enum (V1 = 0x01) in sdk/src/types/ProofEnvelope.ts",
+    "Define per-circuit signal schemas: named index maps (e.g. HumanUniquenessSignals.humanMerkleRoot = 0) so field access is by name, not position",
+    "Define BolyraProofEnvelope interface: { circuitType, protocolVersion, proof: SnarkjsProof, publicSignals: Record<string, bigint>, timestamp?: number, sessionNonce?: bigint }",
+    "Implement toJSON(): serialize bigint fields as base64url strings; produce a self-describing JSON object with schema version header",
+    "Implement fromJSON(): parse and validate schema version; reject unknown circuitType; reconstruct bigints from base64url; validate required signal keys for circuitType",
+    "Implement toBytes(): 4-byte magic (0x424F4C59) + 1-byte version + 1-byte circuitType + length-prefixed JSON payload (UTF-8); return Uint8Array",
+    "Implement fromBytes(): validate magic and version bytes; extract and decode payload; call fromJSON on inner content; throw typed errors for truncation/magic mismatch",
+    "Update proveHandshake() to return BolyraProofEnvelope instead of raw tuple; add legacy rawProof() escape hatch that returns the prior tuple shape",
+    "Update verifyHandshake() to accept BolyraProofEnvelope | LegacyProofTuple via overload; internal path always normalises to envelope before verification",
+    "Write round-trip unit tests covering JSON and binary paths for all three circuit types",
+    "Write adversarial tests: wrong circuitType attached to valid proof, truncated bytes, signal array with extra/missing entries, bigint overflow",
+    "Update sdk/QUICKSTART.md with envelope examples covering HTTP transport and MCP tool result serialization patterns",
+    "Update spec/proof-envelope-codec.md with final wire format, versioning policy, and migration notes",
+    "Run tsc --noEmit and full test suite; confirm no regressions on existing handshake tests"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk internal SnarkjsProof type",
+    "snarkjs proof/public-signal array format (groth16 and plonk)",
+    "circuits/build/*.vkey.json signal ordering (source of truth for index maps)",
+    "spec/did-method-bolyra.md (for sessionNonce field semantics)",
+    "Node 18+ TextEncoder/Uint8Array (no extra dep needed for binary frame)"
+  ]
+}

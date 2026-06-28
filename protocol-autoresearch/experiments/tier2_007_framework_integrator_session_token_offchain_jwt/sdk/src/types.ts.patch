@@ -1,0 +1,16 @@
+// Add to sdk/src/types.ts — SessionClaims and SessionTokenOptions interfaces
+
+export interface SessionClaims {
+  nullifierHash: string;
+  scopeCommitment: string;
+  sessionNonce: string;
+  iat: number;
+  exp: number;
+}
+
+export interface SessionTokenOptions {
+  /** Token lifetime in seconds. Default: 300 (5 minutes). Min: 60. Max: 900. */
+  ttlSeconds?: number;
+  /** JWT issuer claim. Default: 'bolyra.ai'. */
+  issuer?: string;
+}

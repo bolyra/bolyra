@@ -1,0 +1,95 @@
+{
+  "id": "standards_architect_conformance_test_vectors",
+  "title": "Publish canonical JSON test vectors for all proof verification paths",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Index of all test vector files with coverage map and usage instructions for conformance implementors"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/schema.json",
+      "description": "JSON Schema v7 defining the canonical test vector envelope: id, description, category, inputs, expected_public_signals, verdict, error_code"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/01-valid-handshake.json",
+      "description": "5+ vectors: valid human+agent proof pairs with matching sessionNonce, covering single permission, multi-permission, and boundary expiry"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/02-expired-credential.json",
+      "description": "4+ vectors: agent credentials where expiry < current block timestamp, expect reject with ERR_CREDENTIAL_EXPIRED"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/03-stale-merkle-root.json",
+      "description": "4+ vectors: humanMerkleRoot not in 30-root sliding window, expect reject with ERR_ROOT_NOT_IN_WINDOW"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/04-scope-subset-violation.json",
+      "description": "5+ vectors: delegated credential claims scope bits not subset of issuer scope, expect reject with ERR_SCOPE_VIOLATION"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/05-cumulative-bit-violation.json",
+      "description": "5+ vectors: bit 4 set without bits 2+3, bit 3 set without bit 2, and other implication violations, expect reject with ERR_CUMULATIVE_BIT_ENCODING"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/06-delegation-chain-max-depth.json",
+      "description": "3+ vectors: delegation chain at exactly depth 3 (accept) and depth 4 (reject with ERR_MAX_DELEGATION_DEPTH)"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/07-replay-nullifier.json",
+      "description": "4+ vectors: reused nullifierHash across two handshakes with same or different nonce, expect reject with ERR_NULLIFIER_REUSE"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/08-nonce-mismatch.json",
+      "description": "3+ vectors: human proof and agent proof nonceBinding values disagree, expect reject with ERR_NONCE_MISMATCH"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/conformance-runner.js",
+      "description": "Node.js runner that loads all vector files, invokes verifyHandshake (or circuit witness generation in fast mode), and asserts verdict+error_code match"
+    },
+    {
+      "type": "docs",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add Section 9: Conformance Test Vectors \u2014 references spec/test-vectors/, lists categories, and normatively requires conformant implementations to pass all accept vectors and reject all reject vectors with the specified error codes"
+    }
+  ],
+  "steps": [
+    "Define canonical error code registry (ERR_CREDENTIAL_EXPIRED, ERR_ROOT_NOT_IN_WINDOW, ERR_SCOPE_VIOLATION, ERR_CUMULATIVE_BIT_ENCODING, ERR_MAX_DELEGATION_DEPTH, ERR_NULLIFIER_REUSE, ERR_NONCE_MISMATCH) and add to spec/",
+    "Write JSON Schema (schema.json) for the test vector envelope covering id, description, category, inputs object, expected_public_signals array, verdict enum (accept|reject), and optional error_code string",
+    "Instrument the TS SDK verifyHandshake to surface structured error codes matching the registry so conformance runner can assert them",
+    "Generate valid-handshake vectors (01) using the SDK in a script: create real witness inputs from known secrets, capture public signals, record accept verdict",
+    "Generate expired-credential vectors (02): set expiry to a past block timestamp, confirm witness generation succeeds but verifier rejects, capture error code",
+    "Generate stale-merkle-root vectors (03): craft a humanMerkleRoot value outside the 30-root window array, confirm reject with ERR_ROOT_NOT_IN_WINDOW",
+    "Generate scope-subset-violation vectors (04): set delegated permission bits to a superset of issuer bits, confirm Delegation circuit witness rejects",
+    "Generate cumulative-bit-violation vectors (05): set bit 4 alone, bit 3 alone, and other invalid combinations, confirm validateCumulativeBitEncoding rejects with ERR_CUMULATIVE_BIT_ENCODING",
+    "Generate delegation-chain-max-depth vectors (06): recursively build 3-hop (accept) and 4-hop (reject) chains, capture verdicts",
+    "Generate replay-nullifier vectors (07): duplicate nullifierHash in two separate vector entries, expect ERR_NULLIFIER_REUSE on second",
+    "Generate nonce-mismatch vectors (08): produce human proof with nonceBinding=A and agent proof with nonceBinding=B, expect ERR_NONCE_MISMATCH",
+    "Write conformance-runner.js: glob all vector files, for each vector call verifyHandshake (or fast witness-only path), assert verdict and error_code, print pass/fail summary",
+    "Add conformance runner to npm scripts as test:conformance and wire into CI alongside test:circuits:fast",
+    "Author spec/test-vectors/README.md: explain envelope schema, list all categories with file paths, describe how to run the runner, and state normative conformance requirement",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md Section 9 to reference spec/test-vectors/ normatively and enumerate the error code registry",
+    "Verify total vector count is 30+ across all files before marking complete"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circuits/src/HumanUniqueness.circom",
+    "circuits/src/AgentPolicy.circom",
+    "circuits/src/Delegation.circom",
+    "circuits/build/ (.zkey, .vkey artifacts must exist for fast witness generation)",
+    "sdk/src/verifyHandshake (must surface structured error codes)",
+    "sdk/src/validateCumulativeBitEncoding",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md",
+    "contracts/src/ (on-chain root window buffer \u2014 30-root sliding window definition)"
+  ]
+}

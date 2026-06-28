@@ -1,0 +1,65 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "title": "Standardized proof envelope with IANA content type registration",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-content-type.md",
+      "description": "Normative specification for application/bolyra-proof+cbor and application/bolyra-proof+json, including ABNF grammar, version prefix layout, circuit enum table, and proving-system enum table. Structured per RFC 6838 registration template."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/iana-registration-bolyra-proof-cbor.md",
+      "description": "IANA media type registration request document for application/bolyra-proof+cbor per RFC 6838 Section 4. Includes type name, subtype name, required parameters, encoding considerations, security considerations, and contact."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/iana-registration-bolyra-proof-json.md",
+      "description": "IANA media type registration request document for application/bolyra-proof+json (text fallback) per RFC 6838. Includes ABNF for JSON envelope structure."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript implementation of ProofEnvelope codec: encode() serializes proof+signals+circuit+proving-system into CBOR bytes with 2-byte version prefix; decode() parses and validates; toJSON()/fromJSON() for the +json fallback. Exports CircuitId and ProvingSystem enums."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/envelope.ts",
+      "description": "TypeScript type definitions: ProofEnvelope interface, CircuitId enum (human=0, agent=1, delegation=2, model-instance=3), ProvingSystem enum (groth16=0, plonk=1), EnvelopeVersion constant (0x0001)."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests for envelope codec: round-trip CBOR encode/decode for all CircuitId x ProvingSystem combinations, version mismatch rejection, unknown circuit enum rejection, JSON fallback round-trip, and content-type header negotiation helpers."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope-migration.md",
+      "description": "Migration guide for SDK consumers: how to upgrade from ad-hoc JSON proof objects to the versioned envelope, content-type header usage in HTTP contexts, backward-compatibility window and deprecation timeline."
+    }
+  ],
+  "steps": [
+    "Define CircuitId enum (human=0, agent=1, delegation=2, model-instance=3) and ProvingSystem enum (groth16=0, plonk=1) in sdk/src/types/envelope.ts; pin EnvelopeVersion = 0x0001.",
+    "Design CBOR envelope schema: 2-byte big-endian version prefix followed by a CBOR map with keys: version (uint), circuit (uint), provingSystem (uint), proof (bstr or map), publicSignals (array of bstr), and optional metadata map.",
+    "Implement encode() in sdk/src/envelope.ts using the cbor2 or cborg library (already a transitive dep via snarkjs where available, otherwise add cborg as a direct dep); serialize proof object fields from snarkjs output format.",
+    "Implement decode() with strict validation: reject unknown version, unknown circuit enum, unknown proving-system enum, and malformed CBOR; return typed ProofEnvelope.",
+    "Implement toJSON() / fromJSON() for the +json fallback: base64url-encode binary proof fields, include version/circuit/provingSystem as string labels for human readability; define ABNF in spec.",
+    "Write ABNF grammar for application/bolyra-proof+json envelope structure and embed it in spec/proof-envelope-content-type.md.",
+    "Author spec/proof-envelope-content-type.md covering: motivation, wire format diagrams, enum tables, ABNF, content negotiation guidance (Accept / Content-Type headers), and versioning policy.",
+    "Draft spec/iana-registration-bolyra-proof-cbor.md and spec/iana-registration-bolyra-proof-json.md using RFC 6838 Section 4 template fields; include security considerations referencing circuit-specific proof soundness.",
+    "Update sdk/src/index.ts public exports to expose encodeProofEnvelope, decodeProofEnvelope, ProofEnvelope, CircuitId, ProvingSystem.",
+    "Add CONTENT_TYPE_CBOR = 'application/bolyra-proof+cbor' and CONTENT_TYPE_JSON = 'application/bolyra-proof+json' constants to sdk/src/constants.ts for use in HTTP integrations.",
+    "Write unit tests covering all enum combinations, version rejection, JSON round-trip, and a negative test for each validation branch.",
+    "Update sdk/QUICKSTART.md and docs/proof-envelope-migration.md with before/after code samples showing migration from raw JSON proof objects.",
+    "Bump sdk package.json minor version and add changelog entry describing the new envelope API and deprecation of bare proof serialization."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cborg or cbor2 npm package for CBOR serialization (evaluate bundle size impact on SDK before pinning)",
+    "snarkjs Groth16/PLONK proof output schema (existing sdk/src/types must match field names used in encode())",
+    "RFC 6838 \u2014 Media Type Specifications and Registration Procedures",
+    "RFC 8949 \u2014 Concise Binary Object Representation (CBOR)",
+    "RFC 5234 \u2014 ABNF for text fallback grammar",
+    "Existing spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 envelope must align with handshake wire format described there"
+  ]
+}

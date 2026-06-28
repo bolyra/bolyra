@@ -1,0 +1,63 @@
+{
+  "id": "framework_integrator_session_token_offchain",
+  "title": "Off-chain session token for multi-step agent chains",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session.ts",
+      "description": "Core session token module: SessionToken type, mintSessionToken() called after verifyHandshake(), verifySessionToken() for off-chain per-call verification, revokeSessionToken() for explicit teardown."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export mintSessionToken, verifySessionToken, revokeSessionToken, SessionToken, SessionTokenOptions from public API surface."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/BolyraSessionAnchor.sol",
+      "description": "Minimal Solidity contract exposing batchCheckpoint(bytes32 sessionRoot, uint64 epoch) and CheckpointRecorded event. Stores sessionRoot \u2192 block.timestamp mapping. No ZK verification \u2014 anchoring only."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-offchain.md",
+      "description": "Protocol spec: JWT payload schema (proofDigest, humanNullifier, agentCredHash, scopeBitmap, sessionNonce, iat, exp, iss), signing key lifecycle, off-chain verification algorithm, replay prevention via nonce set, checkpoint anchoring cadence, revocation surface."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session.test.ts",
+      "description": "Unit tests: mint produces valid JWT; verifySessionToken accepts valid token; rejects expired, tampered, wrong-scope, replayed tokens; scope narrowing at mint time enforces cumulative-bit rules; revokeSessionToken causes subsequent verify to fail."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/BolyraSessionAnchor.test.ts",
+      "description": "Hardhat tests: batchCheckpoint emits CheckpointRecorded with correct sessionRoot and epoch; duplicate checkpoint for same epoch reverts; sessionRoot retrieval matches stored value."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-guide.md",
+      "description": "Integration guide for LangChain/CrewAI users: initialize session after first handshake, pass SessionToken through tool-call context, configure checkpoint interval, handle expiry mid-chain, migration path from per-call on-chain verify."
+    }
+  ],
+  "steps": [
+    "Define SessionToken payload schema in spec/session-token-offchain.md: JWT with fields proofDigest (SHA-256 of humanProof+agentProof bytes), humanNullifier, agentCredHash, scopeBitmap (8-bit), sessionNonce (32-byte random), iat, exp, iss='bolyra.ai'. Signing key is an ephemeral ECDSA P-256 key generated per SDK instance, never leaves process memory.",
+    "Implement mintSessionToken(humanProof, agentProof, verifiedHandshake, options) in sdk/src/session.ts. Accepts the output of a successful verifyHandshake() call \u2014 does not re-verify on-chain, only hashes the proof pair into proofDigest. Options: expirySeconds (default 3600), scopeOverride (must be subset of verifiedHandshake.scopeBitmap, enforced via validateCumulativeBitEncoding()). Returns signed JWT string.",
+    "Implement verifySessionToken(token, requiredScope?) in sdk/src/session.ts. Verifies JWT signature with in-process public key, checks exp, checks requiredScope bits are a subset of token.scopeBitmap, checks sessionNonce against in-process revocation set. Returns decoded SessionToken payload or throws typed BolyraSessionError.",
+    "Add in-process revocation set (Set<string> of sessionNonce values) to SDK session module. revokeSessionToken(token) decodes without scope check, adds nonce to set. Document that revocation is process-local \u2014 distributed revocation requires application-layer propagation or short expiry.",
+    "Implement batchCheckpoint() helper in sdk/src/session.ts: accepts array of active SessionToken objects, computes sessionRoot as keccak256 of sorted(sessionNonce[]) merkle leaf set, calls BolyraSessionAnchor.batchCheckpoint(sessionRoot, currentEpoch) on-chain. Intended to be called periodically (e.g., every N tool calls or every M seconds), not per-call.",
+    "Write BolyraSessionAnchor.sol: mapping(bytes32 => uint64) public checkpoints; function batchCheckpoint(bytes32 sessionRoot, uint64 epoch) external emits CheckpointRecorded(sessionRoot, epoch, block.timestamp); reverts if checkpoints[sessionRoot] != 0 for same epoch to prevent overwrite.",
+    "Write unit tests in sdk/test/session.test.ts covering: happy path mint+verify, expiry rejection, scope narrowing enforcement, scope elevation rejection, replay via nonce reuse, revocation, and tampered signature rejection.",
+    "Write Hardhat tests in contracts/test/BolyraSessionAnchor.test.ts covering: checkpoint emission, epoch deduplication revert, and retrieval.",
+    "Update sdk/src/index.ts to export new session API. Update sdk/QUICKSTART.md with a 'Session Tokens' section showing the three-line integration pattern: verifyHandshake \u2192 mintSessionToken \u2192 verifySessionToken in tool handler.",
+    "Write docs/session-token-guide.md with LangChain and CrewAI code examples, checkpoint interval recommendations (every 10 calls or 60s, whichever first), expiry handling pattern (re-handshake and re-mint), and security notes on process-local key and revocation scope.",
+    "Run npm run test:contracts and cd sdk && npm run build && npm test to verify all new tests pass. DCO sign-off on all commits."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "verifyHandshake() \u2014 session token is only valid downstream of a successful on-chain handshake verification; mintSessionToken() must receive its verified output struct",
+    "validateCumulativeBitEncoding() from sdk/src/permissions.ts \u2014 enforces 8-bit implication rules on scopeOverride at mint time",
+    "BolyraHandshakeVerifier.sol (existing) \u2014 batchCheckpoint is a separate contract but references the same sessionNonce domain; deploy order must place anchor after verifier",
+    "pot16.ptau and .zkey artifacts \u2014 not directly needed for session layer but session proofDigest hashes the proof bytes produced by existing circuit proving pipeline",
+    "Node crypto module (built-in) \u2014 ECDSA P-256 for JWT signing; no new npm dependencies required",
+    "jose or jsonwebtoken npm package \u2014 evaluate for JWT signing; prefer jose (ESM-native, no CVEs in current audit) over jsonwebtoken"
+  ]
+}

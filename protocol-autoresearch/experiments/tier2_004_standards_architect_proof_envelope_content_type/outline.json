@@ -1,0 +1,63 @@
+{
+  "id": "standards_architect_proof_envelope_content_type",
+  "title": "Register application/bolyra-proof+cbor media type and define proof envelope format",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope.md",
+      "description": "Canonical specification for the proof envelope format: CDDL schema, field semantics, COSE structure alignment, versioning policy, and media type registration rationale per RFC 6838."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope.cddl",
+      "description": "Machine-readable CDDL schema defining the top-level ProofEnvelope map, ProofType enum, PublicSignals array, Groth16Proof struct (a/b/c points as bstr), optional DelegationChain array, and protocolVersion uint."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript encode/decode functions: encodeProofEnvelope(envelope: ProofEnvelope): Uint8Array and decodeProofEnvelope(bytes: Uint8Array): ProofEnvelope using a minimal CBOR library (cbor-x). Validates required fields and version range on decode."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/envelope.ts",
+      "description": "TypeScript type definitions for ProofEnvelope, ProofType enum (human | agent | delegation), Groth16ProofPoints, and DelegationChainEntry."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Round-trip encode/decode tests for all three proof types, delegation chain presence/absence, version mismatch rejection, and malformed CBOR rejection."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/proof-envelope-vectors.json",
+      "description": "Conformance test vectors: hex-encoded CBOR bytes paired with canonical JSON representations for human proof, agent proof, delegation proof, and a chained delegation. Used by any implementation to verify interop."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope-quickstart.md",
+      "description": "Integration guide: how to attach application/bolyra-proof+cbor as a Content-Type header, consume the envelope in a verifier, and extend with custom fields using the reserved CBOR map key range."
+    }
+  ],
+  "steps": [
+    "Survey existing serialization usage across sdk/src, integrations/, and spec/ to identify fields already in use (proof bytes layout, public signals ordering, nonce placement) so the envelope schema captures current reality.",
+    "Define the CDDL schema in spec/proof-envelope.cddl: top-level map with integer keys (0=protocolVersion uint, 1=proofType uint enum, 2=publicSignals [+ bstr], 3=proof {a: [bstr,bstr], b: [[bstr,bstr],[bstr,bstr]], c: [bstr,bstr]}, 4=delegationChain [* DelegationEntry], 5=sessionNonce bstr ?); reserve keys 16\u201331 for private extensions.",
+    "Write spec/proof-envelope.md covering: COSE alignment rationale (why envelope-not-Sign1), media type string (application/bolyra-proof+cbor), IANA registration template (RFC 6838 \u00a74.2), canonicalization rules (definite-length encoding, sorted integer keys), versioning policy (protocolVersion=1 is this spec, decode MUST reject unknown major versions).",
+    "Add cbor-x as a dependency in sdk/package.json (runtime dep, ~6 kB minified); audit for supply-chain risk and pin to exact version in overrides if a transitive advisory exists.",
+    "Implement sdk/src/types/envelope.ts with ProofType enum, Groth16ProofPoints interface, DelegationChainEntry interface, and ProofEnvelope interface; export from sdk/src/index.ts.",
+    "Implement sdk/src/envelope.ts: encodeProofEnvelope validates all required fields, serializes to CBOR map with integer keys, returns Uint8Array; decodeProofEnvelope parses CBOR, validates protocolVersion range, checks required keys, throws typed errors (EnvelopeDecodeError subclassing BolyraError).",
+    "Generate conformance test vectors by running encodeProofEnvelope on known fixture inputs (reuse existing sdk/test fixtures for proof points and public signals), then hex-encode and store in spec/conformance/proof-envelope-vectors.json alongside the canonical JSON representation.",
+    "Write sdk/test/envelope.test.ts covering: round-trip for human/agent/delegation types, delegation chain with two entries, encode\u2192decode identity, decoding a vector from the conformance file, rejection of future major version (protocolVersion=255), rejection of truncated CBOR, rejection of missing required key.",
+    "Run npm run test:circuits:fast and npm run test:contracts to confirm no regressions from the new sdk dependency.",
+    "Update sdk/QUICKSTART.md and integrations/mcp/README.md to reference the new media type and show a minimal encode/decode snippet.",
+    "Commit all artifacts with DCO sign-off (git commit -s); include a note in CHANGELOG.md under [Unreleased] for the new proof-envelope module and media type."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cbor-x (or equivalent deterministic CBOR library) as a new sdk/ runtime dependency",
+    "RFC 6838 media type registration template (informational \u2014 no blocking external process for pre-standard use)",
+    "RFC 9052 COSE structure patterns (informational reference for envelope design)",
+    "Existing sdk/src/index.ts public API surface (encode/decode must be additive exports)",
+    "Existing proof point byte layout from circuits/build .zkey artifacts (defines bstr lengths in the CDDL)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md (must cross-reference the new envelope spec)"
+  ]
+}

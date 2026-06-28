@@ -1,0 +1,95 @@
+{
+  "id": "framework_integrator_session_token_offchain_jwt",
+  "title": "Off-chain JWT session token from verified handshake for framework middleware",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session.ts",
+      "description": "Core SessionToken class: issueSessionJWT(handshakeResult, operatorEdDSAKey, ttlSeconds) derives a JWT signing key from the operator EdDSA key via HKDF, embeds nullifierHash, scopeCommitment, sessionNonce, iat, exp, and iss claims, signs with HS256 or EdDSA (Ed25519), and returns a compact JWT string."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session-verify.ts",
+      "description": "verifySessionJWT(token, operatorPublicKey): reconstructs the expected signing key, verifies signature and expiry, returns typed SessionClaims or throws SessionExpiredError / SessionInvalidError."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Add SessionClaims interface (nullifierHash, scopeCommitment, sessionNonce, iat, exp, iss) and SessionTokenOptions (ttlSeconds, clockSkewSeconds)."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export issueSessionJWT, verifySessionJWT, SessionClaims, SessionTokenOptions from the public API surface."
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/bolyra-tool-middleware.ts",
+      "description": "LangChain StructuredTool wrapper that checks a session JWT on every tool invocation using verifySessionJWT; injects SessionClaims into tool input context. Throws if token is absent or expired."
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/bolyra-session-callback.ts",
+      "description": "LangChain BaseCallbackHandler that stores the session JWT in async-local-storage at chain start and clears it on chain end, enabling middleware to resolve the token without explicit passing."
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/crewai/bolyra_session.py",
+      "description": "CrewAI tool decorator @require_bolyra_session that calls the Python SDK subprocess bridge to verify the JWT before the tool function executes. Raises PermissionError on failure."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-spec.md",
+      "description": "Specification for the JWT payload schema, key derivation (HKDF-SHA256 from operator EdDSA private scalar), signing algorithm selection (Ed25519 preferred, HS256 fallback), replay-prevention via sessionNonce uniqueness, and TTL guidance. Defines the relationship between on-chain verifyHandshake() and off-chain JWT issuance as a trust delegation boundary."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session.test.ts",
+      "description": "Unit tests: issue \u2192 verify round-trip, expired token rejection, tampered claim rejection, wrong operator key rejection, scopeCommitment mismatch, clock skew tolerance, default TTL=300s enforcement."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session-integration.test.ts",
+      "description": "Integration test: runs full proveHandshake() + verifyHandshake() mock, calls issueSessionJWT on the result, verifies the JWT, confirms nullifierHash in claims matches the proof public output."
+    },
+    {
+      "type": "test",
+      "filename": "integrations/langchain/test/bolyra-tool-middleware.test.ts",
+      "description": "LangChain middleware tests: tool call with valid JWT succeeds, tool call with missing JWT throws, tool call with expired JWT throws, sessionNonce is propagated into tool context."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-quickstart.md",
+      "description": "Developer guide: 3-step integration (run handshake, issue JWT, protect tools). Includes copy-paste snippets for LangChain, CrewAI, and raw verifySessionJWT usage. Documents TTL tradeoffs and key rotation guidance."
+    }
+  ],
+  "steps": [
+    "Define SessionClaims interface and SessionTokenOptions in sdk/src/types.ts with nullifierHash (hex string), scopeCommitment (hex string), sessionNonce (hex string), iat, exp, iss fields",
+    "Implement HKDF-SHA256 key derivation in sdk/src/session.ts: take operator EdDSA private scalar bytes as IKM, use info='bolyra-session-jwt-v1' and salt=nullifierHash to produce a 32-byte symmetric key",
+    "Implement issueSessionJWT(): validate handshakeResult fields are present, derive signing key via HKDF, build JWT payload with claims + exp=iat+ttlSeconds, sign with jose or jsonwebtoken library using HS256, return compact JWT",
+    "Implement verifySessionJWT(): derive verification key from operatorPublicKey (symmetric key derivation requires private key \u2014 document that verification is operator-side only OR switch to Ed25519 asymmetric JWT for public verifiability; pick asymmetric Ed25519 for self-sovereign property stated in candidate)",
+    "Revise signing to use Ed25519 asymmetric JWT (alg: EdDSA): operator EdDSA private key signs JWT directly, verifier uses operator public key \u2014 aligns with 'verification stays self-sovereign' requirement",
+    "Update issueSessionJWT() to sign with Ed25519 private key via jose library; update verifySessionJWT() to verify with Ed25519 public key",
+    "Write unit tests in sdk/test/session.test.ts covering round-trip, expiry, tampering, wrong key, and clock skew",
+    "Write integration test in sdk/test/session-integration.test.ts connecting mock handshake output to JWT issuance and verification",
+    "Re-export issueSessionJWT, verifySessionJWT, SessionClaims, SessionTokenOptions from sdk/src/index.ts",
+    "Implement LangChain StructuredTool middleware in integrations/langchain/src/bolyra-tool-middleware.ts using verifySessionJWT on each invocation",
+    "Implement LangChain BaseCallbackHandler for async-local-storage session propagation in bolyra-session-callback.ts",
+    "Write LangChain middleware tests in integrations/langchain/test/",
+    "Implement CrewAI @require_bolyra_session decorator in integrations/crewai/bolyra_session.py calling Python SDK subprocess bridge for JWT verification",
+    "Write spec/session-token-spec.md documenting JWT schema, key derivation rationale, trust boundary, replay prevention via sessionNonce, and TTL guidance",
+    "Write docs/session-token-quickstart.md with LangChain, CrewAI, and raw API snippets",
+    "Run npm run typecheck and npm test to confirm no regressions",
+    "Update sdk/QUICKSTART.md to reference session token as the recommended pattern for multi-step agent sessions"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "jose (^5.x) \u2014 Ed25519 JWT sign/verify in Node",
+    "Existing proveHandshake() and verifyHandshake() in sdk/src/index.ts",
+    "Operator EdDSA key pair already produced by createAgentCredential()",
+    "@langchain/core StructuredTool and BaseCallbackHandler interfaces",
+    "crewai Tool decorator interface (Python)",
+    "Python SDK subprocess bridge (sdk-python/bolyra/bridge.py) for CrewAI integration",
+    "sessionNonce uniqueness guarantee from handshake flow (replay prevention)"
+  ]
+}

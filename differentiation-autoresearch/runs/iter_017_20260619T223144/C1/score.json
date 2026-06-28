@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies real gaps vs RFC 7662 (runtime-adaptive bitwise predicate, adversarial-AS model, constant-size proof). However, the rfc7662_advocate's Attack 1 correctly notes jwt-introspection-response achieves AS-blind offline verification for cached credentials, and Attack 4 shows RFC 8693 token exchange provides runtime scope narrowing (with AS roundtrip). The spiffe_engineer's Attack 3 shows SPIRE+Workload API achieves comparable AS-blindness within TTL windows. Attack 4 flags the omission of WIMSE from the baseline \u2014 the IETF WG chartered for exactly this problem space. The construction's Axis 1 (AS-blindness) is overstated as an independent axis when jwt-introspection-response approximates it. The genuine gap is the combination of runtime-adaptive predicate + adversarial-AS + constant-size, but the construction conflates AS-blindness (achievable by baseline) with the compound property. BBS+ with 64 per-bit messages (Attack 2) achieves selective disclosure under honest-AS. The construction survives only under the adversarial-AS + runtime predicate combination, but does not cleanly isolate this as the irreducible gap. Award 1: preferable but baseline approximates individual axes."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has genuine formal structure: four named games (SCOPE-FORGE, SCOPE-HIDE, AS-BLIND, CROSS-RS-UNLINK), five named assumptions (A1-A5), and reduction sketches. This is substantially above average. However, the cryptographer's attacks expose real gaps: (1) Attack 4 identifies that the SCOPE-HIDE reduction incorrectly invokes collision resistance (A2) where it needs PRF security (A5) \u2014 'collision resistance implies one-wayness' is false as a general statement; (2) Attack 2 shows colluding RSes can coordinate nonces (sessionNonce\u2081 = sessionNonce\u2082), trivially breaking CROSS-RS-UNLINK with advantage 1 \u2014 the game definition excises this by having the challenger sample distinct nonces, but the real-world adversary controls nonce selection; (3) Attack 3 shows adaptive single-bit mask queries recover the full bitmask in 64 sessions \u2014 SCOPE-HIDE is a one-shot game that doesn't cover multi-session adaptive queries. The trusted setup subversion (Attack 1) is also unaddressed in the threat model. The reduction sketch for SCOPE-HIDE has a logical error (wrong assumption cited). The CROSS-RS-UNLINK game has an incorrect adversary model. Award 1: threat model and assumptions stated but reductions have gaps."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon hash (2/3/5 variants), Groth16/PLONK proving, BabyJubjub EdDSA, BinaryMerkleRoot(20), Num2Bits(64), LessThan(64). Circuit cost is explicitly estimated at ~15,800 constraints for AgentPolicy (well under pot16.ptau ceiling of 65,536). The modification from prior construction is minimal: Poseidon2\u2192Poseidon3 for scopeCommitment (+300 constraints). Delegation circuit gains ~600 constraints, total under 20,000. Proving time targets stated: <5s snarkjs, <0.5s rapidsnark. Proof size: 192 bytes Groth16, ~768 bytes PLONK. On-chain verification: ~220K gas. All within Phase 1 budget. The net change is +300 constraints for one additional Poseidon input \u2014 clearly implementable with existing infrastructure."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer: (1) cryptographer Attack 2 \u2014 colluding RSes coordinate nonces to break CROSS-RS-UNLINK with advantage 1, no mitigation specified; (2) cryptographer Attack 3 \u2014 adaptive single-bit mask queries recover full bitmask in 64 sessions, no multi-session game or mitigation; (3) cu_ciso Attack 2 \u2014 audit trail opacity makes post-incident forensics impossible, no permissioned audit channel specified; (4) cu_ciso Attack 4 / auth0_pm Attack 3 \u2014 no revocation mechanism, 30-root history buffer creates unbounded revocation window for financial-scope credentials; (5) cryptographer Attack 1 / spiffe_engineer Attack 1 \u2014 trusted setup subversion entirely outside threat model; (6) auth0_pm Attack 4 \u2014 cross-RS unlinkability is an anti-feature for same-operator audit/SIEM correlation. These are not mitigated or weakened \u2014 they are unaddressed. The construction has no response to nonce coordination, adaptive queries, revocation, or audit trail requirements. Award 0: Tier 3 found attacks the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The credit union scenario (\u00a77) is concrete: Navy Federal, three RSes (account inquiry, loan pre-qual, wire transfer), NCUA examiner audience, specific permission masks. However, the cu_ciso attacks expose that the scenario is undermined by the construction's own properties: (1) cross-RS unlinkability prevents the credit union's own SIEM from correlating agent access events across RSes \u2014 a liability, not a feature, for same-operator deployments; (2) no revocation path for FINANCIAL_MEDIUM credentials violates NCUA Part 748 incident response requirements; (3) no key custody model for operator EdDSA key means the CISO cannot answer GLBA \u00a7314.4(c)(3) examiner questions; (4) on-chain registry governance is unspecified, creating a TPRM gap. The scenario names a real stakeholder and regulatory requirement but the construction as specified would likely fail the examination it claims to satisfy. Award 1: scenario named but the construction's properties conflict with the stakeholder's actual requirements."
+    }
+  },
+  "gaps": [
+    "Nonce coordination attack: colluding RSes pick identical sessionNonces, breaking CROSS-RS-UNLINK with advantage 1. Must add agent-side nonce freshness enforcement or commit-reveal protocol.",
+    "Adaptive mask query attack: malicious RS issues 64 single-bit requiredScopeMask queries to recover full bitmask. Must define multi-session security game and add per-RS proof rate limiting or mask commitment protocol.",
+    "SCOPE-HIDE reduction cites collision resistance (A2) where PRF security (A5) is needed. Fix the reduction.",
+    "No revocation mechanism: 30-root history buffer creates unbounded revocation window. Must specify emergency nullifier registry or maximum buffer depth with revocation SLA.",
+    "No permissioned audit channel: cross-RS unlinkability prevents same-operator forensics. Must distinguish adversarial cross-RS correlation (blocked) from legitimate operator audit (permitted).",
+    "Trusted setup subversion is outside threat model. Must either mandate PLONK universally or cite a public multi-party ceremony for AgentPolicy/Delegation zkeys.",
+    "Operator key custody model unspecified \u2014 no HSM/KMS requirement, no rotation procedure, no secrets inventory for proving-time private inputs.",
+    "On-chain registry governance unspecified \u2014 who controls tree write access, upgrade policy, availability SLA.",
+    "Baseline comparison omits WIMSE (draft-ietf-wimse-arch) and overstates AS-blindness as independent axis when jwt-introspection-response approximates it."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

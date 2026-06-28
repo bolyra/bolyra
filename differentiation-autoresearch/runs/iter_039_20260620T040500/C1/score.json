@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 0,
+      "justification": "Theorem 3 claims AS-blind predicate proof impossibility, but multiple Tier 3 attackers (cryptographer Attack 1, rfc7662_advocate Attack 1) demonstrate BBS+ selective disclosure is a counterexample: the holder runs a ZK proof at presentation time without AS involvement, yet it is assertion-based. The theorem as stated conflates AS observation at issuance with AS participation at presentation. The real delta (predicate-agnosticism at runtime, where m is unknown at issuance) is never formally stated or demonstrated with a concrete scenario. RFC 8693 + RFC 8707 audience-restricted JWTs also cover the AS-blind offline presentation case. The SPIFFE engineer shows a ZK attestor plugin inside SPIRE achieves the same property. No capability is named that the baseline provably cannot match."
+    },
+    "formal_security_argument": {
+      "points": 0,
+      "justification": "Theorem 3 is the sole formal contribution but has critical gaps: (1) BBS+ selective disclosure is a counterexample not addressed in the proof sketch (cryptographer Attack 1), (2) no simulator or malicious-verifier ZK game is defined \u2014 the ZK claim is informal (cryptographer Attack 4), (3) nullifier scheme is unspecified so unlinkability against colluding AS+RS is unanalyzed (cryptographer Attack 2), (4) Groth16 CRS trust assumption is unstated \u2014 the impossibility is conditioned on honest setup but presented as unconditional (cryptographer Attack 3). Named cryptographic assumptions and reduction sketches are absent."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The construction maps to existing Bolyra primitives (Poseidon, Groth16 HumanUniqueness, PLONK AgentPolicy, EdDSA, nullifier scheme) and the 8-bit cumulative bitmask. However, circuit cost is not stated \u2014 no constraint count or proving time target appears. The 2^64 scenario requires a 64-bit circuit that does not exist (spiffe_engineer Attack 4). The auth0_pm latency attack (Attack 4) notes proof generation blocks the first request by seconds with no stated bound. Partial credit for mapping to existing primitives."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer: (1) BBS+ counterexample to Theorem 3 (cryptographer, rfc7662_advocate \u2014 both independently), (2) no concrete scenario where m is runtime-determined and pre-minting is infeasible (rfc7662_advocate Attack 3), (3) adversarial-AS model is not justified for the regulated-agent scenario (auth0_pm Attack 1, rfc7662_advocate Attack 2, spiffe_engineer Attack 3), (4) GLBA audit trail gap (cu_ciso Attack 1), (5) operator key custody unaddressed (cu_ciso Attack 2). None of these are mitigated or lie inside the stated threat model."
+    },
+    "scenario_fit": {
+      "points": 0,
+      "justification": "Two scenarios are named but both fail concreteness: (1) '2^64 permission space' \u2014 no real enterprise has this, the actual circuit is 8-bit, no named stakeholder or regulation requires it (auth0_pm Attack 3, spiffe_engineer Attack 4). (2) 'AS is semi-trusted' \u2014 no named deployment where an enterprise both distrusts its AS with scope yet trusts it with authn (auth0_pm Attack 1). The cu_ciso attacks show the regulated CU scenario actually requires audit trails, BCP, SOC 2, and key custody \u2014 none addressed. No load-bearing deployment is concretely named with a real stakeholder or regulatory requirement."
+    }
+  },
+  "gaps": [
+    "Theorem 3 must be restated to hinge on predicate-agnosticism at runtime (arbitrary P unknown at issuance), not mere AS-observation \u2014 BBS+ selective disclosure is a counterexample as currently written",
+    "Add formal ZK game definition with simulator for malicious-verifier RS across multiple sessions \u2014 current ZK claim is informal",
+    "Specify nullifier function and prove unlinkability against colluding AS+RS with a formal experiment",
+    "State Groth16 CRS trust assumption explicitly \u2014 the impossibility is conditional on honest setup, not unconditional",
+    "Exhibit a concrete interaction where predicate m arrives at proof time and pre-minting tokens for all possible m is infeasible \u2014 the runtime-adaptivity claim has no supporting scenario",
+    "Name a real regulated industry (FINRA, ONC TEFCA, etc.) with a permission space that genuinely stresses token-based systems, or drop the 2^64 scalability framing",
+    "Address GLBA/NCUA audit trail materialization: how examiner-readable access records are derived from nullifierHash + proof transcript",
+    "Address operator key custody (HSM binding, revocation latency) and on-chain registry availability (BCP fallback)",
+    "Bound proof latency with hardware specs and compare to incumbent token issuance (~80ms); scope claim to contexts where latency tradeoff is acceptable",
+    "Explicitly cover WIMSE holder-binding and SPIFFE ZK-attestor-plugin in the proof sketch enumeration, or narrow the 'no future extension can fix it' claim"
+  ],
+  "strength": 1,
+  "verdict": "drop"
+}

@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction identifies a capability the baseline provably cannot match: proving monotonic scope narrowing over hidden bitmask values across a multi-hop chain without disclosing intermediate scopes or participants. BBS+ operates on attributes within a single credential and cannot prove relational properties (bitwise subset) across a sequence of credentials over hidden values. RFC 8693 AS-signed attestation can prove narrowing held but requires the AS to learn all intermediate scopes \u2014 fatal in the journalist/source and cross-org scenarios. The adaptive auditPolicyMask attack (rfc7662_advocate Attack 2) does recover the terminal scope in 8 queries, but this targets only the terminal hop's scope via the policyOk output, not intermediate scopes or participants. The blinding salt construction defeats brute-force recovery of intermediate scope commitments from on-chain data, which no BBS+/RFC 8693 composition can replicate without a trusted aggregator. The structural impossibility argument (Section 8) is well-articulated: arithmetic over hidden values in R1CS/PLONK vs. BBS+ signature disclosure is a genuine capability gap."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction states explicit threat models (NarrowingAuditSoundness and ScopeRecovery games), names cryptographic assumptions (PLONK knowledge soundness, Poseidon collision/preimage resistance, Baby Jubjub DL hardness), and provides detailed reduction sketches for both soundness and privacy. However, the cryptographer's Attack 2 is correct: AGM and ROM for the Fiat-Shamir transform are unstated but required for PLONK knowledge soundness \u2014 the assumption list names the conclusion rather than the primitives. The ScopeRecovery bound (2^{-246}) is incorrect under MAX_HOPS-1 corruption with tight chains (cryptographer Attack 1) \u2014 the construction acknowledges this in prose but the formal game claim is still stated as Pr[A wins] \u2264 256/|F_p|, which is false when narrowing constraints uniquely determine the scope. The adaptive auditPolicyMask attack (rfc7662_advocate Attack 2) further breaks the ScopeRecovery claim for the terminal hop specifically. These are real gaps in the formal argument, not just missing polish."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon3 (circomlib), Num2Bits(64) (circomlib), PLONK proving (existing agent/delegation PLONK option), Baby Jubjub EdDSA (underlying delegation proofs), nullifier scheme, and the cumulative bit encoding model. Circuit cost is estimated at ~8,344 constraints \u2014 2.6x smaller than the existing Delegation circuit (~22K) and well within the PLONK agent budget with a <2s proving target. The upstream changes (Poseidon2\u2192Poseidon3 in AgentPolicy and Delegation circuits) are additive with no public signal layout changes, adding ~100-200 constraints each. The delta from the prior construction (+816 constraints, 11% increase) is clearly bounded. All gadgets are circomlib standard components. This is implementable within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 1,
+      "justification": "Tier 3 codex adversary with 5 personas surfaced several attacks the construction cannot fully answer. The cryptographer found that ScopeRecovery's probability bound is incorrect under tight-chain MAX_HOPS-1 corruption (acknowledged in prose but not formally fixed). The rfc7662_advocate found that adaptive auditPolicyMask queries recover terminal scope in 8 proofs \u2014 a genuine formal gap. The auth0_pm, cu_ciso, and spiffe_engineer all independently identified the blinding salt retention problem as an unmodeled operational failure that can prevent audit proof generation entirely (liveness failure). The cu_ciso's Attack 3 (privacy inverts at incident response) identifies a genuine tension in the NFCU scenario. The spiffe_engineer's Attack 3 (chainLength leaks topology in journalist scenario) is valid. However, the core cryptographic soundness claim (NarrowingAuditSoundness) survived \u2014 no persona broke the narrowing proof itself. The construction mitigates but is weakened: the privacy claims have formal gaps, and the operational model has unaddressed failure modes."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU scenario is concrete and names a real stakeholder (Navy Federal, $176B CU) with a regulatory requirement (NCUA examination, FFIEC SR 11-7). However, multiple personas (auth0_pm Attack 2, cu_ciso Attacks 1 and 3, rfc7662_advocate Attack 3) convincingly argue that the scenario as written is not load-bearing in practice: NCUA examiners cannot verify PLONK proofs, FIPS 140-3 compliance precludes BN254/Poseidon, the examiner needs forensic participant identification (which the construction hides by design), and the construction's primitives map to no FFIEC CAT baseline statement. The journalist/source variant is hypothetical with no named stakeholder. The NFCU scenario is named and detailed but faces serious practical barriers that make the property nice-to-have rather than load-bearing in the current regulatory environment. The construction needs either a non-FIPS scenario where scope hiding is genuinely required by a named stakeholder, or must address the FIPS/regulatory consumption gap."
+    }
+  },
+  "gaps": [
+    "ScopeRecovery game must be reformulated: either tighten corruption bound (no MAX_HOPS-1 corruption) or state the probability bound conditionally on lattice interval size, not as unconditional 2^{-246}",
+    "Adaptive auditPolicyMask queries recover terminal scope in 8 proofs \u2014 must either pre-commit the policy mask, replace policyOk with a non-binary output, or extend ScopeRecovery game to model adaptive queries",
+    "AGM and ROM for Fiat-Shamir must be explicitly listed as assumptions in Section 4 \u2014 PLONK knowledge soundness is a derived property, not a primitive assumption",
+    "Blinding salt lifecycle must be specified: generation (CSPRNG), storage (HSM/KMS vs ephemeral), cross-org coordination protocol, and what happens to auditability when a salt is lost \u2014 either provide a salt commitment/escrow mechanism or explicitly scope audit liveness to cooperative delegators",
+    "NFCU scenario needs a regulatory consumption layer: map narrowingValid=1 to specific NCUA Part 748 / FFIEC CAT controls, address FIPS 140-3 compliance gap for Poseidon/BN254, or replace NFCU with a non-FIPS-regulated deployment where scope hiding is genuinely load-bearing",
+    "chainLength as public input leaks topology in journalist/source scenario \u2014 either hide it (make private, prove policy over all active hops) or drop the journalist claim",
+    "Address the tension between privacy (hiding participants) and incident response (identifying misbehaving agents) for the CU deployment \u2014 consider dual-mode audit with threshold decryption for forensic disclosure under legal process"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

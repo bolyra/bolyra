@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real capability gap \u2014 runtime-adaptive bitwise predicate evaluation over a hidden bitmask \u2014 that vanilla RFC 7662 and BBS+ cannot match today. However, multiple attackers successfully narrow this claim: (1) rfc7662_advocate Attack 2 shows RFC 9701 already achieves AS-blind offline verification, so 'AS-blind' is not unique; (2) rfc7662_advocate Attack 3 shows the NFCU deployment has ~20 distinct RS types, fitting within BBS+ pre-commitment range, undermining the '2^64 combinatorial explosion' argument; (3) auth0_pm Attack 4 notes BBS+ + Bulletproofs can cover arithmetic predicates over hidden attributes, making the gap time-bounded rather than structural; (4) spiffe_engineer Attack 2 shows WIMSE cached tokens achieve operational AS-blindness. The construction conflates multiple properties and overstates structural impossibility. The runtime-adaptive predicate is genuinely novel but the baseline comparison table in \u00a78 strawmans BBS+ and ignores RFC 9701/WIMSE. Preferable but not provably impossible for baseline to approximate."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models (Games SSS and PU), names four cryptographic assumptions (Groth16 knowledge soundness, Poseidon collision resistance, Baby Jubjub DLP, Poseidon PRF), and gives reduction sketches for both games. This is substantial. However, cryptographer Attack 1 identifies that the threat model excludes the trusted setup party \u2014 Groth16 knowledge soundness requires honest CRS generation, but the construction never specifies who runs the ceremony or models CRS subversion. Cryptographer Attack 2 shows the PU game is HVZK-level (honest verifier) but the deployment requires malicious-verifier ZK under concurrent chosen-mask attacks, which Groth16 does not provide. Cryptographer Attack 4 shows blindingNonce entropy is assumed but unenforced \u2014 the circuit accepts any field element including zero. rfc7662_advocate Attack 4 independently confirms nonce freshness is unenforceable in-protocol. The threat model is stated but assumptions are incomplete (no setup trust model) and the PU reduction is insufficient for the stated adversary."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps precisely to existing Bolyra primitives: Poseidon hash (BN254), EdDSAPoseidonVerifier, BinaryMerkleRoot(20), Num2Bits, LessThan \u2014 all from the AgentPolicy circuit. The only new gadget is one Poseidon3 call for the presentation tag. Circuit cost is estimated at ~25,850 constraints, fitting within pot16.ptau (2^16). Proving times are specified: 0.8-1.5s rapidsnark, 8-12s snarkjs, <5s PLONK. The auth0_pm Attack 3 challenges real-world latency (Lambda cold starts, per-call proving) but this is a deployment concern, not a primitive/budget concern. The construction clearly fits Phase 1 budget with existing primitives and stated cost."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer: (1) cryptographer Attack 3 \u2014 no revocation mechanism exists; the append-only Merkle tree has no tombstone, nullifier, or revocation list, leaving a window of hours-to-days where compromised credentials remain valid; (2) cu_ciso Attack 1 independently confirms revocation is completely absent, violating NCUA incident response requirements; (3) cryptographer Attack 1 \u2014 trusted setup subversion is unmodeled, breaking the SSS reduction at step 1; (4) cryptographer Attack 2 \u2014 PU game is HVZK-insufficient for the concurrent malicious-verifier setting actually deployed; (5) auth0_pm Attack 1 \u2014 the smart contract operator is the new AS but is excluded from the adversary model; (6) spiffe_engineer Attack 3 \u2014 agentMerkleRoot epoch fingerprinting breaks PU for small anonymity sets, entirely unaddressed in the reduction. Multiple attacks are explicitly outside the threat model with no mitigation. The construction cannot answer these."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU deployment scenario (\u00a77) is concrete and names a real stakeholder (Navy Federal, 13M+ members) with a plausible use case (agent-mediated financial operations). However: (1) cu_ciso Attack 1 shows the scenario fails NCUA incident response requirements due to missing revocation; (2) cu_ciso Attack 3 shows the unlinkability property conflicts with FFIEC audit trail requirements \u2014 the construction cannot simultaneously satisfy PU and regulatory logging; (3) cu_ciso Attack 4 shows on-chain dependency lacks SLA compatibility with core processor requirements; (4) rfc7662_advocate Attack 3 shows NFCU's bounded permission taxonomy (~20 RS types) fits BBS+ pre-commitment, undermining the claim that ZK is load-bearing in this specific scenario. The scenario is named but the selective scope proof is not load-bearing in it \u2014 BBS+ with pre-committed conjunction claims covers the realistic NFCU case, and regulatory requirements actively conflict with the construction's privacy properties."
+    }
+  },
+  "gaps": [
+    "Add revocation mechanism: on-chain credential tombstone set or nullifier registry with non-membership proof gadget, bounding revocation latency to a specified SLA",
+    "Model trusted setup party in threat model \u2014 either commit to multi-party ceremony with public transcript or explicitly condition adversarial-AS claim on honest CRS",
+    "Upgrade PU game from HVZK to chosen-mask adaptive distinguishability under concurrent malicious verifiers; address agentMerkleRoot epoch fingerprinting as a linkage vector",
+    "Enforce blindingNonce entropy in-protocol: add RS-supplied nonce as public input (like DPoP's dpop_nonce) so unlinkability is protocol-enforced, not implementation-dependent",
+    "Separate 'AS-blind' (RFC 9701 already achieves this) from 'runtime-adaptive predicate' (genuinely novel) in \u00a71 and \u00a78; add WIMSE and SPIFFE columns to comparison table",
+    "Add privileged audit mode (e.g., auditTag = Poseidon2(credCommitment, CU_audit_key)) to resolve the fundamental tension between PU and FFIEC/NCUA audit trail requirements",
+    "Address operator key custody architecture \u2014 the adversarial-AS claim collapses when operator and AS are the same entity (NFCU scenario); specify when they must be distinct",
+    "Replace NFCU scenario or add a second scenario where the permission space is genuinely unbounded and BBS+ pre-commitment provably fails, making ZK load-bearing"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

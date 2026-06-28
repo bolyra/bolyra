@@ -1,0 +1,73 @@
+{
+  "id": "sdk_designer_proof_envelope_codec",
+  "title": "Self-describing proof envelope with named public signals",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-v1.md",
+      "description": "Canonical specification for BolyraEnvelope wire format: version, circuit identifier, provingSystem enum, named signals schema per circuit, and codec contract"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "Core BolyraEnvelope type, encode()/decode() functions, fromRaw(circuit, rawSignals) migration helper, and per-circuit signal maps (HumanUniqueness, AgentPolicy, Delegation)"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/circuits/signal-maps.ts",
+      "description": "Exported const maps from circuit name to ordered signal name arrays, e.g. HUMAN_UNIQUENESS_SIGNALS = ['humanMerkleRoot', 'nullifierHash', 'nonceBinding']. Single source of truth for positional indexing."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export BolyraEnvelope, encode, decode, fromRaw from public API surface"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/envelope.py",
+      "description": "Python dataclass BolyraEnvelope with encode()/decode() (JSON-serializable dict), fromRaw() helper, and signal maps mirroring the TS definitions"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests: round-trip encode/decode for all three circuits, fromRaw migration helper, version mismatch rejection, unknown circuit rejection, missing signal detection"
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_envelope.py",
+      "description": "Python pytest suite: round-trip, fromRaw, cross-compatibility with TS-encoded envelopes (JSON fixtures shared)"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/fixtures/envelope-v1-samples.json",
+      "description": "Shared JSON fixture files with canonical encoded envelopes for all three circuits, used by both TS and Python test suites to verify cross-SDK compatibility"
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add BolyraEnvelope section showing migration from positional publicSignals[] to named signals, with fromRaw() one-liner upgrade path"
+    }
+  ],
+  "steps": [
+    "Define the BolyraEnvelope wire format in spec/proof-envelope-v1.md: version string (semver), circuit enum ('HumanUniqueness' | 'AgentPolicy' | 'Delegation'), provingSystem enum ('groth16' | 'plonk'), signals record keyed by name, opaque proof field",
+    "Create sdk/src/circuits/signal-maps.ts with ordered name arrays for each circuit derived from the authoritative public signal ordering in circuits/src/*.circom; add a lint check that signal count matches",
+    "Implement BolyraEnvelope TypeScript type and encode() in sdk/src/envelope.ts: accepts (circuit, provingSystem, rawProof, rawSignals[]) and returns versioned envelope with named signals",
+    "Implement decode() in sdk/src/envelope.ts: validates version, circuit, provingSystem fields; maps named signals back to bigint[]; throws typed errors (EnvelopeVersionError, UnknownCircuitError, SignalCountMismatch)",
+    "Implement fromRaw(circuit, provingSystem, rawProof, rawSignals[]) as a thin alias for encode() to serve as the migration helper for existing integrators using positional arrays",
+    "Wire BolyraEnvelope into existing proveHandshake() and verifyHandshake() return types so the SDK natively emits envelopes; keep a rawMode flag for backward compat",
+    "Mirror the spec in sdk-python/bolyra/envelope.py using dataclasses: BolyraEnvelope dataclass, encode() returns JSON-serializable dict, decode() accepts dict, fromRaw() helper; signal maps as module-level constants",
+    "Write shared JSON fixture files (sdk/test/fixtures/envelope-v1-samples.json) capturing canonical encoded envelopes for all three circuits with known signal values",
+    "Write TS unit tests in sdk/test/envelope.test.ts covering: round-trip for all circuits, fromRaw migration, version mismatch, unknown circuit, signal count mismatch, JSON serialization fidelity",
+    "Write Python pytest suite in sdk-python/tests/test_envelope.py loading the shared JSON fixtures to verify TS-encoded envelopes decode correctly in Python and vice versa",
+    "Update sdk/QUICKSTART.md with a migration guide: before/after code showing positional publicSignals[] replaced by named envelope fields, fromRaw() one-liner",
+    "Bump sdk package version (minor) and sdk-python version; update CHANGELOG entries for both packages"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circuits/src/HumanUniqueness.circom (authoritative public signal order)",
+    "circuits/src/AgentPolicy.circom (authoritative public signal order)",
+    "circuits/src/Delegation.circom (authoritative public signal order)",
+    "sdk/src/index.ts (existing public API surface to extend)",
+    "sdk-python/bolyra/__init__.py (existing Python public API)"
+  ]
+}

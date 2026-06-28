@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_merkle_depth_guard_underconstraint",
+  "persona": "formal_verifier",
+  "title": "BinaryMerkleRoot depth input is underconstrained \u2014 allows depth=0 bypass",
+  "dimension": "correctness",
+  "description": "All three circuits pass merkleProofLength to BinaryMerkleRoot as the depth parameter, but there is no range check enforcing 1 <= merkleProofLength <= MAX_DEPTH. If merkleProofLength=0, BinaryMerkleRoot returns the leaf itself as the root, meaning any arbitrary commitment trivially 'proves' membership against a root equal to itself. Add a Num2Bits + LessThan constraint enforcing merkleProofLength >= 1 in all circuits, and write a test vector demonstrating the depth=0 attack path.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "formal_verifier_merkle_depth_guard_underconstraint",
+  "adoption": 18,
+  "standards": 15,
+  "completeness": 18,
+  "correctness": 20,
+  "total": 71,
+  "verdict": "consider"
+}

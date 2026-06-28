@@ -1,0 +1,182 @@
+[
+  {
+    "id": "agentic_commerce_identity",
+    "title": "ZKP Identity Layer for Agentic Commerce Transactions",
+    "description": "The $547M-to-$5.2B agentic commerce market identifies identity as a critical infrastructure gap. Bolyra's permission-scoped agent credentials with financial tier bits (FINANCIAL_SMALL/MEDIUM/UNLIMITED) map directly to agent purchasing authority, enabling verifiable spending limits without exposing buyer identity.",
+    "category": "agentic_commerce",
+    "source": "agentic_commerce",
+    "preliminary_demand": 22,
+    "preliminary_timing": 21,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 17,
+    "scores": {
+      "demand": 22,
+      "timing": 21,
+      "fit": 24,
+      "feasibility": 17,
+      "total": 84
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "langchain_zkp_auth",
+    "title": "LangChain ZKP Agent Authentication Middleware",
+    "description": "LangChain's Fleet/Sandboxes lack cryptographic agent identity. Bolyra's AgentPolicy circuit could provide privacy-preserving authentication for LangChain agents accessing tools, proving permissions without exposing credentials. The existing Bolyra LangChain adapter makes integration straightforward.",
+    "category": "developer_tools",
+    "source": "langchain_auth",
+    "preliminary_demand": 18,
+    "preliminary_timing": 20,
+    "preliminary_fit": 22,
+    "preliminary_feasibility": 20,
+    "scores": {
+      "demand": 18,
+      "timing": 20,
+      "fit": 22,
+      "feasibility": 20,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "ietf_zkp_extension",
+    "title": "ZKP Extension to IETF draft-klrc-aiagent-auth",
+    "description": "The IETF draft recommends leveraging SPIFFE/WIMSE/OAuth but acknowledges no existing standard handles privacy-preserving agent auth. Bolyra's mutual ZKP auth draft could position as the privacy layer that complements draft-klrc, proving agent identity without credential disclosure.",
+    "category": "standards",
+    "source": "ietf_agent_auth",
+    "preliminary_demand": 15,
+    "preliminary_timing": 23,
+    "preliminary_fit": 24,
+    "preliminary_feasibility": 18,
+    "scores": {
+      "demand": 15,
+      "timing": 23,
+      "fit": 24,
+      "feasibility": 18,
+      "total": 80
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "bedrock_obo_zkp",
+    "title": "ZKP On-Behalf-Of for AWS Bedrock AgentCore",
+    "description": "AWS Bedrock's OBO token exchange carries both user and agent identity but relies on opaque tokens. Bolyra's Delegation circuit could prove scope narrowing cryptographically, letting agents prove they act within delegated permissions without the resource server needing to call back to the IdP.",
+    "category": "enterprise_auth",
+    "source": "aws_bedrock_agents",
+    "preliminary_demand": 20,
+    "preliminary_timing": 19,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 15,
+    "scores": {
+      "demand": 20,
+      "timing": 19,
+      "fit": 23,
+      "feasibility": 15,
+      "total": 77
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "autogen_policy_proofs",
+    "title": "Cryptographic Policy Proofs for AutoGen Multi-Agent Systems",
+    "description": "Microsoft's AutoGen governance toolkit enforces policies via runtime checks, but multi-agent systems need agents to prove compliance to each other without a central arbiter. Bolyra's AgentPolicy circuit enables agents to prove they hold required permissions before inter-agent collaboration.",
+    "category": "developer_tools",
+    "source": "autogen_identity",
+    "preliminary_demand": 17,
+    "preliminary_timing": 19,
+    "preliminary_fit": 21,
+    "preliminary_feasibility": 19,
+    "scores": {
+      "demand": 17,
+      "timing": 19,
+      "fit": 21,
+      "feasibility": 19,
+      "total": 76
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "cross_platform_agent_passport",
+    "title": "Cross-Platform Agent Identity Passport",
+    "description": "Agents increasingly operate across LangChain, AutoGen, Bedrock, and custom frameworks, each with siloed identity. Bolyra's DID method and portable ZKP credentials could serve as a universal agent passport, proving capabilities once and presenting proofs across platforms without re-enrollment.",
+    "category": "enterprise_auth",
+    "source": "microsoft_agent_identity",
+    "preliminary_demand": 21,
+    "preliminary_timing": 17,
+    "preliminary_fit": 23,
+    "preliminary_feasibility": 14,
+    "scores": {
+      "demand": 21,
+      "timing": 17,
+      "fit": 23,
+      "feasibility": 14,
+      "total": 75
+    },
+    "verdict": "PROMOTE",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "microsoft_entra_zkp_layer",
+    "title": "Privacy-Preserving Agent Governance for Microsoft Entra",
+    "description": "Microsoft's Agent Governance Toolkit enforces policy via centralized Entra ID checks, creating a surveillance bottleneck. Bolyra's human-agent handshake could provide compliance proofs (agent authorized, human verified) without routing every action through a central identity provider.",
+    "category": "enterprise_auth",
+    "source": "microsoft_agent_identity",
+    "preliminary_demand": 17,
+    "preliminary_timing": 18,
+    "preliminary_fit": 20,
+    "preliminary_feasibility": 12,
+    "scores": {
+      "demand": 17,
+      "timing": 18,
+      "fit": 20,
+      "feasibility": 12,
+      "total": 67
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "okta_machine_zkp",
+    "title": "ZKP Machine Identity for Okta Identity Security Fabric",
+    "description": "Okta's identity security fabric adds machine identity management but uses traditional certificate/token approaches. Bolyra could offer a ZKP-native machine identity primitive that proves agent capabilities without revealing the issuing organization, enabling cross-tenant agent interactions.",
+    "category": "enterprise_auth",
+    "source": "okta_machine_identity",
+    "preliminary_demand": 16,
+    "preliminary_timing": 17,
+    "preliminary_fit": 19,
+    "preliminary_feasibility": 14,
+    "scores": {
+      "demand": 16,
+      "timing": 17,
+      "fit": 19,
+      "feasibility": 14,
+      "total": 66
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE"
+  },
+  {
+    "id": "sandbox_attestation",
+    "title": "ZKP Sandbox Execution Attestation",
+    "description": "LangSmith Sandboxes and similar locked-down execution environments need to attest that agent code ran within policy bounds. Bolyra's HumanUniqueness + Delegation circuits could prove a human authorized the sandbox configuration and the agent operated within delegated scope, creating an auditable chain.",
+    "category": "developer_tools",
+    "source": "langchain_auth",
+    "preliminary_demand": 14,
+    "preliminary_timing": 16,
+    "preliminary_fit": 18,
+    "preliminary_feasibility": 13,
+    "scores": {
+      "demand": 14,
+      "timing": 16,
+      "fit": 18,
+      "feasibility": 13,
+      "total": 61
+    },
+    "verdict": "CONSIDER",
+    "ead_classification": "GREY_ZONE"
+  }
+]

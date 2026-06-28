@@ -1,0 +1,61 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "title": "Standardized proof envelope with MIME content-type for HTTP transport",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Add \u00a7Wire-Format section defining application/bolyra-proof+json schema, versioning rules, and Content-Type negotiation semantics"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript ProofEnvelope type, serializeEnvelope(), deserializeEnvelope(), and validateEnvelope() with Zod schema; exports CONTENT_TYPE constant"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/envelope.py",
+      "description": "Python dataclass ProofEnvelope with to_json()/from_json() and pydantic validation; mirrors TS schema exactly"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export envelope types and helpers from public API surface"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests: round-trip serialization, unknown-version rejection, missing-field errors, interop fixture against Python golden JSON"
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_envelope.py",
+      "description": "Pytest: round-trip, validation errors, parse of TS-generated golden fixture to prove cross-SDK compatibility"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope.md",
+      "description": "Integration guide showing Express middleware, FastAPI dependency, and MCP tool wrapper consuming Content-Type: application/bolyra-proof+json"
+    }
+  ],
+  "steps": [
+    "Define canonical JSON schema for ProofEnvelope: {version: string, circuit: string, publicSignals: string[], proof: {pi_a, pi_b, pi_c, protocol}, metadata: {prover: string, timestamp: string (ISO 8601)}}; assign MIME type application/bolyra-proof+json and register version '1.0'",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md \u00a7Wire-Format: add schema table, Content-Type header requirements, version negotiation rules (reject unknown major versions), and normative MUST/SHOULD language",
+    "Implement sdk/src/envelope.ts: define ProofEnvelope interface, Zod validation schema, serializeEnvelope() \u2192 JSON string, deserializeEnvelope(raw: string) \u2192 ProofEnvelope (throws on validation failure), and exported CONTENT_TYPE = 'application/bolyra-proof+json'",
+    "Wire envelope into existing SDK proof outputs: update proveHandshake() and createAgentCredential() to return wrapped ProofEnvelope instead of raw snarkjs output; add envelopeFromSnarkjsProof() adapter for backward compat",
+    "Implement sdk-python/bolyra/envelope.py: ProofEnvelope dataclass with ProofMetadata and ProofData nested types, pydantic v2 model for validation, to_json()/from_json() methods, CONTENT_TYPE constant",
+    "Write cross-SDK interop fixture: generate a signed envelope in TS tests, commit the JSON to sdk/test/fixtures/envelope_v1.json, then parse it in Python tests to prove wire compatibility",
+    "Write sdk/test/envelope.test.ts: valid round-trip, unknown version rejection, missing required field errors, proof field type errors, Content-Type constant value",
+    "Write sdk-python/tests/test_envelope.py: mirror test cases plus parse of TS-generated fixture file",
+    "Add Express middleware snippet and FastAPI Depends() example to docs/proof-envelope.md showing Content-Type header inspection and deserializeEnvelope() / from_json() dispatch",
+    "Run npm run build in sdk/ and pytest in sdk-python/ to verify no regressions; update sdk/QUICKSTART.md with envelope usage example"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "snarkjs proof output format (pi_a/pi_b/pi_c/protocol fields)",
+    "Zod ^3.x (already in sdk/ devDependencies)",
+    "pydantic v2 (sdk-python/pyproject.toml)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md existing structure",
+    "sdk/src/index.ts public export surface"
+  ]
+}

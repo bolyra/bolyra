@@ -1,0 +1,61 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "title": "Human tree root history buffer parity with agent tree",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add humanRootHistory[30] ring buffer and humanRootHistoryIndex pointer mirroring the existing agentRootHistory pattern. Update enrollHuman() to push new roots into the ring buffer. Update verifyHandshake() to accept any humanMerkleRoot present in the buffer instead of checking only the live root."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.test.ts",
+      "description": "Add conformance test: enroll 16 humans to advance the tree root 15 times, then verify a proof generated against root N-15 still passes verifyHandshake. Also add a negative test asserting a root older than 30 slots is rejected."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update Security Considerations section to precisely state that both humanTree and agentTree maintain a 30-root history buffer, making the 'proofs remain valid across concurrent enrollments' claim accurate and symmetric for both trees."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/test-vectors.json",
+      "description": "Add conformance test vector 'human-root-history-n-minus-15': includes a pre-generated humanMerkleRoot, proof, and nullifierHash for a tree state 15 enrollments in the past, with expected verifyHandshake result = true."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/verify.ts",
+      "description": "If verifyHandshake in the SDK performs an off-chain root check before submitting on-chain, update it to query getHumanRootHistory() and accept any root in the returned array, not just the live root."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Note under replay-attack mitigations that the 30-slot humanRootHistory window is the forward-validity window for human proofs, closing the spec-vs-contract gap."
+    }
+  ],
+  "steps": [
+    "Read contracts/src/IdentityRegistry.sol in full to understand the existing agentRootHistory ring buffer implementation (storage layout, index pointer, push logic, lookup in verifyHandshake).",
+    "Add storage variables: `bytes32[30] public humanRootHistory` and `uint256 private humanRootHistoryIndex` immediately adjacent to the agent counterparts to keep storage layout symmetric.",
+    "Add a view helper `getHumanRootHistory() returns (bytes32[30] memory)` for off-chain SDK queries, matching any existing `getAgentRootHistory()` helper.",
+    "In enrollHuman(), after updating the live Merkle root, push the new root into humanRootHistory at `humanRootHistoryIndex % 30` and increment the index.",
+    "In verifyHandshake(), replace the single `humanMerkleRoot == liveHumanRoot` check with a loop over humanRootHistory that returns true if any slot matches the proof's root. Keep the agent path unchanged.",
+    "Compile contracts and confirm no storage-layout conflicts: `npm run compile:contracts`.",
+    "Write Hardhat test: enroll 16 users sequentially, capture the Merkle root after the first enrollment, generate a witness+proof against that stale root, call verifyHandshake and assert it returns true.",
+    "Write negative Hardhat test: enroll 31 users to evict the oldest root, attempt to verify against that evicted root, assert verifyHandshake reverts or returns false.",
+    "Run full contract test suite: `npm run test:contracts`.",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md Security Considerations to symmetrically describe both tree history buffers and correct the accuracy of the 'proofs remain valid across concurrent enrollments' claim.",
+    "Append the new conformance test vector to spec/conformance/test-vectors.json with id 'human-root-history-n-minus-15', documenting the stale root, proof inputs, and expected outcome.",
+    "Audit sdk/src/verify.ts for any off-chain humanMerkleRoot pre-check; update it to iterate the history array returned by getHumanRootHistory() before calling the contract.",
+    "Run `cd sdk && npm run typecheck && npm run build` to confirm SDK compiles cleanly.",
+    "Run `npm test` (fast circuit tests + contracts) to confirm no regressions.",
+    "Update docs/owasp-agentic-mapping.md to reference the 30-slot window as the bounded forward-validity window for human proofs."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 existing agentRootHistory implementation to mirror",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 IETF draft Security Considerations section",
+    "spec/conformance/test-vectors.json \u2014 existing conformance vector format",
+    "sdk/src/verify.ts \u2014 off-chain root validation logic",
+    "pot16.ptau + AgentPolicy/HumanUniqueness .zkey artifacts (no circuit changes; proving artifacts unchanged)"
+  ]
+}

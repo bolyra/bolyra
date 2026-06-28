@@ -1,0 +1,156 @@
+[
+  {
+    "id": "enablement_auditor_scope_commitment_privacy_gap",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      1,
+      5,
+      9,
+      15
+    ],
+    "category": "112",
+    "finding": "Claims 1(c), 5, 9(d), and 15(c) all recite that authentication or delegation occurs \"without revealing\" actual permission bits or credential fields. However, Section 3.8 of the specification explicitly acknowledges that the scope commitment Poseidon2(bitmask, credentialCommitment) is vulnerable to brute-force enumeration in ~2^64 hash evaluations because credentialCommitment is public (on-chain Merkle leaf) and the bitmask is a structured 64-bit value. The specification concedes this is \"feasible for a determined adversary\" on modern GPUs. The claims' \"without revealing\" language is therefore inaccurate as a matter of written description: the specification itself teaches that an offline adversary CAN recover the permission bits. Under Santarus v. Par Pharmaceutical, negative limitations (\"without revealing\") require affirmative disclosure of why the excluded scenario (revelation) does not occur. Here, the specification affirmatively teaches that it does occur for motivated adversaries. This creates a written-description contradiction that an examiner or challenger will exploit.",
+    "recommended_direction": "Qualify all \"without revealing\" language to \"without revealing as a public signal of the zero-knowledge proof\" or \"without on-chain disclosure of.\" This scopes the privacy claim to protocol-level non-disclosure rather than information-theoretic secrecy, which is all the system actually provides. Alternatively, adopt the blinded Poseidon3 construction from Alternative Embodiment (a) in Section 3.8 as the preferred embodiment and amend claims accordingly.",
+    "evidence": "Claim 1(c): \"without revealing the AI agent's credential fields\"; Section 3.8: \"An offline attacker who knows the credentialCommitment can enumerate all 2^64 possible bitmask values... On modern GPUs this is feasible for a determined adversary.\" Santarus v. Par Pharmaceutical, 694 F.3d 1344 (Fed. Cir. 2012) (negative limitations require written description support).",
+    "attack_id": "enablement_auditor_scope_commitment_privacy_gap",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 8,
+    "total": 25,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_identity_bound_indefinite",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      1,
+      5,
+      9,
+      14,
+      15,
+      16,
+      19
+    ],
+    "category": "112",
+    "finding": "The term \"identity-bound scope commitment\" is a coined neologism that appears across nearly every independent and key dependent claim, yet its meaning shifts between uses. In Claim 1(c), it is defined implicitly as a Poseidon hash \"of the permission bitmask and the AI agent's credential commitment that is Merkle-included in the second Merkle tree.\" But in Claim 15(c)(i), the chain-linking constraint requires that \"an entity holding identical permissions but a different credential commitment that is Merkle-included in a different leaf\" cannot reproduce the hash \u2014 importing an anti-impersonation functional property into the structural definition. The specification defines it in Section 3.7 with qualifiers (\"As used herein, a commitment is said to be 'identity-bound' when...\"), but that definition requires both a \"policy field\" and an \"identity field\" \u2014 terms themselves undefined in the claims. Under Nautilus v. Biosig, a POSITA cannot determine with reasonable certainty whether any two-input Poseidon hash binding any identity-related field qualifies, or only the specific (bitmask, credentialCommitment) pair.",
+    "recommended_direction": "Define \"identity-bound scope commitment\" explicitly in every independent claim as exactly Poseidon2(permissionBitmask, credentialCommitment) where credentialCommitment is a leaf in the specified Merkle tree. Drop the functional gloss about impersonation prevention from the claim body \u2014 reserve it for the specification's advantages section.",
+    "evidence": "Claim 1(c): \"an identity-bound scope commitment computed as a Poseidon hash of the permission bitmask and the AI agent's credential commitment that is Merkle-included in the second Merkle tree\"; Claim 15(c)(i): \"such that an entity holding identical permissions but a different credential commitment... cannot reproduce a matching hash value\" \u2014 functional language layered on structural definition. Nautilus v. Biosig, 572 U.S. 898 (2014) (reasonable certainty standard); Interval Licensing v. AOL, 766 F.3d 1364 (Fed. Cir. 2014) (inconsistent terminology renders claims indefinite).",
+    "attack_id": "enablement_auditor_identity_bound_indefinite",
+    "severity": 7,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_collision_resistant_algebraic_hash",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      15
+    ],
+    "category": "112",
+    "finding": "Claim 15(a) recites \"a collision-resistant algebraic hash of the AI agent's permission bitmask and the AI agent's credential commitment, the algebraic hash being a hash function whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve.\" This is a genus claim covering any algebraic hash meeting that description \u2014 Poseidon, Rescue, Griffin, Anemoi, Tip5, and future designs \u2014 yet the specification discloses only Poseidon with specific S-box x^5, partial-round MDS matrices, and BN128 field parameters. Under LizardTech v. Earth Resource Mapping and Ariad v. Eli Lilly, claiming a genus while disclosing a single species is a written-description failure. The specification never describes how the system would function with any non-Poseidon algebraic hash, nor establishes that substituting one is routine.",
+    "recommended_direction": "Narrow Claim 15(a) to \"a Poseidon algebraic hash function\" consistent with the specification and with dependent Claim 15A, which already narrows to Poseidon. Alternatively, add specification support for at least one additional algebraic hash (e.g., Rescue-Prime) with specific parameter choices to support the genus.",
+    "evidence": "Claim 15(a): \"a collision-resistant algebraic hash... whose round function is composed of field-arithmetic operations native to the scalar field of the proof system's base curve\"; Specification Section 9.1 discloses only Poseidon with x^5 S-box and MDS matrices. LizardTech v. Earth Resource Mapping, 424 F.3d 1336 (Fed. Cir. 2005); Ariad v. Eli Lilly, 598 F.3d 1336 (Fed. Cir. 2010, en banc).",
+    "attack_id": "enablement_auditor_collision_resistant_algebraic_hash",
+    "severity": 7,
+    "specificity": 8,
+    "remediability": 8,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_digital_signature_genus",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      9
+    ],
+    "category": "112",
+    "finding": "Claim 9(g) recites \"a digital signature, verified within the delegation zero-knowledge proof circuit using a circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve.\" This is a broad functional genus covering EdDSA-Poseidon on Baby Jubjub, ECDSA on secp256k1 embedded via non-native arithmetic, Schnorr variants, and any future curve-in-circuit scheme. The specification discloses only EdDSA-Poseidon on Baby Jubjub verified via circomlib's EdDSAPoseidonVerifier. No other signature algorithm or embedded curve is described. This is another single-species-for-genus problem under Ariad. A POSITA would also question enablement: the specification provides no guidance on how to embed a non-Baby-Jubjub curve or use a non-Poseidon-based signature within the Circom constraint system, yet the claim scope encompasses all such implementations.",
+    "recommended_direction": "Replace the functional genus with \"an EdDSA signature verified using Poseidon-based hashing on the Baby Jubjub twisted Edwards curve embedded in the BN128 scalar field\" \u2014 matching the specification's sole disclosed embodiment. If broader scope is desired, add specification examples for at least one alternative (e.g., Schnorr on Bandersnatch).",
+    "evidence": "Claim 9(g): \"a circuit-friendly signature verification algorithm on an elliptic curve embedded in the scalar field of the proof system's base curve\"; Specification Section 9.2 discloses only EdDSA on Baby Jubjub (a=168700, d=168696) with Poseidon hashing. Ariad v. Eli Lilly, 598 F.3d 1336 (Fed. Cir. 2010, en banc); LizardTech, 424 F.3d 1336.",
+    "attack_id": "enablement_auditor_digital_signature_genus",
+    "severity": 7,
+    "specificity": 8,
+    "remediability": 8,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "enablement_auditor_first_second_proving_system_genus",
+    "persona": "enablement_auditor",
+    "claim_refs": [
+      1,
+      15,
+      16
+    ],
+    "category": "112",
+    "finding": "Claims 1, 15, and 16 recite \"a first zero-knowledge proving system\" and \"a second zero-knowledge proving system\" (Claim 1) or \"a first zero-knowledge proof\" and \"a second zero-knowledge proof\" (Claim 15) without limiting them to any specific proving system. The genus covers Groth16+PLONK (disclosed), but also Groth16+Groth16, PLONK+PLONK, Halo2+Nova, FRI-based STARKs+Groth16, and any future combination. The specification describes only the Groth16-for-human + PLONK-for-agent architecture. Section 4 explains why this particular combination was chosen (ceremony reuse, circuit evolution flexibility), but provides no implementation detail for any other pairing. The on-chain verifier interfaces (IGroth16Verifier, IPlonkVerifier) are structurally incompatible with STARK or Halo2 proofs \u2014 no adaptation is described. Under Ariad, the specification does not demonstrate possession of the full scope of a system using arbitrary proving-system combinations.",
+    "recommended_direction": "Independent Claims 1 and 15 should either (a) limit to Groth16 and PLONK (as Claim 2 already does as a dependent), or (b) the specification should add at least a paragraph describing how the verifier contract interfaces would be adapted for an alternative proving system pair. The safest path is to fold Claim 2's limitation into Claim 1 directly and make Claim 15A's stack specificity part of Claim 15.",
+    "evidence": "Claim 1(b)-(c): \"a first zero-knowledge proving system... a second zero-knowledge proving system\"; Specification Section 4 (Mixed Proving System Rationale) explains only Groth16+PLONK; Section 7.3 defines interfaces only for IGroth16Verifier and IPlonkVerifier. Ariad v. Eli Lilly, 598 F.3d 1336 (Fed. Cir. 2010, en banc).",
+    "attack_id": "enablement_auditor_first_second_proving_system_genus",
+    "severity": 8,
+    "specificity": 8,
+    "remediability": 7,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "competitor_attorney_baby_jubjub_lock",
+    "persona": "competitor_attorney",
+    "claim_refs": [
+      1,
+      4,
+      15,
+      16
+    ],
+    "category": "design_around",
+    "finding": "Claims 1, 4, 15A, and 16 all hardcode 'EdDSA public key coordinates on the Baby Jubjub elliptic curve.' A competitor can use an alternative embedded curve (e.g., Bandersnatch, JubJub over BLS12-381, or a custom curve) or switch to Schnorr signatures on a different curve. The patent discloses no alternative curves and the claims do not recite a genus of 'twisted Edwards curves embedded in a pairing-friendly scalar field.' This is a pure substitution design-around that preserves all functional properties.",
+    "recommended_direction": "Design-around: use Bandersnatch (already shipping in Ethereum's Verkle tree roadmap) or the BLS12-381 embedded JubJub curve for identity commitments and operator signatures. Every claim element referencing 'Baby Jubjub' fails literal infringement. The specification's silence on alternatives weakens equivalents arguments under Ariad v. Eli Lilly.",
+    "evidence": "Claim 1(a): 'EdDSA public key coordinates on the Baby Jubjub elliptic curve'; Claim 4: 'both coordinates of the operator's EdDSA public key on the Baby Jubjub elliptic curve'; Claim 16: 'Poseidon hashes of EdDSA public keys on the Baby Jubjub elliptic curve.' Ariad v. Eli Lilly: specification must demonstrate possession of full claimed scope.",
+    "attack_id": "competitor_attorney_baby_jubjub_lock",
+    "severity": 7,
+    "specificity": 9,
+    "remediability": 7,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "examiner_strict_103_delegation_obvious_combination",
+    "persona": "examiner_strict",
+    "claim_refs": [
+      9,
+      14,
+      14
+    ],
+    "category": "103",
+    "finding": "Claim 9's delegation chain is obvious under KSR as a combination of three well-known references: (1) UCAN/Biscuit teach capability attenuation chains with subset enforcement and expiry narrowing via issuer signatures \u2014 the identical logical structure of steps (e)-(g); (2) Tornado Cash Nova teaches chaining Poseidon commitments via ZK proofs with on-chain nullifiers \u2014 the identical mechanism of steps (d) and (i); (3) Delegatable Anonymous Credentials (2008/428) teaches private delegation chains via randomizable credentials. A POSITA facing the problem 'make UCAN-style delegation private' would predictably wrap UCAN's cleartext attenuation logic inside a ZK circuit using Tornado Nova's commitment-chaining pattern. The specification itself frames the invention as 'UCAN but with a zero-knowledge layer' (Background, para. on UCAN), which is precisely the KSR 'finite identified solutions' scenario.",
+    "recommended_direction": "Narrow Claim 9 to require the identity-bound scope commitment (Claim 14A's bilateral Merkle-included identity binding) as a mandatory element of the independent claim, not a dependent. The identity-binding property \u2014 where the Poseidon hash pre-image includes both the bitmask AND a credential commitment that is Merkle-included \u2014 is the specific mechanism that distinguishes from Tornado Nova (which chains value commitments without identity binding) and from DAC 2008/428 (which uses pairing-based randomizable credentials, not Poseidon identity-binding). Make this the point of novelty.",
+    "evidence": "Claim 9(d): 'constraining... that a two-input Poseidon hash of the delegator's actual permission bitmask and the delegator's credential commitment equals a previous scope commitment.' Tornado Cash Nova teaches chained Poseidon commitments via ZK proofs (commitment_new links to commitment_old). UCAN teaches 'each delegation narrows permissions' with subset enforcement and expiry narrowing. KSR International v. Teleflex, 550 U.S. 398: 'market pressure, design needs, or finite identified solutions create motivation to combine.'",
+    "attack_id": "examiner_strict_103_delegation_obvious_combination",
+    "severity": 8,
+    "specificity": 9,
+    "remediability": 6,
+    "total": 23,
+    "priority": "high"
+  },
+  {
+    "id": "examiner_strict_101_mutual_auth_abstract",
+    "persona": "examiner_strict",
+    "claim_refs": [
+      1,
+      15,
+      16
+    ],
+    "category": "101",
+    "finding": "Claims 1, 15, and 16 are directed to the abstract idea of 'mutual identity verification between two parties without revealing identity details' \u2014 a longstanding concept in authentication. The recitation of specific cryptographic primitives (Poseidon, EdDSA, LeanIMT, Groth16, PLONK) does not supply an inventive concept under Step 2B because each is individually well-understood and conventional in the ZKP community, and their combination follows the predictable path of applying known ZKP building blocks to an authentication use case. Under Prism Technologies v. T-Mobile, token-based authentication is abstract, and substituting ZK proofs for tokens does not transform the abstract idea. The claims recite what is verified, not a new cryptographic technique for how verification is achieved.",
+    "recommended_direction": "Add claims reciting a specific technical improvement over the prior art baseline \u2014 e.g., a concrete gas-cost reduction mechanism, a novel circuit topology that reduces constraint count vs. naive composition, or a specific security property (e.g., the asymmetric root-freshness requirement of Claim 6) as an independent claim element rather than a dependent afterthought. Elevate Claim 6's asymmetric root freshness into the independent claims as the core technical contribution.",
+    "evidence": "Claim 1 recites 'maintaining, on a blockchain, a first Lean Incremental Merkle Tree... a second Lean Incremental Merkle Tree... receiving... a first zero-knowledge proof... receiving... a second zero-knowledge proof... verifying both.' Each element is conventional: LeanIMT (Semaphore v4), Groth16 proofs (Semaphore v4), PLONK proofs (widely deployed), Poseidon hashing (circomlib standard), nonce replay protection (Tornado Cash). See Prism Technologies v. T-Mobile, 928 F.3d 1364; BSG Tech v. BuySeasons, 899 F.3d 1281 ('conventional computer components don't provide inventive concept even if combined in novel ways').",
+    "attack_id": "examiner_strict_101_mutual_auth_abstract",
+    "severity": 9,
+    "specificity": 8,
+    "remediability": 5,
+    "total": 22,
+    "priority": "high"
+  }
+]

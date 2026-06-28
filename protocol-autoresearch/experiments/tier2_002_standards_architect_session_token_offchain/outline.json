@@ -1,0 +1,82 @@
+{
+  "id": "standards_architect_session_token_offchain",
+  "title": "Define off-chain session token format for verified handshakes",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-session-token-v1.md",
+      "description": "Full specification: JWT header/payload/signature layout, BabyJubjub EdDSA signing algorithm identifier (crv: Baby-Jubjub), claim registry (nullifierHash, scopeCommitment, sessionNonce, exp, iss, aud, iat), and serialization rules"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/bolyra-session-token-cose.md",
+      "description": "COSE_Sign1 equivalent for constrained environments: CBOR encoding of the same claims, algorithm mapping to ECDH-ES+Baby-Jubjub, compact binary layout"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/iana-media-type-registration.md",
+      "description": "IANA media type registration template for application/bolyra-session+jwt and application/bolyra-session+cose per RFC 6838 / RFC 9290"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/sessionToken.ts",
+      "description": "TypeScript implementation: issueSessionToken(handshakeResult, signerKey, opts) -> compact JWS string; verifySessionToken(token, verifierKey) -> VerifiedSession; decodeSessionToken(token) -> SessionClaims (no sig check)"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/types.ts",
+      "description": "SessionClaims interface, VerifiedSession type, SessionTokenOptions, algorithm constants (BOLYRA_ALG = 'EdDSA-BJJ')"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/coseToken.ts",
+      "description": "COSE_Sign1 variant: issueCoseSession() and verifyCoseSession() using cbor + baby-jubjub-js; mirrors JWT API surface"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/sessionToken.test.ts",
+      "description": "Round-trip tests: issue then verify, expired token rejection, tampered payload rejection, wrong key rejection, nullifierHash binding check, scopeCommitment integrity, nonce uniqueness assertion"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/coseToken.test.ts",
+      "description": "COSE round-trip tests mirroring JWT suite; cross-format non-interoperability assertion"
+    },
+    {
+      "type": "test",
+      "filename": "spec/test-vectors/session-token-vectors.json",
+      "description": "Normative test vectors: known nullifierHash + scopeCommitment + sessionNonce inputs -> expected compact JWS and COSE hex; used by conformance runner"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-integration.md",
+      "description": "Relying party integration guide: verify on-chain handshake once, cache session token, validate token on every API call without chain reads; expiry recommendations, key rotation policy"
+    }
+  ],
+  "steps": [
+    "Define claim set: map handshake outputs (nullifierHash, scopeCommitment, sessionNonce) to IANA-registered JWT claim names; reserve 'nul', 'sco', 'snc' as private claims under bolyra.ai namespace pending IANA registration",
+    "Specify JWT header: typ=bolyra-session+jwt, alg=EdDSA, crv=Baby-Jubjub; document that standard RS256/ES256 MUST NOT be used to prevent algorithm confusion",
+    "Define payload encoding: nullifierHash and scopeCommitment as base64url-encoded 32-byte big-endian field elements; sessionNonce as hex string; exp/iat as NumericDate; iss as DID of the Bolyra verifier contract",
+    "Specify signing procedure: serialize header.payload as ASCII bytes, sign with Baby-Jubjub EdDSA (iden3/babyjubjub), encode signature as base64url(R_x || R_y || S) \u2014 96 bytes total",
+    "Define verification procedure: decode and validate header alg/crv, check exp > now, recompute expected nullifierHash from on-chain event log or local cache, verify EdDSA signature over header.payload",
+    "Design COSE_Sign1 mapping: CBOR label -100 for nullifierHash, -101 for scopeCommitment, -102 for sessionNonce; alg = -8 (EdDSA) with key param crv = -1 (Baby-Jubjub); full CDDL schema in spec",
+    "Implement issueSessionToken() in sdk/src/session/sessionToken.ts using noble/ed25519 shim adapted for Baby-Jubjub field; wire in existing bjj utilities from sdk/src/crypto/",
+    "Implement verifySessionToken() with constant-time signature comparison; reject tokens where nullifierHash in payload does not match the verified handshake record",
+    "Implement COSE variant in coseToken.ts using cbor2 library; ensure the two formats are never accidentally cross-validated (type discriminator check at entry point)",
+    "Write test vectors by running issueSessionToken with fixed deterministic key + known inputs; commit output to spec/test-vectors/session-token-vectors.json as normative reference",
+    "Add sessionToken exports to sdk/src/index.ts public API; bump SDK minor version to 0.3.0",
+    "Draft IANA media type registration document per RFC 6838; include contact, security considerations (replay, nullifier reuse), and interoperability notes",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md Section 7 to reference session token format as the bearer credential produced after handshake completion",
+    "Add conformance test cases to spec/conformance/ that validate session token issuance and verification against the test vectors"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "Baby-Jubjub EdDSA signing library (iden3/babyjubjub-js or noble equivalent)",
+    "cbor2 or cbor-x for COSE encoding",
+    "Existing handshake verification output types in sdk/src/types.ts",
+    "Existing BabyJubjub field utilities in sdk/src/crypto/",
+    "spec/did-method-bolyra.md (for iss DID format)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md (parent spec to update)",
+    "RFC 7519 (JWT), RFC 8037 (EdDSA in JOSE), RFC 9052 (COSE), RFC 6838 (media types)"
+  ]
+}

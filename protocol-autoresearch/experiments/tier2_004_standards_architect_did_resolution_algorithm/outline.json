@@ -1,0 +1,70 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Complete DID resolution algorithm with verification methods",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Extend with W3C DID Core \u00a77.1-compliant resolution algorithm: input normalization, IdentityRegistry event query procedure, DID Document construction rules, error codes (invalidDid, notFound, deactivated), and metadata fields (created, updated, versionId)"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-resolution-algorithm.md",
+      "description": "Standalone resolution algorithm spec: pseudo-code for the full resolve(did, resolutionOptions) \u2192 {didDocument, didDocumentMetadata, didResolutionMetadata} flow, covering both agent (EdDSA Baby Jubjub) and human (nullifier-based) DID subjects"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add indexed event fields and a view function getRegistration(bytes32 commitment) returning (keyType, publicKey, merkleRoot, timestamp, active) to support off-chain resolver queries without replaying all logs"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "Implement did:bolyra resolver: parse DID \u2192 extract commitment, call IdentityRegistry view or scan RegistrationRecorded events, construct DID Document with verificationMethod, authentication, assertionMethod, and service arrays"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/didDocument.ts",
+      "description": "DID Document builder: typed constructors for AgentVerificationMethod (type: JsonWebKey2020 with Baby Jubjub JWK), HumanVerificationMethod (type: BolyraZkpAuthentication2024 with nullifierCommitment), and RegistryServiceEndpoint"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Unit + integration tests: resolve known agent DID \u2192 verify verificationMethod JWK fields; resolve human DID \u2192 verify nullifier-based method; resolve unknown commitment \u2192 expect notFound; resolve deactivated DID \u2192 expect deactivated metadata flag"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/did-resolver-integration.md",
+      "description": "Integration guide for resolver library authors: DID syntax ABNF, resolution driver registration snippet (did-resolver npm pattern), RPC provider configuration, caching recommendations, and known limitations (no universal resolver driver submitted yet)"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/did-resolution-vectors.json",
+      "description": "Conformance test vectors: 4 input DIDs (valid agent, valid human, malformed, deactivated) each with expected didDocument snapshot, didResolutionMetadata.error value or null, and didDocumentMetadata fields"
+    }
+  ],
+  "steps": [
+    "Audit current spec/did-method-bolyra.md: identify gaps against W3C DID Core \u00a77.1 (resolve), \u00a77.2 (resolveRepresentation), and \u00a77.3 (dereference) \u2014 document each missing clause as a numbered gap",
+    "Define the DID syntax extension: confirm did:bolyra:<commitment> where <commitment> is the 32-byte Poseidon commitment hex-encoded; specify normalization rules (lowercase, no leading 0x)",
+    "Add getRegistration(bytes32) view function to IdentityRegistry.sol returning all fields needed for DID Document construction; emit RegistrationRecorded and RegistrationRevoked events with indexed commitment field",
+    "Define two verification method types: (a) JsonWebKey2020 for agents \u2014 crv: Baby Jubjub, x/y coordinates from EdDSA public key; (b) BolyraZkpAuthentication2024 for humans \u2014 nullifierCommitment field, proofPurpose: authentication only",
+    "Specify DID Document skeleton: @context array (DID Core + Bolyra context URL), id, controller (self), verificationMethod array, authentication array (by reference), assertionMethod array (agents only), service array with BolyraRegistryService endpoint pointing to on-chain registry address + chainId",
+    "Write resolution algorithm pseudo-code: (1) parse and validate DID string, (2) extract commitment bytes, (3) query IdentityRegistry.getRegistration(), (4) if not found return notFound error, (5) if revoked return deactivated + didDocumentMetadata.deactivated=true, (6) determine subject type (agent vs human) from keyType field, (7) construct verificationMethod entry, (8) assemble full DID Document, (9) populate didDocumentMetadata with created/updated timestamps from event block timestamps, (10) return resolution result",
+    "Implement sdk/src/resolver.ts following the pseudo-code; expose resolve(did, options) matching did-resolver npm interface so it plugs into Veramo, DIF Universal Resolver driver pattern",
+    "Implement sdk/src/didDocument.ts typed builders; validate Baby Jubjub JWK format against draft-ietf-cose-bls-key-representations conventions",
+    "Write conformance test vectors in spec/conformance/did-resolution-vectors.json covering all four cases (valid agent, valid human, malformed syntax, deactivated)",
+    "Write sdk/test/resolver.test.ts against a Hardhat in-process node: deploy IdentityRegistry, register agent and human entries, run resolve() calls, assert DID Document shape and metadata fields against vectors",
+    "Update spec/did-method-bolyra.md: insert \u00a75 Resolution Algorithm (normative), \u00a76 Verification Methods (normative), \u00a77 Service Endpoints (normative), \u00a78 Security Considerations additions (nullifier linkability, key rotation not supported in v1)",
+    "Write docs/did-resolver-integration.md with copy-paste driver registration snippet and RPC configuration examples for Base Sepolia and Base Mainnet"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 must expose getRegistration() view and indexed events before resolver can be implemented",
+    "W3C DID Core 1.0 \u00a77 (resolve/resolveRepresentation interface contracts)",
+    "did-resolver npm package (Veramo ecosystem interface \u2014 Resolver class, DIDResolutionResult type)",
+    "Baby Jubjub JWK encoding \u2014 draft-ietf-cose-bls-key-representations or iden3 JWK convention (must pick one and document it)",
+    "Poseidon hash parameters used in commitment derivation \u2014 must be pinned so resolvers can re-derive and verify commitment == hash(publicKey, salt)",
+    "Base Sepolia RPC endpoint and deployed IdentityRegistry contract address (needed for integration test and docs)",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 resolution algorithm must be consistent with handshake nonce binding described there"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies adversarial-AS security and circuit-enforced implication closure as genuinely beyond baseline. However, the iter_006 refinement elevated 'ZK predicate evaluation (RS learns only pred=1)' as the lead differentiator (Property 1), and rfc7662_advocate Attack 1 shows a boolean-return RFC 7662 introspection response ({\"active\": true}, no scope field) achieves this verbatim. The genuine gap (adversarial-AS) was demoted to Property 2. Additionally, Client Attestation (draft-ietf-oauth-attestation-based-client-auth) is not enumerated in the baseline (auth0_pm Attack 4) and closes the adversarial-AS gap partially via operator-attester separation. WIMSE+OPA achieves structural opacity via architectural separation without ZK (spiffe_engineer Attack 2). The construction is preferable but the baseline can approximate the lead property; the actual irreducible gap (adversarial-AS + bitwise predicate + implication closure) is real but secondary in the current framing."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has an explicit threat model (Section 3: adversarial AS, network observer, N-1 static corruption), four named cryptographic assumptions (Poseidon collision resistance, DLP on Baby Jubjub, PLONK knowledge soundness, EdDSA EUF-CMA), and a three-case reduction sketch (Section 4). However: (a) rfc7662_advocate Attack 4 and cryptographer Attack 4 show the SE-NIZK claim for PLONK is technically incorrect \u2014 standard PLONK is HVZK post-Fiat-Shamir, not SE-NIZK without additional construction (Boneh-Drake or equivalent not cited); (b) cryptographer Attack 2 shows Groth16 trusted setup subversion breaks the adversarial-AS claim but setup trust is not in the formal threat model; (c) cryptographer Attack 3 shows the Merkle root is AS-controlled with no equivocation resistance specified \u2014 'AS-blind presentation' reduces to 'AS-trusted-root presentation' without a formal commitment scheme; (d) no simulator description is provided for malicious-verifier ZK (cryptographer Attack 4). Threat model is stated and assumptions are named, but the reduction has gaps and the SE-NIZK assumption is incorrectly attributed."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Section 5 maps every construction element to existing Bolyra primitives: Poseidon hash, BabyJubjub EdDSA, Lean Incremental Merkle Tree (depth 20), PLONK with pot16.ptau universal setup, agent root history buffer. Section 6 provides a detailed constraint breakdown totaling ~32,500 constraints \u2014 well under the 2^16 = 65,536 ceiling of pot16.ptau. Proving time targets are stated: <500ms server-side (rapidsnark), <5s browser (snarkjs). The SelectiveScopeProof is explicitly described as the existing AgentPolicy circuit with agentMerkleRoot moved from output to public input \u2014 minimal structural change. All within Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five personas found attacks marked 'not in threat model' that the construction cannot answer: (1) cryptographer: adaptive predicate oracle reconstructs full 8-bit bitmask in 8 queries (composition across queries unanalyzed), subverted Groth16 setup breaks adversarial-AS claim, Merkle root equivocation unaddressed, HVZK-to-malicious-verifier lift unstated; (2) rfc7662_advocate: boolean-return introspection matches Property 1, PermExtract honest-RS assumption used asymmetrically (excludes adaptive RS from own threat model but uses it to attack SD-JWT), SE-NIZK claim technically incorrect; (3) cu_ciso: cryptographically opaque audit trail incompatible with NCUA Part 748 forensics, operator key custody unspecified, on-chain SLA incompatible with FFIEC CAT, scopeCommitment is a persistent cross-RS fingerprint contradicting Section 7.3 unlinkability claim; (4) auth0_pm: on-chain integration burden, 500ms latency vs <10ms JWT, Client Attestation unenumerated; (5) spiffe_engineer: predicate binding gap (who encodes scope_id \u2192 required_perms?), WIMSE+OPA matches structural opacity, SPIRE ZK attestor plugin subsumes construction, operatorPrivKey hardware binding unspecified. Multiple fundamental attacks remain unanswered."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Section 7 names Navy Federal Credit Union (13M+ members) with NCUA Part 748 compliance and a concrete runtime flow (budgeting app agent accessing transaction-read API). However, cu_ciso Attack 1 shows NCUA Part 748 Appendix B requires reconstructable audit trails for incident response \u2014 the construction's ZK property (hidden bitmask) makes forensic reconstruction impossible without a supervisor-key escrow mechanism not specified. cu_ciso Attack 3 shows the on-chain registry dependency lacks the SLA guarantees (99.95% uptime, contractual RTO/RPO) required by FFIEC CAT. auth0_pm Attack 3 shows 'zero-knowledge predicate evaluation' is not a procurement criterion \u2014 NCUA Part 748 is satisfied by access controls, audit logging, and documented risk assessments, not ZK proofs. The scenario is concrete and named but the property is not load-bearing for the cited regulation, and the construction creates new compliance problems (opaque audit, no SLA) that undermine the scenario's credibility."
+    }
+  },
+  "gaps": [
+    "Restore adversarial-AS + circuit-enforced implication closure as the lead differentiator (Property 1) instead of 'ZK predicate evaluation' \u2014 the latter is matchable by boolean-return RFC 7662",
+    "Enumerate and address Client Attestation (draft-ietf-oauth-attestation-based-client-auth) and WIMSE+OPA as baseline competitors with explicit gap analysis",
+    "Fix the SE-NIZK overclaim: replace 'PLONK SE-ZK' with 'PLONK ZK (HVZK, Fiat-Shamir in ROM)' or cite the specific SE-NIZK construction (e.g., Boneh-Drake) being used",
+    "Add a query budget or per-predicate nullifier to prevent adaptive predicate oracle attack (cryptographer Attack 1) that reconstructs the full bitmask in 8-64 queries",
+    "Resolve the honest-RS asymmetry: the construction assumes honest-RS for PermExtract mitigation but attacks SD-JWT under adaptive-RS \u2014 apply the same adversary model symmetrically",
+    "Specify Merkle root equivocation resistance: define the on-chain root as an extractable commitment with an explicit update/revocation protocol and prove AS cannot serve forked roots",
+    "Commit to PLONK-only for AgentPolicy/Delegation in adversarial-AS scenarios, or formally scope the adversarial-AS guarantee to exclude setup-colluding adversaries",
+    "Add supervisor-key escrow mechanism for audit trail reconstruction (operator can decrypt audit records under a separately-controlled audit key) to satisfy NCUA Part 748 forensic requirements",
+    "Specify operator key custody requirements (FIPS 140-2 Level 3 HSM, key rotation procedure, compromise response) per FFIEC IT Examination Handbook",
+    "Provide on-chain registry fallback path (CU-operated sidecar with cached signed root snapshots and contractual SLA) to satisfy FFIEC CAT availability requirements",
+    "Randomize scopeCommitment per-session (Poseidon3(bitmask, credComm, sessionNonce)) to eliminate the persistent cross-RS fingerprint identified by cu_ciso Attack 4",
+    "Add a predicate-binding sub-protocol (RS signs (scope_id, required_bitmask, nonce) verified via EdDSA inside the circuit) so the prover cannot substitute a weaker predicate",
+    "Address proof caching semantics: specify whether proofs can be reused within a session window and how this interacts with freshness guarantees",
+    "Add business-risk translation for each cryptographic property: not 'AS cannot inflate permissions' but 'eliminates the breach class where auth vendor compromise expands agent access'"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

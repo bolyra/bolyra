@@ -1,0 +1,167 @@
+{
+  "id": "standards_architect_conformance_test_vectors",
+  "title": "Publish machine-readable conformance test vector suite",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_handshake_basic.json",
+      "description": "Valid human+agent handshake with all circuit inputs, public outputs, and expected verification result"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_handshake_delegated.json",
+      "description": "Valid handshake using a delegated agent credential (1-hop delegation)"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_expired_agent_credential.json",
+      "description": "Agent credential past expiry timestamp \u2014 expected: verifier rejects"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_stale_human_merkle_root.json",
+      "description": "HumanUniqueness proof against a root no longer accepted by registry \u2014 expected: contract revert STALE_ROOT"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_stale_agent_merkle_root.json",
+      "description": "AgentPolicy proof against a stale agent registry root \u2014 expected: contract revert STALE_AGENT_ROOT"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_scope_subset_violation.json",
+      "description": "Delegation grants permission bit not present in parent credential \u2014 expected: circuit constraint failure"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_cumulative_bit_encoding_bit4_without_2_3.json",
+      "description": "FINANCIAL_UNLIMITED (bit 4) set without FINANCIAL_SMALL (bit 2) and FINANCIAL_MEDIUM (bit 3) \u2014 expected: validateCumulativeBitEncoding rejects"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_cumulative_bit_encoding_bit3_without_2.json",
+      "description": "FINANCIAL_MEDIUM (bit 3) set without FINANCIAL_SMALL (bit 2) \u2014 expected: validateCumulativeBitEncoding rejects"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_delegation_chain_max_depth.json",
+      "description": "3-hop delegation chain at maximum allowed depth \u2014 all hops valid, expected: verification passes"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_delegation_chain_exceeds_max_depth.json",
+      "description": "4-hop delegation chain exceeding max depth \u2014 expected: contract revert MAX_DELEGATION_DEPTH"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_nonce_replay.json",
+      "description": "Reuse of (humanProof, agentProof) pair with previously consumed sessionNonce \u2014 expected: contract revert NONCE_ALREADY_USED"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_revoked_human_nullifier.json",
+      "description": "HumanUniqueness proof whose nullifierHash is on the on-chain revocation list \u2014 expected: contract revert NULLIFIER_REVOKED"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_read_only_agent.json",
+      "description": "Agent with only READ_DATA (bit 0) performing a read-scoped handshake \u2014 expected: passes"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_full_permissions_agent.json",
+      "description": "Agent with all 8 bits set (valid cumulative encoding) \u2014 expected: passes"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_wrong_nonce_binding.json",
+      "description": "humanProof and agentProof carry mismatched nonceBinding values \u2014 expected: verifier rejects"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_mismatched_human_root.json",
+      "description": "humanMerkleRoot in proof differs from root committed in agentCredential \u2014 expected: circuit constraint failure"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/valid_delegation_scope_narrowing.json",
+      "description": "Delegation reduces permissions from 0xFF to 0x01 \u2014 expected: circuit passes, narrow scope enforced"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_delegation_scope_expansion.json",
+      "description": "Delegation attempts to expand permissions beyond parent \u2014 expected: circuit constraint failure"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_agent_wrong_model_hash.json",
+      "description": "AgentPolicy proof with modelHash that doesn't match registered operator commitment \u2014 expected: revert"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/invalid_malformed_proof.json",
+      "description": "Structurally invalid Groth16 proof (zeroed pi_a) \u2014 expected: verifyProof returns false"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/README.md",
+      "description": "Schema documentation: field names, types, required fields, how to read expected_result and revert_reason"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/schema.json",
+      "description": "JSON Schema (draft-07) defining the structure every test vector must conform to"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/runner.js",
+      "description": "Node.js conformance runner: loads all vectors, generates witnesses, optionally runs full proofs (FULL_PROOF=1), checks expected outcomes, reports pass/fail per vector"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/vector-validator.js",
+      "description": "Validates all JSON files in spec/test-vectors/ against schema.json before running \u2014 fails fast on malformed vectors"
+    },
+    {
+      "type": "test",
+      "filename": "spec/conformance/contract-harness.js",
+      "description": "Hardhat-based harness that deploys verifier contracts locally and tests on-chain revert reasons for contract-layer vectors"
+    },
+    {
+      "type": "docs",
+      "filename": "spec/conformance/CONFORMANCE.md",
+      "description": "How to run conformance suite, how to add new vectors, mapping from IETF draft sections to vector IDs, known implementation gaps"
+    }
+  ],
+  "steps": [
+    "Define and commit spec/test-vectors/schema.json with required fields: id, category, description, circuit_inputs, public_outputs, expected_result (pass|fail), revert_reason (nullable), proving_system (groth16|plonk|none)",
+    "Write spec/test-vectors/README.md documenting schema fields, category taxonomy (valid, invalid_circuit, invalid_contract, invalid_encoding), and how revert_reason maps to Solidity custom errors",
+    "Implement the 8 core valid-path vectors (valid_handshake_basic, valid_handshake_delegated, valid_delegation_chain_max_depth, valid_delegation_scope_narrowing, valid_read_only_agent, valid_full_permissions_agent, valid_revoked_then_reissued placeholder, valid_plonk_proving_system variant) populating all circuit inputs from known test secrets",
+    "Implement the 12+ invalid-path vectors covering: expired credential, stale human root, stale agent root, scope subset violation, cumulative bit violations (bit4 without 2+3, bit3 without 2), max depth exceeded, nonce replay, revoked nullifier, wrong nonce binding, mismatched human root, delegation scope expansion, wrong model hash, malformed proof",
+    "Implement spec/conformance/vector-validator.js using ajv to validate every JSON file against schema.json; exit non-zero on schema violations",
+    "Implement spec/conformance/runner.js: load vectors, for each run circom_tester witness generation to confirm circuit constraint satisfaction or violation matches expected_result; skip full proof by default",
+    "Extend runner.js with FULL_PROOF=1 mode: generate actual Groth16/PLONK proofs for valid vectors, call snarkjs groth16.verify / plonk.verify, assert verification result matches expected_result",
+    "Implement spec/conformance/contract-harness.js: deploy verifier + registry contracts via Hardhat in-process, submit proofs for contract-layer vectors, capture revert reasons, assert they match revert_reason field",
+    "Wire all three into package.json: add 'conformance:validate', 'conformance:fast' (witness only), 'conformance:full' (with proofs), 'conformance:contracts' targets",
+    "Add CI step in .github/workflows/ that runs conformance:validate + conformance:fast on every PR; gate conformance:full on 'slow-proofs' label",
+    "Write spec/conformance/CONFORMANCE.md mapping each vector ID to the relevant section of spec/draft-bolyra-mutual-zkp-auth-01.md and spec/did-method-bolyra.md",
+    "Verify total vector count >= 30; add supplemental vectors for edge cases (zero permissions agent, single-bit permission variants, boundary expiry timestamp = now) to reach target",
+    "Run full conformance suite end-to-end locally, confirm all pass/fail outcomes match expected_result, commit with DCO sign-off"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "circuits/src/HumanUniqueness.circom",
+    "circuits/src/AgentPolicy.circom",
+    "circuits/src/Delegation.circom",
+    "circuits/build/*.zkey",
+    "circuits/build/*.vkey.json",
+    "contracts/ (verifier contracts + registry)",
+    "sdk/src/validateCumulativeBitEncoding",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md",
+    "spec/did-method-bolyra.md",
+    "circom_tester (npm)",
+    "snarkjs (npm)",
+    "ajv (npm, for schema validation)",
+    "hardhat (contracts test harness)"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "Circuit-enforced implication closure under adversarial AS is a genuine gap that RFC 7662 + JWT introspection cannot structurally match (rfc7662_advocate Attacks 1, 3 concede survival on core claim). However, the construction fails to address Client Attestation (auth0_pm Attack 3), WIMSE WPoP (spiffe_engineer Attack 2), and hardware-attested SPIRE (spiffe_engineer Attack 1) as baseline variants. Section 7 only covers RFC 7662 and RFC 8693. Until these are explicitly ruled out or shown to fall short on implication closure enforcement, the baseline can approximate with extra configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model (adversarial AS) is stated, cryptographic assumption (PLONK knowledge soundness) is named, and ImplicationClosureForgery sub-game provides a reduction sketch. However, the cryptographer identified four fundamental gaps: (1) conflation of soundness and privacy \u2014 no AS-blindness indistinguishability game with explicit simulator, (2) SRS honesty assumption unstated \u2014 subverted pot16.ptau collapses the Adv_PLONK_ks bound to 1, (3) no cross-RS unlinkability game for stable nullifierHash, (4) HVZK cited but simulation extractability needed for multi-query RS interactions. The reduction is partial at best."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Construction maps directly to existing Bolyra primitives: AgentPolicy PLONK circuit, Poseidon hash, BabyJubjub EdDSA, 8-bit cumulative bitmask with G5/G6 constraints. All are Phase 1 artifacts. However, no circuit cost is stated (constraint count, proving time target). auth0_pm Attack 2 notes ~15s proving latency with no concrete rapidsnark benchmark committed. The construction must state a constraint budget and production proving latency to score 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks are marked 'construction must address' with no mitigation present: cryptographer Attack 2 (subverted SRS collapses entire security bound \u2014 no ceremony requirements stated), cryptographer Attack 1 (no AS-blindness game \u2014 lead differentiator conflates soundness with privacy), cu_ciso Attack 1 (no post-verification audit artifact specified), cu_ciso Attack 4 (no revocation mechanism or latency SLA), spiffe_engineer Attack 1 (hardware-attested SPIRE not distinguished from software AS). These are not attacks the construction weakly mitigates \u2014 they are gaps with zero coverage in the current text."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: regulated agent with large permission space, and semi-trusted AS. However, auth0_pm Attack 4 demolishes the 2^64 scaling narrative \u2014 Bolyra ships 8 bits (256 states), trivially enumerable by any AS policy engine. The CU/NCUA scenario is load-bearing in principle but cu_ciso Attacks 1-4 show it cannot be deployed without audit logging, revocation SLA, examiner-readable artifacts, and ceremony audit standards \u2014 none of which the construction specifies. Scenarios are named but not operationally viable as written."
+    }
+  },
+  "gaps": [
+    "Section 7 must address Client Attestation (draft-ietf-oauth-attestation-based-client-auth), WIMSE WPoP, and hardware-attested SPIRE as baseline variants \u2014 show that implication closure as R1CS constraint is strictly stronger than each",
+    "Add explicit SRS trust assumption: either declare pot16.ptau ceremony honest-by-assumption and bound adversary scope, or specify an updatable universal SRS with verifiable ceremony transcript",
+    "Define a separate AS-blindness indistinguishability game with simulator, distinct from ImplicationClosureForgery soundness game",
+    "Address simulation extractability or composable ZK for multi-predicate RS sessions \u2014 cite the Fiat-Shamir ROM result or restrict to single-predicate sessions",
+    "State concrete circuit cost: AgentPolicy PLONK constraint count and rapidsnark proving latency on target hardware (e.g., AWS c6i.xlarge)",
+    "Specify the post-verifyHandshake audit artifact: what structured record the RS emits, with which fields, for NCUA Part 748 compliance",
+    "Specify revocation mechanism with worst-case latency SLA and RS fail-open/fail-closed behavior when on-chain registry is unreachable",
+    "Drop 2^64 permission space scaling narrative \u2014 reframe lead scenario around policy-misconfiguration-is-cryptographically-impossible, which holds at 8 bits",
+    "Add cross-RS unlinkability game showing scope_id binding prevents nullifierHash correlation across colluding RSes",
+    "Ground the on-chain verifier path as the specific instantiation where SPIFFE X.509 policy extensions have no equivalent (spiffe_engineer Attack 4)"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

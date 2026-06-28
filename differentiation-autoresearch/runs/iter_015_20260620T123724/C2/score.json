@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The design intent \u2014 eliminating AS from proof-time authorization entirely, with scopeId as a private circuit input \u2014 is genuinely beyond baseline capability. OAuth structurally requires AS involvement in token issuance; no combination of RFC 9701/DPoP/PPID removes AS knowledge of the target RS at exchange time. However, the scopePseudonym preimage attack (AS knows all cc values from tree enrollment + can compute all scopeId values from public RS data \u2192 O(N\u00d7k) lookup table deanonymizes every proof) means the construction does not actually deliver this separation. The baseline can approximate Bolyra's *actual* (broken) privacy level via PPIDs + long-lived cached JWT introspection responses. Awarding 2 requires the construction to provably deliver what the baseline cannot; the preimage vulnerability means it currently does not."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (\u00a73: adversary controls AS, up to k\u22121 RSes, timing; IND-UNL-AS game formally defined with challenge, oracles, restriction, advantage bound). Assumptions are named (A1 Poseidon PRF, A2 Groth16 knowledge soundness, A3 DL on Baby Jubjub). However, the reduction sketch in \u00a74 step 1 is broken: it claims cc is 'hidden as a private input' and keys the PRF on cc, but the AS built the Merkle tree and knows every cc leaf. The PRF assumption requires the key to be unknown to the distinguisher \u2014 it is not. The cryptographer's Attack 1 demonstrates the AS wins IND-UNL-AS with advantage \u2248 1 via precomputed table, not negl(\u03bb). The reduction does not go through. Additionally, no simulation-extractability analysis is provided for Groth16 delegation (cryptographer Attack 3), and the trusted setup trust model for project-specific Groth16 keys is unspecified (cryptographer Attack 4)."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps directly to existing Bolyra primitives: Poseidon2/3/5, EdDSA on Baby Jubjub, BinaryMerkleRoot depth 20, Groth16+PLONK dual build. Constraint estimate of ~11,514 fits within 2^14 (16,384); pot16.ptau covers. Proving time targets stated: <3s PLONK, <2s Groth16 with rapidsnark. Delegation compatibility addressed via one-constraint adapter. All 11 circuit steps use components already in the Bolyra circuit library. The new primitives (scopePseudonym, blindedScopeCommitment, sessionNullifier, scopeTag) are compositions of existing Poseidon gadgets, not new cryptographic primitives."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found a fatal attack the construction cannot answer. The cryptographer's Attack 1 (scopePseudonym preimage via AS-known cc + public scopeId) breaks the core unlinkability claim with advantage \u2248 1. This was independently confirmed by auth0_pm (Attack 1: AS-as-Operator), rfc7662_advocate (Attack 1: preimage inversion), and cu_ciso (implicitly). The construction's security reduction is invalid because the PRF key (cc) is known to the adversary. Additionally: (a) the blindingScalar TLS channel assumption fails in enterprise deployments where AS controls TLS termination (spiffe_engineer Attack 1, auth0_pm Attack 3, rfc7662_advocate Attack 3, cu_ciso Attack 4 \u2014 four independent personas); (b) requiredScopeMask as public input enables RS fingerprinting (spiffe_engineer Attack 2); (c) scopePseudonym is a permanent within-scope identifier with no rotation mechanism (cryptographer Attack 2). The construction cannot answer the preimage attack without adding an agent-held secret \u2014 a design change, not a parameter tweak."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Two concrete deployments named with specific stakeholders and regulatory requirements: (1) Desert Financial Credit Union ($9B, 400K members) \u2014 merchant graph privacy under NCUA \u00a7748 and CFPB \u00a71033 open-banking rules; (2) Kaiser Permanente (12.6M members) \u2014 referral network privacy under HIPAA Minimum Necessary Standard (45 CFR \u00a7164.502(b)). The property (cross-scope unlinkability) is load-bearing in both: DFCU-as-AS must not reconstruct member merchant graphs; KP-as-AS must not learn referral topology. These are regulatory requirements, not nice-to-haves. The cu_ciso correctly identifies a compliance tension (audit trail requirements), but the scenario fit dimension asks whether the property is load-bearing with a named stakeholder \u2014 it is."
+    }
+  },
+  "gaps": [
+    "FATAL: scopePseudonym = Poseidon2(cc, scopeId) is trivially invertible by AS that knows all cc values from tree enrollment and can compute scopeId from public RS data. Must introduce agent-held secret: scopePseudonym = Poseidon3(agentSecret, cc, scopeId) where agentSecret is committed to the tree but never revealed to AS (mirror Semaphore's trapdoor pattern).",
+    "Security reduction in \u00a74 step 1 is invalid: PRF key (cc) is known to the adversary. Must rewrite reduction after fixing scopePseudonym to use agentSecret as PRF key.",
+    "blindingScalar delivery assumes a TLS channel the AS cannot inspect \u2014 violated in enterprise deployments where AS controls TLS termination (corporate proxies, API gateways, CDN edge). Must either encrypt blindingScalar under RS public key via HPKE/ECIES before transmission (so MITM sees only ciphertext) or prove correct encryption inside the circuit.",
+    "requiredScopeMask is a public input that fingerprints RSes by their characteristic permission patterns. Must either make it a private input with a scope-policy commitment on-chain, or argue the anonymity set remains large under realistic RS ecosystem assumptions.",
+    "scopePseudonym is deterministic and permanent per (agent, RS) pair \u2014 enables persistent within-scope tracking. Must either introduce per-epoch blinding or explicitly disclaim within-scope unlinkability and define a rotation mechanism.",
+    "No compliant audit logging mechanism: NCUA \u00a7748, HIPAA \u00a7164.312(b), and GLBA \u00a7314.4(h) require audit trails the construction structurally prevents. Must design a selective-disclosure or consent-gated audit escrow that preserves operational unlinkability while producing examiner-reviewable logs.",
+    "No simulation-extractability analysis for Groth16 in the Delegation circuit \u2014 proof malleation could allow forging upstream capabilities. Must either use SE-Groth16, migrate Delegation to PLONK, or provide malleability analysis.",
+    "IND-UNL-AS game restriction (step 4) is too narrow: prevents querying challenge agents at challenge scope but does not close the auxiliary-agent loophole or account for AS computing all scopeId values from public data without active RS corruption."
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

@@ -1,0 +1,52 @@
+{
+  "id": "formal_verifier_scope_commitment_binding",
+  "title": "Prove scope commitment chain is unforgeable across delegation hops",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/DelegationChainBinding.circom",
+      "description": "Augmented Delegation circuit that exposes previousScopeCommitment and currentScopeCommitment as public outputs and enforces: (1) scopeCommitment = Poseidon(scope, credCommitment), (2) delegatee permissions bits are a strict subset of delegator permission bits via cumulative AND-mask check."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/delegationChainBinding.adversarial.js",
+      "description": "Circom witness-gen adversarial harness (Mocha + snarkjs) that attempts to construct invalid witnesses: scope-expansion attack (delegatee bits exceed delegator bits), commitment-mismatch attack (previousScopeCommitment does not match prior hop output), and Poseidon pre-image substitution attack. Each case must fail constraint satisfaction."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/delegationChainBinding.soundness.js",
+      "description": "Soundness property test: for all 2^8 pairs of (delegatorScope, delegateeScope), assert that witness generation succeeds iff delegateeScope & delegatorScope === delegateeScope (subset predicate). Uses exhaustive enumeration over the 8-bit permission space."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Append formal binding property statement: Binding(D): forall valid proof pi for hop i, Extract(pi).delegateeScope \u2286 Extract(pi).delegatorScope, and Poseidon(delegateeScope, credCommitment) = scopeCommitment_i. Reference collision-resistance assumption on Poseidon-128 and cite Grassi et al. 2021."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/delegation-chain-security-proof.md",
+      "description": "Security argument document: defines binding game, reduction to Poseidon collision resistance, proof that subset-check signal aliasing is impossible given circuit wiring, and documents adversarial test results as empirical evidence."
+    }
+  ],
+  "steps": [
+    "Read circuits/src/Delegation.circom in full to map existing signal names: delegatorScope, delegateeScope, previousScopeCommitment, credCommitment, and all Poseidon component instantiations.",
+    "Identify the exact constraint that computes scopeCommitment = Poseidon(scope, credCommitment) and verify it feeds the same scope signal used in the AND-mask subset check \u2014 document any signal aliasing risk.",
+    "Add DelegationChainBinding.circom as a thin wrapper (or augmented copy) that promotes previousScopeCommitment and currentScopeCommitment to public outputs so the adversarial harness can inspect them without modifying the production circuit.",
+    "Write the adversarial harness: case 1 \u2014 set delegateeScope to delegatorScope | 0x01 (one extra bit) and assert calculateWitness throws ConstraintError. Case 2 \u2014 tamper previousScopeCommitment to a random field element and assert failure. Case 3 \u2014 swap the scope signal fed to Poseidon with a different value that still satisfies the AND-mask and assert commitment mismatch.",
+    "Write the exhaustive soundness test: iterate all 256\u00d7256 = 65536 (delegatorScope, delegateeScope) pairs, call calculateWitness, and assert success iff (delegateeScope & delegatorScope) === delegateeScope.",
+    "Run npm run test:circuits:fast to confirm all adversarial cases fail witness generation and all valid subset pairs pass.",
+    "Run npm run test:circuits:slow (FULL_PROOF=1) on a representative sample (16 valid pairs + 3 adversarial cases) to confirm the full Groth16 proof path rejects invalid witnesses.",
+    "Update circuits/FORMAL-PROPERTIES.md with the Binding(D) property statement, the Poseidon collision-resistance assumption, and cross-reference to adversarial test filenames.",
+    "Write docs/delegation-chain-security-proof.md covering: binding game definition, reduction sketch, wiring analysis, and test results table.",
+    "Commit all artifacts with DCO sign-off: git commit -s -m 'feat(circuits): formal binding harness for delegation scope commitment chain'"
+  ],
+  "estimated_constraints": 3200,
+  "dependencies": [
+    "circuits/src/Delegation.circom",
+    "circuits/build/Delegation.r1cs",
+    "circuits/build/Delegation_groth16.zkey",
+    "circomlibjs (Poseidon JS implementation for off-circuit reference hashing in tests)",
+    "snarkjs >=0.7.6",
+    "circom_tester (for calculateWitness in adversarial harness)"
+  ]
+}

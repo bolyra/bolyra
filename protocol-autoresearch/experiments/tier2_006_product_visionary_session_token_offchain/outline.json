@@ -1,0 +1,96 @@
+{
+  "id": "product_visionary_session_token_offchain",
+  "title": "Off-chain session token with batched on-chain checkpoints",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/SessionBatch.circom",
+      "description": "Merkle-tree accumulator circuit: takes up to 100 session leaves (nullifierHash, scopeCommitment, expiry, sessionNonce) and outputs a single batchRoot commitment. Groth16 + PLONK dual build."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/SessionBatchRegistry.sol",
+      "description": "Accepts batchRoot + ZK proof from SessionBatch circuit. Stores (batchRoot, timestamp, poster) on-chain. Emits BatchCheckpointed event. Verifies proof via auto-generated SessionBatchVerifier.sol."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/SessionBatchVerifier.sol",
+      "description": "Groth16 verifier auto-generated from SessionBatch.zkey via snarkjs exportSolidityVerifier. Regenerated whenever circuit changes."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/SessionToken.ts",
+      "description": "Mint, sign, and verify off-chain session tokens. JWT-shaped structure embedding nullifierHash, scopeCommitment, expiry, sessionNonce, and signature over those fields using operator EdDSA key. Validates locally without chain read."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/SessionBatcher.ts",
+      "description": "Accumulates session leaves in memory, triggers batch flush when count >= batchSize or age >= batchInterval. Builds Merkle tree, generates SessionBatch proof via snarkjs/rapidsnark, submits to SessionBatchRegistry."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/session/sessionTypes.ts",
+      "description": "TypeScript types: SessionToken, SessionLeaf, BatchConfig (batchSize, batchInterval, chainId), SessionBatchProof."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/session-token-offchain.md",
+      "description": "Protocol spec: token format, signing algorithm, local verification algorithm, batching semantics, replay protection via sessionNonce, expiry enforcement, and batch root verification path."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/SessionBatch.test.js",
+      "description": "Witness-only tests (fast) and full Groth16/PLONK proof tests (slow, FULL_PROOF=1). Covers: valid batch, leaf count boundary (1, 100, overflow), tampered leaf rejection, expiry edge cases."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/SessionToken.test.ts",
+      "description": "Unit tests for mint/verify: valid token, expired token, wrong scope, replayed nonce, tampered nullifierHash, EdDSA signature mismatch."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/session/SessionBatcher.test.ts",
+      "description": "Integration tests for batcher flush triggers: size-based flush at 100, time-based flush at interval, concurrent session ordering, failed proof submission retry."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/SessionBatchRegistry.test.ts",
+      "description": "Hardhat tests: valid proof accepted, invalid proof rejected, duplicate batchRoot rejected, BatchCheckpointed event fields, access control on poster."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/session-token-guide.md",
+      "description": "Developer guide: how to mint a session token after handshake, configure batch parameters, verify tokens in API middleware, and interpret on-chain checkpoints for audit."
+    }
+  ],
+  "steps": [
+    "Define SessionLeaf schema: (nullifierHash, scopeCommitment, expiry, sessionNonce) \u2014 all field elements compatible with existing HumanUniqueness and AgentPolicy circuit outputs",
+    "Implement SessionToken.ts: JWT-shaped structure with header (alg, typ), payload (nullifierHash, scopeCommitment, expiry, sessionNonce, chainId), and EdDSA signature over poseidon(payload fields) using operator key",
+    "Implement local verification in SessionToken.ts: check expiry, recompute poseidon commitment, verify EdDSA signature, confirm scopeCommitment <= original handshake scope (no expansion)",
+    "Write SessionBatch.circom: accept up to 100 SessionLeaf inputs (padded with zero leaves), build incremental Merkle tree depth ceil(log2(100))=7, output batchRoot. Dual Groth16+PLONK build.",
+    "Run trusted setup for SessionBatch: use existing pot16.ptau for Groth16 key; PLONK uses universal SRS \u2014 no new ceremony needed",
+    "Generate SessionBatchVerifier.sol from SessionBatch.zkey via snarkjs exportSolidityVerifier",
+    "Implement SessionBatchRegistry.sol: store batchRoot, verify ZK proof via SessionBatchVerifier, reject duplicate roots, emit BatchCheckpointed(batchRoot, poster, timestamp)",
+    "Implement SessionBatcher.ts: in-memory leaf accumulator, configurable BatchConfig (batchSize default 100, batchInterval default 10min), flush logic, Merkle tree construction matching circuit, proof generation via rapidsnark subprocess bridge",
+    "Write circuit tests (fast witness + slow full proof) covering valid batch, boundary sizes, and tampered leaf rejection",
+    "Write SDK unit tests for SessionToken mint/verify covering expiry, scope mismatch, nonce replay, and signature failure",
+    "Write SDK integration tests for SessionBatcher flush triggers (size-based, time-based) and proof submission",
+    "Write Hardhat contract tests for SessionBatchRegistry covering valid/invalid proof, duplicate root, and event emission",
+    "Expose mintSessionToken(handshakeResult, config) and verifySessionToken(token) in sdk/src/index.ts public API",
+    "Update spec/session-token-offchain.md with finalized token format, signing algorithm, verification steps, and batch checkpoint semantics",
+    "Write docs/session-token-guide.md with end-to-end developer walkthrough and batch configuration reference",
+    "Run npm test (fast circuits + contracts), then npm run test:circuits:slow for full proof validation",
+    "DCO sign-off all commits: git commit -s"
+  ],
+  "estimated_constraints": 3200,
+  "dependencies": [
+    "HumanUniqueness circuit (nullifierHash output)",
+    "AgentPolicy circuit (scopeCommitment output)",
+    "proveHandshake / verifyHandshake SDK API (handshake result feeds session mint)",
+    "pot16.ptau (existing universal SRS for Groth16 SessionBatch key)",
+    "rapidsnark_prover binary in circuits/build/ (production proof generation)",
+    "Operator EdDSA key infrastructure (already used in AgentPolicy)",
+    "SessionBatchVerifier.sol (auto-generated, must be regenerated on circuit change)",
+    "ethers.js / Hardhat deploy pipeline for SessionBatchRegistry"
+  ]
+}

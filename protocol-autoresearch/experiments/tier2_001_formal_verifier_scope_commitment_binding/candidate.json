@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_scope_commitment_binding",
+  "persona": "formal_verifier",
+  "title": "Prove scope commitment chain is unforgeable across delegation hops",
+  "dimension": "correctness",
+  "description": "The delegation chain links hops via scopeCommitment = Poseidon(scope, credCommitment). Formally verify the binding property: given a valid delegation proof where previousScopeCommitment matches the prior hop's output, it is infeasible to produce a witness where the delegatee's actual scope exceeds the delegator's scope. This requires proving that Poseidon is used as a commitment scheme (binding under collision resistance) and that the subset check in the circuit is correctly wired to the same signals that feed the commitment. Produce a Halo2-style MockProver test or a Circom witness-gen adversarial harness that attempts to break the chain link.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_scope_commitment_binding",
+  "adoption": 16,
+  "standards": 17,
+  "completeness": 21,
+  "correctness": 21,
+  "total": 75,
+  "verdict": "promote"
+}

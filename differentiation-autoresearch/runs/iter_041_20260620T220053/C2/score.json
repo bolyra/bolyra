@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims Bolyra beats the baseline in Games 1 and 3a (Corollary 4.6). However, the rfc7662_advocate's Attack 1 shows that OIDC PPIDs + RFC 8707 Resource Indicators already achieve RS-observable unlinkability in Game 1 without ZK, and Attack 2 shows DPoP ephemeral key rotation per-RS closes the Game 3a gap. The construction never directly compares against PPID+RFC 8707 or per-RS DPoP rotation \u2014 only against vanilla RFC 7662. The real distinguisher (verifiable scope commitment inside the proof without trusting the AS) is noted by the rfc7662_advocate but is not made explicit in the construction. Construction is preferable but baseline can approximate with extra configuration."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides explicit threat models (Games 1, 2, 3a, 3b), named cryptographic assumptions (POS-PRF, Groth16 ZK), and reduction sketches (Theorems 4.2, 4.3, Proposition 4.4). This is substantial. However, the cryptographer's Attack 1 identifies that the Adv^ZK term relies on HVZK which does not compose in the multi-session setting \u2014 the reduction is incomplete without an AGM citation or simulation-extractability argument. Attack 2 notes the SRS subversion adversary is absent from all games. The formal argument has a stated threat model and assumptions but the reductions have identified gaps (composability, setup integrity), so full marks cannot be awarded."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps directly to existing Bolyra primitives: Poseidon hash for anchors and PRF, Groth16 for HumanUniqueness circuit, PLONK for AgentPolicy/Delegation circuits, BabyJubjub EdDSA for agent credentials, and the existing nullifier scheme. The pseudonym and anchor computations use Poseidon3 which is already in the circuit library. The construction operates within the Phase 1 circuit budget (pot16.ptau, 2^16 constraints). Dual Groth16/PLONK builds are already implemented per the architecture table."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary and all 5 personas found attacks the construction cannot answer. The auth0_pm identifies Game 3b self-collusion in the primary CU scenario (the CU is simultaneously AS and RS). The cryptographer finds multi-session ZK composition gaps in Theorems 4.2/4.3, subverted SRS outside all games, and timing correlation outside all games. The rfc7662_advocate shows the baseline comparison is against vanilla RFC 7662 rather than PPID+RFC 8707+DPoP, potentially reversing the claimed advantage. The cu_ciso identifies the audit trail conflict (unlinkability vs GLBA \u00a7314.4) and key custody gap. The spiffe_engineer notes the WIMSE+ZK attestor narrower alternative is unaddressed. Multiple unmitigated attacks across all personas \u2014 construction cannot answer them."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: cross-credit-union member agent (CU-as-AS must not see merchant graph) and healthcare agent delegation across providers. However, the auth0_pm's Attack 1 and cryptographer's Attack 3 demonstrate that both scenarios fall squarely into Game 3b territory where Adv=1/2 \u2014 the CU/hospital AS controls the enrollment secrets and can brute-force anchor matching. The cu_ciso further shows GLBA audit trail requirements conflict with unlinkability. The scenarios are named with stakeholders but the construction's own formal results (Prop 4.4) show the privacy guarantee fails in exactly those scenarios. Scenario is named but practically undermined \u2014 not fully load-bearing."
+    }
+  },
+  "gaps": [
+    "Baseline comparison must address PPID+RFC 8707+DPoP, not vanilla RFC 7662 \u2014 the claimed Game 1 and 3a advantages may evaporate against the correct baseline",
+    "Adv^ZK composability: cite AGM assumption or prove simulation-extractability for multi-session Groth16 proofs; current HVZK does not compose",
+    "Add Game 0 for SRS/trusted setup integrity, or migrate AgentPolicy+Delegation exclusively to PLONK universal SRS and prove security",
+    "Game 3b anchor must incorporate per-session blinding (e.g. Poseidon3(scopeId, permBitmask, Commit(cc, r))) \u2014 current 'anchor visibility gating' is a policy deferral, not a cryptographic fix",
+    "Timing correlation attack must be formally addressed: either extend IND-UNL games with timestamp oracle and bound advantage, or specify proof-caching/batching with jitter and prove residual leakage is bounded",
+    "Add GLBA \u00a7314.4 / SOC 2 CC7.2 lawful-access audit channel that is cryptographically separated from the cross-RS correlation surface",
+    "Specify key custody model for sbs (device-local + recovery, CU HSM, or threshold) with regulatory risk assessment",
+    "Add regulatory control matrix mapping Game outcomes to NCUA/FFIEC/GLBA controls",
+    "Compare against SPIFFE+ZK attestor plugin as a narrower alternative to justify the full protocol delta",
+    "Retract or qualify healthcare and CU scenarios from \u00a77 until Game 3b mitigation has a formal security reduction"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

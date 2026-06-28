@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims the baseline cannot prove narrowing over hidden scopes or hide intermediate participants. The rfc7662_advocate's Attack 4 partially invalidates the BBS+ impossibility claim \u2014 BBS+ with Bulletproofs CAN prove subset relationships over committed values in single-issuer settings. The construction's real advantage is cross-org (no shared commitment basis needed), but \u00a78's table overstates baseline inability. The spiffe_engineer's Attack 4 shows WIMSE TraTs already model multi-hop delegation chains with federation; the construction never distinguishes auditor-privacy from RP-privacy threat models. The rfc7662_advocate's Attack 1 is lethal for the NCUA scenario: when the CU operates its own AS, the examiner already trusts the AS's signed attestation \u2014 the 'no trusted third party' advantage evaporates in the primary deployment scenario. The cross-org and whistleblower scenarios do provide genuine baseline gaps, but the construction positions the NCUA single-org case as primary. Net: preferable to baseline in specific cross-org/adversarial-AS contexts, but baseline can approximate in the primary named scenario."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has explicit games (NarrowingSoundness, ParticipantPrivacy, ChainForgery), named assumptions (PLONK knowledge soundness, Poseidon collision resistance, Baby Jubjub DL, EdDSA EUF-CMA), and reduction sketches. However, the cryptographer found three real gaps: (1) hopActive/chainLength decoupling \u2014 no constraint binds hopActive[i] to (i < chainLength), allowing a malicious prover to skip hops, which is a soundness bug in the circuit specification; (2) HVZK vs composable ZK \u2014 the privacy argument invokes 'honest-verifier ZK' but the deployment requires multi-proof privacy (NCUA examiner requests many proofs over time), which needs stronger composability; (3) scope commitment enumeration \u2014 finalScopeCommitment over an 8-bit bitmask \u00d7 small registry is brute-forceable, overstating the privacy claim for the terminal hop. The intermediate enrollment gap (Attack 2) means intermediate delegators need not be enrolled agents \u2014 NarrowingSoundness game doesn't cover EnrollmentSoundness. Threat model is stated and assumptions are named, but reductions have real holes."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Construction maps entirely to existing Bolyra primitives: Poseidon2/4/5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), Num2Bits(64), LessEqThan(64), cumulative bit encoding. Circuit cost is explicitly estimated: ~13,850 constraints per hop, ~111K for 8 hops fitting within pot17.ptau, ~55.7K for 4 hops fitting within pot16.ptau. Proving times estimated at ~3-6s with rapidsnark. PLONK proof size 800 bytes. All referenced gadgets exist in Bolyra's Circom codebase. No new primitives introduced \u2014 only new composition. Phase 1 budget is feasible."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer without modification: (1) cryptographer's hopActive/chainLength decoupling is a soundness bug \u2014 the circuit as specified allows hop skipping; (2) auth0_pm and rfc7662_advocate both identify finalDelegateeMerkleRoot as a cross-proof linkability vector fatal to the whistleblower scenario; (3) cu_ciso's retrospective forgery attack (operator runs non-compliant chain, constructs compliant witness post-hoc) is acknowledged by the threat model granting adversary control of chain construction but unaddressed for the compliance use case; (4) cryptographer's scope commitment enumeration over 8-bit \u00d7 small registry breaks terminal-hop privacy; (5) cu_ciso's regulatory legibility attacks (NCUA examiner cannot interpret PLONK proofs, no FFIEC CAT mapping) collapse the primary deployment scenario. Multiple attacks are outside the stated threat model and the construction provides no mitigation."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: NFCU multi-agent loan origination and journalist/source whistleblower chain. The NFCU scenario names a real stakeholder (NCUA) and regulatory requirement (Letter 23-CU-15). However, rfc7662_advocate's Attack 1 shows that in the single-org CU case, the AS is the CU itself and the examiner already trusts it \u2014 the ZK property is not load-bearing. cu_ciso's attacks show NCUA examiners cannot interpret PLONK proofs and the construction lacks a regulatory acceptance pathway. The whistleblower scenario is undermined by finalDelegateeMerkleRoot linkability and chainLength fingerprinting. Both scenarios are plausible but neither survives adversarial scrutiny as load-bearing deployments where the construction's specific properties are essential and practically usable."
+    }
+  },
+  "gaps": [
+    "Fix hopActive/chainLength decoupling: add in-circuit constraint `hopActive[i] := (i < chainLength)` so prover cannot skip intermediate hops",
+    "Blind finalDelegateeMerkleRoot per-session (e.g., Poseidon2(merkleRoot, sessionNonce)) to prevent cross-proof terminal-agent linkability",
+    "Address scope commitment enumeration: add a random blinding salt to finalScopeCommitment so 8-bit \u00d7 small-registry brute force is infeasible",
+    "Add runtime binding mechanism: require delegation tokens to be logged on-chain or in tamper-evident store at execution time, preventing retrospective witness forgery",
+    "Pad or hide chainLength: either always set chainLength = MAX_HOPS publicly, or make it a private input with a range proof",
+    "Correct \u00a78 baseline comparison: BBS+ with Bulletproofs CAN prove subset over committed values in single-issuer settings; the real gap is cross-org (no shared commitment basis)",
+    "Add regulatory legibility layer: specify a human-readable attestation report alongside the PLONK proof that maps public signals to NCUA/FFIEC control IDs",
+    "Define EnrollmentSoundness game: prove that intermediate delegators must be enrolled agents, not just hash-linked phantom entities",
+    "Address multi-proof privacy: upgrade privacy argument from HVZK to composable ZK or add per-session randomization that prevents cross-proof distinguishing",
+    "Add privileged disclosure path for incident response: encrypted witness escrow to CU's IR key, reconciling privacy guarantee with GLBA breach notification obligations"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

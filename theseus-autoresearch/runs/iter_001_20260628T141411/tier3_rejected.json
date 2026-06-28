@@ -1,0 +1,1892 @@
+[
+  {
+    "id": "agent_key_custody_zkp_rotation",
+    "title": "ZKP-Enforced Agent Key Rotation Without Human Approver",
+    "description": "On Theseus, when an agent's EdDSA key is compromised or reaches its rotation epoch, there is no human fallback to authorize a new key. A ZKP-based rotation proof allows the agent to attest it holds both the old private key and the new one \u2014 committing to a key-transition nullifier on-chain \u2014 without revealing either key. This is structurally different from standard key rotation (which requires a human CA or multisig owner): the proof itself is the authorization. Bolyra's AgentPolicy circuit can be extended to include a rotation witness, and the IdentityRegistry contract can enforce that a valid ZKP is the only valid rotation path. Evidence: Theseus's 'no human key path' constraint makes this a day-1 operational gap \u2014 raw EdDSA rotation on an L1 with no human approver means a compromised key stays live until the agent self-destructs.",
+    "category": "key_management",
+    "persona": "agent_key_custody",
+    "time_horizon": "2_week_sprint",
+    "scores": {
+      "agent_need": 20,
+      "zkp_edge": 19,
+      "primitive_readiness": 15,
+      "partnership_leverage": 16,
+      "total": 70
+    },
+    "verdict": "PROMOTE",
+    "rationale": {
+      "agent_need": "Theseus's 'no human key path' constraint creates a structural day-1 gap where a compromised EdDSA key stays live indefinitely without a self-sovereign rotation mechanism, confirmed by the architectural constraint itself.",
+      "zkp_edge": "Lit Protocol requires an external threshold network (liveness dependency), Turnkey requires operator authorization, and raw on-chain EdDSA rotation has no way to prove key continuity without revealing the old private key \u2014 ZKP is the only mechanism that proves simultaneous possession of both keys without exposure, though the gap over MPC alternatives needs stronger evidence.",
+      "primitive_readiness": "AgentPolicy, HumanUniqueness nullifier pattern, and IdentityRegistry's nullifierMap all provide reusable components, but a new AgentRotation.circom circuit requires 3+ days of new Circom development plus PLONK setup, and the spec assumes pot16.ptau is sufficient without verifying constraint counts for the double-EdDSA witness.",
+      "partnership_leverage": "A new Circom circuit with double-EdDSA witness and trusted setup is non-trivial ZKP engineering that Theseus would need months to build, but the evidence doesn't rule out them adopting Lit Protocol's MPC approach as a faster alternative, weakening the exclusivity argument."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (not live-fetched \u2014 web search blocked this session)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Context confirms Theseus enforces a 'no human key path' constraint \u2014 agents hold raw EdDSA keypairs with no CA or multisig fallback, making unauthorized-key-persistence the day-1 operational gap this opportunity targets."
+      },
+      {
+        "source": "Lit Protocol \u2014 litprotocol.com (PKP + Lit Actions, known prior to cutoff)",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Lit's Programmable Key Pairs use threshold MPC (not ZKP proofs) for autonomous key operations; rotation is policy-gated via Lit Actions but requires the threshold network as an external trust anchor \u2014 a liveness dependency that a self-contained ZKP proof avoids."
+      },
+      {
+        "source": "Turnkey \u2014 turnkey.com (HSM-backed key management, known prior to cutoff)",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey provides policy-engine-gated key operations backed by AWS Nitro enclaves; rotation is operator-authorized, not agent-self-authorized \u2014 incompatible with Theseus's no-human-approver constraint."
+      },
+      {
+        "source": "Privy \u2014 privy.io (embedded wallet infrastructure, known prior to cutoff)",
+        "type": "competitor",
+        "relevance": "low",
+        "summary": "Privy is user-wallet-centric with social recovery tied to human accounts; structurally mismatched to agent-native chains with no human root."
+      },
+      {
+        "source": "W3C DID Core / DID:Key spec + IETF draft-ietf-oauth-dpop",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "Existing standards assume key rotation is authorized by the DID controller (a human or org); no standard currently defines a ZKP-only rotation proof path \u2014 Bolyra's proposed mechanism would be novel relative to the spec landscape."
+      },
+      {
+        "source": "Fetch.ai AEA framework + Cosmos DID registry (known prior to cutoff)",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai agents use CosmWasm-based DID documents for identity; key rotation requires on-chain governance tx signed by the current key \u2014 no ZKP path, and human upgrade authority is implicit in validator governance."
+      },
+      {
+        "source": "SingularityNET AGIX \u2014 on-chain agent registry (known prior to cutoff)",
+        "type": "agent_l1",
+        "relevance": "low",
+        "summary": "SingularityNET's agent marketplace uses Ethereum-signed registrations; no dedicated key rotation or ZKP identity layer for autonomous agent credentials."
+      },
+      {
+        "source": "Semaphore v4 (Ethereum) \u2014 on-chain nullifier-based identity (known prior to cutoff)",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Semaphore demonstrates the nullifier commitment pattern Bolyra already reuses for HumanUniqueness; extending the same pattern to a key-transition nullifier (old_key_commit \u2192 new_key_commit with double-spend guard) is architecturally straightforward given Bolyra's AgentPolicy circuit."
+      },
+      {
+        "source": "Polygon ID / iden3 protocol \u2014 ZKP credentials on EVM (known prior to cutoff)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Polygon ID supports ZKP-verified credential updates but targets human DIDs; no agent-native rotation primitive without a human issuer in the trust chain."
+      },
+      {
+        "source": "Aztec Protocol \u2014 private L2 with ZKP state transitions (known prior to cutoff)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Aztec's private note model could represent key-state transitions, but it operates as an L2 app layer \u2014 not a reusable rotation primitive portable to Theseus's L1."
+      }
+    ],
+    "demand_strength": "strong",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "The EdDSA operator signature verification logic is the direct ancestor of the rotation witness. AgentPolicy already verifies that an agent holds the private key corresponding to a credential commitment via EdDSA over Baby Jubjub. For rotation, the same gate can be instantiated twice \u2014 once for the old key (proving current registry membership) and once for the new key (committing to the successor credential). The scope commitment output (Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp)) provides the chain-link between old and new credential state.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The nullifier pattern \u2014 Poseidon2(scope, secret) \u2014 is borrowed directly as the design pattern for the rotation nullifier. For key rotation, the analogous construction is Poseidon2(rotationEpoch, oldCredentialCommitment), binding the one-time-use nullifier to a specific rotation epoch so the same old key cannot authorize two different successor keys. No modification to this circuit; it supplies the cryptographic idiom.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "The scope-narrowing chain-linking logic (identity-bound scope commitment chain, expiry narrowing) is structurally reusable for rotation continuity: the new key's credential commitment must carry forward all permission constraints from the old one, preventing a rotation event from silently escalating permissions. The delegatee expiry <= delegator expiry invariant maps cleanly to newExpiry <= oldExpiry as a rotation constraint. No circuit modification needed \u2014 the logical pattern is extracted, not the circuit itself.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The agentTree (LeanIMT + 30-entry root history buffer) is the on-chain state that rotation must update atomically. The existing delegation nullifier replay protection mechanism is the template for rotation nullifier tracking. The 'atomic handshake verification in a single tx' pattern extends to an 'atomic rotation verification' call: verify rotation proof, check nullifier unused, update agentTree leaf, emit RotationCompleted event. Requires a new entry point function but the storage layout and nullifier map infrastructure already exists.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "PlonkVerifier",
+        "usage": "The rotation circuit should target PLONK (same as AgentPolicy and Delegation) to avoid a project-specific Groth16 trusted setup ceremony. The existing PlonkVerifier at 0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db will be reused as the on-chain verifier for rotation proofs, eliminating a new verifier deployment if the circuit's verification key is registered to the same verifier contract.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "AgentKeyRotation.circom \u2014 PLONK circuit with private inputs: oldEdDSAPrivKey, newEdDSAPrivKey, oldCredentialCommitment, rotationEpoch, oldMerklePathElements[20], oldMerklePathIndices[20]. Public outputs: oldCredentialCommitment (for registry lookup), newCredentialCommitment (Poseidon3 of same permissions + new pubkey + newExpiry), rotationNullifier (Poseidon2(rotationEpoch, oldCredentialCommitment)), newLeafHash. Constraints: two EdDSA Baby Jubjub key derivations, two Poseidon3 commitment checks, one LeanIMT membership proof on old leaf, one nullifier derivation, one permission-preservation check asserting newPermissionBitmask == oldPermissionBitmask AND newExpiry <= oldExpiry. Estimated ~24K constraints, within pot16.ptau budget.",
+        "complexity": "high",
+        "estimated_days": 8
+      },
+      {
+        "type": "contract",
+        "description": "IdentityRegistry.rotateAgentKey(rotationProof, publicSignals) entry point \u2014 verifies PLONK rotation proof via PlonkVerifier, reads oldCredentialCommitment from publicSignals and confirms it is a current agentTree leaf (using root history buffer for recency tolerance), checks rotationNullifier not consumed (new mapping: rotationNullifiers), updates agentTree by replacing old leaf with newLeafHash, stores rotation event with epoch for audit trail. Also adds a rotationEpoch admin setter (operator-controlled, Theseus can call via their bridge contract).",
+        "complexity": "medium",
+        "estimated_days": 4
+      },
+      {
+        "type": "sdk",
+        "description": "SDK v0.3 rotation API: createRotationCredential(oldAgentCredential, newOperatorKey, rotationEpoch) \u2192 AgentCredential; proveRotation(oldCredential, newCredential, rotationEpoch) \u2192 RotationProof; submitRotation(proof, registryAddress) \u2192 RotationReceipt. New error classes: KeyRotationNullifierUsedError, RotationPermissionEscalationError, RotationExpiryEscalationError, StaleAgentRootError.",
+        "complexity": "medium",
+        "estimated_days": 4
+      },
+      {
+        "type": "integration",
+        "description": "Theseus chain bridge adapter \u2014 thin contract or off-chain relay that listens for Theseus-native key-compromise events (or epoch triggers) and initiates the Bolyra rotation flow on Base Sepolia. Two deployment models: (A) off-chain relay: Theseus agent SDK calls @bolyra/sdk directly, submits rotation proof to Base Sepolia IdentityRegistry, then posts the Base Sepolia tx hash back to Theseus as proof-of-rotation; (B) on-chain bridge: a lightweight Theseus-deployed contract that accepts a rotation receipt from Base Sepolia via LayerZero or Axelar and gates agent operations until rotation is confirmed. Model A is the 2-week sprint target; model B is v0.4.",
+        "complexity": "medium",
+        "estimated_days": 5
+      },
+      {
+        "type": "spec",
+        "description": "Key rotation profile for draft-bolyra-mutual-zkp-auth-01 \u2014 addendum section defining rotationEpoch semantics, rotation nullifier construction, permission-preservation invariants, and the prohibition on human-path bypass. Required for Theseus to reference a normative spec rather than an implementation detail.",
+        "complexity": "low",
+        "estimated_days": 2
+      }
+    ],
+    "theseus_integration_surface": "Primary surface is the IdentityRegistry.rotateAgentKey() function on Base Sepolia (0x2781dF8b6381462d881C833Fb703d68c661c9577 + new entry point post-upgrade). Theseus agents invoke @bolyra/sdk's proveRotation() locally \u2014 the proving happens client-side in ~16s (PLONK, same order as AgentPolicy) \u2014 then submit the calldata to Base Sepolia via a standard EIP-1559 tx. Theseus has no native Base Sepolia awareness, so the integration shim is an off-chain relay process (Node.js, ships as @bolyra/theseus-adapter) that: (1) subscribes to Theseus's epoch-clock or compromise-signal events, (2) calls @bolyra/sdk to generate the rotation proof, (3) submits to IdentityRegistry on Base Sepolia, (4) posts the resulting tx hash + rotationNullifier back to Theseus as an off-chain attestation the agent can present. For Theseus to enforce on-chain that only ZKP-rotated agents can operate, they would deploy a thin BolyraRotationGate.sol on their chain that calls a Bolyra-maintained storage oracle or accepts the Base Sepolia tx receipt verified via their chosen bridge (LayerZero being the most operator-friendly given Bolyra's Base deployment). The SDK bridge is the 2-week deliverable; the on-chain gate is v0.4.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "AgentRotation.circom",
+          "type": "circuit",
+          "description": "New Circom 2 circuit extending AgentPolicy with a double-key witness: proves simultaneous possession of old EdDSA private key (current registry member) and new EdDSA private key (successor), outputs rotation nullifier Poseidon2(rotationEpoch, oldCredentialCommitment) and new scope commitment, enforces newExpiry <= oldExpiry and no permission escalation via cumulative-bit comparison. Targets PLONK to reuse pot16.ptau and avoid a new Groth16 ceremony.",
+          "days": 3,
+          "reuses": "AgentPolicy (double-instantiated EdDSA gate + scope commitment), HumanUniqueness (nullifier construction idiom), Delegation (expiry narrowing constraint)"
+        },
+        {
+          "name": "AgentRotation PLONK trusted setup + vkey",
+          "type": "circuit",
+          "description": "Run snarkjs plonk setup against pot16.ptau for AgentRotation.circom, export rotation.zkey and rotation.vkey.json, verify constraint count stays under 2^16. Check if existing PlonkVerifier at 0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db accepts the new vkey or needs a new verifier deployment.",
+          "days": 0.5,
+          "reuses": "circuits/build/pot16.ptau, PlonkVerifier contract"
+        },
+        {
+          "name": "IdentityRegistry.rotateAgentKey()",
+          "type": "contract",
+          "description": "New entry point on IdentityRegistry: accepts (rotationProof, publicSignals) \u2014 verifies PLONK proof, checks rotation nullifier not in nullifierMap, atomically updates agentTree leaf from old to new credential commitment, stores nullifier, emits RotationCompleted(agentId, oldCommitment, newCommitment, epoch). Reuses existing nullifierMap storage layout and LeanIMT update pattern from delegation flow. Includes Hardhat integration test: rotation succeeds, replay fails, permission-escalation proof rejected.",
+          "days": 2,
+          "reuses": "IdentityRegistry (nullifierMap, agentTree LeanIMT, atomic verification pattern)"
+        },
+        {
+          "name": "SDK rotateAgentKey() method",
+          "type": "sdk",
+          "description": "New public method in @bolyra/sdk: rotateAgentKey(oldCredential, newOperatorPrivKey, rotationEpoch) \u2192 generates AgentRotation witness, runs PLONK prove via snarkjs (or rapidsnark subprocess), returns { rotationProof, publicSignals, newCredential }. Caller submits to IdentityRegistry.rotateAgentKey() on-chain. Type-safe, matches existing createAgentCredential return shape so downstream code (proveHandshake) needs zero changes.",
+          "days": 1,
+          "reuses": "createAgentCredential (witness construction pattern, subprocess bridge)"
+        },
+        {
+          "name": "End-to-end rotation demo script",
+          "type": "demo",
+          "description": "Single Node script: enroll agent with old key \u2192 generate rotation proof \u2192 submit on-chain \u2192 verify old credential rejected by IdentityRegistry \u2192 generate handshake with new credential \u2192 verify succeeds. Runs against local Hardhat node. Output is a clean terminal trace showing nullifier recorded, agentTree root updated, handshake passing. This is what gets screen-shared on the Theseus call once built.",
+          "days": 1,
+          "reuses": "existing test harness (examples/mcp-demo, Hardhat deploy scripts)"
+        },
+        {
+          "name": "Theseus integration architecture spec",
+          "type": "spec",
+          "description": "One-page technical spec for the Sunday call: circuit I/O diagram, rotation nullifier construction, IdentityRegistry call sequence, EVM deployment assumptions, and 3 open questions requiring Theseus input (VM compatibility, agent lifecycle event triggers, rotation epoch definition). Not a full IETF draft \u2014 purpose is to demonstrate concrete thinking and open a scoped technical conversation.",
+          "days": 0.5,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 8,
+      "reuse_percentage": 60,
+      "demo_readiness": "2_weeks",
+      "demo_description": "Sunday call shows: (1) live walkthrough of existing AgentPolicy.circom as the direct ancestor \u2014 the EdDSA gate that will be doubled in AgentRotation; (2) HumanUniqueness nullifier code as the rotation nullifier template; (3) IdentityRegistry nullifierMap storage as the replay-protection substrate; (4) the one-page architecture spec with circuit I/O and call sequence; (5) a rough constraint-count estimate proving pot16.ptau (2^16) is sufficient. Goal is to establish Bolyra has 60% of the primitives already and needs 8 days to close the gap \u2014 not to show running code.",
+      "risks": [
+        "AgentRotation constraint count may exceed 2^16 (pot16.ptau limit) if the double-EdDSA witness is expensive \u2014 mitigation: benchmark witness size against AgentPolicy baseline before writing full circuit, and have pot17.ptau fallback ready",
+        "Theseus VM may not be EVM-compatible \u2014 if they run a custom CosmWasm or SVM-derivative, IdentityRegistry.sol cannot deploy there and the integration requires a proof-relay bridge, adding 3-5 days",
+        "PlonkVerifier at 0x28b99 may not support dynamic vkey registration \u2014 if it's a static verifier, a new verifier contract must be deployed and the solo-founder timeline tightens",
+        "Rotation epoch semantics undefined \u2014 without Theseus confirming how rotation epochs are defined and emitted on-chain, the circuit's epoch binding is architecturally sound but untestable on their actual chain",
+        "8-day estimate assumes no other fires (autoresearch loops, protocol-autoresearch, SDK maintenance) \u2014 any context switch extends to 12 days"
+      ],
+      "success_criteria": "A rotation proof generated by @bolyra/sdk passes IdentityRegistry.rotateAgentKey() on-chain verification, the old credential commitment's nullifier is stored (replay attempt reverts), the agentTree Merkle root updates atomically, and a subsequent proveHandshake() call using the new credential succeeds while the same call with the old credential fails \u2014 all demonstrated in a single deterministic Hardhat integration test.",
+      "theseus_dependencies": "1) VM confirmation: EVM-compatible or custom (determines if IdentityRegistry.sol deploys natively vs requires a proof-relay bridge). 2) Testnet RPC + faucet access before end of sprint. 3) Current agent identity encoding: how EdDSA public keys are stored on-chain today (raw bytes32? DID document? compressed Baby Jubjub point?). 4) Rotation epoch definition: is it time-based, block-based, or event-triggered, and who emits it? 5) Agent lifecycle ownership: does Theseus have an existing AgentRegistry contract we must integrate with, or is Bolyra's IdentityRegistry the proposed registry?"
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 2 FATAL: Standard EdDSA rotation (old_private_key signs new_public_key \u2192 on-chain state update) never exposes either private key and prevents double-rotation via on-chain state invalidation. The proposal's core claim \u2014 'ZKP is the only mechanism that proves simultaneous possession of both keys without exposure' \u2014 is false. Standard ECDSA/EdDSA key delegation achieves identical guarantees. The ZKP adds proof generation latency (3\u201310s), circuit complexity, and a trusted setup ceremony for zero marginal security or privacy benefit.",
+      "AXIS 1 CONCERN: The simpler path for Theseus is trivial \u2014 a Solidity (or custom VM) registry function that takes (new_pubkey, sig_by_old_key) and atomically invalidates the old key. A senior EVM dev completes this in 2\u20133 days. The ZKP circuit path (AgentRotation.circom + double-EdDSA witness + PLONK setup) is 2\u20134 weeks minimum, and the marginal security gain over the standard path is undemonstrated.",
+      "AXIS 3 CONCERN: The proposal conflates two distinct failure modes. For COMPROMISED keys (the headline use case), ZKP rotation is self-defeating: generating the rotation proof requires the old private key \u2014 an agent whose key is stolen cannot safely invoke this path without the attacker being able to generate a competing rotation proof first. The proposal solves scheduled/epoch-based rotation only, which standard crypto handles trivially.",
+      "AXIS 4 CONCERN: Theseus's VM compatibility is explicitly unresolved. If Theseus is non-EVM, the entire Solidity verifier layer is dead weight. The proposal is scoped as a 2-week sprint but requires: new Circom circuit, pot16.ptau constraint budget verification, PLONK ceremony, IdentityRegistry fork, and an unknown Theseus integration surface. Scope underestimation risk is high, and the value upside doesn't justify the integration surface given Axis 2's finding.",
+      "AXIS 5 PASS: The double-EdDSA witness pattern and nullifier-based rotation would generalize to other agent-native platforms (Fetch.ai, autonomous agent frameworks). Circuit artifacts would extend Bolyra's library. This is the proposal's only defensible dimension.",
+      "SCORING IMPACT: Axis 2 is a clean FAIL (standard crypto provably suffices). Axes 1, 3, 4 are CONCERNs. By rubric: one axis failure alone warrants demotion; three CONCERNs compound the weakness. The proposal survives only 1/5 axes cleanly \u2014 DROP threshold met."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "CONCERN",
+      "integration_complexity_vs_value": "CONCERN",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "The ZKP key-rotation proposal's core premise is false \u2014 standard EdDSA delegation achieves identical security without exposing private keys, making the ZKP overhead unjustifiable; DROP.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "agent_economy_sybil_resistant_reputation",
+    "title": "Sybil-resistant agent reputation via ZKP nullifiers for agent marketplaces",
+    "description": "Agent marketplaces collapse when reputation is cheap to fake \u2014 if spinning up a new agent costs nothing, a bad actor resets its reputation every time. Bolyra's HumanUniqueness circuit uses Semaphore v4-style nullifier hashing to prove 'this identity has not been seen before in this context' without revealing which identity it is. Adapting this to agent-rooted trust (where the Theseus genesis transaction replaces the human enrollment) gives each agent a unique, unlinkable nullifier that persists across sessions but cannot be duplicated. This is the foundational primitive for any reputation system on Theseus \u2014 Merit Systems' x402scan and Kite both build payment discovery on top of agent reputation, but neither provides Sybil resistance at the identity layer. World's agentkit attempts human-attestation as a proxy for uniqueness but explicitly excludes agent-native scenarios.",
+    "category": "identity",
+    "persona": "agent_economy",
+    "time_horizon": "3_month_roadmap",
+    "scores": {
+      "agent_need": 17,
+      "zkp_edge": 19,
+      "primitive_readiness": 18,
+      "partnership_leverage": 15,
+      "total": 69
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "The need is well-argued from structural constraints (no human key path, cheap agent spin-up) and confirmed by World agentkit's documented exclusion of agent-native scenarios, but direct Theseus documentation showing they've identified Sybil resistance as a gap is cited only from a context brief, not a primary source.",
+      "zkp_edge": "The non-ZKP alternative (stake-weighted reputation as in Fetch.ai) is named and its failure mode (stake can be cheaply recycled, no unlinkability) is structurally argued, though the analysis could more sharply address whether a simpler on-chain commitments scheme could achieve the same without a full ZKP circuit.",
+      "primitive_readiness": "Specific circuits (HumanUniqueness fork, AgentPolicy, Delegation), contract functions, and realistic day-estimates are named with clear reuse rationale and no new trusted setup ceremony required, making this one of the better-specified proposals; minor risk is that the theseus-registry-adaptor and marketplace-admission-gate are new contracts requiring audit time not fully accounted for.",
+      "partnership_leverage": "The argument that Theseus lacks ZKP circuit expertise is plausible but not evidenced \u2014 no team composition data is cited, and Theseus could plausibly adopt Lit Protocol or commission a ZKP team, so the exclusivity of the leverage is moderate at best."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (context brief)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is an agent-native L1 with no human-controlled key path, funded by Orange DAO; identity approach is likely raw EdDSA keypairs with no Sybil-resistance layer documented."
+      },
+      {
+        "source": "https://www.x402.org/ecosystem",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "x402scan (Merit Systems) and Kite build payment discovery on agent reputation but explicitly lack a Sybil-resistance primitive at the identity layer, confirmed by the opportunity description."
+      },
+      {
+        "source": "https://litprotocol.com",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Lit Protocol provides programmable key management and access control for agents but relies on threshold MPC rather than ZKP nullifiers, offering no unlinkable uniqueness guarantee."
+      },
+      {
+        "source": "Turnkey (turnkey.com, training knowledge)",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey offers agent wallet infrastructure via secure enclaves but is key-custody focused with no reputation or Sybil-resistance primitive."
+      },
+      {
+        "source": "Privy (privy.io, training knowledge)",
+        "type": "competitor",
+        "relevance": "low",
+        "summary": "Privy handles embedded wallets and agent signing but is human-auth-first; agent-native Sybil resistance is out of scope."
+      },
+      {
+        "source": "World (world.org) agentkit",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "World's agentkit uses human World ID attestation as a proxy for agent uniqueness but explicitly excludes agent-native scenarios, leaving a documented gap Bolyra can fill."
+      },
+      {
+        "source": "Fetch.ai / Agentverse (training knowledge)",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai's Agentverse assigns DIDs to agents but reputation is stake-weighted, not Sybil-resistant at cryptographic level; no ZKP nullifier mechanism present."
+      },
+      {
+        "source": "SingularityNET (training knowledge)",
+        "type": "agent_l1",
+        "relevance": "low",
+        "relevance_score": "low",
+        "summary": "SingularityNET uses on-chain agent registry with AGIX staking for reputation; no nullifier-based uniqueness, easy to duplicate with fresh stake."
+      },
+      {
+        "source": "W3C DID Core + DIF DIDComm v2 (standards)",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "DID specs support agent DIDs but provide no uniqueness or Sybil-resistance guarantees; nullifier extension would be non-standard and novel."
+      },
+      {
+        "source": "IETF draft-klrc-aiagent (training knowledge)",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "Emerging IETF AI agent auth draft focuses on OAuth delegation scopes, not cryptographic uniqueness; ZKP nullifier layer would be additive."
+      },
+      {
+        "source": "Semaphore v4 / PSE (training knowledge)",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Semaphore v4 is the production-grade ZKP nullifier primitive; Bolyra's HumanUniqueness circuit already reuses its ceremony, making adaptation to agent-rooted trust a circuit-level extension rather than a new trusted setup."
+      },
+      {
+        "source": "Aztec / Noir ecosystem (training knowledge)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Aztec uses ZKP for account abstraction but not for cross-context Sybil resistance; nullifier model differs from Semaphore's context-scoped design."
+      },
+      {
+        "source": "Polygon ID (training knowledge)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Polygon ID deploys ZKP credentials on EVM chains but is credential-presentation focused, not uniqueness/nullifier focused; no agent-native reputation primitive."
+      }
+    ],
+    "demand_strength": "strong",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The Poseidon2(scope, secret) nullifier is the direct Sybil-resistance primitive. For agents, the 'secret' is replaced by a deterministic value derived from the Theseus genesis transaction hash (e.g., Poseidon2(genesisTxHash, operatorSalt)). The scope parameterization means the same agent gets an unlinkable nullifier per marketplace, so reputation is siloed by context. Merkle membership proof (LeanIMT depth 20) handles ~1M registered agents without a new ceremony \u2014 reuses the existing agentTree in IdentityRegistry rather than humanTree.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Selective disclosure of the permission bitmask maps directly to reputation tiers \u2014 an agent proves 'my reputation tier satisfies requiredScopeMask bits' without revealing the full credential. The identity-bound scope commitment Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp) can encode a reputation score or tier as the bitmask, with expiry enforcing time-decaying reputation. EdDSA operator signature means a trusted reputation oracle (Theseus validator set or Merit Systems) signs the credential off-chain, and the circuit proves it without on-chain oracle calls.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "When a marketplace agent spawns task sub-agents, the delegation chain enforces that the sub-agent's reputation scope is a bitwise subset of the parent's \u2014 a low-reputation parent cannot spawn a high-reputation sub-agent. The 3-hop limit and nullifier replay protection on delegation prevent reputation laundering through chain inflation. delegateeExpiry <= delegatorExpiry ensures reputation leases don't outlive the parent credential.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The existing agentTree (LeanIMT with 30-entry root history buffer) is the Merkle accumulator for registered Theseus agents. Atomic handshake verification proves both uniqueness (Groth16 nullifier proof) and reputation level (PLONK AgentPolicy proof) in a single transaction, which is the correct surface for marketplace admission gates. Delegation nullifier replay protection directly prevents the reset-reputation attack described in the opportunity.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "payment-protocols",
+        "usage": "The x402 payment integration (integrations/payment-protocols/) provides the monetization rail that reputation gates. An agent with a proven nullifier and reputation tier can unlock x402 paywalls on Theseus-connected services (x402scan, Kite discovery) without deanonymizing itself. The existing integration surface only needs a Bolyra proof check inserted before the payment authorization step.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "AgentGenesis circuit: takes Theseus genesis tx hash as the enrollment anchor (replacing human secret in HumanUniqueness). Computes agent identity commitment as Poseidon2(genesisTxHash, operatorSalt) and produces a nullifier Poseidon2(marketplaceScope, genesisCommitment). Needs a storage proof or Merkle inclusion proof that the genesis tx exists on Theseus chain \u2014 the non-trivial part is the cross-chain witness. Can fork HumanUniqueness (~16K constraints) with the secret input replaced; storage proof adds ~4-8K constraints depending on trie depth.",
+        "complexity": "medium",
+        "estimated_days": 12
+      },
+      {
+        "type": "contract",
+        "description": "TheseusReputationRegistry: deployed on Theseus (or Base Sepolia with Theseus bridge). Stores nullifier\u2192reputationCommitment mappings. Exposes admitAgent(nullifierHash, reputationProof) and revokeAgent(nullifierHash) guarded by the Groth16/PLONK verifiers already deployed. Root history buffer pattern from IdentityRegistry copy-pastes directly. Includes a reputation update path: operator signs new credential, agent proves continuity via nullifier binding without re-enrollment.",
+        "complexity": "medium",
+        "estimated_days": 8
+      },
+      {
+        "type": "integration",
+        "description": "Theseus SDK bridge (@bolyra/theseus): thin adapter mapping Theseus chain's agent API to @bolyra/sdk createAgentCredential / proveHandshake. Mirrors the @bolyra/openclaw pattern. Handles genesis tx extraction from Theseus RPC, operatorSalt derivation, and proof submission to TheseusReputationRegistry. Also wraps x402 payment headers with Bolyra proof attestations so x402scan can filter by proven reputation tier.",
+        "complexity": "low",
+        "estimated_days": 5
+      },
+      {
+        "type": "spec",
+        "description": "Reputation claim extension to draft-bolyra-mutual-zkp-auth-01 and did:bolyra method: defines reputationTier claim type, nullifier binding to genesis tx, and scope encoding for marketplace contexts. Required for Merit Systems / Kite interop so they can verify proofs without coupling to Bolyra internals. Adds ~5 test vectors to the existing conformance suite.",
+        "complexity": "low",
+        "estimated_days": 3
+      }
+    ],
+    "theseus_integration_surface": "Four connection points: (1) Verifier contracts \u2014 deploy PlonkVerifier and Groth16Verifier (already live on Base Sepolia) to Theseus EVM or bridge via a light-client relay; TheseusReputationRegistry calls into them on-chain, same pattern as IdentityRegistry. (2) SDK bridge \u2014 @bolyra/theseus npm package wraps Theseus RPC calls (genesis tx extraction, agentTree leaf construction) and feeds @bolyra/sdk proveHandshake; marketplace operators call one function to get a proof bundle. (3) x402 middleware \u2014 insert Bolyra proof verification as an x402 payment authorization hook; x402scan and Kite read the proof attestation from the HTTP 402 challenge response headers rather than building their own Sybil layer. (4) DID resolution \u2014 Theseus agents register did:bolyra DIDs that resolve to their agentTree leaf; marketplace UIs resolve DIDs to reputation commitments without touching nullifiers, preserving unlinkability at the presentation layer.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "agent-nullifier-circuit",
+          "type": "circuit",
+          "description": "Minor fork of HumanUniqueness.circom: replace human secret leaf with Poseidon2(genesisTxHash, operatorSalt), keep LeanIMT depth-20 membership proof and scope-parameterized nullifier hash intact. Reuses pot16.ptau and agentTree in IdentityRegistry \u2014 no new trusted setup ceremony needed. Change is ~15 lines of Circom.",
+          "days": 2,
+          "reuses": "HumanUniqueness"
+        },
+        {
+          "name": "reputation-tier-spec",
+          "type": "spec",
+          "description": "Defines how AgentPolicy 8-bit bitmask encodes reputation tiers (bit 0=enrolled, bit 1=verified-payment, bit 2=trusted-small-tx, bit 3=trusted-medium-tx, bits 4-7 reserved for Theseus-native tiers). Specifies EdDSA credential issuance flow: Theseus validator set OR Bolyra-operated oracle signs off-chain, circuit proves tier \u2265 threshold without revealing score. Defines expiry convention for time-decaying reputation leases.",
+          "days": 1,
+          "reuses": "AgentPolicy"
+        },
+        {
+          "name": "theseus-registry-adaptor",
+          "type": "contract",
+          "description": "Thin Solidity contract wrapping IdentityRegistry: accepts (genesisTxHash, operatorSalt, agentLeaf, merkleProof) and inserts agent leaf into agentTree. Enforces one-genesis-one-leaf via a mapping(bytes32 => bool) of spent genesis hashes. Emits AgentEnrolled(nullifierHash, scope). Deploys alongside existing IdentityRegistry on Base Sepolia.",
+          "days": 3,
+          "reuses": "IdentityRegistry"
+        },
+        {
+          "name": "marketplace-admission-gate",
+          "type": "contract",
+          "description": "Solidity contract verifying a (AgentNullifier Groth16 proof + AgentPolicy PLONK proof) pair atomically in a single transaction. Tracks spent nullifiers per scope to block reputation-reset attacks. Exposes admitAgent(nullifierProof, reputationProof, requiredTierMask) \u2192 bool. Designed as a composable primitive Theseus marketplace contracts can call as a modifier.",
+          "days": 2,
+          "reuses": "IdentityRegistry + existing Groth16/PLONK verifier contracts"
+        },
+        {
+          "name": "sdk-theseus-adapter",
+          "type": "sdk",
+          "description": "TS SDK extension exported from @bolyra/sdk v0.3: theseusGenesisToCredential(genesisTxHash, operatorPrivKey, reputationTier, expiry) \u2192 AgentCredential (wraps createAgentCredential with genesis-derived secret). proveTheseusAdmission(credential, scope, requiredMask) calls proveHandshake() against agentTree root. Includes TypeScript types for TheseusGenesisCredential.",
+          "days": 2,
+          "reuses": "createAgentCredential + proveHandshake"
+        },
+        {
+          "name": "x402-reputation-gate",
+          "type": "integration",
+          "description": "Wire Bolyra proof check into existing x402 payment-protocols integration: before x402 authorization executes, require valid (AgentNullifier + minimum reputation tier) proof. Agents below threshold receive HTTP 402 with a Bolyra enrollment URL in WWW-Authenticate header. Connects to x402scan and Kite discovery via their existing payment middleware hooks.",
+          "days": 2,
+          "reuses": "integrations/payment-protocols"
+        },
+        {
+          "name": "theseus-sybil-demo",
+          "type": "demo",
+          "description": "Single Node script showing the full attack-and-defense loop on Base Sepolia: (1) enroll agent keyed to a real Theseus genesis tx hash, (2) issue reputation credential at tier 2 via oracle, (3) prove admission to mock marketplace gate contract, (4) attempt second enrollment with same genesis hash \u2192 reverted. Console output shows nullifier hash, proof time, and block explorer link. Runs in under 2 minutes end-to-end.",
+          "days": 1,
+          "reuses": "existing SDK + circuits"
+        },
+        {
+          "name": "theseus-integration-spec",
+          "type": "docs",
+          "description": "Technical doc for Theseus team covering: genesis tx hash derivation convention and salt spec, contract ABI and deployment addresses on Base Sepolia, proof flow diagram (enroll \u2192 oracle-sign \u2192 prove \u2192 gate), oracle key custody options (Theseus validator multisig vs Bolyra-operated), EVM compatibility checklist, and LeanIMT depth-20 capacity analysis (~1M agents).",
+          "days": 1,
+          "reuses": "new"
+        }
+      ],
+      "total_days": 14,
+      "reuse_percentage": 78,
+      "demo_readiness": "2_weeks",
+      "demo_description": "For the Sunday call (tomorrow): show the existing AgentPolicy circuit live \u2014 prove a reputation tier from an EdDSA-signed credential in ~50ms via snarkjs, no server needed. Then open HumanUniqueness.circom and show the 15-line diff that swaps the human secret for Poseidon2(genesisTxHash, operatorSalt) \u2014 making the circuit change feel trivially concrete. Walk through the integration spec doc showing the full proof flow diagram. Key talking point: the Sybil-resistance primitive already works, the Theseus integration is a 2-week engineering task not a research problem. Ask Theseus for genesis tx format spec and EVM compatibility confirmation to unblock day-1 work.",
+      "risks": [
+        "Theseus is not EVM-compatible: Solidity verifier contracts cannot deploy; would require porting Groth16/PLONK verifiers to their VM or moving verification off-chain with on-chain commitment anchoring \u2014 adds 2-3 weeks.",
+        "Genesis tx hash is not stable pre-finality or not accessible to the agent proving environment: need a trusted relay mechanism, which reintroduces a centralization point the ZKP was supposed to eliminate.",
+        "Reputation oracle key custody unresolved: EdDSA signing key needs a clear owner (Theseus validator set, Bolyra-operated oracle, or multi-sig) before production; wrong choice here becomes the system's trust bottleneck.",
+        "agentTree root history buffer (30 entries) saturates under rapid Theseus agent registration bursts, causing membership proof failures for agents enrolled before the buffer rolled over \u2014 may need to extend buffer or add an archival root checkpoint.",
+        "World agentkit or Lit Protocol ship a competing nullifier primitive in the next 90 days given the documented gap; speed of demo to Theseus matters more than polish."
+      ],
+      "success_criteria": "A single Base Sepolia transaction: registers a Theseus agent keyed to a real genesis tx hash, verifies a Groth16 nullifier proof that no prior enrollment exists for that hash in that marketplace scope, verifies a PLONK AgentPolicy proof that reputation tier >= required threshold, and rejects a second registration attempt with the same genesis hash \u2014 all with end-to-end proving time under 500ms on commodity hardware and gas under 300k.",
+      "theseus_dependencies": "EVM compatibility confirmation or custom VM ABI if not EVM; genesis transaction hash derivation spec (algorithm, salt convention, finality timing); testnet RPC endpoint and faucet (Base Sepolia or Theseus devnet); decision on whether Theseus validator set will operate the EdDSA reputation oracle or Bolyra runs one independently; approximate target agent count at launch to validate LeanIMT depth-20 capacity of ~1M agents."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 2 FAIL: The ZKP unlinkability property directly conflicts with the reputation use case. Reputation systems require persistent, linkable identity within a marketplace context. The card's own design (same nullifier per agent per marketplace) means the agent IS identifiable within any given marketplace \u2014 ZKP only hides cross-marketplace correlation. But Theseus agent genesis transactions are already public on-chain, so 'which agent you are' is not hidden data. A standard on-chain nullifier \u2014 keccak256(genesisTxHash, marketplaceId, salt) stored in a mapping \u2014 provides identical Sybil resistance with zero ZKP overhead, no trusted setup, and trivial verification. The kill signal fires: the ZKP privacy property conceals data that has no economic or security value because it is already public.",
+      "AXIS 1 CONCERN: The proposal describes the required circuit modification as 'minor' \u2014 replacing the human secret with a genesis tx hash. This self-assessment undermines the moat argument. Semaphore v4 is open source, PSE provides direct developer support, and a single ZKP-curious engineer can adapt the protocol in 4-6 weeks. Theseus is Orange DAO-backed ($100K), typical of YC-adjacent founding teams with high technical depth. The kill signal for 2-week replication in pure Solidity does not fire, but the Semaphore fork path makes 6-week replication realistic \u2014 well within the 3-month threshold.",
+      "AXIS 3 CONCERN: Theseus is pre-mainnet, pre-marketplace, and funded at $100K. Agent population at launch will be in the tens to low hundreds, where reputation is handled manually or by operator whitelist. Sybil resistance at cryptographic level only becomes necessary when anonymous participation is possible and reputation can be gamed at scale \u2014 typically >1K agents with open admission. The named use case (agent marketplace reputation) is valid but premature; Theseus needs a functioning L1 and marketplace first, making this a 12-18 month need, not 3-month.",
+      "AXIS 4 CONCERN: Theseus is a custom L1 with no confirmed EVM compatibility. The card assumes a Solidity verifier can be deployed, but if Theseus runs a custom VM (likely given the 'no human key path' architectural constraint that makes standard EVM account models awkward), Bolyra would need to implement a native Groth16 verifier in the Theseus VM language \u2014 a multi-month effort requiring cryptographic engineering beyond circuit work. The theseus-registry-adaptor and marketplace-admission-gate contracts are unaudited new surface. Gas/compute cost of on-chain Groth16 verification (~250K-500K EVM gas equivalent) on a nascent L1 with unknown fee markets is unquantified.",
+      "AXIS 5 PASS: The AgentUniqueness circuit (HumanUniqueness adapted for genesis-tx enrollment) is genuinely reusable. Context-scoped nullifiers for agent Sybil resistance is a primitive applicable to Fetch.ai, SingularityNET, and any future agent L1 or marketplace. This work advances Bolyra's agent-rooted trust roadmap independent of Theseus's survival. The reuse case is real and the primitives are not Theseus-specific."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "CONCERN",
+      "integration_complexity_vs_value": "CONCERN",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "Standard on-chain nullifiers (keccak256 commitments) solve the Sybil problem with zero ZKP overhead, the circuit modification is self-described as minor making the Semaphore fork path trivially available to Theseus, and the target company is pre-mainnet with a $100K seed \u2014 three compounding weaknesses that make this a DROP under the rubric's two-or-fewer-axes threshold.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "agent_key_custody_birth_cert_no_ceremony",
+    "title": "ZKP Agent Birth Certificate via PLONK (No Per-Agent Trusted Setup)",
+    "description": "When a new agent spawns on Theseus, it needs a verifiable identity commitment that (a) doesn't require a human ceremony, (b) proves the agent was legitimately born from the L1 (not fabricated off-chain), and (c) is portable to other chains. Bolyra's PLONK-based AgentPolicy circuit avoids per-agent trusted setup \u2014 the universal SRS is the ceremony. An agent can generate its credential commitment at spawn time, submit a PLONK proof to the IdentityRegistry, and receive a DID (did:bolyra:...) anchored to the Theseus genesis block. This directly addresses the 'no human key path' constraint: the L1 itself is the root of trust, and ZKP is what proves legitimate birth without a human CA. Bolyra already ships PLONK zkeys for AgentPolicy \u2014 this is a configuration extension, not a new circuit.",
+    "category": "identity",
+    "persona": "agent_key_custody",
+    "time_horizon": "sunday_demo",
+    "scores": {
+      "agent_need": 18,
+      "zkp_edge": 16,
+      "primitive_readiness": 20,
+      "partnership_leverage": 14,
+      "total": 68
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "Theseus documentation is not publicly accessible so evidence rests on structural inference from 'no human key path' plus weak analogies from Fetch.ai/SingularityNET that use conventional PKI, not ZKP birth certs.",
+      "zkp_edge": "The proposal names Lit Protocol (MPC-based) and Turnkey (TEE-based) as non-ZKP alternatives and correctly identifies that neither produces portable, chain-anchored ZKP credential commitments, but the failure mode argument is asserted rather than demonstrated with a concrete attack or limitation scenario.",
+      "primitive_readiness": "Existing PLONK zkeys, PlonkVerifier, IdentityRegistry, and createAgentCredential() are all directly reusable; new work is a thin SDK wrapper (~0.5d), one orchestration contract (~1d), a spec addendum (~0.5d), and a demo \u2014 well-scoped and realistic.",
+      "partnership_leverage": "The argument that Theseus cannot build this in <3 months is plausible given Circom/PLONK expertise requirements, but the proposal doesn't assess whether Theseus has a crypto team, whether they are already evaluating Lit/Turnkey, or why they would prefer Bolyra over a custodial TEE solution that ships faster."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (not reachable via search in this session)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is an agent-native L1 founded 2025, funded by Orange DAO; no public documentation of their identity/auth primitive was accessible \u2014 likely raw EdDSA keypairs at spawn time with no ZKP layer."
+      },
+      {
+        "source": "Lit Protocol \u2014 lit.build / litprotocol.com",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Lit Protocol offers programmable key management via threshold MPC for agents and dApps, but relies on a human-operated node network and does NOT produce ZKP-verifiable credential commitments \u2014 no PLONK or Groth16 proofs anchored to chain genesis."
+      },
+      {
+        "source": "Turnkey (turnkey.com) \u2014 agent wallet infrastructure",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Turnkey provides TEE-backed key custody for agents (used by Coinbase Agentic Wallets per signal URL), but custody is custodial/TEE-attested rather than ZKP-proven, and does not produce portable DID documents or on-chain credential registries."
+      },
+      {
+        "source": "Privy (privy.io) \u2014 embedded wallet SDK",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Privy targets human-facing embedded wallets, has begun supporting server-side agent wallets, but assumes a human operator root of trust \u2014 not suited for Theseus's 'no human key path' constraint."
+      },
+      {
+        "source": "W3C DID Core Spec / DIF DIDComm v2 / IETF draft-klrc-aiagent",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "No ratified standard for agent-to-agent ZKP-backed DID authentication exists as of mid-2026; DIF and IETF working groups have drafts but none address agent-native L1 genesis anchoring or PLONK-based birth certificates."
+      },
+      {
+        "source": "Fetch.ai / Autonomous Economic Agent (AEA) framework",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai agents carry on-chain identities (agent addresses) but use conventional PKI signing \u2014 no ZKP birth certificate, no universal SRS, and delegation is handled via smart contract logic rather than circuit-enforced scope narrowing."
+      },
+      {
+        "source": "SingularityNET \u2014 agent registry",
+        "type": "agent_l1",
+        "relevance": "low",
+        "summary": "SingularityNET's agent registry is metadata-only (IPFS CIDs + on-chain hashes); no cryptographic proof-of-legitimate-spawn and no delegation circuit."
+      },
+      {
+        "source": "AWS blog: x402 and Agentic Commerce (signal URL)",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "x402 HTTP payment protocol for agents relies on wallet-signed requests \u2014 highlights demand for agent-native credential primitives but does not provide identity birth certificates or ZKP proofs."
+      },
+      {
+        "source": "Coinbase Agentic Wallets launch (signal URL)",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Coinbase's agentic wallet product uses Turnkey TEE custody \u2014 confirms strong market demand for agent key management at spawn time but remains TEE/MPC rather than ZKP, leaving the 'portable, no-ceremony, L1-anchored proof' gap open."
+      },
+      {
+        "source": "zkLogin (Sui Foundation) / zkEmail",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "zkLogin proves OAuth identity via Groth16 on Sui \u2014 closest deployed ZKP identity primitive, but human-rooted (OAuth) and chain-specific; does not generalize to agent-spawn proofs on arbitrary EVM-compatible L1s."
+      },
+      {
+        "source": "Semaphore v4 / World ID (Worldcoin)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Semaphore provides ZKP group membership with nullifiers (Bolyra reuses its ceremony for HumanUniqueness), but is explicitly human-biometric-rooted \u2014 cannot serve as agent birth certificate without stripping the biometric assumption."
+      },
+      {
+        "source": "Bolyra CLAUDE.md / AgentPolicy PLONK zkeys (local context)",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Bolyra already ships PLONK zkeys for AgentPolicy with universal SRS (pot16.ptau), 8-bit cumulative permission encoding, and a DID method (did:bolyra:) \u2014 the primitives for an agent birth certificate without per-agent ceremony are already built."
+      }
+    ],
+    "demand_strength": "strong",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Core birth-certificate primitive. Agent generates credentialCommitment at spawn time using createAgentCredential(). PLONK universal SRS IS the ceremony \u2014 no per-agent trusted setup. The operatorKey role is filled by Theseus L1's own signing authority (sequencer/validator key or a deterministic key derived from the genesis block hash), making L1 the root of trust without a human CA. Selective disclosure of permission bitmask lets the agent prove capability subset to any relying party without revealing full policy.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "agentTree (LeanIMT, depth 20) registers the agent's leaf after PLONK proof verification. Root history buffer (30 entries) provides stale-proof tolerance during chain reorgs. Nonce equality and delegation nullifier replay protection guard against duplicate registrations across forks. For Theseus-native deployment the contract needs redeployment on Theseus's EVM (same bytecode, new address); Base Sepolia can serve as the canonical registry with a cross-chain relay if Theseus is EVM-compatible.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "PlonkVerifier",
+        "usage": "Already deployed at 0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db on Base Sepolia. The same vkey.json can generate a verifier contract deployable on Theseus's chain with zero circuit changes. Self-contained PLONK proof portability means the proof bundle (pi_a, pi_b, pi_c + public inputs) can be verified by any chain holding the verification key \u2014 cross-chain portability is inherent.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Enables Theseus sub-agent spawning with enforced scope narrowing. A parent agent's birth certificate becomes the delegator credential; child agents receive scope-narrowed delegatee credentials with delegateeExpiry <= delegatorExpiry. Three-hop max (human -> orchestrator agent -> task agent -> sub-agent) maps cleanly to Theseus's agent hierarchy. Delegator key binding (UC3.1 fix) ensures the birth certificate chain is unforgeable.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "did:bolyra",
+        "usage": "DID anchored to Theseus genesis block: did:bolyra:agent:<agentId> where agentId = Poseidon(genesisBlockHash, credentialCommitment). The DID document carries the PLONK proof reference, agentTree Merkle path, and chain-of-origin metadata. Portable resolution \u2014 any resolver with the verification key can validate without contacting Theseus's chain directly. Minor extension to the DID method spec to include genesisAnchor as a first-class DID document field.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "createAgentCredential(modelHash, operatorKey, permissions, expiry) is the direct entry point. modelHash encodes the agent's code digest; operatorKey is Theseus L1's signing key (or a key derived from genesis hash via a deterministic KDF). No new SDK function needed \u2014 a genesisAnchor option parameter added to the options object satisfies the L1-birth provenance requirement without breaking the existing API.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "draft-bolyra-mutual-zkp-auth-01",
+        "usage": "The mutual ZKP auth handshake (proveHandshake + verifyHandshake) becomes the Theseus agent-to-agent trust handshake. When two Theseus agents interact, both present birth-certificate-backed proofs; the IETF draft's nonce binding prevents replay across sessions. This gives Theseus a standards-track wire format instead of a custom auth protocol.",
+        "modification_needed": "none"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "spec",
+        "description": "genesis-anchor convention: define how Theseus genesis block hash is incorporated into credentialCommitment \u2014 specifically, a Poseidon3(modelHash, genesisBlockHash, operatorPubKeyHash) preimage convention so L1 provenance is cryptographically bound. Extend did:bolyra method spec to add genesisAnchor as a first-class field in the DID document and add 3\u20135 test vectors to test-vectors.json.",
+        "complexity": "low",
+        "estimated_days": 1
+      },
+      {
+        "type": "sdk",
+        "description": "Add optional genesisAnchor parameter to createAgentCredential options and incorporate it into the credential commitment hash. Expose a deriveOperatorKeyFromGenesis(genesisBlockHash) helper using Baby Jubjub deterministic scalar derivation so Theseus L1 can act as operator without a human-generated key. Backwards-compatible \u2014 existing callers unaffected.",
+        "complexity": "low",
+        "estimated_days": 1
+      },
+      {
+        "type": "integration",
+        "description": "theseus-bolyra-spawn adapter: a lightweight TS module that hooks into Theseus's agent spawn lifecycle, calls createAgentCredential at birth, submits the PLONK proof to IdentityRegistry (or Theseus-native verifier), and returns a did:bolyra DID to the agent runtime. Pattern matches langchain-bolyra-tool stub already in integrations/.",
+        "complexity": "medium",
+        "estimated_days": 2
+      },
+      {
+        "type": "contract",
+        "description": "Deploy PlonkVerifier + IdentityRegistry on Theseus's EVM (if EVM-compatible). No Solidity changes needed \u2014 same bytecode, new deployment script targeting Theseus RPC. If Theseus is not EVM-compatible, a thin verification relay contract on Base Sepolia with cross-chain message passing (e.g. via L1 state proof) is the fallback.",
+        "complexity": "low",
+        "estimated_days": 1
+      }
+    ],
+    "theseus_integration_surface": "Three connection points: (1) SDK bridge \u2014 Theseus agent runtime imports @bolyra/sdk, calls createAgentCredential() at spawn with genesis-anchored operatorKey, receives a PLONK proof bundle and did:bolyra DID; (2) Verifier contract \u2014 PlonkVerifier + IdentityRegistry deployed on Theseus's EVM chain (or Base Sepolia as canonical registry with Theseus relaying proofs via L1 state root); (3) DID resolution \u2014 Theseus's agent directory resolves did:bolyra DIDs against the agentTree Merkle root, enabling any other Theseus agent or external service to verify birth provenance without trusting Theseus's own assertions. The mutual ZKP handshake (draft-bolyra-mutual-zkp-auth-01) then serves as the agent-to-agent trust wire protocol, giving Theseus a standards-track inter-agent auth layer on top of the birth certificate foundation.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "createTheseusAgentCredential()",
+          "type": "sdk",
+          "description": "Thin wrapper (~50 LOC) around existing createAgentCredential() that derives operatorKey deterministically from Poseidon(genesisBlockHash, agentSeed) so the L1 genesis block is the root of trust with zero human CA involvement. Exported from @bolyra/sdk as a named export alongside existing API.",
+          "days": 0.5,
+          "reuses": "createAgentCredential() in @bolyra/sdk"
+        },
+        {
+          "name": "TheseusBirthCertRegistrar.sol",
+          "type": "contract",
+          "description": "Minimal Solidity contract deployable on Base Sepolia (or any EVM): accepts PLONK proof + genesisBlockHash as public input, delegates to existing PlonkVerifier (0x28b99c48f19F1680a7D88733ffeb9AFbcB3B95Db), inserts credentialCommitment into agentTree, emits AgentRegistered(did, credentialCommitment, genesisAnchor). No new verifier logic \u2014 pure orchestration over existing deployed verifier.",
+          "days": 1,
+          "reuses": "IdentityRegistry.sol agentTree logic + deployed PlonkVerifier on Base Sepolia"
+        },
+        {
+          "name": "did:bolyra genesisAnchor extension",
+          "type": "spec",
+          "description": "Two-paragraph addendum to spec/did-method-bolyra.md: defines agentId = Poseidon(genesisBlockHash, credentialCommitment), DID = did:bolyra:agent:<agentId>, and genesisAnchor as a first-class DID document field carrying chain-of-origin metadata. Pure spec text, no new crypto, no circuit changes.",
+          "days": 0.5,
+          "reuses": "spec/did-method-bolyra.md"
+        },
+        {
+          "name": "theseus-birth-cert-demo.ts",
+          "type": "demo",
+          "description": "Self-contained runnable script: (1) takes mock genesisBlockHash (keccak256('theseus-genesis-v0') until real testnet), (2) calls createTheseusAgentCredential(), (3) loads pre-generated PLONK proof artifact from disk to avoid 30s live wait, (4) submits to TheseusBirthCertRegistrar on Base Sepolia, (5) prints DID + Merkle inclusion path + Etherscan link. End-to-end runtime under 5 seconds.",
+          "days": 0.5,
+          "reuses": "AgentPolicy PLONK zkeys + @bolyra/sdk + TheseusBirthCertRegistrar"
+        }
+      ],
+      "total_days": 2.5,
+      "reuse_percentage": 85,
+      "demo_readiness": "sunday",
+      "demo_description": "Live terminal demo: agent seed + mock genesis hash in \u2192 PLONK proof verified (pre-generated, sub-second) \u2192 DID printed: did:bolyra:agent:<hash>. Etherscan link showing AgentRegistered event on Base Sepolia with credentialCommitment and genesisAnchor visible. One comparison slide: Lit Protocol = MPC custody (node network, no ZKP), Turnkey = TEE attestation (custodial, no portable DID), Privy = human root required. Bolyra = ZKP-verifiable birth cert, no human CA, PLONK universal SRS IS the ceremony, portable to any EVM chain. Closing line: 'The Theseus genesis block replaces the human ceremony. The L1 is the trust root.'",
+      "risks": [
+        "Theseus is not EVM-compatible: TheseusBirthCertRegistrar cannot deploy natively \u2014 mitigate by positioning Base Sepolia as canonical registry with a cross-chain relay stub; proof portability is inherent (any chain holding vkey.json can verify)",
+        "PLONK proof generation takes ~30s with snarkjs live \u2014 mitigate by pre-generating proof artifact before the call and loading from file; demo still shows real on-chain submission",
+        "Theseus genesis block hash unavailable (no testnet access before Sunday) \u2014 use keccak256('theseus-genesis-v0') as deterministic mock; swap in real value the moment testnet RPC is shared",
+        "Theseus may already be committed to TEE or MPC solution \u2014 frame Bolyra as additive ZKP attestation layer on top of their existing key custody, not a replacement; TEE + ZKP is stronger than either alone",
+        "Solo founder bandwidth: 2.5 days of work must land by Saturday EOD \u2014 if time-pressed, cut contract deploy and show local proof verification only; the cryptography story holds without the on-chain tx"
+      ],
+      "success_criteria": "Demo runs end-to-end without errors from a cold clone: agent seed + genesis hash in, PLONK proof verified, DID printed, AgentRegistered event visible on Base Sepolia Etherscan. The integration is working when Eric Wang asks 'how do we wire this into our agent spawn flow on mainnet?' \u2014 that question is the buying signal.",
+      "theseus_dependencies": "Nice-to-have before Sunday, none are blockers: (1) Theseus testnet RPC endpoint to pull real genesis block hash \u2014 mock substitutes cleanly. (2) Confirmation of EVM compatibility for native TheseusBirthCertRegistrar deploy \u2014 Base Sepolia serves as canonical registry in the interim. (3) Their current agent spawn API/spec so operatorKey derivation path matches their actual key generation \u2014 determines whether Poseidon or keccak256 derivation is the right join point. All three can be collected on the Sunday call and wired in as a follow-up PR."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 1 (Theseus Builds It) \u2014 CONCERN: The core 'proof of legitimate spawn' can be replicated without ZKP expertise in ~2 weeks. Theseus L1 can deterministically derive an agent keypair from the genesis transaction, register the public key in a Solidity registry, and use the spawning transaction hash as the birth certificate. That's standard OpenZeppelin + Hardhat work. The proposal conflates 'no human CA' with 'needs ZKP' \u2014 these are not the same property. Bolyra's actual moat is selective disclosure of the 8-bit permission bitmask, not the birth certificate itself.",
+      "AXIS 2 (Standard Crypto Suffices) \u2014 FAIL: This is the kill signal. The specific ZKP value-add named in the proposal is (a) no per-agent trusted setup and (b) portable credential commitment. But the 'no ceremony' argument only matters if you're using ZKP at all \u2014 it's circular. Standard crypto provides proof of legitimate spawn via the L1's own signature on the genesis transaction. For cross-chain portability, Theseus can publish a Merkle root of its agent registry, and any chain can verify inclusion proofs without ZKP. The only genuine ZKP advantage is hiding the full permission bitmask, but at birth-certificate time there is no adversary who benefits from not knowing an agent's permission scope \u2014 permissions are typically set by the operator and are non-sensitive at spawn.",
+      "AXIS 3 (No Agent Actually Needs This) \u2014 CONCERN: No concrete Theseus agent use case is named that fails without ZKP birth certs. The proposal explicitly admits 'evidence rests on structural inference.' The need for permission-private birth certificates only becomes real when (a) an agent has sensitive permission scope it wants to selectively disclose to counterparties, and (b) those counterparties exist and are querying the agent. At Theseus's current scale ($100K funding, pre-mainnet), neither condition holds. The earliest plausible concrete need is agent-to-agent delegation with permission narrowing \u2014 but that's Axis 4 work, not birth certificate work.",
+      "AXIS 4 (Integration Complexity vs Value) \u2014 FAIL: Two blockers. First, Theseus's VM is unknown. The proposal assumes EVM-compatible PlonkVerifier.sol deployment, but a custom L1 (which Theseus may well be building) requires implementing a PLONK verifier from scratch or porting the Solidity verifier to their native execution environment \u2014 multi-month work. Second, the proving side assumes agents can invoke snarkjs or rapidsnark at spawn time. Agents spawning on-chain cannot run JavaScript natively; they would need to call out to a Bolyra-hosted proving service or run the prover in a sidecar. This is a trusted off-chain dependency that undermines the 'no human key path' constraint Theseus is explicitly designed to avoid. Neither blocker is addressed in the proposal.",
+      "AXIS 5 (Single-Partner Dependency) \u2014 PASS: The new work is genuinely minimal (~2d) and entirely within existing Bolyra primitives (PLONK zkeys, AgentPolicy circuit, DID method). If Theseus fails, the orchestration contract and SDK wrapper are reusable for any other agent-native chain. This axis survives cleanly.",
+      "DEMOTION MATH: FAIL on axes 2 and 4, CONCERN on axes 1 and 3, PASS on axis 5. Per rubric, 2 FAILs = survives fewer than 3/5 = DROP regardless of raw score. Original verdict was CONSIDER; adversarial review mandates REJECT."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "CONCERN",
+      "integration_complexity_vs_value": "FAIL",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "The ZKP birth certificate collapses under Axis 2 (a spawning transaction signature IS the proof of legitimate birth, and permission bitmask privacy is not valuable at spawn time) and Axis 4 (unknown Theseus VM + on-chain agents cannot run snarkjs without a trusted off-chain proving service that contradicts the 'no human key path' constraint).",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "l1_security_session_nonce_replay_prevention",
+    "title": "Nullifier-Bound Session Nonces to Block Agent Transaction Replay Attacks",
+    "description": "Agents on Theseus execute high-frequency autonomous transactions \u2014 authorization proofs issued at time T can be replayed at T+N if the receiving contract or counterparty agent does not enforce per-session uniqueness. Unlike human systems where replay surfaces are limited by human interaction speed, agents can replay thousands of stale authorizations per second. Bolyra's handshake protocol already binds every proof to a fresh sessionNonce and enforces nullifier uniqueness on-chain \u2014 replaying (humanProof, agentProof) without rebinding the nonce fails verification by design. Porting this nullifier registry to Theseus L1 closes a structural replay surface that raw EdDSA signatures cannot address (a valid signature is valid forever unless explicitly revoked).",
+    "category": "security",
+    "persona": "l1_security",
+    "time_horizon": "sunday_demo",
+    "scores": {
+      "agent_need": 18,
+      "zkp_edge": 15,
+      "primitive_readiness": 21,
+      "partnership_leverage": 14,
+      "total": 68
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "High-frequency autonomous agent transactions create a real replay surface absent from human systems, and x402 agentic commerce evidence confirms authorization replay is a live concern, though direct Theseus documentation showing they lack nullifier protection is inferred rather than cited.",
+      "zkp_edge": "The structural argument that EdDSA signatures are valid forever without explicit revocation is correct, but nonce counters at the wallet layer (Privy pattern) or simple on-chain nonce mappings achieve replay prevention without ZKP \u2014 the ZKP advantage here is unlinkable nullifiers for privacy, not replay prevention per se, which weakens the edge claim.",
+      "primitive_readiness": "IdentityRegistry, AgentPolicy, HumanUniqueness, and Delegation circuits all map directly with no or minor modifications, the deploy script is estimated at 0.5 days reusing existing artifacts, and the SDK chain config is a one-file edit \u2014 highest confidence dimension with concrete named primitives and realistic timelines.",
+      "partnership_leverage": "The expertise gap argument (Circom proficiency, trusted setup) is plausible but unverified against Theseus's team composition, and competitors Lit Protocol and Turnkey could offer simpler signature-based alternatives that sidestep ZKP entirely, making the partnership value proposition dependent on privacy requirements Theseus may not have."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (context-provided, web fetch blocked)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is a $100K Orange DAO-backed L1 purpose-built for autonomous AI agents with no human-controlled key path, almost certainly relying on raw EdDSA keypairs with no native nullifier/replay protection."
+      },
+      {
+        "source": "https://aws.amazon.com/blogs/industries/x402-and-agentic-commerce/",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "AWS x402 agentic commerce blog highlights autonomous agent payment flows where replay of authorization headers is a live attack surface \u2014 no nullifier mechanism is present in x402 by default."
+      },
+      {
+        "source": "Lit Protocol \u2014 programmable key pairs (PKP) for agent signing",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Lit PKPs provide threshold-ECDSA agent keys and access control conditions but offer no ZKP nullifier registry; valid signatures remain valid forever unless Lit node network explicitly revokes."
+      },
+      {
+        "source": "Turnkey \u2014 secure MPC key management for wallets/agents",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey manages EdDSA/ECDSA agent keys via MPC enclaves; authorization tokens are signature-bound but not nullifier-bound, so replayed tokens within TTL windows are indistinguishable from fresh ones."
+      },
+      {
+        "source": "Privy \u2014 embedded wallets and agent signers",
+        "type": "competitor",
+        "relevance": "low",
+        "summary": "Privy focuses on human-facing embedded wallets; agent signer capability is nascent and has no replay-prevention primitive beyond standard nonce counters at the wallet layer."
+      },
+      {
+        "source": "Semaphore v4 \u2014 ZKP identity with nullifier registry (Ethereum)",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Semaphore's on-chain nullifier registry is the closest deployed analog to what Bolyra proposes; Bolyra already reuses its Groth16 ceremony, making a Theseus port directly feasible without new trusted setup."
+      },
+      {
+        "source": "Polygon ID \u2014 ZKP credentials on EVM chains",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Polygon ID uses ZKP-based credential proofs on EVM but is human-identity-centric with no agent-native session nonce binding or high-frequency replay prevention design."
+      },
+      {
+        "source": "Fetch.ai / Autonolas \u2014 agent-native L1 identity patterns",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai and Autonolas use agent DIDs with basic signature verification; neither implements nullifier-based per-session uniqueness, leaving replay surfaces open in high-frequency multi-agent coordination."
+      },
+      {
+        "source": "IETF draft-ietf-oauth-transaction-tokens + agent auth working groups",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "Transaction tokens proposal introduces per-request binding but is OAuth/HTTP layer \u2014 no cryptographic nullifier commitment; does not prevent replay at the smart contract or L1 execution layer."
+      },
+      {
+        "source": "W3C Decentralized Identifiers (DID) spec \u2014 agent DID methods",
+        "type": "standard",
+        "relevance": "low",
+        "summary": "DID spec has no provisions for session nonce binding or nullifier uniqueness; agent DIDs inherit the same 'valid signature = valid forever' weakness as raw EdDSA."
+      },
+      {
+        "source": "EIP-2612 permit / account abstraction (EIP-4337) nonce handling",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "EVM account abstraction handles sequential nonces for transaction ordering but not ZKP-bound per-session nullifiers; an agent with a compromised replay window can exhaust multi-call permits."
+      },
+      {
+        "source": "Bolyra CLAUDE.md \u2014 handshake nonce binding pattern",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Bolyra's sessionNonce binding is already implemented and circuit-enforced; porting the nullifier registry contract to an EVM-compatible Theseus chain is days of work, not months \u2014 primitive_readiness score of 22/25 is credible."
+      }
+    ],
+    "demand_strength": "moderate",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "Core replay-prevention infrastructure already exists: nonce equality enforcement prevents (humanProof, agentProof) reuse, delegation nullifier replay protection blocks stale delegation chains, root history buffers (30 entries) accommodate Theseus block latency. This contract is the direct analog of the 'nullifier registry' the opportunity calls for. Deploying it to Theseus L1 is the primary integration act.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Expiry enforcement (expiryTimestamp > currentTimestamp) and identity-bound scope commitment directly prevent authorization proofs issued at T from being valid at T+N beyond their stated window. The selective-disclosure bitmask means counterparty agents learn only required permissions, not the full credential \u2014 reducing the value of replayed proofs even if nullifier check were bypassed.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Session nonce binding is a first-class output: the circuit commits to sessionNonce as a public signal, so any replayed (humanProof, nonce) pair with a stale nonce fails on-chain without requiring application-level state. Poseidon2(scope, secret) nullifier is unlinkable across scopes, preventing cross-session correlation attacks specific to high-frequency agent environments.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Delegation nullifier replay protection (already in IdentityRegistry) closes the sub-agent replay surface: a delegated authorization cannot be replayed after use or after the delegator revokes. Expiry narrowing (delegateeExpiry <= delegatorExpiry) bounds the replay window for the entire chain, not just the leaf credential. Current-time liveness check enforces this at proof-time.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Groth16Verifier",
+        "usage": "Needs to be deployed to Theseus L1 as a standalone contract. Verifies HumanUniqueness proofs on-chain \u2014 the cryptographic anchor for the nullifier check.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "PlonkVerifier",
+        "usage": "Needs to be deployed to Theseus L1. Verifies AgentPolicy and Delegation proofs. PLONK's universal SRS means no Theseus-specific trusted setup ceremony is required.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "DelegationPlonkVerifier",
+        "usage": "Needs to be deployed to Theseus L1 alongside PlonkVerifier for delegation chain verification with hop-count enforcement.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "@bolyra/sdk",
+        "usage": "proveHandshake already generates a fresh sessionNonce and binds both proofs to it. verifyHandshake already enforces nonce equality. The only change needed is wiring the Theseus L1 chain ID and RPC endpoint into the SDK's chain config so it submits to the right IdentityRegistry deployment.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "contract",
+        "description": "Deploy IdentityRegistry + Groth16Verifier + PlonkVerifier + DelegationPlonkVerifier to Theseus L1. Contracts are already written and audited on Base Sepolia \u2014 this is a deployment task, not a build task. Requires Theseus L1 RPC, funded deployer wallet, and verifying constructor args match the zkeys used in production.",
+        "complexity": "low",
+        "estimated_days": 1
+      },
+      {
+        "type": "sdk",
+        "description": "Add Theseus L1 chain config to @bolyra/sdk (chain ID, RPC URL, IdentityRegistry address). Expose a theseusClient factory or extend the existing chain-config map. No circuit changes, no new proving logic.",
+        "complexity": "low",
+        "estimated_days": 1
+      },
+      {
+        "type": "integration",
+        "description": "Theseus agent adapter: thin wrapper that intercepts outbound agent authorization calls, calls proveHandshake with a fresh nonce, and submits the atomic handshake tx to the Theseus IdentityRegistry before executing the downstream action. Pattern mirrors the existing openclaw adapter. Required for the Sunday demo.",
+        "complexity": "medium",
+        "estimated_days": 2
+      },
+      {
+        "type": "spec",
+        "description": "Add a 'Theseus L1 replay prevention profile' section to draft-bolyra-mutual-zkp-auth-01 specifying: nonce freshness requirements for high-frequency agents (recommend per-transaction nonce, not per-session), nullifier TTL relative to IdentityRegistry root history buffer depth (30 blocks), and the on-chain verification flow for counterparty agents. Strengthens partnership leverage.",
+        "complexity": "low",
+        "estimated_days": 1
+      }
+    ],
+    "theseus_integration_surface": "Primary surface: a deployed IdentityRegistry on Theseus L1 that Theseus agent runtimes call before executing any authorized action. The atomic handshake tx (Groth16 + PLONK in a single call) serves as the authorization gate \u2014 the agent's transaction only proceeds if verifyHandshake succeeds on-chain, which requires a fresh nonce not previously seen in the nullifier set. Secondary surface: @bolyra/sdk with a Theseus chain config, so agent operators can call proveHandshake targeting the Theseus registry without forking the SDK. For the demo, a lightweight Theseus agent adapter (analogous to the openclaw adapter) intercepts outbound calls, generates and submits the handshake proof, and only forwards the action on success. No bridge, oracle, or cross-chain message passing is needed \u2014 Theseus L1 carries its own nullifier state, fully self-contained.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "theseus-deploy-script",
+          "type": "contract",
+          "description": "Hardhat deploy script targeting Theseus L1 RPC \u2014 deploys Groth16Verifier, PlonkVerifier, DelegationPlonkVerifier, and IdentityRegistry in one shot. Identical contracts to Base Sepolia; only chainId and RPC endpoint change. Assumes EVM-compatible VM \u2014 the single largest unknown.",
+          "days": 0.5,
+          "reuses": "contracts/deploy/ + existing verifier artifacts"
+        },
+        {
+          "name": "replay-attack-demo-script",
+          "type": "demo",
+          "description": "Node script that (1) generates a valid agent handshake proof, (2) submits it to IdentityRegistry on Theseus and succeeds, (3) replays the identical (humanProof, agentProof, nonce) tuple and shows the on-chain revert. Self-contained, runnable in under 60 seconds. Uses Base Sepolia as fallback if Theseus testnet is unavailable Sunday.",
+          "days": 1.0,
+          "reuses": "@bolyra/sdk proveHandshake + verifyHandshake + existing test fixtures"
+        },
+        {
+          "name": "theseus-chain-config",
+          "type": "sdk",
+          "description": "Add Theseus L1 chainId, RPC URL, and deployed contract addresses to @bolyra/sdk ChainConfig. One file edit + type export. Lets any integrator call sdk.connect('theseus') after the call.",
+          "days": 0.5,
+          "reuses": "@bolyra/sdk chain config pattern from Base Sepolia"
+        },
+        {
+          "name": "nullifier-registry-integration-spec",
+          "type": "spec",
+          "description": "Two-page technical spec scoped to Theseus: problem statement (raw EdDSA = valid forever), Bolyra's nullifier-bound session nonce solution, contract interface, SDK call sequence, and open questions for Eric Wang (EVM compat?, testnet RPC?, block latency for root history buffer). Doubles as meeting prep doc.",
+          "days": 0.5,
+          "reuses": "new \u2014 distilled from existing CLAUDE.md architecture notes"
+        }
+      ],
+      "total_days": 2.5,
+      "reuse_percentage": 88,
+      "demo_readiness": "sunday",
+      "demo_description": "Live terminal demo: proveHandshake() generates a fresh-nonce agent proof, first submitProof() call to IdentityRegistry succeeds (tx hash shown), identical replay call reverts with NullifierAlreadyUsed. If Theseus testnet RPC is available before Sunday, run against it directly; otherwise run against Base Sepolia and call out that the contract bytecode is chain-agnostic. Show the 8-bit permission bitmask in the proof output to illustrate scope narrowing. Entire demo is < 90 seconds of live terminal.",
+      "risks": [
+        "Theseus VM may not be EVM-compatible \u2014 if it's a custom VM, verifier contracts cannot be ported without rewriting in the target language (weeks, not days); must confirm before committing to Sunday deploy",
+        "No public Theseus testnet RPC found \u2014 demo falls back to Base Sepolia, which weakens the 'deployed on Theseus' narrative; need Eric to share an RPC endpoint before the call",
+        "Root history buffer (30 entries) was tuned for Ethereum block times (~12s); Theseus L1 block time is unknown \u2014 buffer depth may need adjustment if blocks are faster",
+        "solo-founder context means any integration bug found after the call has no second pair of eyes; build the demo against a fixed fixture set, not a live prover, to eliminate timing failures on-call"
+      ],
+      "success_criteria": "IdentityRegistry deployed to Theseus (or Base Sepolia as stand-in), replay-attack-demo-script exits 0, the revert reason NullifierAlreadyUsed is visible in the terminal output, and Eric Wang can call sdk.connect('theseus').verifyHandshake() from his own Node environment using the published contract address.",
+      "theseus_dependencies": "EVM-compatibility confirmation (binary yes/no), testnet RPC URL + faucet access, deployed block time (for root history buffer sizing), and whether they have an existing identity/auth interface contract Bolyra should integrate with rather than deploy alongside."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 1 FAIL \u2014 Replay prevention via nonce registries is trivially buildable without ZKP expertise. A usedNonces[bytes32] => bool mapping is 10 lines of Solidity and a well-understood OpenZeppelin pattern. EIP-4337 account abstraction handles sequential nonces natively. Theseus's 1-2 engineers can ship this in days, not months. ZKP expertise is not required for replay prevention \u2014 it is only required if the goal is *unlinkable* nullifiers, which is a privacy claim, not a security claim.",
+      "AXIS 2 FAIL \u2014 The card's own rationale self-destructs this proposal: 'nonce counters at the wallet layer or simple on-chain nonce mappings achieve replay prevention without ZKP \u2014 the ZKP advantage here is unlinkable nullifiers for privacy, not replay prevention per se.' That is an admission that standard crypto suffices for the stated goal. The ZKP overhead (Groth16 proof generation latency per session, ~200K-300K gas for on-chain verification vs ~20K gas for a boolean write) is not justified when the marginal benefit is privacy for session nonces \u2014 a property Theseus agents may not need on a transparent L1 where all transactions are visible anyway.",
+      "AXIS 3 CONCERN \u2014 The replay surface is real in high-frequency agent systems, but the ZKP-specific solution is not distinguishable from simpler alternatives at Theseus's current scale ($100K funded, pre-mainnet, likely single-digit active agents). The need for unlinkable nullifiers specifically requires an agent that (a) executes high-frequency transactions AND (b) needs to hide which sessions it participated in. No named Theseus agent use case satisfies both conditions. At launch scale, a simple nonce counter eliminates the replay surface entirely.",
+      "AXIS 4 CONCERN \u2014 Theseus's VM compatibility is an explicitly open question in the provided context. If Theseus runs a custom non-EVM VM, deploying Solidity verifier contracts requires either EVM compatibility or implementing a native Groth16 verifier \u2014 a significant engineering undertaking that could take months. Even on EVM, Groth16 verification at 200K-300K gas is prohibitively expensive for the 'thousands of transactions per second' agent pattern the proposal cites as its motivation. The integration complexity is therefore contingent on an unverified assumption (EVM compatibility) and economically suspect even if that assumption holds.",
+      "AXIS 5 PASS \u2014 Nullifier registry contracts and the underlying circuit artifacts (HumanUniqueness, AgentPolicy) are genuinely reusable across agent-native chains. A Theseus port would accelerate multi-chain deployment. This is the only axis the proposal survives cleanly.",
+      "SCORING SUMMARY \u2014 1 clean PASS, 2 CONCERNs, 2 FAILs. Per rubric: 'Survives 2 or fewer: DROP regardless of raw score.' REJECT."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "FAIL",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "CONCERN",
+      "integration_complexity_vs_value": "CONCERN",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "The proposal's own rationale concedes that standard nonce mappings solve replay prevention without ZKP \u2014 the ZKP premium buys only unlinkable nullifiers (a privacy benefit, not a security one), and that benefit is unjustified for transparent L1 agent transactions at pre-mainnet scale where Theseus can ship the same functional protection in days with 15x lower gas cost.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "agent_economy_payment_attribution_proof",
+    "title": "ZKP delegation chain proof appended to x402 payment receipts for audit and dispute",
+    "description": "Base's Builder Codes (ERC-8021) establish on-chain attribution for x402 payments, but attribution is not authorization \u2014 knowing which agent paid tells you nothing about whether it was permitted to pay, on whose behalf, or under what delegation chain. Bolyra can generate a compact ZKP that attaches to an x402 payment receipt and proves 'this payment was authorized by a valid, unrevoked delegation chain from root identity X with permission bit FINANCIAL_MEDIUM active at time T' without revealing X or the intermediate delegators. This is the audit and dispute primitive that enterprise operators and DeFi protocols will require before letting autonomous agents access high-value services. The x402 Foundation's Linux Foundation backing (Google, Visa, Stripe, AWS, Mastercard) signals regulatory scrutiny is coming; authorization proofs on payment receipts position Bolyra as the compliance layer for autonomous agent commerce.",
+    "category": "agent_economy",
+    "persona": "agent_economy",
+    "time_horizon": "3_month_roadmap",
+    "scores": {
+      "agent_need": 15,
+      "zkp_edge": 20,
+      "primitive_readiness": 13,
+      "partnership_leverage": 17,
+      "total": 65
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "The attribution-vs-authorization distinction for x402 receipts is a structurally sound argument, and x402's Linux Foundation backing signals enterprise scrutiny is coming, but Theseus-specific evidence is absent (web search unavailable) so the claim that Theseus agents specifically need this remains inferred rather than cited.",
+      "zkp_edge": "The ZKP edge is genuine and well-argued: a non-ZKP approach (EdDSA + on-chain ACL) either leaks the full delegation chain or requires O(n) on-chain lookups per hop, while the ZKP proves 'authorized by valid chain from root X with FINANCIAL_MEDIUM active at time T' without revealing X or intermediaries \u2014 a structural privacy and scalability win.",
+      "primitive_readiness": "The Delegation + AgentPolicy circuits cover the core predicate, but the gap (no payment-context binding inputs) requires a major Delegation circuit modification, new zkeys from pot16.ptau, a regenerated Solidity verifier, and a new SDK export \u2014 realistically 10+ days of work with non-trivial ceremony overhead, which is correctly scoped but makes this a build rather than a near-term deploy.",
+      "partnership_leverage": "The Circom/ZKP expertise gap is a real barrier for most chains, and the x402 compliance angle creates bilateral value, but the assessment that Theseus cannot build this in <3 months is speculative without confirming their team's crypto background, and the existence of MPC alternatives (Lit, Turnkey) that could partially satisfy enterprise audit requirements weakens the exclusivity argument."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (provided context)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is an agent-native L1 with no human key path; agents hold their own keys and are first-class citizens, implying raw EdDSA keypairs with no delegation primitive as of the call date."
+      },
+      {
+        "source": "WebSearch unavailable \u2014 permission not granted",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Could not retrieve Theseus GitHub repos, docs, or community discussions to confirm current identity/auth implementation details."
+      },
+      {
+        "source": "Lit Protocol (litprotocol.com) \u2014 known from training data",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Lit provides programmable key management and MPC-based signing for agents but does not offer ZKP delegation chains or on-chain permission-bit enforcement."
+      },
+      {
+        "source": "Turnkey (turnkey.com) \u2014 known from training data",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey offers sub-organization wallet scoping for agents but is custodial MPC, not ZKP-based, and has no delegation circuit with scope narrowing."
+      },
+      {
+        "source": "Privy (privy.io) \u2014 known from training data",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Privy targets human-rooted embedded wallets and has no agent-native delegation or ZKP authorization primitive."
+      },
+      {
+        "source": "IETF draft-klrc-aiagent-auth (referenced in bolyra-bookmarks skill)",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "Emerging IETF draft for AI agent authentication is active; no finalized spec for agent-to-agent delegation yet, leaving the standards gap Bolyra can anchor."
+      },
+      {
+        "source": "Fetch.ai / SingularityNET \u2014 known from training data",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai uses DID-based agent identifiers with on-chain registration but no ZKP delegation or cumulative permission encoding; SingularityNET relies on reputation oracles, not proofs."
+      },
+      {
+        "source": "Semaphore v4 / Worldcoin \u2014 known from training data",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Semaphore v4 is the closest deployed ZKP identity primitive on Ethereum mainnet, but it is human-uniqueness only \u2014 no agent policy or delegation circuit exists in that stack."
+      },
+      {
+        "source": "x402 Foundation / Linux Foundation backing (provided context)",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "x402 has Google, Visa, Stripe, AWS, Mastercard backing; regulatory scrutiny on agent payment authorization is imminent, creating pull for audit-grade delegation proofs on receipts."
+      },
+      {
+        "source": "Base Builder Codes ERC-8021 (provided context)",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "ERC-8021 provides on-chain attribution (who paid) but explicitly not authorization (was the agent permitted to pay), confirming the gap Bolyra's delegation proof fills."
+      }
+    ],
+    "demand_strength": "strong",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "Delegation",
+        "usage": "Core cryptographic engine for the payment authorization proof. Already proves an unrevoked chain (human\u2192agent\u2192sub-agent, max 3 hops) with FINANCIAL_MEDIUM bit (bit 3, which implies bit 2 by cumulative encoding) active at a committed timestamp, without revealing the root identity or intermediate delegators. The identity-bound scope commitment chain and delegator key binding (UC3.1 fix) directly satisfy the 'authorized by valid delegation chain from root identity X' predicate. The liveness check (currentTimestamp < delegateeExpiry) anchors the proof to time T. Gap: circuit currently has no public input that commits to payment-specific parameters (amount, recipient address, tx/receipt hash), so a detached proof could be replayed against a different payment event.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Proves the paying agent holds FINANCIAL_MEDIUM (bit 3) with selective disclosure\u2014only the required scope mask is revealed, not the full bitmask. The identity-bound scope commitment ties permission to the specific credential commitment, preventing credential substitution. Expiry enforcement and EdDSA operator signature verification are already in-circuit. This circuit runs in parallel with Delegation to prove both 'agent is credentialed' and 'agent is delegated' simultaneously, matching the handshake pattern.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "Root history buffers (30 entries each for humanTree and agentTree) are the critical on-chain primitive here: a payment receipt must reference the Merkle root that was valid at payment time T, not the current root. The 30-entry buffer gives a sliding window to validate historical proofs. Delegation nullifier replay protection prevents the same authorization proof from being submitted twice for two different payments. The existing delegation chain-state tracking on-chain maps cleanly to audit trail requirements.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "DelegationPlonkVerifier",
+        "usage": "Already deployed at 0x285D2E315AdD9c82337d8a4BDF567AB3a9215B93 on Base Sepolia. x402 receipt verifiers can call this contract directly to check the PLONK proof attached to a payment receipt. PLONK's universal SRS means no per-payment trusted setup. This is the on-chain verification endpoint that x402 facilitators or Theseus infrastructure would invoke.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "payment-protocols",
+        "usage": "integrations/payment-protocols/src/spend-policy.ts already exists and implements budget/spend-policy enforcement logic. This is the SDK-level integration surface where payment authorization proofs get wired: SpendPolicy can be extended to call provePaymentAuthorization() before releasing an x402 HTTP 402 challenge response, attaching the Bolyra delegation proof to the receipt. The conformance runner structure there can host x402-specific test vectors.",
+        "modification_needed": "minor"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "PaymentCommitmentBinding: extend Delegation.circom with a new public input `paymentCommitment = Poseidon4(paymentAmount, recipientAddress, receiptHash, paymentTimestamp)`. This binds the delegation proof to one specific payment event\u2014a detached proof is cryptographically unusable on a different receipt. Implemented as a thin wrapper template around the existing Delegation circuit rather than a full rewrite. Requires new .zkey ceremony (pot16.ptau is sufficient at 22k constraints + ~2k new constraints).",
+        "complexity": "medium",
+        "estimated_days": 10
+      },
+      {
+        "type": "contract",
+        "description": "X402AuthorizationVerifier: a Solidity contract that x402 facilitators and Theseus call. Accepts (receiptHash, delegationProof, agentProof, merkleRoot, permissionMask) and (1) calls DelegationPlonkVerifier.verifyProof(), (2) checks merkleRoot is in IdentityRegistry's root history buffer, (3) verifies paymentCommitment = Poseidon4(receiptHash params), (4) emits PaymentAuthorized(nullifier, scopeMask, expiryTimestamp) for the on-chain audit log. Wraps existing verifier contracts\u2014no new cryptography.",
+        "complexity": "medium",
+        "estimated_days": 6
+      },
+      {
+        "type": "sdk",
+        "description": "provePaymentAuthorization(delegationChain, paymentParams): new SDK function that (1) resolves the active Merkle root at payment time from IdentityRegistry history, (2) computes paymentCommitment from payment params, (3) generates the extended Delegation PLONK proof with payment binding, (4) serializes to a compact base64url blob for x402 header attachment. Requires completing the delegate() v0.3 stub first\u2014that's the primary dependency. Also needs a deserializePaymentProof() counterpart for verifiers.",
+        "complexity": "high",
+        "estimated_days": 18
+      },
+      {
+        "type": "spec",
+        "description": "X-Bolyra-Payment-Authorization HTTP header spec: defines the wire format for attaching a Bolyra proof to an x402 payment receipt. Fields: proof (base64url PLONK proof), publicSignals (paymentCommitment, nullifier, scopeMask, expiryTimestamp, merkleRoot), bolyraVersion. Extends draft-bolyra-mutual-zkp-auth-01 with a new PaymentAuthorization proof type. Needed so x402 facilitators know what to parse and forward to X402AuthorizationVerifier.",
+        "complexity": "low",
+        "estimated_days": 3
+      },
+      {
+        "type": "integration",
+        "description": "ERC-8021 (Builder Codes) bridge: on-chain mapping from Bolyra nullifier to Base Builder Code attribution. When X402AuthorizationVerifier emits PaymentAuthorized, a bridge contract reads the Builder Code from the tx and records (builderCode \u2192 bolyraRootNullifier) for attribution-plus-authorization correlation. Enables compliance queries like 'show all payments by root identity X within delegation scope FINANCIAL_MEDIUM in Q3'. Complexity is high because ERC-8021 attribution events and Bolyra nullifiers have different privacy models that need reconciliation.",
+        "complexity": "high",
+        "estimated_days": 14
+      }
+    ],
+    "theseus_integration_surface": "Theseus (theseuschain.com) sits between x402 payment facilitators and autonomous agents. Bolyra plugs in at two surfaces. First, the agent-side SDK surface: before an agent submits an x402 402-response, it calls provePaymentAuthorization(delegationChain, {amount, recipient, receiptHash, timestamp}) via @bolyra/sdk, receives a serialized PLONK proof, and attaches it as the X-Bolyra-Payment-Authorization header. Theseus forwards this header alongside the payment. Second, the facilitator-side verifier surface: the x402 facilitator (or Theseus's settlement layer) calls X402AuthorizationVerifier.verifyPaymentAuthorization(receiptHash, proof, publicSignals) on Base Sepolia before accepting the payment as authorized. The verifier contract calls DelegationPlonkVerifier (already deployed), checks IdentityRegistry root history for the claimed Merkle root at payment time T, and emits the PaymentAuthorized event for the audit log. The ERC-8021 bridge optionally correlates the emitted nullifier to Builder Code attribution. Theseus never learns the root human identity or intermediate delegator keys\u2014only the scope mask, nullifier, and expiry timestamp appear as public signals.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "PaymentContextBinding.circom patch",
+          "type": "circuit",
+          "description": "Add three public inputs to Delegation circuit: paymentAmount (u64), recipientAddress (field), receiptHash (field). Commitment H(amount||recipient||receiptHash||nonce) becomes a 4th public output, binding the authorization proof to a specific payment event and preventing replay across different receipts. Requires recompile + new groth16/plonk zkeys from existing pot16.ptau.",
+          "days": 5,
+          "reuses": "Delegation.circom \u2014 major modification"
+        },
+        {
+          "name": "Updated DelegationVerifier.sol",
+          "type": "contract",
+          "description": "Regenerate Solidity verifier from new vkey.json after circuit recompile. Add verifyPaymentAuthorization(proof, publicSignals, receiptHash) entrypoint that checks the paymentContextCommitment signal matches the provided receipt. Deploy to Base Sepolia and \u2014 if Theseus is EVM-compatible \u2014 to Theseus testnet. If Theseus uses a custom VM, this becomes a verification adapter spec only.",
+          "days": 2,
+          "reuses": "DelegationPlonkVerifier at 0x285D2E315AdD9c82337d8a4BDF567AB3a9215B93 \u2014 redeploy with new vkey"
+        },
+        {
+          "name": "provePaymentAuthorization() SDK function",
+          "type": "sdk",
+          "description": "New export in @bolyra/sdk that takes (delegationChain, paymentContext: {amount, recipient, receiptHash}, sessionNonce) and returns a PaymentAuthProof struct. Wires through the modified Delegation circuit via snarkjs (dev) or rapidsnark (prod). Includes proof serialization to a compact bytes format suitable for appending to x402 receipt headers.",
+          "days": 3,
+          "reuses": "sdk/src/delegation.ts + existing proveHandshake pattern \u2014 moderate extension"
+        },
+        {
+          "name": "SpendPolicy.proveBeforeRelease() extension",
+          "type": "integration",
+          "description": "Extend integrations/payment-protocols/src/spend-policy.ts to call provePaymentAuthorization() before releasing an x402 HTTP 402\u2192200 payment. Attach the compact proof bytes to the x402 Receipt header as X-Bolyra-Auth-Proof. Add verifyPaymentAuthProof() on the receiver side. Covers the FINANCIAL_MEDIUM bit enforcement path.",
+          "days": 3,
+          "reuses": "integrations/payment-protocols/src/spend-policy.ts \u2014 existing file, moderate extension"
+        },
+        {
+          "name": "Theseus Agent Key Bridge spec + adapter stub",
+          "type": "spec",
+          "description": "Theseus agents hold raw EdDSA keypairs with no delegation primitive. This spec defines how a Theseus agent key (Ed25519 pubkey) maps to a Bolyra AgentCredential: operator signs the agent's pubkey hash as the modelHash field, issuing a credential with the desired permission bitmask. The adapter stub in sdk/ reads a Theseus-format agent identity JSON and emits a Bolyra credential. BLOCKED on Theseus providing their agent identity schema.",
+          "days": 2,
+          "reuses": "AgentPolicy circuit \u2014 none needed, existing circuit handles EdDSA signature verification already"
+        },
+        {
+          "name": "x402 Payment Auth Proof \u2014 spec doc",
+          "type": "spec",
+          "description": "One-page IETF-style spec defining the X-Bolyra-Auth-Proof header format: CBOR-encoded {proof_type, public_signals, pi_a, pi_b, pi_c, payment_context_commitment, chain_id, registry_address}. Covers Base Sepolia and Theseus testnet variants. This is the artifact to share with Theseus team on the call and propose as a joint standard.",
+          "days": 1,
+          "reuses": "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 new section, minimal new work"
+        },
+        {
+          "name": "End-to-end demo script",
+          "type": "demo",
+          "description": "Node.js script: (1) create a Theseus-style agent credential via bridge adapter, (2) call provePaymentAuthorization() for a $500 simulated payment (within FINANCIAL_MEDIUM), (3) attach proof to x402 receipt header, (4) call DelegationVerifier.verifyPaymentAuthorization() on Base Sepolia and log the boolean result. Runnable in < 60s with mock proofs, ~3min with full Groth16. This is the Sunday call demo.",
+          "days": 2,
+          "reuses": "examples/mcp-demo pattern + existing test fixtures"
+        }
+      ],
+      "total_days": 18,
+      "reuse_percentage": 72,
+      "demo_readiness": "2_weeks",
+      "demo_description": "Sunday call (tomorrow): show existing Delegation + AgentPolicy circuits running in fast mode (witness-only, no full proof). Walk through the architecture diagram: Theseus agent key \u2192 Bolyra credential \u2192 payment auth proof \u2192 x402 receipt header \u2192 on-chain verifier. Show the deployed DelegationPlonkVerifier on Base Sepolia via Basescan. Present the X-Bolyra-Auth-Proof header spec as a draft and propose co-authoring. The circuit modification and full end-to-end demo are 2 weeks out \u2014 frame Sunday as a technical alignment call, not a live integration demo.",
+      "risks": [
+        "Theseus VM is not EVM-compatible: DelegationVerifier.sol cannot deploy directly; need to ship proof bytes off-chain and verify on Base Sepolia instead, adding a cross-chain round-trip that hurts UX and is a harder sell.",
+        "Circuit recompile with new public inputs requires regenerating zkeys from pot16.ptau (~20min local, non-parallelizable); if pot16.ptau has wrong constraint capacity the build fails and needs a new ceremony \u2014 check constraint count before starting.",
+        "Theseus agent key schema is unknown: if agents use something other than Ed25519 (e.g. secp256k1 or a custom VM key type), the AgentPolicy circuit's EdDSA verifier doesn't apply and a new constraint subcircuit is needed (~3 extra days).",
+        "Solo founder context-switching cost: Delegation circuit modification requires uninterrupted deep work (Circom constraint debugging is non-linear). Interleaving with ZKProva/GeniusComply tasks will double the real-calendar time.",
+        "x402 is not yet stable: the Linux Foundation spec is still in draft; the receipt format may change before Bolyra's header extension ships, requiring a spec update pass."
+      ],
+      "success_criteria": "A Theseus agent submits an x402 payment; the receiving service calls DelegationVerifier.verifyPaymentAuthorization(proof, receiptHash) on-chain and gets true; a replayed proof against a different receiptHash returns false. The proof generation adds < 5s latency for snarkjs (dev) and < 300ms for rapidsnark (prod). Theseus team can reproduce the demo using the bridge adapter with their own agent keys.",
+      "theseus_dependencies": "1) Agent identity schema: exact format of their EdDSA keypairs and any on-chain agent registration struct. 2) Testnet RPC + faucet access if they want the verifier deployed on their chain. 3) Confirmation of VM type (EVM-compatible or custom) \u2014 this is the single highest-leverage question for Sunday. 4) x402 facilitator they're planning to integrate with (Base x402, custom) so the receipt format is known. 5) Willingness to co-author the X-Bolyra-Auth-Proof spec as a joint Bolyra+Theseus proposal to the x402 Foundation."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 2 FAIL \u2014 Theseus's 'no human key path' architecture is a structural kill shot for the primary ZKP value proposition. The entire privacy argument rests on 'hiding root identity X and intermediate delegators from the payment receipt.' But in an agent-native chain where there IS no human root and agents ARE the first-class principals, there is nothing sensitive to hide. An EdDSA delegation chain posted on-chain (agent A signs over to agent B signs over to agent C, all public) provides the same audit trail with zero ZKP overhead. The Bolyra rationale assumes human-rooted privacy is the motivator \u2014 Theseus's architecture explicitly eliminates that assumption.",
+      "AXIS 4 FAIL \u2014 Integration complexity is disqualifying at three independent layers: (1) Theseus is an L1 with unknown VM compatibility \u2014 if non-EVM, Bolyra's Solidity verifier is useless and requires a custom Groth16 verifier implementation from scratch in Theseus's native runtime, a multi-month effort for Theseus alone; (2) the Delegation circuit requires 'major' modification to add payment-context binding inputs (amount, recipient, receipt hash), triggering a new trusted setup ceremony and regenerated Solidity verifier \u2014 Bolyra estimates 10+ days just for the circuit work; (3) there is no finalized x402 receipt format for ZKP attachment, making this a standards problem in addition to a build problem. Three compounding blockers against a $100K-funded pre-mainnet partner is an unacceptable risk ratio.",
+      "AXIS 1 CONCERN \u2014 A Theseus engineer with basic crypto literacy can build an on-chain delegation registry (agent \u2192 agent signed scoped grants, stored as Merkle leaves, referenced in payment receipts) using standard Solidity + OpenZeppelin in 4-6 weeks. This satisfies 80% of the audit use case without ZKP. The 20% gap is the privacy property \u2014 but as noted in Axis 2, that property may have no value in Theseus's architecture. The 'ZKP expertise barrier' argument is only valid if privacy is the requirement, which is unproven.",
+      "AXIS 3 CONCERN \u2014 Enterprise operators requiring audit-grade authorization proofs on autonomous agent payments will not be deploying on a $100K-funded, pre-mainnet L1 within 12 months. The demand signal comes from x402's backing (Google, Visa, Stripe) \u2014 those are enterprise players who will not be on Theseus at any near-term horizon. The actual Theseus agent cohort at launch will be crypto-native developers running experimental agents, not regulated enterprise workflows requiring authorization proofs. The use case is real but arrives at 100K+ agent scale, which Theseus is years from.",
+      "AXIS 5 PASS \u2014 The x402 payment attribution proof is genuinely reusable across any x402-adopting platform (Fetch.ai, SingularityNET, future agent chains, even Coinbase's own agent ecosystem). If Bolyra builds the Delegation circuit modification with payment-context binding, it becomes a protocol-level primitive that doesn't die with Theseus. The work is worth doing eventually \u2014 but not with Theseus as the forcing function at this stage.",
+      "COMPOUND FINDING \u2014 The proposal conflates two distinct gaps: (a) attribution vs. authorization (real and ERC-8021 confirms it) and (b) privacy of the delegation chain (unproven value in agent-native context). It wins on (a) but loses on (b), and the ZKP overhead is only justified by (b). A non-ZKP authorization proof (EdDSA delegation chain with on-chain verification) closes gap (a) adequately for Theseus's actual use cases. Recommend decoupling: build the simpler EdDSA solution for Theseus as a fast win, reserve ZKP payment proof for a human-rooted operator context where privacy of the delegation chain has provable economic value."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "CONCERN",
+      "integration_complexity_vs_value": "FAIL",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "Axis 2 is a structural kill: Theseus's agent-native, no-human-root architecture eliminates the privacy motivation for ZKP over EdDSA delegation chains, while Axis 4's triple-layer integration complexity (unknown VM, major circuit modification, no x402 ZKP receipt standard) makes this a multi-month build against a pre-mainnet $100K-funded partner \u2014 DROP from CONSIDER to REJECT.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "protocol_mapper_agent_rooted_delegation",
+    "title": "Agent-rooted Delegation circuit: L1 genesis as root of trust",
+    "description": "Bolyra's existing Delegation circuit hard-assumes a human delegator \u2014 the delegator key is bound to a HumanUniqueness credential commitment. Theseus agents have no human key path; the root of trust is the agent's on-chain genesis transaction. A new AgentDelegation circuit variant is needed where the root delegator is validated against the Theseus L1 genesis block commitment rather than a Semaphore-style human tree root. The existing scope-narrowing logic (delegateeScope \u2286 delegatorScope, expiry monotonicity, max-3-hop chain) carries over with ~3k additional constraints to verify the L1 genesis commitment. This is the single most important architectural gap: without it, Bolyra cannot support any agent-to-agent delegation on Theseus at all.",
+    "category": "authorization",
+    "persona": "protocol_mapper",
+    "time_horizon": "2_week_sprint",
+    "scores": {
+      "agent_need": 17,
+      "zkp_edge": 18,
+      "primitive_readiness": 13,
+      "partnership_leverage": 16,
+      "total": 64
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "The structural argument is compelling \u2014 if Theseus is truly agent-native L1 with no human key path, the current Delegation circuit literally cannot function as a delegator root \u2014 but the evidence relies on training-knowledge characterizations of Theseus rather than cited documentation or codebase, weakening the required evidence standard.",
+      "zkp_edge": "Correctly names Lit Protocol (no circuit-level scope narrowing), Turnkey (custodial trusted third party), and Fetch.ai (replay/impersonation gaps) as structural failures, but does not address whether a simple on-chain ACL contract with Merkle inclusion proofs could provide 80% of the value without ZKP overhead.",
+      "primitive_readiness": "Names specific circuits (Delegation.circom fork, AgentPolicy), contracts (IdentityRegistry new enrollment path, new verifiers), and a plausible 2-week timeline, but the entire work is gated on a critical external dependency \u2014 Theseus must share their genesis block commitment format before a single constraint can be written, making the timeline speculative.",
+      "partnership_leverage": "Correctly identifies ZKP circuit design and Circom proficiency as the expertise gap and notes competitor alternatives (Lit, Turnkey) Theseus could adopt instead, but does not assess Theseus's actual crypto team composition or whether they have an identity solution already in progress, leaving the 'they can't build this themselves' claim unsubstantiated."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (provided context, not live-fetched)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is an agent-native L1 with no human-controlled key path; agents hold their own keys and persist on-chain, creating a structural gap with all human-rooted identity systems including Bolyra's current Delegation circuit."
+      },
+      {
+        "source": "Lit Protocol \u2014 litprotocol.com (training knowledge)",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Lit Protocol provides programmable key management and access control for agents using threshold cryptography, but does not use ZKP delegation chains or cumulative-bit permission encoding \u2014 no circuit-level scope narrowing."
+      },
+      {
+        "source": "Turnkey \u2014 turnkey.com (training knowledge)",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey offers API-driven key management with policy enforcement for agents, but is custodial and trust-anchored to Turnkey's infrastructure, not to an L1 genesis commitment."
+      },
+      {
+        "source": "Privy \u2014 privy.io (training knowledge)",
+        "type": "competitor",
+        "relevance": "low",
+        "summary": "Privy targets human wallet UX (embedded wallets, social login) and has limited agent-native primitives; not designed for agent-rooted trust chains."
+      },
+      {
+        "source": "Fetch.ai / Agentverse (training knowledge)",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai runs an agent-native network where agents register on-chain and communicate via the Agent Communication Protocol (ACP); delegation is handled via agent-signed messages rather than ZKP circuits, creating exploitable replay/impersonation gaps."
+      },
+      {
+        "source": "SingularityNET (training knowledge)",
+        "type": "agent_l1",
+        "relevance": "low",
+        "summary": "SingularityNET focuses on AI service marketplace mechanics; identity is service-level API-key gating, not cryptographic agent delegation."
+      },
+      {
+        "source": "IETF draft-klrc-aiagent / OAuth 2.0 for AI agents (training knowledge)",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "Emerging IETF drafts on AI agent authorization propose OAuth-style token delegation but assume a human principal at the root \u2014 no standard yet covers agent-genesis-rooted delegation chains, which is exactly the gap a Theseus-native AgentDelegation circuit would fill."
+      },
+      {
+        "source": "Semaphore v4 / Worldcoin ZKP identity (training knowledge)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Semaphore v4 is the most deployed ZKP identity primitive on L1s (Ethereum mainnet), but its Merkle tree root is human-biometric-anchored; no variant exists that substitutes an L1 genesis block commitment as the root of trust."
+      },
+      {
+        "source": "Aztec / Noir ZKP on L1 (training knowledge)",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "Aztec's Noir language enables privacy-preserving circuits on Ethereum, but no published circuit addresses agent-genesis delegation chains; the tooling is available for Bolyra to build this without competition."
+      },
+      {
+        "source": "Polygon ID / Iden3 (training knowledge)",
+        "type": "zkp_identity",
+        "relevance": "low",
+        "summary": "Polygon ID supports W3C Verifiable Credentials with ZKP, but is human-credential-centric and does not model agent autonomy or genesis-block trust anchors."
+      }
+    ],
+    "demand_strength": "moderate",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "Delegation",
+        "usage": "Core scope-narrowing logic (delegateeScope \u2286 delegatorScope, expiry monotonicity, max-3-hop chain, delegation nullifier replay protection, EdDSA delegation token signature) carries over verbatim. The circuit template is the starting point for AgentDelegation \u2014 only the root-delegator identity check changes.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "The root delegator in AgentDelegation is an agent credential, not a human. AgentPolicy's identity-bound scope commitment (Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp)) and EdDSA operator signature verification become the delegator identity anchor, replacing the HumanUniqueness Merkle root check that the existing Delegation circuit uses.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "Not applicable as delegator root. Its Semaphore v4 Merkle tree and nullifier construction are human-specific. However, mixed human\u2192agent delegation chains that terminate at a Theseus agent still need HumanUniqueness for any human-origin hop, so the circuit interface must remain compatible with the existing handshake tuple.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The agentTree (dual LeanIMT, 30-entry root history buffer) already tracks enrolled agent commitments on Base Sepolia. For agent-rooted delegation, the genesis commitment from Theseus L1 must either (a) be mirrored into agentTree via a bridge-attested enrollment, or (b) verified out-of-band before the delegation proof is accepted. The existing delegationVerify path and hop-count enforcement reuse with a new entry point that accepts an agent-root proof instead of a human-root proof.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "DelegationPlonkVerifier",
+        "usage": "Cannot reuse directly \u2014 the new AgentDelegation circuit will generate a different R1CS/constraint system. A new PLONK verifier contract must be generated from the new zkey. The existing PlonkVerifier address is circuit-specific.",
+        "modification_needed": "major"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "AgentDelegation.circom: fork of Delegation.circom replacing the delegator HumanUniqueness Merkle check with (1) AgentPolicy-style EdDSA operator signature over the root credential commitment, and (2) a Theseus L1 genesis block commitment verifier (~3k additional constraints, likely Poseidon-hashed block header fields or a compact Merkle path into the genesis state trie). Scope-narrowing, expiry, hop-count, and nullifier replay logic copy verbatim. Dual Groth16+PLONK build required for ceremony flexibility.",
+        "complexity": "high",
+        "estimated_days": 10
+      },
+      {
+        "type": "spec",
+        "description": "Theseus Genesis Commitment Interface Spec: define the exact fields from the Theseus L1 genesis block that serve as the root-of-trust anchor (block hash, state root, agent registry commitment), their encoding as ZK-friendly field elements (Baby Jubjub / BN254 scalar field), and the on-chain attestation mechanism (oracle, storage proof, or bridge message). Without this spec the circuit cannot be implemented \u2014 this is the critical unknown.",
+        "complexity": "medium",
+        "estimated_days": 4
+      },
+      {
+        "type": "contract",
+        "description": "AgentDelegationPlonkVerifier.sol: generated from the new AgentDelegation zkey via snarkjs exportSolidityVerifier. Deploy alongside existing verifiers on Base Sepolia.",
+        "complexity": "low",
+        "estimated_days": 1
+      },
+      {
+        "type": "contract",
+        "description": "IdentityRegistry extension (agentDelegationVerify): new method or overloaded verify path that accepts (agentRootProof, delegationChainProofs[], nonce) instead of (humanProof, agentProof, nonce). Must validate Theseus genesis commitment is in the trusted genesis anchor set (owner-controlled mapping), check hop count \u2264 3, enforce delegation nullifiers, and emit the same events as existing verifyHandshake for indexer compatibility.",
+        "complexity": "medium",
+        "estimated_days": 5
+      },
+      {
+        "type": "sdk",
+        "description": "Implement delegate() stub for agent-rooted path: createAgentDelegation(rootCredential, delegateeCredential, scopeMask, expiry) \u2192 AgentDelegationResult. Wire to AgentDelegation circuit artifacts, add ThesusBridgeAdapter that fetches and caches the genesis commitment from Theseus RPC, expose verifyAgentDelegationChain(). Add AgentDelegationError and GenesisMismatchError to error class hierarchy.",
+        "complexity": "medium",
+        "estimated_days": 5
+      },
+      {
+        "type": "integration",
+        "description": "Theseus bridge adapter: lightweight module that reads the Theseus L1 genesis block commitment via Theseus RPC/REST, converts it to BN254 field elements, and caches it with a configurable TTL. Used by the SDK proving path and optionally by the IdentityRegistry oracle updater.",
+        "complexity": "medium",
+        "estimated_days": 3
+      }
+    ],
+    "theseus_integration_surface": "Two viable surfaces: (A) Verifier-on-Base-Sepolia with oracle bridge \u2014 Bolyra's IdentityRegistry stays on Base Sepolia; a trusted oracle (or Theseus\u2192Base bridge message) writes the Theseus L1 genesis commitment into a GenesisAnchorRegistry contract; the AgentDelegation circuit proves membership against this anchored value; no cross-chain proving required. (B) Native Theseus deployment \u2014 deploy AgentDelegationPlonkVerifier and a minimal IdentityRegistry fork directly on Theseus L1 so the genesis commitment is a local constant (block.chainid + genesis hash available natively); agents prove delegation entirely on-chain without bridging. Surface A is faster (reuses existing Base Sepolia infra, 2-week sprint feasible) but introduces oracle trust. Surface B is cleaner (genesis commitment is a chain constant, zero oracle risk) but requires Theseus EVM compatibility verification and a new deployment pipeline.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "AgentDelegation spec + Theseus genesis commitment format",
+          "type": "spec",
+          "description": "Document the wire format for Theseus L1 genesis block commitment (block hash fields, Poseidon-hashed header, or compact Merkle path). Defines the public signal interface AgentDelegation.circom will consume. Requires Theseus to share genesis block structure. This is the critical dependency that gates all circuit work.",
+          "days": 2,
+          "reuses": "new"
+        },
+        {
+          "name": "AgentDelegation.circom",
+          "type": "circuit",
+          "description": "Fork of Delegation.circom. Replaces the HumanUniqueness Merkle root check with: (1) AgentPolicy-style EdDSA operator signature over the root credential commitment, and (2) Poseidon-hash verification of the Theseus L1 genesis block commitment (~3k additional constraints). Scope-narrowing (delegateeScope \u2286 delegatorScope), expiry monotonicity, max-3-hop chain, and nullifier replay protection copy verbatim. Dual Groth16+PLONK build. Will use pot16.ptau for Groth16 trusted setup \u2014 no new ceremony needed if constraint count stays under 2^16.",
+          "days": 8,
+          "reuses": "Delegation.circom (scope-narrowing, expiry, hop-count, nullifier logic \u2014 ~70% of constraints)"
+        },
+        {
+          "name": "AgentDelegationGroth16Verifier.sol + AgentDelegationPlonkVerifier.sol",
+          "type": "contract",
+          "description": "Regenerated Solidity verifier contracts from the new AgentDelegation zkey. Cannot reuse existing DelegationPlonkVerifier \u2014 different R1CS. Generated via snarkjs exportSolidityVerifier from the new vkey.json. Hardhat integration test confirms verifyProof accepts valid witness and rejects tampered scope.",
+          "days": 2,
+          "reuses": "DelegationPlonkVerifier.sol (generation pattern + test harness)"
+        },
+        {
+          "name": "IdentityRegistry: agent-root enrollment path",
+          "type": "contract",
+          "description": "New entry point on IdentityRegistry that accepts a bridge-attested Theseus genesis commitment and inserts it into the agentTree (existing dual LeanIMT, 30-entry root history buffer). Adds an enrollAgentGenesis(bytes32 genesisCommitment, bytes calldata bridgeAttestation) method. Bridge attestation is initially a multisig (2-of-3 Theseus team keys) pending a trustless bridge. Existing delegationVerify path reused with a flag selecting agent-root vs human-root entry.",
+          "days": 3,
+          "reuses": "IdentityRegistry.sol (agentTree, root history buffer, delegationVerify)"
+        },
+        {
+          "name": "SDK: agentDelegation() API methods",
+          "type": "sdk",
+          "description": "Two new TypeScript methods on @bolyra/sdk: createAgentDelegation(rootCredential, delegateeCredential, scopeBitmask, expiry, genesisCommitment) and verifyAgentDelegation(proof, nonce). Thin wrappers over snarkjs prover using the new AgentDelegation zkey. Existing proveHandshake/verifyHandshake session-nonce binding reused for the handshake layer.",
+          "days": 2,
+          "reuses": "createAgentCredential, proveHandshake patterns (proving pipeline, nonce binding)"
+        },
+        {
+          "name": "Theseus integration demo",
+          "type": "demo",
+          "description": "Node script demonstrating a 2-hop agent delegation on Base Sepolia testnet: root agent (Theseus genesis commitment enrolled via multisig) \u2192 delegatee agent (narrowed scope bitmask) \u2192 proof verification on-chain. Shows the score from 76 (CONSIDER) is actionable: scope-narrowing works, replay fails, expired delegation rejected. Requires Theseus testnet genesis commitment or a mock commitment for demo purposes.",
+          "days": 2,
+          "reuses": "examples/mcp-demo pattern + existing Hardhat testnet scripts"
+        }
+      ],
+      "total_days": 19,
+      "reuse_percentage": 62,
+      "demo_readiness": "2_weeks",
+      "demo_description": "For the Sunday June 29 call: (1) live demo of the existing Delegation circuit showing scope-narrowing and max-3-hop enforcement \u2014 proves the core primitive works; (2) AgentDelegation.circom scaffold open in editor showing the exact lines being changed (the HumanUniqueness Merkle check replaced by EdDSA + genesis hash verify); (3) the spec doc showing the wire format Theseus needs to expose. Nothing deployed yet \u2014 but the gap is precisely scoped and the delta from existing code is visibly small. The ask of Theseus: share genesis block Poseidon-hash format so spec can be finalized on the call.",
+      "risks": [
+        "Theseus genesis commitment format is unknown \u2014 if they use a non-Poseidon hash (e.g. keccak256 of raw RLP), adding a keccak gadget in Circom adds ~5k constraints and complexity; resolve on the call",
+        "pot16.ptau caps at 2^16 constraints \u2014 if AgentDelegation exceeds this (unlikely but possible with complex genesis Merkle path), a new Powers of Tau ceremony is needed, adding 2-3 days",
+        "Bridge attestation is initially a multisig trust assumption \u2014 trustless bridge from Theseus L1 to Base Sepolia is a separate multi-month engineering effort; demo must be honest about this",
+        "Solo capacity: circuit work is sequential and debugging Circom witness errors is unpredictable \u2014 8-day estimate for AgentDelegation.circom has \u00b13 day variance",
+        "Theseus testnet may not exist yet \u2014 demo may need a mock genesis commitment if their chain is not live"
+      ],
+      "success_criteria": "A 2-hop agent delegation proof verifies on-chain (Base Sepolia) with: (a) delegateeScope strictly \u2286 delegatorScope enforced in-circuit, (b) replay of the same proof with a fresh nonce fails, (c) a tampered genesis commitment causes proof verification to reject, (d) SDK round-trip (createAgentDelegation \u2192 verifyAgentDelegation) completes in under 30 seconds using snarkjs on a laptop",
+      "theseus_dependencies": "Critical path item 1: genesis block commitment format \u2014 specifically which fields are hashed, what hash function (Poseidon preferred; keccak adds circuit complexity), and byte ordering. Item 2: a testnet or staging environment where agents have on-chain genesis transactions we can use to generate test commitment values. Item 3: a 2-of-3 multisig signing authority for bridge attestations during the demo phase (their team keys). Nice-to-have: their agent credential schema (public key format, on-chain registration record structure) so AgentPolicy's EdDSA signature check binds to real Theseus keypairs."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 2 FAIL \u2014 Standard crypto suffices for agent delegation: a Solidity ACL contract enforcing delegateePermissions & delegatorPermissions == delegateePermissions (bitwise AND check) enforces the same cumulative-bit scope narrowing the Delegation circuit provides, with nullifier replay protection via a simple spent-nullifier mapping. The privacy benefit of hiding delegation chains is unclear for an agent-native L1 where chain transparency is a feature, not a bug. The proposal never addresses what concrete harm occurs if delegation chains are visible on-chain, which is the only question that would justify ZKP overhead.",
+      "AXIS 4 FAIL \u2014 Integration is structurally blocked on unknowns that Bolyra cannot resolve before the Sunday demo: Theseus's VM architecture is undocumented ($100K funded, likely pre-mainnet), the genesis block commitment format is unknown, and the EVM-compatibility status is unconfirmed. The proposal itself admits the entire 2-week sprint is gated on Theseus sharing their genesis commitment format first. If Theseus runs a custom non-EVM VM, Solidity verifiers cannot be deployed and Bolyra would need to implement a custom Groth16 verifier in Theseus's native language \u2014 work that dwarfs the circuit modification itself. The claimed timeline is fictional until these prerequisites are satisfied.",
+      "AXIS 1 CONCERN \u2014 Theseus can defer this: for their current scale ($100K, pre-launch), a hardcoded permission set per agent enforced in a Solidity registry is a 1-week implementation. ZKP circuit design requires specialized Circom expertise, but Theseus's identity problem at launch is not complex enough to demand it. The 'they can't build this themselves' claim is unsubstantiated \u2014 the proposal acknowledges it doesn't know Theseus's crypto team composition.",
+      "AXIS 3 CONCERN \u2014 The agent use case is named (agent spawns sub-agent, needs scope-narrowed delegation) but the ZKP-specific version is not necessary at launch. Theseus at launch likely has tens to hundreds of agents, where gas-efficient proof verification is irrelevant and on-chain ACL call overhead is acceptable. The ZKP version only becomes operationally necessary at scale that $100K funding will not reach.",
+      "AXIS 5 CONCERN \u2014 Partial reuse value exists: the AgentDelegation circuit pattern (agent-genesis as root of trust instead of Semaphore human tree) is generalizable to any agent-native L1. However, the genesis commitment binding is Theseus-specific, and Theseus's failure probability at current funding level is high. The net reusable artifact is roughly 60% of the effort; the Theseus-specific genesis integration work is stranded if they pivot or fold."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "CONCERN",
+      "integration_complexity_vs_value": "FAIL",
+      "single_partner_dependency": "CONCERN"
+    },
+    "tier3_summary": "Two hard FAILs \u2014 standard Solidity ACLs cover the scope-narrowing claim without ZKP, and the 2-week sprint is entirely blocked on undocumented Theseus VM and genesis format \u2014 make this a DROP under the rubric regardless of architectural appeal.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "cross_chain_identity_storage_proof_registry_sync",
+    "title": "EIP-1186 storage proof relay to sync Bolyra IdentityRegistry root onto Theseus L1",
+    "description": "Bolyra's IdentityRegistry on Base Sepolia maintains a Merkle root of enrolled agent credentials. For Theseus agents to be verifiable on Base without a trusted bridge, Theseus L1 needs to pin that Merkle root. Using EIP-1186 Ethereum storage proofs, a light-client relay can submit the IdentityRegistry slot proof to a Theseus L1 contract, updating the pinned root trustlessly. A Bolyra ZKP generated on Base is then verifiable on Theseus by checking inclusion against the locally-synced root \u2014 no bridge operator required. This is the key architectural piece that makes Bolyra the canonical cross-chain identity layer rather than a chain-specific system; Theseus cannot easily replicate this without Bolyra's IdentityRegistry being the source of truth on Base.",
+    "category": "cross_chain",
+    "persona": "cross_chain_identity",
+    "time_horizon": "3_month_roadmap",
+    "scores": {
+      "agent_need": 14,
+      "zkp_edge": 15,
+      "primitive_readiness": 16,
+      "partnership_leverage": 16,
+      "total": 61
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "The 'no human key path' structural constraint on Theseus creates an inherent need for trustless cross-chain credential verification, but evidence relies on inferred architecture rather than direct Theseus documentation citing this need.",
+      "zkp_edge": "Named alternatives (trusted bridge, multisig, ACL contracts) all require a trusted third party operator, which is a structural failure ZKP+EIP-1186 eliminates, though the storage proof relay is EIP-1186 mechanics rather than ZKP itself, making the ZKP edge specifically about proof portability once the root is pinned.",
+      "primitive_readiness": "Specific primitives named (PlonkVerifier, Groth16Verifier, IdentityRegistry root history buffer) are reusable verbatim with zero circuit changes; new work is scoped realistically to BolyraRootPinner.sol admin stub (2 days) with the full trustless relay left as follow-on, which is an honest gap.",
+      "partnership_leverage": "The ZKP circuit design and Circom expertise gap is real and well-identified, and IdentityRegistry as source of truth creates bilateral value, but the argument that Theseus cannot build this themselves in 3 months is underdeveloped given no assessment of their team's crypto background or whether competitor solutions (Lit PKP) could serve the same role."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (context-provided, not live-fetched)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is an agent-native L1 with 'no human-controlled key path' constraint, meaning agents hold keys natively \u2014 raw EdDSA keypairs are the assumed current identity primitive, with no ZKP delegation layer described."
+      },
+      {
+        "source": "Lit Protocol (litprotocol.com) \u2014 training knowledge",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Lit offers distributed threshold-signature key management for agent wallets (PKP \u2014 Programmable Key Pairs) with Lit Actions for conditional signing, but no ZKP-based cross-chain identity or delegation circuit \u2014 operates on access control conditions, not cryptographic proofs of scope."
+      },
+      {
+        "source": "Turnkey (turnkey.com) \u2014 training knowledge",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey provides non-custodial server-side wallets increasingly used for agent key management, but identity is simply ECDSA/EdDSA key custody with no on-chain registry, Merkle roots, or delegation proofs."
+      },
+      {
+        "source": "Privy (privy.io) \u2014 training knowledge",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Privy offers embedded + server wallets for agents but is strictly a key-management layer with no cross-chain identity registry, ZKP proofs, or permission encoding \u2014 targets Web2 developers, not L1-native agent architectures."
+      },
+      {
+        "source": "W3C DID Core + Verifiable Credentials spec \u2014 training knowledge",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "W3C DIDs support agent DIDs and VCs support delegation via capability invocation, but the VC model relies on JWT/JSON-LD signatures \u2014 not ZKP proofs \u2014 and has no native cross-chain Merkle root sync mechanism."
+      },
+      {
+        "source": "IETF draft-klrc-aiagent (referenced in Bolyra bookmarks context)",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "Emerging IETF draft for AI agent authentication is actively evolving; no settled standard exists for agent-to-agent delegation with cryptographic scope narrowing \u2014 this is a spec gap Bolyra can position into."
+      },
+      {
+        "source": "EIP-1186 (ethereum/EIPs) \u2014 training knowledge",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "EIP-1186 (eth_getProof) is a mature Ethereum standard for generating Merkle-Patricia storage proofs; it is production-ready and widely used by light clients (Helios, Nimbus) \u2014 the relay mechanism proposed for Bolyra has strong technical precedent."
+      },
+      {
+        "source": "Fetch.ai / ASI Alliance \u2014 training knowledge",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai has agent identity via its uAgents framework with DID-like addressing, but uses a proprietary ledger and has no ZKP-based credential or permission proof system \u2014 cross-chain identity is handled via bridges, not storage proofs."
+      },
+      {
+        "source": "Worldcoin / World ID \u2014 training knowledge",
+        "type": "zkp_identity",
+        "relevance": "medium",
+        "summary": "World ID deploys Semaphore-based ZKP identity on-chain (human-only), proving group membership via nullifiers \u2014 structurally analogous to Bolyra's HumanUniqueness circuit, but entirely human-scoped with no agent credential or delegation layer."
+      },
+      {
+        "source": "Polygon ID \u2014 training knowledge",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Polygon ID offers ZKP-based verifiable credentials on-chain with on-chain state (identity state tree) and cross-chain state sync via state relay contracts \u2014 the closest live analog to Bolyra's proposed IdentityRegistry root sync, but human/VC-centric with no agent permission bit encoding."
+      },
+      {
+        "source": "Semaphore Protocol (semaphore.pse.dev) \u2014 training knowledge",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Semaphore is deployed on Ethereum mainnet/L2s and proves group membership anonymously \u2014 Bolyra reuses its depth-20 ceremony for HumanUniqueness, giving Bolyra ceremony legitimacy; no agent-identity equivalent exists in the Semaphore ecosystem."
+      },
+      {
+        "source": "Helios light client (a16z) \u2014 training knowledge",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "Helios demonstrates production-grade EIP-1186 storage proof verification in Rust for trustless Ethereum state reading \u2014 confirms the relay architecture is buildable without novel cryptography, only integration work."
+      }
+    ],
+    "demand_strength": "moderate",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The source of truth for the relay. The 30-entry root history buffer on agentTree and humanTree provides a natural sync window \u2014 a relay submitting EIP-1186 proofs can pin any of the 30 most-recent roots without requiring the relay to be atomic with each Base Sepolia enrollment. The contract's deterministic storage layout (LeanIMT root slot) is the exact slot proven via eth_getProof.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "Circuit is chain-agnostic by construction: the public output agentMerkleRoot is a field element that Theseus's pinned root can be checked against directly. A proof generated on Base is valid on Theseus if the verifier there checks the same root. Zero circuit changes needed.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Same chain-agnostic property as AgentPolicy. The scope commitment chain links credential commitments, not chain IDs. Delegation proofs generated on Base are portable to any chain that has the pinned root and the PlonkVerifier deployed.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "PlonkVerifier",
+        "usage": "Existing PlonkVerifier bytecode (0x28b99c48\u2026) can be deployed verbatim on Theseus. AgentPolicy and Delegation proofs from Base are verifiable against the locally-synced root with no code change \u2014 only a redeployment.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "Groth16Verifier",
+        "usage": "Existing Groth16Verifier bytecode (0x5467FCbe\u2026) deployed verbatim on Theseus for HumanUniqueness proofs. Enables full handshake verification (human + agent) on Theseus once the roots are pinned.",
+        "modification_needed": "none"
+      },
+      {
+        "primitive_id": "DelegationPlonkVerifier",
+        "usage": "Redeploy verbatim on Theseus to support on-chain delegation chain verification against the pinned root.",
+        "modification_needed": "none"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "contract",
+        "description": "BolyraStorageProofRelay.sol on Theseus L1. Accepts an EIP-1186 proof bundle (account proof + storage proof for the IdentityRegistry agentTree.root slot on Base Sepolia), verifies MPT inclusion against a trusted Base Sepolia block header hash, and writes the proven root to a local pinnedRoot mapping keyed by block number. Emits RootPinned(blockNumber, agentRoot, humanRoot). This is the trust anchor \u2014 all Theseus-side ZKP verification gates against this contract.",
+        "complexity": "high",
+        "estimated_days": 21
+      },
+      {
+        "type": "contract",
+        "description": "TheseusBlockHeaderOracle interface / adapter. BolyraStorageProofRelay needs a trusted Base Sepolia block header to verify the storage proof against. If Theseus already runs an Ethereum light client (e.g. Helios-style), this is a thin adapter (~2 days). If not, a committee-signed header feed must be built as an interim measure until a canonical light client exists, which is significantly heavier. Estimate assumes Theseus has a usable block header source.",
+        "complexity": "medium",
+        "estimated_days": 5
+      },
+      {
+        "type": "contract",
+        "description": "BolyraVerifierHub.sol on Theseus. Mirrors IdentityRegistry's verifyHandshake and verifyDelegation surface but reads from pinnedRoot (via BolyraStorageProofRelay) rather than a local LeanIMT. Wraps the redeployed Groth16Verifier + PlonkVerifier + DelegationPlonkVerifier. This gives Theseus dApps a single integration point identical to the Base API.",
+        "complexity": "medium",
+        "estimated_days": 7
+      },
+      {
+        "type": "integration",
+        "description": "Root relay bot (TypeScript). Watches IdentityRegistry on Base Sepolia for RootUpdated events (or polls every N blocks), calls eth_getProof for the agentTree.root and humanTree.root storage slots, and submits the proof bundle to BolyraStorageProofRelay on Theseus. Includes freshness logic to skip redundant submissions when pinnedRoot already reflects the current root.",
+        "complexity": "medium",
+        "estimated_days": 7
+      },
+      {
+        "type": "sdk",
+        "description": "Cross-chain verification support in @bolyra/sdk. Add optional rootOverride and targetChainId to verifyHandshake options so callers on Theseus can pass the pinnedRoot fetched from BolyraStorageProofRelay. Add verifyHandshakeOnChain(proof, { chainId, relayAddress }) as a typed wrapper. Backward-compatible \u2014 existing Base callers unaffected.",
+        "complexity": "low",
+        "estimated_days": 3
+      },
+      {
+        "type": "spec",
+        "description": "EIP-1186 storage slot manifest for IdentityRegistry. Documents the exact storage layout (slot derivation for agentTree.root and humanTree.root in the LeanIMT struct), the ABI encoding of the proof bundle, and the relay API surface. Required for Theseus to implement independent relayers and for conformance testing.",
+        "complexity": "low",
+        "estimated_days": 2
+      }
+    ],
+    "theseus_integration_surface": "Three-layer surface: (1) On-chain \u2014 BolyraStorageProofRelay + BolyraVerifierHub deployed on Theseus L1; dApps call verifyHandshake on BolyraVerifierHub with proofs generated on Base, which validates against the locally-pinned root. (2) Off-chain relay \u2014 a stateless relay bot (can be run by Bolyra, Theseus, or any permissionless party) that submits EIP-1186 proof bundles to BolyraStorageProofRelay whenever IdentityRegistry root changes; relay submissions are trustless since the contract self-verifies the storage proof. (3) SDK bridge \u2014 @bolyra/sdk v0.3 exposes verifyHandshakeOnChain({ chainId: theseusChainId, relayAddress }) so Theseus-native agent frameworks (including Theseus's own MCP tooling) can verify Bolyra credentials with one SDK call, making Bolyra's Base Sepolia registry the canonical cross-chain identity source without requiring any bridge operator.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "Bolyra \u00d7 Theseus Architecture Spec",
+          "type": "spec",
+          "description": "One-page doc + sequence diagram: EIP-1186 relay flow, trust anchors, and proof portability model. Covers BolyraStorageProofRelay contract interface, TheseusBlockHeaderOracle dependency surface, and the 3-step verification path (pin root \u2192 submit proof \u2192 gate action). Used directly in Sunday call.",
+          "days": 1,
+          "reuses": "new"
+        },
+        {
+          "name": "Verifier redeploy on Theseus testnet",
+          "type": "contract",
+          "description": "Deploy PlonkVerifier (0x28b99c48), Groth16Verifier (0x5467FCbe), and DelegationPlonkVerifier verbatim onto Theseus testnet using existing Hardhat deploy scripts with a new network config entry. Zero code changes \u2014 pure redeployment. Proves Bolyra proofs are chain-portable today.",
+          "days": 2,
+          "reuses": "PlonkVerifier, Groth16Verifier, DelegationPlonkVerifier (all verbatim)"
+        },
+        {
+          "name": "BolyraRootPinner.sol (admin stub)",
+          "type": "contract",
+          "description": "Minimal Theseus-side contract: owner-settable agentRoot and humanRoot mapping keyed by blockNumber. Emits RootPinned events. No MPT logic \u2014 root is set by admin call. Enables end-to-end proof verification demo before the trustless relay is built. Will be replaced by BolyraStorageProofRelay.sol but is production-usable with a trusted relayer as an interim.",
+          "days": 2,
+          "reuses": "new"
+        },
+        {
+          "name": "Sunday demo script",
+          "type": "demo",
+          "description": "Hardhat task that: (1) generates an AgentPolicy proof on Base Sepolia fork, (2) calls BolyraRootPinner.sol on Theseus testnet with the current IdentityRegistry root, (3) calls PlonkVerifier.verifyProof() on Theseus with the Base-generated proof, (4) asserts true. Single terminal session, no live bridge needed. Shows the key claim: Bolyra proofs generated on Base are valid on Theseus.",
+          "days": 1,
+          "reuses": "AgentPolicy circuit, PlonkVerifier, IdentityRegistry"
+        },
+        {
+          "name": "eth_getProof relay script (off-chain)",
+          "type": "sdk",
+          "description": "Node.js script that calls eth_getProof on Base Sepolia for the IdentityRegistry agentTree.root storage slot, encodes the resulting account + storage proof RLP, and submits it to BolyraStorageProofRelay.sol on Theseus. Uses viem's getProof. Runs as a cron or triggered by IdentityRegistry RootUpdated events via a Base Sepolia websocket subscription.",
+          "days": 4,
+          "reuses": "IdentityRegistry ABI, viem (existing SDK dep)"
+        },
+        {
+          "name": "BolyraStorageProofRelay.sol",
+          "type": "contract",
+          "description": "Core trustless relay contract on Theseus. Accepts EIP-1186 proof bundle (RLP-encoded account proof + storage proof), verifies Merkle Patricia Trie inclusion against a trusted Base Sepolia block header hash sourced from TheseusBlockHeaderOracle, and writes the proven agentTree.root to pinnedRoot[blockNumber]. Uses an existing Solidity MPT library (ethereum-optimism/Solidity-RLP or succinctlabs/telepathy-contracts MerklePatricia verifier) to avoid building MPT from scratch. High complexity \u2014 storage slot must be computed deterministically from IdentityRegistry's LeanIMT layout.",
+          "days": 18,
+          "reuses": "IdentityRegistry storage layout, existing Solidity MPT library"
+        },
+        {
+          "name": "TheseusBlockHeaderOracle adapter",
+          "type": "integration",
+          "description": "Adapter between BolyraStorageProofRelay and Theseus's block header source. Three possible implementations depending on what Theseus provides: (A) if Theseus runs Helios-style light client, wrap its getBlockHash interface; (B) if Theseus has a block hash registry, read from it; (C) if neither, deploy a minimal trusted oracle (multisig-gated) as a placeholder. Complexity and days depend heavily on Theseus testnet access and docs \u2014 this is the critical external dependency.",
+          "days": 7,
+          "reuses": "new \u2014 shape determined by Theseus architecture"
+        },
+        {
+          "name": "SDK relay helper in @bolyra/sdk",
+          "type": "sdk",
+          "description": "Add relayRootToTheseus(theseusRpcUrl, blockTag?) to the TS SDK. Fetches the storage proof, encodes it, and submits to BolyraStorageProofRelay on Theseus. Companion verifyOnTheseus(proof, theseusRpcUrl) checks pinnedRoot and calls the deployed verifier. Lets integrators do the full cross-chain flow in 2 SDK calls.",
+          "days": 4,
+          "reuses": "existing SDK proveHandshake, verifyHandshake patterns"
+        },
+        {
+          "name": "Integration test suite",
+          "type": "integration",
+          "description": "Hardhat fork-based tests: fork Base Sepolia + simulate Theseus with local Hardhat. Generate real AgentPolicy proof, run relay script, verify against pinned root. Tests the full happy path and three failure cases: stale root (outside 30-block buffer), tampered storage proof, wrong slot. CI-runnable without live testnets.",
+          "days": 3,
+          "reuses": "existing circuit test harness, Hardhat fork config"
+        }
+      ],
+      "total_days": 42,
+      "reuse_percentage": 65,
+      "demo_readiness": "sunday",
+      "demo_description": "Terminal demo: generate an AgentPolicy PLONK proof on a Base Sepolia fork, manually pin the IdentityRegistry agentTree.root to BolyraRootPinner.sol on Theseus testnet (or local Hardhat), call PlonkVerifier.verifyProof() on Theseus with the Base-generated proof, get true. No bridge, no operator. The ZKP is the bridge. Slides show the trustless relay architecture (EIP-1186 path) as the 3-month roadmap. The claim: circuits are chain-agnostic today, the relay is the 6-week build.",
+      "risks": [
+        "TheseusBlockHeaderOracle: if Theseus has no Ethereum light client or block hash oracle, the trustless relay requires Theseus to build infrastructure first \u2014 solo founder cannot unblock this. Interim: trusted admin relay with multisig, delivered in week 2.",
+        "MPT proof verification gas cost on Theseus: EIP-1186 Merkle Patricia proofs are 200-400KB RLP and expensive to verify on-chain. If Theseus gas limits are low or the VM is not EVM-equivalent, the relay contract may not be feasible \u2014 fallback is an optimistic relay with fraud proofs.",
+        "Theseus testnet availability: if testnet is not publicly accessible before the call, the Sunday demo runs on local Hardhat only \u2014 sufficient to prove the concept but not live cross-chain.",
+        "IdentityRegistry storage slot stability: LeanIMT internal storage layout must be pinned \u2014 any contract upgrade that shifts the root slot breaks the relay. Add a slot-stability CI check.",
+        "Solo founder sequencing: BolyraStorageProofRelay.sol is 18 days of focused Solidity work. Any parallel SDK or other product obligations push total wall time past 8 weeks.",
+        "Theseus EVM compatibility: if Theseus uses a custom VM (not EVM-equivalent), PlonkVerifier bytecode redeploy fails and the verifier must be reimplemented \u2014 changes reuse percentage from 65% to under 30%."
+      ],
+      "success_criteria": "A proof generated by @bolyra/sdk on Base Sepolia (or its fork) passes PlonkVerifier.verifyProof() on Theseus L1 against a root that was pinned by BolyraStorageProofRelay without any trusted intermediary signing the root \u2014 only the EIP-1186 storage proof and the Theseus block header oracle as trust anchor. Measured by: relay script submits proof \u2192 RootPinned event emitted \u2192 verifyProof returns true \u2192 integration test green in CI.",
+      "theseus_dependencies": "1) Testnet RPC endpoint + faucet for contract deployment and gas. 2) Confirmation that Theseus is EVM-compatible (precompiles, opcode parity) \u2014 PlonkVerifier uses bn254 pairing precompile (EIP-197). 3) Block header oracle surface: does Theseus expose Base Sepolia block hashes on-chain via a light client, a block hash registry, or neither? This determines relay architecture. 4) VM gas limits: EIP-1186 proof verification is ~2-4M gas; need confirmation Theseus block gas limit accommodates it. 5) If Theseus has existing agent identity contracts, their ABIs \u2014 to wire Bolyra root pinning as a gating condition on existing agent registration flows."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 1 \u2014 CONCERN: The storage proof relay requires zero ZKP expertise. EIP-1186 is a mature standard with production Rust implementations (Helios, Nimbus). The Bolyra-specific work is identifying the IdentityRegistry storage slot \u2014 that's one day of effort. Theseus's engineers can build a functional MPT-based root relay in 6\u20138 weeks using open-source tooling. The proposal itself concedes 'the storage proof relay is EIP-1186 mechanics rather than ZKP itself,' which means Bolyra's moat is absent from the primary deliverable.",
+      "AXIS 2 \u2014 CONCERN: The trustless property of EIP-1186 is Merkle Patricia Trie verification, not ZKP. Standard crypto (MPT proofs + EdDSA oracle signatures) fully serves the root-pinning function. ZKP only enters at the credential presentation layer, which is a separate concern. At Theseus's current validator count ($100K funding, pre-mainnet), a 2-of-3 multisig oracle updating the pinned root is operationally equivalent and carries near-zero integration overhead. The ZKP overhead is not justified by the marginal trustlessness benefit at this stage.",
+      "AXIS 3 \u2014 FAIL: No concrete agent use case requiring cross-chain root sync exists at Theseus's current scale. Theseus has essentially zero live agents today. At this stage, agents can directly query Base Sepolia RPC for credential verification with sub-second latency \u2014 cross-chain root pinning is a throughput optimization relevant at thousands of simultaneous agent verifications per second. This proposal solves a scaling problem Theseus will not face for at minimum 18\u201324 months. Kill signal triggered: the need only arises at scale that far exceeds any plausible Theseus 12-month roadmap.",
+      "AXIS 4 \u2014 CONCERN: If Theseus is non-EVM, deploying an MPT proof verifier from scratch in their native VM is substantially harder than deploying a Groth16 verifier. RLP decoding + Merkle Patricia Trie traversal on-chain is multi-KB proof size with significant compute cost. The Helios evidence confirms buildability on EVM but not on a custom L1 VM. Integration friction may equal or exceed the value delivered, especially since the relay infrastructure must be maintained continuously to re-pin roots as the IdentityRegistry updates.",
+      "AXIS 5 \u2014 PASS: The EIP-1186 relay architecture generalizes cleanly to any chain that wants to consume Bolyra's IdentityRegistry from Base Sepolia. BolyraRootPinner.sol and the relay daemon are reusable primitives. Building this for Theseus accelerates Bolyra's cross-chain positioning regardless of Theseus's outcome. This is the one axis that holds."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "CONCERN",
+      "no_agent_needs_this": "FAIL",
+      "integration_complexity_vs_value": "CONCERN",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "The relay is EIP-1186 mechanics with no ZKP moat, Theseus has no live agents that need cross-chain verification, and the core trustless property can be approximated with a multisig oracle at zero ZKP cost \u2014 REJECT per the 2-or-fewer axis rule.",
+    "tier3_source": "claude_cli"
+  },
+  {
+    "id": "agent_key_custody_nullifier_cross_chain",
+    "title": "Nullifier-Based Cross-Chain Agent Identity for x402 Micropayments",
+    "description": "Theseus agents need to interact with Base and Ethereum contracts (DeFi, x402 payment endpoints, Coinbase Agentic Wallets). Revealing the Theseus-native key on Base links all cross-chain activity back to the agent's L1 identity \u2014 a privacy and security risk (once the Base key is compromised, the Theseus identity is deanonymized). ZKP nullifiers allow a Theseus agent to prove 'I am the same authorized entity' on Base without revealing its Theseus public key or linking individual transactions. Bolyra's HumanUniqueness circuit already implements nullifier-hash binding; an agent-rooted variant makes this work without the human Merkle tree. The @bolyra/payment-protocols x402 implementation provides the payment layer. This is the only approach that achieves cross-chain agent pseudonymity \u2014 EdDSA + Merkle alone leaks the linkage.",
+    "category": "cross_chain",
+    "persona": "agent_key_custody",
+    "time_horizon": "3_month_roadmap",
+    "scores": {
+      "agent_need": 14,
+      "zkp_edge": 18,
+      "primitive_readiness": 13,
+      "partnership_leverage": 13,
+      "total": 58
+    },
+    "verdict": "CONSIDER",
+    "rationale": {
+      "agent_need": "The structural argument that Theseus agents holding EdDSA keypairs face cross-chain deanonymization is sound, but actual Theseus documentation or community discussion confirming this as a pain point was not fetched \u2014 evidence remains inferred from the opportunity brief itself.",
+      "zkp_edge": "The comparison against Lit Protocol and Turnkey is concrete and structural (deterministic public key linkage persists with MPC/TEE approaches), and the nullifier domain separation argument is technically valid, though the claim that EdDSA+Merkle 'leaks linkage' needs clarification since Merkle proofs can also hide the leaf identity.",
+      "primitive_readiness": "AgentPolicy and HumanUniqueness provide reusable building blocks (EdDSA verify, nullifier pattern), but the integration spec itself acknowledges 'major' modifications to both circuits are needed, and a new AgentNullifier.circom plus a new registry contract constitute meaningful new work that warrants more than a 4+2 day estimate.",
+      "partnership_leverage": "The argument that Theseus cannot build ZKP nullifier circuits in-house is plausible given Circom expertise barriers, but no evidence is presented about Theseus's actual team composition, roadmap, or whether they are already evaluating Lit/Turnkey for cross-chain identity."
+    },
+    "evidence": [
+      {
+        "source": "theseuschain.com (not fetched \u2014 web search denied; inferred from provided opportunity brief)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Theseus is an agent-native L1 with no human-controlled key path; agents hold their own EdDSA keypairs, making raw key linkage across chains the default (and a structural deanonymization risk) without a ZKP nullifier layer."
+      },
+      {
+        "source": "Lit Protocol (litprotocol.com) \u2014 general knowledge",
+        "type": "competitor",
+        "relevance": "high",
+        "summary": "Lit provides threshold-key MPC for agent wallets, granting cross-chain signing without exposing a single private key, but does not implement ZKP nullifiers for unlinkable pseudonymity \u2014 it still reveals a deterministic public key per chain."
+      },
+      {
+        "source": "Turnkey (turnkey.com) \u2014 general knowledge",
+        "type": "competitor",
+        "relevance": "medium",
+        "summary": "Turnkey offers TEE-backed key custody for agents; like Lit it protects the key but does not decouple on-chain identity from the underlying keypair, so cross-chain activity remains linkable."
+      },
+      {
+        "source": "Privy (privy.io) \u2014 general knowledge",
+        "type": "competitor",
+        "relevance": "low",
+        "summary": "Privy targets human-owned wallets with embedded wallet UX; minimal native support for headless agent-to-agent flows or ZKP-based credential delegation."
+      },
+      {
+        "source": "W3C Verifiable Credentials + DID-Linked Resources specs \u2014 general knowledge",
+        "type": "standard",
+        "relevance": "medium",
+        "summary": "VC/DID standards provide a substrate for agent credential issuance but lack ZKP nullifier binding for cross-chain pseudonymity; they rely on presenter-controlled selective disclosure, not circuit-enforced unlinkability."
+      },
+      {
+        "source": "IETF draft-klrc-aiagent-auth (inferred from bolyra/CLAUDE.md reference to spec/draft-bolyra-mutual-zkp-auth-01.md)",
+        "type": "standard",
+        "relevance": "high",
+        "summary": "Emerging IETF agent-auth drafts discuss credential scoping and delegation chains but do not specify nullifier-based cross-chain unlinkability \u2014 a gap Bolyra's circuit design directly addresses."
+      },
+      {
+        "source": "Fetch.ai / Agentverse \u2014 general knowledge",
+        "type": "agent_l1",
+        "relevance": "medium",
+        "summary": "Fetch.ai has agent-native on-chain identity via uAgents but uses ECDSA keypairs with no ZKP layer; cross-chain pseudonymity is not a design goal and agents are linkable across interactions."
+      },
+      {
+        "source": "SingularityNET \u2014 general knowledge",
+        "type": "agent_l1",
+        "relevance": "low",
+        "summary": "SingularityNET focuses on AI service marketplace coordination, not privacy-preserving agent identity; no ZKP nullifier mechanism present."
+      },
+      {
+        "source": "Aztec Network / noir identity patterns \u2014 general knowledge",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Aztec's ZKP-based account model demonstrates nullifier-per-action patterns in production on L1-adjacent rollups, validating technical feasibility of agent nullifier binding at chain scale."
+      },
+      {
+        "source": "Semaphore v4 (appliedzkp.org) \u2014 general knowledge",
+        "type": "zkp_identity",
+        "relevance": "high",
+        "summary": "Semaphore's production nullifier-hash circuit (already reused in Bolyra HumanUniqueness) proves the primitive is ceremony-ready and audited; an agent-rooted variant skipping the human Merkle tree is a well-scoped engineering delta."
+      },
+      {
+        "source": "Coinbase Agentic Wallets launch blog (provided signal URL)",
+        "type": "theseus",
+        "relevance": "high",
+        "summary": "Coinbase's agentic wallet SDK explicitly targets agent-controlled Base transactions \u2014 confirming the Base payment rail Theseus agents will hit, and therefore the concrete deanonymization risk from key linkage across chains."
+      },
+      {
+        "source": "AWS x402 agentic commerce blog (provided signal URL)",
+        "type": "theseus",
+        "relevance": "medium",
+        "summary": "AWS endorsement of x402 as the agentic micropayment standard signals wide adoption, raising the stakes for privacy in x402 payment flows where per-payment key reuse enables behavioral fingerprinting."
+      }
+    ],
+    "demand_strength": "moderate",
+    "timing_assessment": "sunday_demo",
+    "mapped_primitives": [
+      {
+        "primitive_id": "HumanUniqueness",
+        "usage": "The Poseidon2(scope, secret) nullifier construction is the direct template for an agent-rooted nullifier. The nullifier domain separation pattern (scope-keyed, unlinkable across scopes) and nonce binding for replay protection transfer directly. However the identity anchor is currently the human Semaphore secret + humanTree membership, both of which are irrelevant for agents.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "AgentPolicy",
+        "usage": "The credential commitment \u2014 Poseidon3(permissionBitmask, credentialCommitment, expiryTimestamp) \u2014 is the right identity anchor for an agent nullifier. The EdDSA operator signature verification and agentTree Merkle membership proof establish that the credential is legitimate before a nullifier is derived. These two building blocks are directly reusable. The circuit currently lacks a nullifier output signal.",
+        "modification_needed": "major"
+      },
+      {
+        "primitive_id": "Delegation",
+        "usage": "Sub-agent delegation chains apply when a Theseus orchestrator spawns child agents that independently interact with x402 endpoints. The scope-narrowing and expiry-narrowing guarantees ensure a child agent cannot claim broader cross-chain permissions than the parent. The hop-count ceiling (max 3) bounds delegation depth. No structural modification needed; chain-ID binding in the scope commitment would need to be threaded through.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "IdentityRegistry",
+        "usage": "The agentTree (LeanIMT depth 20, 30-entry root history buffer) on Base Sepolia is the on-chain trust anchor. Agent credentials registered here are the Merkle leaves whose membership the new AgentNullifier circuit will prove. The dual-tree architecture and root history buffer (supports ~10-minute liveness windows) carry over. The nullifier replay-protection pattern (delegationNullifiers mapping) is the direct model for a cross-chain nullifier registry.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "payment-protocols",
+        "usage": "The @bolyra/payment-protocols x402 implementation provides the payment transport layer. The HTTP 402 + Authorization header pattern is the integration surface where a nullifier proof would replace or augment the current credential attestation \u2014 proving 'I am an authorized agent' to the x402 endpoint without revealing the Theseus key or linking payments.",
+        "modification_needed": "minor"
+      },
+      {
+        "primitive_id": "Groth16Verifier",
+        "usage": "An AgentNullifier circuit targeting Groth16 (like HumanUniqueness, ~16K constraints) would reuse the existing deployed Groth16Verifier on Base Sepolia, avoiding a new verifier deploy for the first iteration. PLONK would require a new verifier.",
+        "modification_needed": "none"
+      }
+    ],
+    "new_components_needed": [
+      {
+        "type": "circuit",
+        "description": "AgentNullifier.circom \u2014 agent-rooted nullifier circuit. Identity anchor: credentialCommitment (from AgentPolicy). Public outputs: nullifierHash = Poseidon2(chainId ++ scope, credentialCommitment), scopeCommitment, chainIdBinding. Private inputs: credentialCommitment, permissionBitmask, expiryTimestamp, agentTreePathElements[20], agentTreePathIndices[20], operatorSignature. Proves: (1) Merkle inclusion in agentTree, (2) operator EdDSA signature valid, (3) scope bits satisfied, (4) expiry > currentTimestamp, (5) nullifier correctly derived. Strips human Merkle tree entirely. Chain-ID enters nullifier domain so the same credential produces unlinkable nullifiers on Base vs Ethereum mainnet.",
+        "complexity": "medium",
+        "estimated_days": 9
+      },
+      {
+        "type": "contract",
+        "description": "AgentNullifierRegistry.sol \u2014 extend or deploy alongside IdentityRegistry on Base. Tracks spent nullifiers per (chainId, scope) pair. Exposes verifyAndSpend(proof, nullifierHash, chainId, scope) and a read-only isSpent(nullifierHash) view. Uses the existing Groth16Verifier. Enforces that the agentTree root in the proof matches a stored root-history entry (liveness window). Emits NullifierSpent(nullifierHash, chainId, scope, timestamp) for off-chain indexing.",
+        "complexity": "medium",
+        "estimated_days": 5
+      },
+      {
+        "type": "sdk",
+        "description": "proveAgentNullifier(credential, chainId, scope, options) \u2192 {proof, nullifierHash, scopeCommitment} added to @bolyra/sdk. Mirrors proveHandshake signature. Fetches live agentTree root from IdentityRegistry, builds witness, runs Groth16 proving via rapidsnark bridge. Companion verifyAgentNullifier() calls AgentNullifierRegistry on-chain.",
+        "complexity": "low",
+        "estimated_days": 4
+      },
+      {
+        "type": "integration",
+        "description": "x402-nullifier middleware for @bolyra/payment-protocols. Intercepts outbound x402 Authorization headers and injects a Bolyra-Nullifier-Proof field containing the serialized AgentNullifier proof. Payment endpoint SDK (server-side) calls verifyAgentNullifier before settling. Theseus agents configure once via BolyraX402Adapter(credential, chainId) \u2014 subsequent .pay() calls are proof-transparent.",
+        "complexity": "medium",
+        "estimated_days": 6
+      },
+      {
+        "type": "spec",
+        "description": "Chain-ID nullifier domain separation spec \u2014 extend draft-bolyra-mutual-zkp-auth-01 with a new section formalizing nullifier = Poseidon2(Poseidon2(chainId, scope), credentialCommitment). Defines canonical chainId encoding (uint64, big-endian), scope string hashing, and cross-chain replay prevention guarantees. Add 8-10 new conformance test vectors to test-vectors.json covering Base, Ethereum mainnet, and a simulated Theseus L1 chain.",
+        "complexity": "low",
+        "estimated_days": 3
+      }
+    ],
+    "theseus_integration_surface": "Bolyra connects to Theseus at three layers. (1) On-chain: AgentNullifierRegistry deployed on Base Sepolia (and later Base mainnet) exposes a single verifyAndSpend entry point. Theseus agent wallets or x402 payment contracts call this to gate actions on proven identity without learning the Theseus public key. The agentTree root anchored in IdentityRegistry is the trust root \u2014 Theseus operators register agent credentials there once. (2) SDK: Theseus agent runtimes import @bolyra/sdk and call proveAgentNullifier(credential, chainId='base', scope='x402:pay') before each micropayment. The proof is ~200 bytes (Groth16), generated in ~0.6s via rapidsnark. (3) x402 payment layer: the BolyraX402Adapter middleware slots into the existing @bolyra/payment-protocols x402 stack. Payment endpoint operators verify the Bolyra-Nullifier-Proof header server-side with a single SDK call \u2014 no changes to their core payment logic. Coinbase Agentic Wallet integration would additionally expose the nullifierHash as the stable pseudonymous wallet identifier, replacing the raw Theseus public key in wallet lookup flows.",
+    "spec": {
+      "deliverables": [
+        {
+          "name": "AgentNullifier.circom",
+          "type": "circuit",
+          "description": "New Circom 2 circuit. Anchors identity in Poseidon3(credentialCommitment, chainId, scope) \u2014 no human Merkle tree. Outputs nullifierHash = Poseidon2(anchorHash, sessionNonce). Reuses AgentPolicy EdDSA operator signature verification and agentTree membership proof verbatim; adds chainId as a public input and nullifierHash as a new public output signal. Targets Groth16 at ~16K constraints to reuse the existing deployed Groth16Verifier on Base Sepolia.",
+          "days": 4,
+          "reuses": "AgentPolicy (EdDSA verify + agentTree Merkle path), HumanUniqueness (nullifier domain separation + nonce binding pattern)"
+        },
+        {
+          "name": "AgentNullifierRegistry.sol",
+          "type": "contract",
+          "description": "Minimal Solidity contract on Base Sepolia. Maps keccak256(chainId, scope) => nullifierHash => bool. Exposes verifyAndConsume(proof, publicSignals) \u2014 calls the existing Groth16Verifier, reverts on replay. Root history buffer (30 entries, ~10-minute liveness window) copied from IdentityRegistry. No new verifier deploy needed.",
+          "days": 2,
+          "reuses": "IdentityRegistry (root history buffer, delegationNullifiers mapping pattern), existing deployed Groth16Verifier"
+        },
+        {
+          "name": "AgentNullifier SDK wrapper",
+          "type": "sdk",
+          "description": "Adds proveAgentNullifier(credential, chainId, scope, sessionNonce) and verifyAgentNullifier(proof, registry) to @bolyra/sdk. Thin wrapper: generates witness via snarkjs, calls AgentNullifierRegistry.verifyAndConsume on-chain. No new proving logic \u2014 reuses existing snarkjs prove/verify pipeline from AgentPolicy.",
+          "days": 2,
+          "reuses": "AgentPolicy SDK prove/verify pipeline, payment-protocols x402 credential injection point"
+        },
+        {
+          "name": "x402 nullifier proof integration",
+          "type": "integration",
+          "description": "Patches @bolyra/payment-protocols x402 handler to attach a ZKP nullifier proof in the Authorization header alongside the credential attestation. Payment endpoint receives proof; calls AgentNullifierRegistry.verifyAndConsume before processing payment. Existing x402 HTTP 402 flow unchanged \u2014 nullifier is additive.",
+          "days": 2,
+          "reuses": "payment-protocols x402 handler, AgentNullifier SDK wrapper"
+        },
+        {
+          "name": "Theseus integration spec",
+          "type": "spec",
+          "description": "One-page technical spec + sequence diagram: (1) Theseus agent registers EdDSA credential in Bolyra agentTree on Base Sepolia. (2) Agent computes AgentNullifier proof scoped to chainId=Base + scope=x402-endpoint. (3) Proof replaces raw key in x402 Authorization header. (4) AgentNullifierRegistry consumes nullifier \u2014 Theseus L1 identity never appears on Base. Covers: scope encoding, chain ID binding, delegation sub-agent flows, replay protection guarantees.",
+          "days": 1,
+          "reuses": "Bolyra DID method spec, draft-bolyra-mutual-zkp-auth-01.md structure"
+        },
+        {
+          "name": "Sunday demo script",
+          "type": "demo",
+          "description": "Runnable Node script showing: (a) existing AgentPolicy circuit generating a credential proof \u2014 proves Bolyra can already anchor agent identity; (b) existing x402 payment flow completing against a mock endpoint \u2014 proves the payment layer works; (c) hardcoded mock nullifier output where AgentNullifier.circom will plug in \u2014 marks the gap clearly. No new circuit needed for Sunday \u2014 demo is 70% live code, 30% annotated stub.",
+          "days": 1,
+          "reuses": "AgentPolicy test harness, payment-protocols x402 mock server, existing circuits/test/ scaffolding"
+        }
+      ],
+      "total_days": 12,
+      "reuse_percentage": 68,
+      "demo_readiness": "sunday",
+      "demo_description": "Run the existing AgentPolicy witness generation (proves agent credential anchoring works today), walk through the x402 payment flow against a local mock server (proves payment layer is live), then show the spec diagram explaining exactly where AgentNullifier.circom slots in to replace the raw key reference. The circuit stub with correct signal declarations can be shown in an editor. The narrative: 'Every piece except one circuit is built \u2014 here is what we ship in 2 weeks.'",
+      "risks": [
+        "Theseus VM compatibility unknown: if Theseus L1 is not EVM-compatible, verifyAndConsume cannot be called natively on Theseus \u2014 integration would be Base-only (Theseus agent registers on Base, transacts on Base, Theseus L1 is only the key origin). Clarify on Sunday call.",
+        "AgentNullifier circuit trusted setup: pot16.ptau is already available, but a new Groth16 zkey requires a phase-2 ceremony. For a 2-week prototype, use a dev-only zkey with no ceremony \u2014 flag clearly as non-production.",
+        "Solo-founder bandwidth: 12 days of focused circuit + contract + SDK work is tight alongside discovery-autoresearch and differentiation-autoresearch loops still running. Pause autoresearch crons during sprint.",
+        "Theseus testnet access: integration tests against real Theseus agents require testnet RPC + funded agent keypairs. Without this, e2e test is Base-only mock \u2014 real Theseus agent behavior unverified.",
+        "Scope creep from delegation chains: sub-agent x402 flows (Delegation circuit chain-ID threading) are scoped as minor but will surface edge cases. Defer to month-2 unless Theseus explicitly needs it at launch."
+      ],
+      "success_criteria": "A Theseus-origin agent completes an x402 micropayment to a Base Sepolia endpoint where: (1) no Theseus EdDSA public key appears in any Base transaction calldata, (2) the AgentNullifierRegistry rejects a replayed proof for the same (chainId, scope, nonce) tuple, (3) a different scope for the same agent produces an unlinkable nullifier hash (verified by Poseidon2 output diff), and (4) the full prove+verify round trip completes in under 3 seconds using the existing snarkjs pipeline.",
+      "theseus_dependencies": "Testnet RPC endpoint + chain ID for Theseus L1; sample agent keypair (EdDSA, likely Ed25519 or BabyJubJub \u2014 need to confirm curve to verify AgentPolicy compatibility); confirmation of EVM vs custom VM on Theseus (determines whether AgentNullifierRegistry can be deployed natively or remains Base-only); any existing agent credential schema (JSON format, field names) so AgentPolicy credentialCommitment encoding aligns; and confirmation of whether Theseus has an existing on-chain registry Bolyra should integrate with or replace."
+    },
+    "tier3_verdict": "REJECT",
+    "tier3_findings": [
+      "AXIS 1 (CONCERN): ZKP circuit expertise is a real barrier \u2014 AgentNullifier.circom cannot be built in 2 weeks \u2014 but BIP32/BIP44-style HD wallet key derivation lets Theseus agents derive chain-specific keypairs from a master key in a single afternoon. This is already standard practice in multi-chain wallets (MetaMask, Coinbase Wallet) and achieves the pseudonymity goal with zero ZKP expertise required. The proposal conflates 'cross-chain pseudonymity' with 'ZKP nullifiers' without ruling out the obvious alternative.",
+      "AXIS 2 (FAIL): The stated use case is x402 micropayments on Base. For a payment to succeed, the agent needs funds and a valid signature \u2014 not a cross-chain identity proof. HD key derivation already gives each agent an unlinkable Base key. The nullifier only adds value if a Base contract needs to verify Theseus-level permissions before accepting payment, which is not described anywhere in the integration card. The proposal claims 'EdDSA+Merkle leaks linkage' but Tier 2 review correctly flagged this: Merkle proofs can also hide leaf identity, and separate derived keys have no linkage at all. The core ZKP value proposition for this specific use case evaporates under scrutiny.",
+      "AXIS 3 (FAIL): No specific Theseus agent use case is named where the agent operationally FAILS without ZKP nullifiers. The deanonymization risk is theoretical \u2014 agents can simply use chain-specific keys. For the first 12 months, Theseus at $100K funding will have dozens of agents at most, all likely controlled by the same small team, where cross-chain behavioral fingerprinting is not a meaningful attack surface. The x402 micropayment use case is purely about payment authorization, not identity continuity. The need for ZKP-based cross-chain pseudonymity only materializes at adversarial scale (thousands of agents with sophisticated chain-analysis opponents) that Theseus cannot reach in 12 months.",
+      "AXIS 4 (FAIL): x402 is designed as a low-friction, high-throughput micropayment rail. ZKP proof generation (snarkjs: 3-10 seconds per proof; rapidsnark: 200-500ms) adds latency to every cross-chain payment. This is architecturally backwards \u2014 you are adding the heaviest cryptographic primitive to the most latency-sensitive operation. Additionally, Theseus's VM type is unknown; if non-EVM, deploying a Groth16 or PLONK Solidity verifier requires either EVM compatibility work or a custom verifier implementation from scratch. The integration card estimates '4+2 days' for 'major modifications to both circuits' plus a new AgentNullifier.circom and registry contract \u2014 this is a material underestimate, and the latency penalty for micropayments alone is disqualifying.",
+      "AXIS 5 (PASS WITH CONCERN): The agent-rooted nullifier primitive generalizes to Ritual, Autonolas, and any future agent-native chain. The circuit work has standalone roadmap value for Bolyra regardless of Theseus's outcome. However, Theseus at $100K from Orange DAO is pre-product, pre-mainnet, and pre-revenue. Spending Bolyra engineering time on Theseus-specific integration before Theseus has proven it can ship a chain is a high-risk allocation. The reusable primitives argument partially rescues this axis but does not rescue the overall proposal."
+    ],
+    "tier3_axis_scores": {
+      "theseus_builds_it": "CONCERN",
+      "standard_crypto_suffices": "FAIL",
+      "no_agent_needs_this": "FAIL",
+      "integration_complexity_vs_value": "FAIL",
+      "single_partner_dependency": "PASS"
+    },
+    "tier3_summary": "The proposal conflates cross-chain pseudonymity (solved by HD key derivation in an afternoon) with ZKP-based cross-chain credential portability (a real but entirely different problem), and attaches the heaviest cryptographic primitive to the most latency-sensitive operation in the stack \u2014 three separate axes fail, triggering DROP per rubric.",
+    "tier3_source": "claude_cli"
+  }
+]

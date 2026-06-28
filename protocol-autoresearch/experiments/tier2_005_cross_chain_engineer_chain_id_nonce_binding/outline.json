@@ -1,0 +1,109 @@
+{
+  "id": "cross_chain_engineer_chain_id_nonce_binding",
+  "title": "Bind sessionNonce to chainId to prevent cross-chain replay",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add chainId as a public input; change nonceBinding to Poseidon3(nullifierHash, sessionNonce, chainId) instead of Poseidon2"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add chainId as a public input; include chainId in the nullifierHash commitment: Poseidon3(secret, nonce, chainId)"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Pass block.chainid as the expected chainId public signal to both verifyProof calls inside verifyHandshake; revert if signal mismatch"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/HumanUniquenessVerifier.sol",
+      "description": "Regenerate Solidity verifier from updated HumanUniqueness.zkey after circuit recompile and new trusted setup"
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/AgentPolicyVerifier.sol",
+      "description": "Regenerate Solidity verifier (both Groth16 and PLONK variants) from updated AgentPolicy.zkey"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/handshake.ts",
+      "description": "Add chainId parameter to proveHandshake and verifyHandshake; pass chainId as public input when generating witness; include in proof inputs object"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Extend HandshakeOptions and ProofInputs types to include chainId: bigint"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/handshake.py",
+      "description": "Propagate chainId through the subprocess bridge call; update Python type stubs for HandshakeOptions"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Document chainId binding in Section on nonce construction; add cross-chain replay as a named threat in Security Considerations"
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add invariant: nonceBinding is chain-specific \u2014 two proofs for distinct chainIds sharing the same sessionNonce must not be interchangeable"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/HumanUniqueness.test.js",
+      "description": "Add fast witness tests: (a) valid proof with correct chainId passes, (b) proof generated for chainId=1 fails witness check when chainId=137 is substituted"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/AgentPolicy.test.js",
+      "description": "Mirror cross-chain replay rejection tests for AgentPolicy circuit"
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.test.js",
+      "description": "Integration test: mock proof with mismatched chainId signal causes verifyHandshake to revert; correct chainId passes"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/handshake.test.ts",
+      "description": "Unit test proveHandshake with explicit chainId; assert proof.publicSignals includes chainId at expected index"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/quickstart.md",
+      "description": "Update proveHandshake usage example to pass chainId; note that proofs are chain-specific and cannot be reused across deployments"
+    }
+  ],
+  "steps": [
+    "Read current HumanUniqueness.circom and AgentPolicy.circom to confirm existing Poseidon arity and public signal ordering before making changes",
+    "Update HumanUniqueness.circom: add `signal input chainId` (public), replace Poseidon2(nullifierHash, sessionNonce) with Poseidon3(nullifierHash, sessionNonce, chainId) for nonceBinding output",
+    "Update AgentPolicy.circom: add `signal input chainId` (public), incorporate chainId into the nullifierHash preimage computation",
+    "Recompile both circuits with `npm run compile:circuits`; confirm .r1cs constraint counts change by exactly +1 Poseidon3 gate relative to baseline",
+    "Re-run trusted setup for HumanUniqueness project-specific key using pot16.ptau (NOTE: HumanUniqueness reuses Semaphore ceremony \u2014 verify depth-20 ptau still covers new constraint count before proceeding)",
+    "Re-run trusted setup for AgentPolicy Groth16 and PLONK keys using pot16.ptau",
+    "Regenerate Solidity verifier contracts from new vkey.json files for HumanUniqueness, AgentPolicy (Groth16), and AgentPolicy (PLONK) using snarkjs exportSolidityVerifier",
+    "Update IdentityRegistry.sol verifyHandshake: read block.chainid, pass as expected public signal to both HumanUniquenessVerifier and AgentPolicyVerifier calls; revert on signal mismatch",
+    "Update sdk/src/types.ts to add chainId: bigint to HandshakeOptions and ProofInputs",
+    "Update sdk/src/handshake.ts proveHandshake to accept chainId and inject into circuit witness inputs; update verifyHandshake to include chainId in expected public signals",
+    "Update sdk-python subprocess bridge to forward chainId argument; update Python type stubs",
+    "Write and run circuit fast tests for cross-chain replay rejection in HumanUniqueness and AgentPolicy",
+    "Write and run Hardhat integration tests for IdentityRegistry.verifyHandshake rejecting wrong-chainId proofs",
+    "Write and run SDK unit tests confirming chainId appears at correct index in publicSignals",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md Security Considerations and circuits/FORMAL-PROPERTIES.md",
+    "Update docs/quickstart.md usage examples",
+    "Run full test suite (npm test) and confirm zero regressions",
+    "Run DCO sign-off on all commits (git commit -s)"
+  ],
+  "estimated_constraints": 850,
+  "dependencies": [
+    "pot16.ptau must accommodate new constraint count for HumanUniqueness (verify 2^16 ceiling still holds after adding Poseidon3 gate)",
+    "Semaphore v4 ceremony reuse must be re-validated if HumanUniqueness constraint count crosses a ptau boundary",
+    "IdentityRegistry ABI changes require redeployment on Base Sepolia \u2014 any existing registered identities will need re-enrollment",
+    "SDK semver bump required (breaking change to proveHandshake signature) \u2014 coordinate with any downstream integrations (langchain adapter, crewai, mcp-demo)",
+    "AgentPolicy PLONK zkey regeneration requires same pot16.ptau as Groth16 variant"
+  ]
+}

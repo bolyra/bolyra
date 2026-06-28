@@ -1,0 +1,49 @@
+
+---
+
+## Binding(D) — Delegation Scope Commitment Chain
+
+**Property statement.** For every valid Groth16/PLONK proof π produced by the
+`DelegationChainBinding` circuit at hop _i_:
+
+1. **Subset enforcement:**
+   `Extract(π).delegateeScope ⊆ Extract(π).delegatorScope`
+   — that is, `delegateeScope & delegatorScope === delegateeScope`.
+
+2. **Commitment binding:**
+   `Poseidon(delegateeScope, credCommitment) = currentScopeCommitment_i`
+   and the public input `previousScopeCommitment` equals
+   `Poseidon(delegatorScope, previousCredCommitment)` as recomputed inside
+   the circuit.
+
+3. **Cumulative-bit invariant:**
+   Both `delegatorScope` and `delegateeScope` satisfy the implication rules
+   of the Bolyra 8-bit permission model (bit 4 → bits 3,2; bit 3 → bit 2).
+
+**Assumptions.**
+
+- **Collision resistance of Poseidon-128.** The commitment scheme
+  `C(scope, cred) = Poseidon(scope, cred)` is binding under the assumption
+  that Poseidon with 128-bit security is collision-resistant over the BN254
+  scalar field. See: Grassi et al., "Poseidon: A New Hash Function for
+  Zero-Knowledge Proof Systems," USENIX Security 2021.
+
+- **Soundness of Groth16 / PLONK.** The proving system is knowledge-sound
+  under the q-SDH assumption (Groth16) or the idealized polynomial
+  commitment model (PLONK).
+
+**Signal aliasing analysis.** The `delegatorScope` signal used in the AND-mask
+subset check is the _same_ signal fed to `Poseidon(delegatorScope, previousCredCommitment)`.
+There is no intermediate wire or unconstrained copy. An attacker cannot supply
+a different scope value to the commitment computation without violating the
+subset-check constraints, and vice versa.
+
+**Empirical evidence.**
+
+| Test file | Coverage |
+|---|---|
+| `circuits/test/delegationChainBinding.adversarial.js` | Scope-expansion, commitment-mismatch, pre-image substitution, cumulative-bit violation |
+| `circuits/test/delegationChainBinding.soundness.js` | Exhaustive 2^8 × 2^8 = 65 536 pair enumeration |
+
+All adversarial cases fail at witness generation (constraint violation).
+All valid subset pairs (with cumulative-bit compliance) produce satisfying witnesses.

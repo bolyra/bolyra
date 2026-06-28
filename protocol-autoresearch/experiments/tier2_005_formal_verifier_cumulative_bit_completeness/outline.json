@@ -1,0 +1,51 @@
+{
+  "id": "formal_verifier_cumulative_bit_completeness",
+  "title": "Prove cumulative bit encoding is exhaustively enforced",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add explicit implication constraints: bit4=>bit3, bit4=>bit2, bit3=>bit2. Currently enforced in Delegation but must also be enforced at credential-minting time in AgentPolicy so an agent cannot mint a structurally invalid bitmask."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/agentPolicy.cumulative.test.js",
+      "description": "Exhaustive witness-generation tests over all 256 possible 8-bit permissionBitmask values. For each satisfying assignment assert implication rules hold; for each violating assignment assert witness generation fails (invalid constraint)."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/delegation.composition.test.js",
+      "description": "Property tests proving: (1) if delegatorScope is valid (passes cumulative rules) and delegateeScope is a bitwise subset of delegatorScope, then delegateeScope is also valid. (2) If delegateeScope violates implication rules independently, the Delegation circuit rejects it even when it is a subset of delegatorScope."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add three new named properties: CUMUL-1 (bit4 implies bits 2+3), CUMUL-2 (bit3 implies bit2), SUBSET-CLOSURE (subset of valid scope is valid). Reference the test files that witness each property."
+    },
+    {
+      "type": "docs",
+      "filename": "tasks/lessons.md",
+      "description": "Record that cumulative-bit enforcement must be duplicated in every circuit that accepts a permissionBitmask input, not only in Delegation."
+    }
+  ],
+  "steps": [
+    "Read AgentPolicy.circom in full; locate where permissionBitmask is decomposed into bits and identify which implication constraints (if any) are already present.",
+    "Read Delegation.circom to extract the exact gate pattern used for bit4=>bit3+bit2 and bit3=>bit2 implications (source of truth for constraint style).",
+    "If AgentPolicy.circom is missing any of the three implication constraints, add them using the same gate pattern; keep constraint count delta minimal (each implication is one quadratic constraint via 1 - bit_i * (1 - bit_j) == 0 or equivalent).",
+    "Write circuits/test/agentPolicy.cumulative.test.js: loop all 256 values of permissionBitmask; for each, compute expected validity from the three rules, then call circom_tester.calculateWitness() and assert it either succeeds or throws.",
+    "Write circuits/test/delegation.composition.test.js: (a) property SUBSET-CLOSURE \u2014 pick 20 random valid delegatorScopes, derive all bitwise subsets, confirm each subset is accepted by Delegation circuit; (b) anti-property \u2014 take a structurally invalid delegateeScope that is still a bitwise subset of some delegatorScope and confirm Delegation rejects it.",
+    "Run npm run test:circuits:fast to verify all new tests pass without full proof generation.",
+    "Update circuits/FORMAL-PROPERTIES.md with CUMUL-1, CUMUL-2, SUBSET-CLOSURE property statements and cross-link the test file + line numbers.",
+    "Run npm run compile:circuits to confirm no constraint count regressions beyond the expected delta (\u22643 new constraints in AgentPolicy).",
+    "Append a one-line lesson to tasks/lessons.md documenting the enforcement-duplication requirement.",
+    "Commit with DCO sign-off: git commit -s -m 'feat(circuits): enforce cumulative-bit implications in AgentPolicy + property tests'"
+  ],
+  "estimated_constraints": 3,
+  "dependencies": [
+    "circuits/src/AgentPolicy.circom",
+    "circuits/src/Delegation.circom",
+    "circuits/FORMAL-PROPERTIES.md",
+    "circom_tester (dev dependency, already present)",
+    "pot16.ptau (only needed for slow proof path, not required for this witness-only property suite)"
+  ]
+}

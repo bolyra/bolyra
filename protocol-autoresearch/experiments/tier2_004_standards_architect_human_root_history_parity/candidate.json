@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "persona": "standards_architect",
+  "title": "Specify human tree root history buffer matching agent tree",
+  "dimension": "correctness",
+  "description": "IdentityRegistry maintains a 30-root history buffer for agentTree but none for humanTree. The contract comment says 'humanTree uses Semaphore's' but the deployed code uses a standalone LeanIMT with no history. Any new human enrollment immediately invalidates in-flight proofs. Add a parallel ROOT_HISTORY_SIZE buffer for humanTree roots in the registry, and update the IETF draft's Security Considerations to document the staleness window. This is a protocol-level correctness gap, not just an implementation detail.",
+  "priority": "critical",
+  "estimated_effort": "hours",
+  "candidate_id": "standards_architect_human_root_history_parity",
+  "adoption": 18,
+  "standards": 14,
+  "completeness": 16,
+  "correctness": 20,
+  "total": 68,
+  "verdict": "consider"
+}

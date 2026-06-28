@@ -1,0 +1,45 @@
+{
+  "id": "security_auditor_human_root_no_history_buffer",
+  "title": "HumanUniqueness proofs go stale instantly \u2014 no root history buffer",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add `humanRootHistory[30]` ring buffer storage, a `humanRootHistoryIndex` pointer, push current root into the buffer inside `enrollHuman()`, and replace the `humanTree._root()` point-in-time check inside `verifyHandshake()` with a loop over the 30-slot buffer."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+      "description": "Hardhat tests covering: (1) proof generated before enrollment still verifies within window, (2) proof older than 30 enrollments is correctly rejected, (3) ring wrap-around at slot 30, (4) simultaneous human + agent enrollment does not corrupt either ring, (5) front-run simulation \u2014 second enrollment between proof generation and verifyHandshake call still succeeds."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Document the 30-root history window for humanTree root acceptance, matching the existing agentTree window language. Note that the window is enrollment-count-based, not time-based."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Update the liveness / DoS threat row for HumanUniqueness to mark it mitigated via history buffer; cite the enrollment-count window and its trade-offs."
+    }
+  ],
+  "steps": [
+    "Read contracts/src/IdentityRegistry.sol to locate agentRootHistory ring buffer pattern (storage layout, push logic in enroll, loop check in verify).",
+    "Mirror the pattern: add `bytes32[30] private humanRootHistory` and `uint256 private humanRootHistoryIndex` storage variables immediately after the agentTree equivalents to keep storage slot ordering stable.",
+    "In `enrollHuman()`: after `humanTree.insert(leaf)` succeeds, store the new root \u2014 `humanRootHistory[humanRootHistoryIndex % 30] = humanTree._root(); humanRootHistoryIndex++;`",
+    "Seed the buffer at deploy time (or first enrollment): if `humanRootHistoryIndex == 0` pre-insert, push the initial empty root so slot 0 is valid before any proof can be generated.",
+    "In `verifyHandshake()`: replace the single equality check `require(proof.humanMerkleRoot == humanTree._root())` with a loop across all 30 slots, reverting only if none match \u2014 use a local `bool found` flag to avoid repeated SLOADs.",
+    "Gas-profile the 30-iteration loop against the baseline single-root check; add a NatSpec note with the worst-case gas delta so integrators can size their gas limits.",
+    "Write the Hardhat test file covering all five scenarios listed in the test artifact, including the front-run simulation using `evm_snapshot` / `evm_revert` to bracket the enrollment transaction.",
+    "Update spec/did-method-bolyra.md to document the acceptance window semantics (enrollment-count-based, not time-based).",
+    "Update docs/owasp-agentic-mapping.md liveness/DoS row.",
+    "Run `npm run test:contracts` and confirm all existing tests pass plus new tests pass.",
+    "Commit with DCO sign-off: `git commit -s -m 'fix: add humanRootHistory[30] ring buffer to IdentityRegistry'`"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 agentRootHistory pattern must be read before mirroring",
+    "IncrementalMerkleTree library \u2014 confirm _root() returns the post-insert root synchronously",
+    "Hardhat test suite \u2014 existing verifyHandshake integration tests must remain green after the loop replacement"
+  ]
+}

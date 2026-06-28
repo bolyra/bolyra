@@ -1,0 +1,16 @@
+{
+  "id": "sdk_designer_proof_envelope_codec",
+  "persona": "sdk_designer",
+  "title": "Self-describing proof envelope with content-type and version negotiation",
+  "dimension": "adoption",
+  "description": "Currently proofs are bare JSON arrays of bigints with implicit positional semantics \u2014 integrators must know that `publicSignals[0]` is `humanMerkleRoot` and `publicSignals[4]` is `nonceBinding`. Define a `BolyraEnvelope` codec (msgpack or CBOR with JSON fallback) that wraps proofs with `{ version: '0.2', circuit: 'HumanUniqueness', provingSystem: 'groth16', publicSignals: { humanMerkleRoot, nullifierHash, nonceBinding, ... }, proof: {...} }`. Add `BolyraEnvelope.encode()` / `BolyraEnvelope.decode()` to both TS and Python SDKs. This eliminates the `publicSignals[5]` positional indexing that caused the chainId mismatch bug in the cross-chain experiment.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "sdk_designer_proof_envelope_codec",
+  "adoption": 19,
+  "standards": 18,
+  "completeness": 18,
+  "correctness": 17,
+  "total": 72,
+  "verdict": "consider"
+}

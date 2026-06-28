@@ -1,0 +1,63 @@
+{
+  "id": "standards_architect_human_root_history_parity",
+  "title": "Specify human tree root history buffer matching agent tree",
+  "artifacts": [
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add ROOT_HISTORY_SIZE constant and humanRootHistory ring buffer mirroring the existing agentRootHistory pattern; update _updateHumanRoot to push into the buffer; update isKnownHumanRoot to check the ring buffer instead of a single slot."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IIdentityRegistry.sol",
+      "description": "Extend interface with isKnownHumanRoot(bytes32 root) view function and emit HumanRootHistoryUpdated event for indexers."
+    },
+    {
+      "type": "test",
+      "filename": "contracts/test/IdentityRegistry.humanRootHistory.test.ts",
+      "description": "Hardhat tests verifying: (1) proofs against the N most recent human roots are accepted, (2) a root older than ROOT_HISTORY_SIZE enrollments is rejected, (3) ring-buffer wrapping is correct at boundary, (4) parity with existing agentRootHistory acceptance window."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Update Security Considerations section: document the ROOT_HISTORY_SIZE staleness window for humanTree roots, define maximum proof validity period as a function of enrollment rate, and note that verifiers MUST call isKnownHumanRoot with the proof's claimed root before accepting."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Add note under DID Resolution / Proof Freshness: human-tree root proofs carry an implicit validity window bounded by ROOT_HISTORY_SIZE. Resolvers should surface root age metadata."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/verifier.ts",
+      "description": "Update verifyHandshake to call isKnownHumanRoot on-chain (or against a locally cached root set) and surface a HumanRootStale error code when the attested root has aged out."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/owasp-agentic-mapping.md",
+      "description": "Add entry under 'Replay / Staleness Attacks': humanTree root history window closes the unlimited-validity gap; cross-reference IETF draft staleness window section."
+    }
+  ],
+  "steps": [
+    "Read existing agentRootHistory implementation in IdentityRegistry.sol to understand ring-buffer pattern (slot layout, push logic, lookup loop).",
+    "Add `uint256 private _humanRootIndex` and `bytes32[ROOT_HISTORY_SIZE] private _humanRootHistory` storage variables immediately below the analogous agent fields to preserve storage slot ordering.",
+    "Refactor (or add) `_updateHumanRoot(bytes32 newRoot)` internal function: store new root at `_humanRootHistory[_humanRootIndex % ROOT_HISTORY_SIZE]`, increment index, emit `HumanRootHistoryUpdated(newRoot, block.number)`.",
+    "Add `isKnownHumanRoot(bytes32 root) public view returns (bool)` that iterates the ring buffer \u2014 identical logic to `isKnownAgentRoot`.",
+    "Update every call site that previously compared against a single `humanRoot` slot to use `isKnownHumanRoot`; grep for `humanMerkleRoot` and `humanTree.root()` across contracts.",
+    "Extend IIdentityRegistry.sol with the new view function and event signatures.",
+    "Write Hardhat tests: enroll N+1 humans, assert roots 1..N pass isKnownHumanRoot, assert root 0 (evicted) fails; test boundary at exactly ROOT_HISTORY_SIZE enrollments.",
+    "Update IETF draft Security Considerations: define staleness window T_stale = ROOT_HISTORY_SIZE \u00d7 avg_enrollment_interval, recommend verifiers reject proofs with root age > T_stale, add normative MUST for on-chain root check.",
+    "Update did-method-bolyra.md Proof Freshness subsection with the root validity window.",
+    "Update SDK verifyHandshake to call isKnownHumanRoot and throw HumanRootStale (new error code) on mismatch; add to structured error codes enum.",
+    "Run `npm run test:contracts` and `npm run test:circuits:fast` to confirm no regressions.",
+    "Update SECURITY.md to document the staleness window as an accepted protocol invariant (not a vulnerability)."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 agentRootHistory ring-buffer implementation (reference pattern)",
+    "contracts/src/IIdentityRegistry.sol \u2014 interface must be versioned consistently",
+    "spec/draft-bolyra-mutual-zkp-auth-01.md \u2014 IETF draft Security Considerations section",
+    "sdk/src/errors.ts \u2014 structured error code registry for new HumanRootStale code",
+    "ROOT_HISTORY_SIZE constant (currently 30 for agentTree) \u2014 must match or be independently configurable with rationale"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "formal_verifier_credential_commitment_binding_uniqueness",
+  "title": "Prove credential commitment uniquely binds all five fields",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Add Num2Bits(254) range-check constraints on modelHash, opPkAx, and opPkAy before they are fed into the Poseidon5 credentialCommitment hash; permissionBitmask and expiryTimestamp already have range checks and are unaffected."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/lib/FieldCheck.circom",
+      "description": "Reusable template InFieldBN254(n) that wraps Num2Bits(254) and asserts the input is strictly less than the BN254 scalar field modulus r = 21888242871839275222246405745257275088548364400416034343698204186575808495617; import from AgentPolicy and any future circuit that hashes arbitrary external inputs."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/AgentPolicy.field-binding.test.js",
+      "description": "Mocha property test using fast-check: (1) generate random 254-bit tuples (modelHash, opPkAx, opPkAy, bitmask, expiry) and assert witness generation succeeds; (2) generate tuples where modelHash = validValue + r (i.e., a wrap-around twin) and assert witness generation throws a constraint-violation error, proving the circuit rejects out-of-field inputs; (3) enumerate all pairs of distinct valid tuples and confirm their computed credentialCommitments differ (collision-resistance smoke test over 10k samples)."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add formal property P-COMMIT-BIND: 'For all (m, ax, ay, b, e) and (m', ax', ay', b', e') in F_r^5, Poseidon5(m,ax,ay,b,e) = Poseidon5(m',ax',ay',b',e') implies m=m' \u2227 ax=ax' \u2227 ay=ay' \u2227 b=b' \u2227 e=e''. Document that enforcement is split: the circuit enforces domain membership (inputs \u2208 F_r) and relies on Poseidon's collision-resistance for injectivity within that domain. Reference the Poseidon paper (Section 5) for the formal security argument."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Inline comments above each InFieldBN254 instantiation explaining why the check is required (field-wrap attack) and citing the FORMAL-PROPERTIES.md property P-COMMIT-BIND."
+    }
+  ],
+  "steps": [
+    "Read circuits/src/AgentPolicy.circom in full to confirm the current Poseidon5 call site, identify which signals feed modelHash/opPkAx/opPkAy, and count existing Num2Bits constraints so we know exactly what to add.",
+    "Create circuits/src/lib/FieldCheck.circom with template InFieldBN254: instantiate Num2Bits(254), assert the reconstructed 254-bit integer is strictly less than the BN254 scalar field modulus r using a LessThan(254) comparator.",
+    "In AgentPolicy.circom, import FieldCheck.circom and instantiate InFieldBN254 for modelHash, opPkAx, and opPkAy before the credentialCommitment Poseidon5 call; wire the checked output (not the raw signal) into Poseidon.",
+    "Run npm run compile:circuits to verify the modified circuit compiles without errors and measure the new R1CS constraint count delta (expect +762 constraints: 254 bits \u00d7 3 signals).",
+    "Write circuits/test/AgentPolicy.field-binding.test.js: (a) happy-path witness generation with valid in-field inputs, (b) rejection test with modelHash = validHash + r (must throw), (c) fast-check 10k-sample collision-resistance smoke test comparing all output commitments for uniqueness.",
+    "Run npm run test:circuits:fast to confirm all existing and new tests pass in witness-generation mode.",
+    "Optionally run npm run test:circuits:slow (FULL_PROOF=1) on the new test file to confirm the full Groth16 proof round-trip is unaffected by the new constraints.",
+    "Update circuits/FORMAL-PROPERTIES.md: add property P-COMMIT-BIND with the formal statement, proof sketch citing Poseidon collision-resistance, and a note that enforcement of domain membership is now circuit-level.",
+    "Add inline comments in AgentPolicy.circom above each InFieldBN254 instantiation referencing P-COMMIT-BIND.",
+    "Commit with DCO sign-off (git commit -s): 'fix(circuits): enforce BN254 field membership for modelHash and opPk inputs in AgentPolicy'."
+  ],
+  "estimated_constraints": 762,
+  "dependencies": [
+    "circomlib Num2Bits template (already a transitive dependency via circomlib)",
+    "circomlib LessThan comparator (already available in circomlib)",
+    "fast-check npm package for property-based testing (add to circuits/package.json devDependencies if not present)",
+    "pot16.ptau (existing \u2014 no new trusted setup required, constraint increase stays well within 2^16)"
+  ]
+}

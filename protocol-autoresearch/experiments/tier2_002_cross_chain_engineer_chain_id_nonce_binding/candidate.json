@@ -1,0 +1,16 @@
+{
+  "id": "cross_chain_engineer_chain_id_nonce_binding",
+  "persona": "cross_chain_engineer",
+  "title": "Bind chain ID into sessionNonce to prevent cross-chain replay",
+  "dimension": "correctness",
+  "description": "The current sessionNonce is chain-unaware \u2014 a valid handshake proof verified on Base can be replayed on Arbitrum if both share the same root. Fix by computing effectiveNonce = Poseidon2(sessionNonce, chainId) inside HumanUniqueness and AgentPolicy circuits, and exposing chainId as a public input. The on-chain verifier checks that the chainId public signal matches block.chainid. This is a prerequisite for any multi-chain deployment and costs only ~300 extra constraints (one Poseidon2 + one equality check).",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "cross_chain_engineer_chain_id_nonce_binding",
+  "adoption": 18,
+  "standards": 17,
+  "completeness": 18,
+  "correctness": 20,
+  "total": 73,
+  "verdict": "consider"
+}

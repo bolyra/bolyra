@@ -1,0 +1,776 @@
+[
+  {
+    "winner": {
+      "id": "standards_architect_session_token_offchain",
+      "persona": "standards_architect",
+      "title": "Off-chain session token format with JWT-compatible envelope",
+      "dimension": "standards",
+      "description": "Define a standardized off-chain session token that wraps a verified handshake result into a JWT-compatible envelope (RFC 7519). After on-chain verifyHandshake succeeds, the relayer issues a signed JWT whose claims include humanNullifier, agentNullifier, scopeCommitment, and sessionNonce \u2014 enabling stateless verification by downstream services without additional on-chain calls. The token MUST include an `iss` claim bound to the relayer's DID, a `nbf`/`exp` window, and a `bolyra_proof_tx` claim linking back to the on-chain settlement. This bridges the gap between Bolyra's on-chain verification and the HTTP-native auth flows that web services expect.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_session_token_offchain",
+      "adoption": 20,
+      "standards": 20,
+      "completeness": 18,
+      "correctness": 15,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_session_token_offchain",
+      "title": "Off-chain session token format with JWT-compatible envelope",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/session-token-format.md",
+          "description": "Normative specification for the Bolyra off-chain session token: JWT claims registry (humanNullifier, agentNullifier, scopeCommitment, sessionNonce, bolyra_proof_tx), iss/nbf/exp/jti requirements, signing algorithm constraints (ES256K / EdDSA), and token lifecycle rules."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Amend to add relayer DID document structure: verificationMethod entries that downstream verifiers use to resolve the iss claim and validate the JWT signature."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session-token.ts",
+          "description": "issueSessionToken(handshakeResult, relayerPrivKey, opts): signs and returns a compact JWT. verifySessionToken(jwt, relayerDID): resolves DID, verifies signature, validates nbf/exp window, and returns typed claims object. Exports BolyraSessionClaims interface."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "Add BolyraSessionClaims interface: extends standard JWT claims with humanNullifier, agentNullifier, scopeCommitment, sessionNonce, bolyra_proof_tx fields. Add SessionTokenOptions type."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session-token.test.ts",
+          "description": "Unit tests: round-trip issue/verify, expired token rejection, nbf-future rejection, tampered claim rejection, missing bolyra_proof_tx rejection, scope commitment mismatch, and DID resolution failure path."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-token-quickstart.md",
+          "description": "Integration guide for downstream HTTP services: how to validate a Bolyra JWT without on-chain calls, middleware snippet for Express/Fastify, and guidance on caching the relayer DID document."
+        }
+      ],
+      "steps": [
+        "Define the BolyraSessionClaims schema: registered JWT claims (iss, sub, nbf, exp, jti) plus private claims (humanNullifier, agentNullifier, scopeCommitment, sessionNonce, bolyra_proof_tx). Namespace private claims under 'https://bolyra.ai/claims/' per RFC 7519 \u00a74.3.",
+        "Write the normative spec in spec/session-token-format.md covering: claim semantics, mandatory vs optional fields, signing algorithm selection (ES256K preferred, EdDSA allowed), iss MUST be a did:bolyra: URI, exp MUST NOT exceed 1 hour, bolyra_proof_tx MUST be a valid tx hash on the configured chain.",
+        "Amend spec/did-method-bolyra.md to add a 'relayer' role with a verificationMethod of type EcdsaSecp256k1VerificationKey2019 or Ed25519VerificationKey2020, enabling downstream verifiers to resolve the public key from the iss DID.",
+        "Add BolyraSessionClaims and SessionTokenOptions types to sdk/src/types.ts.",
+        "Implement issueSessionToken() in sdk/src/session-token.ts: accept HandshakeResult + relayer private key, construct claims object, sign with jose (ES256K/EdDSA), return compact JWT string.",
+        "Implement verifySessionToken() in sdk/src/session-token.ts: parse and validate JWT header/signature using resolved relayer DID public key, enforce nbf <= now < exp, assert presence of all required Bolyra private claims, return typed BolyraSessionClaims.",
+        "Write unit tests in sdk/test/session-token.test.ts covering happy path, all rejection conditions, and boundary conditions on nbf/exp windows.",
+        "Export issueSessionToken, verifySessionToken, and BolyraSessionClaims from sdk/src/index.ts public API.",
+        "Write docs/session-token-quickstart.md with a middleware snippet showing how a downstream Express service validates the JWT using only verifySessionToken (no RPC call needed).",
+        "Run npm run typecheck and npm run test:contracts (no new circuits involved) to confirm no regressions."
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "jose (JWT signing/verification library, JOSE RFC 7515/7519 compliant)",
+        "did:bolyra DID method resolution (spec/did-method-bolyra.md must define relayer verificationMethod)",
+        "verifyHandshake() returning HandshakeResult with humanNullifier, agentNullifier, scopeCommitment, sessionNonce fields",
+        "on-chain settlement tx hash (bolyra_proof_tx) available to the relayer at token issuance time",
+        "RFC 7519 (JWT), RFC 7515 (JWS), RFC 8037 (EdDSA in JOSE)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_conformance_test_vectors",
+      "persona": "standards_architect",
+      "title": "Machine-readable conformance test vectors with deterministic fixtures",
+      "dimension": "standards",
+      "description": "Create a conformance/ directory with 30+ JSON test vectors organized by circuit (HumanUniqueness, AgentPolicy, Delegation) and scenario (valid, expired-credential, revoked-human, stale-root, scope-superset-rejection, cumulative-bit-violation, nonce-replay). Each vector includes deterministic private inputs, expected public outputs, and a 'should_pass' boolean. Use a fixed test secret/keypair so any implementation can reproduce identical commitments and nullifiers. This is the minimum bar for a credible multi-implementation ecosystem and should be referenced normatively from the IETF draft.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_conformance_test_vectors",
+      "adoption": 17,
+      "standards": 23,
+      "completeness": 19,
+      "correctness": 18,
+      "total": 77,
+      "verdict": "promote"
+    },
+    "outline": {
+      "id": "standards_architect_conformance_test_vectors",
+      "title": "Machine-readable conformance test vectors with deterministic fixtures",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "conformance/README.md",
+          "description": "Conformance suite overview: vector schema, fixed keypair derivation, how to run the validation harness, and normative reference pointer for the IETF draft"
+        },
+        {
+          "type": "spec",
+          "filename": "conformance/schema.json",
+          "description": "JSON Schema for a single test vector: privateInputs, publicOutputs, shouldPass, scenario, circuit, notes"
+        },
+        {
+          "type": "spec",
+          "filename": "conformance/fixtures/keys.json",
+          "description": "Fixed deterministic test keypair: EdDSA private key (hex), public key (Bj, Bx), Poseidon-hash-based test secret, derived identityCommitment and trapdoor"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/human_uniqueness.json",
+          "description": "10+ vectors for HumanUniqueness circuit: valid proof, stale-root, nonce-replay, revoked-human, wrong-trapdoor, tree-depth-mismatch"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/agent_policy.json",
+          "description": "10+ vectors for AgentPolicy circuit: valid credential, expired-credential, cumulative-bit-violation (e.g. bit 3 set without bit 2), scope-superset-rejection, wrong-operator-sig"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/delegation.json",
+          "description": "10+ vectors for Delegation circuit: valid narrowing, scope-superset-rejection (delegatee claims more than delegator), sub-delegate-without-bit-6, expired parent credential, double-delegation depth"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/vectors/cross_circuit.json",
+          "description": "5+ end-to-end handshake vectors combining HumanUniqueness + AgentPolicy + Delegation: full valid flow, mismatched sessionNonce, replay with stale nonce"
+        },
+        {
+          "type": "sdk",
+          "filename": "conformance/generate_fixtures.js",
+          "description": "Node script that uses @bolyra/sdk + snarkjs to recompute witnesses for every vector from its privateInputs and assert publicOutputs match; exits non-zero on mismatch"
+        },
+        {
+          "type": "test",
+          "filename": "conformance/validate.js",
+          "description": "CI harness: loads all JSON vectors, validates against schema.json, runs witness generation (fast mode) for each, asserts shouldPass agreement; reports per-vector pass/fail table"
+        },
+        {
+          "type": "docs",
+          "filename": "conformance/CONTRIBUTING.md",
+          "description": "How to add a new vector: deterministic input derivation rules, forbidden random values, PR checklist requiring schema validation and witness-gen pass"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Amendment: add normative Section referencing conformance/ as the machine-readable test suite; link schema.json and keys.json as fixed anchors for interoperability"
+        }
+      ],
+      "steps": [
+        "Define and commit conformance/schema.json with required fields: id, circuit, scenario, privateInputs (object), publicOutputs (object), shouldPass (bool), notes (string)",
+        "Generate and commit conformance/fixtures/keys.json: derive all fixed values (EdDSA privkey, pubkey, Poseidon secret, identityCommitment, trapdoor) from a single seed constant using documented deterministic procedure",
+        "Author conformance/vectors/human_uniqueness.json with 10 vectors covering: valid, stale-merkle-root, nonce-replay, revoked-nullifier, wrong-trapdoor, tree-depth-1-vs-20, empty-leaf, all-zero-inputs, root-mismatch, double-spend-nullifier",
+        "Author conformance/vectors/agent_policy.json with 10 vectors covering: valid, expired-expiry, future-issuance, cumulative-bit-3-without-2, cumulative-bit-4-without-3, scope-superset (agent claims bit not in credential), wrong-operator-sig, zero-modelHash, mismatched-nonce, revoked-credential-hash",
+        "Author conformance/vectors/delegation.json with 10 vectors covering: valid-narrowing, scope-superset-rejection, sub-delegate-without-bit-6, expired-parent, zero-delegatee-pubkey, depth-exceeds-limit, parent-scope-zero, identity-delegation (no narrowing), cross-operator-delegation, nullifier-collision",
+        "Author conformance/vectors/cross_circuit.json with 5 end-to-end handshake vectors: full-valid-flow, mismatched-sessionNonce, stale-nonce-replay, human-not-in-tree, agent-scope-exceeds-human-grant",
+        "Write conformance/generate_fixtures.js: for each vector load privateInputs, call snarkjs.wtns.calculate() with appropriate circuit wasm, extract public signals, diff against publicOutputs, print structured results",
+        "Write conformance/validate.js: parse all JSON files in vectors/, validate each against schema.json using ajv, run witness generation in fast mode, assert shouldPass matches witness success/failure, exit non-zero on any mismatch",
+        "Add 'test:conformance' script to root package.json invoking node conformance/validate.js; wire into CI as a required check gate",
+        "Write conformance/README.md: explain fixed keypair rationale, vector schema, how to run validation, how to extend, and the normative link to the IETF draft",
+        "Write conformance/CONTRIBUTING.md: forbidden randomness rule (all entropy from documented seed), schema validation requirement, witness-gen pass requirement before PR merge",
+        "Amend spec/draft-bolyra-mutual-zkp-auth-01.md: add Section 9 'Conformance Test Vectors' with normative language referencing conformance/schema.json and keys.json as fixed anchors",
+        "Run full conformance suite (npm run test:conformance) and fix any witness mismatches in vector privateInputs or publicOutputs",
+        "Commit all artifacts with DCO sign-off; update CHANGELOG referencing the conformance suite addition"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "circuits/build/HumanUniqueness.wasm",
+        "circuits/build/AgentPolicy.wasm",
+        "circuits/build/Delegation.wasm",
+        "circuits/src/HumanUniqueness.circom",
+        "circuits/src/AgentPolicy.circom",
+        "circuits/src/Delegation.circom",
+        "circuits/FORMAL-PROPERTIES.md",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md",
+        "@bolyra/sdk",
+        "snarkjs",
+        "ajv"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "persona": "standards_architect",
+      "title": "Register application/bolyra-proof+cbor media type and define proof envelope",
+      "dimension": "standards",
+      "description": "The protocol currently has no standardized wire format for transmitting proofs between prover and verifier. Define a CBOR-based proof envelope (application/bolyra-proof+cbor) with a fixed schema: version (uint), circuit_id (text), proving_system (text: 'groth16'|'plonk'), public_signals (array<bstr>), proof (bstr), and optional delegation_chain (array<envelope>). Include a CDDL grammar in the IETF draft. This replaces ad-hoc JSON serialization in the SDK and enables language-agnostic interop \u2014 any conformant implementation can parse and forward proofs without SDK-specific knowledge.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_proof_envelope_content_type",
+      "adoption": 18,
+      "standards": 21,
+      "completeness": 18,
+      "correctness": 16,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_proof_envelope_content_type",
+      "title": "Register application/bolyra-proof+cbor media type and define proof envelope",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-cbor.cddl",
+          "description": "CDDL grammar defining the CBOR proof envelope schema: version, circuit_id, proving_system, public_signals, proof bstr, optional delegation_chain"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+          "description": "Update existing IETF draft to include Section: Proof Envelope Format with CDDL grammar, media type registration template (RFC 6838), and Content-Type negotiation semantics"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/media-type-registration.md",
+          "description": "IANA media type registration template for application/bolyra-proof+cbor per RFC 6838: type name, subtype, required parameters, encoding, security considerations, contact"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/envelope.ts",
+          "description": "TypeScript module implementing ProofEnvelope encode/decode using cbor2 or cbor-x: serializeProofEnvelope(), deserializeProofEnvelope(), with full type definitions"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "Add ProofEnvelope, DelegationChain, ProvingSystem union type ('groth16' | 'plonk') to public SDK types"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/index.ts",
+          "description": "Re-export serializeProofEnvelope and deserializeProofEnvelope as part of public SDK surface"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/envelope.test.ts",
+          "description": "Unit tests: round-trip encode/decode for groth16 envelope, plonk envelope, envelope with delegation_chain, unknown version rejection, malformed bstr rejection"
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/proof-envelope-vectors.json",
+          "description": "Language-agnostic conformance test vectors: hex-encoded CBOR bytes paired with decoded JSON representation for each envelope variant"
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope.md",
+          "description": "Developer-facing guide: wire format rationale, Content-Type header usage, SDK encode/decode examples, interop notes for non-JS implementations"
+        }
+      ],
+      "steps": [
+        "Audit current SDK proof output: trace proveHandshake() and verifyHandshake() to identify all ad-hoc JSON serialization points and the exact fields emitted (proof object, publicSignals array, circuit metadata)",
+        "Define CDDL schema in spec/proof-envelope-cbor.cddl: version (uint, currently 1), circuit_id (tstr), proving_system (tstr .within ('groth16' / 'plonk')), public_signals (array of bstr), proof (bstr, snarkjs proof JSON encoded as CBOR bstr for forward compat), delegation_chain (optional array of recursive envelope)",
+        "Add ProofEnvelope and related types to sdk/src/types.ts; ensure ProvingSystem union matches circuit build outputs",
+        "Install cbor2 (or cbor-x) in sdk/package.json; verify license compatibility with Apache-2.0",
+        "Implement serializeProofEnvelope() in sdk/src/envelope.ts: map SDK proof output to CBOR map with defined key ordering, encode delegation_chain recursively",
+        "Implement deserializeProofEnvelope() with strict validation: reject unknown version, reject proving_system values outside the enum, enforce required fields before returning typed object",
+        "Wire envelope serialization into SDK public API: proveHandshake() returns ProofEnvelope; verifyHandshake() accepts ProofEnvelope; maintain backward-compat JSON path behind a flag for one release cycle",
+        "Generate hex-encoded conformance vectors for each envelope variant (groth16 no delegation, plonk no delegation, groth16 with one delegation level) and write to spec/conformance/proof-envelope-vectors.json",
+        "Write unit tests in sdk/test/envelope.test.ts covering round-trip, invalid version, invalid proving_system, missing required field, and delegation_chain recursion",
+        "Update spec/draft-bolyra-mutual-zkp-auth-01.md: add new section 'Proof Envelope Format' with embedded CDDL, Content-Type negotiation rules (Accept/Content-Type: application/bolyra-proof+cbor), and forward to IANA registration template",
+        "Draft spec/media-type-registration.md following RFC 6838 template: type name application, subtype bolyra-proof+cbor, structured syntax suffix +cbor per RFC 8949, encoding CBOR, security considerations (no executable content, proof bytes are opaque to parser), contact ZKProva Inc.",
+        "Update sdk/QUICKSTART.md and docs/proof-envelope.md with Content-Type header examples, curl snippet, and interop note that any CBOR-capable runtime can parse without the SDK",
+        "Run npm run test:circuits:fast and npm run test:contracts to confirm no regressions; run sdk/test suite with new envelope tests",
+        "Bump sdk package version to 0.3.0 (minor: new public API surface) and update CHANGELOG"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "cbor2 or cbor-x npm package (Apache-2.0 or MIT compatible)",
+        "RFC 8949 (CBOR)",
+        "RFC 6838 (media type registration)",
+        "RFC 7049 structured syntax suffix registry (+cbor)",
+        "snarkjs proof JSON schema (existing AgentPolicy and Delegation circuit outputs)",
+        "spec/draft-bolyra-mutual-zkp-auth-01.md (existing IETF draft to extend)",
+        "sdk/src/index.ts public API surface (to avoid breaking changes)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "persona": "standards_architect",
+      "title": "Complete DID resolution algorithm with revocation and delegation discovery",
+      "dimension": "standards",
+      "description": "The existing did-method-bolyra.md spec defines the DID syntax but lacks a complete resolution algorithm. Specify the full CRUD lifecycle: Create (enrollment tx \u2192 DID Document with verificationMethod), Read (resolve commitment \u2192 on-chain lookup of enrollment event + current Merkle inclusion status), Update (not applicable \u2014 commitments are immutable), Deactivate (revocation nullifier check). Add a `delegationService` endpoint in the DID Document that points to the delegation chain discovery API. Include concrete JSON-LD examples for each operation and error codes for stale-root and revoked-identity resolution failures.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "standards_architect_did_resolution_algorithm",
+      "adoption": 16,
+      "standards": 22,
+      "completeness": 20,
+      "correctness": 15,
+      "total": 73,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "standards_architect_did_resolution_algorithm",
+      "title": "Complete DID resolution algorithm with revocation and delegation discovery",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/did-method-bolyra.md",
+          "description": "Extend existing DID method spec with full CRUD lifecycle: Create (enrollment tx \u2192 DID Document), Read (resolve commitment \u2192 on-chain lookup + Merkle inclusion), Update (immutable \u2014 explicit non-operation), Deactivate (revocation nullifier check). Add resolution algorithm pseudocode, error codes (STALE_ROOT, REVOKED_IDENTITY, NOT_FOUND, INVALID_COMMITMENT), and delegationService endpoint definition."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-resolution-algorithm.md",
+          "description": "Standalone resolution algorithm document: input/output types, step-by-step resolver logic, caching policy for Merkle roots, conformance requirements per W3C DID Core \u00a77."
+        },
+        {
+          "type": "docs",
+          "filename": "spec/did-resolution-examples.jsonld",
+          "description": "Concrete JSON-LD DID Document examples for each lifecycle operation: freshly enrolled human identity, resolved agent credential DID, deactivated (revoked) identity with nullifier proof, and DID Document with delegationService endpoint."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/did-error-registry.md",
+          "description": "Error code registry: invalidDid, notFound, deactivated (maps to revocationNullifierFound), representationNotSupported, staleRoot (Merkle root lag > threshold), delegationChainBroken."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/resolver.ts",
+          "description": "TypeScript DID resolver implementing the algorithm: resolveHuman(commitment) and resolveAgent(credentialHash) returning W3C DID Resolution Result objects, with on-chain EnrollmentRegistry lookups, nullifier checks, and delegationService URL construction."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/did/types.ts",
+          "description": "DID Document type definitions: DidDocument, VerificationMethod (Ed25519 + BLS12-381), ServiceEndpoint, DelegationService, ResolutionMetadata, DocumentMetadata."
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/DIDRegistry.sol",
+          "description": "On-chain registry emitting EnrollmentRegistered and IdentityDeactivated events with indexed commitment fields to support resolution queries. Exposes currentMerkleRoot() and isNullifierRevoked(bytes32) view functions."
+        },
+        {
+          "type": "test",
+          "filename": "spec/conformance/did-resolution-conformance.ts",
+          "description": "Conformance test suite validating the resolver against all W3C DID Core resolution algorithm requirements: happy path, stale-root error, revoked identity error, delegation chain discovery, and representation negotiation."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/did/resolver.test.ts",
+          "description": "Unit tests for the TypeScript resolver: mock EnrollmentRegistry, nullifier state, and Merkle inclusion proofs. Covers all error code paths."
+        }
+      ],
+      "steps": [
+        "Audit existing spec/did-method-bolyra.md to inventory what syntax and DID Document structure is already defined; note gaps in CRUD lifecycle coverage",
+        "Define the canonical DID syntax: did:bolyra:<network>:<commitment-hash> for humans, did:bolyra:<network>:agent:<credential-hash> for agents",
+        "Specify Create operation: map enrollment transaction (EnrollmentRegistry.enroll(commitment)) to DID Document with Ed25519 verificationMethod derived from commitment, plus Merkle inclusion proof as documentMetadata",
+        "Specify Read (resolve) operation: (1) parse DID \u2192 extract commitment/credential hash, (2) query EnrollmentRegistry for EnrollmentRegistered event, (3) verify current Merkle inclusion via inclusion proof or on-chain root, (4) check nullifier registry for deactivation, (5) construct DID Document with current verificationMethods and serviceEndpoints",
+        "Specify Update operation explicitly as NOT SUPPORTED with rationale: commitments are cryptographic commitments, immutable by design; key rotation requires new enrollment and DID",
+        "Specify Deactivate operation: submitting a valid revocation nullifier to NullifierRegistry marks the DID as deactivated; resolver MUST return deactivated=true in documentMetadata and error code 'deactivated'",
+        "Define delegationService endpoint schema: type='BolyraD elegationChain', serviceEndpoint pointing to delegation discovery API with did parameter; describe how resolver populates this from on-chain delegation events",
+        "Define error codes and map to W3C DID resolution error vocabulary: invalidDid, notFound, deactivated, staleRoot (configurable lag threshold), delegationChainBroken, representationNotSupported",
+        "Write concrete JSON-LD examples for all operations and embed in spec/did-resolution-examples.jsonld with @context referencing did-bolyra context document",
+        "Implement DID Document types in sdk/src/did/types.ts aligned with W3C DID Core data model",
+        "Implement resolver in sdk/src/did/resolver.ts: resolveHuman and resolveAgent functions, ethers.js queries against DIDRegistry and NullifierRegistry, Merkle inclusion verification via snarkjs witness check",
+        "Add DIDRegistry.sol with EnrollmentRegistered(bytes32 indexed commitment, address enrollee, uint256 timestamp) and IdentityDeactivated(bytes32 indexed nullifier) events plus view functions currentMerkleRoot() and isNullifierRevoked(bytes32)",
+        "Write conformance test suite covering all W3C DID Core \u00a77 resolution algorithm steps",
+        "Write SDK unit tests mocking on-chain state for all error paths",
+        "Update spec/did-method-bolyra.md to reference the new resolution algorithm document and examples",
+        "Cross-reference FORMAL-PROPERTIES.md to ensure resolver's nullifier check aligns with circuit-enforced nullifier domain separation"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "spec/did-method-bolyra.md (existing DID syntax baseline)",
+        "contracts/src/EnrollmentRegistry.sol (enrollment event source)",
+        "circuits/src/HumanUniqueness.circom (nullifierHash output used as deactivation key)",
+        "circuits/src/AgentPolicy.circom (credentialHash used as agent DID identifier)",
+        "W3C DID Core 1.0 (resolution algorithm \u00a77 conformance)",
+        "W3C DID Resolution spec (resolutionMetadata + documentMetadata types)",
+        "snarkjs (Merkle inclusion witness verification in resolver)",
+        "ethers.js v6 (on-chain event and view function queries)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "sdk_designer_handshake_error_diagnostics",
+      "persona": "sdk_designer",
+      "title": "Structured error codes with recovery hints",
+      "dimension": "adoption",
+      "description": "SDK currently throws generic Error('proof verification failed'). Introduce a BolyraError class with machine-readable codes (STALE_ROOT, EXPIRED_CREDENTIAL, SCOPE_MISMATCH, NONCE_REUSED, NULLIFIER_SPENT) and a `.hint` field with the specific fix ('Root is 3 blocks behind; re-fetch with registry.latestRoot()'). Map on-chain revert reasons from IdentityRegistry's custom errors to SDK-level diagnostics. This is the single biggest DX gap \u2014 developers can't debug failures without reading circuit code.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "sdk_designer_handshake_error_diagnostics",
+      "adoption": 23,
+      "standards": 13,
+      "completeness": 18,
+      "correctness": 17,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "sdk_designer_handshake_error_diagnostics",
+      "title": "Structured error codes with recovery hints",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/errors.ts",
+          "description": "BolyraError class with code enum (STALE_ROOT, EXPIRED_CREDENTIAL, SCOPE_MISMATCH, NONCE_REUSED, NULLIFIER_SPENT, PROOF_INVALID, REGISTRY_REVERT, UNKNOWN), hint string, and optional cause chaining"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/error-codes.ts",
+          "description": "Exported ErrorCode enum and HintMap mapping each code to a template hint string with interpolation placeholders"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/revert-decoder.ts",
+          "description": "mapRevertToBolyraError() \u2014 decodes ethers ContractErrorData / revert reason strings from IdentityRegistry custom errors into BolyraError instances"
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/proof-verifier.ts",
+          "description": "Updated verifyHandshake() and verifyProof() to catch snarkjs/rapidsnark failures and rethrow as typed BolyraError with contextual hint"
+        },
+        {
+          "type": "contract",
+          "filename": "contracts/src/IdentityRegistry.sol",
+          "description": "Audit and enumerate existing custom errors; add any missing ones (StaleRoot, NullifierSpent, ScopeMismatch) with parameters for SDK-side interpolation"
+        },
+        {
+          "type": "spec",
+          "filename": "spec/error-codes.md",
+          "description": "Normative list of all BolyraError codes, their trigger conditions, and canonical hint templates for SDK implementors"
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/errors.test.ts",
+          "description": "Unit tests: each error code thrown under its trigger condition, hint contains expected substring, cause chain preserved, revert decoder maps every IdentityRegistry custom error"
+        },
+        {
+          "type": "docs",
+          "filename": "sdk/QUICKSTART.md",
+          "description": "Add error-handling section showing try/catch on BolyraError, code switch, and acting on .hint"
+        }
+      ],
+      "steps": [
+        "Audit IdentityRegistry.sol for all existing custom errors; document their parameter types and add StaleRoot(uint256 providedBlock, uint256 latestBlock), NullifierSpent(bytes32 nullifier), and ScopeMismatch(uint8 required, uint8 provided) if missing",
+        "Define ErrorCode enum in error-codes.ts with values: STALE_ROOT, EXPIRED_CREDENTIAL, SCOPE_MISMATCH, NONCE_REUSED, NULLIFIER_SPENT, PROOF_INVALID, REGISTRY_REVERT, UNKNOWN",
+        "Implement HintMap in error-codes.ts mapping each ErrorCode to a hint template string (e.g., STALE_ROOT => 'Root is {delta} blocks behind; re-fetch with registry.latestRoot()')",
+        "Implement BolyraError extends Error in errors.ts with fields: code: ErrorCode, hint: string, cause?: unknown; include static factory helpers (BolyraError.staleRoot(delta), etc.) that interpolate hint templates",
+        "Implement revert-decoder.ts: parse ethers Interface.parseError() output against IdentityRegistry ABI fragments, map each custom error selector to the corresponding BolyraError factory; fall back to REGISTRY_REVERT for unknown reverts",
+        "Wrap snarkjs/rapidsnark verification calls in proof-verifier.ts: catch witness generation failures as PROOF_INVALID, expired credential detection as EXPIRED_CREDENTIAL, nonce mismatch as NONCE_REUSED",
+        "Update verifyHandshake() public entrypoint to catch all thrown errors and rethrow as BolyraError if not already typed, preserving cause chain",
+        "Write unit tests in errors.test.ts covering: each code triggered under its condition, hint interpolation correctness, revert decoder for every IdentityRegistry custom error selector, cause chain preservation",
+        "Update sdk/QUICKSTART.md with a try/catch example demonstrating BolyraError code switching and acting on .hint",
+        "Export BolyraError and ErrorCode from sdk/src/index.ts public surface",
+        "Update spec/error-codes.md with normative definitions of all codes, trigger conditions, and hint templates"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "ethers v6 Interface.parseError() for ABI-level revert decoding",
+        "IdentityRegistry.sol ABI with custom error definitions",
+        "snarkjs proof verification error surface (must enumerate failure modes)",
+        "@bolyra/sdk existing verifyHandshake() and verifyProof() signatures"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "framework_integrator_langchain_credential_middleware",
+      "persona": "framework_integrator",
+      "title": "LangChain credential middleware with automatic scope-gated tool access",
+      "dimension": "adoption",
+      "description": "Build a LangChain CallbackHandler + BaseTool wrapper that intercepts tool invocations and requires a valid Bolyra AgentPolicy proof before execution. The middleware maps LangChain tool names to permission bitmask bits (e.g., SQLDatabaseTool \u2192 READ_DATA, StripeChargeTool \u2192 FINANCIAL_SMALL) via a declarative YAML config. On first call, it runs proveHandshake() and caches the proof for the session nonce lifetime. Publish as @bolyra/langchain on npm and bolyra-langchain on PyPI, with a 5-line quickstart that wraps an existing AgentExecutor.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_langchain_credential_middleware",
+      "adoption": 23,
+      "standards": 13,
+      "completeness": 20,
+      "correctness": 15,
+      "total": 71,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "framework_integrator_langchain_credential_middleware",
+      "title": "LangChain credential middleware with automatic scope-gated tool access",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/BolyraCallbackHandler.ts",
+          "description": "LangChain CallbackHandler that intercepts onToolStart events, validates cached AgentPolicy proof against required permission bitmask, and blocks execution if scope is insufficient"
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/BolyraToolWrapper.ts",
+          "description": "BaseTool wrapper factory that decorates any LangChain tool with scope annotation and delegates enforcement to BolyraCallbackHandler"
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/toolPermissionMap.ts",
+          "description": "Default tool-name to permission bitmask mapping (SQLDatabaseTool \u2192 READ_DATA, StripeChargeTool \u2192 FINANCIAL_SMALL, etc.) with merge support for user-supplied overrides"
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/ProofSessionCache.ts",
+          "description": "In-memory LRU cache keyed by sessionNonce that stores proveHandshake() results and evicts on nonce expiry"
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/index.ts",
+          "description": "Public barrel export: BolyraCallbackHandler, wrapTools(), loadToolPermissionConfig()"
+        },
+        {
+          "type": "spec",
+          "filename": "integrations/langchain/tool-permissions.schema.yaml",
+          "description": "JSON Schema (expressed in YAML) for the declarative tool\u2192bitmask config file; validated at middleware init"
+        },
+        {
+          "type": "spec",
+          "filename": "integrations/langchain/examples/tool-permissions.yaml",
+          "description": "Reference YAML config mapping common LangChain community tools to Bolyra permission bits"
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/python/bolyra_langchain/__init__.py",
+          "description": "Python port: BaseCallbackHandler subclass + wrap_tools() helper; proving delegates to @bolyra/sdk subprocess bridge"
+        },
+        {
+          "type": "test",
+          "filename": "integrations/langchain/test/callbackHandler.test.ts",
+          "description": "Unit tests: proof cache hit/miss, scope gate blocks under-privileged calls, YAML config loading, nonce expiry eviction"
+        },
+        {
+          "type": "test",
+          "filename": "integrations/langchain/test/integration.test.ts",
+          "description": "Integration test: full AgentExecutor run with mock LLM, real proveHandshake() (fast/mock proof), verifies blocked vs allowed tool paths"
+        },
+        {
+          "type": "test",
+          "filename": "integrations/langchain/python/tests/test_bolyra_langchain.py",
+          "description": "Python equivalent integration test using pytest and langchain-community stubs"
+        },
+        {
+          "type": "docs",
+          "filename": "integrations/langchain/README.md",
+          "description": "5-line quickstart wrapping an existing AgentExecutor, YAML config reference, permission bit table, nonce lifetime notes"
+        },
+        {
+          "type": "docs",
+          "filename": "integrations/langchain/PUBLISHING.md",
+          "description": "npm publish (@bolyra/langchain) and PyPI publish (bolyra-langchain) runbook, peer dependency matrix, versioning policy"
+        }
+      ],
+      "steps": [
+        "Define tool-permissions.schema.yaml with ajv-compatible JSON Schema; list all 8 permission bit names as enum values",
+        "Implement toolPermissionMap.ts with hardcoded defaults for top-10 LangChain community tools and a mergePermissionConfig() that deep-merges user YAML",
+        "Implement ProofSessionCache.ts: Map<sessionNonce, {proof, expiresAt}>; add get/set/evict; wire eviction to AgentPolicy expiry field",
+        "Implement BolyraCallbackHandler.ts: onToolStart() resolves tool name \u2192 required bitmask via config, checks cache for valid proof, calls proveHandshake() on miss, throws BolyraInsufficientScopeError if proof bitmask & required !== required",
+        "Implement BolyraToolWrapper.ts: wrapTools(tools[], config) annotates each tool with requiredPermission metadata and returns tools unchanged (handler does enforcement \u2014 no monkey-patching call())",
+        "Wire index.ts barrel; add package.json for @bolyra/langchain with peerDeps on @bolyra/sdk ^0.2.0 and @langchain/core ^0.2.0",
+        "Write unit tests for cache logic, scope gate arithmetic, and YAML loading; mock proveHandshake()",
+        "Write integration test: construct AgentExecutor with BolyraCallbackHandler, run agent with mock LLM that forces a FINANCIAL_SMALL tool call, assert blocked when credential has only READ_DATA",
+        "Port to Python: implement bolyra_langchain/handler.py as BaseCallbackHandler, delegate proof to subprocess bridge (same pattern as sdk-python), publish bolyra-langchain to PyPI",
+        "Write Python pytest integration test mirroring the TS integration test",
+        "Draft README.md with 5-line quickstart, full YAML config reference, and security notes on nonce lifetime",
+        "Add @bolyra/langchain to root package.json workspaces; update landing page ecosystem section"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "@bolyra/sdk ^0.2.0",
+        "@langchain/core ^0.2.0",
+        "langchain ^0.2.0",
+        "ajv ^8",
+        "js-yaml ^4",
+        "bolyra (Python SDK) >= 0.2.0",
+        "langchain (Python) >= 0.2.0",
+        "pyyaml",
+        "jsonschema (Python)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "framework_integrator_proof_envelope_content_type",
+      "persona": "framework_integrator",
+      "title": "Standardized proof envelope with application/bolyra+json content type",
+      "dimension": "standards",
+      "description": "Define a JSON envelope format for proof payloads that all framework integrations use: {version, circuit, publicSignals[], proof{pi_a, pi_b, pi_c}, metadata{framework, sdkVersion, provingTimeMs}}. Register application/bolyra+json as the content type. This lets any HTTP-based agent framework (MCP servers, OpenAI function calling proxies, REST tool servers) accept Bolyra proofs via a standard Authorization header (Bearer bolyra:<base64-envelope>) without framework-specific code. Include a generic Express/FastAPI middleware that validates the header, so tool servers get ZK auth in 3 lines.",
+      "priority": "high",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_proof_envelope_content_type",
+      "adoption": 20,
+      "standards": 19,
+      "completeness": 16,
+      "correctness": 14,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "framework_integrator_proof_envelope_content_type",
+      "title": "Standardized proof envelope with application/bolyra+json content type",
+      "artifacts": [
+        {
+          "type": "spec",
+          "filename": "spec/proof-envelope-v1.md",
+          "description": "Formal specification of the application/bolyra+json envelope schema: version, circuit name, publicSignals array, proof object (pi_a/pi_b/pi_c), and metadata block. Includes ABNF for the Authorization header value 'Bearer bolyra:<base64url-envelope>'."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/content-type-registration.md",
+          "description": "IANA-style registration template for application/bolyra+json: type, subtype, required fields, optional fields, encoding considerations, security considerations."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/envelope.ts",
+          "description": "TypeScript implementation of ProofEnvelope type, serializeEnvelope(), deserializeEnvelope(), and encodeAuthHeader() / decodeAuthHeader() utilities. Validates schema on both encode and decode paths."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/middleware/express.ts",
+          "description": "Express middleware: extractBolyraProof(req, res, next) \u2014 parses Authorization header, base64url-decodes envelope, validates schema, calls verifyHandshake(), attaches result to req.bolyraIdentity. 3-line usage: app.use(extractBolyraProof)."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk-python/bolyra/middleware/fastapi.py",
+          "description": "FastAPI dependency: bolyra_auth = Depends(BolyraAuthMiddleware()) \u2014 parses Authorization header, delegates proof verification to the Node subprocess bridge, returns BolyraIdentity pydantic model. 3-line usage via Depends()."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/envelope.test.ts",
+          "description": "Unit tests for round-trip serialize/deserialize, Authorization header encode/decode, schema validation rejections (missing fields, wrong version, malformed base64), and Express middleware integration with a mock Express app."
+        },
+        {
+          "type": "test",
+          "filename": "sdk-python/tests/test_middleware_fastapi.py",
+          "description": "pytest tests for FastAPI middleware: valid proof header, missing header 401, malformed base64 400, expired credential 403. Uses httpx TestClient."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/proof-envelope-quickstart.md",
+          "description": "Integration guide showing 3-line Express setup, 3-line FastAPI setup, curl example with a real base64url-encoded envelope, and a table mapping framework types (MCP server, OpenAI function proxy, REST tool server) to the middleware import path."
+        }
+      ],
+      "steps": [
+        "Define ProofEnvelopeV1 JSON schema in spec/proof-envelope-v1.md: required fields version (string semver), circuit (string enum: HumanUniqueness|AgentPolicy|Delegation), publicSignals (string[] hex), proof ({pi_a: string[], pi_b: string[][], pi_c: string[]}), metadata ({framework?: string, sdkVersion: string, provingTimeMs?: number})",
+        "Write serializeEnvelope() and deserializeEnvelope() in sdk/src/envelope.ts with zod schema validation; export ProofEnvelope TypeScript type",
+        "Implement encodeAuthHeader(envelope: ProofEnvelope): string (returns 'bolyra <base64url>') and decodeAuthHeader(header: string): ProofEnvelope with error throws for malformed input",
+        "Build Express middleware extractBolyraProof in sdk/src/middleware/express.ts: parse header, decode envelope, call verifyHandshake() from existing SDK, attach to req.bolyraIdentity, call next() on success or return 401/403 JSON error",
+        "Build FastAPI dependency BolyraAuthMiddleware in sdk-python/bolyra/middleware/fastapi.py: extract Authorization header via Request, delegate to subprocess bridge for verification, return BolyraIdentity pydantic model or raise HTTPException",
+        "Write unit tests for envelope serialization round-trips, header encode/decode, and schema rejection cases in sdk/test/envelope.test.ts",
+        "Write pytest tests for FastAPI middleware covering valid, missing, malformed, and expired cases in sdk-python/tests/test_middleware_fastapi.py",
+        "Update sdk/src/index.ts to export serializeEnvelope, deserializeEnvelope, encodeAuthHeader, decodeAuthHeader, and extractBolyraProof",
+        "Update sdk-python/bolyra/__init__.py to expose BolyraAuthMiddleware",
+        "Write spec/content-type-registration.md following IANA structured syntax template, referencing proof-envelope-v1.md for schema",
+        "Write docs/proof-envelope-quickstart.md with Express snippet, FastAPI snippet, curl example, and framework compatibility table",
+        "Run npm run typecheck in sdk/ and pytest in sdk-python/ to confirm no regressions; verify existing verifyHandshake integration tests still pass"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "@bolyra/sdk verifyHandshake() public API",
+        "sdk-python subprocess bridge to Node for proof verification",
+        "zod (already in sdk/package.json) for schema validation",
+        "fastapi + httpx (already in sdk-python) for middleware and tests",
+        "express @types/express (already in sdk devDependencies)"
+      ]
+    }
+  },
+  {
+    "winner": {
+      "id": "framework_integrator_session_token_offchain_jwt",
+      "persona": "framework_integrator",
+      "title": "Off-chain JWT session token from verified handshake for framework middleware",
+      "dimension": "adoption",
+      "description": "After a successful on-chain verifyHandshake(), the SDK should emit a signed JWT containing the nullifierHash, scopeCommitment, and sessionNonce with a configurable TTL (default 5 min). Framework middleware (LangChain, CrewAI, AutoGen) can then verify this JWT locally for subsequent tool calls in the same session without re-proving on-chain. This eliminates the biggest adoption blocker: multi-second proof generation on every tool invocation. The JWT issuer key is derived from the agent's operator EdDSA key, so verification stays self-sovereign.",
+      "priority": "critical",
+      "estimated_effort": "days",
+      "candidate_id": "framework_integrator_session_token_offchain_jwt",
+      "adoption": 22,
+      "standards": 14,
+      "completeness": 18,
+      "correctness": 15,
+      "total": 69,
+      "verdict": "consider"
+    },
+    "outline": {
+      "id": "framework_integrator_session_token_offchain_jwt",
+      "title": "Off-chain JWT session token from verified handshake for framework middleware",
+      "artifacts": [
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session.ts",
+          "description": "Core SessionToken class: issueSessionJWT(handshakeResult, operatorEdDSAKey, ttlSeconds) derives a JWT signing key from the operator EdDSA key via HKDF, embeds nullifierHash, scopeCommitment, sessionNonce, iat, exp, and iss claims, signs with HS256 or EdDSA (Ed25519), and returns a compact JWT string."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/session-verify.ts",
+          "description": "verifySessionJWT(token, operatorPublicKey): reconstructs the expected signing key, verifies signature and expiry, returns typed SessionClaims or throws SessionExpiredError / SessionInvalidError."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/types.ts",
+          "description": "Add SessionClaims interface (nullifierHash, scopeCommitment, sessionNonce, iat, exp, iss) and SessionTokenOptions (ttlSeconds, clockSkewSeconds)."
+        },
+        {
+          "type": "sdk",
+          "filename": "sdk/src/index.ts",
+          "description": "Re-export issueSessionJWT, verifySessionJWT, SessionClaims, SessionTokenOptions from the public API surface."
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/bolyra-tool-middleware.ts",
+          "description": "LangChain StructuredTool wrapper that checks a session JWT on every tool invocation using verifySessionJWT; injects SessionClaims into tool input context. Throws if token is absent or expired."
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/langchain/src/bolyra-session-callback.ts",
+          "description": "LangChain BaseCallbackHandler that stores the session JWT in async-local-storage at chain start and clears it on chain end, enabling middleware to resolve the token without explicit passing."
+        },
+        {
+          "type": "sdk",
+          "filename": "integrations/crewai/bolyra_session.py",
+          "description": "CrewAI tool decorator @require_bolyra_session that calls the Python SDK subprocess bridge to verify the JWT before the tool function executes. Raises PermissionError on failure."
+        },
+        {
+          "type": "spec",
+          "filename": "spec/session-token-spec.md",
+          "description": "Specification for the JWT payload schema, key derivation (HKDF-SHA256 from operator EdDSA private scalar), signing algorithm selection (Ed25519 preferred, HS256 fallback), replay-prevention via sessionNonce uniqueness, and TTL guidance. Defines the relationship between on-chain verifyHandshake() and off-chain JWT issuance as a trust delegation boundary."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session.test.ts",
+          "description": "Unit tests: issue \u2192 verify round-trip, expired token rejection, tampered claim rejection, wrong operator key rejection, scopeCommitment mismatch, clock skew tolerance, default TTL=300s enforcement."
+        },
+        {
+          "type": "test",
+          "filename": "sdk/test/session-integration.test.ts",
+          "description": "Integration test: runs full proveHandshake() + verifyHandshake() mock, calls issueSessionJWT on the result, verifies the JWT, confirms nullifierHash in claims matches the proof public output."
+        },
+        {
+          "type": "test",
+          "filename": "integrations/langchain/test/bolyra-tool-middleware.test.ts",
+          "description": "LangChain middleware tests: tool call with valid JWT succeeds, tool call with missing JWT throws, tool call with expired JWT throws, sessionNonce is propagated into tool context."
+        },
+        {
+          "type": "docs",
+          "filename": "docs/session-token-quickstart.md",
+          "description": "Developer guide: 3-step integration (run handshake, issue JWT, protect tools). Includes copy-paste snippets for LangChain, CrewAI, and raw verifySessionJWT usage. Documents TTL tradeoffs and key rotation guidance."
+        }
+      ],
+      "steps": [
+        "Define SessionClaims interface and SessionTokenOptions in sdk/src/types.ts with nullifierHash (hex string), scopeCommitment (hex string), sessionNonce (hex string), iat, exp, iss fields",
+        "Implement HKDF-SHA256 key derivation in sdk/src/session.ts: take operator EdDSA private scalar bytes as IKM, use info='bolyra-session-jwt-v1' and salt=nullifierHash to produce a 32-byte symmetric key",
+        "Implement issueSessionJWT(): validate handshakeResult fields are present, derive signing key via HKDF, build JWT payload with claims + exp=iat+ttlSeconds, sign with jose or jsonwebtoken library using HS256, return compact JWT",
+        "Implement verifySessionJWT(): derive verification key from operatorPublicKey (symmetric key derivation requires private key \u2014 document that verification is operator-side only OR switch to Ed25519 asymmetric JWT for public verifiability; pick asymmetric Ed25519 for self-sovereign property stated in candidate)",
+        "Revise signing to use Ed25519 asymmetric JWT (alg: EdDSA): operator EdDSA private key signs JWT directly, verifier uses operator public key \u2014 aligns with 'verification stays self-sovereign' requirement",
+        "Update issueSessionJWT() to sign with Ed25519 private key via jose library; update verifySessionJWT() to verify with Ed25519 public key",
+        "Write unit tests in sdk/test/session.test.ts covering round-trip, expiry, tampering, wrong key, and clock skew",
+        "Write integration test in sdk/test/session-integration.test.ts connecting mock handshake output to JWT issuance and verification",
+        "Re-export issueSessionJWT, verifySessionJWT, SessionClaims, SessionTokenOptions from sdk/src/index.ts",
+        "Implement LangChain StructuredTool middleware in integrations/langchain/src/bolyra-tool-middleware.ts using verifySessionJWT on each invocation",
+        "Implement LangChain BaseCallbackHandler for async-local-storage session propagation in bolyra-session-callback.ts",
+        "Write LangChain middleware tests in integrations/langchain/test/",
+        "Implement CrewAI @require_bolyra_session decorator in integrations/crewai/bolyra_session.py calling Python SDK subprocess bridge for JWT verification",
+        "Write spec/session-token-spec.md documenting JWT schema, key derivation rationale, trust boundary, replay prevention via sessionNonce, and TTL guidance",
+        "Write docs/session-token-quickstart.md with LangChain, CrewAI, and raw API snippets",
+        "Run npm run typecheck and npm test to confirm no regressions",
+        "Update sdk/QUICKSTART.md to reference session token as the recommended pattern for multi-step agent sessions"
+      ],
+      "estimated_constraints": null,
+      "dependencies": [
+        "jose (^5.x) \u2014 Ed25519 JWT sign/verify in Node",
+        "Existing proveHandshake() and verifyHandshake() in sdk/src/index.ts",
+        "Operator EdDSA key pair already produced by createAgentCredential()",
+        "@langchain/core StructuredTool and BaseCallbackHandler interfaces",
+        "crewai Tool decorator interface (Python)",
+        "Python SDK subprocess bridge (sdk-python/bolyra/bridge.py) for CrewAI integration",
+        "sessionNonce uniqueness guarantee from handshake flow (replay prevention)"
+      ]
+    }
+  }
+]

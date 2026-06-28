@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction identifies a real gap (predicate proof vs selective disclosure, AS-blind presentation). However, the rfc7662_advocate's Attack 1 shows that per-RS filtered introspection already achieves predicate-outcome-only disclosure for pre-registered predicates. Attack 4 shows SD-JWT + attached ZK proof hybrid closes the predicate gap when AS is trusted. The auth0_pm's Attack 1 shows FGA systems already return boolean decisions, not scope lists. The construction's advantage holds only under the adversarial-AS + runtime-adaptive predicate combination, but this is buried in scenarios, not the \u00a71 claim statement. The claim as written ('without revealing the full permission set to the resource server') is matchable by filtered introspection. Baseline can approximate with extra configuration, so 1 not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a threat model (SI game, adversarial-AS model) and names cryptographic primitives (Poseidon, Groth16, PLONK, BabyJubjub EdDSA). However, the cryptographer's attacks expose four unaddressed formal gaps: (1) the SI game is not bounded to single-query, enabling adaptive binary-search full bitmask reconstruction in 8 queries; (2) no statement of trusted setup assumptions re: AS participation; (3) nullifier derivation over 8-bit space enables precomputation attack; (4) HVZK vs malicious-verifier ZK distinction unstated. These are not minor \u2014 Attack 1 alone means the 1-bit leak claim fails under adaptive queries. Threat model stated but assumptions vague and reduction missing on critical points."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The construction maps to existing Bolyra primitives (Poseidon hash, Groth16/PLONK circuits, BabyJubjub EdDSA, cumulative-bit encoding). The AgentPolicy circuit already exists. However, the construction does not state circuit cost (constraint count or proving time target). The auth0_pm's Attack 3 notes ~15s proof latency with no amortization model described. No constraint budget is given for the predicate proof extension. Maps to primitives but cost unknown."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 adversaries found multiple attacks the construction cannot answer: (1) cryptographer's adaptive binary-search reconstructs full bitmask in 8 queries \u2014 construction has no query bound or cross-query unlinkability mechanism; (2) nullifier precomputation over 256-value space deanonymizes permissions; (3) rfc7662_advocate's SD-JWT+ZK hybrid attack is unaddressed in \u00a78; (4) cu_ciso's forensic/audit gap \u2014 hiding property destroys NCUA Part 748 audit trail with no compliant audit channel specified; (5) spiffe_engineer's SPIFFE/WIMSE baselines entirely unaddressed in \u00a78. Multiple attacks the construction cannot answer as written."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two scenarios are named: (1) regulated agent with 2^64 permission space, (2) semi-trusted AS where RS needs cryptographic assurance. However, the cu_ciso's attacks show the CU deployment scenario has fatal operational gaps: no regulatory mapping to FFIEC CAT/NCUA Part 748, the hiding property breaks audit trail requirements, no key custody model for member secrets, no on-chain registry SLA. The auth0_pm's Attack 2 shows no concrete buyer persona who actually distrusts their AS. The spiffe_engineer's Attack 3 defeats the 2^64 scenario with hierarchical SVIDs. Scenarios are named but only hypothetical \u2014 no named stakeholder with a load-bearing regulatory requirement that survives scrutiny."
+    }
+  },
+  "gaps": [
+    "\u00a71 claim must foreground AS-blind + runtime-adaptive predicate as the primary differentiator, not just 'without revealing full permission set to RS' which filtered introspection matches",
+    "SI game in \u00a73 must be explicitly bounded (single-query or bounded-query) with stated consequences for adaptive multi-query interaction \u2014 currently the 8-query binary search reconstructs full bitmask",
+    "\u00a73 must specify trusted setup trust assumptions: which proving system for predicate proof, whether AS participated in ceremony, security degradation under subverted CRS",
+    "Nullifier derivation function must be specified and proven not to leak bitmask over the 256-value permission space to a scope_id-knowing adversary \u2014 add credential blinding factor",
+    "\u00a73 must state whether ZK property is HVZK or malicious-verifier ZK and specify RS verifier model (honest-but-curious vs malicious)",
+    "\u00a78 must address SD-JWT + externally-attached ZK predicate proof hybrid as strongest baseline attack",
+    "\u00a78 must address SPIFFE/SPIRE (ZK attestor plugin, hierarchical SVIDs) and WIMSE as baseline systems",
+    "Add proof latency/amortization section: per-session vs per-request, session definition for autonomous agents, staleness handling",
+    "Add compliant audit channel that satisfies NCUA Part 748 \u00a73 audit trail requirements without breaking the hiding property \u2014 e.g., agent-side signed disclosure to CU SIEM",
+    "Add regulatory mapping table: proof properties to FFIEC CAT controls, NCUA Part 748 subsections, GLBA Safeguards Rule requirements",
+    "Add key custody model for member secrets with recovery path satisfying both uniqueness guarantee and NCUA requirements",
+    "Address FGA/policy-engine architectures (Auth0 FGA, AWS Verified Permissions) that return boolean authorization decisions rather than scope lists"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

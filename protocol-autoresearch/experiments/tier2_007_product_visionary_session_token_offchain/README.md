@@ -1,0 +1,7 @@
+# Off-chain session token from verified handshake
+
+After a successful on-chain handshake verification, emit a signed JWT (or SD-JWT) session token that encodes the verified scope, nullifiers, and expiry. Downstream tool calls can present this token instead of re-proving on-chain, enabling sub-100ms auth for agentic workflows. The token references the on-chain transaction hash as its trust anchor. This is the missing bridge between ZKP correctness and real-time agentic commerce latency requirements — without it, every tool call requires a fresh proof or an on-chain transaction, making Bolyra unusable for high-frequency agent-to-agent interactions.
+
+## Status
+
+Placeholder — awaiting implementation.

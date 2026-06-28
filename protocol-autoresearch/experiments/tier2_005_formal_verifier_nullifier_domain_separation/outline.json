@@ -1,0 +1,70 @@
+{
+  "id": "formal_verifier_nullifier_domain_separation",
+  "title": "Add domain separation tags to all Poseidon nullifier derivations",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Replace Poseidon2(scope, secret) with Poseidon3(0x01, scope, secret) for human nullifier derivation"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Replace Poseidon2(credentialCommitment, sessionNonce) with Poseidon3(0x02, credentialCommitment, sessionNonce) for agent nullifier derivation"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Replace Poseidon2(delegateeCredCommitment, sessionNonce) with Poseidon3(0x03, delegateeCredCommitment, sessionNonce) for delegation nullifier derivation"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/draft-bolyra-mutual-zkp-auth-01.md",
+      "description": "Document domain separation tags (0x01=human, 0x02=agent, 0x03=delegation) and rationale citing IETF hash-to-curve RFC 9380 conventions"
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add formal property: cross-circuit nullifier collision resistance guaranteed by domain tags; update nullifier derivation definitions"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/nullifier-domain-separation.test.js",
+      "description": "Regression tests proving that human/agent/delegation nullifiers never collide even when inputs are crafted equal across circuits"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/nullifier.ts",
+      "description": "Update any SDK-side nullifier pre-image construction helpers to match new 3-input Poseidon arity (primarily documentation/comment alignment)"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/security-model.md",
+      "description": "Add section on nullifier domain separation guarantees and tag registry"
+    }
+  ],
+  "steps": [
+    "Audit all three circuits (HumanUniqueness, AgentPolicy, Delegation) to locate every Poseidon2 call used for nullifier derivation \u2014 confirm no other Poseidon2 calls exist that derive cross-circuit-visible values",
+    "Define domain tag constants: HUMAN_NULLIFIER_DOMAIN = 1, AGENT_NULLIFIER_DOMAIN = 2, DELEGATION_NULLIFIER_DOMAIN = 3 \u2014 document these as frozen constants in FORMAL-PROPERTIES.md before touching any circuit",
+    "In HumanUniqueness.circom: swap `component nullifier = Poseidon(2); nullifier.inputs[0] <== scope; nullifier.inputs[1] <== secret;` to `component nullifier = Poseidon(3); nullifier.inputs[0] <== 1; nullifier.inputs[1] <== scope; nullifier.inputs[2] <== secret;`",
+    "In AgentPolicy.circom: swap Poseidon(2)(credentialCommitment, sessionNonce) to Poseidon(3)(2, credentialCommitment, sessionNonce)",
+    "In Delegation.circom: swap Poseidon(2)(delegateeCredCommitment, sessionNonce) to Poseidon(3)(3, delegateeCredCommitment, sessionNonce)",
+    "Recompile all three circuits: `npm run compile:circuits` \u2014 verify constraint counts increase by ~1 per circuit (one extra Poseidon round for added input)",
+    "Regenerate trusted setup artifacts for AgentPolicy and Delegation (project-specific .zkey files use pot16.ptau) \u2014 HumanUniqueness reuses the Semaphore v4 ceremony so its .zkey must also be regenerated from the new .r1cs",
+    "Regenerate Solidity verifier contracts from updated vkey.json files for all three circuits to keep on-chain verifyProof aligned",
+    "Write nullifier-domain-separation.test.js: craft inputs where (scope == credentialCommitment) and (secret == sessionNonce), assert all three nullifier outputs are distinct",
+    "Run fast circuit tests (`npm run test:circuits:fast`) to verify witness generation passes, then run slow tests (`npm run test:circuits:slow`) to verify full Groth16/PLONK proofs are valid",
+    "Run Hardhat contract tests (`npm run test:contracts`) to confirm updated verifier contracts accept new proofs",
+    "Update spec/draft-bolyra-mutual-zkp-auth-01.md nullifier derivation section with Poseidon3 formulas and domain tag registry table",
+    "Update circuits/FORMAL-PROPERTIES.md with new formal property P-DS-1: cross-circuit nullifier collision resistance",
+    "Commit with DCO sign-off: `git commit -s -m 'feat(circuits): add domain separation tags to all Poseidon nullifier derivations'`"
+  ],
+  "estimated_constraints": 3,
+  "dependencies": [
+    "circomlib Poseidon template supports arbitrary input arity (Poseidon(3) is available)",
+    "pot16.ptau must support at least 2^16 constraints after adding ~3 new constraints across circuits",
+    "Trusted setup re-execution required for all three circuits \u2014 existing .zkey files become invalid",
+    "Solidity verifier contracts must be regenerated and redeployed to Base Sepolia after .zkey changes",
+    "Any downstream consumer caching nullifier values (e.g., on-chain nullifier registries) must be aware that nullifier values change \u2014 requires migration or registry reset on testnet"
+  ]
+}

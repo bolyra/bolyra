@@ -1,0 +1,41 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction proves AS-blind unlinkability (Corollary 4.3: Adv_baseline=1/2 vs Adv_ZK\u2264negl(\u03bb)), which is genuinely beyond what a single-AS OAuth baseline achieves. However, the spiffe_engineer shows WIMSE/SPIFFE trust-domain federation architecturally removes the single-AS assumption (separate SPIRE servers per trust domain), and the rfc7662_advocate shows RFC 8693+RFC 8707 with per-RS PPID eliminates stable client_id at the RS layer. The formal separation only holds against vanilla RFC 6749 OAuth \u2014 not against the strongest non-ZK alternative. Baseline can approximate via architectural separation."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Theorem 4.1 (Adv\u22642\u00b7Adv^PRF+Adv^ZK), Theorem 4.2 (deterministic A_base), and Corollary 4.3 exist with named assumptions and a reduction sketch. However, the cryptographer identified four unresolved gaps: (1) scope_id generation is unspecified \u2014 an active AS can force nullifier collision by reusing scope_ids; (2) the union bound assumes PRF and ZK games are independent but both depend on the same Groth16 CRS, collapsing under subverted setup; (3) HVZK vs SE-NIZK is never specified \u2014 a malicious-verifier AS breaks HVZK guarantees; (4) nonce generation party is unspecified, allowing AS-controlled nonce replay. Threat model exists but reduction is incomplete."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "Nullifier-per-scope construction naturally maps to existing Bolyra primitives (Poseidon hash for nullifiers, BabyJubjub EdDSA, Groth16/PLONK circuits). However, the construction summary specifies no constraint count, no proving time target, and no circuit cost analysis. The auth0_pm notes 15s snarkjs proving vs ~400ms rapidsnark but the construction itself is silent on cost. Budget compliance cannot be verified from the construction text alone."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "All five Tier 3 personas found attacks the construction cannot answer. Cryptographer: scope_id collision (active AS trivially wins), CRS non-independence (vacuous bound under subverted setup), HVZK insufficient for malicious-verifier AS, nonce generation unspecified. cu_ciso: unlinkability is structurally incompatible with BSA/AML SAR obligations (31 USC \u00a75318(g)) \u2014 no selective disclosure sub-protocol exists; incident response is impossible under NCUA Part 748 Appendix B \u2014 no break-glass linkability path. spiffe_engineer: baseline comparison collapses against WIMSE/SPIFFE federation. auth0_pm: no proof caching prohibition despite 15s latency creating engineering pressure to degrade guarantees. None of these attacks are mitigated or scoped out."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "PNWCU cross-credit-union member agent scenario is named with a specific stakeholder and the construction references it in \u00a77. However, cu_ciso Attack 1 shows the unlinkability property directly conflicts with BSA/AML obligations \u2014 the same nullifier separation that hides merchant graphs from the AS also hides transaction velocity patterns from legally mandated fraud monitoring. No compliance-disclosure sub-protocol is defined. The scenario is concrete but regulatory conflict makes the property potentially undeployable as described."
+    }
+  },
+  "gaps": [
+    "Define IND-UNL-RS and IND-UNL-(AS\u2227RS) games to cover RS-collusion adversary, not just AS-adversary (rfc7662_advocate, spiffe_engineer)",
+    "Restate Theorem 4.2 against WIMSE/SPIFFE baseline, not just vanilla RFC 6749 OAuth \u2014 or explicitly scope the baseline and justify why OAuth-AS topology is dominant",
+    "Specify ZK flavor (HVZK vs SE-NIZK) and cite the assumption (e.g., KoE in generic group model for Groth16 simulation-extractability) needed for malicious-verifier AS",
+    "Add explicit honest-setup assumption as a game axiom, or address CRS subversion to restore independence of PRF and ZK reduction terms",
+    "Specify scope_id binding commitment step \u2014 agent must verify scope_id against a public RS registry before proving, or reformulate game to give adversary scope_id selection power",
+    "Specify nonce generation party (agent-generated with monotonic counter vs AS-supplied) and prove chosen-nonce adversary advantage remains negl(\u03bb)",
+    "Add compliance-disclosure sub-protocol (e.g., threshold credential reveal under signed examiner subpoena) to resolve BSA/AML incompatibility while preserving unlinkability for non-regulated queries",
+    "Add break-glass linkability path for incident response to satisfy NCUA Part 748 Appendix B and SOC 2 CC7.2",
+    "State circuit constraint count and proving time target (rapidsnark latency) within Phase 1 budget",
+    "Add explicit proof-caching prohibition or nonce-freshness verification that makes stale proofs fail, preventing SDK-level degradation of unlinkability",
+    "Address timing side channels: either require constant-time verification and benchmark it, or explicitly scope threat model to exclude network-observable side channels as documented residual risk",
+    "Add salt to PRF nullifier input to handle small OAuth scope space (rfc7662_advocate Attack 4)"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

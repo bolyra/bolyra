@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction removes the AS from the authorization hot path entirely \u2014 post-enrollment, the agent self-proves to each RS via PLONK against on-chain roots with no token issuance step. \u00a78 explicitly names this structural impossibility: OAuth/OIDC places the AS on the critical path of every authorization, and no composition of RFCs (7662, 8693, 8707, 9449) can replicate AS-invisibility because every mitigation (PPID, DPoP, BBS+) operates below the AS. The rfc7662_advocate's Attack 4 concedes the categorical difference is real, only objecting that \u00a78 overstates baseline weakness on traffic-frequency vs topology. The capability \u2014 AS never learns which RSes the agent contacts \u2014 is provably absent from the baseline."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides a threat model (\u00a73.1: adversarial AS, colluding RS coalition, network observer), names four cryptographic assumptions (Poseidon PRF, Poseidon CR, PLONK knowledge soundness, Baby Jubjub DL), defines the IND-UNL-AS game (\u00a73.2), and sketches a reduction (\u00a74.2). However, the cryptographer's Attack 1 shows the reduction has a simulator gap: B cannot produce challenge proofs without the PLONK SRS trapdoor, making the concrete bound unproven. Attack 3 shows the IND-UNL-AS game captures single-proof scope indistinguishability, not the cross-session linkability that is the actual claimed property against colluding RSes \u2014 the game is inconsistent with the \u00a73.1 threat model. The collusion resistance argument in \u00a74.3 is prose, not a formal game with reduction. Threat model is stated and assumptions are named, but the reduction is incomplete and the game is misaligned with the stated threat."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "Every construction element maps to existing Bolyra primitives: Poseidon2/Poseidon5 hashes, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), PLONK with pot16.ptau universal setup. \u00a76 provides a detailed constraint breakdown totaling ~17,724 constraints, well within the 2^16 (65,536) pot16.ptau budget. Proving time targets are stated: <3s PLONK on commodity hardware, <2s Groth16 with rapidsnark. The ScopedDelegation extension adds ~1,200 constraints (total ~19,200), still within budget. No new primitives are introduced \u2014 scopeBlindingSecret is a standard field element managed identically to the human secret scalar, and the nullifier derivation reuses the existing Poseidon2(scope, secret) pattern from HumanUniqueness."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer. The most devastating: (1) scopeCommitment is a public output identical across all scopes for the same agent \u2014 colluding RSes trivially link proofs by comparing this value, directly contradicting \u00a74.3's claim that RSes don't see it. Found independently by cryptographer (Attack 2), cu_ciso (Attack 3), spiffe_engineer (Attack 3), and rfc7662_advocate (Attack 1). The construction's own \u00a72.2 and \u00a74.3 are internally inconsistent. (2) The suggested scopeBlindingSecret derivation Poseidon2(operatorPrivKey, 'bolyra-scope-blind') means the AS-as-operator (NFCU in \u00a77) can precompute all nullifiers for every agent it enrolled, destroying the headline claim. Found by cryptographer (Attack 4), rfc7662_advocate (Attack 3), auth0_pm (Attack 3). (3) The IND-UNL-AS reduction has a simulator gap (cryptographer Attack 1). These are not mitigated \u2014 they break the core unlinkability claim as specified."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named with specific stakeholders: cross-CU member agent (NFCU, Amazon, Costco) and healthcare delegation (Kaiser, Quest, Cedars-Sinai). The CU scenario identifies a real regulatory tension \u2014 NFCU-as-AS learning the merchant graph. However, auth0_pm (Attack 1) and cu_ciso (Attack 1) demonstrate that the construction's core property (destroying AS visibility) directly conflicts with NCUA Part 748 Appendix A \u00a7III.C.4, GLBA Safeguards Rule \u00a7314.4(h), and FFIEC CAT Domain 3, which require the CU to maintain audit trails of agent authorizations. The construction offers no selective-disclosure audit mode or regulatory trapdoor. The lead deployment scenario's regulatory requirements contradict the construction's value proposition, making the scenario self-defeating as specified."
+    }
+  },
+  "gaps": [
+    "Remove scopeCommitment from ScopedAgentAuth public outputs \u2014 it is a stable cross-scope agent fingerprint that trivially breaks collusion resistance. Move it to a separate on-chain-only delegation verification circuit.",
+    "Rearchitect scopeBlindingSecret derivation: must use agent-local entropy unknown to the operator/AS, not Poseidon2(operatorPrivKey, salt). The current derivation makes every AS-as-issuer deployment trivially omniscient.",
+    "Fix the reduction simulator gap: either work in the simulation-extractable PLONK model with explicit trapdoor access, or restructure the reduction so B uses honest witnesses throughout and embeds the PRF challenge only in nullifier comparison.",
+    "Define a cross-session linkability game (not just single-proof scope indistinguishability) that captures the colluding-RS threat stated in \u00a73.1. The IND-UNL-AS game is misaligned with the actual threat model.",
+    "Add a regulatory selective-disclosure mechanism (e.g., regulator-keyed audit circuit or compliance HSM escrow) so the CU deployment scenario does not self-defeat against NCUA/GLBA/FFIEC audit trail requirements.",
+    "Bound minimum anonymity set size as a deployment parameter \u2014 agentMerkleRoot narrows the population to O(30) candidates in sparse trees, creating a practical linkability vector unaddressed in \u00a73.",
+    "Define a scopeBlindingSecret rotation protocol with bounded exposure window and forward secrecy properties.",
+    "Specify a scopeId namespace authority to prevent collision-based forced linkage between independent RSes."
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

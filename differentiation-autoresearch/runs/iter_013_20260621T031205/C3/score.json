@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C3",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "Construction explicitly names and closes the strongest baseline counter-arguments: BBS+ commit-and-prove with CL predicates can prove single-hop hidden bitmask subset, but cannot compose N cross-issuer proofs into a single self-contained artifact for a distrusting auditor. RFC 7662 + jwt-introspection-response requires per-issuer JWKS fetches and trusts each issuer's key infrastructure \u2014 circular for an examiner auditing the auditee. WIMSE/SPIFFE requires per-domain trust bundle exchange. The ChainAuditProof collapses an N-hop cross-org chain into one PLONK proof verified against a universal vkey and on-chain state not controlled by any participant. The rfc7662_advocate's Attack 1 (signed JWT introspection) was correctly identified as surviving \u2014 the construction's distrusting-auditor model explicitly excludes JWKS fetches as interactive queries. Section 8's table is thorough and honest about BBS+ capabilities."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is well-structured with four named games (DelegationAuditSoundness, DelegationAuditPrivacy, IntermediateAnonymity, CrossOrgDistrust). Named assumptions (A1-A4) and reduction sketches are present. However, the cryptographer's Attack 1 is devastating: finalAccumulator is a private input to ChainAuditProof with no public input anchoring it to on-chain chainAccumulators[sessionNonce]. The reduction sketch assumes the extracted witness corresponds to actual on-chain execution but this binding is absent from the circuit constraints. The spiffe_engineer's Attack 3 confirms this independently. Additionally, Attack 2 (low-entropy scope brute-force) breaks the IntermediateAnonymity game \u2014 newScopeCommitment is public, delegateeScope has ~30 valid values, and credCommitment leaks from enrollment transactions, making the privacy reduction's 'inverting Poseidon' argument formally false over a small domain. These are real gaps in the formal argument, not just presentation issues."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "All construction elements map to existing Bolyra primitives: Poseidon2/Poseidon3 over BN254, EdDSA on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit encoding, PLONK with pot16.ptau. Section 6 provides detailed constraint counts: DelegationHopAccumulator at ~28,700 constraints and ChainAuditProof at ~13,100 constraints, both well within the 2^16 = 65,536 pot16.ptau budget. Proving time targets (<5s per hop, <3s for audit) are stated. No new primitives or ceremonies required. The new gadgets (ScopeSubsetAccumulator, accumulator hash, chain digest) use only Poseidon \u2014 already implemented in the codebase."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer as specified. (1) Cryptographer Attack 1: finalAccumulator is an unconstrained private input \u2014 the proof is decoupled from on-chain reality, breaking DelegationAuditSoundness with advantage 1. (2) Cryptographer Attack 2: low-entropy scope (\u226430 valid values) + leaked credCommitment from enrollment breaks IntermediateAnonymity perfectly. (3) Cryptographer Attack 3: no nullifier uniqueness check specified, enabling hop replay to inflate chain length. (4) cu_ciso Attack 1: the privacy feature directly conflicts with GLBA \u00a7314.4(f) vendor oversight requirements \u2014 the examiner is legally required to know which vendors processed member data, which the construction explicitly hides. These are not mitigated weaknesses; they are unanswered structural gaps. The construction cannot claim the attacks 'lie inside the stated threat model' because the threat model itself has the gaps (no enrollment authority adversary, no on-chain anchoring constraint, no regulatory compliance model)."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The NFCU multi-tool AI pipeline scenario is concrete and names a real stakeholder (Navy Federal, 13M members, NCUA examination). However, cu_ciso Attacks 1 and 2 expose that the scenario as constructed conflicts with the stakeholder's actual regulatory requirements: GLBA requires documented vendor inventory (the construction hides vendors), NCUA Part 748 requires reconstructible audit trails (the construction produces only a hash digest), and FFIEC requires key management architecture (unspecified). The scenario is load-bearing for the wrong stakeholder \u2014 it works for the whistleblower variant but the whistleblower variant has its own problems (chain length disclosure per rfc7662_advocate Attack 3). The NCUA scenario as written would generate compliance findings, not pass examination. Downgraded to 1 because the scenario is named and concrete but does not survive regulatory scrutiny from the stated stakeholder."
+    }
+  },
+  "gaps": [
+    "Add onChainFinalAccumulator as a public input to ChainAuditProof and constrain chainDigest === Poseidon2(onChainFinalAccumulator, sessionNonce) \u2014 currently finalAccumulator is unconstrained private input, breaking soundness",
+    "Blind newScopeCommitment with a per-hop random salt: newScopeCommitment = Poseidon3(scope, credCommitment, blindingNonce) \u2014 current low-entropy scope + leaked credCommitment from enrollment enables trivial brute-force inversion",
+    "Specify nullifier uniqueness enforcement in BolyraAuditRegistry.sol (mapping + require check) to prevent hop replay attacks that inflate chain length",
+    "Add dual-rail architecture: ZKP audit artifact for cross-org monotonicity proof + permissioned plaintext vendor log for GLBA \u00a7314.4(f) compliance \u2014 currently the privacy feature conflicts with the regulatory requirement it claims to serve",
+    "Make hopIndex a public output of DelegationHopAccumulator and enforce sequential ordering in the contract (monotonic counter per sessionNonce) to prevent liveness failures from misordered hop submissions",
+    "Address enrollment governance: specify who can insert leaves, what attestation is required, and how the anonymity set is bounded when the operator controls enrollment",
+    "Specify pot16.ptau ceremony provenance (participants, transcript hash) or commit to a documented multi-party ceremony to close the SRS trust assumption gap",
+    "Add chainLength padding or bucketing for the whistleblower scenario \u2014 exact length disclosure is deanonymizing when the agent population is small",
+    "Address sequential on-chain dependency latency: either allow off-chain accumulator state with deferred on-chain settlement, or specify batched hop submission to avoid 20s+ pipeline blocking in the NFCU scenario"
+  ],
+  "strength": 6,
+  "verdict": "drop"
+}

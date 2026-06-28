@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_underconstrained_merkle_depth",
+  "persona": "formal_verifier",
+  "title": "Prove merkleProofLength is bounded and non-zero across all circuits",
+  "dimension": "correctness",
+  "description": "BinaryMerkleRoot accepts merkleProofLength as a private input with no range check enforcing 1 <= depth <= MAX_DEPTH. A prover can supply depth=0 (making the leaf itself the root, bypassing tree membership) or depth > MAX_DEPTH (reading uninitialized sibling slots). Add Num2Bits + LessThan constraints bounding depth in HumanUniqueness, AgentPolicy, Delegation, and ModelInstanceBinding. Write a formal property file (Certora-style invariant spec) asserting that for any satisfying witness, 1 <= merkleProofLength <= MAX_DEPTH.",
+  "priority": "critical",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_underconstrained_merkle_depth",
+  "adoption": 16,
+  "standards": 17,
+  "completeness": 20,
+  "correctness": 21,
+  "total": 74,
+  "verdict": "consider"
+}

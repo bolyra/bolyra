@@ -1,0 +1,97 @@
+{
+  "id": "framework_integrator_langchain_credential_middleware",
+  "title": "LangChain credential middleware with automatic scope-gated tool access",
+  "artifacts": [
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/BolyraCallbackHandler.ts",
+      "description": "LangChain CallbackHandler that intercepts onToolStart events, validates cached AgentPolicy proof against required permission bitmask, and blocks execution if scope is insufficient"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/BolyraToolWrapper.ts",
+      "description": "BaseTool wrapper factory that decorates any LangChain tool with scope annotation and delegates enforcement to BolyraCallbackHandler"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/toolPermissionMap.ts",
+      "description": "Default tool-name to permission bitmask mapping (SQLDatabaseTool \u2192 READ_DATA, StripeChargeTool \u2192 FINANCIAL_SMALL, etc.) with merge support for user-supplied overrides"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/ProofSessionCache.ts",
+      "description": "In-memory LRU cache keyed by sessionNonce that stores proveHandshake() results and evicts on nonce expiry"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/src/index.ts",
+      "description": "Public barrel export: BolyraCallbackHandler, wrapTools(), loadToolPermissionConfig()"
+    },
+    {
+      "type": "spec",
+      "filename": "integrations/langchain/tool-permissions.schema.yaml",
+      "description": "JSON Schema (expressed in YAML) for the declarative tool\u2192bitmask config file; validated at middleware init"
+    },
+    {
+      "type": "spec",
+      "filename": "integrations/langchain/examples/tool-permissions.yaml",
+      "description": "Reference YAML config mapping common LangChain community tools to Bolyra permission bits"
+    },
+    {
+      "type": "sdk",
+      "filename": "integrations/langchain/python/bolyra_langchain/__init__.py",
+      "description": "Python port: BaseCallbackHandler subclass + wrap_tools() helper; proving delegates to @bolyra/sdk subprocess bridge"
+    },
+    {
+      "type": "test",
+      "filename": "integrations/langchain/test/callbackHandler.test.ts",
+      "description": "Unit tests: proof cache hit/miss, scope gate blocks under-privileged calls, YAML config loading, nonce expiry eviction"
+    },
+    {
+      "type": "test",
+      "filename": "integrations/langchain/test/integration.test.ts",
+      "description": "Integration test: full AgentExecutor run with mock LLM, real proveHandshake() (fast/mock proof), verifies blocked vs allowed tool paths"
+    },
+    {
+      "type": "test",
+      "filename": "integrations/langchain/python/tests/test_bolyra_langchain.py",
+      "description": "Python equivalent integration test using pytest and langchain-community stubs"
+    },
+    {
+      "type": "docs",
+      "filename": "integrations/langchain/README.md",
+      "description": "5-line quickstart wrapping an existing AgentExecutor, YAML config reference, permission bit table, nonce lifetime notes"
+    },
+    {
+      "type": "docs",
+      "filename": "integrations/langchain/PUBLISHING.md",
+      "description": "npm publish (@bolyra/langchain) and PyPI publish (bolyra-langchain) runbook, peer dependency matrix, versioning policy"
+    }
+  ],
+  "steps": [
+    "Define tool-permissions.schema.yaml with ajv-compatible JSON Schema; list all 8 permission bit names as enum values",
+    "Implement toolPermissionMap.ts with hardcoded defaults for top-10 LangChain community tools and a mergePermissionConfig() that deep-merges user YAML",
+    "Implement ProofSessionCache.ts: Map<sessionNonce, {proof, expiresAt}>; add get/set/evict; wire eviction to AgentPolicy expiry field",
+    "Implement BolyraCallbackHandler.ts: onToolStart() resolves tool name \u2192 required bitmask via config, checks cache for valid proof, calls proveHandshake() on miss, throws BolyraInsufficientScopeError if proof bitmask & required !== required",
+    "Implement BolyraToolWrapper.ts: wrapTools(tools[], config) annotates each tool with requiredPermission metadata and returns tools unchanged (handler does enforcement \u2014 no monkey-patching call())",
+    "Wire index.ts barrel; add package.json for @bolyra/langchain with peerDeps on @bolyra/sdk ^0.2.0 and @langchain/core ^0.2.0",
+    "Write unit tests for cache logic, scope gate arithmetic, and YAML loading; mock proveHandshake()",
+    "Write integration test: construct AgentExecutor with BolyraCallbackHandler, run agent with mock LLM that forces a FINANCIAL_SMALL tool call, assert blocked when credential has only READ_DATA",
+    "Port to Python: implement bolyra_langchain/handler.py as BaseCallbackHandler, delegate proof to subprocess bridge (same pattern as sdk-python), publish bolyra-langchain to PyPI",
+    "Write Python pytest integration test mirroring the TS integration test",
+    "Draft README.md with 5-line quickstart, full YAML config reference, and security notes on nonce lifetime",
+    "Add @bolyra/langchain to root package.json workspaces; update landing page ecosystem section"
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@bolyra/sdk ^0.2.0",
+    "@langchain/core ^0.2.0",
+    "langchain ^0.2.0",
+    "ajv ^8",
+    "js-yaml ^4",
+    "bolyra (Python SDK) >= 0.2.0",
+    "langchain (Python) >= 0.2.0",
+    "pyyaml",
+    "jsonschema (Python)"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "id": "formal_verifier_underconstrained_merkle_depth",
+  "title": "Prove merkleProofLength is bounded and non-zero across all circuits",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/lib/MerkleDepthCheck.circom",
+      "description": "Reusable template RangeCheckDepth(MAX_DEPTH) that uses Num2Bits and LessThan to enforce 1 <= merkleProofLength <= MAX_DEPTH. Emits a single constrained output `valid` that callers assert === 1."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Import and instantiate RangeCheckDepth, wiring merkleProofLength through the constraint before passing it to BinaryMerkleRoot."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Same RangeCheckDepth instantiation for the agent policy Merkle membership check."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Same RangeCheckDepth instantiation for the delegation tree membership check."
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/ModelInstanceBinding.circom",
+      "description": "Same RangeCheckDepth instantiation for the model instance binding Merkle check."
+    },
+    {
+      "type": "spec",
+      "filename": "circuits/formal/MerkleDepthBounded.spec",
+      "description": "Certora-style invariant spec (CVL pseudocode). Declares: forall satisfying witness W, 1 <= W.merkleProofLength <= MAX_DEPTH. Also asserts that depth=0 produces no satisfying witness (null set for that public root value)."
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/merkleDepthBound.test.js",
+      "description": "Mocha fast tests: (1) depth=0 \u2192 witness generation fails, (2) depth=MAX_DEPTH+1 \u2192 fails, (3) depth=1 and depth=MAX_DEPTH \u2192 succeed. One slow test (FULL_PROOF=1) verifies groth16 proof rejects depth=0 input at verify step."
+    },
+    {
+      "type": "docs",
+      "filename": "circuits/FORMAL-PROPERTIES.md",
+      "description": "Add section 'Merkle Depth Boundedness' documenting the property, the constraint count added per circuit, and the formal spec file location."
+    }
+  ],
+  "steps": [
+    "Read existing BinaryMerkleRoot usage in HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom, and ModelInstanceBinding.circom to confirm the exact signal name and template parameter for depth.",
+    "Determine MAX_DEPTH per circuit (likely 20 for HumanUniqueness per Semaphore v4; confirm AgentPolicy/Delegation/ModelInstanceBinding values).",
+    "Author circuits/src/lib/MerkleDepthCheck.circom: template RangeCheckDepth(MAX_DEPTH). Use Num2Bits(log2ceil(MAX_DEPTH)+1) to range-check merkleProofLength fits in the bit width, then LessThan to assert merkleProofLength >= 1 and merkleProofLength <= MAX_DEPTH. Assert the two comparator outputs are 1.",
+    "In HumanUniqueness.circom, import MerkleDepthCheck and instantiate RangeCheckDepth(20) with the merkleProofLength signal wired in, placed before the BinaryMerkleRoot call.",
+    "Apply the same change to AgentPolicy.circom with its MAX_DEPTH.",
+    "Apply the same change to Delegation.circom with its MAX_DEPTH.",
+    "Apply the same change to ModelInstanceBinding.circom with its MAX_DEPTH.",
+    "Write circuits/test/merkleDepthBound.test.js with fast witness-only negative cases (depth=0, depth=MAX_DEPTH+1) and positive boundary cases (depth=1, depth=MAX_DEPTH), plus one full-proof slow test gated on FULL_PROOF=1.",
+    "Run npm run test:circuits:fast to confirm all new and existing tests pass.",
+    "Run npm run compile:circuits to verify the modified circuits compile clean and record the new R1CS constraint delta per circuit.",
+    "Write circuits/formal/MerkleDepthBounded.spec in Certora CVL pseudocode: declare the ghost variable merkleProofLength, invariant 1 <= merkleProofLength <= MAX_DEPTH, and a rule that a witness with merkleProofLength=0 has no satisfying assignment.",
+    "Update circuits/FORMAL-PROPERTIES.md with the new 'Merkle Depth Boundedness' section, referencing the spec file and noting the constraint count added (approximately 2*log2(MAX_DEPTH)+4 constraints per circuit instantiation).",
+    "Run npm run test:circuits:slow (or CI label trigger) for full groth16 proof regression across all four affected circuits.",
+    "Commit with DCO sign-off: git commit -s -m 'fix(circuits): bound merkleProofLength 1..MAX_DEPTH in all circuits'"
+  ],
+  "estimated_constraints": 120,
+  "dependencies": [
+    "circomlib LessThan template (already imported in existing circuits)",
+    "circomlib Num2Bits template (already imported in existing circuits)",
+    "pot16.ptau \u2014 no new ceremony needed if constraint count stays under 2^16",
+    "Existing BinaryMerkleRoot template \u2014 read-only dependency, no changes required"
+  ]
+}

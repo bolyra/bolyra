@@ -1,0 +1,16 @@
+{
+  "id": "formal_verifier_field_overflow_public_signal_binding",
+  "persona": "formal_verifier",
+  "title": "Prove no field-overflow on public signal round-trip to Solidity",
+  "dimension": "standards",
+  "description": "The circuits use Num2Bits(64) for permissionBitmask, expiryTimestamp, and currentTimestamp, but sessionNonce, scope, modelHash, and requiredScopeMask have NO range checks \u2014 they are full field elements (< BN254 r \u2248 2^254). The Solidity verifier passes these as uint256, so values near r could alias modularly. Add Num2Bits(253) constraints on all unranged public inputs to guarantee they are canonical field elements, and document in FORMAL-PROPERTIES.md which signals are range-checked and to what width. This closes the class of 'modular aliasing' attacks where a malicious prover submits p + x instead of x.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "formal_verifier_field_overflow_public_signal_binding",
+  "adoption": 14,
+  "standards": 20,
+  "completeness": 17,
+  "correctness": 19,
+  "total": 70,
+  "verdict": "consider"
+}

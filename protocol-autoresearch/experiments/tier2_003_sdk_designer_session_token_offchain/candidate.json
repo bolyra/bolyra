@@ -1,0 +1,16 @@
+{
+  "id": "sdk_designer_session_token_offchain",
+  "persona": "sdk_designer",
+  "title": "SD-JWT session token for off-chain proof reuse",
+  "dimension": "adoption",
+  "description": "After a successful handshake, emit an SD-JWT (Selective Disclosure JWT) session token that encodes the verified nullifiers, scope commitment, and expiry. Subsequent API calls within the session present the compact JWT instead of re-running the full ZKP verification. This bridges the gap between ZKP correctness and practical latency requirements: the initial handshake takes ~2s with rapidsnark, but follow-up calls verify in <1ms. The Python SDK already depends on PyJWT; add sd-jwt support to both SDKs with a verifySessionToken() helper.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "sdk_designer_session_token_offchain",
+  "adoption": 21,
+  "standards": 17,
+  "completeness": 20,
+  "correctness": 16,
+  "total": 74,
+  "verdict": "consider"
+}

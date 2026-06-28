@@ -1,0 +1,37 @@
+{
+  "candidate_id": "C1",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims five axes of baseline dominance, but Tier 3 attacks materially weaken several. The rfc7662_advocate (Attack 3) shows RFC 8693 bulk pre-issuance + offline JWT achieves zero AS roundtrips at request time, neutralizing Axis 1 as stated. The rfc7662_advocate (Attack 4) demonstrates BBS+ with 64 per-bit attributes can express the bitwise predicate with runtime-adaptive verifier-chosen disclosure sets, refuting Axis 2's claim that 'bitwise AND has no BBS+ extension.' The spiffe_engineer (Attack 4) shows SPIFFE + ZK attestor plugin achieves AS-blindness without a new protocol. The genuine residual differentiator is circuit-enforced cumulative implication closure over a private bitmask \u2014 real but narrower than claimed. The construction is preferable to baseline but the baseline can approximate most claimed properties with extra configuration, fitting the 1-point definition."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides an explicit threat model with three named games (SCOPE-FORGE, SCOPE-HIDE, AS-BLIND), four named cryptographic assumptions (A1-A4), and reduction sketches. This is substantive. However, Tier 3 attacks expose critical gaps: (1) The cryptographer (Attack 1) and every other persona identify that scopeCommitment is a permanent cross-session fingerprint, breaking the multi-RS privacy claim \u2014 SCOPE-HIDE is single-shot and does not capture session unlinkability. (2) The cryptographer (Attack 2) shows SCOPE-HIDE is brute-force broken because the effective permission space is ~256 values and the adversary knows all other Poseidon5 inputs, recovering the full bitmask in sub-millisecond. (3) The cryptographer (Attack 4) shows the Groth16 trusted setup assumption is missing \u2014 an adversarial AS that participated in the pot16.ptau ceremony can forge proofs, making 'adversarial-AS resilience' circular. (4) The spiffe_engineer (Attack 1) shows adaptive chosen-mask bit recovery across 64 sessions fully recovers the bitmask via accept/reject side-channel. The threat model is stated but assumptions are incomplete and multiple reductions fail under realistic multi-session adversaries."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "The construction maps directly to the existing AgentPolicy circuit already implemented in circuits/src/AgentPolicy.circom. Every gadget (Num2Bits, Poseidon5, EdDSAPoseidonVerifier, BinaryMerkleRoot, LessThan) is a current Bolyra primitive. Circuit cost is estimated at ~15,500 constraints, well within the pot16.ptau ceiling of 65,536. Proving time targets are stated (Groth16 rapidsnark <0.5s, snarkjs <5s, PLONK <5s). Proof size is 192 bytes (Groth16) or 768 bytes (PLONK). On-chain verification cost is ~220K gas via EIP-196/197 precompiles. No new primitives are required. This fits Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 found multiple attacks the construction cannot answer without fundamental changes: (1) scopeCommitment cross-session fingerprint \u2014 identified by all five personas \u2014 directly contradicts the \u00a77 multi-RS privacy claim and fixing it breaks the delegation chain seed property. (2) Brute-force bitmask recovery via small permission space (cryptographer Attack 2) \u2014 256 Poseidon evaluations recover the full bitmask, breaking SCOPE-HIDE entirely. (3) Adaptive chosen-mask bit recovery (spiffe_engineer Attack 1) \u2014 64 sequential probes fully recover the bitmask via accept/reject side-channel, and the single-shot SCOPE-HIDE game does not capture this. (4) Trusted setup circularity (cryptographer Attack 4) \u2014 adversarial-AS resilience claim fails when AS participated in the ceremony. (5) Revocation latency (auth0_pm Attack 2) \u2014 30-root buffer with unspecified flush cadence is structurally incompatible with the credit union regulatory scenario. These are not mitigated attacks \u2014 they are unanswered breaks in the core claims."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "The construction names a concrete deployment (Navy Federal CU, 13M members, three resource servers with specific permission requirements) and cites NCUA examination guidelines. However, Tier 3 attacks expose the scenario as hypothetical rather than load-bearing: the cu_ciso (Attack 1) shows ZK opacity contradicts GLBA Safeguards Rule and FFIEC CAT audit trail requirements \u2014 the RS cannot log what it cannot see. The auth0_pm (Attack 4) shows no SOC 2, no cyber insurance, no SLA \u2014 vendor risk committee rejects on day one. The cu_ciso (Attack 4) shows the 30-root buffer creates a 60-second availability cliff incompatible with core processor SLAs. The scenario is named with a real stakeholder but the regulatory and operational requirements of that stakeholder contradict the construction's properties, making it hypothetical rather than load-bearing."
+    }
+  },
+  "gaps": [
+    "scopeCommitment must be randomized per session (e.g., Poseidon3(permissionBitmask, credentialCommitment, sessionNonce)) to eliminate the cross-RS fingerprint \u2014 and the delegation chain seed mechanism must be redesigned to not depend on a stable scopeCommitment",
+    "SCOPE-HIDE game must be upgraded to an adaptive multi-query game; the construction needs a blinding salt in scopeCommitment to prevent brute-force recovery over the small (~256) valid bitmask space",
+    "Adaptive chosen-mask bit recovery via accept/reject side-channel must be addressed \u2014 either the agent must be able to produce a proof for any mask (padding unset bits with noise) or the protocol must rate-limit or bind masks to prevent sequential probing",
+    "Trusted setup must be explicitly modeled: either add 'honest trusted setup' as assumption A5 and acknowledge the limitation, or mandate PLONK with security arguments under PLONK-specific assumptions, or require a publicly verifiable MPC ceremony for pot16.ptau",
+    "Revocation mechanism must specify root update cadence and an emergency invalidation path (e.g., on-chain revocation bitmap) with wall-clock time guarantees compatible with regulatory requirements",
+    "Audit trail reconciliation: define how nullifierHash + agentMerkleRoot map to a human-readable FFIEC-CAT-compliant audit log, or explicitly scope the construction to non-regulated deployments",
+    "Operator key custody model must be specified (HSM class, rotation cadence, compromise recovery) since the operator EdDSA key is the enrollment trust anchor replacing the AS",
+    "Baseline dominance claim must be narrowed: drop 'zero AS roundtrips' as a differentiator (RFC 8693 pre-issuance matches it), drop 'bitwise predicates are inexpressible in BBS+' (per-bit attribute model works), and foreground the genuine novel property: circuit-enforced cumulative implication closure over a private bitmask"
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

@@ -1,0 +1,39 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims AS-adversary unlinkability that RFC 7662+DPoP+PPIDs cannot achieve, and the rfc7662_advocate's Attack 4 concedes that DCR+Attestation fails under an adversarial AS. However, the rfc7662_advocate's Attack 2 and the spiffe_engineer's Attack 1 both note there is no formal separation theorem against the OAuth/WIMSE baseline \u2014 no game-based proof that DPoP+PPID+RFC8707 cannot achieve the same property. The construction asserts dominance but does not formally rule out the baseline. The auth0_pm's Attack 4 survives ('Yes \u2014 construction survives') but only conditionally: \u00a71 must include a concrete distinguishing attack on DCR+Attestation, which is absent. Score 1: preferable but baseline can approximate."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction has a well-defined IND-UNL-AS game (Definition 3.1), explicit Theorem 4.1 with bound 2\u00b7\u03b5_PRF(\u03bb, q+2), and a named assumption (Poseidon2 PRF security). However, the cryptographer's Attack 2 identifies that Groth16 is not simulation-extractable under standard assumptions (Fuchsbauer-Orr\u00f9-Zaverucha, CRYPTO 2018), and the PRF reduction silently assumes SE holds \u2014 this is a gap in the reduction sketch. Attack 4 notes Poseidon2 has no published PRF security proof in the standard model, making the bound 2\u00b7\u03b5_PRF vacuous without specifying the security model. The threat model is stated but the reduction has identified holes (SE assumption unstated, PRF model unspecified). Score 1: threat model stated but assumption vague or reduction has gaps."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The Poseidon2-tree anchor maps directly to existing Bolyra primitives (Poseidon2 hash, AgentPolicy circuit with PLONK, BabyJubjub EdDSA, nullifier scheme). The hybrid argument simplification from 4 to 2 steps is circuit-friendly. However, the auth0_pm's Attack 1 identifies a critical cost gap: proof generation takes ~15 seconds (Groth16 on AgentPolicy), which is a 150\u00d7 latency regression versus JWT issuance. The construction does not address proof caching or session-token offloading, and any caching scheme that reuses proofs reintroduces linkability. No stated circuit cost budget or proving time target for the unlinkability-specific additions. Score 1: maps to Bolyra primitives but cost unknown or exceeds practical budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 codex adversary with 5 personas found multiple attacks the construction cannot answer. The cryptographer's Attack 2 (Groth16 non-simulation-extractability breaks the PRF reduction) is marked 'No \u2014 construction must address' and is a fundamental flaw in the formal argument. The cryptographer's Attack 3 (timing side-channel) and Attack 4 (Poseidon2 PRF model gap) are also unaddressed. The cu_ciso's Attack 1 (unlinkability breaks fraud investigation under NCUA Part 748) is unaddressed with no break-glass mechanism. The rfc7662_advocate's Attack 1 (constant cc as public linking handle) and the spiffe_engineer's Attack 4 (scope-request metadata leaks traffic graph before proof verification) both identify attacks outside the game model that the construction cannot answer. Multiple 'No \u2014 construction must address' verdicts across all personas with no mitigation. Score 0: Tier 3 found attacks the construction cannot answer."
+    },
+    "scenario_fit": {
+      "points": 1,
+      "justification": "Two concrete scenarios are named: cross-CU member agent where CU-as-AS must not see merchant graph, and healthcare agent delegation across providers. However, the cu_ciso's Attack 1 shows the CU scenario is actively harmful \u2014 unlinkability conflicts with NCUA Part 748.0(b) fraud investigation requirements, making the property load-bearing in the wrong direction (it breaks compliance rather than enabling it). The auth0_pm's Attack 3 notes the AS-adversary framing inverts the actual buyer relationship. No scenario survives as 'load-bearing with named stakeholder or regulatory requirement' \u2014 the named regulatory requirements (NCUA, GLBA) actually oppose the construction's core property. Score 1: scenarios named but undermined by regulatory conflict."
+    }
+  },
+  "gaps": [
+    "Add formal separation theorem: define a baseline OAuth game (DPoP+PPID+RFC8707) and prove the IND-UNL-AS adversary wins against it but not against the ZK construction",
+    "State and cite simulation-extractability assumption for Groth16 explicitly, or switch to an SE-SNARK (e.g., Groth16+DV compilation), to fix the PRF reduction gap",
+    "Specify the security model for Poseidon2 PRF (algebraic circuit model with citation, or switch to HMAC-SHA256 with standard-model proof)",
+    "Address cc as a public linking handle: either hide cc per-proof via commitment re-randomization, or derive per-scope cc_scope = PRF(sbs, scopeId || 'cc')",
+    "Address scope-request metadata leakage: extend IND-UNL-AS game to model pre-proof authorization requests, or require blind authorization request mechanism",
+    "Add proof latency mitigation (proof-once-cache-per-epoch with formal analysis showing cached credential preserves cross-scope unlinkability)",
+    "Define break-glass linkage path for authorized fraud investigators (e.g., threshold disclosure to HSM-held audit key) satisfying NCUA Part 748.0(b) without breaking IND-UNL-AS against unauthorized parties",
+    "Specify sbs custody mechanism (secure enclave, FIDO2, MPC) and key rotation/re-enrollment protocol with forward secrecy analysis",
+    "Bound anonymity set size as a function of actual permBitmask distribution entropy per tier at authorization time, not projected network enrollment",
+    "Add timing-correlation countermeasure (proof batch submission, jitter) and annotate Theorem 4.1 with timing-indistinguishability assumption"
+  ],
+  "strength": 4,
+  "verdict": "drop"
+}

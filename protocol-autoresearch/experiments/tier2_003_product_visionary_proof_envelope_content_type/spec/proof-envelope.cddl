@@ -1,0 +1,24 @@
+; Bolyra Proof Envelope — CDDL Schema
+; Media type: application/bolyra-proof+cbor
+; Spec: RFC 8949 (CBOR), RFC 6838 (media type registration)
+; Version: 1
+;
+; Field indices are append-only: new fields MUST use keys > 6.
+; Decoders MUST ignore unknown keys for forward compatibility.
+
+proof-envelope = {
+  version:        1,           ; uint — schema version, currently 1
+  circuit-id:     2,           ; tstr — e.g. "HumanUniqueness", "AgentPolicy", "Delegation"
+  proving-system: 3,           ; tstr — "groth16" / "plonk"
+  proof-bytes:    4,           ; bstr — serialized proof
+  public-signals: 5,           ; [+ tstr] — array of decimal string signals
+  ? delegation-chain: 6,      ; [* bstr] — optional chain of delegated credential blobs
+  * int => any                 ; future extension fields (must be > 6)
+}
+
+version        = uint .eq 1
+circuit-id     = tstr .size (1..128)
+proving-system = tstr .regexp "groth16|plonk"
+proof-bytes    = bstr .size (1..8192)
+public-signals = [+ tstr]
+delegation-chain = [* bstr]

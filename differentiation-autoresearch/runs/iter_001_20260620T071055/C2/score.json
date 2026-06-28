@@ -1,0 +1,38 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 1,
+      "justification": "The construction claims AS-level unlinkability post-enrollment, which is genuinely beyond what RFC 7662/SPIFFE can provide. However, the spiffe_engineer (Attack 4) correctly identifies that Section 8 item 1 ('AS removed from hot path') is false \u2014 SPIFFE/SPIRE Workload API already achieves this. The *actual* differentiation (AS cannot correlate post-enrollment scope accesses) is valid but misstated. More critically, the rfc7662_advocate (Attack 1) demonstrates that scopeId is a public on-chain input, so the merchant-graph privacy claim in Section 7 is false \u2014 the AS sees (scopeId, timestamp) on-chain, which is informationally equivalent to RFC 7662 introspection seeing (resource_id, timestamp). The construction provides agent unlinkability across scopes but NOT scope unlinkability, yet claims both. The baseline differentiation exists but is overstated and partially incorrect, yielding 1 not 2."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "The construction provides a well-structured IND-UNL-AS game, named assumptions (Poseidon PRF, Groth16 ZK, DLog on BabyJubjub), and a reduction sketch. However, multiple formal gaps survive: (1) The rfc7662_advocate Attack 4 identifies that operatorPrivateKey is not in the private inputs table and the circuit lacks a scalar multiplication constraint binding it to the public key \u2014 this is a soundness failure allowing arbitrary nullifier generation, breaking Sybil resistance. (2) The cryptographer Attack 1 shows the game doesn't model AS nonce issuance, and client-generated nonces are SHOULD not MUST. (3) The cryptographer Attack 2 notes the reduction invokes Groth16 ZK without specifying the model (CRS/AGM/ROM). (4) The cryptographer Attack 3 shows delegation chain linkability via public previousBlindedScopeCommitment values \u2014 the delegation privacy claim is false. (5) The game is single-shot, not multi-query adaptive. The threat model exists and assumptions are named, but the reduction has real gaps and at least one soundness issue (operatorPrivateKey unconstrained), so this is 1 not 2."
+    },
+    "implementability": {
+      "points": 1,
+      "justification": "The construction maps entirely to existing Bolyra primitives (Poseidon2/3, EdDSA, BinaryMerkleRoot, cumulative bits) with a stated constraint count of ~12,750 fitting under pot16.ptau. However, the cost estimate is wrong: the rfc7662_advocate Attack 4 identifies that the operatorPrivateKey scalar multiplication constraint (BabyJubjub, ~3,200 constraints) is missing from the budget. Real cost is ~15,950 constraints \u2014 still under pot16.ptau but a significant omission indicating the circuit spec is incomplete. The construction also doesn't specify the delegation circuit's full revised cost with the blinding changes. Maps to primitives but cost is understated and the circuit spec has a gap (missing private input and constraint), so 1 not 2."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Multiple Tier 3 attacks found issues the construction cannot answer: (1) operatorPrivateKey is unconstrained in the circuit \u2014 a soundness failure that breaks Sybil resistance entirely (rfc7662_advocate Attack 4). This is not mitigated. (2) scopeId as public input contradicts the merchant-graph privacy claim (rfc7662_advocate Attack 1, spiffe_engineer Attack 3). (3) Delegation chain is publicly traceable via previousBlindedScopeCommitment graph traversal, falsifying the delegation privacy claim (cryptographer Attack 3). (4) The IND-UNL-AS game is single-shot and non-adaptive, not covering the multi-session deployment scenarios described (cryptographer Attack 4, spiffe_engineer Attack 2). (5) Anonymity set collapse via AS-controlled root timing (auth0_pm Attack 4, rfc7662_advocate Attack 2). (6) No audit trail mechanism for NCUA compliance (cu_ciso Attack 1). The operatorPrivateKey soundness issue alone is a construction-breaking flaw \u2014 a malicious prover can generate unlimited distinct nullifiers per credential, defeating the entire Sybil resistance mechanism. Multiple attacks lie outside the stated threat model and the construction cannot answer them. This is 0."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Two concrete deployment scenarios are named with specific stakeholders and regulatory requirements: (1) Pacific Northwest CU Association with 5 member CUs where NCUA member privacy and CFPB Reg V create a regulatory requirement for merchant-graph privacy \u2014 cross-scope unlinkability is load-bearing for compliance. (2) Intermountain Health (33 hospitals) where HIPAA prevents the identity provider from learning the referral network. Both scenarios name real regulatory frameworks (NCUA, CFPB, HIPAA) that make the property load-bearing rather than nice-to-have. The cu_ciso attacks challenge the *feasibility* of deployment (audit trail gaps, availability), but the scenarios themselves are concrete, named, and regulatory-grounded."
+    }
+  },
+  "gaps": [
+    "operatorPrivateKey must be added as a private input with a BabyJubjub scalar multiplication constraint (sk * G == pubkey) \u2014 without this the nullifier is unconstrained and any prover can forge arbitrary nullifiers, breaking Sybil resistance. Update cost estimate to ~15,950 constraints.",
+    "scopeId is a public on-chain input \u2014 revise merchant-graph privacy claims to accurately state agent unlinkability across scopes, not scope unlinkability. Either make scopeId private (with public commitment) or reframe Section 7 and Section 8 claims.",
+    "previousBlindedScopeCommitment is public in delegation proofs, making delegation chains fully traceable by graph traversal. Either re-blind at each hop so the link value is unlinkable, or drop the delegation privacy claim.",
+    "Upgrade IND-UNL-AS game to multi-session adaptive model with OProve oracle and prove security bounds compose across q queries. The single-shot game does not cover the sustained deployment scenarios described.",
+    "Address anonymity set collapse: AS controls Merkle root publication timing and can engineer singleton root windows. Add minimum anonymity set requirement (k-anonymity on root membership) with mandatory hold period before root publication.",
+    "Reframe Section 8 item 1: the actual differentiation from SPIFFE is AS-level unlinkability post-enrollment, not AS removal from the hot path (SPIRE Workload API already achieves the latter).",
+    "Add selective audit disclosure mechanism for NCUA Part 748 compliance \u2014 e.g., escrow of operatorPrivateKey with regulated custodian or ZK audit proof that reveals identity only under lawful process.",
+    "Specify nonce generation as MUST client-generated (not SHOULD) and add circuit-level commitment to client randomness component to prevent AS nonce-issuance deanonymization.",
+    "State the cryptographic model explicitly (CRS under \u03c3-DLOG, or AGM+ROM) in the reduction sketch and cite the precise Groth16 ZK theorem."
+  ],
+  "strength": 5,
+  "verdict": "drop"
+}

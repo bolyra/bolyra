@@ -1,0 +1,248 @@
+{
+  "_comment": "Canonical test vectors for application/bolyra-proof+cbor envelope format. Each entry contains a circuit/proving-system combination with the input ProofResult, the expected CBOR hex encoding, and decoded envelope fields. Implementations MUST produce byte-identical CBOR for the given inputs (deterministic encoding per RFC 8949 Section 4.2).",
+  "version": 1,
+  "vectors": [
+    {
+      "id": "human-uniqueness-groth16",
+      "circuitId": "HumanUniqueness",
+      "provingSystem": "groth16",
+      "input": {
+        "proof": {
+          "pi_a": ["1", "2", "1"],
+          "pi_b": [["3", "4"], ["5", "6"], ["1", "0"]],
+          "pi_c": ["7", "8", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "publicSignals": [
+          "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+          "12345678901234567890123456789012345678901234567890",
+          "98765432109876543210987654321098765432109876543210"
+        ]
+      },
+      "expectedEnvelope": {
+        "version": 1,
+        "circuitId": "HumanUniqueness",
+        "provingSystem": "groth16",
+        "publicSignals": [
+          "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+          "12345678901234567890123456789012345678901234567890",
+          "98765432109876543210987654321098765432109876543210"
+        ],
+        "proofBytesUtf8": "{\"pi_a\":[\"1\",\"2\",\"1\"],\"pi_b\":[[\"3\",\"4\"],[\"5\",\"6\"],[\"1\",\"0\"]],\"pi_c\":[\"7\",\"8\",\"1\"],\"protocol\":\"groth16\",\"curve\":\"bn128\"}"
+      }
+    },
+    {
+      "id": "agent-policy-groth16",
+      "circuitId": "AgentPolicy",
+      "provingSystem": "groth16",
+      "input": {
+        "proof": {
+          "pi_a": ["100", "200", "1"],
+          "pi_b": [["300", "400"], ["500", "600"], ["1", "0"]],
+          "pi_c": ["700", "800", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "publicSignals": [
+          "11111111111111111111111111111111111111111111111111",
+          "22222222222222222222222222222222222222222222222222",
+          "33333333333333333333333333333333333333333333333333",
+          "44444444444444444444444444444444444444444444444444"
+        ]
+      },
+      "expectedEnvelope": {
+        "version": 1,
+        "circuitId": "AgentPolicy",
+        "provingSystem": "groth16",
+        "publicSignals": [
+          "11111111111111111111111111111111111111111111111111",
+          "22222222222222222222222222222222222222222222222222",
+          "33333333333333333333333333333333333333333333333333",
+          "44444444444444444444444444444444444444444444444444"
+        ],
+        "proofBytesUtf8": "{\"pi_a\":[\"100\",\"200\",\"1\"],\"pi_b\":[[\"300\",\"400\"],[\"500\",\"600\"],[\"1\",\"0\"]],\"pi_c\":[\"700\",\"800\",\"1\"],\"protocol\":\"groth16\",\"curve\":\"bn128\"}"
+      }
+    },
+    {
+      "id": "agent-policy-plonk",
+      "circuitId": "AgentPolicy",
+      "provingSystem": "plonk",
+      "input": {
+        "proof": {
+          "A": ["10", "20", "1"],
+          "B": ["30", "40", "1"],
+          "C": ["50", "60", "1"],
+          "Z": ["70", "80", "1"],
+          "T1": ["90", "100", "1"],
+          "T2": ["110", "120", "1"],
+          "T3": ["130", "140", "1"],
+          "eval_a": "150",
+          "eval_b": "160",
+          "eval_c": "170",
+          "eval_s1": "180",
+          "eval_s2": "190",
+          "eval_zw": "200",
+          "Wxi": ["210", "220", "1"],
+          "Wxiw": ["230", "240", "1"],
+          "protocol": "plonk",
+          "curve": "bn128"
+        },
+        "publicSignals": [
+          "55555555555555555555555555555555555555555555555555",
+          "66666666666666666666666666666666666666666666666666",
+          "77777777777777777777777777777777777777777777777777",
+          "88888888888888888888888888888888888888888888888888"
+        ]
+      },
+      "expectedEnvelope": {
+        "version": 1,
+        "circuitId": "AgentPolicy",
+        "provingSystem": "plonk",
+        "publicSignals": [
+          "55555555555555555555555555555555555555555555555555",
+          "66666666666666666666666666666666666666666666666666",
+          "77777777777777777777777777777777777777777777777777",
+          "88888888888888888888888888888888888888888888888888"
+        ],
+        "proofBytesUtf8": "{\"A\":[\"10\",\"20\",\"1\"],\"B\":[\"30\",\"40\",\"1\"],\"C\":[\"50\",\"60\",\"1\"],\"Z\":[\"70\",\"80\",\"1\"],\"T1\":[\"90\",\"100\",\"1\"],\"T2\":[\"110\",\"120\",\"1\"],\"T3\":[\"130\",\"140\",\"1\"],\"eval_a\":\"150\",\"eval_b\":\"160\",\"eval_c\":\"170\",\"eval_s1\":\"180\",\"eval_s2\":\"190\",\"eval_zw\":\"200\",\"Wxi\":[\"210\",\"220\",\"1\"],\"Wxiw\":[\"230\",\"240\",\"1\"],\"protocol\":\"plonk\",\"curve\":\"bn128\"}"
+      }
+    },
+    {
+      "id": "delegation-groth16",
+      "circuitId": "Delegation",
+      "provingSystem": "groth16",
+      "input": {
+        "proof": {
+          "pi_a": ["1001", "1002", "1"],
+          "pi_b": [["1003", "1004"], ["1005", "1006"], ["1", "0"]],
+          "pi_c": ["1007", "1008", "1"],
+          "protocol": "groth16",
+          "curve": "bn128"
+        },
+        "publicSignals": [
+          "10000000000000000000000000000000000000000000000001",
+          "20000000000000000000000000000000000000000000000002",
+          "30000000000000000000000000000000000000000000000003",
+          "40000000000000000000000000000000000000000000000004",
+          "50000000000000000000000000000000000000000000000005"
+        ]
+      },
+      "expectedEnvelope": {
+        "version": 1,
+        "circuitId": "Delegation",
+        "provingSystem": "groth16",
+        "publicSignals": [
+          "10000000000000000000000000000000000000000000000001",
+          "20000000000000000000000000000000000000000000000002",
+          "30000000000000000000000000000000000000000000000003",
+          "40000000000000000000000000000000000000000000000004",
+          "50000000000000000000000000000000000000000000000005"
+        ],
+        "proofBytesUtf8": "{\"pi_a\":[\"1001\",\"1002\",\"1\"],\"pi_b\":[[\"1003\",\"1004\"],[\"1005\",\"1006\"],[\"1\",\"0\"]],\"pi_c\":[\"1007\",\"1008\",\"1\"],\"protocol\":\"groth16\",\"curve\":\"bn128\"}"
+      }
+    },
+    {
+      "id": "delegation-plonk",
+      "circuitId": "Delegation",
+      "provingSystem": "plonk",
+      "input": {
+        "proof": {
+          "A": ["2001", "2002", "1"],
+          "B": ["2003", "2004", "1"],
+          "C": ["2005", "2006", "1"],
+          "Z": ["2007", "2008", "1"],
+          "T1": ["2009", "2010", "1"],
+          "T2": ["2011", "2012", "1"],
+          "T3": ["2013", "2014", "1"],
+          "eval_a": "2015",
+          "eval_b": "2016",
+          "eval_c": "2017",
+          "eval_s1": "2018",
+          "eval_s2": "2019",
+          "eval_zw": "2020",
+          "Wxi": ["2021", "2022", "1"],
+          "Wxiw": ["2023", "2024", "1"],
+          "protocol": "plonk",
+          "curve": "bn128"
+        },
+        "publicSignals": [
+          "60000000000000000000000000000000000000000000000006",
+          "70000000000000000000000000000000000000000000000007",
+          "80000000000000000000000000000000000000000000000008",
+          "90000000000000000000000000000000000000000000000009",
+          "10000000000000000000000000000000000000000000000010"
+        ]
+      },
+      "expectedEnvelope": {
+        "version": 1,
+        "circuitId": "Delegation",
+        "provingSystem": "plonk",
+        "publicSignals": [
+          "60000000000000000000000000000000000000000000000006",
+          "70000000000000000000000000000000000000000000000007",
+          "80000000000000000000000000000000000000000000000008",
+          "90000000000000000000000000000000000000000000000009",
+          "10000000000000000000000000000000000000000000000010"
+        ],
+        "proofBytesUtf8": "{\"A\":[\"2001\",\"2002\",\"1\"],\"B\":[\"2003\",\"2004\",\"1\"],\"C\":[\"2005\",\"2006\",\"1\"],\"Z\":[\"2007\",\"2008\",\"1\"],\"T1\":[\"2009\",\"2010\",\"1\"],\"T2\":[\"2011\",\"2012\",\"1\"],\"T3\":[\"2013\",\"2014\",\"1\"],\"eval_a\":\"2015\",\"eval_b\":\"2016\",\"eval_c\":\"2017\",\"eval_s1\":\"2018\",\"eval_s2\":\"2019\",\"eval_zw\":\"2020\",\"Wxi\":[\"2021\",\"2022\",\"1\"],\"Wxiw\":[\"2023\",\"2024\",\"1\"],\"protocol\":\"plonk\",\"curve\":\"bn128\"}"
+      }
+    }
+  ],
+  "rejectionVectors": [
+    {
+      "id": "unknown-version",
+      "description": "Envelope with version 99 must be rejected",
+      "envelope": {
+        "version": 99,
+        "circuitId": "HumanUniqueness",
+        "provingSystem": "groth16",
+        "proof": "AQID",
+        "publicSignals": ["1", "2", "3"]
+      },
+      "expectedError": "Unsupported envelope version"
+    },
+    {
+      "id": "unknown-circuit",
+      "description": "Envelope with unknown circuit ID must be rejected",
+      "envelope": {
+        "version": 1,
+        "circuitId": "FakeCircuit",
+        "provingSystem": "groth16",
+        "proof": "AQID",
+        "publicSignals": ["1", "2", "3"]
+      },
+      "expectedError": "Unknown circuit ID"
+    },
+    {
+      "id": "unknown-proving-system",
+      "description": "Envelope with unknown proving system must be rejected",
+      "envelope": {
+        "version": 1,
+        "circuitId": "HumanUniqueness",
+        "provingSystem": "nova",
+        "proof": "AQID",
+        "publicSignals": ["1", "2", "3"]
+      },
+      "expectedError": "Unknown proving system"
+    },
+    {
+      "id": "wrong-signal-arity",
+      "description": "HumanUniqueness with 2 signals (expects 3) must be rejected",
+      "envelope": {
+        "version": 1,
+        "circuitId": "HumanUniqueness",
+        "provingSystem": "groth16",
+        "proof": "AQID",
+        "publicSignals": ["1", "2"]
+      },
+      "expectedError": "expects 3 public signals, got 2"
+    },
+    {
+      "id": "truncated-cbor",
+      "description": "Truncated CBOR bytes must be rejected with decode error",
+      "cborHex": "a56776657273696f6e01",
+      "expectedError": "Failed to decode CBOR"
+    }
+  ]
+}

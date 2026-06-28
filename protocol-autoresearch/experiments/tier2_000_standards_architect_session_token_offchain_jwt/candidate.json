@@ -1,0 +1,16 @@
+{
+  "id": "standards_architect_session_token_offchain_jwt",
+  "persona": "standards_architect",
+  "title": "JWT-encoded off-chain session token for verified handshakes",
+  "dimension": "standards",
+  "description": "Define a compact JWT profile (RFC 7519) for encoding verified handshake results off-chain. After on-chain verifyHandshake succeeds, the relayer mints a JWT with claims: `iss` (registry address), `sub` (nullifierHash), `scope` (scopeCommitment), `nonce` (sessionNonce), `exp` (TTL). This lets API gateways enforce Bolyra auth without RPC calls. Spec the claim namespace, signing algorithm (ES256 over the relayer key), and a JOSE header `x5c`-style chain linking back to the on-chain registry. Deliverable: spec section in draft-bolyra-mutual-zkp-auth, plus SDK helper `encodeSessionToken()` / `verifySessionToken()`.",
+  "priority": "high",
+  "estimated_effort": "days",
+  "candidate_id": "standards_architect_session_token_offchain_jwt",
+  "adoption": 20,
+  "standards": 20,
+  "completeness": 18,
+  "correctness": 13,
+  "total": 71,
+  "verdict": "consider"
+}

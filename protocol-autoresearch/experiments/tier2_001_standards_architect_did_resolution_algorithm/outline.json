@@ -1,0 +1,64 @@
+{
+  "id": "standards_architect_did_resolution_algorithm",
+  "title": "Complete DID method resolution algorithm with deactivation semantics",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/did-method-bolyra.md",
+      "description": "Add normative Section 4 (Resolution Algorithm): input validation, IdentityRegistry query steps, DID Document construction rules, deactivation semantics per W3C DID Core \u00a78.2, verificationMethod population from operator EdDSA key, and delegateGrant representation for delegation chains."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/resolver.ts",
+      "description": "Reference resolver implementing the normative algorithm. Exports resolveBolyra(did, options) returning W3C-conformant DIDResolutionResult with didDocument, didDocumentMetadata, and didResolutionMetadata."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types/did.ts",
+      "description": "TypeScript types for DIDDocument, VerificationMethod (EdDSA 2022 / JsonWebKey2020), ServiceEndpoint, DelegateGrant, DIDResolutionResult, and DIDDocumentMetadata (including deactivated flag)."
+    },
+    {
+      "type": "contract",
+      "filename": "contracts/src/IdentityRegistry.sol",
+      "description": "Add view functions required by the resolver: getIdentityStatus(commitment) returning (active|revoked|unknown), getAgentCredential(commitment) returning operator pubkey + permissions + expiry, getDelegationChain(commitment) returning array of DelegateGrant structs."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/resolver.test.ts",
+      "description": "Mocha/chai tests covering: active human identity resolution, revoked identity produces deactivated DID Document, agent credential populates verificationMethod with EdDSA key, delegation chain appears as delegateGrant service entries, invalid DID syntax returns invalidDid error, unknown commitment returns notFound."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance/resolver-vectors.json",
+      "description": "Conformance test vectors: one vector per resolution case (active, deactivated, agent, delegated, not-found, invalid-did) with input DID and expected DIDResolutionResult shape."
+    },
+    {
+      "type": "docs",
+      "filename": "sdk/QUICKSTART.md",
+      "description": "Add resolver usage section: import resolveBolyra, show active vs deactivated output, note RPC endpoint configuration."
+    }
+  ],
+  "steps": [
+    "Read existing spec/did-method-bolyra.md to understand current DID syntax definition and any partial resolution notes.",
+    "Read contracts/src/IdentityRegistry.sol to audit existing view surface \u2014 identify which getter functions exist vs which need to be added.",
+    "Draft normative resolution algorithm text for spec/did-method-bolyra.md Section 4: (a) parse and validate DID syntax, (b) extract commitment from method-specific identifier, (c) call IdentityRegistry.getIdentityStatus(commitment), (d) if revoked \u2192 construct deactivated DID Document with didDocumentMetadata.deactivated=true per W3C DID Core \u00a78.2, (e) if active \u2192 build DID Document with id, controller, verificationMethod from operator EdDSA key (JsonWebKey2020 / Ed25519VerificationKey2020), authentication/assertionMethod references, (f) call getAgentCredential(commitment) to populate agent-specific verificationMethod entries, (g) call getDelegationChain(commitment) to populate service entries of type DelegateGrant.",
+    "Add IdentityRegistry.sol view functions: getIdentityStatus, getAgentCredential, getDelegationChain \u2014 ensure they are gas-bounded (no unbounded loops; cap delegation chain depth at protocol MAX_DELEGATION_DEPTH constant).",
+    "Define TypeScript types in sdk/src/types/did.ts: DIDDocument, VerificationMethod (with EdDSA curve type), DelegateGrant (grantee, scopeBitmap, expiry, proofHash), DIDResolutionResult, DIDDocumentMetadata.",
+    "Implement sdk/src/resolver.ts: resolveBolyra(did, options) \u2014 validate DID prefix 'did:bolyra:', extract commitment, call contract view functions via ethers provider (configurable RPC), construct conformant DIDResolutionResult, handle error cases (invalidDid, notFound, methodNotSupported) per W3C resolution metadata error vocabulary.",
+    "Write conformance test vectors in spec/conformance/resolver-vectors.json covering all six resolution cases.",
+    "Write sdk/test/resolver.test.ts using Hardhat in-process network (or mocked contract calls) to test all resolution cases against the vectors.",
+    "Update sdk/QUICKSTART.md with resolver usage examples.",
+    "Run npm run test:contracts and cd sdk && npm run typecheck && npm test to verify end-to-end.",
+    "Update spec/did-method-bolyra.md with a Conformance section referencing resolver-vectors.json and pointing to the SDK reference implementation."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "contracts/src/IdentityRegistry.sol \u2014 must expose getIdentityStatus, getAgentCredential, getDelegationChain view functions",
+    "W3C DID Core \u00a78.2 deactivation semantics \u2014 normative reference for deactivated DID Document shape",
+    "W3C DID Resolution spec \u2014 error vocabulary (invalidDid, notFound, methodNotSupported) for DIDResolutionMetadata",
+    "Ed25519VerificationKey2020 / JsonWebKey2020 \u2014 key representation type for operator EdDSA keys",
+    "ethers.js v6 \u2014 provider interface used by SDK resolver for on-chain queries",
+    "@bolyra/sdk peer dependency on hardhat network or configured RPC for tests",
+    "spec/did-method-bolyra.md existing DID syntax definition \u2014 must remain backward-compatible"
+  ]
+}

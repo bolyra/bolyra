@@ -1,0 +1,74 @@
+{
+  "id": "framework_integrator_proof_envelope_content_type",
+  "title": "Standardized proof envelope with application/bolyra+json content type",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-v1.md",
+      "description": "Canonical specification for application/bolyra+json: field definitions, required vs optional fields, versioning rules, content-type registration rationale, and interop requirements for LangChain/CrewAI/AutoGen."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/test-vectors/proof-envelope/",
+      "description": "10+ JSON test vectors covering all three circuits (AgentPolicy, Delegation, HumanUniqueness), both proving systems (groth16, plonk), valid and invalid envelopes, and edge cases (missing fields, wrong version, malformed publicSignals)."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "TypeScript implementation of ProofEnvelope type, validateProofEnvelope() with Zod schema, serializeEnvelope(), deserializeEnvelope(), and CONTENT_TYPE constant ('application/bolyra+json')."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.schema.json",
+      "description": "JSON Schema (draft-07) for the proof envelope, consumable by non-TS integrators and used for spec conformance runner."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/envelope.py",
+      "description": "Python dataclass + pydantic model for ProofEnvelope with validate_proof_envelope(), serialize_envelope(), deserialize_envelope(), and CONTENT_TYPE constant."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Mocha/Chai tests: round-trip serialization for all circuit types, validateProofEnvelope() acceptance and rejection against all spec/test-vectors, content-type header assertion."
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_envelope.py",
+      "description": "Pytest tests mirroring the TS suite: round-trip, validation against shared test vectors, pydantic model coercion checks."
+    },
+    {
+      "type": "spec",
+      "filename": "spec/conformance-runner.ts",
+      "description": "Extend existing conformance runner to load spec/test-vectors/proof-envelope/ and assert that both TS and Python SDKs accept/reject each vector per its expected outcome field."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope.md",
+      "description": "Developer-facing guide: envelope anatomy, how to wrap an existing proof, how LangChain/CrewAI/AutoGen integrations should attach content-type headers, and upgrade path from pre-envelope ad-hoc formats."
+    }
+  ],
+  "steps": [
+    "Draft spec/proof-envelope-v1.md: define envelope schema with required fields (version, circuit, proof, publicSignals) and optional metadata (provingSystem, timestamp, chainId, nonce), enumerate allowed circuit and provingSystem enum values, specify content-type string 'application/bolyra+json', and document versioning policy.",
+    "Write sdk/src/envelope.schema.json as the normative JSON Schema artifact derived from the spec; this becomes the single source of truth for validation in both SDKs.",
+    "Implement sdk/src/envelope.ts: import zod, define ProofEnvelope TypeScript type from JSON Schema, implement validateProofEnvelope() that throws typed errors on violations, add serializeEnvelope() / deserializeEnvelope() helpers, export CONTENT_TYPE constant.",
+    "Implement sdk-python/bolyra/envelope.py: define ProofEnvelope pydantic BaseModel with field validators matching the JSON Schema, implement validate_proof_envelope(), serialize_envelope(), deserialize_envelope(), export CONTENT_TYPE.",
+    "Author 10+ test vectors in spec/test-vectors/proof-envelope/: at minimum one valid vector per circuit+provingSystem combination (AgentPolicy/groth16, AgentPolicy/plonk, Delegation/groth16, Delegation/plonk, HumanUniqueness/groth16), plus invalid vectors for missing 'version', unknown 'circuit', malformed 'proof' object, non-array 'publicSignals', and future version string; each vector carries an 'expected' field ('valid' or error code).",
+    "Write sdk/test/envelope.test.ts: load all test vectors from spec/test-vectors/proof-envelope/, run validateProofEnvelope() on each and assert accept/reject matches expected; add round-trip tests for serializeEnvelope/deserializeEnvelope; assert CONTENT_TYPE equals 'application/bolyra+json'.",
+    "Write sdk-python/tests/test_envelope.py: same vector-driven pattern using pytest parametrize; share vector loading logic via a conftest fixture pointing at spec/test-vectors/.",
+    "Extend spec/conformance-runner.ts to discover and execute proof-envelope vector tests against both SDK implementations, reporting per-vector pass/fail for CI gating.",
+    "Update integrations/langchain/ middleware to wrap all tool outputs in a ProofEnvelope and set Content-Type header; update integrations/crewai/ and any AutoGen adapter similarly.",
+    "Update sdk/src/index.ts and sdk-python/bolyra/__init__.py to re-export validateProofEnvelope, serializeEnvelope, deserializeEnvelope, CONTENT_TYPE so integrators access them from the top-level package.",
+    "Write docs/proof-envelope.md covering envelope anatomy, usage examples for TS and Python, framework integration snippets, and migration notes for existing ad-hoc formats.",
+    "Run full test suite (npm test + pytest) and conformance runner; verify all vectors pass; commit with DCO sign-off."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "zod (already in sdk/package.json or add)",
+    "pydantic (already in sdk-python/pyproject.toml or add)",
+    "spec/test-vectors/ directory convention (establish if not present)",
+    "spec/conformance-runner.ts (extend existing or create skeleton first)",
+    "integrations/langchain/ middleware entry point",
+    "integrations/crewai/ adapter entry point"
+  ]
+}

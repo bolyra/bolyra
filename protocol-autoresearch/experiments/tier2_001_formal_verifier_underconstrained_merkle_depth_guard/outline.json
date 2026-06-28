@@ -1,0 +1,51 @@
+{
+  "id": "formal_verifier_underconstrained_merkle_depth_guard",
+  "title": "Add under-constrained Merkle depth range check",
+  "artifacts": [
+    {
+      "type": "circuit",
+      "filename": "circuits/src/HumanUniqueness.circom",
+      "description": "Add Num2Bits + LessThan range-check constraints ensuring 1 <= merkleProofLength <= MAX_DEPTH before passing to BinaryMerkleRoot"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/AgentPolicy.circom",
+      "description": "Same merkleProofLength range-check constraints as HumanUniqueness"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/Delegation.circom",
+      "description": "Same merkleProofLength range-check constraints as HumanUniqueness"
+    },
+    {
+      "type": "circuit",
+      "filename": "circuits/src/ModelInstanceBinding.circom",
+      "description": "Same merkleProofLength range-check constraints if this circuit uses BinaryMerkleRoot; add if present"
+    },
+    {
+      "type": "test",
+      "filename": "circuits/test/merkleDepthGuard.test.js",
+      "description": "Witness-generation tests asserting constraint failure for merkleProofLength=0 and merkleProofLength=MAX_DEPTH+1 across all affected circuits"
+    }
+  ],
+  "steps": [
+    "Audit all four circuits (HumanUniqueness, AgentPolicy, Delegation, ModelInstanceBinding) to confirm each passes merkleProofLength as a signal to BinaryMerkleRoot and identify the MAX_DEPTH constant in each",
+    "In each circuit, declare a Num2Bits(log2(MAX_DEPTH+1)) component fed by merkleProofLength to implicitly bound the signal bit-width and prevent overflow",
+    "Add a LessThan(log2(MAX_DEPTH+1)) component comparing merkleProofLength against MAX_DEPTH+1; constrain its output === 1 to enforce merkleProofLength <= MAX_DEPTH",
+    "Add a second LessThan(log2(MAX_DEPTH+1)) component comparing 0 against merkleProofLength; constrain its output === 1 to enforce merkleProofLength >= 1",
+    "Wire the range-check outputs as hard constraints (=== 1) before the BinaryMerkleRoot instantiation to ensure the prover cannot bypass them by witness manipulation",
+    "Recompile all modified circuits with `npm run compile:circuits` and confirm R1CS constraint counts increase by ~4-6 constraints per circuit",
+    "Write circuits/test/merkleDepthGuard.test.js with four test cases: (HumanUniqueness, merkleProofLength=0), (HumanUniqueness, merkleProofLength=MAX_DEPTH+1), plus analogous cases for at least one other circuit; each must assert that witness generation throws a constraint-failure error",
+    "Run `npm run test:circuits:fast` to confirm the new tests pass (constraint failures are detected during witness generation without needing full proof)",
+    "Update circuits/FORMAL-PROPERTIES.md to document the new invariant: 'merkleProofLength is range-checked to [1, MAX_DEPTH] via LessThan constraints prior to BinaryMerkleRoot instantiation'",
+    "Verify no existing fast or slow circuit tests regress; run `npm run test:circuits:slow` on CI or locally to confirm end-to-end proof generation still succeeds with valid inputs"
+  ],
+  "estimated_constraints": 24,
+  "dependencies": [
+    "circomlib LessThan component (already a project dependency via circomlib)",
+    "circomlib Num2Bits component (already a project dependency via circomlib)",
+    "BinaryMerkleRoot component interface must expose merkleProofLength as a distinct signal (confirm it is not internally derived)",
+    "circuits/build/ must be regenerated after circuit changes before running slow proof tests",
+    "pot16.ptau and existing .zkey artifacts \u2014 re-trusted-setup not required if only adding constraints to non-HumanUniqueness circuits; HumanUniqueness reuses Semaphore v4 ceremony so any structural change there must be validated against ceremony compatibility"
+  ]
+}

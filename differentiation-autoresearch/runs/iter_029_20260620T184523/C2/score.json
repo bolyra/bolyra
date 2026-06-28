@@ -1,0 +1,36 @@
+{
+  "candidate_id": "C2",
+  "dims": {
+    "baseline_dominance": {
+      "points": 2,
+      "justification": "The construction names a specific capability \u2014 unlinkability against an adversarial AS that is simultaneously the credential operator \u2014 and structurally rules it out of the baseline. OAuth requires AS on the issuance path; even blind BBS+ (rfc7662_advocate Attack 2) cannot enforce scope containment in-circuit without AS inspection. The rfc7662_advocate concedes the core AS-elimination claim survives. Cached JWT introspection (Attack 1) removes AS from latency path but not information path. The architectural departure (agent self-proves to RS, AS never contacted post-enrollment) is a category the baseline cannot replicate."
+    },
+    "formal_security_argument": {
+      "points": 1,
+      "justification": "Threat model is explicit (\u00a73.1: AS/operator adversarial, coalition of RSes, on-chain observer). Four named cryptographic assumptions (Poseidon PRF, Poseidon CR, PLONK KS, DL on Baby Jubjub). Reduction sketch (\u00a74.2) from IND-UNL-AS to Poseidon PRF. However, cryptographer Attack 1 is fatal to the game definition: scopeId is a public input of ScopedAgentAuth, so the adversary in \u00a73.2 step 3 reads scopeId from the challenge proof and wins with advantage 1, making the reduction vacuous. Additionally, cryptographer Attack 2 identifies that the reduction relies on PLONK ZK simulation without stating the SRS trapdoor assumption \u2014 B cannot simulate proofs without \u03c4, and the AS=operator may hold \u03c4. The formal argument exists but the game is broken as defined."
+    },
+    "implementability": {
+      "points": 2,
+      "justification": "\u00a75 maps every construction element to existing Bolyra primitives: Poseidon2/5, EdDSAPoseidonVerifier on Baby Jubjub, BinaryMerkleRoot(20), cumulative bit constraints. \u00a76 provides detailed constraint breakdowns: ScopedAgentAuth ~17,124 constraints, DelegationEntry ~16,328 constraints, ScopedDelegation extension ~19,200 constraints \u2014 all within pot16.ptau (2^16). Proving time targets stated: <3s PLONK, <2s Groth16 with rapidsnark. No new primitives introduced. Fits Phase 1 budget."
+    },
+    "adversarial_survival": {
+      "points": 0,
+      "justification": "Tier 3 surfaced multiple attacks the construction cannot answer: (1) Cryptographer Attack 1 \u2014 scopeId as public input trivially breaks the IND-UNL-AS game with advantage 1, unmitigated. (2) Trust boundary collapse (auth0_pm Attack 1, rfc7662_advocate Attack 3, spiffe_engineer Attack 1) \u2014 in the NFCU scenario, the CU is simultaneously operator AND infrastructure host, so scopeBlindingSecret is extractable by the exact adversary the game models; raised independently by 3 personas, no mitigation in the construction. (3) Cryptographer Attack 3 \u2014 scopeId\u2192requiredScopeMask binding is off-circuit, enabling scope forgery by a malicious agent. (4) cu_ciso Attack 1 \u2014 the construction destroys the CU's audit trail required by NCUA Part 748 and GLBA \u00a7314.4(h), making the primary deployment scenario regulatorily unviable. These are not weakened claims \u2014 they are unanswered."
+    },
+    "scenario_fit": {
+      "points": 2,
+      "justification": "Two concrete deployments named: (1) NFCU cross-CU member agent where the CU-as-AS must not learn the member's merchant graph \u2014 named stakeholder (NFCU), named regulatory driver (GLBA member privacy), specific authorization flow across Amazon and Costco. (2) Kaiser/Quest/Cedars-Sinai healthcare delegation where the issuer must not learn the referral network topology. Both scenarios are load-bearing: without cross-scope unlinkability, the member/patient's activity graph is exposed to the credential issuer, which is the primary threat in both domains."
+    }
+  },
+  "gaps": [
+    "Fix IND-UNL-AS game definition: scopeId is a public input so the adversary trivially wins \u2014 either move scopeId to a private input with a Poseidon commitment as public output, or redefine the game to model agent-unlinkability (can the adversary link two proofs at different RSes to the same agent?) rather than scope-distinguishability",
+    "Address trust boundary collapse for operator-hosted agents: specify that IND-UNL-AS holds only when the agent runs in a non-operator-controlled environment (member device, TEE, neutral cloud), or integrate TEE attestation for scopeBlindingSecret generation, or add a SPIFFE-style workload attestation path",
+    "Add SRS trapdoor assumption to \u00a74.1: state that the adversary does not know \u03c4 from the Powers of Tau ceremony (or that at least one ceremony participant was honest), and make the PLONK simulation step in \u00a74.2 explicit about requiring \u03c4",
+    "Bind scopeId to requiredScopeMask either on-chain (registry stores canonical (scopeId, requiredScopeMask) pairs verified in-circuit) or as an explicit RS-side verification obligation in the protocol spec",
+    "Add CU compliance mode: define a member-held lawful-access key for dispute resolution and regulatory audit without giving the CU unilateral traffic graph reconstruction \u2014 address NCUA Part 748 audit trail requirement",
+    "Specify scopeBlindingSecret secure storage profile (FIPS 140-3 Level 2+, WebAuthn PRF extension, or platform secure enclave with attestation) and define a member-recoverable key rotation ceremony",
+    "Address DelegationEntry on-chain timing side channel: add epoch-bucketing or random delay for DelegationEntry submissions, and extend \u00a73.5 side-channel table to cover delegation event frequency and timestamp correlation"
+  ],
+  "strength": 7,
+  "verdict": "consider"
+}

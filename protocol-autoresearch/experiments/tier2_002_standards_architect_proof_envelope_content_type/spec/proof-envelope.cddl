@@ -1,0 +1,33 @@
+; Bolyra Proof Envelope — CDDL Schema (RFC 8610)
+; Media type: application/bolyra-proof+cbor
+; Version: 1
+;
+; Normative reference: spec/proof-envelope-cbor.md
+
+bolyra-proof-envelope = {
+  version:        envelope-version,
+  proof_system:   proof-system,
+  circuit_id:     circuit-id,
+  public_signals: public-signals,
+  proof_bytes:    proof-bytes,
+  timestamp:      epoch-seconds,
+  ? metadata:     metadata-map,
+  * tstr => any    ; forward-compatibility: unknown keys tolerated
+}
+
+envelope-version = uint .eq 1          ; current version
+
+proof-system = "groth16" / "plonk"     ; extensible in future versions
+
+circuit-id = tstr .size (1..128)       ; UTF-8, matches circuit artifact stem
+
+; Each signal is either a uint (fits in 64-bit) or a bstr (big-endian
+; unsigned integer for field elements > 2^64).
+public-signal = uint / bstr
+public-signals = [* public-signal] .size (0..64)
+
+proof-bytes = bstr .size (1..4096)     ; opaque, system-specific
+
+epoch-seconds = uint                    ; Unix epoch seconds (UTC)
+
+metadata-map = { * tstr => any }       ; implementation-specific extensions

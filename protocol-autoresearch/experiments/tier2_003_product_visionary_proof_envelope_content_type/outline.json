@@ -1,0 +1,76 @@
+{
+  "id": "product_visionary_proof_envelope_content_type",
+  "title": "Standard proof envelope with IANA-registerable content type",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-content-type.md",
+      "description": "IANA media type registration template for application/bolyra-proof+cbor, CBOR schema definition (CDDL), field semantics, versioning strategy, and interop requirements"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/proof-envelope.ts",
+      "description": "ProofEnvelope TypeScript class with encode()/decode() methods using cbor-x, typed fields for proofBytes, publicSignals, circuitId, provingSystem (groth16|plonk), version, and optional delegationChain array"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/types.ts",
+      "description": "Add ProofEnvelope, ProvingSystem, and DelegationChainEntry type exports to the public API surface"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/proof_envelope.py",
+      "description": "ProofEnvelope Python dataclass with encode()/decode() methods using the cbor2 library, mirroring the TS schema exactly"
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/__init__.py",
+      "description": "Re-export ProofEnvelope from the top-level package"
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/proof-envelope.test.ts",
+      "description": "Round-trip encode/decode tests, cross-version compatibility tests, malformed input rejection tests, and size benchmark against raw JSON"
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_proof_envelope.py",
+      "description": "Python round-trip tests plus cross-language interop test: encode in TS (via subprocess), decode in Python, and vice versa"
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope.md",
+      "description": "Developer guide: wire format diagram, field reference table, content-type negotiation example, migration guide for existing LangChain/CrewAI/MCP integrations"
+    },
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope.cddl",
+      "description": "Formal CDDL (Concise Data Definition Language) schema for the CBOR envelope, machine-checkable and suitable for inclusion in IANA registration"
+    }
+  ],
+  "steps": [
+    "Define CBOR schema in CDDL: fields are version (uint), circuitId (tstr), provingSystem (tstr enum: groth16|plonk), proofBytes (bstr), publicSignals (array of bstr), delegationChain (optional array of bstr). Pin field indices so future additions are append-only.",
+    "Add cbor-x as a dependency in sdk/package.json and cbor2 in sdk-python/pyproject.toml; verify license compatibility (MIT/Apache) before committing.",
+    "Implement ProofEnvelope class in sdk/src/proof-envelope.ts with static encode(fields): Uint8Array and decode(bytes): ProofEnvelope; throw typed BolyraError on schema violations.",
+    "Add ProofEnvelope and related types to sdk/src/index.ts public exports; bump sdk version to 0.3.0 in package.json.",
+    "Implement ProofEnvelope dataclass in sdk-python/bolyra/proof_envelope.py with encode() -> bytes and decode(data: bytes) -> ProofEnvelope using cbor2; raise BolyraError on decode failure.",
+    "Write TS unit tests covering: round-trip identity, missing required field rejection, unknown future field tolerance (forward-compat), and byte-size vs JSON baseline.",
+    "Write Python unit tests covering the same cases plus a cross-language interop test that shells out to node -e to encode a fixture in TS then decodes it in Python.",
+    "Update LangChain integration (integrations/langchain/) to use ProofEnvelope.encode/decode instead of ad-hoc JSON serialization.",
+    "Update MCP integration (integrations/mcp/ and examples/mcp-demo/) to attach Content-Type: application/bolyra-proof+cbor header when transmitting envelopes over HTTP.",
+    "Write spec/proof-envelope-content-type.md following RFC 6838 template sections: media type name, required parameters, encoding considerations, security considerations, IANA registration contact.",
+    "Add spec/proof-envelope.cddl as the normative CDDL schema referenced from both the spec doc and the SDK source as a comment header.",
+    "Run full test suite (npm test + pytest) and confirm no regressions; add a size-regression check that rejects encode output > 2x the raw proof bytes.",
+    "Update CHANGELOG.md and sdk/QUICKSTART.md with ProofEnvelope usage examples."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "cbor-x (npm) \u2014 CBOR encode/decode for TypeScript SDK",
+    "cbor2 (PyPI) \u2014 CBOR encode/decode for Python SDK",
+    "RFC 8949 \u2014 CBOR data format specification",
+    "RFC 6838 \u2014 Media type specifications and registration procedures",
+    "Existing BolyraError typed error infrastructure in sdk/src/errors.ts",
+    "Existing AgentCredential and HumanIdentity types for publicSignals shape reference",
+    "Delegation circuit output format (delegationChain array element schema)"
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "id": "sdk_designer_proof_envelope_codec",
+  "title": "Self-describing proof envelope with content-type and version negotiation",
+  "artifacts": [
+    {
+      "type": "spec",
+      "filename": "spec/proof-envelope-v1.md",
+      "description": "Canonical BolyraEnvelope schema definition: fields, versioning contract, content-type header value (application/bolyra-proof+json and application/bolyra-proof+cbor), and migration notes from bare publicSignals arrays."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/envelope.ts",
+      "description": "BolyraEnvelope TypeScript implementation: CircuitPublicSignals discriminated union types per circuit (HumanUniqueness, AgentPolicy, Delegation), encode()/decode() with JSON default and optional msgpack/CBOR via dynamic import, version negotiation helper (negotiateVersion)."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/circuits/signal-maps.ts",
+      "description": "Positional index maps for each circuit \u2014 converts legacy bare publicSignals arrays to named-field objects and back. Single source of truth replacing ad-hoc indexing throughout the SDK."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk-python/bolyra/envelope.py",
+      "description": "Python BolyraEnvelope dataclass with encode()/decode() methods. JSON codec is pure-Python; CBOR codec uses cbor2 (optional dependency). Mirrors TS named-field schema for interoperability."
+    },
+    {
+      "type": "sdk",
+      "filename": "sdk/src/index.ts",
+      "description": "Re-export BolyraEnvelope, CircuitPublicSignals types, and negotiateVersion from public API surface."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/envelope.test.ts",
+      "description": "Unit tests: round-trip encode/decode for each circuit type in JSON and msgpack; backward-compat decode of legacy bare-array proofs; version negotiation edge cases; schema validation rejection of unknown fields."
+    },
+    {
+      "type": "test",
+      "filename": "sdk-python/tests/test_envelope.py",
+      "description": "Python mirror of TS envelope tests: round-trip JSON and CBOR, cross-SDK interop fixture (encode in TS, decode in Python via shared JSON fixture file), rejection cases."
+    },
+    {
+      "type": "test",
+      "filename": "sdk/test/fixtures/envelope-interop.json",
+      "description": "Shared JSON fixture containing pre-encoded envelopes for each circuit/codec combination used by both TS and Python cross-SDK interop tests."
+    },
+    {
+      "type": "docs",
+      "filename": "docs/proof-envelope-migration.md",
+      "description": "Migration guide for integrators: before/after code snippets, backward-compat window policy, how to detect envelope version at runtime, content-type negotiation in HTTP contexts."
+    }
+  ],
+  "steps": [
+    "Define BolyraEnvelope schema in spec/proof-envelope-v1.md: top-level fields (version, circuit, provingSystem, publicSignals as named object, proof), allowed version strings ('0.2', future '0.3'), content-type values, and backward-compat rules for bare-array inputs.",
+    "Author sdk/src/circuits/signal-maps.ts: define PositionalMap<T> type and one map per circuit (HumanUniqueness: [humanMerkleRoot, nullifierHash, nonceBinding, ...], AgentPolicy, Delegation). Export fromArray(signals, map) and toArray(named, map) converters.",
+    "Implement sdk/src/envelope.ts: BolyraEnvelope<C extends CircuitName> generic interface, encode() serializes to JSON (default) or msgpack (via dynamic import of @msgpack/msgpack), decode() accepts Buffer/string and detects codec from leading byte or explicit codec param, negotiateVersion(offered[], supported[]) picks highest mutually supported version.",
+    "Update sdk/src/index.ts to export BolyraEnvelope, CircuitPublicSignals union, negotiateVersion, and signal-maps utilities.",
+    "Refactor existing SDK call sites (proveHandshake, verifyHandshake, createAgentCredential) to produce/consume BolyraEnvelope internally while keeping legacy bare-array output behind a deprecated flag for one version cycle.",
+    "Implement sdk-python/bolyra/envelope.py: BolyraEnvelopeCodec dataclass with encode()/decode() supporting 'json' and 'cbor' (cbor2) backends; mirror the named-signal field names from signal-maps.ts exactly.",
+    "Generate sdk/test/fixtures/envelope-interop.json by running the TS encoder against known witness inputs for each circuit; commit as a static fixture.",
+    "Write sdk/test/envelope.test.ts covering: round-trip per codec, legacy bare-array decode, cross-version negotiation, unknown-field rejection.",
+    "Write sdk-python/tests/test_envelope.py covering: round-trip JSON and CBOR, decode of interop fixture produced by TS encoder, rejection of malformed envelopes.",
+    "Add cbor2 as an optional dependency in sdk-python/pyproject.toml under [project.optional-dependencies] (extras = ['cbor']).",
+    "Update docs/proof-envelope-migration.md with before/after snippets showing publicSignals[0] \u2192 envelope.publicSignals.humanMerkleRoot, HTTP Content-Type header usage, and deprecation timeline.",
+    "Run npm test and pytest -v; confirm all existing circuit and contract tests still pass with refactored call sites."
+  ],
+  "estimated_constraints": null,
+  "dependencies": [
+    "@msgpack/msgpack (optional, dynamic import in TS SDK)",
+    "cbor2 (optional Python extra)",
+    "Existing snarkjs proof output shape (groth16: {pi_a, pi_b, pi_c, protocol, curve})",
+    "Signal index order from circuits/src/HumanUniqueness.circom, AgentPolicy.circom, Delegation.circom output signal declarations",
+    "TS SDK version bump to 0.3.0 (semver minor \u2014 additive public API change)",
+    "Python SDK version bump to 0.6.0"
+  ]
+}
