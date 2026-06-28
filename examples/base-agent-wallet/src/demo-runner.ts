@@ -21,6 +21,7 @@
  */
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import { Permission } from '@bolyra/sdk';
 import { setupDelegation, type WalletPolicy } from './delegation.js';
 import { BaseAgentWallet, type PaymentRequest, type Receipt } from './base-wallet.js';
 
@@ -172,7 +173,7 @@ export async function runDemo(): Promise<void> {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 60 min
 
     const delegation = await setupDelegation({
-      permissions: ['READ_DATA', 'FINANCIAL_SMALL'],
+      permissions: [Permission.READ_DATA, Permission.FINANCIAL_SMALL],
       maxPerRequest: 200,   // $2.00
       dailyCap: 200,        // $2.00
       allowedAssets: ['USDC'],
