@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE / "sources"))
 
 from _shared import call_claude_cli  # noqa: E402
 from scoring import IntegrationScore, score_integration  # noqa: E402
+from judge import judge_tier1 as _judge_tier1_llm  # noqa: E402
 from run_tier2_validate import run_tier2_validate  # noqa: E402
 from run_tier3_challenge import run_tier3_challenge  # noqa: E402
 from plateau_detector import should_stop, load_trajectory, record_iteration  # noqa: E402
@@ -134,47 +135,21 @@ def run_tier1(
 def judge_tier1(
     opportunities: list[dict],
     output_dir: Path,
+    *,
+    model: str = "opus",
+    timeout: int = 240,
 ) -> dict:
-    """Score and filter Tier 1 integration opportunities."""
-    scored: list[dict] = []
-    promoted: list[dict] = []
+    """Score and filter Tier 1 integration opportunities using LLM-as-judge.
 
-    for opp in opportunities:
-        try:
-            s = score_integration(
-                agent_need=max(0, min(25, int(opp.get("preliminary_agent_need", 0)))),
-                zkp_edge=max(0, min(25, int(opp.get("preliminary_zkp_edge", 0)))),
-                primitive_readiness=max(0, min(25, int(opp.get("preliminary_primitive_readiness", 0)))),
-                partnership_leverage=max(0, min(25, int(opp.get("preliminary_partnership_leverage", 0)))),
-            )
-        except (ValueError, TypeError):
-            s = IntegrationScore(
-                agent_need=0, zkp_edge=0, primitive_readiness=0,
-                partnership_leverage=0, total=0, verdict="DROP",
-            )
+    Saves tier1_opportunities.json first (if not already saved by run_tier1),
+    then delegates to judge.py's LLM-based scoring pipeline.
+    """
+    # Ensure opportunities are saved for the LLM judge to read
+    opps_path = output_dir / "tier1_opportunities.json"
+    if not opps_path.exists():
+        opps_path.write_text(json.dumps(opportunities, indent=2))
 
-        entry = {
-            **opp,
-            "scores": {
-                "agent_need": s.agent_need,
-                "zkp_edge": s.zkp_edge,
-                "primitive_readiness": s.primitive_readiness,
-                "partnership_leverage": s.partnership_leverage,
-                "total": s.total,
-            },
-            "verdict": s.verdict,
-        }
-        scored.append(entry)
-        if s.verdict in ("PROMOTE", "CONSIDER"):
-            promoted.append(entry)
-
-    scored.sort(key=lambda x: x["scores"]["total"], reverse=True)
-    promoted.sort(key=lambda x: x["scores"]["total"], reverse=True)
-
-    (output_dir / "tier1_scored.json").write_text(json.dumps(scored, indent=2))
-    (output_dir / "tier1_promoted.json").write_text(json.dumps(promoted, indent=2))
-
-    return {"scored": scored, "promoted": promoted}
+    return _judge_tier1_llm(output_dir, model=model, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +313,7 @@ def run_iteration(
         return {"iter": iter_num, "empty": True, "trajectory_entry": entry}
 
     print(f"[iter {iter_num}] Judging {len(opportunities)} opportunities...")
-    judge_result = judge_tier1(opportunities, iter_dir)
+    judge_result = judge_tier1(opportunities, iter_dir, model=model, timeout=timeout)
     promoted = judge_result.get("promoted", [])
 
     if not promoted:

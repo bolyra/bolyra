@@ -209,32 +209,36 @@ def judge_tier1(
         if s is not None:
             scored.append({
                 **c,
-                "agent_need": s.agent_need,
-                "zkp_edge": s.zkp_edge,
-                "primitive_readiness": s.primitive_readiness,
-                "partnership_leverage": s.partnership_leverage,
-                "total": s.total,
+                "scores": {
+                    "agent_need": s.agent_need,
+                    "zkp_edge": s.zkp_edge,
+                    "primitive_readiness": s.primitive_readiness,
+                    "partnership_leverage": s.partnership_leverage,
+                    "total": s.total,
+                },
                 "verdict": s.verdict,
             })
         else:
             # Meta stub or unscored
             scored.append({
                 **c,
-                "agent_need": 0,
-                "zkp_edge": 0,
-                "primitive_readiness": 0,
-                "partnership_leverage": 0,
-                "total": 0,
+                "scores": {
+                    "agent_need": 0,
+                    "zkp_edge": 0,
+                    "primitive_readiness": 0,
+                    "partnership_leverage": 0,
+                    "total": 0,
+                },
                 "verdict": "DROP",
             })
 
     # Promotion: total >= promote_min and verdict is PROMOTE or CONSIDER
     promoted = [
         s for s in scored
-        if s.get("total", 0) >= promote_min
+        if s.get("scores", {}).get("total", 0) >= promote_min
         and s.get("verdict") in ("PROMOTE", "CONSIDER")
     ]
-    promoted.sort(key=lambda x: x.get("total", 0), reverse=True)
+    promoted.sort(key=lambda x: x.get("scores", {}).get("total", 0), reverse=True)
 
     # Save
     (output_dir / "tier1_scored.json").write_text(json.dumps(scored, indent=2))
