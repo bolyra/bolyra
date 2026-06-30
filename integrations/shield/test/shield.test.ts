@@ -112,4 +112,89 @@ describe('@bolyra/shield', () => {
     expect(res.error).toBeDefined();
     expect(res.error.message).toMatch(/replay|Nonce already used/i);
   });
+
+  test('Scenario 5: unknown tool allowed when defaultDeny is off (baseline)', async () => {
+    const bundle = makeDevBundle(0b11111111, 3005);
+    const res = await send({
+      jsonrpc: '2.0', method: 'tools/call', id: 5,
+      params: { name: 'unknown_tool', arguments: {}, _meta: { bolyra: bundle } },
+    });
+    expect(res.result).toBeDefined();
+    expect(res.result.content[0].text).toContain('executed unknown_tool');
+  });
+});
+
+describe('@bolyra/shield (defaultDeny)', () => {
+  let shield: ChildProcess;
+  let responseQueue: Array<(value: any) => void> = [];
+
+  beforeAll(done => {
+    const fs = require('fs');
+    const tmpConfig = path.resolve(__dirname, 'shield-deny.yaml');
+    fs.writeFileSync(tmpConfig, [
+      'devMode: true',
+      'defaultDeny: true',
+      'tools:',
+      '  read_file:',
+      '    requireBitmask: 1',
+    ].join('\n'));
+
+    shield = spawn('node', [
+      SHIELD_BIN,
+      '--server', MOCK_SERVER_CMD,
+      '--config', tmpConfig,
+    ], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+
+    const rl = readline.createInterface({ input: shield.stdout! });
+    rl.on('line', (line: string) => {
+      try {
+        const parsed = JSON.parse(line);
+        const resolver = responseQueue.shift();
+        if (resolver) resolver(parsed);
+      } catch { /* ignore non-JSON */ }
+    });
+
+    shield.stderr!.once('data', () => setTimeout(done, 1000));
+  });
+
+  afterAll(() => {
+    shield.kill('SIGTERM');
+    const fs = require('fs');
+    try { fs.unlinkSync(path.resolve(__dirname, 'shield-deny.yaml')); } catch {}
+  });
+
+  function send(msg: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('timeout')), 8000);
+      responseQueue.push((val) => {
+        clearTimeout(timeout);
+        resolve(val);
+      });
+      shield.stdin!.write(JSON.stringify(msg) + '\n');
+    });
+  }
+
+  test('known tool with valid proof — allowed', async () => {
+    const bundle = makeDevBundle(1, 4001);
+    const res = await send({
+      jsonrpc: '2.0', method: 'tools/call', id: 1,
+      params: { name: 'read_file', arguments: {}, _meta: { bolyra: bundle } },
+    });
+    expect(res.result).toBeDefined();
+    expect(res.result.content[0].text).toContain('executed read_file');
+  });
+
+  test('unknown tool with valid proof — denied by defaultDeny', async () => {
+    const bundle = makeDevBundle(0b11111111, 4002);
+    const res = await send({
+      jsonrpc: '2.0', method: 'tools/call', id: 2,
+      params: { name: 'unknown_tool', arguments: {}, _meta: { bolyra: bundle } },
+    });
+    expect(res.error).toBeDefined();
+    expect(res.error.message).toContain('not in policy');
+    expect(res.error.message).toContain('defaultDeny');
+  });
 });

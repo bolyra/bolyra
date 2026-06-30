@@ -64,6 +64,9 @@ function main(argv: string[] = process.argv.slice(2)): void {
   process.stderr.write(`  Server:   ${config.server}\n`);
   process.stderr.write(`  Mode:     ${config.devMode ? 'dev' : 'production'}\n`);
   process.stderr.write(`  Tools:    ${Object.keys(config.tools).length} policies\n`);
+  if (config.defaultDeny) {
+    process.stderr.write(`  Policy:   default-deny (unknown tools rejected)\n`);
+  }
   process.stderr.write(`  Receipts: stderr\n\n`);
 
   createShield(config);

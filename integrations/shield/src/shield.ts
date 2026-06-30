@@ -83,6 +83,15 @@ export function createShield(config: ShieldConfig): ShieldInstance {
 
     // Check tool policy
     const toolName = msg?.params?.name ?? '';
+
+    // Default-deny: reject tools not in the config tools map
+    if (config.defaultDeny && !(toolName in config.tools)) {
+      const err = jsonRpcError(msg.id, -32001, `Bolyra policy denied: tool "${toolName}" not in policy (defaultDeny enabled)`);
+      process.stdout.write(JSON.stringify(err) + '\n');
+      emitReceipt(config, { decision: 'deny', toolName, reason: 'defaultDeny: tool not in policy', timestamp: new Date().toISOString() });
+      return;
+    }
+
     const decision = checkToolPolicy(toolName, authCtx, mcpConfig);
     if (!decision.allowed) {
       const err = jsonRpcError(msg.id, -32001, `Bolyra policy denied: ${decision.reason}`);

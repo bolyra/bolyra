@@ -15,6 +15,7 @@ export interface ShieldConfig {
   nonce: { store: 'memory'; maxProofAge: number };
   receipts: { enabled: boolean; output: 'stderr' | 'file'; dir?: string };
   tools: Record<string, ShieldToolPolicy>;
+  defaultDeny: boolean;
 }
 
 const DEFAULTS: ShieldConfig = {
@@ -24,6 +25,7 @@ const DEFAULTS: ShieldConfig = {
   nonce: { store: 'memory', maxProofAge: 300 },
   receipts: { enabled: true, output: 'stderr' },
   tools: {},
+  defaultDeny: false,
 };
 
 function substituteEnvVars(obj: any): any {

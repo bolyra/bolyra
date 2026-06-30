@@ -16,6 +16,7 @@ Create `shield.yaml`:
 
 ```yaml
 devMode: true
+defaultDeny: true
 
 nonce:
   store: memory
@@ -39,6 +40,10 @@ Then:
 ```bash
 npx @bolyra/shield --server "node my-server.js" --config shield.yaml
 ```
+
+## Default Deny
+
+By default, tools without a policy entry are allowed through (only authentication is checked). Set `defaultDeny: true` to reject any `tools/call` for tool names not listed in the `tools:` map.
 
 ## How It Works
 
