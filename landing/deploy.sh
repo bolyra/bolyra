@@ -214,10 +214,25 @@ aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
+echo "→ uploading school.html to s3://$BUCKET/"
+aws s3 cp "$SCRIPT_DIR/school.html" "s3://$BUCKET/school.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$SCRIPT_DIR/school.html" "s3://$BUCKET/school" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
+for SCHOOL_JSX in school-animations.jsx school-kit.jsx school-scenes.jsx; do
+  echo "→ uploading $SCHOOL_JSX to s3://$BUCKET/"
+  aws s3 cp "$SCRIPT_DIR/$SCHOOL_JSX" "s3://$BUCKET/$SCHOOL_JSX" \
+    --content-type "application/javascript; charset=utf-8" \
+    --cache-control "public, max-age=300"
+done
+
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" \
   --query 'Invalidation.Id' \
   --output text)
 
