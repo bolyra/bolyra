@@ -1,0 +1,36 @@
+# Shield config for X MCP demo
+# Wraps X's xurl MCP server (or mock) with per-tool ZKP authorization.
+
+devMode: true
+defaultDeny: true    # Reject tools not listed below
+
+nonce:
+  store: memory
+  maxProofAge: 300
+
+receipts:
+  enabled: true
+  output: stderr
+
+# Tool policies mirror X MCP's tool surface.
+# Permission bits: 0=READ_DATA, 1=WRITE_DATA, 5=SIGN_ON_BEHALF
+tools:
+  # Read tools — READ_DATA (bit 0)
+  search_recent_posts:
+    requireBitmask: 1
+  get_user_by_username:
+    requireBitmask: 1
+  get_me:
+    requireBitmask: 1
+  get_bookmarks:
+    requireBitmask: 1
+
+  # Write tools — WRITE_DATA (bit 1)
+  add_bookmark:
+    requireBitmask: 2
+  remove_bookmark:
+    requireBitmask: 2
+
+  # Publish tools — WRITE_DATA | SIGN_ON_BEHALF (bits 1+5 = 34)
+  create_article:
+    requireBitmask: 34
