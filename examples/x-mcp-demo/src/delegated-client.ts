@@ -5,7 +5,7 @@
 import { spawn } from 'child_process';
 import * as readline from 'readline';
 import * as path from 'path';
-import { printHeader, printResult, jsonRpcInit, jsonRpcCall, proveReadOnly } from './shared';
+import { printHeader, printResult, jsonRpcInit, jsonRpcCall, proveReadOnly, tick } from './shared';
 
 const SHIELD_BIN = path.resolve(__dirname, '../../../integrations/shield/dist/cli.js');
 const MOCK_SERVER = `npx tsx ${path.resolve(__dirname, 'mock-x-server.ts')}`;
@@ -49,6 +49,7 @@ async function main() {
   const res1 = await send(JSON.stringify(call2));
   printResult('search_recent_posts', res1);
 
+  await tick();
   const auth2 = await proveReadOnly();
   console.log('  Calling add_bookmark with delegated proof...');
   const call3 = JSON.parse(jsonRpcCall(3, 'add_bookmark', { post_id: '789' }));
@@ -56,6 +57,7 @@ async function main() {
   const res2 = await send(JSON.stringify(call3));
   printResult('add_bookmark', res2);
 
+  await tick();
   const auth3 = await proveReadOnly();
   console.log('  Calling create_article with delegated proof...');
   const call4 = JSON.parse(jsonRpcCall(4, 'create_article', { title: 'Unauthorized', body: 'Should fail' }));

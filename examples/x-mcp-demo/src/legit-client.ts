@@ -5,7 +5,7 @@
 import { spawn } from 'child_process';
 import * as readline from 'readline';
 import * as path from 'path';
-import { printHeader, printResult, jsonRpcInit, jsonRpcCall, proveFullAccess } from './shared';
+import { printHeader, printResult, jsonRpcInit, jsonRpcCall, proveFullAccess, tick } from './shared';
 
 const SHIELD_BIN = path.resolve(__dirname, '../../../integrations/shield/dist/cli.js');
 const MOCK_SERVER = `npx tsx ${path.resolve(__dirname, 'mock-x-server.ts')}`;
@@ -48,6 +48,7 @@ async function main() {
   const res1 = await send(JSON.stringify(call2));
   printResult('search_recent_posts', res1);
 
+  await tick(); // ensure unique nonce
   const auth2 = await proveFullAccess();
   console.log('  Calling add_bookmark with proof...');
   const call3 = JSON.parse(jsonRpcCall(3, 'add_bookmark', { post_id: '456' }));
@@ -55,6 +56,7 @@ async function main() {
   const res2 = await send(JSON.stringify(call3));
   printResult('add_bookmark', res2);
 
+  await tick();
   const auth3 = await proveFullAccess();
   console.log('  Calling create_article with proof...');
   const call4 = JSON.parse(jsonRpcCall(4, 'create_article', { title: 'Hello from Bolyra', body: 'ZKP-authenticated post' }));

@@ -70,6 +70,9 @@ export function printHeader(title: string) {
   console.log(`${line}\n`);
 }
 
+/** Wait to ensure unique nonce (dev mode uses second-level timestamps). */
+export const tick = () => new Promise<void>(r => setTimeout(r, 1100));
+
 export function printResult(label: string, res: any) {
   if (res.error) {
     console.log(`  [DENIED] ${label}`);
