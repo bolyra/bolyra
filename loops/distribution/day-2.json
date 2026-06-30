@@ -1,0 +1,31 @@
+{
+  "day": 2,
+  "date": "2026-07-01",
+  "targets": [7, 2, 3, 9, 11, 21, 26, 36],
+  "target_hypotheses": {
+    "7": "Warm — already replied to our pinned tweet. David Tso runs Base ecosystem & ventures; fastest path to 3-5 Base builders simultaneously. Not a builder himself — success here is an intro, not a design-partner close. First DM should ask his read on infrastructure-level authorization.",
+    "2": "Nathan Schwermann won the Cronos x402 Hackathon ($24K) by building scoped permissions — the closest intellectual overlap in the entire pipeline. He already solved the delegation/scope problem on another chain. Fresh hackathon momentum = he's thinking about this now.",
+    "3": "Rodrigo Coelho built ampersend — the management and observation layer for x402 payments. Authorization is the obvious next data signal at that layer. Early-stage product = protocol decisions are still being made, a conversation changes what they build.",
+    "9": "Merit Systems built x402scan (Coinbase-endorsed). They index every x402 transaction. Adding 'was agent authorized?' as a filterable field = a new data product on top of what they've already built. Coinbase endorsement means they're on the growth path.",
+    "11": "Jia Yaoqi / AltLayer built x402-as-a-Service ($14.4M raised). Their facilitator processes payments but has no signal on whether the calling agent had permission to initiate. Authorization is the natural adjacent layer — an upsell they can offer customers.",
+    "21": "Joao Moura (CrewAI) — bolyra-crewai integration PR #6382 is open and unmerged. Multi-agent crew pipelines are the exact threat model (impersonation, over-permissioned sub-agents). First DM; the open PR gives follow-up leverage if he replies.",
+    "26": "Josh Twist (Zuplo) — ex-Microsoft Azure API Management, now building API gateway with both x402 and Stripe MPP. He has depth on API auth. The question isn't 'what is auth?' — it's 'where does wallet-only auth fall short of what you already know about?' He's the right person to stress-test the framing.",
+    "36": "Brett Calhoun (Redbud VC, $25M) — replied 'congrats' already = warm. Not an ICP builder; this is the investor pipeline. One ask: which Redbud portfolio companies are building live x402 endpoints? A single intro is the win here."
+  },
+  "drafts": {
+    "7": "Hey David, your summary of where x402 is headed on Base was the clearest framing I've seen of the protocol-to-ecosystem fit. For builders adding x402 endpoints on Base today, where does authorization fit in the stack — something each team should solve themselves, or something you're seeing addressed at the infrastructure layer?",
+    "2": "Hey Nathan, the Cronos x402 hackathon win with scoped permissions was one of the most technically interesting entries I saw — solving permission granularity in the payment layer is the hard problem. How did you approach scoping: did you encode it in the payment metadata, or keep it as a separate authorization step before the payment goes through?",
+    "3": "Hey Rodrigo, ampersend making x402 payments observable and manageable is the infrastructure layer the ecosystem needed. At that management layer, are you seeing demand for tracking which agent or operator initiated a payment, beyond just the wallet address?",
+    "9": "Hey, x402scan is the first serious explorer for x402 transaction data — Etherscan-equivalent infrastructure for the protocol. Are you planning to surface agent or caller metadata in the transaction view, or is wallet address the only identity signal you index today?",
+    "11": "Hey Jia, AltLayer building x402-as-a-Service is the right abstraction — most teams shouldn't have to run their own facilitator. In your facilitator design, how are you thinking about the identity of the agent making the payment request versus just the wallet that signs the transaction?",
+    "21": "Hey Joao, CrewAI's multi-agent orchestration is the most mature framework for production crew deployments. For crews where one agent calls another agent's external API, are you seeing builders implement any identity or authorization check between agents, or is it still trust-internal-by-default?",
+    "26": "Hey Josh, Zuplo adding x402 alongside Stripe MPP is a strong signal that API gateway operators are serious about agent payments. For agents calling through an API gateway, how do you think about caller identity — is the signing key enough, or does 'authorized agent' require something beyond 'wallet that paid'?",
+    "36": "Hey Brett, your congrats stuck with me — the Redbud team has a sharp eye for infrastructure timing. Are any of your portfolio companies building live x402 endpoints or paid agent flows? Would love to understand what they're solving for on the authorization side."
+  },
+  "codex_review": "Two-pass review. Pass 1 — compliance: zero drafts say 'I built', zero mention Bolyra, zero include links. All are first-contact. Pass 2 — quality: every draft leads with a specific reference to the target's actual work (hackathon win, specific product name, specific tweet), and ends with exactly one technical question. Three flags for the founder: (1) #7 David Tso is ecosystem not ICP — if he replies, ask for intro to Base builders, not a walkthrough. (2) #36 Brett Calhoun is investor pipeline — success = portfolio intro, not design partner. (3) #21 Joao Moura: if he replies, follow up by mentioning PR #6382 on the CrewAI repo as a concrete starting point.",
+  "sent": [],
+  "replies_received": [],
+  "scores_updated": {},
+  "blocker_learned": "",
+  "scorecard_snapshot": {}
+}
