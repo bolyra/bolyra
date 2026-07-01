@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gating X's MCP Server with Per-Tool ZKP Authorization — Bolyra</title>
+  <meta name="description" content="X shipped an MCP server. OAuth says who the user is — nothing says what the agent can do. We wrapped xurl MCP with Bolyra Shield and ran three scenarios: attacker blocked, full agent authorized, delegated agent scoped to read-only.">
+  <meta property="og:title" content="Gating X's MCP Server with Per-Tool ZKP Authorization — Bolyra">
+  <meta property="og:description" content="X shipped an MCP server. We wrapped it with Bolyra Shield. Three scenarios: attacker blocked, full agent authorized, delegated agent scoped to read-only.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://bolyra.ai/blog-6">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e;
+      --text: #e0e0e0; --text-muted: #888;
+      --accent: #6366f1; --accent-hover: #818cf8;
+      --green: #4ade80; --red: #f87171; --border: #222; --max-width: 760px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 56px;
+    }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+    article { padding: 100px 0 80px; }
+    article h1 {
+      font-size: 2.2rem; font-weight: 800; line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 40px; }
+    article h2 {
+      font-size: 1.4rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    article p { margin-bottom: 16px; }
+    article ul, article ol { margin-bottom: 16px; padding-left: 24px; }
+    article li { margin-bottom: 6px; }
+    code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em; background: var(--bg-code); padding: 2px 6px; border-radius: 4px;
+    }
+    pre {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; overflow-x: auto; margin-bottom: 24px; line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+    .diagram {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 24px; margin: 24px 0;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 0.85rem; line-height: 1.8; text-align: center;
+      color: var(--text-muted);
+    }
+    .diagram .highlight { color: var(--green); font-weight: 700; }
+    .diagram .label { color: var(--accent); }
+    .diagram .red { color: var(--red); font-weight: 700; }
+    .table-wrap { overflow-x: auto; margin-bottom: 24px; }
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left; padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--text-muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    td code { font-size: 0.82rem; }
+    .scenario-table td:first-child { font-weight: 600; }
+    .pass { color: var(--green); }
+    .fail { color: var(--red); }
+    .cta-box {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; margin-top: 48px; text-align: center;
+    }
+    .cta-box a {
+      display: inline-block; background: var(--accent); color: #fff;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600;
+      margin-top: 12px; transition: background 0.2s;
+    }
+    .cta-box a:hover { background: var(--accent-hover); color: #fff; }
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 0;
+      color: var(--text-muted); font-size: 0.85rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <nav><div class="container">
+    <a href="/" class="logo">Bolyra</a>
+    <a href="/blog">Blog</a>
+  </div></nav>
+
+  <article class="container">
+    <h1>Gating X's MCP Server with Per-Tool ZKP Authorization</h1>
+    <p class="meta">June 30, 2026 &middot; Viswanadha Pratap Kondoju</p>
+
+    <p>X shipped an <a href="https://docs.x.com/tools/mcp">MCP server</a>. Agents can now search posts, manage bookmarks, and publish articles on behalf of users. OAuth tells X who the user is. Nothing in the MCP protocol tells X what the agent is allowed to do.</p>
+
+    <p>We built a demo wrapping X's <code>xurl mcp</code> stdio bridge with <a href="https://github.com/bolyra/bolyra/tree/main/integrations/shield">Bolyra Shield</a> and ran three scenarios against a mock server that simulates X's MCP tool surface. The demo uses dev mode (mock ZKP proofs) to show the authorization flow without requiring circuit artifacts or X API credentials.</p>
+
+    <h2>The gap</h2>
+
+    <p>X's MCP server uses OAuth 2.0 PKCE for user authentication. Once an agent has a user's OAuth token, it can call any tool the token's scopes allow. There is no per-tool authorization layer. A social media reading agent and a publishing agent present the same bearer token. From X's perspective, they are identical.</p>
+
+    <p>This matters because X's MCP tool surface includes both read operations (search, user lookup, bookmarks) and write operations (publish articles, modify bookmarks). An agent that should only read your timeline can also publish articles under your name if it has the same OAuth token.</p>
+
+    <h2>What we built</h2>
+
+    <p><code>@bolyra/shield</code> is a stdio proxy that sits between the MCP client and the MCP server. It intercepts every <code>tools/call</code> request, verifies a ZKP proof bundle, checks per-tool permission policies, and either forwards the call or rejects it with a JSON-RPC error.</p>
+
+    <div class="diagram">
+      <span class="label">Agent</span> &larr;stdin/stdout&rarr; <span class="highlight">@bolyra/shield</span> &larr;stdin/stdout&rarr; <span class="label">xurl mcp</span><br><br>
+      verifyBundle() &middot; checkToolPolicy() &middot; rejectReplay() &middot; defaultDeny()
+    </div>
+
+    <p>Shield does not replace OAuth. It adds a cryptographic authorization layer on top. OAuth says "this agent acts as you." Bolyra says "this agent can only do these specific things as you, and here is the proof it stayed in bounds."</p>
+
+    <h2>Three scenarios</h2>
+
+    <div class="table-wrap"><table class="scenario-table">
+      <thead>
+        <tr><th>Scenario</th><th>Agent</th><th>Tool</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1. Attacker</td>
+          <td>No proof</td>
+          <td><code>search_recent_posts</code></td>
+          <td class="fail">Blocked (-32000)</td>
+        </tr>
+        <tr>
+          <td>1. Attacker</td>
+          <td>No proof</td>
+          <td><code>add_bookmark</code></td>
+          <td class="fail">Blocked (-32000)</td>
+        </tr>
+        <tr>
+          <td>2. Legit agent</td>
+          <td>Full permissions</td>
+          <td><code>search_recent_posts</code></td>
+          <td class="pass">Allowed</td>
+        </tr>
+        <tr>
+          <td>2. Legit agent</td>
+          <td>Full permissions</td>
+          <td><code>add_bookmark</code></td>
+          <td class="pass">Allowed</td>
+        </tr>
+        <tr>
+          <td>2. Legit agent</td>
+          <td>Full permissions</td>
+          <td><code>create_article</code></td>
+          <td class="pass">Allowed</td>
+        </tr>
+        <tr>
+          <td>3. Delegated</td>
+          <td>READ_DATA only</td>
+          <td><code>search_recent_posts</code></td>
+          <td class="pass">Allowed</td>
+        </tr>
+        <tr>
+          <td>3. Delegated</td>
+          <td>READ_DATA only</td>
+          <td><code>add_bookmark</code></td>
+          <td class="fail">Blocked (-32001)</td>
+        </tr>
+        <tr>
+          <td>3. Delegated</td>
+          <td>READ_DATA only</td>
+          <td><code>create_article</code></td>
+          <td class="fail">Blocked (-32001)</td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <p style="color: var(--text-muted); font-size: 0.85rem;"><em>Tool names in this demo are mock placeholders for X MCP capability categories. X's docs describe capability areas but do not publish exact tool names. Real <code>xurl</code> tool names may differ.</em></p>
+
+    <p>Scenario 3 is the interesting one. A human delegates to an agent with <code>READ_DATA</code> only (permission bit 0). The delegation circuit enforces one-way scope narrowing in the ZK proof. The agent can search posts but cannot modify bookmarks (<code>WRITE_DATA</code>, bit 1) or publish articles (<code>SIGN_ON_BEHALF</code>, bit 5). The proof bundle cryptographically binds the narrowed scope. Shield verifies it before forwarding.</p>
+
+    <h2>Tool permission mapping</h2>
+
+    <div class="table-wrap"><table>
+      <thead>
+        <tr><th>Permission</th><th>Bit</th><th>Tools</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>READ_DATA</code></td><td>0</td><td><code>search_recent_posts</code>, <code>get_user_by_username</code>, <code>get_me</code>, <code>get_bookmarks</code></td></tr>
+        <tr><td><code>WRITE_DATA</code></td><td>1</td><td><code>add_bookmark</code>, <code>remove_bookmark</code></td></tr>
+        <tr><td><code>WRITE_DATA</code> + <code>SIGN_ON_BEHALF</code></td><td>1+5</td><td><code>create_article</code></td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Each tool requires a specific combination of permission bits. <code>SIGN_ON_BEHALF</code> (bit 5) does not imply <code>WRITE_DATA</code> (bit 1). Publishing articles requires both bits set (bitmask 34). An agent with only <code>WRITE_DATA</code> can manage bookmarks but cannot publish articles. The policy is defined in <code>shield.yaml</code>, not hardcoded.</p>
+
+    <h2>Default deny</h2>
+
+    <p>We shipped a new Shield feature for this demo: <code>defaultDeny</code>. When enabled, any <code>tools/call</code> for a tool name not listed in the policy map is rejected, even if the agent has a valid proof. This closes the gap where X adds a new tool (say, <code>delete_post</code>) and existing Shield configs would silently allow it through because no policy entry exists.</p>
+
+<pre><code># shield.yaml
+devMode: true
+defaultDeny: true    # Reject tools not listed below
+
+tools:
+  search_recent_posts:
+    requireBitmask: 1    # READ_DATA
+  add_bookmark:
+    requireBitmask: 2    # WRITE_DATA
+  create_article:
+    requireBitmask: 34   # WRITE_DATA | SIGN_ON_BEHALF</code></pre>
+
+    <h2>Run it yourself</h2>
+
+<pre><code>git clone https://github.com/bolyra/bolyra.git
+cd bolyra/examples/x-mcp-demo
+bash run-demo.sh</code></pre>
+
+    <p>No X API credentials needed. The demo uses a mock server that simulates X's MCP tools and runs in dev mode with mock ZKP proofs (no circuit artifacts or trusted setup required). In production, Shield verifies real Groth16 proof bundles from the <code>@bolyra/sdk</code>. To use the real X API, install <a href="https://docs.x.com/tools/mcp">xurl</a> and run:</p>
+
+<pre><code>bolyra-shield --server "xurl mcp" --config shield.yaml</code></pre>
+
+    <h2>What this means</h2>
+
+    <p>X's MCP server is one of the first major platform APIs to adopt MCP natively. As more platforms ship MCP endpoints, the agent authorization gap becomes a product category. OAuth handles user identity. MCP handles tool discovery and invocation. Nothing handles per-tool agent authorization.</p>
+
+    <p>Bolyra Shield fills that gap with a single process that sits in front of any stdio MCP server. No changes to X's server. No changes to the MCP protocol. The authorization policy is a YAML file. The proofs are cryptographic.</p>
+
+    <p style="margin-top: 32px; text-align: center;"><a href="/blog-5">&larr; Previous: How Bolyra Agent Credentials Are Issued, Registered, Revoked, and Rotated</a></p>
+
+    <div class="cta-box">
+      <p>Clone the demo and see per-tool ZKP authorization on X's MCP tools.</p>
+      <a href="https://github.com/bolyra/bolyra/tree/main/examples/x-mcp-demo">View Demo on GitHub</a>
+    </div>
+
+    <p style="margin-top: 24px; color: var(--text-muted); font-size: 0.8rem; text-align: center;">This project is not affiliated with, endorsed by, or sponsored by X Corp. The demo uses a mock server with no connection to X's production systems.</p>
+  </article>
+
+  <footer><div class="container">
+    &copy; 2026 ZKProva Inc. &middot; <a href="/">bolyra.ai</a> &middot; <a href="https://github.com/bolyra/bolyra">GitHub</a> &middot; <a href="mailto:viswa@bolyra.ai">viswa@bolyra.ai</a>
+  </div></footer>
+</body>
+</html>
