@@ -13,13 +13,11 @@ export function createShield(config: ShieldConfig): ShieldInstance {
   const nonceStore = new MemoryNonceStore();
   const toolPolicy: ToolPolicyMap = {};
   for (const [name, policy] of Object.entries(config.tools)) {
-    if (policy.requireBitmask !== undefined) {
-      toolPolicy[name] = {
-        requireBitmask: BigInt(policy.requireBitmask),
-        minScore: policy.minScore,
-        maxChainDepth: policy.maxChainDepth,
-      };
-    }
+    toolPolicy[name] = {
+      ...(policy.requireBitmask !== undefined ? { requireBitmask: BigInt(policy.requireBitmask) } : {}),
+      ...(policy.minScore !== undefined ? { minScore: policy.minScore } : {}),
+      ...(policy.maxChainDepth !== undefined ? { maxChainDepth: policy.maxChainDepth } : {}),
+    };
   }
 
   const mcpConfig: BolyraMcpConfig = {
@@ -85,7 +83,7 @@ export function createShield(config: ShieldConfig): ShieldInstance {
     const toolName = msg?.params?.name ?? '';
 
     // Default-deny: reject tools not in the config tools map
-    if (config.defaultDeny && !(toolName in config.tools)) {
+    if (config.defaultDeny && !Object.hasOwn(config.tools, toolName)) {
       const err = jsonRpcError(msg.id, -32001, `Bolyra policy denied: tool "${toolName}" not in policy (defaultDeny enabled)`);
       process.stdout.write(JSON.stringify(err) + '\n');
       emitReceipt(config, { decision: 'deny', toolName, reason: 'defaultDeny: tool not in policy', timestamp: new Date().toISOString() });

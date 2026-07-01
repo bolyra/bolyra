@@ -11,9 +11,9 @@ echo ""
 
 # Build dependencies (always rebuild to pick up changes)
 echo "Building @bolyra/sdk..."
-(cd ../../sdk && npm run build 2>/dev/null || true)
+(cd ../../sdk && npm run build)
 echo "Building @bolyra/mcp..."
-(cd ../../integrations/mcp && npm run build 2>/dev/null || true)
+(cd ../../integrations/mcp && npm run build)
 echo "Building @bolyra/shield..."
 (cd ../../integrations/shield && npm run build)
 
@@ -46,6 +46,6 @@ echo "  2. Full-permission agent: all tools allowed"
 echo "  3. Delegated agent: only read tools allowed"
 echo "  4. Unknown tools: rejected (defaultDeny)"
 echo ""
-echo "  To use with real X API: replace mock-x-server.ts"
-echo "  with 'xurl mcp' in shield.yaml"
+echo "  To use with real X API:"
+echo "    bolyra-shield --server 'xurl mcp' --config shield.yaml"
 echo "============================================================"
