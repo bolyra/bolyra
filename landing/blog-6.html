@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gating X's MCP Server with Per-Tool ZKP Authorization — Bolyra</title>
-  <meta name="description" content="X shipped an MCP server. OAuth says who the user is — nothing says what the agent can do. We wrapped xurl MCP with Bolyra Shield and ran three scenarios: attacker blocked, full agent authorized, delegated agent scoped to read-only.">
+  <meta name="description" content="Demo: wrapping a mock X-style MCP server with Bolyra Shield for per-tool agent authorization. Three scenarios with dev-mode proofs: attacker blocked, full agent authorized, delegated agent scoped to read-only.">
   <meta property="og:title" content="Gating X's MCP Server with Per-Tool ZKP Authorization — Bolyra">
-  <meta property="og:description" content="X shipped an MCP server. We wrapped it with Bolyra Shield. Three scenarios: attacker blocked, full agent authorized, delegated agent scoped to read-only.">
+  <meta property="og:description" content="Demo: Bolyra Shield wraps a mock X-style MCP server. Three scenarios with dev-mode proofs: attacker blocked, full agent authorized, delegated agent scoped to read-only.">
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://bolyra.ai/blog-6">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
@@ -190,7 +190,7 @@
 
     <p style="color: var(--text-muted); font-size: 0.85rem;"><em>Tool names in this demo are mock placeholders for X MCP capability categories. X's docs describe capability areas but do not publish exact tool names. Real <code>xurl</code> tool names may differ.</em></p>
 
-    <p>Scenario 3 is the interesting one. A human delegates to an agent with <code>READ_DATA</code> only (permission bit 0). The delegation circuit enforces one-way scope narrowing in the ZK proof. The agent can search posts but cannot modify bookmarks (<code>WRITE_DATA</code>, bit 1) or publish articles (<code>SIGN_ON_BEHALF</code>, bit 5). The proof bundle cryptographically binds the narrowed scope. Shield verifies it before forwarding.</p>
+    <p>Scenario 3 is the interesting one. A human delegates to an agent with <code>READ_DATA</code> only (permission bit 0). In production, the delegation circuit enforces one-way scope narrowing in a real ZK proof and the proof bundle cryptographically binds the narrowed scope. In this demo (dev mode), Shield walks the delegation chain shape and checks the permission bitmask without real cryptographic verification. The agent can search posts but cannot modify bookmarks (<code>WRITE_DATA</code>, bit 1) or publish articles (<code>SIGN_ON_BEHALF</code>, bit 5).</p>
 
     <h2>Tool permission mapping</h2>
 
