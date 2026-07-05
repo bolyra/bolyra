@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
 import { verifyBundle, checkToolPolicy, MemoryNonceStore } from '@bolyra/mcp';
 import type { BolyraProofBundle, BolyraMcpConfig, ToolPolicyMap } from '@bolyra/mcp';
+import { splitCommand } from './command';
 import type { ShieldConfig } from './config';
 
 export interface ShieldInstance {
@@ -29,7 +30,7 @@ export function createShield(config: ShieldConfig): ShieldInstance {
   };
 
   // Spawn child MCP server
-  const parts = config.server.split(/\s+/);
+  const parts = splitCommand(config.server);
   const child = spawn(parts[0], parts.slice(1), {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
