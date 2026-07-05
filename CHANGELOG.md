@@ -17,6 +17,21 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.2] — 2026-07-04
+
+### Fixed
+
+#### TypeScript SDK (`@bolyra/sdk` 0.5.3)
+
+- **Fresh install was broken** — `snarkjs` and `ethers` were optional
+  peerDependencies but are eagerly imported by `dist/index.js`, so
+  `npm install @bolyra/sdk` followed by `require('@bolyra/sdk')` threw
+  `Cannot find module 'snarkjs'` (the documented quickstart path, caught by
+  the CI fresh-install smoke test). Both are now regular `dependencies`.
+- Removed the unused `@semaphore-protocol/core` peer/dev dependency —
+  nothing in the SDK imports it (the HumanUniqueness circuit reuses the
+  Semaphore v4 *ceremony*, not the JS package).
+
 ## [0.7.1] — 2026-06-21
 
 ### Added
