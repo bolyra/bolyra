@@ -1,0 +1,214 @@
+{
+  "week": 1,
+  "date": "2026-07-06",
+  "scanner_notes": "GitHub MCP scoped to bolyra/bolyra only — external PR state (reviews, CI, comments) could not be fetched directly. Status assessed from dates in prs.json. All 10 PRs are past their follow_up_due date with no recorded activity; all marked stale. New targets sourced from mcp__github__search_repositories (broad access allowed).",
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "days_open": 8,
+      "follow_up_overdue_days": 1,
+      "action_needed": "Send polite follow-up. Caleb Peffer (CEO) also in distribution loop — coordinate with DM."
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "days_open": 8,
+      "follow_up_overdue_days": 1,
+      "action_needed": "Send polite follow-up. Rodrigo Coelho (CEO) in distribution loop — coordinate with DM."
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "stale",
+      "days_open": 8,
+      "follow_up_overdue_days": 1,
+      "action_needed": "Send polite follow-up. High-visibility awesome list — worth persistence."
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "days_open": 8,
+      "follow_up_overdue_days": 1,
+      "action_needed": "Send polite follow-up. Small repo — low-friction merge target if maintainer is active."
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "days_open": 8,
+      "follow_up_overdue_days": 1,
+      "action_needed": "Send polite follow-up. bolyra-crewai v0.2.0 on PyPI is a strong credibility anchor — mention it."
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "days_open": 8,
+      "follow_up_overdue_days": 1,
+      "action_needed": "Send polite follow-up. Note CLA status if pending — Google repos often block until CLA resolves."
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "days_open": 13,
+      "follow_up_overdue_days": 4,
+      "action_needed": "Send polite follow-up. 13 days open, most urgent. If no response by day 14, close with a note."
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "days_open": 13,
+      "follow_up_overdue_days": 4,
+      "action_needed": "Send polite follow-up. High-profile target — patient persistence justified. Don't close early."
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "days_open": 13,
+      "follow_up_overdue_days": 4,
+      "action_needed": "Send polite follow-up. Financial use case (trading) where agent identity/permissions are directly relevant."
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "days_open": 13,
+      "follow_up_overdue_days": 4,
+      "action_needed": "Send polite follow-up. Small community repo — may need a gentler ping or a direct contributor connection."
+    }
+  ],
+  "new_targets": [
+    {
+      "repo": "BlockRunAI/ClawRouter",
+      "stars": 6627,
+      "language": "TypeScript",
+      "last_updated": "2026-07-06",
+      "why": "Highest-traffic x402 repo found. Agent-native LLM router that routes across 41+ models and settles USDC payments via x402 on Base & Solana. Actively maintained (updated today). A Bolyra PR here would reach the widest x402 audience.",
+      "gap": "Handles WHO gets paid (the model provider) but not WHO is authorized to call the router. No agent identity or per-caller permission enforcement. Bolyra adds: verify agent credential before routing → prevent unauthorized model spend.",
+      "suggested_pr": "feat: add example — authorized agent routing with Bolyra identity verification before x402 payment"
+    },
+    {
+      "repo": "google-agentic-commerce/a2a-x402",
+      "stars": 535,
+      "language": "Python",
+      "last_updated": "2026-07-06",
+      "why": "Google-backed A2A protocol extension for x402 agent payments. Very active (updated today). This is exactly where Bolyra's delegation circuit is useful: an agent initiating A2A payment flows needs a verifiable credential scoped to FINANCIAL_SMALL or FINANCIAL_MEDIUM.",
+      "gap": "x402 handles the payment rail; A2A handles task delegation. Neither verifies that the calling agent has been granted payment authority. Bolyra's handshake proof fills this gap before any x402 charge is authorized.",
+      "suggested_pr": "docs/example: add Bolyra agent credential check before A2A-x402 payment initiation"
+    },
+    {
+      "repo": "golf-mcp/golf",
+      "stars": 835,
+      "language": "Python",
+      "last_updated": "2026-07-02",
+      "why": "Production-ready MCP server framework with auth, observability, and telemetry built in. High star count, active, positioned as enterprise infrastructure. Auth topics in repo indicate they care about authorization.",
+      "gap": "Auth is likely session/API-key based (standard web auth). No ZKP-backed agent identity — an agent connecting to Golf knows the API key but can't prove it's a specific model instance with specific granted permissions. Bolyra adds cryptographic agent provenance that survives key rotation.",
+      "suggested_pr": "docs: add Bolyra integration guide — ZKP agent identity as an auth provider for Golf MCP servers"
+    },
+    {
+      "repo": "gosuda/portal-tunnel",
+      "stars": 261,
+      "language": "Go",
+      "last_updated": "2026-07-03",
+      "why": "Self-hostable x402 tunneling — publishes localhost services to the agentic web. Clear x402 focus, active project, smaller community = easier to get a PR merged quickly.",
+      "gap": "Trustless relay based on x402 payment, but any agent that can pay can tunnel. No identity check on the caller — a compromised agent key can spin up tunnels without traceability. Bolyra adds: prove agent identity + verify delegation scope before the x402 payment is accepted.",
+      "suggested_pr": "example: add Bolyra identity gate before x402 tunnel authorization"
+    },
+    {
+      "repo": "daydreamsai/lucid-agents",
+      "stars": 187,
+      "language": "TypeScript",
+      "last_updated": "2026-06-26",
+      "why": "Multi-protocol commerce SDK supporting A2A, x402, and ERC-8004. Drop-in adapters for Hono, Express, Next.js. Protocol-agnostic framing means Bolyra's universal identity story (human + agent, any chain) is especially natural here.",
+      "gap": "SDK bootstraps payment rails but no identity layer across any of the supported protocols. An agent using lucid-agents can initiate payments with no verifiable credential. Bolyra's AgentPolicy proof works across all three payment protocols the SDK supports.",
+      "suggested_pr": "feat: add @bolyra/sdk middleware adapter — agent identity verification for lucid-agents payment flows"
+    }
+  ],
+  "follow_ups_drafted": [
+    {
+      "pr_id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "comment": "Hey! Just checking in on this PR. Happy to adjust the example or address any questions the team has. The core idea is showing how Bolyra's agent identity verification can slot in before a scraping request, so you know it's coming from an authorized agent — not just a valid API key. No dependency required; it's a self-contained example. Let me know what would make it a better fit!"
+    },
+    {
+      "pr_id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "comment": "Hey! Following up on this PR. The example I added shows how to verify the agent's identity and permission scope before authorizing the x402 payment — essentially adding a 'who is allowed to pay' check before the payment rail runs. Happy to rewrite as a docs addition, a test fixture, or whatever format fits best for the SDK. What would work for you?"
+    },
+    {
+      "pr_id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "comment": "Hi! Just following up on adding Bolyra to the awesome-x402 list. Bolyra is the identity + authorization layer that sits in front of x402 payments — it answers 'which agent is authorized to pay, and for what scope?' We're on npm (`@bolyra/sdk`) and PyPI (`bolyra`), have a working MCP integration, and just shipped v0.2.0. Happy to tweak the description or placement if needed!"
+    },
+    {
+      "pr_id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "comment": "Hey! Following up on the `@authorize()` decorator PR. The idea is to give fastapi-x402 routes a way to verify the calling agent's ZKP credential before the x402 payment is triggered — so you can enforce per-agent permission scopes at the route level. Happy to simplify it down to a minimal decorator if the current implementation is too much. Let me know!"
+    },
+    {
+      "pr_id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "comment": "Hi! Just checking in on this docs PR. We shipped `bolyra-crewai` v0.2.0 to PyPI last week, which makes the integration even smoother — agents can now get a Bolyra credential with two lines. The PR shows how to gate crew task execution behind a ZKP authorization check so each agent proves its delegated permissions before running. Happy to update to show v0.2.0 usage if that helps!"
+    },
+    {
+      "pr_id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "comment": "Hi! Following up on the `DelegationAuthPlugin` PR. If CLA is the blocker, I'm happy to wait — just wanted to make sure it wasn't stuck on a review question. The plugin adds ZKP-backed per-agent authorization to ADK agents: each agent carries a Bolyra credential that's verified before the tool call is executed, so you can enforce 'this agent can call financial tools but not PII tools.' Happy to adjust scope or format to fit ADK's plugin conventions."
+    },
+    {
+      "pr_id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "comment": "Hey! Following up on this docs PR — it's been about two weeks. The guide shows how to add a Bolyra identity check before MCP tool calls, so only agents with the right delegated permissions (e.g. FINANCIAL_SMALL) can access live stock data. Happy to cut it down to a single README section or a minimal code snippet if that fits better. Would love to know if there's a format you prefer for external contributions!"
+    },
+    {
+      "pr_id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "comment": "Hi! Following up on the agent identity guide PR. The core idea: before an AI agent calls a Stripe tool (charge a card, initiate a payout), it presents a Bolyra ZKP credential that proves its delegated permission scope — so you can enforce 'this agent has FINANCIAL_MEDIUM permission' without trusting the agent's self-reported claims. Happy to adjust the format or depth to match your docs standards. Let me know what would be most useful!"
+    },
+    {
+      "pr_id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "comment": "Hey! Following up on the agent identity guide. Trading APIs are a natural fit for ZKP authorization — you want to prove an agent is credentialed to place orders (and at what size) before it touches the brokerage API. The guide shows how Bolyra's permission bits (FINANCIAL_SMALL/MEDIUM/UNLIMITED) map to Alpaca's order tiers. Happy to rewrite as a shorter example or integrate into an existing doc section if that's cleaner!"
+    },
+    {
+      "pr_id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "comment": "Hey! Following up on the agent authorization guide PR. The idea is to show how an AI agent calling your Shopify MCP server can prove it has WRITE_DATA or FINANCIAL_SMALL permission before executing an order or inventory mutation — so the MCP server can enforce 'only authorized agents can place orders' with a cryptographic proof rather than just an API key. Happy to trim it to a code snippet if that's a better fit. Thanks!"
+    }
+  ],
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 0,
+    "prs_closed": 0,
+    "prs_stale": 10,
+    "review_comments_responded": 0,
+    "new_repos_identified": 5
+  }
+}
