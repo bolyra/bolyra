@@ -45,6 +45,22 @@ npx @bolyra/shield --server "node my-server.js" --config shield.yaml
 
 By default, tools without a policy entry are allowed through (only authentication is checked). Set `defaultDeny: true` to reject any `tools/call` for tool names not listed in the `tools:` map.
 
+## Learn Mode
+
+Don't write the config by hand — generate a safe starting point from the server's own tool list:
+
+```bash
+npx @bolyra/shield --learn --server "node my-server.js"
+```
+
+Learn mode spawns the server, performs the MCP handshake (`initialize` → `notifications/initialized` → `tools/list`, following pagination), then writes `shield.yaml` (or the `--config` path) with:
+
+- `defaultDeny: true` — anything the server adds later is rejected until you allow it
+- every discovered tool at `requireBitmask: 1` (READ_DATA) — the least-privilege floor
+- a `_generated` provenance block (source command + timestamp)
+
+It never overwrites an existing config file, caps pagination at 50 pages, and times out after 30 seconds. The output is a starting point: review each tool and raise its `requireBitmask` (e.g. `write_file` → `2`) before production use.
+
 ## How It Works
 
 ```
