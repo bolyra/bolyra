@@ -17,6 +17,24 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.3] — 2026-07-08
+
+### Added
+
+#### MCP Shield (`@bolyra/shield` 0.2.0)
+
+- **Learn mode** — `bolyra-shield --learn --server "<cmd>"` spawns the target
+  MCP server, performs the handshake (`initialize` →
+  `notifications/initialized` → `tools/list` with cursor pagination), and
+  generates a `shield.yaml` with `defaultDeny: true` and every discovered tool
+  at `requireBitmask: 1` (READ_DATA). Hardened per 3-reviewer consensus:
+  quote-aware spawn splitting (shared with the proxy), `_generated` provenance
+  marker, 50-page pagination cap, 30s handshake timeout, guaranteed child
+  cleanup, `O_EXCL` write (never overwrites an existing config), `yaml`
+  serializer output.
+- LICENSE and NOTICE now ship in the npm tarball (they were listed in `files`
+  but missing from the package directory in 0.1.0).
+
 ## [0.7.2] — 2026-07-04
 
 ### Fixed
