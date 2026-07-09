@@ -95,4 +95,90 @@ describe("verify() — v0.2 orchestrator", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("STATUS_CHECK_UNCONFIGURED");
   });
+
+  it("expired receipt reports EXPIRED, not INVALID_SIGNATURE (F2, shipped in 0.2.2)", async () => {
+    const { privateKey: issPriv, publicKey: issPub } = await generateKeyPair("EdDSA");
+    const { privateKey: agentPriv, publicKey: agentPub } = await generateKeyPair("EdDSA");
+    const receipt = await allow({
+      iss: "did:web:bolyra.ai", sub: "agent-1", aud: "merchant-x",
+      act: "checkout.charge", perm: "FINANCIAL_SMALL",
+      agentPubKey: agentPub as unknown as CryptoKey,
+      ttlSeconds: -3600,
+    }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
+    const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n1", audience: "merchant-x" });
+
+    const r = await verify(presented, {
+      audience: "merchant-x",
+      trustedIssuers: staticIssuerResolver({ "did:web:bolyra.ai": { k1: issPub as unknown as CryptoKey } }),
+      kbNonce: "n1",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("EXPIRED");
+  });
+
+  it("receipt crossing expiry during a slow issuer resolver reports EXPIRED, not INVALID_SIGNATURE", async () => {
+    const { privateKey: issPriv, publicKey: issPub } = await generateKeyPair("EdDSA");
+    const { privateKey: agentPriv, publicKey: agentPub } = await generateKeyPair("EdDSA");
+
+    const baseMs = Math.floor(Date.now() / 1000) * 1000;
+    jest.useFakeTimers({ now: baseMs });
+    try {
+      // exp = now - 29; with 30s skew the receipt is still (barely) valid
+      // at the pre-check, and expires 1s later.
+      const receipt = await allow({
+        iss: "did:web:bolyra.ai", sub: "agent-1", aud: "merchant-x",
+        act: "checkout.charge", perm: "FINANCIAL_SMALL",
+        agentPubKey: agentPub as unknown as CryptoKey,
+        ttlSeconds: -29,
+      }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
+      const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n1", audience: "merchant-x" });
+
+      // Slow resolver: the clock crosses the expiry boundary while the
+      // issuer key lookup is in flight (e.g. a network DID/JWKS fetch).
+      const slowResolver = async (iss: string, kid: string) => {
+        jest.setSystemTime(baseMs + 5000);
+        return iss === "did:web:bolyra.ai" && kid === "k1"
+          ? (issPub as unknown as CryptoKey)
+          : null;
+      };
+
+      const r = await verify(presented, {
+        audience: "merchant-x",
+        trustedIssuers: slowResolver,
+        kbNonce: "n1",
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("EXPIRED");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("receipt expiring exactly on the skew boundary reports EXPIRED (F2 boundary)", async () => {
+    const { privateKey: issPriv, publicKey: issPub } = await generateKeyPair("EdDSA");
+    const { privateKey: agentPriv, publicKey: agentPub } = await generateKeyPair("EdDSA");
+
+    // Freeze the clock on a whole second so exp + skew === now exactly:
+    // ttlSeconds -30 gives exp = now - 30, and the default skew is 30s.
+    jest.useFakeTimers({ now: Math.floor(Date.now() / 1000) * 1000 });
+    try {
+      const receipt = await allow({
+        iss: "did:web:bolyra.ai", sub: "agent-1", aud: "merchant-x",
+        act: "checkout.charge", perm: "FINANCIAL_SMALL",
+        agentPubKey: agentPub as unknown as CryptoKey,
+        ttlSeconds: -30,
+      }, { privateKey: issPriv as unknown as CryptoKey, kid: "k1" });
+      const presented = await present(receipt, agentPriv as unknown as CryptoKey, { nonce: "n1", audience: "merchant-x" });
+
+      const r = await verify(presented, {
+        audience: "merchant-x",
+        trustedIssuers: staticIssuerResolver({ "did:web:bolyra.ai": { k1: issPub as unknown as CryptoKey } }),
+        kbNonce: "n1",
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("EXPIRED");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

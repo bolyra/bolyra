@@ -15,7 +15,7 @@
 // Note on legacy paths: a tilde-less receipt is treated as a v0.1
 // compact-JWS. The orchestrator only routes it to verifyV01 when the caller
 // opts in via opts.acceptLegacyV01; otherwise it returns LEGACY_V01_REJECTED.
-import { jwtVerify, decodeProtectedHeader, decodeJwt } from "jose";
+import { jwtVerify, decodeProtectedHeader, decodeJwt, errors as joseErrors } from "jose";
 import type {
   ReceiptClaims,
   VerifyOptions,
@@ -125,6 +125,24 @@ export async function verify(
   }
   const iss = String(preClaims.iss ?? "");
 
+  // F2 fix: pre-check exp on the decoded (unverified) claims so an expired
+  // receipt reports the canonical `EXPIRED` reason instead of being masked
+  // by jose's generic signature error. jose's jwtVerify automatically
+  // validates exp/nbf and throws a single opaque error for both bad
+  // signature and expired token, which previously surfaced as
+  // INVALID_SIGNATURE and misled design partners debugging clock issues.
+  // A tampered-but-expired token still ends up rejected — the failure
+  // reason is the only thing that changes, from less- to more-informative.
+  // <= matches jose's boundary: jwtVerify treats exp + tolerance === now as
+  // already expired, so a strict < here would let the exact-boundary case
+  // fall through to the catch below and surface as INVALID_SIGNATURE again.
+  const nowEarly = Math.floor(Date.now() / 1000);
+  const skewEarly = opts.clockSkewSeconds ?? 30;
+  const expEarly = preClaims.exp;
+  if (typeof expEarly === "number" && expEarly + skewEarly <= nowEarly) {
+    return { ok: false, reason: "EXPIRED" };
+  }
+
   // VerifyOptions.trustedIssuers is a union (IssuerKeyResolver | TrustedIssuer
   // | TrustedIssuer[]) for v0.1 compatibility. The v0.2 surface requires the
   // resolver function form. Per the project convention we narrow at the call
@@ -147,11 +165,30 @@ export async function verify(
   // Step 4: verify the issuer-JWS signature. typ-pinning here is redundant
   // with Step 2 but cheap, and means a typ mutation slipping past the header
   // check still gets caught.
+  //
+  // F2: pass `clockTolerance` so jose's internal exp/iat check uses the same
+  // skew as `checkIssuerClaims`. Without this, jose's default 0s tolerance
+  // throws a generic signature error on an expired receipt, which we used to
+  // map to INVALID_SIGNATURE — misleading for design partners debugging
+  // clock issues. The pre-check above also catches this when the configured
+  // skew is tight; this `clockTolerance` ensures jose stops emitting the
+  // generic error so `checkIssuerClaims` becomes the single source of truth
+  // for expiry → EXPIRED reason translation.
   let claims: ReceiptClaims;
   try {
-    const v = await jwtVerify(jws, issuerKey as unknown as CryptoKey, { typ: ISS_TYP });
+    const v = await jwtVerify(jws, issuerKey as unknown as CryptoKey, {
+      typ: ISS_TYP,
+      clockTolerance: opts.clockSkewSeconds ?? 30,
+    });
     claims = v.payload as unknown as ReceiptClaims;
-  } catch {
+  } catch (err) {
+    // The pre-check above can pass and the clock still cross exp + skew
+    // while an async issuer resolver is in flight; jose then throws
+    // JWTExpired here. Keep that case fail-closed but report the honest
+    // reason instead of collapsing it into INVALID_SIGNATURE.
+    if (err instanceof joseErrors.JWTExpired) {
+      return { ok: false, reason: "EXPIRED" };
+    }
     return { ok: false, reason: "INVALID_SIGNATURE" };
   }
 

@@ -239,35 +239,76 @@ export type StatusListChecker = (
   expectedIss: string,
 ) => Promise<StatusListResult>;
 
+/**
+ * Options for verify(). The canonical v0.2 fields the runtime actually reads
+ * are `audience` and `trustedIssuers` — these are required on the v0.2 path.
+ * Mirror what `delegation/README.md` shows:
+ *
+ *   const result = await verify(presented, {
+ *     audience: "https://merchant.example",
+ *     trustedIssuers: staticIssuerResolver({ "did:web:bolyra.ai": { k1: issuerPub } }),
+ *     kbNonce: "fresh-server-nonce",
+ *     action: "checkout.charge",
+ *     perm: "FINANCIAL_SMALL",
+ *     amount: 50, currency: "USD",
+ *   });
+ *
+ * The `expectedAudience` / `resolveIssuerKey` fields are accepted at the type
+ * level for back-compat with placeholder shapes but are NOT read by the v0.2
+ * dispatcher. Prefer `audience` / `trustedIssuers`.
+ */
 export type VerifyOptions = {
   /**
-   * Canonical v0.2 expected audience. Optional at the type level so the
-   * legacy v0.1 path (which uses `audience`) can share this single options
-   * shape; the v0.2 dispatcher still requires it at runtime.
+   * Canonical v0.2 expected audience. The verifier represents this audience
+   * (merchant, RP, tool). The receipt's `aud` claim must match exactly.
+   * Required at runtime on the v0.2 path; optional at the type level only so
+   * the legacy v0.1 path can share this shape.
    */
-  expectedAudience?: string;
-  expectedIssuer?: string;
-  /**
-   * Canonical v0.2 issuer key resolver. Optional at the type level so the
-   * legacy v0.1 path (which uses `trustedIssuers`) can share this shape.
-   * The v0.2 dispatcher still requires it at runtime.
-   */
-  resolveIssuerKey?: IssuerKeyResolver;
-  checkStatus?: StatusListChecker;
-  /** Required if the SD-JWT presentation is expected to carry a KB-JWT. */
-  expectedNonce?: string;
-  /** Maximum acceptable iat-skew on KB-JWT (seconds). Default 60. */
-  maxKbIatSkewSeconds?: number;
+  audience?: string;
 
-  // ---- Task 12 KB-JWT support (consumed by verify-kb.ts).
-  // verifyKbJwt reads these directly. The Task 13 orchestrator may also accept
-  // `expectedNonce` / `maxKbIatSkewSeconds` and forward into these fields.
-  /** Task 12: required nonce the KB-JWT payload must echo. */
+  /**
+   * Canonical v0.2 issuer key resolver. Function form:
+   *   (iss: string, kid: string) => Promise<CryptoKey | null>
+   * Use `staticIssuerResolver({ [iss]: { [kid]: pubKey } })` for static keys
+   * or write your own resolver for DID/JWKS-backed lookups. Required at
+   * runtime on the v0.2 path. Returning `null` produces `UNKNOWN_ISSUER_KID`;
+   * throwing produces `KID_RESOLVER_ERROR`.
+   *
+   * The v0.1 path also accepts `TrustedIssuer | TrustedIssuer[]` here for
+   * back-compat; the v0.2 dispatcher requires the function form.
+   */
+  trustedIssuers?: IssuerKeyResolver | TrustedIssuer | TrustedIssuer[];
+
+  /**
+   * Required: the nonce the verifier issued to the holder this session. The
+   * KB-JWT payload must echo this exact value. Empty string is a legitimate
+   * value and is exact-matched. Omitting (undefined) is fail-closed with
+   * `KB_NONCE_REQUIRED` — there is no default.
+   */
   kbNonce?: string;
-  /** Task 12: maximum acceptable KB-JWT age in seconds (iat freshness). Default 60. */
+
+  /** Required action the agent is attempting (matched against receipt.act). */
+  action?: string;
+  /**
+   * Required permission. Accepts either a string label
+   * (e.g. "FINANCIAL_SMALL") or the numeric cumulative bitmask. `permImplies`
+   * in ./permissions resolves both.
+   */
+  perm?: string | number;
+  /** Caller's invocation amount. Checked against receipt.max.amount. */
+  amount?: number;
+  /** Caller's invocation currency. Pairs with `amount`. */
+  currency?: string;
+
+  /** Optional status-list checker. Required if the receipt advertises a status slot. */
+  checkStatus?: StatusListChecker;
+
+  /** Clock skew tolerance in seconds for exp/iat checks. Default 30. */
+  clockSkewSeconds?: number;
+
+  /** Maximum acceptable KB-JWT age in seconds (iat freshness). Default 60. */
   kbMaxAgeSeconds?: number;
 
-  // ---- Task 13 orchestrator switches.
   /**
    * Allow plain compact-JWS receipts (no '~' separator) to be routed through
    * the legacy v0.1 verify path. Default: false. When false (the default), a
@@ -276,39 +317,29 @@ export type VerifyOptions = {
    */
   acceptLegacyV01?: boolean;
 
-  // ---- Legacy v0.1 path fields (consumed by verifyV01).
-  // All optional so the canonical v0.2 shape still compiles. The v0.1 path
-  // accepts either the new names below or the old aliases (expectedAgent,
-  // expectedAction, invocationAmount, clockToleranceSeconds, trustedIssuers
-  // as a TrustedIssuer | TrustedIssuer[]).
-  /** v0.1: caller-expected audience (alias used by verifyV01 in lieu of expectedAudience). */
-  audience?: string;
+  // ---- Legacy v0.1 aliases (consumed by verifyV01 only). Not read by the
+  // v0.2 dispatcher. Use the canonical fields above on the v0.2 path.
+
+  /** v0.1 alias: kept for type compat. The v0.2 dispatcher reads `audience`. */
+  expectedAudience?: string;
+  /** v0.1 alias: kept for type compat. The v0.2 dispatcher reads `trustedIssuers`. */
+  resolveIssuerKey?: IssuerKeyResolver;
   /** v0.1: subject (agent) the verifier expects. */
   expectedSubject?: string;
   /** v0.1 alias of expectedSubject. */
   expectedAgent?: string;
-  /** v0.1: action the agent is attempting. */
-  action?: string;
   /** v0.1 alias of action. */
   expectedAction?: string;
-  /**
-   * v0.1: required permission. Accepts either the numeric cumulative bitmask
-   * (legacy v0.1 surface) or a string label (v0.2 surface, e.g.
-   * "FINANCIAL_UNLIMITED"). `permImplies` in ./permissions resolves both.
-   */
-  perm?: string | number;
-  /** v0.1: caller's invocation amount. */
-  amount?: number;
-  /** v0.1: caller's invocation currency. Pairs with `amount`. */
-  currency?: string;
+  /** v0.1 alias of trustedIssuers + expected issuer string. */
+  expectedIssuer?: string;
+  /** v0.1 alias of kbNonce. */
+  expectedNonce?: string;
+  /** v0.1 alias of kbMaxAgeSeconds. */
+  maxKbIatSkewSeconds?: number;
   /** v0.1 grouped form of {amount, currency}. */
   invocationAmount?: { amount: number; currency: string };
-  /** v0.1: clock skew tolerance in seconds. Default 30. */
-  clockSkewSeconds?: number;
   /** v0.1 alias of clockSkewSeconds. */
   clockToleranceSeconds?: number;
-  /** v0.1: issuer key resolver, OR a single TrustedIssuer / array of them. */
-  trustedIssuers?: IssuerKeyResolver | TrustedIssuer | TrustedIssuer[];
 };
 
 /**

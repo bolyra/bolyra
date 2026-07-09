@@ -53,6 +53,29 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ## [0.7.3] — 2026-07-08
 
+### Fixed
+
+#### Delegation (`@bolyra/delegation` 0.2.3 — not yet published)
+
+- Repo reconciled with the published 0.2.2: the 0.2.1/0.2.2 hotfixes
+  (published 2026-05-13) were cut from a working tree that was never
+  committed — canonical `audience`/`trustedIssuers` option docs in
+  `types.ts`, and the F2 fix in `verify.ts` (an expired receipt reports
+  `EXPIRED` instead of being masked as `INVALID_SIGNATURE` by jose's
+  generic error). Sources restored from the published tarball with
+  regression tests added.
+- New in 0.2.3: the F2 pre-check now uses `<=` so a receipt expiring
+  exactly on the skew boundary also reports `EXPIRED` — published 0.2.2
+  still returns `INVALID_SIGNATURE` in that one case (found by Codex
+  review, confirmed with a frozen-clock regression test).
+- New in 0.2.3: `jose.errors.JWTExpired` is caught distinctly, so a
+  receipt that crosses expiry while a slow async issuer resolver is in
+  flight (network DID/JWKS lookup) also reports `EXPIRED` fail-closed
+  instead of `INVALID_SIGNATURE` (Codex round 2; clock-advancing-resolver
+  regression test).
+- `release.yml` now covers `@bolyra/delegation@*` tags for future OIDC
+  releases (Trusted Publisher config on npmjs.com still required first).
+
 ### Added
 
 #### MCP Shield (`@bolyra/shield` 0.2.0)
