@@ -114,3 +114,33 @@ export function fromBolyraError(
   }
   return deny(code, message ?? (err instanceof Error ? err.message : String(err)));
 }
+
+/**
+ * Shared denial signal for verifier modules.
+ *
+ * A verify/* module throws `VerifyDenial` when a check fails; the core
+ * orchestrator (verify/core.ts) catches it and converts to a `DenyVerdict`
+ * via `.toVerdict()`. Any *unexpected* (non-VerifyDenial) throw is mapped by
+ * the core to `internal_error` + non-zero exit, per spec §7.3. This keeps each
+ * module independently testable (assert the thrown code) while the wire mapping
+ * stays in one place.
+ */
+export class VerifyDenial extends Error {
+  constructor(
+    public readonly code: DenyCode,
+    message: string,
+    public readonly detail?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'VerifyDenial';
+  }
+
+  toVerdict(): DenyVerdict {
+    return deny(this.code, this.message, this.detail);
+  }
+}
+
+/** Type guard: is this a `VerifyDenial` thrown by a verifier module? */
+export function isVerifyDenial(err: unknown): err is VerifyDenial {
+  return err instanceof VerifyDenial;
+}
