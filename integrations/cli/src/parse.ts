@@ -6,7 +6,32 @@
  * - BigInt serialization helpers
  */
 
+import * as crypto from 'node:crypto';
 import { Permission, validateCumulativeBitEncoding, permissionsToBitmask } from '@bolyra/sdk';
+
+/**
+ * BN254 scalar field order. Model hashes are reduced modulo this value so they
+ * fit the circuit's scalar field.
+ */
+const BN254_FIELD_ORDER =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Hash a model identifier into a BN254 scalar field element.
+ *
+ * Computes `sha256(utf8(model))`, interprets the 32-byte digest as a big-endian
+ * BigInt, then reduces it modulo the BN254 scalar field order. The result is
+ * always in the range `[0, BN254_FIELD_ORDER)`.
+ *
+ * This is the canonical model-binding rule shared by `cred create` (credential
+ * issuance) and the external verifier (model-binding check) so both derive an
+ * identical `modelHash` for the same input.
+ */
+export function hashModel(model: string): bigint {
+  const digest = crypto.createHash('sha256').update(model).digest();
+  const full = BigInt('0x' + digest.toString('hex'));
+  return full % BN254_FIELD_ORDER;
+}
 
 /** Duration unit multipliers in seconds */
 const DURATION_UNITS: Record<string, number> = {

@@ -4,9 +4,8 @@
 
 import { parseArgs } from 'node:util';
 import * as fs from 'node:fs';
-import * as crypto from 'node:crypto';
 import { createAgentCredential, permissionsToBitmask } from '@bolyra/sdk';
-import { parseExpiry, parsePermissions, parseKeyFile, serializeBigInt } from '../parse';
+import { parseExpiry, parsePermissions, parseKeyFile, serializeBigInt, hashModel } from '../parse';
 import { saveCredential, ensureStoreDir } from '../store';
 import type { StoredCredential } from '../format';
 
@@ -69,12 +68,8 @@ export async function run(args: string[]): Promise<void> {
   const keyContent = fs.readFileSync(values['operator-key']);
   const operatorKey = parseKeyFile(keyContent);
 
-  // Hash model name: SHA-256 truncated to BN254 field
-  const modelHashBytes = crypto.createHash('sha256').update(values.model).digest();
-  const modelHashFull = BigInt('0x' + modelHashBytes.toString('hex'));
-  // Truncate to BN254 scalar field (modular reduction)
-  const BN254_FIELD_ORDER = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-  const modelHash = modelHashFull % BN254_FIELD_ORDER;
+  // Hash model name: SHA-256 truncated to BN254 field (shared with the verifier)
+  const modelHash = hashModel(values.model);
 
   // Parse permissions
   const permissions = parsePermissions(values.permissions);
