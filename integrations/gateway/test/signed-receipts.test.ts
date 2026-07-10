@@ -15,7 +15,7 @@
 
 import * as http from 'http';
 import { createGatewayProxy } from '../src/proxy';
-import { verifyReceipt } from '@bolyra/receipts';
+import { verifyReceipt, verifyReceiptChain, GENESIS_PREV_RECEIPT_HASH } from '@bolyra/receipts';
 import type { SignedReceipt } from '@bolyra/receipts';
 import type { GatewayConfig, ReceiptWriter } from '../src/types';
 
@@ -468,6 +468,54 @@ describe('signed receipts on every decision', () => {
     const reworded: SignedReceipt = JSON.parse(JSON.stringify(receipt));
     reworded.payload.decision.reasonCode = 'nothing to see here';
     expect(verifyReceipt(reworded)).toBe(false);
+  });
+
+  // ------------------------------------------------------------ hash chaining
+
+  it('receipts from one gateway process form a verifiable hash chain (allow + deny + anonymous)', async () => {
+    const { signed, writer } = makeCapturingWriter();
+    await withGateway(makeConfig(), writer, async (port) => {
+      await proxyRequest(port, {
+        body: toolsCall('read_file'),
+        headers: { Authorization: `Bolyra ${makeDevBundle()}` },
+      }); // allow
+      await proxyRequest(port, {
+        body: toolsCall('transfer_funds'),
+        headers: { Authorization: `Bolyra ${makeDevBundle('3')}` },
+      }); // policy deny
+      await proxyRequest(port, { body: toolsCall('read_file') }); // anonymous deny
+    });
+
+    expect(signed).toHaveLength(3);
+    // The startup probe must not consume seq 0 — the first WRITTEN receipt is genesis.
+    expect(signed[0].payload.chain?.seq).toBe(0);
+    expect(signed[0].payload.chain?.prevReceiptHash).toBe(GENESIS_PREV_RECEIPT_HASH);
+    signed.forEach((r, i) => {
+      expect(r.payload.chain?.seq).toBe(i);
+      expect(r.receiptHash).toMatch(/^0x[0-9a-f]{64}$/);
+    });
+    const result = verifyReceiptChain(signed, { expectedSigner: signed[0].signature.signer });
+    expect(result.issues).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('deleting or reordering receipts in the gateway log breaks chain verification', async () => {
+    const { signed, writer } = makeCapturingWriter();
+    await withGateway(makeConfig(), writer, async (port) => {
+      for (let i = 0; i < 4; i++) {
+        await proxyRequest(port, {
+          body: toolsCall('read_file'),
+          headers: { Authorization: `Bolyra ${makeDevBundle()}` },
+        });
+      }
+    });
+    expect(signed).toHaveLength(4);
+
+    const deleted = [signed[0], signed[2], signed[3]];
+    expect(verifyReceiptChain(deleted).ok).toBe(false);
+
+    const reordered = [signed[0], signed[2], signed[1], signed[3]];
+    expect(verifyReceiptChain(reordered).ok).toBe(false);
   });
 
   // ------------------------------------------------------------- regressions

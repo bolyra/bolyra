@@ -6,7 +6,7 @@
  * Usage:
  *   bolyra cred create|inspect|revoke|list
  *   bolyra key generate|show
- *   bolyra receipt verify
+ *   bolyra receipt verify|verify-chain
  *   bolyra dev
  *   bolyra --help
  *   bolyra --version
@@ -43,6 +43,10 @@ async function runReceiptVerify(args: string[]): Promise<void> {
   const { run } = await import('./commands/receipt-verify');
   await run(args);
 }
+async function runReceiptVerifyChain(args: string[]): Promise<void> {
+  const { run } = await import('./commands/receipt-verify-chain');
+  await run(args);
+}
 async function runDev(args: string[]): Promise<void> {
   const { run } = await import('./commands/dev');
   await run(args);
@@ -75,6 +79,7 @@ Commands:
   key show          Show public key info from a private key file
 
   receipt verify    Verify a signed audit receipt
+  receipt verify-chain  Verify a JSONL receipt log as a hash chain
 
   verify            Verify an external proof bundle (stdin JSON → verdict JSON)
 
@@ -152,8 +157,11 @@ export async function main(argv: string[]): Promise<void> {
       if (action === 'verify') {
         return runReceiptVerify(rest);
       }
+      if (action === 'verify-chain') {
+        return runReceiptVerifyChain(rest);
+      }
       console.error(`Unknown receipt command: ${action ?? '(none)'}`);
-      console.error('Available: verify');
+      console.error('Available: verify, verify-chain');
       process.exitCode = 2;
       return;
     case 'inspect':

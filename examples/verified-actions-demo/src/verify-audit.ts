@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { readAuditLog, verifyAuditLog, tamperChecks } from './audit';
+import { readAuditLog, verifyAuditLog, verifyAuditChain, tamperChecks, logTamperChecks } from './audit';
 import { pkgRoot } from './paths';
 
 const ROOT = pkgRoot(__dirname);
@@ -41,6 +41,19 @@ function main(): void {
     if (!valid) failures++;
   }
 
+  console.log('\nChain check (whole-log integrity — seq + prevReceiptHash links):');
+  const chainResult = verifyAuditChain(receipts, signerInfo.signer);
+  if (chainResult.ok) {
+    console.log(`  chain intact: ${chainResult.chained} receipts, head ${chainResult.headHash}`);
+    console.log('  note: tail truncation is not detectable from the log alone — pin the head');
+    console.log('  hash above and re-check with `bolyra receipt verify-chain --expect-head`.');
+  } else {
+    for (const issue of chainResult.issues) {
+      console.log(`  line ${issue.index + 1}: [${issue.code}] ${issue.message}`);
+    }
+    failures += chainResult.issues.length;
+  }
+
   console.log('\nTamper checks (mutated copies must NOT verify):');
   const sample = receipts.find((r) => !r.payload.decision.allowed) ?? receipts[0];
   if (sample) {
@@ -50,6 +63,13 @@ function main(): void {
       console.log(`  ${check.description} -> ${ok ? 'rejected (good)' : 'ACCEPTED (bug!)'}`);
       if (!ok) failures++;
     }
+  }
+
+  console.log('\nLog tamper checks (deleted/reordered lines must break the chain):');
+  for (const check of logTamperChecks(receipts)) {
+    const ok = !check.chainStillVerifies;
+    console.log(`  ${check.description} -> ${ok ? 'chain broken (good)' : 'chain STILL VERIFIES (bug!)'}`);
+    if (!ok) failures++;
   }
 
   if (failures > 0) {

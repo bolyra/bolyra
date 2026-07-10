@@ -15,7 +15,7 @@
  */
 
 import { randomBytes } from 'crypto';
-import { createAuthReceipt, signReceipt } from '@bolyra/receipts';
+import { createAuthReceipt, signReceipt, ReceiptChain } from '@bolyra/receipts';
 import type { AuthReceiptInput, ReceiptSignerConfig, SignedReceipt } from '@bolyra/receipts';
 import type { BolyraAuthContext, BolyraProofBundle } from '@bolyra/mcp';
 import type { GatewayConfig, GatewayDenial } from './types';
@@ -66,7 +66,23 @@ export function createGatewayReceiptSigner(
 
   // Derive the signer address by signing a throwaway probe payload — same
   // approach as the verified-actions demo. Also validates the key material.
+  // Signed OUTSIDE the chain: the probe is never written to the log, so the
+  // first written receipt must be the chain's genesis (seq 0).
   const probe = signReceipt(createAuthReceipt(probeInput(), signerConfig), signerConfig);
+
+  // Hash-chain state for this gateway process: every signed decision carries
+  // { seq, prevReceiptHash } inside the signed payload, making deletion or
+  // reordering of log lines detectable (`bolyra receipt verify-chain`). One
+  // chain per process lifetime — a restart starts a new chain at seq 0, so
+  // rotate log files per run if the log must verify as a single chain.
+  //
+  // Chain state advances at SIGN time, before the (fire-and-forget) writer
+  // persists the receipt. Deliberate: if a write is dropped, the resulting
+  // log is genuinely incomplete, and the seq gap makes verify-chain FAIL —
+  // an auditor should see that loss, not a clean-verifying survivor log.
+  // (Signing failures do NOT advance state: ReceiptChain.sign throws before
+  // updating, and the proxy falls back to a tagged unsigned raw record.)
+  const chain = new ReceiptChain();
 
   return {
     issuer: signerConfig.issuer,
@@ -79,7 +95,7 @@ export function createGatewayReceiptSigner(
         issuer: signerConfig.issuer,
         keyId: signerConfig.keyId,
       });
-      return signReceipt(payload, signerConfig);
+      return chain.sign(payload, signerConfig);
     },
   };
 }
