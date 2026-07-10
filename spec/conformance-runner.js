@@ -250,6 +250,17 @@ function runExternalVerifierVector(vector) {
     const inputs = vector.inputs || {};
     const expected = vector.expected || {};
 
+    // Static-verdict mode (contract §3.5): validate a literal verifier verdict
+    // object against the §3.4 verdict schema WITHOUT spawning a verifier. This
+    // exercises the OPTIONAL `kind` self-description across proof-system classes
+    // (classical | zk | external). It has no CLI dependency by design: the
+    // reference `bolyra verify` is a zk-class verifier and cannot itself emit a
+    // classical/external verdict, so class coverage is asserted at the schema
+    // level here rather than via a spawned process.
+    if (inputs.static_verdict !== undefined) {
+        return runStaticVerdictVector(inputs.static_verdict, expected);
+    }
+
     if (!fs.existsSync(VERIFY_CLI)) {
         return {
             skipped: true,
@@ -327,6 +338,115 @@ function runExternalVerifierVector(vector) {
     }
 
     return { pass: expected.result === 'PASS' };
+}
+
+/**
+ * The §3.4 verdict JSON Schema (External Verifier Contract v1), mirrored here for
+ * static-verdict conformance checks. Kept in lockstep with
+ * spec/external-verifier-contract-v1.md §3.4 — the `kind` field is the 2026-07-10
+ * additive amendment (§15). A drift between this copy and §3.4 is a bug.
+ */
+const VERDICT_SCHEMA_V1 = {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'https://bolyra.ai/spec/external-verifier-verdict-v1.json',
+    title: 'External Verifier Verdict v1',
+    oneOf: [
+        {
+            type: 'object',
+            required: ['verdict'],
+            additionalProperties: false,
+            properties: {
+                verdict: { const: 'allow' },
+                kind: { type: 'string', enum: ['classical', 'zk', 'external'] },
+                consume_nonces: {
+                    type: 'array',
+                    minItems: 1,
+                    items: {
+                        type: 'object',
+                        required: ['issuer_key', 'nonce', 'retain_until'],
+                        additionalProperties: false,
+                        properties: {
+                            issuer_key: { type: 'string' },
+                            nonce: { type: 'string' },
+                            retain_until: { type: 'integer' },
+                        },
+                    },
+                },
+            },
+        },
+        {
+            type: 'object',
+            required: ['verdict', 'code', 'message'],
+            additionalProperties: false,
+            properties: {
+                verdict: { const: 'deny' },
+                kind: { type: 'string', enum: ['classical', 'zk', 'external'] },
+                code: {
+                    type: 'string',
+                    enum: [
+                        'malformed_input',
+                        'unsupported_version',
+                        'invalid_bundle',
+                        'invalid_proof',
+                        'untrusted_root',
+                        'delegation_invalid',
+                        'invalid_signature',
+                        'request_mismatch',
+                        'model_mismatch',
+                        'unknown_capability',
+                        'scope_exceeded',
+                        'expired',
+                        'nonce_missing',
+                        'nonce_replayed',
+                        'internal_error',
+                    ],
+                },
+                message: { type: 'string' },
+                detail: { type: 'object' },
+            },
+        },
+    ],
+};
+
+/**
+ * Validate a literal verdict object against the §3.4 verdict schema and, for
+ * PASS vectors, assert its verdict/code/kind. A verdict with no `kind` defaults
+ * to `zk` (contract §3.3). For FAIL vectors, conformance means the §3.4 schema
+ * REJECTS the verdict (e.g. an out-of-enum `kind`).
+ */
+function runStaticVerdictVector(verdict, expected) {
+    const Ajv = require('ajv/dist/2020');
+    const ajv = new Ajv({ allErrors: true });
+    const validate = ajv.compile(VERDICT_SCHEMA_V1);
+    const schemaValid = validate(verdict);
+
+    if (expected.result === 'FAIL') {
+        return {
+            pass: !schemaValid,
+            reason: schemaValid ? 'expected §3.4 schema to reject the verdict but it validated' : '',
+        };
+    }
+
+    if (!schemaValid) {
+        return { pass: false, reason: `verdict failed §3.4 schema: ${ajv.errorsText(validate.errors)}` };
+    }
+    if (expected.verdict && verdict.verdict !== expected.verdict) {
+        return { pass: false, reason: `verdict mismatch: got '${verdict.verdict}', want '${expected.verdict}'` };
+    }
+    if (expected.code && verdict.code !== expected.code) {
+        return { pass: false, reason: `deny code mismatch: got '${verdict.code}', want '${expected.code}'` };
+    }
+    if (expected.kind) {
+        // Absent `kind` is defined as `zk` for backward compatibility (§3.3).
+        const effectiveKind = verdict.kind === undefined ? 'zk' : verdict.kind;
+        if (effectiveKind !== expected.kind) {
+            return {
+                pass: false,
+                reason: `kind mismatch: got '${effectiveKind}' (absent defaults to zk), want '${expected.kind}'`,
+            };
+        }
+    }
+    return { pass: true };
 }
 
 async function runHandshakeVector(vector, { poseidon, eddsa, babyJub, F }) {

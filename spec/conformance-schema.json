@@ -46,7 +46,7 @@
             "session_token",
             "external_verifier"
           ],
-          "description": "The category of conformance behavior being tested. 'external_verifier' is an IO-contract class: the runner spawns the built 'bolyra verify' CLI and diffs the stdout verdict (see spec/external-verifier-contract-v1.md)."
+          "description": "The category of conformance behavior being tested. 'external_verifier' is an IO-contract class: the runner spawns the built 'bolyra verify' CLI and diffs the stdout verdict, OR — when inputs.static_verdict is present — validates a literal verdict object against the §3.4 verdict schema without spawning (used to exercise the proof-system `kind` self-description across classes). See spec/external-verifier-contract-v1.md."
         },
         "status": {
           "type": "string",
@@ -75,6 +75,11 @@
             "code": {
               "type": "string",
               "description": "For 'external_verifier' deny vectors: the expected denial code from the External Verifier Contract v1 registry"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["classical", "zk", "external"],
+              "description": "For 'external_verifier' static-verdict vectors: the expected verifier proof-system self-description (External Verifier Contract v1 §3.5). An absent verdict `kind` defaults to 'zk'."
             }
           },
           "description": "Expected outcome, including result and any additional behavioral checks"

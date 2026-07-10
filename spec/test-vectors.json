@@ -1269,6 +1269,71 @@
         "verdict": "deny",
         "code": "model_mismatch"
       }
+    },
+    {
+      "id": "external-verifier-kind-zk-default",
+      "description": "Contract §3.3/§3.5: a verdict with no `kind` field is interpreted as the `zk` class for backward compatibility with wire-version-1 verifiers that predate the field (e.g. the reference `bolyra verify`). Validated against the §3.4 verdict schema, no CLI spawn.",
+      "type": "external_verifier",
+      "inputs": {
+        "static_verdict": { "verdict": "allow" }
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "allow",
+        "kind": "zk"
+      }
+    },
+    {
+      "id": "external-verifier-kind-zk-explicit",
+      "description": "Contract §3.5: a `zk`-class verifier MAY set `kind` explicitly; `\"kind\":\"zk\"` is equivalent to omitting it for a revision-aware host (a strict pre-revision host rejects any kind-bearing verdict per §11). The §3.4 schema accepts the field on an allow verdict.",
+      "type": "external_verifier",
+      "inputs": {
+        "static_verdict": { "verdict": "allow", "kind": "zk" }
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "allow",
+        "kind": "zk"
+      }
+    },
+    {
+      "id": "external-verifier-kind-classical-allow",
+      "description": "Contract §3.5: a `classical`-class verifier (Bolyra Core — ES256K receipts, JWT delegation, policy/nonce checks) returns the same allow envelope tagged with `kind: classical`. Exercises the classical class at the §3.4 schema level.",
+      "type": "external_verifier",
+      "inputs": {
+        "static_verdict": { "verdict": "allow", "kind": "classical" }
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "allow",
+        "kind": "classical"
+      }
+    },
+    {
+      "id": "external-verifier-kind-external-deny",
+      "description": "Contract §3.5/§9: a third-party (`external`-class) verifier denies using the shared denial-code registry and tags the verdict `kind: external`. Exercises the external class plus a deny verdict carrying `kind`.",
+      "type": "external_verifier",
+      "inputs": {
+        "static_verdict": { "verdict": "deny", "kind": "external", "code": "expired", "message": "credential expired" }
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "expired",
+        "kind": "external"
+      }
+    },
+    {
+      "id": "external-verifier-kind-invalid-rejected",
+      "description": "Contract §3.5: `kind` MUST be one of classical|zk|external. A verdict carrying an out-of-enum `kind` MUST be rejected by the §3.4 verdict schema (the host fails closed on the malformed verdict, §7.2). Conformance = schema rejection.",
+      "type": "external_verifier",
+      "inputs": {
+        "static_verdict": { "verdict": "allow", "kind": "quantum" }
+      },
+      "expected": {
+        "result": "FAIL",
+        "reason": "kind value outside the classical|zk|external enum must be rejected by the §3.4 verdict schema"
+      }
     }
   ]
 }

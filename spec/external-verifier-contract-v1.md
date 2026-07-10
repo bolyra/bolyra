@@ -2,7 +2,10 @@
 
 - **Status:** Stable (v1)
 - **Wire version:** `1` (integer-major; see §11)
-- **Reference implementation:** `bolyra verify` in `@bolyra/cli` (`integrations/cli`)
+- **Document revision:** 2026-07-10 (additive, backward-compatible; wire major
+  unchanged — see the changelog in §15)
+- **Reference implementation:** `bolyra verify` in `@bolyra/cli`
+  (`integrations/cli`) — a `zk`-class verifier (§3.5)
 - **Companion documents:** `spec/CONFORMANCE.md` (conformance vectors), design spec
   `docs/superpowers/specs/2026-07-08-external-verifier-cli-design.md`
 
@@ -30,12 +33,18 @@ implement or consume the contract without depending on Bolyra internals. The
 needs to understand its internal `bvp/1` structure. A host adopts the contract by
 learning four steps (§10), not the proof format.
 
-This contract governs the *transport and verdict envelope*. The reference
-verifier's internal verification algorithm (envelope validation, Groth16
-verification, trusted-root checks, scope/expiry/replay binding) is specified in
-the design document; a conforming verifier MAY implement any algorithm so long as
-it honors the input schema (§2), the verdict schema (§3), the exit-code semantics
-(§6), and the stdout discipline (§5).
+This contract governs the *transport and verdict envelope* and is
+**proof-system-agnostic**: the request (§2) and verdict (§3) envelopes are
+identical whether the verifier checks Groth16 zero-knowledge proofs, classical
+signatures (ES256K receipts, JWT delegation, policy/nonce checks), or a third
+party's own scheme. A verifier **SHOULD** announce which proof-system class it
+implements via the verdict's `kind` self-description (§3.5), and a host **MAY**
+route to, or branch on, verifiers of a given class. The reference `bolyra verify`
+verifier is a `zk`-class verifier; its internal algorithm (envelope validation,
+Groth16 verification, trusted-root checks, scope/expiry/replay binding) is
+specified in the design document. A conforming verifier of **any** class **MAY**
+implement any algorithm so long as it honors the input schema (§2), the verdict
+schema (§3), the exit-code semantics (§6), and the stdout discipline (§5).
 
 ## 2. Host → verifier request (stdin)
 
@@ -192,6 +201,11 @@ human-uniqueness nullifier when the bundle is human-backed (the human entry's
 - `detail` (object, **OPTIONAL**) — structured context for logs/debugging. A
   verifier **SHOULD** echo the originating internal error code here (e.g.
   `sdk_code`) so the coarse wire `code` stays stable while logs stay precise.
+- `kind` (string, **OPTIONAL**) — the verifier's proof-system **self-description**,
+  one of `classical`, `zk`, or `external` (§3.5). It **MAY** appear on either an
+  `allow` or a `deny` verdict. When it is **absent**, the host **MUST** interpret
+  the verdict as `zk`. A verifier whose class is **not** `zk` (i.e. `classical` or
+  `external`) **MUST** set `kind` explicitly, because omission is read as `zk`.
 
 ### 3.4 Verdict JSON Schema
 
@@ -207,6 +221,7 @@ human-uniqueness nullifier when the bundle is human-backed (the human entry's
       "additionalProperties": false,
       "properties": {
         "verdict": { "const": "allow" },
+        "kind": { "type": "string", "enum": ["classical", "zk", "external"] },
         "consume_nonces": {
           "type": "array",
           "minItems": 1,
@@ -229,6 +244,7 @@ human-uniqueness nullifier when the bundle is human-backed (the human entry's
       "additionalProperties": false,
       "properties": {
         "verdict": { "const": "deny" },
+        "kind": { "type": "string", "enum": ["classical", "zk", "external"] },
         "code": {
           "type": "string",
           "enum": [
@@ -256,6 +272,57 @@ human-uniqueness nullifier when the bundle is human-backed (the human entry's
   ]
 }
 ```
+
+### 3.5 Verifier self-description (`kind`) and proof-system class
+
+Because the contract is proof-system-agnostic (§1), the same wire envelope carries
+verdicts from verifiers built on different cryptographic foundations. The
+**OPTIONAL** verdict field `kind` lets a verifier declare which class it
+implements, so a host that spawns a verifier it did not build — or that fans a
+request across several verifiers — can record and, if it chooses, branch on the
+class of proof that produced the decision.
+
+`kind` takes exactly one of three values:
+
+| `kind` | Proof-system class | Bolyra product line | Examples |
+|---|---|---|---|
+| `classical` | Classical public-key crypto — signatures, tokens, policy/nonce checks, no zero-knowledge. | **Bolyra Core** | ES256K-signed receipts, JWT delegation tokens, capability/scope and replay-nonce checks. |
+| `zk` | Zero-knowledge circuit proofs. | **Bolyra ZK** | Groth16 proofs for private delegation, credential predicates, human-uniqueness nullifiers. |
+| `external` | A third-party verifier implementing this contract with its own proof system. | — (third party) | A vendor verifier the host adopts without depending on Bolyra internals. |
+
+Normative rules:
+
+- A verifier **SHOULD** set `kind` to the class it implements.
+- A verifier that implements this revision as a `classical`- or `external`-class
+  verifier **MUST** set `kind` explicitly (such verifiers are introduced by the
+  2026-07-10 revision, §15; no non-`zk` verifier existed under the original v1). A
+  verifier **MUST NOT** emit a `kind` value outside the three-member set above; a
+  host **MUST** treat an unrecognized `kind` as a malformed verdict and fail closed
+  (§7.2).
+- The reference `bolyra verify` verifier is `zk`-class. For backward
+  compatibility with wire version `1` verifiers that predate this field, a verdict
+  **without** `kind` **MUST** be interpreted by the host as `zk` (§3.3). A
+  `zk`-class verifier **MAY** therefore omit the field; emitting `"kind":"zk"`
+  explicitly is equivalent for a revision-aware host. Because a host validating
+  against the *original* (pre-revision) closed v1 schema rejects **any**
+  `kind`-bearing verdict (§11), a `zk`-class verifier that must remain
+  interoperable with such a host **SHOULD** omit `kind` rather than emit
+  `"kind":"zk"`.
+- `kind` is **advisory metadata about provenance**, not an authorization input.
+  The `verdict`, `code`, and (in host nonce mode) `consume_nonces` fields are the
+  sole enforcement surface; a host **MUST NOT** upgrade a `deny` to an `allow`, or
+  relax any §7 fail-closed obligation, on the basis of `kind`.
+- The value is **self-reported by the verifier and is not authenticated**. A host
+  that requires a proof of a particular class **MUST** establish the verifier's
+  class from its **configured verifier identity or policy** (which command it
+  spawned, and the trust configuration it supplied) — never from the `kind` string
+  alone. A host **MAY** use `kind` for logging, or to deny more strictly on a
+  mismatch between the expected and reported class, but **MUST NOT** use it to
+  relax trust, verifier selection, schema validation, nonce handling, or any §7
+  fail-closed obligation.
+
+The denial-code registry (§9) is shared across all three classes; a `classical`-
+or `external`-`kind` verifier reuses the same vocabulary (§9).
 
 ## 4. Canonicalization, domain separation, and the binding signature
 
@@ -412,7 +479,10 @@ The host **MUST** treat **all** of the following as **deny**, regardless of what
 - timeout (§6) — the host **MUST** kill the process and deny;
 - death by signal / crash;
 - unparseable, empty, oversized, or multi-object stdout (§5.2);
-- an unknown `verdict` value or a `deny` missing required fields.
+- an unknown `verdict` value or a `deny` missing required fields;
+- a verdict that otherwise fails the §3.4 verdict schema — including an
+  unrecognized `kind` value (outside `classical` | `zk` | `external`, §3.5) or any
+  disallowed additional property.
 
 The verifier is designed so these are the *only* ways it fails ambiguously; every
 outcome it can reason about is an explicit `deny` with a `code` (§9).
@@ -463,7 +533,11 @@ for host-side bookkeeping only.
 The stable, lowercase `snake_case` vocabulary for the verdict `code` field. This
 table is the single normative source; hosts **MAY** branch on these tokens and
 **MUST** treat an unrecognized future `code` as deny. Verifiers **MUST NOT** add,
-remove, or rename a code without a version bump (§11).
+remove, or rename a code without a version bump (§11). The registry is
+**proof-system-agnostic** (§3.5): a `classical`- or `external`-`kind` verifier
+reuses the same codes — e.g. `invalid_proof` covers a failed classical signature
+or token check as well as a failed Groth16 verification, and the Groth16-specific
+wording in a row's *Meaning* is illustrative of the `zk` class, not exclusive.
 
 | `code` | Meaning |
 |---|---|
@@ -500,7 +574,8 @@ opaque throughout; the host never parses proofs.
 4. **Decide, fail-closed** (§7): `allow` → proceed (and, in host nonce mode,
    reserve-before-act EVERY `consume_nonces` entry, §7.3); anything else — `deny`, non-zero
    exit, timeout, signal death, unparseable/oversized/multi-object stdout, unknown
-   verdict — → reject.
+   verdict, or a verdict that fails §3.4 schema validation (e.g. an unrecognized
+   `kind`) — → reject.
 
 Language-neutral pseudocode:
 
@@ -547,6 +622,33 @@ This split — *wire envelopes integer-major, embedded proofs semver* — is
 intentional and is stated here so it does not read as accidental. The denial-code
 registry (§9) is part of the wire contract and is therefore also governed by the
 integer-major rule: adding, removing, or renaming a code is a wire-major change.
+
+**Additive optional fields do not bump the wire major.** The verdict `kind` field
+(§3.5) is **OPTIONAL** and its absence has a defined meaning (`zk`, §3.3). Adding
+it is compatible in the two directions that occur in practice: (i) a verifier that
+omits `kind` — which includes **every** wire-`1` verifier predating this revision,
+all of them `zk`-class — produces verdicts that both pre-revision and
+revision-aware hosts accept; and (ii) a revision-aware host accepts those older
+no-`kind` verdicts unchanged, reading them as `zk`.
+
+The one caveat, stated plainly: the §3.4 verdict schema is **closed**
+(`additionalProperties: false`), so a host validating against the *original* v1
+schema will reject any verdict that actually *carries* `kind` — including a `zk`
+verifier's explicit `"kind":"zk"`. The compatibility guarantee is therefore
+precise rather than absolute: **omitted**-`kind` verdicts interoperate in both
+directions (§3.3 reads their absence as `zk`), but any verdict that **emits**
+`kind` requires a revision-aware host. This does not force a wire-major bump,
+because the two classes of verifier that would emit `kind` are already paired with
+revision-aware hosts: a `zk`-class verifier that must remain interoperable with a
+strict pre-revision host **SHOULD** simply omit the field (§3.5), and a
+`classical`- or `external`-class verifier — which **MUST** emit `kind` (§3.5) — did
+not exist under the original v1 (the reference verifier was `zk`-only and emitted
+no `kind`), so it is introduced by this revision and consumed only by
+revision-aware hosts. Because the change adds only a named **OPTIONAL** property
+with a defined default and introduces no new required field, it is recorded in the
+document changelog (§15) rather than by incrementing the wire `version`. A field
+that is **REQUIRED**, or whose omission would change how an existing verdict is
+interpreted, would instead remain a wire-major change.
 
 ## 12. Reference implementation flags (informative)
 
@@ -654,6 +756,28 @@ code, so the host fail-closes on either signal:
 { "verdict": "deny", "code": "internal_error", "message": "no trusted root source configured" }
 ```
 
+### 13.7 Allow — `classical`-kind verifier (Bolyra Core)
+
+A `classical`-class verifier (§3.5) — e.g. one that checks an ES256K-signed
+receipt and a JWT delegation token rather than a Groth16 proof — returns the same
+`allow` envelope, tagged with its `kind`. Verdict (exit 0):
+
+```json
+{ "verdict": "allow", "kind": "classical" }
+```
+
+### 13.8 Deny — `external`-kind verifier
+
+A third-party verifier (§3.5) denies with the shared registry (§9) and its own
+`kind`. Verdict (exit 0):
+
+```json
+{ "verdict": "deny", "kind": "external", "code": "expired", "message": "credential expired" }
+```
+
+An agent-only `zk` verdict (§13.1) carries no `kind`; the host reads its absence
+as `zk` (§3.3).
+
 ## 14. References
 
 - Denial-code registry and IO-contract framing: `spec/CONFORMANCE.md`.
@@ -661,6 +785,25 @@ code, so the host fail-closes on either signal:
   `docs/superpowers/specs/2026-07-08-external-verifier-cli-design.md`.
 - Host integration guide (mcp_agent_mail):
   `docs/integrations/mcp-agent-mail-verifier.md`.
+
+## 15. Changelog
+
+The wire contract is versioned integer-major (§11); this changelog records
+**additive, backward-compatible** document revisions that do **not** increment the
+wire `version`. A wire-`1` verifier that predates an entry below — necessarily
+`zk`-class and emitting no `kind` — remains conformant, and its no-`kind` verdicts
+are read as `zk` (§3.3); a verifier that implements a revision as a non-`zk` class
+adopts that revision's obligations (e.g. it **MUST** set `kind`, §3.5).
+
+- **2026-07-10 (wire version `1`, additive).** Made proof-system-agnosticism
+  explicit. Added the **OPTIONAL** verdict field `kind` (`classical` | `zk` |
+  `external`) as a verifier self-description (§3.3, §3.5) and to the §3.4 verdict
+  schema; defined its absence as `zk` for backward compatibility. Stated in §1 and
+  §9 that the transport, verdict envelope, and denial-code registry are shared
+  across proof-system classes, and recorded in §11 that adding an optional field
+  with a defined default does not bump the wire major. Motivated by the split of
+  Bolyra into **Bolyra Core** (`classical`) and **Bolyra ZK** (`zk`), alongside
+  third-party (`external`) verifiers.
 
 [RFC 2119]: https://www.rfc-editor.org/rfc/rfc2119
 [RFC 8174]: https://www.rfc-editor.org/rfc/rfc8174
