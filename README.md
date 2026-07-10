@@ -1,6 +1,6 @@
 # Bolyra
 
-Unified zero-knowledge proof identity protocol for humans and AI agents.
+Verified agent actions: authorization policy, signed receipts, and tamper-evident audit for AI agent tool calls.
 
 - **Domain:** [bolyra.ai](https://bolyra.ai)
 - **Company:** ZKProva Inc.
@@ -8,7 +8,11 @@ Unified zero-knowledge proof identity protocol for humans and AI agents.
 
 ## What this is
 
-Bolyra is a mutual zero-knowledge proof authentication protocol. Humans prove uniqueness via a Semaphore v4-style enrollment circuit; AI agents prove EdDSA-signed credentials with cumulative-bit permissions; a delegation circuit narrows scope one-way. A handshake binds a Groth16 (human) and Groth16 (agent) proof to a shared session nonce, verified atomically on-chain.
+When an AI agent calls a tool, Bolyra proves who — and what — authorized the action. Put the gateway in front of any MCP server (or embed the verifier in your agent platform) and every tool call gets four checks: credential verification, per-tool policy, replay protection, and a signed audit receipt.
+
+Under the hood it is a mutual zero-knowledge proof authentication protocol: humans prove uniqueness via a Semaphore v4-style enrollment circuit; AI agents prove EdDSA-signed credentials with cumulative-bit permissions; a delegation circuit narrows scope one-way (permissions can only drop, never widen). A handshake binds the human and agent Groth16 proofs to a shared session nonce, verified atomically on-chain — but you don't need to know any of that to gate your first MCP server with one command.
+
+**Building an agent platform?** Bolyra plugs in as an external verifier and gives you an enterprise security capability — verified agent actions — without rebuilding auth. See [bolyra.ai](https://bolyra.ai/#platforms).
 
 ## Repository layout
 
