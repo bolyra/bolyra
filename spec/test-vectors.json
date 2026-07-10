@@ -977,7 +977,7 @@
           "11111111111111111111"
         ],
         "proof_bytes_b64": "eyJwcm9vZiI6InZhbGlkLWdyb3RoMTYtcHJvb2YtYnl0ZXMifQ==",
-        "content_type": "application/bolyra-proof+json"
+        "content_type": "application/vnd.bolyra.proof+json"
       },
       "expected": {
         "result": "PASS",
@@ -995,7 +995,7 @@
           "55555555555555555555"
         ],
         "proof_bytes_b64": "eyJwcm9vZiI6InNvbWUtYWdlbnQtcG9saWN5LXByb29mIn0=",
-        "content_type": "application/bolyra-proof+json"
+        "content_type": "application/vnd.bolyra.proof+json"
       },
       "expected": {
         "result": "FAIL",
@@ -1014,7 +1014,7 @@
           "22222222222222222222"
         ],
         "proof_bytes_b64": "!!!not-valid-base64!!!",
-        "content_type": "application/bolyra-proof+json"
+        "content_type": "application/vnd.bolyra.proof+json"
       },
       "expected": {
         "result": "FAIL",
@@ -1033,7 +1033,7 @@
           "33333333333333333333"
         ],
         "proof_bytes_b64": "eyJwcm9vZiI6ImZvcndhcmQtY29tcGF0LXByb29mIn0=",
-        "content_type": "application/bolyra-proof+json",
+        "content_type": "application/vnd.bolyra.proof+json",
         "future_field_v2": "some-value",
         "experimental_hint": true
       },
@@ -1057,7 +1057,7 @@
           "77777777777777777777"
         ],
         "proof_bytes_b64": "eyJoYW5kc2hha2UiOiJwcm9vZi1hIiwiZGVsZWdhdGlvbiI6InByb29mLWIifQ==",
-        "content_type": "application/bolyra-proof+json",
+        "content_type": "application/vnd.bolyra.proof+json",
         "circuits_included": ["HumanUniqueness", "Delegation"]
       },
       "expected": {
@@ -1075,7 +1075,7 @@
         "circuit": "AgentPolicy",
         "public_signals": [],
         "proof_bytes_b64": "eyJwcm9vZiI6InBsb25rLWFnZW50LXBvbGljeSJ9",
-        "content_type": "application/bolyra-proof+json"
+        "content_type": "application/vnd.bolyra.proof+json"
       },
       "expected": {
         "result": "FAIL",
@@ -1191,6 +1191,83 @@
         "result": "FAIL",
         "reason": "nonce_replay",
         "failsAt": "bolyra.session_token.issue: session_nonce already consumed"
+      }
+    },
+    {
+      "id": "external-verifier-allow-agent",
+      "description": "IO-contract: valid agent-only bundle, request covered by the signed binding, fresh nonce — the spawned verifier returns allow",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "allow-agent-only",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "local"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "allow"
+      }
+    },
+    {
+      "id": "external-verifier-allow-host-nonce",
+      "description": "IO-contract: same valid bundle under --nonce-mode host — the verifier returns allow and defers nonce burning to the host via consume_nonce",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "allow-agent-only",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "host"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "allow"
+      }
+    },
+    {
+      "id": "external-verifier-deny-malformed-input",
+      "description": "IO-contract: truncated JSON on stdin — the verifier fails closed with deny malformed_input at exit 0",
+      "type": "external_verifier",
+      "inputs": {
+        "request_raw": "{\"version\":1,\"bun",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "external-verifier-deny-scope-exceeded",
+      "description": "IO-contract: capability requires WRITE_DATA but the proof-anchored scope is only READ_DATA — deny scope_exceeded",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "deny-scope-exceeded",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "local"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "scope_exceeded"
+      }
+    },
+    {
+      "id": "external-verifier-deny-model-mismatch",
+      "description": "IO-contract: request.model does not match the model the proof commits to — deny model_mismatch",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "deny-model-mismatch",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "local"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "model_mismatch"
       }
     }
   ]

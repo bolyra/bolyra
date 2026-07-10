@@ -127,6 +127,31 @@
 | 4 | session-missing-nullifier-binding | FAIL | – SKIP |
 | 5 | session-nonce-replay | FAIL | – SKIP |
 
+## Vector Classes
+
+Conformance vectors fall into **two distinct classes**, and the summary counts
+above must not conflate them:
+
+- **Crypto re-derivation class** (`handshake`, `delegation`, `delegation_chain`,
+  `enrollment`, `merkle_inclusion`, `signature_verification`, `sd_jwt`,
+  `proof_envelope`, `session_token`). The runner re-derives the crypto in-process
+  (Poseidon / EdDSA / Merkle) and checks the expected PASS/FAIL result. It never
+  spawns a subprocess.
+
+- **IO-contract class** (`external_verifier`). These vectors exercise the
+  host↔verifier *wire contract* defined in
+  [External Verifier Contract v1](external-verifier-contract-v1.md): the runner
+  **spawns the built `bolyra verify` command**, pipes the vector's §2.1 request to
+  the child's stdin, reads exactly one stdout verdict, and diffs it against
+  `expected.verdict` (and `expected.code` for denies). `expected.result`
+  (PASS/FAIL, required by the schema) means "did the verifier behave as
+  specified"; the *semantic* outcome lives in `expected.verdict` / `expected.code`.
+  Each spawn runs with a fresh temporary `$HOME` so the verifier's local nonce
+  store is isolated, and points `--circuits-dir` at committed Groth16 verifying
+  keys (verify-only; no proving). This class tests the transport and verdict
+  envelope, not the internal crypto — do not fold verdict logic into the
+  re-derivation harness.
+
 ## Normative Requirements
 
 The following requirements are semantic constraints that the JSON Schema cannot
@@ -178,3 +203,6 @@ evolution without breaking existing implementations.
 - [Protocol Specification](draft-bolyra-mutual-zkp-auth-01.md)
 - [DID Method](did-method-bolyra.md)
 - [Test Vectors](test-vectors.json)
+- [External Verifier Contract v1](external-verifier-contract-v1.md) — the
+  host-agnostic wire contract exercised by the `external_verifier` IO-contract
+  vector class

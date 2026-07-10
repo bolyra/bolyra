@@ -18,6 +18,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { spawnSync } = require('child_process');
+
+// External-verifier IO-contract class: spawn the built `bolyra verify` CLI and
+// diff the stdout verdict (see spec/external-verifier-contract-v1.md). These
+// paths are resolved from spec/ up into the CLI package.
+const VERIFY_CLI = path.join(__dirname, '../integrations/cli/dist/main.js');
+const VERIFY_FIXTURES = path.join(__dirname, '../integrations/cli/test/fixtures/verify');
 
 function generateReport(vectors, results) {
     const specVersion = vectors.version;
@@ -73,9 +81,19 @@ function generateReport(vectors, results) {
     return md;
 }
 
-// Use circomlibjs from circuits/node_modules
-const MODULE_PATH = path.join(__dirname, '../circuits/node_modules');
-module.paths.unshift(MODULE_PATH);
+// Resolve runtime deps (circomlibjs, ajv) from the first sibling package whose
+// node_modules is installed. circuits/ is preferred (canonical), with the SDK and
+// CLI packages as fallbacks so the runner also works from an integration worktree
+// where circuits deps have not been installed. Unshift in reverse so the earlier
+// candidates end up first in module.paths.
+const CANDIDATE_MODULE_PATHS = [
+    path.join(__dirname, '../circuits/node_modules'),
+    path.join(__dirname, '../sdk/node_modules'),
+    path.join(__dirname, '../integrations/cli/node_modules'),
+];
+for (const candidate of [...CANDIDATE_MODULE_PATHS].reverse()) {
+    if (fs.existsSync(candidate)) module.paths.unshift(candidate);
+}
 
 const { buildPoseidon, buildEddsa, buildBabyjub } = require('circomlibjs');
 
@@ -199,9 +217,116 @@ async function runVector(vector, crypto) {
             return runProofEnvelopeVector(vector, crypto);
         case 'session_token':
             return { skipped: true, reason: 'experimental — no implementation yet' };
+        case 'external_verifier':
+            return runExternalVerifierVector(vector);
         default:
             return { skipped: true, reason: `unknown vector type: ${vector.type}` };
     }
+}
+
+/**
+ * IO-contract class runner (spec/external-verifier-contract-v1.md).
+ *
+ * Spawns the BUILT `bolyra verify` CLI, pipes the vector's §2.1 request to the
+ * child's stdin, reads EXACTLY one stdout verdict, and diffs it against
+ * `expected.verdict` (+ `expected.code` for denies). Unlike the other vector
+ * types this does not re-derive crypto — it exercises the wire contract.
+ *
+ * inputs:
+ *   request_fixture  string  — dir under test/fixtures/verify/ holding request.json
+ *   request_raw      string  — raw stdin payload (for malformed_input cases)
+ *   roots_file       string  — trusted-roots JSON, relative to the fixtures dir
+ *   capability_map   string  — capability map JSON, relative to the fixtures dir
+ *   nonce_mode       string  — 'local' (default) | 'host'
+ * expected:
+ *   result           'PASS'|'FAIL' — did the verifier behave as specified
+ *   verdict          'allow'|'deny'
+ *   code             deny code (deny vectors only)
+ *
+ * Groth16 VERIFY only: --circuits-dir points at committed vkeys (no proving).
+ * Each spawn runs with a FRESH temp $HOME so the durable nonce store is isolated.
+ */
+function runExternalVerifierVector(vector) {
+    const inputs = vector.inputs || {};
+    const expected = vector.expected || {};
+
+    if (!fs.existsSync(VERIFY_CLI)) {
+        return {
+            skipped: true,
+            reason: `built CLI not found at ${VERIFY_CLI} — run: (cd integrations/cli && npm run build)`,
+        };
+    }
+
+    // Resolve the stdin payload.
+    let input;
+    if (typeof inputs.request_raw === 'string') {
+        input = inputs.request_raw;
+    } else if (typeof inputs.request_fixture === 'string') {
+        const reqPath = path.join(VERIFY_FIXTURES, inputs.request_fixture, 'request.json');
+        if (!fs.existsSync(reqPath)) {
+            return { pass: false, reason: `request fixture not found: ${reqPath}` };
+        }
+        input = fs.readFileSync(reqPath, 'utf-8');
+    } else {
+        return { pass: false, reason: 'external_verifier vector needs inputs.request_fixture or inputs.request_raw' };
+    }
+
+    // Build the CLI args. Verify-only against committed vkeys — never prove.
+    const args = ['verify', '--circuits-dir', path.join(VERIFY_FIXTURES, 'vkeys')];
+    if (inputs.roots_file) args.push('--roots-file', path.join(VERIFY_FIXTURES, inputs.roots_file));
+    if (inputs.capability_map) args.push('--capability-map', path.join(VERIFY_FIXTURES, inputs.capability_map));
+    if (inputs.nonce_mode) args.push('--nonce-mode', inputs.nonce_mode);
+
+    // Fresh temp $HOME so the FileNonceStore ($HOME/.bolyra/nonces) starts empty,
+    // and strip any ambient trusted-roots so each vector supplies its own.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-conf-verify-'));
+    const env = { ...process.env, HOME: home };
+    delete env.BOLYRA_TRUSTED_ROOTS;
+
+    let res;
+    try {
+        res = spawnSync(process.execPath, [VERIFY_CLI, ...args], {
+            input,
+            env,
+            encoding: 'utf-8',
+            maxBuffer: 8 * 1024 * 1024,
+        });
+    } finally {
+        fs.rmSync(home, { recursive: true, force: true });
+    }
+
+    if (res.error) {
+        return { pass: false, reason: `spawn failed: ${res.error.message}` };
+    }
+
+    // Strict single-object parse of stdout (contract §5.2). JSON.parse throws on
+    // any leading/trailing noise or concatenated values.
+    let verdict;
+    try {
+        verdict = JSON.parse((res.stdout || '').trim());
+    } catch (e) {
+        return { pass: false, reason: `stdout is not a single JSON verdict: ${JSON.stringify((res.stdout || '').slice(0, 160))}` };
+    }
+
+    if (expected.verdict && verdict.verdict !== expected.verdict) {
+        return { pass: false, reason: `verdict mismatch: got '${verdict.verdict}', want '${expected.verdict}'` };
+    }
+    if (expected.code && verdict.code !== expected.code) {
+        return { pass: false, reason: `deny code mismatch: got '${verdict.code}', want '${expected.code}'` };
+    }
+
+    // Exit-code discipline (contract §7): 0 for any verdict, non-zero ONLY for
+    // internal_error.
+    const wantNonZero = expected.code === 'internal_error';
+    const status = res.status;
+    if (wantNonZero && status === 0) {
+        return { pass: false, reason: 'expected non-zero exit for internal_error but got 0' };
+    }
+    if (!wantNonZero && status !== 0) {
+        return { pass: false, reason: `expected exit 0 for a verdict but got ${status}` };
+    }
+
+    return { pass: expected.result === 'PASS' };
 }
 
 async function runHandshakeVector(vector, { poseidon, eddsa, babyJub, F }) {
