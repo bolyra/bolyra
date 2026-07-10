@@ -19,11 +19,32 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as snarkjs from 'snarkjs';
 import { canonicalize } from '@bolyra/receipts';
 import type { CircuitName, ProofEnvelope, ProofData } from '@bolyra/sdk';
 import type { ParsedBundle } from './bundle';
 import { VerifyDenial } from './verdict';
+
+/**
+ * Lazy snarkjs loader — the ONLY place the CLI resolves snarkjs.
+ *
+ * snarkjs is a ZK-only cost: `bolyra --help` and every non-ZK command must
+ * never pay its module-load cost (or crash where the native/WASM stack
+ * misbehaves). Even the `verify` command only needs snarkjs at actual
+ * Groth16-verification time, inside the isolated worker. The dynamic import
+ * defers resolution to the first proof verification and caches the in-flight
+ * promise; a failed load clears the cache so a transient failure isn't sticky.
+ */
+type SnarkjsModule = typeof import('snarkjs');
+let cachedSnarkjs: Promise<SnarkjsModule> | undefined;
+function loadSnarkjs(): Promise<SnarkjsModule> {
+  if (!cachedSnarkjs) {
+    cachedSnarkjs = import('snarkjs');
+    cachedSnarkjs.catch(() => {
+      cachedSnarkjs = undefined;
+    });
+  }
+  return cachedSnarkjs;
+}
 
 /** Options controlling where circuit verification keys are resolved from. */
 export interface ProofVerifyOptions {
@@ -170,6 +191,9 @@ export async function verifyEnvelopeProof(
   }
 
   // (3) Groth16 verification (no logger argument — keep snarkjs quiet).
+  // snarkjs is loaded lazily here — the first point in the CLI that truly
+  // needs it — so every other command path stays snarkjs-free.
+  const snarkjs = await loadSnarkjs();
   const ok = await snarkjs.groth16.verify(
     vkey,
     envelope.publicSignals,

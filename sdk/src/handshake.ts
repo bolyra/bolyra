@@ -1,5 +1,4 @@
 import { randomBytes } from 'crypto';
-import * as snarkjs from 'snarkjs';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
@@ -11,6 +10,7 @@ import {
 } from './types';
 import { ProofGenerationError, CircuitArtifactNotFoundError, VerificationError } from './errors';
 import { proveGroth16, ProverBackend } from './prover';
+import { loadSnarkjs } from './zk';
 
 // Default paths to circuit artifacts (relative to package root)
 const DEFAULT_CIRCUIT_DIR = path.join(__dirname, '../../circuits/build');
@@ -266,6 +266,10 @@ export async function verifyHandshake(
   if (!fs.existsSync(agentVkeyPath)) {
     throw new CircuitArtifactNotFoundError(agentVkeyPath, 'vkey');
   }
+
+  // ZK path begins here — snarkjs is loaded lazily so classical (Core)
+  // callers of this module never pay the snarkjs module-load cost.
+  const snarkjs = await loadSnarkjs();
 
   // Verify human proof (Groth16)
   const humanVkey = require(humanVkeyPath);

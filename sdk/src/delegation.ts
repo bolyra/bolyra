@@ -1,4 +1,3 @@
-import * as snarkjs from 'snarkjs';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
@@ -17,6 +16,7 @@ import {
 } from './errors';
 import { eddsaSign, poseidon3, poseidon4 } from './utils';
 import { proveGroth16, ProverBackend } from './prover';
+import { loadSnarkjs } from './zk';
 
 const DEFAULT_CIRCUIT_DIR =
   process.env.BOLYRA_CIRCUITS_DIR ?? path.join(__dirname, '../../circuits/build');
@@ -269,6 +269,9 @@ export async function verifyDelegation(
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const vkey = require(vkeyPath);
 
+  // ZK path begins here — snarkjs is loaded lazily so classical (Core)
+  // callers of this module never pay the snarkjs module-load cost.
+  const snarkjs = await loadSnarkjs();
   const valid = await snarkjs.groth16.verify(vkey, proof.publicSignals, proof.proof);
   if (!valid) {
     throw new VerificationError('Delegation proof failed Groth16 verification.');

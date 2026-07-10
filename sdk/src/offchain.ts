@@ -1,4 +1,3 @@
-import * as snarkjs from 'snarkjs';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ethers } from 'ethers';
@@ -11,6 +10,7 @@ import {
 } from './types';
 import { VerificationError, CircuitArtifactNotFoundError } from './errors';
 import { poseidon2 } from './utils';
+import { loadSnarkjs } from './zk';
 
 // Default paths to circuit artifacts (relative to package root)
 const DEFAULT_CIRCUIT_DIR = path.join(__dirname, '../../circuits/build');
@@ -62,6 +62,10 @@ export async function verifyHandshakeOffchain(
   if (!fs.existsSync(agentVkeyPath)) {
     throw new CircuitArtifactNotFoundError(agentVkeyPath, 'vkey');
   }
+
+  // ZK path begins here — snarkjs is loaded lazily so classical (Core)
+  // callers of this module never pay the snarkjs module-load cost.
+  const snarkjs = await loadSnarkjs();
 
   // Verify both proofs locally (no on-chain interaction)
   const humanVkey = require(humanVkeyPath);

@@ -1,4 +1,3 @@
-import * as snarkjs from 'snarkjs';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -7,6 +6,7 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 import { Proof } from './types';
+import { loadSnarkjs } from './zk';
 
 /**
  * Prover backend selection.
@@ -147,6 +147,9 @@ export async function proveGroth16(
   backend: ProverBackend = 'auto',
 ): Promise<Proof> {
   if (backend === 'snarkjs') {
+    // ZK path — snarkjs is loaded lazily so classical (Core) callers of this
+    // module never pay the snarkjs module-load cost.
+    const snarkjs = await loadSnarkjs();
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, wasmPath, zkeyPath);
     return { proof, publicSignals };
   }
@@ -166,6 +169,7 @@ export async function proveGroth16(
   if (bin) {
     return proveWithRapidsnark(input, wasmPath, zkeyPath, bin);
   }
+  const snarkjs = await loadSnarkjs();
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, wasmPath, zkeyPath);
   return { proof, publicSignals };
 }
