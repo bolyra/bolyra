@@ -43,6 +43,24 @@ console.log('Agent scope commitment:', result.scopeCommitment);
 // await registry.verifyHandshake(humanProof, agentProof, nonce);
 ```
 
+## Low-level primitives (v0.6.0+)
+
+For advanced use — e.g. building an external verifier or recomputing
+credential/scope commitments — the SDK exports its Poseidon hashes and
+BabyJubjub EdDSA primitives:
+
+```typescript
+import { poseidon5, eddsaSign, eddsaVerify, derivePublicKey } from '@bolyra/sdk';
+
+const pub = await derivePublicKey(operatorPrivateKey);   // { x, y }
+const sig = await eddsaSign(operatorPrivateKey, message); // { R8: { x, y }, S }
+const ok  = await eddsaVerify(pub, message, sig);         // boolean
+const h   = await poseidon5(a, b, c, d, e);               // bigint
+```
+
+`eddsaVerify` returns `false` (never throws) on malformed input. See
+`@bolyra/cli`'s `bolyra verify` for a full external-verifier reference.
+
 ## Permissions
 
 Permissions use cumulative bit encoding — higher tiers imply lower ones:

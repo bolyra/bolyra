@@ -21,6 +21,29 @@ cd integrations/cli && npm run build && node dist/main.js
 
 ## Commands
 
+### Verify an external proof bundle (`bolyra verify`)
+
+A spawnable external verifier for MCP hosts and agent-coordination servers. The
+host writes one JSON request to stdin and reads exactly one allow/deny verdict
+from stdout — fail-closed on anything else (non-zero exit, timeout, unparseable
+or multi-object stdout, missing fields).
+
+```bash
+echo '{"version":1,"bundle":"<opaque proof string>","request":{"agent_name":"BlueLake","project_key":"/data/proj","program":"claude-code","model":"opus-4.1","granted_capabilities":["send_message"]},"now_unix":1720000000}' \
+  | bolyra verify --roots-file roots.json --capability-map caps.json --circuits-dir ./vkeys
+# -> {"verdict":"allow"}   (or {"verdict":"deny","code":"...","message":"..."})
+```
+
+Flags: `--nonce-mode local|host` (default `local`), `--roots-file <path>`,
+`--root <decimal>` (repeatable) / `BOLYRA_TRUSTED_ROOTS`, `--capability-map <path>`,
+`--circuits-dir <path>` / `BOLYRA_CIRCUITS_DIR`, `--verbose`.
+
+It verifies the proof envelope + Groth16 proof (vkeyHash-pinned), delegation-chain
+non-expansion, scope/capability binding, model binding, strict expiry, trusted
+Merkle roots, and nonce replay — all anchored to the proof's public commitments.
+See the host-agnostic **[External Verifier Contract v1](../../spec/external-verifier-contract-v1.md)**
+and the **[mcp_agent_mail integration guide](../../docs/integrations/mcp-agent-mail-verifier.md)**.
+
 ### Generate an operator keypair
 
 ```bash
