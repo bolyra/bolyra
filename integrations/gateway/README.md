@@ -60,7 +60,9 @@ Options:
   --target <url>       Upstream MCP server URL (required unless in config)
   --port <number>      Gateway listen port (default: 4100)
   --config <path>      Path to gateway config file (default: ./gateway.yaml)
-  --dev                Enable dev mode (mock verification, no real ZKP)
+  --dev                Enable Bolyra Core mode (classical checks: tool policy,
+                       nonce replay, signed receipts; ZK proof verification off —
+                       credential claims are not cryptographically bound)
   --receipt-dir <path> Directory for receipt JSON files (default: ./receipts/)
   --receipt-stdout     Write receipts to stdout (NDJSON)
   --no-receipts        Disable receipt generation
@@ -79,7 +81,7 @@ target: http://localhost:3000/mcp
 port: 4100
 network: base-sepolia
 
-# Dev mode skips real ZKP verification
+# Bolyra Core mode: classical checks only, ZK proof verification skipped
 devMode: false
 
 # Credential resolution
@@ -326,7 +328,7 @@ docker pull ghcr.io/bolyra/gateway:latest
 ### Quick Start
 
 ```bash
-# Dev mode -- mock verification, no config file needed
+# Bolyra Core mode -- classical checks, no circuits, no config file needed
 docker run --rm -p 4100:4100 ghcr.io/bolyra/gateway \
   --target http://host.docker.internal:3000/mcp --dev
 ```

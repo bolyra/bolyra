@@ -10,7 +10,12 @@ Verified agent actions: authorization policy, signed receipts, and tamper-eviden
 
 When an AI agent calls a tool, Bolyra proves who — and what — authorized the action. Put the gateway in front of any MCP server (or embed the verifier in your agent platform) and every tool call gets four checks: credential verification, per-tool policy, replay protection, and a signed audit receipt.
 
-Under the hood it is a mutual zero-knowledge proof authentication protocol: humans prove uniqueness via a Semaphore v4-style enrollment circuit; AI agents prove EdDSA-signed credentials with cumulative-bit permissions; a delegation circuit narrows scope one-way (permissions can only drop, never widen). A handshake binds the human and agent Groth16 proofs to a shared session nonce, verified atomically on-chain — but you don't need to know any of that to gate your first MCP server with one command.
+Bolyra ships in two tiers on the same verifier contract:
+
+- **Bolyra Core** — classical crypto, no circuits, no trusted setup: per-tool policy, nonce replay protection, ES256K-signed action receipts, and JWT-based delegation claims ([`@bolyra/delegation`](delegation/)). This is the gateway's `--dev` mode today; packaged `--dev` enforces policy, replay protection, and signed receipts, but credential permission claims are self-asserted and not cryptographically bound.
+- **Bolyra ZK** — the privacy upgrade: humans prove uniqueness via a Semaphore v4-style enrollment circuit; AI agents prove EdDSA-signed credentials with cumulative-bit permissions; a delegation circuit narrows scope one-way (permissions can only drop, never widen), with the delegation path hidden from the verifier. A handshake binds the human and agent Groth16 proofs to a shared session nonce, verified atomically on-chain.
+
+Core gets you policy-gated, replay-protected, receipted actions. ZK gets you cryptographically bound verified actions **without disclosure** — the verifier learns that the predicate holds, not your credentials, policies, or delegation graph. You don't need ZK to gate your first MCP server with one command.
 
 **Building an agent platform?** Bolyra plugs in as an external verifier and gives you an enterprise security capability — verified agent actions — without rebuilding auth. See [bolyra.ai](https://bolyra.ai/#platforms).
 
