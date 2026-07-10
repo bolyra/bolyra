@@ -282,40 +282,6 @@ verifyReceipt(receipt);                  // true — signature + payload hash ch
 verifyReceipt(receipt, pinnedSigner);    // true — also pins the signer address
 ```
 
-### Hash-Chained Receipts (v0.5.0+)
-
-Signatures make each receipt tamper-evident; hash-chaining makes the receipt
-**stream** tamper-evident. Every receipt the gateway signs carries
-`chain: { seq, prevReceiptHash }` inside the signed payload (`seq` is 0-based
-per gateway process; the first receipt links to the 32-zero-byte genesis
-sentinel) plus a top-level `receiptHash` that the next receipt links to.
-Deleting, reordering, or inserting receipts in a collected log breaks chain
-verification even though every remaining signature stays individually valid:
-
-```bash
-# stdout mode: collect NDJSON to a file, verify signatures + chain
-bolyra receipt verify-chain receipts.ndjson --signer 0xPinnedSigner
-```
-
-Notes for auditors:
-
-- **One chain per gateway process.** A restart starts a new chain at seq 0 —
-  rotate the collected log per process run (or verify each run's segment
-  separately); a mid-file restart is reported as `chain-restart`.
-- **File mode** writes one JSON file per receipt; the chain fields still
-  order and link them (concatenate in seq order to verify).
-- **Tail truncation is not detectable from the log alone.** Chain
-  verification proves nothing was deleted, reordered, or edited *within* the
-  log, but a log cut after any receipt is still internally consistent. Pin
-  the head hash / receipt count that `verify-chain` prints and re-verify with
-  `--expect-head` / `--expect-count`. How and how often you anchor those
-  checkpoints (object-lock storage, transparency log, chain) is
-  enterprise-configurable deployment policy.
-- Receipts predating 0.5.0 have no chain fields; `--allow-unchained` accepts
-  them as a leading prefix (signatures still verified) while chain-verifying
-  the rest. A chain-less receipt after a chained one always fails — it could
-  be an inserted line.
-
 ### Receipt Output Modes
 
 | Mode | Description |

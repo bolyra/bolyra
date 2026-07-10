@@ -27,23 +27,12 @@ That's it. You'll see four scenes and an audit section:
 
 Then the demo prints the audit log (`audit/audit-log.jsonl`, one signed
 receipt per line), verifies every receipt against the published signer
-address, and shows that three kinds of receipt tampering (flipping a verdict,
+address, and shows that three kinds of tampering (flipping a verdict,
 rewriting the deny reason, splicing a signature from another receipt) all
-break verification.
-
-Signatures make each *receipt* tamper-evident; **hash-chaining makes the
-LOG tamper-evident**. Every receipt's signed payload carries
-`chain: { seq, prevReceiptHash }` (genesis uses the 32-zero-byte sentinel),
-so the demo's final scenes delete a line and reorder two lines and show that
-chain verification (`verifyReceiptChain` from `@bolyra/receipts`, or
-`bolyra receipt verify-chain audit/audit-log.jsonl`) fails both times — even
-though every remaining signature is still individually valid. One honest
-limitation, stated by the tooling itself: truncating receipts off the *tail*
-of the log leaves a chain that is still internally consistent. Closing that
-gap means anchoring the chain head hash / receipt count externally and
-re-verifying with `--expect-head` / `--expect-count`; the anchoring mechanism
-and checkpoint cadence are enterprise-configurable (buyer-specified) rather
-than something this demo picks for you.
+break verification. Signatures make each *receipt* tamper-evident;
+whole-log integrity (detecting deleted or reordered lines) is a production
+add-on — sequence numbers or hash-chaining with externally anchored
+checkpoints.
 
 Re-verify later, with the gateway long gone:
 
@@ -71,29 +60,21 @@ Each line in `audit-log.jsonl` is a self-contained `SignedReceipt`:
       "permissionBitmask": "1",
       "chainDepth": 0
     },
-    "proof": { "nonce": "…", "humanProofHash": "…", "agentProofHash": "…", "publicSignalsHash": "…" },
-    "chain": {
-      "seq": 1,                  // 0-based position in the log
-      "prevReceiptHash": "0x…"   // previous receipt's hash (genesis: 32 zero bytes)
-    }
+    "proof": { "nonce": "…", "humanProofHash": "…", "agentProofHash": "…", "publicSignalsHash": "…" }
   },
   "signature": {
     "alg": "ES256K",
     "signer": "0x6f57a2d737bf21a52010a26af2a480a28d6624b5",
     "payloadHash": "0x…",
     "value": "0x…"       // 65-byte r||s||v secp256k1 signature
-  },
-  "receiptHash": "0x…"   // this receipt's canonical hash (what the NEXT line links to)
+  }
 }
 ```
 
 `verifyReceipt()` recomputes the canonical payload hash, recovers the signer
 from the signature, and checks both — so an auditor needs nothing but the
 JSONL file and the signer address. Change one byte of the payload and
-verification fails. `verifyReceiptChain()` additionally walks the
-`chain.seq` / `chain.prevReceiptHash` links across the whole file — the
-`chain` block sits *inside* the signed payload, so it cannot be rewritten to
-hide a deletion without breaking a signature.
+verification fails.
 
 ## How it works
 
@@ -131,7 +112,7 @@ hide a deletion without breaking a signature.
 | `src/gateway-host.ts` | Gateway middleware + policy + signed receipts + forwarding |
 | `src/upstream.ts` | Mock "payments" MCP server being protected |
 | `src/agents.ts` | Demo credentials + dev-mode proof bundles |
-| `src/audit.ts` | Signed, hash-chained JSONL audit log: record / read / verify / chain-verify / tamper-check |
+| `src/audit.ts` | Signed JSONL audit log: record / read / verify / tamper-check |
 | `src/verify-audit.ts` | Standalone offline verification (`npm run verify`) |
 | `gateway.yaml` | Tool policy, in the standard `@bolyra/gateway` config format |
 | `test/demo.test.ts` | E2E test: allow, deny, receipt count, tamper rejection |
@@ -199,7 +180,5 @@ npm test
 Compiles, runs the full demo as a child process, and asserts: both allow
 verdicts, all three deny verdicts (policy, replay, forged claim), exactly one
 signed receipt per decision, every receipt verifies independently (the test
-imports `@bolyra/receipts` directly), the log verifies as a hash chain,
-deleting or reordering log lines breaks chain verification (while leaving
-every individual signature valid), and all tampered receipt variants fail
+imports `@bolyra/receipts` directly), and all tampered variants fail
 verification.

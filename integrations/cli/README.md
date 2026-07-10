@@ -1,6 +1,6 @@
 # @bolyra/cli
 
-Unified CLI for Bolyra credential lifecycle management. Create, inspect, revoke, and list agent credentials. Generate Ed25519 operator keypairs. Verify signed audit receipts and hash-chained receipt logs. Generate dev identities for testing.
+Unified CLI for Bolyra credential lifecycle management. Create, inspect, revoke, and list agent credentials. Generate Ed25519 operator keypairs. Verify signed audit receipts. Generate dev identities for testing.
 
 ## Install
 
@@ -116,28 +116,6 @@ bolyra receipt verify receipt.json
 bolyra receipt verify receipt.json --signer 0xabc...
 cat receipt.json | bolyra receipt verify --stdin --max-age 3600
 ```
-
-### Verify a receipt log as a hash chain
-
-`receipt verify` checks one receipt; `receipt verify-chain` checks a whole
-JSONL log (one signed receipt per line, e.g. a gateway audit log) — every
-ES256K signature AND the hash chain each signed payload carries
-(`chain: { seq, prevReceiptHash }`, genesis = 32 zero bytes):
-
-```bash
-bolyra receipt verify-chain audit-log.jsonl
-bolyra receipt verify-chain audit-log.jsonl --signer 0xabc...
-bolyra receipt verify-chain audit-log.jsonl --expect-count 128 --expect-head 0xdef...
-bolyra receipt verify-chain audit-log.jsonl --allow-unchained   # log STARTS with pre-chaining receipts
-```
-
-Detects, from the log alone: edited receipts, deleted lines, reordered lines,
-inserted lines, and head truncation (a log that no longer starts at genesis).
-**Not detectable from the log alone:** truncation from the tail — a chain cut
-after any receipt is still internally consistent. On success the command
-prints the chain head hash; pin it (and the count) externally — anchoring
-mechanism and cadence are enterprise-configurable — and pass them back via
-`--expect-head` / `--expect-count` to close that gap.
 
 ### Generate dev identities
 

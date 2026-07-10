@@ -15,7 +15,7 @@ import * as assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { verifyReceipt, verifyReceiptChain, GENESIS_PREV_RECEIPT_HASH } from '@bolyra/receipts';
+import { verifyReceipt } from '@bolyra/receipts';
 import type { SignedReceipt } from '@bolyra/receipts';
 import { pkgRoot } from '../src/paths';
 
@@ -85,45 +85,6 @@ test('every receipt verifies independently against the published signer', () => 
       `receipt ${receipt.id} failed verification`,
     );
   }
-});
-
-test('receipts are hash-chained: seq 0..n-1 from the genesis sentinel', () => {
-  const receipts = readReceipts();
-  assert.ok(receipts.length > 0);
-  assert.equal(receipts[0].payload.chain?.seq, 0);
-  assert.equal(receipts[0].payload.chain?.prevReceiptHash, GENESIS_PREV_RECEIPT_HASH);
-  receipts.forEach((r, i) => {
-    assert.equal(r.payload.chain?.seq, i, `receipt ${i} has wrong seq`);
-    assert.match(r.receiptHash ?? '', /^0x[0-9a-f]{64}$/, `receipt ${i} missing receiptHash`);
-  });
-  const result = verifyReceiptChain(receipts);
-  assert.equal(result.ok, true, `chain verification failed: ${JSON.stringify(result.issues)}`);
-  assert.equal(result.chained, receipts.length);
-});
-
-test('deleting a line from the audit log breaks chain verification', () => {
-  const receipts = readReceipts();
-  const deleted = [...receipts.slice(0, 1), ...receipts.slice(2)]; // line 2 deleted
-  const result = verifyReceiptChain(deleted);
-  assert.equal(result.ok, false, 'a deleted line must break chain verification');
-  // Every remaining individual signature is still valid — that is exactly why
-  // per-receipt signatures alone cannot catch this.
-  for (const r of deleted) assert.equal(verifyReceipt(r), true);
-});
-
-test('reordering two lines in the audit log breaks chain verification', () => {
-  const receipts = readReceipts();
-  const reordered = [...receipts];
-  [reordered[1], reordered[2]] = [reordered[2], reordered[1]];
-  const result = verifyReceiptChain(reordered);
-  assert.equal(result.ok, false, 'reordered lines must break chain verification');
-  for (const r of reordered) assert.equal(verifyReceipt(r), true);
-});
-
-test('demo narrates the whole-log tamper scenes (delete + reorder)', () => {
-  assert.match(run.stdout, /delet/i, 'expected the deleted-line scene in the narration');
-  assert.match(run.stdout, /reorder/i, 'expected the reordered-lines scene in the narration');
-  assert.match(run.stdout, /chain/i, 'expected chain verification in the narration');
 });
 
 test('tampered receipts fail verification', () => {
