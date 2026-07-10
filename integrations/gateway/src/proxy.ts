@@ -15,6 +15,12 @@ import { createGatewayMiddleware, extractToolName } from './middleware';
 import { injectBolyraHeaders, computeHmac } from './headers';
 import { createHealthHandler } from './health';
 import { createReceiptWriter } from './receipts';
+import {
+  createGatewayReceiptSigner,
+  buildDecisionReceiptInput,
+  buildDenialReceiptInput,
+} from './receipt-signer';
+import type { GatewayReceiptSigner } from './receipt-signer';
 import type {
   GatewayConfig,
   GatewayMiddlewareOptions,
@@ -28,6 +34,12 @@ import type { BolyraAuthContext } from '@bolyra/mcp';
 export interface GatewayProxyOptions extends GatewayMiddlewareOptions {
   /** Custom receipt writer (overrides config-based writer). */
   receiptWriter?: ReceiptWriter;
+  /**
+   * Pre-resolved gateway receipt signer (overrides receiptSigner/config).
+   * Used by the CLI so the proxy signs with the exact key whose address was
+   * printed in the banner and persisted to signer.json.
+   */
+  gatewayReceiptSigner?: GatewayReceiptSigner;
 }
 
 /**
@@ -39,8 +51,20 @@ export function createGatewayProxy(options: GatewayProxyOptions): http.Server {
   const targetUrl = new URL(config.target);
   const isTargetHttps = targetUrl.protocol === 'https:';
 
-  // Create components
-  const authMiddleware = createGatewayMiddleware(options);
+  // Create components.
+  // Receipts are active when either the config enables them or the caller
+  // injected a writer. When active, EVERY tools/call decision — allow and
+  // deny, dev and production — is ES256K-signed by the gateway's own signer,
+  // which carries the FINAL decision (including the tool-policy verdict).
+  // The middleware deliberately gets no receiptSigner: a receipt attached by
+  // @bolyra/mcp's verifyBundle records only the verification step, so for a
+  // request that authenticates but fails tool policy it would say
+  // allowed=true while the gateway returned 403.
+  const receiptsActive = options.receiptWriter !== undefined || config.receipts.enabled;
+  const receiptSigner =
+    options.gatewayReceiptSigner ??
+    (receiptsActive ? createGatewayReceiptSigner(config, options.receiptSigner) : undefined);
+  const authMiddleware = createGatewayMiddleware({ ...options, receiptSigner: undefined });
   const healthHandler = createHealthHandler(config);
   const receiptWriter = options.receiptWriter ?? createReceiptWriter(config.receipts);
 
@@ -95,14 +119,14 @@ export function createGatewayProxy(options: GatewayProxyOptions): http.Server {
         if (!authorized) {
           // Middleware already sent response
           if (isToolsCall) {
-            writeReceiptForDenial(receiptWriter, jsonRpcBody, toolName);
+            writeReceiptForDenial(receiptWriter, receiptSigner, config, req, jsonRpcBody, toolName);
           }
           return;
         }
 
         // Write allow receipt for tools/call
         if (isToolsCall) {
-          writeReceiptForAllow(receiptWriter, req.bolyra!, jsonRpcBody, toolName);
+          writeReceiptForAllow(receiptWriter, receiptSigner, config, req, jsonRpcBody, toolName);
         }
       }
 
@@ -168,9 +192,7 @@ function forwardRequest(
 
     // Inject X-Bolyra-* headers for authenticated requests
     if (req.bolyra) {
-      const receiptId = req.bolyra.receipt?.payload
-        ? (req.bolyra.receipt.payload as unknown as Record<string, string>).receiptId
-        : undefined;
+      const receiptId = req.bolyra.receipt?.id;
       const bolyraHeaders = injectBolyraHeaders(req.bolyra, receiptId);
 
       // HMAC sign if configured
@@ -249,37 +271,118 @@ function sendJsonRpcError(
   res.end(body);
 }
 
-/** Write a receipt for a denied request. */
+/**
+ * Write an ES256K-signed receipt for a denied request. Falls back to the
+ * legacy unsigned raw record only if signing itself fails — receipt problems
+ * must never break request handling.
+ */
 function writeReceiptForDenial(
   writer: ReceiptWriter,
+  signer: GatewayReceiptSigner | undefined,
+  config: GatewayConfig,
+  req: GatewayRequest,
   body: JsonRpcRequest | undefined,
   toolName: string | undefined,
 ): void {
+  const denial = req.bolyraDenial;
+  let signingError: string | undefined;
+  if (signer) {
+    try {
+      writer.write(signer.sign(buildDenialReceiptInput(denial, config, toolName)));
+      return;
+    } catch (err) {
+      signingError = (err as Error).message;
+      console.error('[gateway] deny receipt signing error:', signingError);
+    }
+  }
+  // Last-resort record. Explicitly tagged so audit consumers can detect the
+  // gap — a signed receipt cannot be forged from this. (The signing key is
+  // probe-validated at startup, so reaching this at runtime is exceptional.)
   writer.writeRaw({
+    unsigned: true,
+    ...(signingError ? { signingError } : {}),
     decision: 'deny',
     toolName: toolName ?? 'unknown',
     method: body?.method ?? 'unknown',
+    reason: denial?.reason,
     timestamp: new Date().toISOString(),
   });
 }
 
-/** Write a receipt for an allowed request. */
+/**
+ * Write an ES256K-signed receipt for an allowed request and attach it to the
+ * auth context so the X-Bolyra-Receipt-ID header can reference it. Falls back
+ * to the legacy unsigned raw record only if signing fails.
+ */
 function writeReceiptForAllow(
   writer: ReceiptWriter,
-  authCtx: BolyraAuthContext,
+  signer: GatewayReceiptSigner | undefined,
+  config: GatewayConfig,
+  req: GatewayRequest,
   body: JsonRpcRequest | undefined,
   toolName: string | undefined,
 ): void {
-  if (authCtx.receipt) {
-    writer.write(authCtx.receipt);
-  } else {
-    writer.writeRaw({
-      decision: 'allow',
-      toolName: toolName ?? 'unknown',
-      method: body?.method ?? 'unknown',
-      did: authCtx.did,
-      score: authCtx.score,
-      timestamp: new Date().toISOString(),
-    });
+  const authCtx = req.bolyra!;
+  let signingError: string | undefined;
+  if (signer) {
+    try {
+      const receipt = signer.sign(buildAllowInput(req, authCtx, config, toolName));
+      // Cast: @bolyra/mcp pins an older @bolyra/receipts whose SignedReceipt
+      // predates the 'bolyra.commerce' kind — structurally identical for auth.
+      authCtx.receipt = receipt as unknown as NonNullable<BolyraAuthContext['receipt']>; // X-Bolyra-Receipt-ID references this
+      writer.write(receipt);
+      return;
+    } catch (err) {
+      signingError = (err as Error).message;
+      console.error('[gateway] allow receipt signing error:', signingError);
+    }
   }
+  // Last-resort record, tagged so audit consumers can detect the gap.
+  writer.writeRaw({
+    unsigned: true,
+    ...(signingError ? { signingError } : {}),
+    decision: 'allow',
+    toolName: toolName ?? 'unknown',
+    method: body?.method ?? 'unknown',
+    did: authCtx.did,
+    score: authCtx.score,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/** Build the receipt input for an allow decision (same shape the demo emits). */
+function buildAllowInput(
+  req: GatewayRequest,
+  authCtx: BolyraAuthContext,
+  config: GatewayConfig,
+  toolName: string | undefined,
+): import('@bolyra/receipts').AuthReceiptInput {
+  const required = toolName !== undefined ? config.tools?.[toolName]?.requireBitmask : undefined;
+  const reason =
+    `policy_allow: tool "${toolName ?? 'unknown'}" requires ` +
+    `${required === undefined ? 'authentication only' : required.toString(2) + 'b'}, ` +
+    `agent has ${authCtx.permissionBitmask.toString(2)}b`;
+  const bundle = req.bolyraBundle;
+  if (bundle) {
+    return buildDecisionReceiptInput(bundle, authCtx, config, true, reason);
+  }
+  // Verified without receiptable proof material (custom embeddings) — still
+  // leave a signed record of the decision.
+  return {
+    rootDid: authCtx.did,
+    actingDid: authCtx.did,
+    credentialCommitment: authCtx.effectiveCommitment || '0',
+    effectiveCommitment: authCtx.effectiveCommitment || '0',
+    allowed: true,
+    reasonCode: reason,
+    score: authCtx.score,
+    permissionBitmask: authCtx.permissionBitmask.toString(),
+    chainDepth: authCtx.chainDepth,
+    humanProof: { proof: [] },
+    agentProof: { proof: [] },
+    humanPublicSignals: [],
+    agentPublicSignals: [],
+    bundleVersion: 1,
+    nonce: '0',
+  };
 }

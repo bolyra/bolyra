@@ -59,7 +59,7 @@ describe('health check', () => {
 
       expect(status).toBe(200);
       expect(body.status).toBe('ok');
-      expect(body.version).toBe('0.2.0');
+      expect(body.version).toBe(require('../package.json').version);
       expect(body.upstream).toBe('reachable');
       expect(typeof body.uptime).toBe('number');
     } finally {

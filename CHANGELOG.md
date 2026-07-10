@@ -17,6 +17,55 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.5] — 2026-07-10
+
+### Added
+
+#### Gateway (`@bolyra/gateway` 0.2.1 → 0.3.0 — not yet published)
+
+- **ES256K-signed receipts for EVERY decision** — allow and deny, dev mode
+  and production. This makes the landing-page claim ("ES256K-signed receipt
+  for every decision. Allow or deny.") true for the packaged proxy, not just
+  the verified-actions demo it was lifted from. Previously dev mode emitted
+  no receipts at all (`verifyDevBundle` never attaches one) and production
+  denials were written as unsigned raw JSON.
+  - Denials now carry full context: verdict, reason (which tool, required
+    vs. held permissions), agent DID/score when known, proof-material hashes.
+  - Requests with a missing or malformed proof bundle get a signed
+    **anonymous deny receipt** — no unsigned gaps in the audit trail.
+  - Same schema and crypto as `examples/verified-actions-demo`:
+    `createAuthReceipt` + `signReceipt` from `@bolyra/receipts`; every
+    receipt verifies independently via `verifyReceipt()` and is
+    tamper-evident.
+- **Signing key resolution**: explicit `receiptSigner` option →
+  `receipts.privateKey` from config (now validated at startup: 32-byte hex)
+  → ephemeral key generated at startup. The CLI prints the signer address in
+  the banner, warns when running production on an ephemeral key, and (file
+  output) persists `signer.json` to the receipt dir as the pinnable trust
+  anchor — the same pattern as the demo's audit log.
+- New exports: `createGatewayReceiptSigner`, receipt-input builders, and the
+  `GatewayDenial` type (middleware now records why it denied a request on
+  `req.bolyraDenial` so embedders can sign their own deny receipts).
+- Receipts record the gateway's FINAL decision: the proxy signs its own
+  receipts and deliberately does not forward a `receiptSigner` to the
+  verification middleware, because a verification-step receipt says
+  `allowed: true` for an authenticated agent that then fails tool policy
+  (Codex review P1). Delegated calls attribute `actingDid` to the
+  delegation-chain leaf. In the exceptional case that runtime signing fails
+  (the key is probe-validated at startup), the fallback raw record is
+  explicitly tagged `unsigned: true` so audit consumers can detect the gap.
+
+### Fixed
+
+- `X-Bolyra-Receipt-ID` header now actually carries the signed receipt id —
+  it previously read a nonexistent `payload.receiptId` field and was never
+  set. File-mode receipt filenames now use the receipt id instead of
+  `unknown-{timestamp}`.
+- A bundle that parses as JSON but carries no proof material made
+  `verifyBundle` throw, surfacing as an unaudited 502. The middleware now
+  fails closed: HTTP 401 plus a signed anonymous deny receipt (Codex review
+  P1).
+
 ## [0.7.4] — 2026-07-09
 
 ### Added

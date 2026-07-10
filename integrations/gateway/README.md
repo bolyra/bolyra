@@ -109,12 +109,14 @@ nonce:
   #   keyPrefix: "bolyra:nonce:"  # optional, default shown
   #   connectTimeout: 5000        # optional, ms
 
-# Receipt signing
+# Receipt signing — every allow/deny decision is ES256K-signed (see
+# "Signed Receipts" below). Without privateKey an ephemeral key is
+# generated at startup; set it for a stable, pinnable signer address.
 receipts:
   enabled: true
   issuer: "my-gateway"
   keyId: "k1"
-  privateKey: "${BOLYRA_RECEIPT_KEY}"  # env var substitution
+  privateKey: "${BOLYRA_RECEIPT_KEY}"  # 32-byte hex secp256k1 key, env var substitution
   output: file              # "file", "stdout", or "webhook"
   dir: ./receipts/
 
@@ -173,6 +175,7 @@ const middleware = createGatewayMiddleware({ config });
 | `computeHmac(headers, secret)` | HMAC-SHA256 sign X-Bolyra-* headers |
 | `verifyHmac(headers, secret, hmac)` | Verify HMAC on X-Bolyra-* headers |
 | `createReceiptWriter(config)` | Create pluggable receipt output |
+| `createGatewayReceiptSigner(config, override?)` | Resolve the ES256K receipt signer (configured key or ephemeral) |
 | `createHealthHandler(config)` | Create /healthz endpoint handler |
 | `extractToolName(body)` | Extract tool name from JSON-RPC body |
 | `RedisNonceStore` | Redis-backed NonceStore for multi-instance deployments |
@@ -216,20 +219,66 @@ When a request passes verification, the gateway injects these headers into the p
 | `X-Bolyra-Score` | Verification score (0-100) |
 | `X-Bolyra-Permissions` | Effective permission bitmask (decimal) |
 | `X-Bolyra-Chain-Depth` | Delegation chain depth (0 = direct) |
-| `X-Bolyra-Receipt-ID` | Receipt ID (when receipts enabled) |
+| `X-Bolyra-Receipt-ID` | Signed receipt id for this decision (when receipts enabled) |
 | `X-Bolyra-HMAC` | HMAC-SHA256 signature (when HMAC configured) |
 
 The upstream server can use these headers for logging/auditing without importing Bolyra.
 
-## Receipt Output Modes
+## Signed Receipts (v0.3.0+)
+
+Every `tools/call` decision — **allow and deny, dev mode and production** —
+produces an ES256K-signed receipt (`SignedReceipt` from
+[`@bolyra/receipts`](../receipts/README.md): secp256k1 + keccak256,
+Ethereum-compatible recovery). This includes rejections with no usable proof
+bundle at all: a missing or malformed `Authorization` header still leaves a
+signed **anonymous deny receipt**, so the audit trail has no unsigned gaps.
+
+Each receipt carries the verdict (`decision.allowed`), a human-readable
+`reasonCode` (which tool, which permissions were required vs. held), the agent
+DID when known, score, permission bitmask, delegation chain depth, hashes of
+the presented proof material, and the decision timestamp. Any edit to a
+receipt breaks its signature.
+
+**Signing key resolution:**
+
+1. `receiptSigner` option (library embedders)
+2. `receipts.privateKey` from the config (recommended for production)
+3. Otherwise an **ephemeral key** is generated at startup. Receipts remain
+   independently verifiable — the signer address is recoverable from every
+   signature — but the address rotates on restart. The CLI prints the signer
+   address in the startup banner and, in `file` output mode, persists it to
+   `{receipt-dir}/signer.json` so auditors can pin the trust anchor.
+
+**Independent verification** needs only the receipt (plus, optionally, the
+pinned signer address) — no gateway, no database:
+
+```typescript
+import { verifyReceipt } from '@bolyra/receipts';
+
+const receipt = JSON.parse(fs.readFileSync('receipts/2026-07-10/....json', 'utf8'));
+verifyReceipt(receipt);                  // true — signature + payload hash check
+verifyReceipt(receipt, pinnedSigner);    // true — also pins the signer address
+```
+
+### Receipt Output Modes
 
 | Mode | Description |
 |------|-------------|
-| `file` | JSON files in day-rotated directories: `receipts/2026-06-18/{timestamp}-{id}.json` |
+| `file` | JSON files in day-rotated directories: `receipts/2026-06-18/{timestamp}-{receipt-id}.json`, plus `signer.json` with the pinned signer address |
 | `stdout` | NDJSON to stdout (one JSON line per receipt) |
 | `webhook` | HTTP POST to configured URL with optional auth headers |
 
-All modes are non-blocking. Write failures are logged but never interrupt request processing.
+All modes are non-blocking. Write and signing failures are logged but never
+interrupt request processing. The signing key is probe-validated at startup;
+in the exceptional case that signing still fails at runtime, the decision is
+recorded as a raw JSON record explicitly tagged `"unsigned": true` (with the
+signing error), so audit consumers can detect the gap — an unsigned record
+can never masquerade as a signed receipt.
+
+Receipts always record the gateway's **final** decision: a request that
+authenticates successfully but fails tool policy gets a *deny* receipt. A
+bundle that parses as JSON but is missing proof material entirely is denied
+fail-closed (HTTP 401) with a signed anonymous receipt.
 
 ## Security Model
 
@@ -247,7 +296,7 @@ The gateway is the **trust boundary**. Agents present proof bundles; the gateway
 - Delegation escalation (one-way scope narrowing, circuit-enforced)
 - Scope bypass (per-tool bitmask enforcement)
 - Header injection (optional HMAC signing)
-- Audit evasion (receipts for both allows and denials)
+- Audit evasion (ES256K-signed receipts for every decision — allow and deny, including anonymous rejections; tamper-evident via `verifyReceipt`)
 
 ## Permission Bitmask Reference
 

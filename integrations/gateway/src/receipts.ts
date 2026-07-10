@@ -43,6 +43,7 @@ function createFileWriter(baseDir: string): ReceiptWriter {
       const dateDir = now.toISOString().split('T')[0]; // YYYY-MM-DD
       const timestamp = now.toISOString().replace(/[:.]/g, '-');
       const rawReceiptId = (data as { receiptId?: string }).receiptId ??
+        (data as { id?: string }).id ?? // SignedReceipt.id
         (data as { payload?: { receiptId?: string } }).payload?.receiptId ??
         `unknown-${Date.now()}`;
       // Sanitize: strip path traversal and non-safe characters

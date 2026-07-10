@@ -9,10 +9,14 @@
  *   bolyra-gateway --target http://localhost:3000/mcp --dev --port 4100
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadConfig } from './config';
 import { createGatewayProxy } from './proxy';
 import { createReceiptWriter } from './receipts';
+import { createGatewayReceiptSigner } from './receipt-signer';
+import type { GatewayReceiptSigner } from './receipt-signer';
 import { RedisNonceStore } from './redis-nonce-store';
 import { MemoryNonceStore } from '@bolyra/mcp';
 import type { NonceStore } from '@bolyra/mcp';
@@ -121,8 +125,52 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     console.warn('[gateway] WARNING: Redis URL uses unencrypted redis:// -- consider rediss:// for production');
   }
 
-  // Create receipt writer
+  // Create receipt writer + resolve the receipt signer.
+  // Every allow/deny decision gets an ES256K-signed receipt. Without a
+  // configured receipts.privateKey the key is ephemeral: receipts stay
+  // independently verifiable (the signer address is recoverable from each
+  // signature and printed below / persisted to signer.json), but the address
+  // rotates on restart.
   const receiptWriter = createReceiptWriter(config.receipts);
+  let receiptSigner: GatewayReceiptSigner | undefined;
+  if (config.receipts.enabled) {
+    try {
+      receiptSigner = createGatewayReceiptSigner(config);
+    } catch (err) {
+      console.error(`Receipt signer error: ${(err as Error).message}`);
+      console.error('Check receipts.privateKey in your config (32-byte hex secp256k1 key).');
+      process.exit(1);
+    }
+
+    if (receiptSigner.ephemeral && !config.devMode) {
+      console.warn('[gateway] WARNING: no receipts.privateKey configured — using an ephemeral signing key. Receipts remain verifiable, but the signer address rotates on restart. Set receipts.privateKey for a pinnable trust anchor.');
+    }
+
+    // Persist the signer identity next to file-mode receipts so auditors can
+    // pin the trust anchor (same pattern as the verified-actions demo).
+    if (config.receipts.output === 'file') {
+      try {
+        const dir = config.receipts.dir ?? './receipts/';
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(
+          path.join(dir, 'signer.json'),
+          JSON.stringify(
+            {
+              issuer: receiptSigner.issuer,
+              keyId: receiptSigner.keyId,
+              alg: receiptSigner.alg,
+              signer: receiptSigner.signer,
+              ephemeral: receiptSigner.ephemeral,
+            },
+            null,
+            2,
+          ) + '\n',
+        );
+      } catch (err) {
+        console.warn(`[gateway] WARNING: could not write signer.json: ${(err as Error).message}`);
+      }
+    }
+  }
 
   // Create nonce store based on config
   let nonceStore: NonceStore;
@@ -138,15 +186,18 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     nonceStore = new MemoryNonceStore();
   }
 
-  // Create and start the proxy
+  // Create and start the proxy. Passing the resolved signer keeps the
+  // proxy's signing key identical to the one printed in the banner and
+  // persisted to signer.json.
   const server = createGatewayProxy({
     config,
     receiptWriter,
     nonceStore,
+    gatewayReceiptSigner: receiptSigner,
   });
 
   server.listen(config.port, () => {
-    printBanner(config);
+    printBanner(config, receiptSigner);
   });
 
   // Graceful shutdown
@@ -175,7 +226,10 @@ function redactUrl(url: string): string {
 }
 
 /** Print the startup banner. */
-function printBanner(config: { target: string; port: number; devMode: boolean; nonce: { store: string; redis?: { url: string } }; receipts: { enabled: boolean; output: string; dir?: string }; network: string }): void {
+function printBanner(
+  config: { target: string; port: number; devMode: boolean; nonce: { store: string; redis?: { url: string } }; receipts: { enabled: boolean; output: string; dir?: string }; network: string },
+  receiptSigner?: GatewayReceiptSigner,
+): void {
   const receiptInfo = !config.receipts.enabled
     ? 'disabled'
     : config.receipts.output === 'stdout'
@@ -188,6 +242,10 @@ function printBanner(config: { target: string; port: number; devMode: boolean; n
     ? `redis (${redactUrl(config.nonce.redis?.url ?? 'unknown')})`
     : 'memory';
 
+  const signerInfo = receiptSigner
+    ? `${receiptSigner.signer} (ES256K${receiptSigner.ephemeral ? ', ephemeral — set receipts.privateKey to persist' : ''})`
+    : 'n/a';
+
   console.log(`
 @bolyra/gateway v${VERSION}
   Mode:     ${config.devMode ? 'dev' : 'production'}
@@ -195,6 +253,7 @@ function printBanner(config: { target: string; port: number; devMode: boolean; n
   Port:     ${config.port}
   Nonce:    ${nonceInfo}
   Receipts: ${receiptInfo}
+  Signer:   ${signerInfo}
   Network:  ${config.network}
 `);
 }

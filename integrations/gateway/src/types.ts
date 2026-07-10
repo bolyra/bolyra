@@ -5,7 +5,7 @@
  * BolyraAuthContext, BolyraProofBundle, etc. from @bolyra/mcp.
  */
 
-import type { ToolPolicyMap, NonceStore, BolyraAuthContext } from '@bolyra/mcp';
+import type { ToolPolicyMap, NonceStore, BolyraAuthContext, BolyraProofBundle } from '@bolyra/mcp';
 import type { ReceiptSignerConfig, SignedReceipt } from '@bolyra/receipts';
 import type { IncomingMessage, ServerResponse } from 'http';
 
@@ -116,9 +116,25 @@ export interface ReceiptWriter {
   writeRaw(data: Record<string, unknown>): void;
 }
 
+/** Why the middleware denied a request — recorded so the proxy can sign a deny receipt. */
+export interface GatewayDenial {
+  /** Which check failed. */
+  stage: 'missing_auth' | 'malformed_bundle' | 'verification_failed' | 'policy_denied';
+  /** Human-readable reason (becomes the receipt's reasonCode). */
+  reason: string;
+  /** Auth context when verification produced one (verification/policy failures). */
+  authCtx?: BolyraAuthContext;
+  /** The decoded proof bundle when it carried usable proof material. */
+  bundle?: BolyraProofBundle;
+}
+
 /** Request with attached Bolyra auth context. */
 export interface GatewayRequest extends IncomingMessage {
   bolyra?: BolyraAuthContext;
+  /** Decoded proof bundle with usable proof material (set by middleware). */
+  bolyraBundle?: BolyraProofBundle;
+  /** Denial context when the middleware rejected the request. */
+  bolyraDenial?: GatewayDenial;
   /** Parsed JSON-RPC body (set by body parser). */
   jsonRpcBody?: JsonRpcRequest;
   /** Raw body buffer. */

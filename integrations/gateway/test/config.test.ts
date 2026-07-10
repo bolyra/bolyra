@@ -119,6 +119,37 @@ devMode: true
       expect(() => validateConfig(config)).toThrow('webhook.url');
     });
 
+    it('passes valid receipts.privateKey (with and without 0x prefix)', () => {
+      const base: GatewayConfig = {
+        target: 'http://localhost:3000/mcp',
+        port: 4100,
+        network: 'base-sepolia',
+        devMode: false,
+        nonce: { store: 'memory', maxProofAge: 300 },
+        receipts: { enabled: true, output: 'file', privateKey: '0x' + 'ab'.repeat(32) },
+        health: { enabled: true, path: '/healthz' },
+      };
+      expect(() => validateConfig(base)).not.toThrow();
+      base.receipts.privateKey = 'ab'.repeat(32);
+      expect(() => validateConfig(base)).not.toThrow();
+    });
+
+    it('throws on malformed receipts.privateKey', () => {
+      const config = {
+        target: 'http://localhost',
+        receipts: { enabled: true, output: 'file' as const, privateKey: 'not-a-key' },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('"receipts.privateKey" must be a 32-byte secp256k1 key');
+    });
+
+    it('throws on receipts.privateKey with unresolved env var', () => {
+      const config = {
+        target: 'http://localhost',
+        receipts: { enabled: true, output: 'file' as const, privateKey: '${BOLYRA_RECEIPT_KEY}' },
+      } as Partial<GatewayConfig>;
+      expect(() => validateConfig(config)).toThrow('unresolved environment variable');
+    });
+
     it('passes valid redis nonce config', () => {
       const config: GatewayConfig = {
         target: 'http://localhost:3000/mcp',

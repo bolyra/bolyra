@@ -179,7 +179,7 @@ describe('reverse proxy', () => {
       path: '/healthz',
     });
     expect(status).toBe(200);
-    expect(body.version).toBe('0.2.0');
+    expect(body.version).toBe(require('../package.json').version);
     // The health probe sends a HEAD to upstream, which is expected.
     // But the original request body should NOT be forwarded.
     if (lastUpstreamReq) {

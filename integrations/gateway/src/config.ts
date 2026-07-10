@@ -106,6 +106,16 @@ export function validateConfig(config: Partial<GatewayConfig>): asserts config i
     }
   }
 
+  if (config.receipts?.privateKey !== undefined) {
+    if (typeof config.receipts.privateKey !== 'string' || config.receipts.privateKey.length === 0) {
+      errors.push('"receipts.privateKey" must be a non-empty string');
+    } else if (config.receipts.privateKey.includes('${')) {
+      errors.push('"receipts.privateKey" contains unresolved environment variable reference');
+    } else if (!/^(0x)?[0-9a-fA-F]{64}$/.test(config.receipts.privateKey)) {
+      errors.push('"receipts.privateKey" must be a 32-byte secp256k1 key: 64 hex characters, optional 0x prefix');
+    }
+  }
+
   if (config.nonce?.maxProofAge !== undefined) {
     if (typeof config.nonce.maxProofAge !== 'number' || config.nonce.maxProofAge < 30 || config.nonce.maxProofAge > 86400) {
       errors.push('"nonce.maxProofAge" must be between 30 and 86400 seconds');

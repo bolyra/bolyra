@@ -22,6 +22,7 @@ import type {
   GatewayRequest,
   JsonRpcError,
 } from './types';
+import { isReceiptableBundle } from './receipt-signer';
 
 /**
  * Create gateway auth middleware. Returns an async function that verifies
@@ -41,12 +42,14 @@ export function createGatewayMiddleware(
     const authHeader = headerString(req.headers['authorization']);
 
     if (!authHeader || !authHeader.startsWith('Bolyra ')) {
+      const reason = 'missing or malformed Authorization header';
+      req.bolyraDenial = { stage: 'missing_auth', reason: `authentication_failed: ${reason}` };
       sendJsonRpcError(res, 401, {
         jsonrpc: '2.0',
         id: req.jsonRpcBody?.id ?? null,
         error: {
           code: -32000,
-          message: 'Bolyra auth required: missing or malformed Authorization header',
+          message: `Bolyra auth required: ${reason}`,
         },
       });
       return false;
@@ -58,6 +61,10 @@ export function createGatewayMiddleware(
       const json = Buffer.from(encoded, 'base64').toString('utf8');
       bundle = JSON.parse(json);
     } catch {
+      req.bolyraDenial = {
+        stage: 'malformed_bundle',
+        reason: 'authentication_failed: malformed bundle (expected base64-encoded JSON)',
+      };
       sendJsonRpcError(res, 401, {
         jsonrpc: '2.0',
         id: req.jsonRpcBody?.id ?? null,
@@ -69,9 +76,42 @@ export function createGatewayMiddleware(
       return false;
     }
 
-    // Verify the proof bundle
-    const authCtx = await verifyBundle(bundle, mcpConfig);
+    // Expose the bundle for receipt signing only when it carries the proof
+    // material receipts hash. A shapeless bundle gets an anonymous receipt.
+    if (isReceiptableBundle(bundle)) {
+      req.bolyraBundle = bundle;
+    }
+
+    // Verify the proof bundle. verifyBundle can throw on bundles that parse
+    // as JSON but are missing proof material entirely — fail closed with a
+    // 401 (and a recorded denial) rather than bubbling into a 502.
+    let authCtx: BolyraAuthContext;
+    try {
+      authCtx = await verifyBundle(bundle, mcpConfig);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      req.bolyraDenial = {
+        stage: 'verification_failed',
+        reason: `authentication_failed: proof bundle verification threw: ${message}`,
+        bundle: req.bolyraBundle,
+      };
+      sendJsonRpcError(res, 401, {
+        jsonrpc: '2.0',
+        id: req.jsonRpcBody?.id ?? null,
+        error: {
+          code: -32000,
+          message: 'Bolyra auth failed: proof bundle could not be verified',
+        },
+      });
+      return false;
+    }
     if (!authCtx.verified) {
+      req.bolyraDenial = {
+        stage: 'verification_failed',
+        reason: `authentication_failed: ${authCtx.reason ?? 'unknown'}`,
+        authCtx,
+        bundle: req.bolyraBundle,
+      };
       sendJsonRpcError(res, 401, {
         jsonrpc: '2.0',
         id: req.jsonRpcBody?.id ?? null,
@@ -87,6 +127,12 @@ export function createGatewayMiddleware(
     if (toolName) {
       const decision = checkToolPolicy(toolName, authCtx, mcpConfig);
       if (!decision.allowed) {
+        req.bolyraDenial = {
+          stage: 'policy_denied',
+          reason: `policy_denied: ${decision.reason ?? 'tool policy denied'}`,
+          authCtx,
+          bundle: req.bolyraBundle,
+        };
         sendJsonRpcError(res, 403, {
           jsonrpc: '2.0',
           id: req.jsonRpcBody?.id ?? null,

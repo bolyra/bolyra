@@ -28,6 +28,17 @@ export type { RedisNonceStoreOptions } from './redis-nonce-store';
 // Receipts — pluggable receipt output
 export { createReceiptWriter } from './receipts';
 
+// Receipt signing — ES256K-signed receipt for every allow/deny decision
+export {
+  createGatewayReceiptSigner,
+  buildDecisionReceiptInput,
+  buildAuthFailReceiptInput,
+  buildAnonymousDenyReceiptInput,
+  buildDenialReceiptInput,
+  isReceiptableBundle,
+} from './receipt-signer';
+export type { GatewayReceiptSigner } from './receipt-signer';
+
 // Health — health check endpoint handler
 export { createHealthHandler } from './health';
 
@@ -43,6 +54,7 @@ export type {
   HealthConfig,
   HmacConfig,
   ReceiptWriter,
+  GatewayDenial,
   GatewayRequest,
   GatewayHandler,
   JsonRpcRequest,
