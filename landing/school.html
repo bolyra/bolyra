@@ -21,38 +21,4981 @@ html, body { margin: 0; padding: 0; background: #0a0a0a; overflow: hidden; width
 </style>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
 <div id="root"><div class="loading">Loading Bolyra School...</div></div>
 <script>
-// Load JSX files in order via Babel standalone, then mount the app.
-// Each file sets globals on window that subsequent files read.
-async function loadAndTranspile(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to load ' + url + ': ' + res.status);
-  const code = await res.text();
-  const transformed = Babel.transform(code, {
-    presets: [['react', { runtime: 'classic' }]],
-    sourceType: 'script',
-  }).code;
-  // Use indirect eval to run in global scope (new Function scopes const/let)
-  (0, eval)(transformed);
+// Pre-transpiled from school-animations.jsx + school-kit.jsx + school-scenes.jsx
+// Each wrapped in IIFE to avoid const collisions. No Babel needed (CSP-safe).
+// --- school-animations.jsx (pre-transpiled) ---
+(function(){
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
+// @ds-adherence-ignore -- omelette starter scaffold (raw elements/hex/px by design)
+
+/* BEGIN USAGE */
+// animations.jsx — timeline engine. Exports (on window): Stage, Sprite,
+//   TextSprite, ImageSprite, RectSprite, VideoSprite, PlaybackBar,
+//   useTime, useTimeline, useSprite, Easing, interpolate, animate, clamp.
+//
+//   <Stage width={1280} height={720} duration={10} background="#f6f4ef">
+//     <Sprite start={0} end={3}>
+//       <TextSprite text="Hello" x={100} y={300} size={72} color="#111" />
+//     </Sprite>
+//     <Sprite start={2} end={8}>
+//       <ImageSprite src="hero.png" x={200} y={120} width={640} height={360} kenBurns />
+//     </Sprite>
+//   </Stage>
+//
+// Stage({width,height,duration,background,fps,loop,autoplay}) — auto-scales to
+//   viewport; scrubber + play/pause + ←/→ seek + space + 0-reset; persists
+//   playhead. The canvas is an <svg><foreignObject>, export-ready: Share →
+//   Export → Video (or the PlaybackBar's download button) renders it to .mp4.
+//   Screenshot tools DOM-rerender (not pixel-capture) and unwrap this wrapper
+//   so captures should work — but if one comes back black, that's a capture
+//   artifact, not a render bug; trust the live preview.
+// Sprite({start,end,keepMounted}) — mounts children only while playhead is in
+//   [start,end]. Children read {localTime, progress, duration} via useSprite().
+// useTime() → seconds; useTimeline() → {time,duration,playing,setTime,setPlaying}.
+// TextSprite({text,x,y,size,color,font,weight,align,entryDur,exitDur}) — fades/scales in+out.
+// ImageSprite({src,x,y,width,height,fit,radius,kenBurns,placeholder}) — same, with optional ken-burns.
+// RectSprite({x,y,width,height,color,radius}) — solid box with entry/exit.
+// VideoSprite({src,start,end,speed,style}) — looped <video> clip synced to the
+//   timeline; its audio is mixed into the exported video.
+// Easing.{linear,easeIn/Out/InOut Quad/Cubic/Quart/Quint/Expo/Back, …}
+// interpolate([t0,t1,…],[v0,v1,…],ease?) → (t)=>v  — piecewise tween.
+// animate({from,to,start,end,ease}) → (t)=>v  — single tween.
+//
+// Build scenes by composing Sprites inside Stage. Absolutely-position elements.
+//
+// In a .dc.html project, put your scene in a sibling my-scene.jsx (reading
+// {Stage, Sprite, useTime, Easing, …} from window is safe) and mount BOTH:
+//   <x-import component-from-global-scope="MyScene"
+//             from="./animations.jsx ./my-scene.jsx"></x-import>
+// The two files in from= load in order, so my-scene.jsx can use the globals
+// animations.jsx set.
+/* END USAGE */
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Easing functions (hand-rolled, Popmotion-style) ─────────────────────────
+// All easings take t ∈ [0,1] and return eased t ∈ [0,1] (may overshoot for back/elastic).
+const Easing = {
+  linear: t => t,
+  // Quad
+  easeInQuad: t => t * t,
+  easeOutQuad: t => t * (2 - t),
+  easeInOutQuad: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  // Cubic
+  easeInCubic: t => t * t * t,
+  easeOutCubic: t => --t * t * t + 1,
+  easeInOutCubic: t => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1,
+  // Quart
+  easeInQuart: t => t * t * t * t,
+  easeOutQuart: t => 1 - --t * t * t * t,
+  easeInOutQuart: t => t < 0.5 ? 8 * t * t * t * t : 1 - 8 * --t * t * t * t,
+  // Expo
+  easeInExpo: t => t === 0 ? 0 : Math.pow(2, 10 * (t - 1)),
+  easeOutExpo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+  easeInOutExpo: t => {
+    if (t === 0) return 0;
+    if (t === 1) return 1;
+    if (t < 0.5) return 0.5 * Math.pow(2, 20 * t - 10);
+    return 1 - 0.5 * Math.pow(2, -20 * t + 10);
+  },
+  // Sine
+  easeInSine: t => 1 - Math.cos(t * Math.PI / 2),
+  easeOutSine: t => Math.sin(t * Math.PI / 2),
+  easeInOutSine: t => -(Math.cos(Math.PI * t) - 1) / 2,
+  // Back (overshoot)
+  easeOutBack: t => {
+    const c1 = 1.70158,
+      c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  },
+  easeInBack: t => {
+    const c1 = 1.70158,
+      c3 = c1 + 1;
+    return c3 * t * t * t - c1 * t * t;
+  },
+  easeInOutBack: t => {
+    const c1 = 1.70158,
+      c2 = c1 * 1.525;
+    return t < 0.5 ? Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2) / 2 : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2;
+  },
+  // Elastic
+  easeOutElastic: t => {
+    const c4 = 2 * Math.PI / 3;
+    if (t === 0) return 0;
+    if (t === 1) return 1;
+    return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+  }
+};
+
+// ── Core interpolation helpers ──────────────────────────────────────────────
+
+// Clamp a value to [min, max]
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+// interpolate([0, 0.5, 1], [0, 100, 50], ease?) -> fn(t)
+// Popmotion-style: linearly maps t across input keyframes to output values,
+// with optional easing per segment (single fn or array of fns).
+function interpolate(input, output, ease = Easing.linear) {
+  return t => {
+    if (t <= input[0]) return output[0];
+    if (t >= input[input.length - 1]) return output[output.length - 1];
+    for (let i = 0; i < input.length - 1; i++) {
+      if (t >= input[i] && t <= input[i + 1]) {
+        const span = input[i + 1] - input[i];
+        const local = span === 0 ? 0 : (t - input[i]) / span;
+        const easeFn = Array.isArray(ease) ? ease[i] || Easing.linear : ease;
+        const eased = easeFn(local);
+        return output[i] + (output[i + 1] - output[i]) * eased;
+      }
+    }
+    return output[output.length - 1];
+  };
 }
 
-(async () => {
-  try {
-    await loadAndTranspile('school-animations.jsx');
-    await loadAndTranspile('school-kit.jsx');
-    await loadAndTranspile('school-scenes.jsx');
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(window.BolyraExplainer));
-  } catch (err) {
-    console.error('Bolyra School load error:', err);
-    document.getElementById('root').innerHTML =
-      '<div class="loading" style="color:#f87171">Failed to load. Check console.</div>';
+// animate({from, to, start, end, ease})(t) — simpler single-segment tween.
+// Returns `from` before `start`, `to` after `end`.
+function animate({
+  from = 0,
+  to = 1,
+  start = 0,
+  end = 1,
+  ease = Easing.easeInOutCubic
+}) {
+  return t => {
+    if (t <= start) return from;
+    if (t >= end) return to;
+    const local = (t - start) / (end - start);
+    return from + (to - from) * ease(local);
+  };
+}
+
+// ── Timeline context ────────────────────────────────────────────────────────
+
+const TimelineContext = React.createContext({
+  time: 0,
+  duration: 10,
+  playing: false
+});
+const useTime = () => React.useContext(TimelineContext).time;
+const useTimeline = () => React.useContext(TimelineContext);
+
+// ── Sprite ──────────────────────────────────────────────────────────────────
+// Renders children only when the playhead is inside [start, end]. Provides
+// a sub-context with `localTime` (seconds since start) and `progress` (0..1).
+//
+//   <Sprite start={2} end={5}>
+//     {({ localTime, progress }) => <Thing x={progress * 100} />}
+//   </Sprite>
+//
+// Or as a plain wrapper — children can call useSprite() themselves.
+
+const SpriteContext = React.createContext({
+  localTime: 0,
+  progress: 0,
+  duration: 0
+});
+const useSprite = () => React.useContext(SpriteContext);
+function Sprite({
+  start = 0,
+  end = Infinity,
+  children,
+  keepMounted = false
+}) {
+  const {
+    time
+  } = useTimeline();
+  const visible = time >= start && time <= end;
+  if (!visible && !keepMounted) return null;
+  const duration = end - start;
+  const localTime = Math.max(0, time - start);
+  const progress = duration > 0 && isFinite(duration) ? clamp(localTime / duration, 0, 1) : 0;
+  const value = {
+    localTime,
+    progress,
+    duration,
+    visible
+  };
+  return /*#__PURE__*/React.createElement(SpriteContext.Provider, {
+    value: value
+  }, typeof children === 'function' ? children(value) : children);
+}
+
+// ── Sample sprite components ────────────────────────────────────────────────
+
+// TextSprite: fades/slides text in on entry, holds, then fades out on exit.
+// Props: text, x, y, size, color, font, entryDur, exitDur, align
+function TextSprite({
+  text,
+  x = 0,
+  y = 0,
+  size = 48,
+  color = '#111',
+  font = 'Inter, system-ui, sans-serif',
+  weight = 600,
+  entryDur = 0.45,
+  exitDur = 0.35,
+  entryEase = Easing.easeOutBack,
+  exitEase = Easing.easeInCubic,
+  align = 'left',
+  letterSpacing = '-0.01em'
+}) {
+  const {
+    localTime,
+    duration
+  } = useSprite();
+  const exitStart = Math.max(0, duration - exitDur);
+  let opacity = 1;
+  let ty = 0;
+  if (localTime < entryDur) {
+    const t = entryEase(clamp(localTime / entryDur, 0, 1));
+    opacity = t;
+    ty = (1 - t) * 16;
+  } else if (localTime > exitStart) {
+    const t = exitEase(clamp((localTime - exitStart) / exitDur, 0, 1));
+    opacity = 1 - t;
+    ty = -t * 8;
   }
+  const translateX = align === 'center' ? '-50%' : align === 'right' ? '-100%' : '0';
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: `translate(${translateX}, ${ty}px)`,
+      opacity,
+      fontFamily: font,
+      fontSize: size,
+      fontWeight: weight,
+      color,
+      letterSpacing,
+      whiteSpace: 'pre',
+      lineHeight: 1.1,
+      willChange: 'transform, opacity'
+    }
+  }, text);
+}
+
+// ImageSprite: scales + fades in; optional Ken Burns drift during hold.
+function ImageSprite({
+  src,
+  x = 0,
+  y = 0,
+  width = 400,
+  height = 300,
+  entryDur = 0.6,
+  exitDur = 0.4,
+  kenBurns = false,
+  kenBurnsScale = 1.08,
+  radius = 12,
+  fit = 'cover',
+  placeholder = null // {label: string} for striped placeholder
+}) {
+  const {
+    localTime,
+    duration
+  } = useSprite();
+  const exitStart = Math.max(0, duration - exitDur);
+  let opacity = 1;
+  let scale = 1;
+  if (localTime < entryDur) {
+    const t = Easing.easeOutCubic(clamp(localTime / entryDur, 0, 1));
+    opacity = t;
+    scale = 0.96 + 0.04 * t;
+  } else if (localTime > exitStart) {
+    const t = Easing.easeInCubic(clamp((localTime - exitStart) / exitDur, 0, 1));
+    opacity = 1 - t;
+    scale = (kenBurns ? kenBurnsScale : 1) + 0.02 * t;
+  } else if (kenBurns) {
+    const holdSpan = exitStart - entryDur;
+    const holdT = holdSpan > 0 ? (localTime - entryDur) / holdSpan : 0;
+    scale = 1 + (kenBurnsScale - 1) * holdT;
+  }
+  const content = placeholder ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'repeating-linear-gradient(135deg, #e9e6df 0 10px, #dcd8cf 10px 20px)',
+      color: '#6b6458',
+      fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+      fontSize: 13,
+      letterSpacing: '0.04em',
+      textTransform: 'uppercase'
+    }
+  }, placeholder.label || 'image') : /*#__PURE__*/React.createElement("img", {
+    src: src,
+    alt: "",
+    style: {
+      width: '100%',
+      height: '100%',
+      objectFit: fit,
+      display: 'block'
+    }
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      width,
+      height,
+      opacity,
+      transform: `scale(${scale})`,
+      transformOrigin: 'center',
+      borderRadius: radius,
+      overflow: 'hidden',
+      willChange: 'transform, opacity'
+    }
+  }, content);
+}
+
+// RectSprite: simple rectangle that animates position/size/color via props.
+// Useful demo primitive — takes a `render` fn for per-frame customization.
+function RectSprite({
+  x = 0,
+  y = 0,
+  width = 100,
+  height = 100,
+  color = '#111',
+  radius = 8,
+  entryDur = 0.4,
+  exitDur = 0.3,
+  render // optional: (ctx) => style overrides
+}) {
+  const spriteCtx = useSprite();
+  const {
+    localTime,
+    duration
+  } = spriteCtx;
+  const exitStart = Math.max(0, duration - exitDur);
+  let opacity = 1;
+  let scale = 1;
+  if (localTime < entryDur) {
+    const t = Easing.easeOutBack(clamp(localTime / entryDur, 0, 1));
+    opacity = clamp(localTime / entryDur, 0, 1);
+    scale = 0.4 + 0.6 * t;
+  } else if (localTime > exitStart) {
+    const t = Easing.easeInQuad(clamp((localTime - exitStart) / exitDur, 0, 1));
+    opacity = 1 - t;
+    scale = 1 - 0.15 * t;
+  }
+  const overrides = render ? render(spriteCtx) : {};
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      width,
+      height,
+      background: color,
+      borderRadius: radius,
+      opacity,
+      transform: `scale(${scale})`,
+      transformOrigin: 'center',
+      willChange: 'transform, opacity',
+      ...overrides
+    }
+  });
+}
+
+// ── Font inlining ───────────────────────────────────────────────────────────
+// Copy every @font-face rule from the page into a <style> inside the svg's
+// foreignObject, with font URLs rewritten to data: URLs. Makes the svg
+// self-describing so serializing it alone (video export fast path) still
+// renders with the right fonts. Sets data-om-fonts-inlined on the svg when
+// done so the exporter can wait for it.
+
+function useInlineFontsInto(svgRef) {
+  React.useEffect(() => {
+    // Export-tool context only: the cross-origin font fetches violate the
+    // public site's connect-src CSP, and the inlined fonts are only consumed
+    // by the video-export pipeline, which embeds this page in an iframe.
+    if (window.parent === window) return;
+    const svg = svgRef.current;
+    const host = svg && svg.querySelector('foreignObject > div');
+    if (!svg || !host) return;
+    let cancelled = false;
+    (async () => {
+      const rules = [];
+      for (const ss of document.styleSheets) {
+        let cssRules;
+        try {
+          cssRules = ss.cssRules;
+        } catch {
+          // Cross-origin sheet without crossorigin attr (e.g. the standard
+          // fonts.googleapis.com <link>) — fetch the CSS text directly and
+          // regex-extract the @font-face blocks.
+          if (ss.href) {
+            try {
+              const txt = await fetch(ss.href).then(r => {
+                if (!r.ok) throw 0;
+                return r.text();
+              });
+              for (const ff of txt.match(/@font-face\s*{[^}]*}/g) || []) rules.push({
+                css: ff,
+                base: ss.href
+              });
+            } catch {}
+          }
+          continue;
+        }
+        if (!cssRules) continue;
+        for (const r of cssRules) {
+          if (r.type === CSSRule.FONT_FACE_RULE) {
+            rules.push({
+              css: r.cssText,
+              base: ss.href || location.href
+            });
+          }
+        }
+      }
+      const toDataURL = url => fetch(url).then(r => {
+        if (!r.ok) throw 0;
+        return r.blob();
+      }).then(b => new Promise(res => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.onerror = () => res(url);
+        fr.readAsDataURL(b);
+      })).catch(() => url);
+      const parts = await Promise.all(rules.map(async ({
+        css,
+        base
+      }) => {
+        const re = /url\((['"]?)([^'")]+)\1\)/g;
+        let out = css,
+          m;
+        while (m = re.exec(css)) {
+          const u = m[2];
+          if (u.startsWith('data:')) continue;
+          let abs;
+          try {
+            abs = new URL(u, base).href;
+          } catch {
+            continue;
+          }
+          out = out.split(m[0]).join(`url("${await toDataURL(abs)}")`);
+        }
+        return out;
+      }));
+      if (cancelled || !parts.length) {
+        svg.setAttribute('data-om-fonts-inlined', 'true');
+        return;
+      }
+      const style = document.createElement('style');
+      style.textContent = parts.join('\n');
+      host.insertBefore(style, host.firstChild);
+      svg.setAttribute('data-om-fonts-inlined', 'true');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+}
+function Stage({
+  width = 1280,
+  height = 720,
+  duration = 10,
+  background = '#f6f4ef',
+  fps = 60,
+  loop = true,
+  autoplay = true,
+  persistKey = 'animstage',
+  children
+}) {
+  // Props arrive as strings when Stage is mounted via <x-import> (DC
+  // projects) — coerce so style={{width}} gets a number React can px-ify.
+  width = +width || 1280;
+  height = +height || 720;
+  duration = +duration || 10;
+  fps = +fps || 60;
+  if (typeof loop === 'string') loop = loop !== 'false';
+  if (typeof autoplay === 'string') autoplay = autoplay !== 'false';
+  const [time, setTime] = React.useState(() => {
+    try {
+      const v = parseFloat(localStorage.getItem(persistKey + ':t') || '0');
+      return isFinite(v) ? clamp(v, 0, duration) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [playing, setPlaying] = React.useState(autoplay);
+  const [hoverTime, setHoverTime] = React.useState(null);
+  const [scale, setScale] = React.useState(1);
+  const stageRef = React.useRef(null);
+  const canvasRef = React.useRef(null);
+  const rafRef = React.useRef(null);
+  const lastTsRef = React.useRef(null);
+
+  // Persist playhead
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(persistKey + ':t', String(time));
+    } catch {}
+  }, [time, persistKey]);
+
+  // Auto-scale to fit viewport
+  React.useEffect(() => {
+    if (!stageRef.current) return;
+    const el = stageRef.current;
+    const measure = () => {
+      const barH = 44; // playback bar height
+      const s = Math.min(el.clientWidth / width, (el.clientHeight - barH) / height);
+      setScale(Math.max(0.05, s));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [width, height]);
+
+  // Animation loop
+  React.useEffect(() => {
+    if (!playing) {
+      lastTsRef.current = null;
+      return;
+    }
+    const step = ts => {
+      if (lastTsRef.current == null) lastTsRef.current = ts;
+      const dt = (ts - lastTsRef.current) / 1000;
+      lastTsRef.current = ts;
+      setTime(t => {
+        let next = t + dt;
+        if (next >= duration) {
+          if (loop) next = next % duration;else {
+            next = duration;
+            setPlaying(false);
+          }
+        }
+        return next;
+      });
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      lastTsRef.current = null;
+    };
+  }, [playing, duration, loop]);
+
+  // Keyboard: space = play/pause, ← → = seek
+  React.useEffect(() => {
+    const onKey = e => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setPlaying(p => !p);
+      } else if (e.code === 'ArrowLeft') {
+        setTime(t => clamp(t - (e.shiftKey ? 1 : 0.1), 0, duration));
+      } else if (e.code === 'ArrowRight') {
+        setTime(t => clamp(t + (e.shiftKey ? 1 : 0.1), 0, duration));
+      } else if (e.key === '0' || e.code === 'Home') {
+        setTime(0);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [duration]);
+
+  // Video-export protocol: the exporter dispatches this event per frame;
+  // pause + sync the playhead so the capture sees exactly that timestamp.
+  React.useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onSeek = e => {
+      setPlaying(false);
+      setTime(clamp(e.detail.time, 0, duration));
+    };
+    el.addEventListener('data-om-seek-to-time-frame', onSeek);
+    return () => el.removeEventListener('data-om-seek-to-time-frame', onSeek);
+  }, [duration]);
+
+  // Inline @font-face rules into the svg's foreignObject so the svg is
+  // self-describing — serializing it alone (for video export) then renders
+  // with the right fonts. Sets data-om-fonts-inlined once done.
+  useInlineFontsInto(canvasRef);
+  const displayTime = hoverTime != null ? hoverTime : time;
+  const ctxValue = React.useMemo(() => ({
+    time: displayTime,
+    duration,
+    playing,
+    setTime,
+    setPlaying
+  }), [displayTime, duration, playing]);
+  return /*#__PURE__*/React.createElement("div", {
+    ref: stageRef,
+    style: {
+      position: 'absolute',
+      inset: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      background: '#0a0a0a',
+      fontFamily: 'Inter, system-ui, sans-serif'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      minHeight: 0
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    ref: canvasRef,
+    width: width,
+    height: height,
+    "data-om-exportable-video-with-duration-secs": duration,
+    style: {
+      transform: `scale(${scale})`,
+      transformOrigin: 'center',
+      flexShrink: 0,
+      boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+      display: 'block'
+    }
+  }, /*#__PURE__*/React.createElement("foreignObject", {
+    x: "0",
+    y: "0",
+    width: "100%",
+    height: "100%"
+  }, /*#__PURE__*/React.createElement("div", {
+    xmlns: "http://www.w3.org/1999/xhtml",
+    style: {
+      width,
+      height,
+      background,
+      position: 'relative',
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement(TimelineContext.Provider, {
+    value: ctxValue
+  }, children))))), /*#__PURE__*/React.createElement(PlaybackBar, {
+    time: displayTime,
+    actualTime: time,
+    duration: duration,
+    playing: playing,
+    onPlayPause: () => setPlaying(p => !p),
+    onReset: () => {
+      setTime(0);
+    },
+    onSeek: t => setTime(t),
+    onHover: t => setHoverTime(t)
+  }));
+}
+
+// ── Playback bar ────────────────────────────────────────────────────────────
+// Play/pause, return-to-begin, scrub track, time display.
+// Uses fixed-width time fields so layout doesn't thrash.
+
+function PlaybackBar({
+  time,
+  duration,
+  playing,
+  onPlayPause,
+  onReset,
+  onSeek,
+  onHover
+}) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const timeFromEvent = React.useCallback(e => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    return x * duration;
+  }, [duration]);
+  const onTrackMove = e => {
+    if (!trackRef.current) return;
+    const t = timeFromEvent(e);
+    if (dragging) {
+      onSeek(t);
+    } else {
+      onHover(t);
+    }
+  };
+  const onTrackLeave = () => {
+    if (!dragging) onHover(null);
+  };
+  const onTrackDown = e => {
+    setDragging(true);
+    const t = timeFromEvent(e);
+    onSeek(t);
+    onHover(null);
+  };
+  React.useEffect(() => {
+    if (!dragging) return;
+    const onUp = () => setDragging(false);
+    const onMove = e => {
+      if (!trackRef.current) return;
+      const t = timeFromEvent(e);
+      onSeek(t);
+    };
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('mousemove', onMove);
+    return () => {
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onMove);
+    };
+  }, [dragging, timeFromEvent, onSeek]);
+  const pct = duration > 0 ? time / duration * 100 : 0;
+  const fmt = t => {
+    const total = Math.max(0, t);
+    const m = Math.floor(total / 60);
+    const s = Math.floor(total % 60);
+    const cs = Math.floor(total * 100 % 100);
+    return `${String(m).padStart(1, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+  };
+  const mono = 'JetBrains Mono, ui-monospace, SFMono-Regular, monospace';
+  return /*#__PURE__*/React.createElement("div", {
+    "data-omelette-chrome": true,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      padding: '8px 16px',
+      background: 'rgba(20,20,20,0.92)',
+      borderTop: '1px solid rgba(255,255,255,0.08)',
+      width: '100%',
+      maxWidth: 680,
+      alignSelf: 'center',
+      borderRadius: 8,
+      color: '#f6f4ef',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      userSelect: 'none',
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement(IconButton, {
+    onClick: onReset,
+    title: "Return to start (0)"
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 14 14",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M3 2v10M12 2L5 7l7 5V2z",
+    stroke: "currentColor",
+    strokeWidth: "1.5",
+    strokeLinejoin: "round",
+    strokeLinecap: "round"
+  }))), /*#__PURE__*/React.createElement(IconButton, {
+    onClick: onPlayPause,
+    title: "Play/pause (space)"
+  }, playing ? /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 14 14",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "3",
+    y: "2",
+    width: "3",
+    height: "10",
+    fill: "currentColor"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "8",
+    y: "2",
+    width: "3",
+    height: "10",
+    fill: "currentColor"
+  })) : /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 14 14",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M3 2l9 5-9 5V2z",
+    fill: "currentColor"
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: mono,
+      fontSize: 12,
+      fontVariantNumeric: 'tabular-nums',
+      width: 64,
+      textAlign: 'right',
+      color: '#f6f4ef'
+    }
+  }, fmt(time)), /*#__PURE__*/React.createElement("div", {
+    ref: trackRef,
+    onMouseMove: onTrackMove,
+    onMouseLeave: onTrackLeave,
+    onMouseDown: onTrackDown,
+    style: {
+      flex: 1,
+      height: 22,
+      position: 'relative',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      height: 4,
+      background: 'rgba(255,255,255,0.12)',
+      borderRadius: 2
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 0,
+      width: `${pct}%`,
+      height: 4,
+      background: 'oklch(72% 0.12 250)',
+      borderRadius: 2
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: `${pct}%`,
+      top: '50%',
+      width: 12,
+      height: 12,
+      marginLeft: -6,
+      marginTop: -6,
+      background: '#fff',
+      borderRadius: 6,
+      boxShadow: '0 2px 4px rgba(0,0,0,0.4)'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: mono,
+      fontSize: 12,
+      fontVariantNumeric: 'tabular-nums',
+      width: 64,
+      textAlign: 'left',
+      color: 'rgba(246,244,239,0.55)'
+    }
+  }, fmt(duration)), window.parent !== window && typeof VideoEncoder !== 'undefined' && /*#__PURE__*/React.createElement(IconButton, {
+    title: "Export video",
+    onClick: () => window.parent.postMessage({
+      type: 'omelette:request-video-export'
+    }, '*')
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 14 14",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M7 2v7m0 0L4 6m3 3l3-3M2 12h10",
+    stroke: "currentColor",
+    strokeWidth: "1.5",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }))));
+}
+function IconButton({
+  children,
+  onClick,
+  title
+}) {
+  const [hover, setHover] = React.useState(false);
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    title: title,
+    onMouseEnter: () => setHover(true),
+    onMouseLeave: () => setHover(false),
+    style: {
+      width: 28,
+      height: 28,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      borderRadius: 6,
+      color: '#f6f4ef',
+      cursor: 'pointer',
+      padding: 0,
+      transition: 'background 120ms'
+    }
+  }, children);
+}
+
+// ── VideoSprite ─────────────────────────────────────────────────────────────
+// Renders a <video> that loops within [start,end] of its source at `speed`,
+// kept in sync with the Stage's playhead. Carries the
+// data-om-exportable-video-play-* attrs so video export can mix its audio.
+//
+//   <VideoSprite src="clip.mp4" start={2} end={5} speed={1}
+//     style={{ width: 640, height: 360 }} />
+
+function VideoSprite({
+  src,
+  start = 0,
+  end,
+  speed = 1,
+  style,
+  ...rest
+}) {
+  start = +start || 0;
+  speed = +speed || 1;
+  if (end != null) end = +end || undefined;
+  const t = useTime();
+  const ref = React.useRef(null);
+  const span = Math.max(0.001, (end ?? start + 1) - start);
+  React.useEffect(() => {
+    const v = ref.current;
+    if (!v || v.readyState < 1) return;
+    const target = start + t * speed % span;
+    if (Math.abs(v.currentTime - target) > 0.05) v.currentTime = target;
+  }, [t, start, span, speed]);
+  return /*#__PURE__*/React.createElement("video", _extends({
+    ref: ref,
+    src: src,
+    muted: true,
+    playsInline: true,
+    preload: "auto",
+    "data-om-exportable-video-play-start": start,
+    "data-om-exportable-video-play-end": end ?? start + span,
+    "data-om-exportable-video-play-speed": speed,
+    style: {
+      display: 'block',
+      objectFit: 'cover',
+      ...style
+    }
+  }, rest));
+}
+Object.assign(window, {
+  Easing,
+  interpolate,
+  animate,
+  clamp,
+  TimelineContext,
+  useTime,
+  useTimeline,
+  Sprite,
+  SpriteContext,
+  useSprite,
+  TextSprite,
+  ImageSprite,
+  RectSprite,
+  VideoSprite,
+  Stage,
+  PlaybackBar
+});
 })();
+
+// --- school-kit.jsx (pre-transpiled) ---
+(function(){
+// bolyra-kit.jsx — shared palette, helpers, and reusable characters/props
+// Reads Stage/Sprite/Easing/etc from window (animations.jsx loaded first).
+
+const C = {
+  ink: '#2E2350',
+  inkSoft: '#6B5E94',
+  purple: '#A98BFF',
+  purpleDk: '#7C5CFF',
+  amber: '#FFB85C',
+  amberDk: '#F3982F',
+  green: '#46D39A',
+  greenDk: '#1FA873',
+  red: '#FF7184',
+  redDk: '#E5485E',
+  blue: '#6DA8FF',
+  blueDk: '#3E7BE0',
+  teal: '#4FC9DD',
+  tealDk: '#26A7BD',
+  cream: '#FFFFFF',
+  lav: '#F4F0FF',
+  lav2: '#ECE4FF',
+  warm: '#FFF6EC',
+  cool: '#EAF1FF'
+};
+
+// ── timing helpers ──────────────────────────────────────────────────────────
+const smooth = t => {
+  t = Math.max(0, Math.min(1, t));
+  return t * t * (3 - 2 * t);
+};
+const rise = (lt, a, b) => smooth((lt - a) / (b - a));
+// appear at [a,b], hold, disappear at [c,d]
+const env = (lt, a, b, c = 1e9, d = 1e9) => rise(lt, a, b) * (1 - rise(lt, c, d));
+const mix = (t, p, q) => p + (q - p) * t;
+const TAU = Math.PI * 2;
+
+// soft drop shadow presets
+const SH = {
+  sm: '0 4px 14px rgba(60,40,110,0.12)',
+  md: '0 12px 30px rgba(60,40,110,0.16)',
+  lg: '0 22px 50px rgba(60,40,110,0.22)',
+  glow: c => `0 0 0 6px ${c}22, 0 14px 34px ${c}55`
+};
+const FH = "'Fredoka', system-ui, sans-serif"; // headings
+const FB = "'Nunito', system-ui, sans-serif"; // body
+
+// ── Critter ─────────────────────────────────────────────────────────────────
+// kind: human | robot | villain ; mood: happy|worried|sneaky|shocked|cool
+function Critter({
+  kind = 'human',
+  x = 0,
+  y = 0,
+  size = 220,
+  look = {
+    x: 0,
+    y: 0
+  },
+  mood = 'happy',
+  t = 0,
+  phase = 0,
+  style = {},
+  flip = false
+}) {
+  const pal = {
+    human: {
+      body: '#A98BFF',
+      dk: '#7C5CFF',
+      cheek: '#FF9FC0',
+      foot: '#6B4FE0'
+    },
+    robot: {
+      body: '#4FC9DD',
+      dk: '#2BA9BE',
+      cheek: '#BDEFF6',
+      foot: '#1E94A8'
+    },
+    villain: {
+      body: '#6E5E8C',
+      dk: '#4B3D68',
+      cheek: '#897aa6',
+      foot: '#3A2F52'
+    }
+  }[kind];
+  const bob = Math.sin((t + phase) * 2.0) * (size * 0.018);
+  const px = look.x,
+    py = look.y;
+  const mouths = {
+    happy: /*#__PURE__*/React.createElement("path", {
+      d: "M46 98 Q60 114 74 98",
+      stroke: pal.dk,
+      strokeWidth: "5",
+      fill: "none",
+      strokeLinecap: "round"
+    }),
+    worried: /*#__PURE__*/React.createElement("path", {
+      d: "M48 106 Q60 98 72 106",
+      stroke: pal.dk,
+      strokeWidth: "5",
+      fill: "none",
+      strokeLinecap: "round"
+    }),
+    sneaky: /*#__PURE__*/React.createElement("path", {
+      d: "M45 99 Q62 110 78 96",
+      stroke: pal.dk,
+      strokeWidth: "5",
+      fill: "none",
+      strokeLinecap: "round"
+    }),
+    shocked: /*#__PURE__*/React.createElement("ellipse", {
+      cx: "60",
+      cy: "104",
+      rx: "8",
+      ry: "10",
+      fill: pal.dk
+    }),
+    cool: /*#__PURE__*/React.createElement("path", {
+      d: "M48 100 Q60 108 72 100",
+      stroke: pal.dk,
+      strokeWidth: "5",
+      fill: "none",
+      strokeLinecap: "round"
+    })
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      width: size,
+      height: size * 1.25,
+      transform: `translate(-50%,-50%) ${flip ? 'scaleX(-1)' : ''}`,
+      ...style
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 120 150",
+    width: size,
+    height: size * 1.25,
+    style: {
+      transform: `translateY(${bob}px)`,
+      overflow: 'visible'
+    }
+  }, /*#__PURE__*/React.createElement("ellipse", {
+    cx: "46",
+    cy: "142",
+    rx: "13",
+    ry: "7",
+    fill: pal.foot
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "74",
+    cy: "142",
+    rx: "13",
+    ry: "7",
+    fill: pal.foot
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "13",
+    cy: "92",
+    rx: "10",
+    ry: "17",
+    fill: pal.body
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "107",
+    cy: "92",
+    rx: "10",
+    ry: "17",
+    fill: pal.body
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "60",
+    cy: "80",
+    rx: "48",
+    ry: "60",
+    fill: pal.body
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "60",
+    cy: "92",
+    rx: "34",
+    ry: "40",
+    fill: "#ffffff",
+    opacity: "0.10"
+  }), kind === 'villain' && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("rect", {
+    x: "30",
+    y: "14",
+    width: "60",
+    height: "16",
+    rx: "8",
+    fill: pal.dk
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "44",
+    y: "2",
+    width: "32",
+    height: "18",
+    rx: "8",
+    fill: pal.dk
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "16",
+    y: "56",
+    width: "88",
+    height: "26",
+    rx: "13",
+    fill: "#241C38"
+  })), kind === 'robot' && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("line", {
+    x1: "60",
+    y1: "24",
+    x2: "60",
+    y2: "6",
+    stroke: pal.dk,
+    strokeWidth: "4",
+    strokeLinecap: "round"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "60",
+    cy: "5",
+    r: "7",
+    fill: C.amber
+  }, /*#__PURE__*/React.createElement("animate", {
+    attributeName: "opacity",
+    values: "1;0.4;1",
+    dur: "1.4s",
+    repeatCount: "indefinite"
+  }))), kind === 'human' && /*#__PURE__*/React.createElement("g", {
+    transform: "translate(86 26)"
+  }, [0, 1, 2, 3, 4].map(i => /*#__PURE__*/React.createElement("circle", {
+    key: i,
+    cx: Math.cos(i / 5 * TAU) * 7,
+    cy: Math.sin(i / 5 * TAU) * 7,
+    r: "5.5",
+    fill: C.amber
+  })), /*#__PURE__*/React.createElement("circle", {
+    cx: "0",
+    cy: "0",
+    r: "5",
+    fill: C.amberDk
+  })), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "45",
+    cy: "70",
+    rx: "13",
+    ry: "15",
+    fill: "#fff"
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "75",
+    cy: "70",
+    rx: "13",
+    ry: "15",
+    fill: "#fff"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: 45 + px * 5,
+    cy: 70 + py * 5,
+    r: kind === 'robot' ? 6.5 : 6,
+    fill: "#241C38"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: 75 + px * 5,
+    cy: 70 + py * 5,
+    r: kind === 'robot' ? 6.5 : 6,
+    fill: "#241C38"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: 43 + px * 5,
+    cy: 67 + py * 5,
+    r: "2.4",
+    fill: "#fff"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: 73 + px * 5,
+    cy: 67 + py * 5,
+    r: "2.4",
+    fill: "#fff"
+  }), mood === 'worried' && /*#__PURE__*/React.createElement("g", {
+    stroke: pal.dk,
+    strokeWidth: "4",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: "36",
+    y1: "50",
+    x2: "52",
+    y2: "55"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "84",
+    y1: "50",
+    x2: "68",
+    y2: "55"
+  })), (mood === 'sneaky' || mood === 'cool') && /*#__PURE__*/React.createElement("g", {
+    stroke: pal.dk,
+    strokeWidth: "4",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: "34",
+    y1: "56",
+    x2: "54",
+    y2: "52"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "86",
+    y1: "56",
+    x2: "66",
+    y2: "52"
+  })), /*#__PURE__*/React.createElement("circle", {
+    cx: "30",
+    cy: "86",
+    r: "7",
+    fill: pal.cheek,
+    opacity: "0.7"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "90",
+    cy: "86",
+    r: "7",
+    fill: pal.cheek,
+    opacity: "0.7"
+  }), mouths[mood] || mouths.happy));
+}
+
+// ── Speech bubble ───────────────────────────────────────────────────────────
+function Bubble({
+  x,
+  y,
+  text,
+  color = '#fff',
+  textColor = C.ink,
+  tail = 'down',
+  op = 1,
+  scale = 1,
+  size = 30,
+  align = 'center',
+  accent
+}) {
+  const pop = smooth(scale);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: `translate(-50%,-100%) scale(${0.6 + 0.4 * pop})`,
+      opacity: op,
+      transformOrigin: tail === 'down' ? 'center bottom' : 'center top',
+      willChange: 'transform,opacity'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'relative',
+      background: color,
+      color: textColor,
+      padding: '14px 22px',
+      borderRadius: 22,
+      fontFamily: FH,
+      fontSize: size,
+      fontWeight: 600,
+      whiteSpace: 'nowrap',
+      boxShadow: SH.md,
+      border: accent ? `3px solid ${accent}` : 'none',
+      textAlign: align
+    }
+  }, text, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: '50%',
+      bottom: -12,
+      transform: 'translateX(-50%)',
+      width: 0,
+      height: 0,
+      borderLeft: '12px solid transparent',
+      borderRight: '12px solid transparent',
+      borderTop: `14px solid ${accent || color}`
+    }
+  }), accent && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: '50%',
+      bottom: -8,
+      transform: 'translateX(-50%)',
+      width: 0,
+      height: 0,
+      borderLeft: '9px solid transparent',
+      borderRight: '9px solid transparent',
+      borderTop: `11px solid ${color}`
+    }
+  })));
+}
+
+// ── Caption pill (bottom) ───────────────────────────────────────────────────
+function Cap({
+  lt,
+  a,
+  b,
+  c = 1e9,
+  d = 1e9,
+  text,
+  sub,
+  y = 968,
+  accent = C.purpleDk
+}) {
+  const op = env(lt, a, b, c, d);
+  if (op <= 0.002) return null;
+  const up = (1 - smooth(rise(lt, a, b))) * 14;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: y,
+      transform: `translate(-50%,-50%) translateY(${up}px)`,
+      opacity: op,
+      textAlign: 'center',
+      willChange: 'transform,opacity'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'inline-block',
+      background: '#fff',
+      borderRadius: 999,
+      padding: sub ? '14px 34px 16px' : '16px 38px',
+      boxShadow: SH.md,
+      borderBottom: `4px solid ${accent}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 36,
+      color: C.ink,
+      lineHeight: 1.1
+    }
+  }, text), sub && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 700,
+      fontSize: 22,
+      color: C.inkSoft,
+      marginTop: 4
+    }
+  }, sub)));
+}
+
+// ── Big scene title ─────────────────────────────────────────────────────────
+function SceneTitle({
+  lt,
+  a = 0.2,
+  b = 1.0,
+  c = 1e9,
+  d = 1e9,
+  kicker,
+  title,
+  y = 150,
+  color = C.ink
+}) {
+  const op = env(lt, a, b, c, d);
+  if (op <= 0.002) return null;
+  const up = (1 - smooth(rise(lt, a, b))) * 22;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: y,
+      transform: `translate(-50%,0) translateY(${up}px)`,
+      opacity: op,
+      textAlign: 'center'
+    }
+  }, kicker && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 24,
+      letterSpacing: '0.22em',
+      color: C.purpleDk,
+      textTransform: 'uppercase',
+      marginBottom: 8
+    }
+  }, kicker), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 64,
+      color,
+      lineHeight: 1.05
+    }
+  }, title));
+}
+
+// ── Scene background (soft radial) ──────────────────────────────────────────
+function SceneBg({
+  lt,
+  D,
+  base = C.lav,
+  glow = C.lav2,
+  gx = 50,
+  gy = 38
+}) {
+  const op = env(lt, 0, 0.45, D - 0.45, D);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      opacity: op,
+      background: `radial-gradient(120% 90% at ${gx}% ${gy}%, ${glow} 0%, ${base} 60%, ${base} 100%)`
+    }
+  });
+}
+
+// soft floating blobs decoration for backgrounds
+function Floaters({
+  t,
+  tint = '#ffffff',
+  op = 0.5,
+  seed = 0
+}) {
+  const items = [{
+    x: 180,
+    y: 250,
+    r: 70
+  }, {
+    x: 1680,
+    y: 200,
+    r: 90
+  }, {
+    x: 1500,
+    y: 820,
+    r: 60
+  }, {
+    x: 300,
+    y: 800,
+    r: 80
+  }, {
+    x: 980,
+    y: 120,
+    r: 46
+  }];
+  return items.map((it, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      position: 'absolute',
+      left: it.x,
+      top: it.y + Math.sin((t + seed + i) * 0.8) * 14,
+      width: it.r * 2,
+      height: it.r * 2,
+      marginLeft: -it.r,
+      marginTop: -it.r,
+      borderRadius: '50%',
+      background: tint,
+      opacity: op * 0.5,
+      filter: 'blur(2px)'
+    }
+  }));
+}
+
+// ── Poseidon hash machine ───────────────────────────────────────────────────
+// A magical grinder. `spin` (0..1+) drives gear rotation, `glow` intensity.
+function Poseidon({
+  x,
+  y,
+  scale = 1,
+  spin = 0,
+  glow = 0,
+  label = 'POSEIDON',
+  op = 1
+}) {
+  const W = 280,
+    H = 230;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      width: W,
+      height: H,
+      transform: `translate(-50%,-50%) scale(${scale})`,
+      opacity: op
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: W / 2 - 60,
+      top: -18,
+      width: 120,
+      height: 46,
+      background: C.purpleDk,
+      borderRadius: '12px 12px 4px 4px',
+      clipPath: 'polygon(0 0,100% 0,78% 100%,22% 100%)',
+      boxShadow: SH.sm
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      top: 24,
+      background: `linear-gradient(160deg, ${C.purple}, ${C.purpleDk})`,
+      borderRadius: 30,
+      boxShadow: glow > 0.02 ? SH.glow(C.purpleDk) : SH.md,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      opacity: 0.25 + glow * 0.5,
+      background: `radial-gradient(60% 60% at 50% 40%, ${C.amber}, transparent 70%)`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: '50%',
+      top: 96,
+      transform: 'translate(-50%,-50%)',
+      width: 150,
+      height: 110,
+      borderRadius: 18,
+      background: '#241C38',
+      border: `5px solid ${C.purpleDk}`,
+      overflow: 'hidden',
+      boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.5)'
+    }
+  }, [{
+    cx: 52,
+    cy: 54,
+    r: 34,
+    dir: 1
+  }, {
+    cx: 104,
+    cy: 60,
+    r: 26,
+    dir: -1
+  }].map((g, i) => /*#__PURE__*/React.createElement("svg", {
+    key: i,
+    viewBox: "0 0 150 110",
+    width: "150",
+    height: "110",
+    style: {
+      position: 'absolute',
+      inset: 0
+    }
+  }, /*#__PURE__*/React.createElement("g", {
+    transform: `rotate(${spin * 360 * g.dir} ${g.cx} ${g.cy})`
+  }, Array.from({
+    length: 10
+  }).map((_, k) => /*#__PURE__*/React.createElement("rect", {
+    key: k,
+    x: g.cx - 4,
+    y: g.cy - g.r - 4,
+    width: "8",
+    height: "10",
+    rx: "2",
+    fill: i ? C.teal : C.amber,
+    transform: `rotate(${k * 36} ${g.cx} ${g.cy})`
+  })), /*#__PURE__*/React.createElement("circle", {
+    cx: g.cx,
+    cy: g.cy,
+    r: g.r,
+    fill: i ? C.tealDk : C.amberDk
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: g.cx,
+    cy: g.cy,
+    r: g.r * 0.45,
+    fill: "#241C38"
+  })))), glow > 0.3 && Array.from({
+    length: 5
+  }).map((_, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      position: 'absolute',
+      left: 20 + i * 26,
+      top: 14 + i % 2 * 70,
+      width: 6,
+      height: 6,
+      borderRadius: '50%',
+      background: '#fff',
+      opacity: (Math.sin(spin * 12 + i) + 1) / 2
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      right: -2,
+      top: 150,
+      width: 40,
+      height: 26,
+      background: C.purpleDk,
+      borderRadius: '6px 14px 14px 6px'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: '50%',
+      top: H + 2,
+      transform: 'translateX(-50%)',
+      fontFamily: FB,
+      fontWeight: 900,
+      fontSize: 18,
+      letterSpacing: '0.18em',
+      color: C.purpleDk
+    }
+  }, label));
+}
+
+// ── generic glyph card (a "tag"/"commitment") ──────────────────────────────
+function Glyph({
+  size = 120,
+  color = C.amber,
+  icon
+}) {
+  return /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 100 100",
+    width: size,
+    height: size,
+    style: {
+      overflow: 'visible'
+    }
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("pattern", {
+    id: 'hx' + color.replace('#', ''),
+    width: "14",
+    height: "12",
+    patternUnits: "userSpaceOnUse",
+    patternTransform: "rotate(0)"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M7 0 L14 4 L14 8 L7 12 L0 8 L0 4 Z",
+    fill: "none",
+    stroke: "#ffffff",
+    strokeOpacity: "0.5",
+    strokeWidth: "1"
+  }))), /*#__PURE__*/React.createElement("circle", {
+    cx: "50",
+    cy: "50",
+    r: "46",
+    fill: color
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "50",
+    cy: "50",
+    r: "46",
+    fill: `url(#hx${color.replace('#', '')})`
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "50",
+    cy: "50",
+    r: "46",
+    fill: "none",
+    stroke: "#fff",
+    strokeWidth: "3",
+    strokeDasharray: "4 6",
+    opacity: "0.8"
+  }), icon);
+}
+Object.assign(window, {
+  BK: {
+    C,
+    smooth,
+    rise,
+    env,
+    mix,
+    TAU,
+    SH,
+    FH,
+    FB,
+    Critter,
+    Bubble,
+    Cap,
+    SceneTitle,
+    SceneBg,
+    Floaters,
+    Poseidon,
+    Glyph
+  }
+});
+})();
+
+// --- school-scenes.jsx (pre-transpiled) ---
+(function(){
+// bolyra-scenes.jsx — the 13-scene explainer. Loads after animations.jsx + bolyra-kit.jsx.
+const {
+  C,
+  smooth,
+  rise,
+  env,
+  mix,
+  TAU,
+  SH,
+  FH,
+  FB,
+  Critter,
+  Bubble,
+  Cap,
+  SceneTitle,
+  SceneBg,
+  Floaters,
+  Poseidon,
+  Glyph
+} = window.BK;
+const {
+  useSprite,
+  useTime,
+  interpolate,
+  animate,
+  Easing,
+  clamp,
+  Sprite,
+  Stage
+} = window;
+const E = Easing;
+const A = (from, to, start, end, ease = E.easeInOutCubic) => animate({
+  from,
+  to,
+  start,
+  end,
+  ease
+});
+// shorthand: value of tween at lt
+const tw = (lt, from, to, start, end, ease = E.easeInOutCubic) => A(from, to, start, end, ease)(lt);
+
+// ── small shared bits ───────────────────────────────────────────────────────
+function Card({
+  x,
+  y,
+  w,
+  h,
+  op = 1,
+  sc = 1,
+  bg = '#fff',
+  radius = 26,
+  shadow = SH.md,
+  style = {},
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      width: w,
+      height: h,
+      opacity: op,
+      transform: `translate(-50%,-50%) scale(${sc})`,
+      background: bg,
+      borderRadius: radius,
+      boxShadow: shadow,
+      ...style
+    }
+  }, children);
+}
+function Chip({
+  label,
+  color = C.purpleDk,
+  bg = '#fff',
+  size = 26
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      background: bg,
+      color,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: size,
+      padding: '8px 16px',
+      borderRadius: 999,
+      boxShadow: SH.sm,
+      border: `2px solid ${color}33`
+    }
+  }, label);
+}
+function Token({
+  x,
+  y,
+  text,
+  op = 1,
+  color = C.ink,
+  bg = '#fff',
+  accent = C.purpleDk,
+  size = 30,
+  mono
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: 'translate(-50%,-50%)',
+      opacity: op
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: mono ? "'JetBrains Mono', monospace" : FH,
+      fontWeight: 700,
+      fontSize: size,
+      color,
+      background: bg,
+      padding: '10px 18px',
+      borderRadius: 14,
+      boxShadow: SH.sm,
+      border: `2.5px solid ${accent}`,
+      whiteSpace: 'nowrap'
+    }
+  }, text));
+}
+function QMark({
+  x,
+  y,
+  t,
+  delay = 0,
+  size = 60
+}) {
+  const f = (Math.sin((t + delay) * 1.6) + 1) / 2;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y - f * 16,
+      fontFamily: FH,
+      fontWeight: 700,
+      fontSize: size,
+      color: C.purpleDk,
+      opacity: 0.55 + f * 0.4,
+      transform: 'translate(-50%,-50%)'
+    }
+  }, "?");
+}
+function Sparkle({
+  x,
+  y,
+  t,
+  d = 0,
+  s = 14
+}) {
+  const k = (Math.sin((t + d) * 4) + 1) / 2;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: `translate(-50%,-50%) scale(${0.4 + k})`,
+      opacity: 0.4 + k * 0.6,
+      color: '#fff',
+      fontSize: s
+    }
+  }, "\u2726");
+}
+
+// =============================================================================
+// SCENE 1 — THE PROBLEM
+// =============================================================================
+function S1() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const hx = tw(lt, 380, 600, 0.3, 1.6, E.easeOutBack);
+  const rx = tw(lt, 1540, 1320, 0.5, 1.8, E.easeOutBack);
+  const vY = tw(lt, 1260, 760, 5.4, 6.6, E.easeOutBack);
+  const vX = tw(lt, 1120, 960, 5.4, 6.8, E.easeOutCubic);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: C.lav2
+  }), /*#__PURE__*/React.createElement(Floaters, {
+    t: lt,
+    tint: C.purple,
+    op: 0.35
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.1,
+    c: 4.4,
+    d: 5.0,
+    kicker: "Scene 1",
+    title: "On the internet, who is who?"
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "human",
+    x: hx,
+    y: 650,
+    size: 230,
+    t: lt,
+    mood: lt > 6.4 ? 'worried' : 'happy',
+    look: {
+      x: 0.4,
+      y: 0
+    }
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "robot",
+    x: rx,
+    y: 650,
+    size: 230,
+    t: lt,
+    phase: 1.2,
+    mood: lt > 6.4 ? 'worried' : 'happy',
+    look: {
+      x: -0.4,
+      y: 0
+    }
+  }), lt > 5.2 && /*#__PURE__*/React.createElement(Critter, {
+    kind: "villain",
+    x: vX,
+    y: vY,
+    size: 250,
+    t: lt,
+    phase: 2.1,
+    mood: "sneaky"
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 600,
+    y: 500,
+    text: "I'm Alice!",
+    op: env(lt, 2.1, 2.5, 12, 13),
+    scale: rise(lt, 2.1, 2.6),
+    accent: C.purpleDk
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 1320,
+    y: 500,
+    text: "I'm Helpful Bot!",
+    op: env(lt, 3.0, 3.4, 12, 13),
+    scale: rise(lt, 3.0, 3.5),
+    accent: C.tealDk
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 830,
+    y: 620,
+    text: "I'm Alice too!",
+    op: env(lt, 7.0, 7.4, 12, 13),
+    scale: rise(lt, 7.0, 7.5),
+    accent: C.redDk,
+    color: "#FFF0F2"
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 1090,
+    y: 620,
+    text: "I'm Helpful Bot too!",
+    op: env(lt, 8.6, 9.0, 12, 13),
+    scale: rise(lt, 8.6, 9.1),
+    accent: C.redDk,
+    color: "#FFF0F2"
+  }), lt > 9.6 && [[470, 360, 0], [960, 300, 1.4], [1460, 360, 2.6], [720, 410, 3.4], [1230, 420, 0.7]].map((q, i) => /*#__PURE__*/React.createElement(QMark, {
+    key: i,
+    x: q[0],
+    y: q[1],
+    t: lt,
+    delay: q[2],
+    size: i % 2 ? 54 : 72
+  })), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 10.4,
+    b: 11.0,
+    text: "On the internet, ANYONE can say ANYTHING.",
+    sub: "So how do we know who's real?"
+  }));
+}
+
+// =============================================================================
+// SCENE 2 — WHY NOT PASSWORDS
+// =============================================================================
+function Server({
+  x,
+  y,
+  op = 1,
+  face = 'happy'
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: 'translate(-50%,-50%)',
+      opacity: op
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 150,
+      height: 180,
+      background: '#fff',
+      borderRadius: 22,
+      boxShadow: SH.md,
+      border: `3px solid ${C.blueDk}33`,
+      padding: 14,
+      boxSizing: 'border-box'
+    }
+  }, [0, 1, 2].map(i => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      height: 30,
+      background: C.cool,
+      borderRadius: 8,
+      marginBottom: 10,
+      display: 'flex',
+      alignItems: 'center',
+      paddingLeft: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 12,
+      height: 12,
+      borderRadius: '50%',
+      background: i === 0 ? C.green : C.blue
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'center',
+      gap: 18,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 12,
+      height: 12,
+      borderRadius: '50%',
+      background: C.ink
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 12,
+      height: 12,
+      borderRadius: '50%',
+      background: C.ink
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 2,
+      color: C.ink,
+      fontSize: 22
+    }
+  }, face === 'confused' ? '~' : '‿')), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.blueDk,
+      marginTop: 6
+    }
+  }, "SERVER"));
+}
+function S2() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  // pipe from 430 -> 1470 at y 560
+  const x0 = 430,
+    x1 = 1470,
+    py = 560;
+  const wordP = tw(lt, 0, 1, 2.4, 6.4, E.easeInOutSine); // travel progress
+  const caught = lt > 5.0;
+  const wordX = caught ? mix(rise(lt, 5.0, 5.8), x0 + (x1 - x0) * 0.52, 960) : mix(wordP, x0 + 40, x0 + (x1 - x0) * 0.52);
+  const wordY = caught ? mix(rise(lt, 5.0, 5.8), py, 760) : py;
+  const morph = rise(lt, 7.2, 8.6); // hacker -> alice
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.warm,
+    glow: "#FFEFD6",
+    gx: 50,
+    gy: 30
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 2",
+    title: "Why not just passwords?"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x0,
+      top: py - 22,
+      width: x1 - x0,
+      height: 44,
+      background: 'linear-gradient(#fff,#EFE6FF)',
+      borderRadius: 999,
+      boxShadow: 'inset 0 2px 6px rgba(0,0,0,.06)',
+      border: `3px solid ${C.purple}55`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x0 + 6,
+      top: py - 14,
+      width: x1 - x0 - 12,
+      height: 8,
+      background: '#fff',
+      borderRadius: 999,
+      opacity: 0.7
+    }
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "human",
+    x: 300,
+    y: 560,
+    size: 200,
+    t: lt,
+    mood: "happy",
+    look: {
+      x: 0.4,
+      y: 0
+    }
+  }), /*#__PURE__*/React.createElement(Server, {
+    x: 1600,
+    y: 560,
+    face: lt > 8.8 ? 'confused' : 'happy'
+  }), /*#__PURE__*/React.createElement(Token, {
+    x: wordX,
+    y: wordY,
+    text: "dolphin123",
+    mono: true,
+    accent: caught ? C.redDk : C.purpleDk,
+    color: caught ? C.redDk : C.ink,
+    op: env(lt, 2.2, 2.6, 11.6, 12),
+    size: 28
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      opacity: 1 - morph * 0.92
+    }
+  }, /*#__PURE__*/React.createElement(Critter, {
+    kind: "villain",
+    x: 960,
+    y: 800,
+    size: 230,
+    t: lt,
+    phase: 1,
+    mood: morph > 0.5 ? 'sneaky' : 'cool'
+  })), morph > 0.02 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 800,
+      transform: 'translate(-50%,-50%)',
+      opacity: morph
+    }
+  }, /*#__PURE__*/React.createElement(Critter, {
+    kind: "human",
+    x: 0,
+    y: 0,
+    size: 230,
+    t: lt,
+    phase: 1,
+    mood: "sneaky",
+    style: {
+      position: 'static'
+    }
+  })), /*#__PURE__*/React.createElement(Bubble, {
+    x: 300,
+    y: 430,
+    text: "psst\u2026 dolphin123",
+    op: env(lt, 1.0, 1.4, 2.4, 2.8),
+    scale: rise(lt, 1.0, 1.5),
+    accent: C.purpleDk,
+    size: 26
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 960,
+    y: 720,
+    text: "Gotcha!",
+    op: env(lt, 5.4, 5.8, 7.2, 7.6),
+    scale: rise(lt, 5.4, 5.9),
+    accent: C.redDk,
+    color: "#FFF0F2"
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 960,
+    y: 680,
+    text: "Now I'm Alice!",
+    op: env(lt, 8.8, 9.2, 13.4, 13.8),
+    scale: rise(lt, 8.8, 9.3),
+    accent: C.redDk,
+    color: "#FFF0F2"
+  }), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 10.2,
+    b: 10.8,
+    text: "Passwords travel. Travelers get caught.",
+    sub: "Anyone who copies it becomes you.",
+    accent: C.redDk
+  }));
+}
+
+// =============================================================================
+// SCENE 3 — ZERO KNOWLEDGE
+// =============================================================================
+function S3() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  // curtain at center; prover left (sees color), verifier right (colorblind)
+  const ballsIn = rise(lt, 1.0, 2.0);
+  // rounds montage 4.0 -> 12.5
+  const rStart = 4.0,
+    rEnd = 12.5,
+    rounds = 20;
+  const rp = clamp((lt - rStart) / (rEnd - rStart), 0, 1);
+  const count = Math.min(rounds, Math.floor(rp * rounds + 0.0001));
+  const cyc = (lt - rStart) * 2.0; // curtain open/close pulse
+  const curtainOpen = lt < 3.6 ? 1 : lt > rEnd ? 1 : Math.sin(cyc) > 0 ? 1 : 0;
+  const curtainK = lt < 3.6 ? 1 : lt > rEnd ? rise(lt, rEnd, rEnd + 0.5) : 0.5 + 0.5 * Math.sin(cyc * Math.PI);
+  const conf = Math.round(clamp(rp, 0, 1) * 100);
+  const swapped = Math.floor((lt - rStart) * 1.3) % 2 === 0;
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: "#EAFBF3",
+    gx: 50,
+    gy: 40
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 3.0,
+    d: 3.6,
+    kicker: "Scene 3",
+    title: "Zero-Knowledge: the magic trick"
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "human",
+    x: 270,
+    y: 650,
+    size: 190,
+    t: lt,
+    mood: "cool",
+    look: {
+      x: 0.4,
+      y: 0.1
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 270,
+      top: 802,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.purpleDk,
+      fontSize: 22
+    }
+  }, "PROVER \xB7 sees colors"), /*#__PURE__*/React.createElement(Critter, {
+    kind: "robot",
+    x: 1650,
+    y: 650,
+    size: 190,
+    t: lt,
+    phase: 1,
+    mood: "happy",
+    look: {
+      x: -0.4,
+      y: 0.1
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1650,
+      top: 802,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.tealDk,
+      fontSize: 22
+    }
+  }, "FRIEND \xB7 colorblind"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 560,
+      transform: 'translate(-50%,-50%)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'relative',
+      width: 460,
+      height: 360,
+      background: '#fff',
+      borderRadius: 24,
+      boxShadow: SH.lg,
+      border: `4px solid ${C.purple}44`,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 150,
+      left: swapped ? 300 : 110,
+      width: 80,
+      height: 80,
+      borderRadius: '50%',
+      background: 'radial-gradient(circle at 35% 30%, #ff9aa6,' + C.red + ')',
+      boxShadow: SH.sm,
+      transition: 'none'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 150,
+      left: swapped ? 110 : 300,
+      width: 80,
+      height: 80,
+      borderRadius: '50%',
+      background: 'radial-gradient(circle at 35% 30%, #9ff0c4,' + C.green + ')',
+      boxShadow: SH.sm
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      bottom: 0,
+      width: '50%',
+      background: `linear-gradient(90deg, ${C.purpleDk}, ${C.purple})`,
+      transform: `translateX(${-curtainK * 100}%)`,
+      borderRight: '3px solid #fff'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: '50%',
+      background: `linear-gradient(270deg, ${C.purpleDk}, ${C.purple})`,
+      transform: `translateX(${curtainK * 100}%)`,
+      borderLeft: '3px solid #fff'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: '50%',
+      top: -34,
+      transform: 'translateX(-50%)',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      color: C.ink
+    }
+  }, "behind the curtain\u2026")), /*#__PURE__*/React.createElement(Bubble, {
+    x: 500,
+    y: 420,
+    text: swapped ? 'You swapped!' : "You didn't swap!",
+    op: env(lt, 4.4, 4.7, 12.6, 13),
+    scale: rise(lt, 4.4, 4.8),
+    accent: C.greenDk,
+    color: "#EEFBF4",
+    size: 26
+  }), lt > 3.8 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 880,
+      transform: 'translate(-50%,-50%)',
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 30,
+      color: C.ink
+    }
+  }, "Round ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.purpleDk
+    }
+  }, count), " / 20 \xA0 ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.greenDk
+    }
+  }, "\u2713")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 520,
+      height: 22,
+      background: '#fff',
+      borderRadius: 999,
+      marginTop: 12,
+      boxShadow: SH.sm,
+      overflow: 'hidden',
+      border: `2px solid ${C.green}55`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: '100%',
+      width: conf + '%',
+      borderRadius: 999,
+      background: `linear-gradient(90deg, ${C.green}, ${C.greenDk})`
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.greenDk,
+      marginTop: 6
+    }
+  }, "confidence ", conf, "%")), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 13.0,
+    b: 13.6,
+    c: 15.4,
+    d: 15.9,
+    text: "Convinced \u2014 but never learned which ball was which.",
+    accent: C.greenDk
+  }), lt > 15.6 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 540,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 15.6, 16.4),
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 30,
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#fff',
+      borderRadius: 22,
+      padding: '26px 40px',
+      boxShadow: SH.md,
+      borderBottom: `5px solid ${C.purpleDk}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontSize: 40,
+      fontWeight: 600,
+      color: C.purpleDk
+    }
+  }, "PROVE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 700,
+      color: C.inkSoft,
+      fontSize: 24
+    }
+  }, "you know it")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontSize: 50,
+      color: C.ink
+    }
+  }, "+"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#fff',
+      borderRadius: 22,
+      padding: '26px 40px',
+      boxShadow: SH.md,
+      borderBottom: `5px solid ${C.greenDk}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontSize: 40,
+      fontWeight: 600,
+      color: C.greenDk
+    }
+  }, "REVEAL"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 700,
+      color: C.inkSoft,
+      fontSize: 24
+    }
+  }, "nothing")))));
+}
+
+// =============================================================================
+// SCENE 4 — HUMAN IDENTITY: THE LOCKED BOX
+// =============================================================================
+function S4() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const secretX = tw(lt, 470, 855, 1.2, 3.0, E.easeInOutCubic);
+  const secretOp = env(lt, 1.0, 1.4, 3.0, 3.4);
+  const inHopper = lt > 2.8;
+  const spin = inHopper ? (lt - 2.8) * 1.6 : 0;
+  const glow = env(lt, 3.0, 3.6, 5.2, 5.8);
+  const outOp = env(lt, 5.0, 5.6, 13.5, 14);
+  const outX = tw(lt, 1090, 1330, 5.0, 6.4, E.easeOutBack);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: C.lav2,
+    gx: 45,
+    gy: 42
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 4 \xB7 Human identity",
+    title: "The Locked Box"
+  }), /*#__PURE__*/React.createElement(Token, {
+    x: secretX,
+    y: 420,
+    text: "secret 8 4 7 1 9",
+    mono: true,
+    op: secretOp,
+    accent: C.purpleDk,
+    size: 28
+  }), /*#__PURE__*/React.createElement(Poseidon, {
+    x: 960,
+    y: 560,
+    scale: 1.05,
+    spin: spin,
+    glow: glow,
+    op: env(lt, 0.4, 1.0, 13.6, 14)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: outX,
+      top: 560,
+      transform: 'translate(-50%,-50%)',
+      opacity: outOp
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      filter: glow > 0.1 ? `drop-shadow(0 0 18px ${C.amber})` : 'none'
+    }
+  }, /*#__PURE__*/React.createElement(Glyph, {
+    size: 150,
+    color: C.amber,
+    icon: /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("rect", {
+      x: "38",
+      y: "44",
+      width: "24",
+      height: "20",
+      rx: "4",
+      fill: "#fff"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M42 44 v-6 a8 8 0 0 1 16 0 v6",
+      fill: "none",
+      stroke: "#fff",
+      strokeWidth: "4"
+    }))
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 900,
+      color: C.amberDk,
+      marginTop: 8,
+      fontSize: 20
+    }
+  }, "COMMITMENT"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: "'JetBrains Mono',monospace",
+      color: C.inkSoft,
+      fontSize: 16
+    }
+  }, "0x9f3a\u2026c1")), glow > 0.1 && [0, 1, 2, 3].map(i => /*#__PURE__*/React.createElement(Sparkle, {
+    key: i,
+    x: outX - 40 + i * 30,
+    y: 490 + i % 2 * 140,
+    t: lt,
+    d: i
+  })), lt > 6.4 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 800,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 6.4, 7.0),
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement(Chip, {
+    label: "secret \u2192",
+    color: C.purpleDk
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontSize: 30,
+      color: C.green
+    }
+  }, "easy \u2713"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 30
+    }
+  }), /*#__PURE__*/React.createElement(Chip, {
+    label: "\u2190 reverse",
+    color: C.redDk
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontSize: 30,
+      color: C.redDk
+    }
+  }, "impossible \u2717")), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 8.0,
+    b: 8.6,
+    text: "A locked chest with your name on it \u2014 that nobody can open.",
+    sub: "Everyone sees the tag. The secret stays inside.",
+    accent: C.amberDk
+  }));
+}
+
+// =============================================================================
+// SCENE 5 — AGENT IDENTITY: THE SEALED ENVELOPE
+// =============================================================================
+function IngredientChip({
+  icon,
+  label,
+  color
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      background: '#fff',
+      borderRadius: 16,
+      padding: '12px 20px',
+      boxShadow: SH.sm,
+      border: `2.5px solid ${color}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      background: color + '22',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, icon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      color: C.ink
+    }
+  }, label));
+}
+function S5() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const ings = [{
+    label: 'Model Hash',
+    color: C.blueDk,
+    icon: /*#__PURE__*/React.createElement("svg", {
+      width: "28",
+      height: "28",
+      viewBox: "0 0 24 24"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M12 3a5 5 0 0 0-5 5 4 4 0 0 0-1 8 4 4 0 0 0 6 3 4 4 0 0 0 6-3 4 4 0 0 0-1-8 5 5 0 0 0-5-5z",
+      fill: "none",
+      stroke: C.blueDk,
+      strokeWidth: "1.8"
+    }))
+  }, {
+    label: 'Operator Signature',
+    color: C.purpleDk,
+    icon: /*#__PURE__*/React.createElement("svg", {
+      width: "28",
+      height: "28",
+      viewBox: "0 0 24 24"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "12",
+      cy: "9",
+      r: "6",
+      fill: "none",
+      stroke: C.purpleDk,
+      strokeWidth: "1.8"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M9 15l-1 6 4-2 4 2-1-6",
+      fill: "none",
+      stroke: C.purpleDk,
+      strokeWidth: "1.8"
+    }))
+  }, {
+    label: 'Permission Bits',
+    color: C.green,
+    icon: /*#__PURE__*/React.createElement("svg", {
+      width: "30",
+      height: "30",
+      viewBox: "0 0 24 24"
+    }, /*#__PURE__*/React.createElement("rect", {
+      x: "3",
+      y: "7",
+      width: "18",
+      height: "10",
+      rx: "5",
+      fill: "none",
+      stroke: C.greenDk,
+      strokeWidth: "1.8"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: "9",
+      cy: "12",
+      r: "3",
+      fill: C.greenDk
+    }))
+  }, {
+    label: 'Expiry Clock',
+    color: C.amberDk,
+    icon: /*#__PURE__*/React.createElement("svg", {
+      width: "28",
+      height: "28",
+      viewBox: "0 0 24 24"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "12",
+      cy: "13",
+      r: "8",
+      fill: "none",
+      stroke: C.amberDk,
+      strokeWidth: "1.8"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M12 13V9M12 13l4 2M9 3h6",
+      stroke: C.amberDk,
+      strokeWidth: "1.8",
+      fill: "none",
+      strokeLinecap: "round"
+    }))
+  }];
+  const enterAt = [1.2, 2.2, 3.2, 4.2];
+  const sealOp = env(lt, 6.4, 7.2, 13.6, 14);
+  const spin = lt > 5.0 ? (lt - 5.0) * 1.4 : 0;
+  const glow = env(lt, 5.4, 6.0, 6.8, 7.4);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.cool,
+    glow: "#E2ECFF",
+    gx: 40,
+    gy: 38
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 5 \xB7 Agent identity",
+    title: "The Sealed Envelope"
+  }), ings.map((ig, i) => {
+    const op = env(lt, enterAt[i], enterAt[i] + 0.4, 4.8 + i * 0.1, 5.2 + i * 0.15);
+    const x = tw(lt, 360, 940, enterAt[i] + 0.3, enterAt[i] + 1.4, E.easeInOutCubic);
+    const y = tw(lt, 320 + i * 120, 430, enterAt[i] + 0.3, enterAt[i] + 1.4);
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        position: 'absolute',
+        left: x,
+        top: y,
+        transform: 'translate(-50%,-50%)',
+        opacity: op
+      }
+    }, /*#__PURE__*/React.createElement(IngredientChip, ig));
+  }), /*#__PURE__*/React.createElement(Poseidon, {
+    x: 960,
+    y: 600,
+    scale: 1.05,
+    spin: spin,
+    glow: glow,
+    op: env(lt, 0.4, 1.0, 13.6, 14)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1340,
+      top: 600,
+      transform: 'translate(-50%,-50%)',
+      opacity: sealOp
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      filter: glow > 0.1 ? `drop-shadow(0 0 16px ${C.amber})` : 'none',
+      position: 'relative'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 180,
+      height: 124,
+      background: '#fff',
+      borderRadius: 14,
+      boxShadow: SH.md,
+      border: `3px solid ${C.amber}`,
+      position: 'relative',
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 64,
+      background: `linear-gradient(135deg, ${C.amber}33, ${C.amber}11)`,
+      clipPath: 'polygon(0 0,100% 0,50% 80%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: '50%',
+      top: 62,
+      transform: 'translate(-50%,-50%)',
+      width: 40,
+      height: 40,
+      borderRadius: '50%',
+      background: `radial-gradient(circle at 35% 30%, ${C.red}, ${C.redDk})`,
+      boxShadow: SH.sm,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      fontFamily: FH,
+      fontWeight: 700,
+      fontSize: 20
+    }
+  }, "B")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 900,
+      color: C.amberDk,
+      marginTop: 8,
+      fontSize: 20
+    }
+  }, "AGENT COMMITMENT"))), glow > 0.1 && [0, 1, 2].map(i => /*#__PURE__*/React.createElement(Sparkle, {
+    key: i,
+    x: 1280 + i * 50,
+    y: 520 + i % 2 * 130,
+    t: lt,
+    d: i
+  })), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 8.2,
+    b: 8.8,
+    text: "Four secrets sealed into one tamper-proof envelope.",
+    sub: "The badge is inside \u2014 nobody can peek.",
+    accent: C.amberDk
+  }));
+}
+
+// =============================================================================
+// SCENE 6 — THE HANDSHAKE
+// =============================================================================
+function ProofGears({
+  x,
+  y,
+  spin,
+  color,
+  label,
+  op = 1
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: 'translate(-50%,-50%)',
+      opacity: op
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 150,
+      height: 150,
+      borderRadius: 28,
+      background: '#fff',
+      boxShadow: SH.md,
+      border: `3px solid ${color}55`,
+      position: 'relative',
+      overflow: 'hidden'
+    }
+  }, [{
+    cx: 56,
+    cy: 62,
+    r: 30
+  }, {
+    cx: 104,
+    cy: 96,
+    r: 22
+  }].map((g, i) => /*#__PURE__*/React.createElement("svg", {
+    key: i,
+    viewBox: "0 0 150 150",
+    width: "150",
+    height: "150",
+    style: {
+      position: 'absolute',
+      inset: 0
+    }
+  }, /*#__PURE__*/React.createElement("g", {
+    transform: `rotate(${spin * 360 * (i ? -1 : 1)} ${g.cx} ${g.cy})`
+  }, Array.from({
+    length: 9
+  }).map((_, k) => /*#__PURE__*/React.createElement("rect", {
+    key: k,
+    x: g.cx - 4,
+    y: g.cy - g.r - 5,
+    width: "8",
+    height: "11",
+    rx: "2",
+    fill: color,
+    transform: `rotate(${k * 40} ${g.cx} ${g.cy})`
+  })), /*#__PURE__*/React.createElement("circle", {
+    cx: g.cx,
+    cy: g.cy,
+    r: g.r,
+    fill: color
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: g.cx,
+    cy: g.cy,
+    r: g.r * 0.4,
+    fill: "#fff"
+  }))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      color,
+      marginTop: 6
+    }
+  }, label));
+}
+function S6() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const coinDrop = tw(lt, 200, 320, 1.4, 2.4, E.easeOutBack);
+  const spin = lt > 3.0 && lt < 8.6 ? (lt - 3.0) * 1.3 : lt >= 8.6 ? (8.6 - 3.0) * 1.3 : 0;
+  const timer = Math.min(140, Math.max(0, (lt - 3.0) / 5.6 * 140));
+  const hpx = tw(lt, 420, 760, 8.6, 10.0, E.easeInOutCubic);
+  const apx = tw(lt, 1500, 1160, 8.6, 10.0, E.easeInOutCubic);
+  const verified = lt > 10.4;
+  const proofsGone = env(lt, 8.6, 9.0, 10.0, 10.4);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: C.lav2
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 6",
+    title: "The Handshake"
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "human",
+    x: 250,
+    y: 620,
+    size: 200,
+    t: lt,
+    mood: verified ? 'cool' : 'happy',
+    look: {
+      x: 0.4,
+      y: 0
+    }
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "robot",
+    x: 1670,
+    y: 620,
+    size: 200,
+    t: lt,
+    phase: 1,
+    mood: verified ? 'cool' : 'happy',
+    look: {
+      x: -0.4,
+      y: 0
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: coinDrop,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 1.2, 1.6, 13.4, 13.9)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 96,
+      height: 96,
+      borderRadius: '50%',
+      background: `radial-gradient(circle at 35% 30%, #FFE08A, ${C.amber})`,
+      boxShadow: SH.glow(C.amber),
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      border: `4px solid ${C.amberDk}`,
+      fontFamily: FH,
+      fontWeight: 700,
+      fontSize: 30,
+      color: C.amberDk
+    }
+  }, "\u2B22"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.amberDk,
+      marginTop: 6,
+      fontSize: 20
+    }
+  }, "SESSION NONCE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: "'JetBrains Mono',monospace",
+      color: C.inkSoft,
+      fontSize: 15
+    }
+  }, "fresh \xB7 never reused")), /*#__PURE__*/React.createElement(ProofGears, {
+    x: 520,
+    y: 560,
+    spin: spin,
+    color: C.purpleDk,
+    label: "Human proof",
+    op: env(lt, 2.8, 3.2, 8.4, 8.8) * (1 - proofsGone)
+  }), /*#__PURE__*/React.createElement(ProofGears, {
+    x: 1400,
+    y: 560,
+    spin: spin,
+    color: C.tealDk,
+    label: "Agent proof",
+    op: env(lt, 2.8, 3.2, 8.4, 8.8) * (1 - proofsGone)
+  }), lt > 3.0 && lt < 8.8 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 540,
+      transform: 'translate(-50%,-50%)',
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'JetBrains Mono',monospace",
+      fontWeight: 700,
+      fontSize: 30,
+      color: C.ink
+    }
+  }, Math.round(timer), "ms"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 700,
+      color: C.inkSoft,
+      fontSize: 18
+    }
+  }, "Groth16 \xB7 in parallel\u2026")), lt > 8.6 && lt < 10.6 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Token, {
+    x: hpx,
+    y: 560,
+    text: "\u03C0 human",
+    accent: C.purpleDk,
+    op: 1 - rise(lt, 10.0, 10.4)
+  }), /*#__PURE__*/React.createElement(Token, {
+    x: apx,
+    y: 560,
+    text: "\u03C0 agent",
+    accent: C.tealDk,
+    op: 1 - rise(lt, 10.0, 10.4)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 560,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 8.4, 8.9, 13.4, 13.9)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 200,
+      height: 150,
+      borderRadius: 26,
+      background: verified ? `linear-gradient(160deg, ${C.green}, ${C.greenDk})` : '#fff',
+      boxShadow: verified ? SH.glow(C.green) : SH.md,
+      border: `4px solid ${verified ? C.greenDk : C.purple + '55'}`,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      transition: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 30,
+      height: 30,
+      borderRadius: '50%',
+      background: verified ? '#fff' : '#ddd',
+      boxShadow: verified ? '0 0 16px #fff' : 'none'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 28,
+      color: verified ? '#fff' : C.inkSoft
+    }
+  }, verified ? 'VERIFIED' : 'VERIFY'))), verified && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 830,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 10.6, 11.2),
+      display: 'flex',
+      gap: 16
+    }
+  }, ['humanNullifier', 'agentNullifier', 'scopeCommitment'].map((o, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      background: '#fff',
+      borderRadius: 14,
+      padding: '12px 18px',
+      boxShadow: SH.sm,
+      fontFamily: "'JetBrains Mono',monospace",
+      fontWeight: 700,
+      fontSize: 20,
+      color: C.greenDk,
+      border: `2px solid ${C.green}66`
+    }
+  }, o))), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 11.6,
+    b: 12.2,
+    text: "Both proved they're real.",
+    sub: "Neither learned who the other actually is.",
+    accent: C.greenDk
+  }));
+}
+
+// =============================================================================
+// SCENE 7 — PERMISSIONS CONTROL PANEL
+// =============================================================================
+function S7() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const sw = [{
+    l: 'READ',
+    c: C.blue
+  }, {
+    l: 'WRITE',
+    c: C.blue
+  }, {
+    l: '$',
+    c: C.green
+  }, {
+    l: '$$',
+    c: C.green,
+    req: '$'
+  }, {
+    l: '$$$',
+    c: C.green,
+    req: '$+$$'
+  }, {
+    l: 'SIGN',
+    c: C.purpleDk
+  }, {
+    l: 'DELEGATE',
+    c: C.purpleDk
+  }, {
+    l: 'PII',
+    c: C.red
+  }];
+  const buildAt = i => 1.0 + i * 0.35;
+  // illegal attempt on $$$ at 5.4-7.0
+  const illegal = lt > 5.6 && lt < 7.2;
+  const snap = illegal ? Math.sin((lt - 5.6) * 18) * (1 - rise(lt, 5.6, 7.0)) : 0;
+  // valid config at 8.5+: READ WRITE $ on
+  const validOn = i => lt > 8.6 && (i === 0 || i === 1 || i === 2);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.cool,
+    glow: "#E6EEFF"
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 7",
+    title: "Permissions: the control panel"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 520,
+      transform: 'translate(-50%,-50%)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#fff',
+      borderRadius: 30,
+      boxShadow: SH.lg,
+      padding: '34px 40px',
+      border: `4px solid ${C.purple}33`,
+      display: 'grid',
+      gridTemplateColumns: 'repeat(4,1fr)',
+      gap: 26
+    }
+  }, sw.map((s, i) => {
+    const op = env(lt, buildAt(i), buildAt(i) + 0.4);
+    const on = validOn(i);
+    const isIllegal = illegal && i === 4;
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        opacity: op,
+        textAlign: 'center',
+        width: 150,
+        transform: isIllegal ? `translateX(${snap * 6}px)` : 'none'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 110,
+        height: 56,
+        margin: '0 auto',
+        borderRadius: 999,
+        background: on ? `linear-gradient(90deg, ${C.green}, ${C.greenDk})` : isIllegal ? '#FFE3E6' : '#E9E4F5',
+        boxShadow: 'inset 0 2px 6px rgba(0,0,0,.12)',
+        position: 'relative',
+        transition: 'none',
+        border: isIllegal ? `2px solid ${C.redDk}` : 'none'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: 'absolute',
+        top: 5,
+        left: on ? 58 : 6,
+        width: 46,
+        height: 46,
+        borderRadius: '50%',
+        background: '#fff',
+        boxShadow: SH.sm
+      }
+    }), isIllegal && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: 'absolute',
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%,-50%)',
+        color: C.redDk,
+        fontFamily: FH,
+        fontWeight: 700,
+        fontSize: 30
+      }
+    }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: FH,
+        fontWeight: 600,
+        fontSize: 26,
+        color: s.c,
+        marginTop: 10
+      }
+    }, s.l), s.req && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: FB,
+        fontWeight: 700,
+        fontSize: 16,
+        color: C.inkSoft
+      }
+    }, "needs ", s.req));
+  }))), /*#__PURE__*/React.createElement(Bubble, {
+    x: 1300,
+    y: 400,
+    text: "$$$ without $? Nope.",
+    op: env(lt, 5.8, 6.2, 7.2, 7.6),
+    scale: rise(lt, 5.8, 6.3),
+    accent: C.redDk,
+    color: "#FFF0F2",
+    size: 26
+  }), lt > 9.2 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 830,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 9.2, 9.8),
+      display: 'flex',
+      alignItems: 'center',
+      gap: 20
+    }
+  }, /*#__PURE__*/React.createElement(Chip, {
+    label: "READ + WRITE + $",
+    color: C.greenDk,
+    size: 28
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FH,
+      fontSize: 34,
+      color: C.ink
+    }
+  }, "="), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "'JetBrains Mono',monospace",
+      fontSize: 40,
+      fontWeight: 700,
+      color: C.purpleDk
+    }
+  }, "00000111"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FH,
+      fontSize: 34,
+      color: C.ink
+    }
+  }, "="), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 70,
+      height: 70,
+      borderRadius: '50%',
+      background: C.amber,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: FH,
+      fontWeight: 700,
+      fontSize: 40,
+      color: C.ink,
+      boxShadow: SH.md
+    }
+  }, "7")), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 11.0,
+    b: 11.6,
+    text: "The circuit enforces the rules \u2014 you can't cheat.",
+    accent: C.purpleDk
+  }));
+}
+
+// =============================================================================
+// SCENE 8 — DELEGATION: SHARING STICKERS
+// =============================================================================
+function Sticker({
+  label,
+  color,
+  op = 1,
+  x,
+  y,
+  sc = 1,
+  rot = 0
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: `translate(-50%,-50%) rotate(${rot}deg) scale(${sc})`,
+      opacity: op
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: color,
+      color: '#fff',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 22,
+      padding: '10px 16px',
+      borderRadius: 14,
+      boxShadow: SH.sm,
+      border: '3px solid #fff',
+      whiteSpace: 'nowrap'
+    }
+  }, label));
+}
+function S8() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  // Parent (left), Child (mid), Grandchild (right)
+  const peelRW = rise(lt, 2.6, 4.2); // READ+WRITE move parent->child
+  const peelR = rise(lt, 7.0, 8.4); // READ move child->grandchild
+  const keyMorph1 = rise(lt, 11.0, 12.2);
+  const keyMorph2 = rise(lt, 12.2, 13.4);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: "#FFF0E0",
+    gx: 50,
+    gy: 36
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 8",
+    title: "Delegation: sharing your stickers"
+  }), /*#__PURE__*/React.createElement(Critter, {
+    kind: "robot",
+    x: 330,
+    y: 560,
+    size: 170,
+    t: lt,
+    mood: "happy"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 330,
+      top: 670,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.tealDk
+    }
+  }, "PARENT"), /*#__PURE__*/React.createElement(Critter, {
+    kind: "robot",
+    x: 960,
+    y: 560,
+    size: 150,
+    t: lt,
+    phase: 1,
+    mood: "happy"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 660,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.tealDk
+    }
+  }, "CHILD"), /*#__PURE__*/React.createElement(Critter, {
+    kind: "robot",
+    x: 1560,
+    y: 560,
+    size: 130,
+    t: lt,
+    phase: 2,
+    mood: "happy"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1560,
+      top: 650,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.tealDk
+    }
+  }, "GRANDCHILD"), /*#__PURE__*/React.createElement(Sticker, {
+    label: "$",
+    color: C.green,
+    x: 250,
+    y: 360,
+    op: env(lt, 0.8, 1.2),
+    rot: -6
+  }), /*#__PURE__*/React.createElement(Sticker, {
+    label: "SIGN",
+    color: C.purpleDk,
+    x: 350,
+    y: 330,
+    op: env(lt, 1.0, 1.4),
+    rot: 4
+  }), /*#__PURE__*/React.createElement(Sticker, {
+    label: "DELEGATE",
+    color: C.amberDk,
+    x: 300,
+    y: 420,
+    op: env(lt, 1.2, 1.6),
+    rot: -3
+  }), /*#__PURE__*/React.createElement(Sticker, {
+    label: "READ",
+    color: C.blue,
+    x: mix(peelRW, 380, 900),
+    y: mix(peelRW, 360, 360),
+    op: env(lt, 1.4, 1.8),
+    rot: mix(peelRW, 6, 0)
+  }), /*#__PURE__*/React.createElement(Sticker, {
+    label: "WRITE",
+    color: C.blue,
+    x: mix(peelRW, 420, 1010),
+    y: mix(peelRW, 410, 350),
+    op: env(lt, 1.6, 2.0),
+    rot: mix(peelRW, -5, 0)
+  }), /*#__PURE__*/React.createElement(Sticker, {
+    label: "READ",
+    color: C.blue,
+    x: mix(peelR, 900, 1530),
+    y: mix(peelR, 360, 360),
+    op: peelRW * env(lt, 0, 0.1)
+  }), [{
+    x: 330,
+    p: 0.9,
+    lbl: '60 min'
+  }, {
+    x: 960,
+    p: 0.55,
+    lbl: '15 min'
+  }, {
+    x: 1560,
+    p: 0.25,
+    lbl: '3 min'
+  }].map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      position: 'absolute',
+      left: c.x,
+      top: 760,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 3 + i * 2.2, 3.4 + i * 2.2),
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "56",
+    height: "56",
+    viewBox: "0 0 56 56"
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "28",
+    cy: "30",
+    r: "22",
+    fill: "#fff",
+    stroke: C.amberDk,
+    strokeWidth: "3"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: `M28 30 L28 12`,
+    stroke: C.amberDk,
+    strokeWidth: "3",
+    strokeLinecap: "round",
+    transform: `rotate(${c.p * 330} 28 30)`
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "28",
+    cy: "30",
+    r: "3",
+    fill: C.amberDk
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 18,
+      color: C.amberDk
+    }
+  }, c.lbl))), lt > 9.0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 880,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 9.0, 9.6),
+      display: 'flex',
+      alignItems: 'center',
+      gap: 14,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 30,
+      color: C.ink
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "Parent ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: C.tealDk
+    }
+  }, "[5]")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.purpleDk
+    }
+  }, "\u2192"), /*#__PURE__*/React.createElement("span", null, "Child ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: C.tealDk
+    }
+  }, "[2]")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.purpleDk
+    }
+  }, "\u2192"), /*#__PURE__*/React.createElement("span", null, "Grandchild ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: C.tealDk
+    }
+  }, "[1]"))), lt > 10.8 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1560,
+      top: 880,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 10.8, 11.2),
+      display: 'flex',
+      gap: 10,
+      alignItems: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.inkSoft,
+      fontSize: 16
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 1 - keyMorph1 * 0.5
+    }
+  }, "\uD83C\uDFE0"), "\u2192", /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 1 - keyMorph2 * 0.5
+    }
+  }, "\uD83C\uDF73"), "\u2192", /*#__PURE__*/React.createElement("span", null, "\uD83E\uDDCA")), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 9.6,
+    b: 10.2,
+    text: "Each hop can only get NARROWER. Never wider.",
+    sub: "Enforced by math.",
+    accent: C.purpleDk
+  }));
+}
+
+// =============================================================================
+// SCENE 9 — NULLIFIERS: ANONYMOUS RECEIPTS
+// =============================================================================
+function S9() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  // three voters stamp ballots; P1 unique, P2 duplicate(of P1), P3 different
+  const voters = [{
+    at: 1.4,
+    pat: 'A',
+    dup: false,
+    x: 560
+  }, {
+    at: 5.0,
+    pat: 'A',
+    dup: true,
+    x: 960
+  }, {
+    at: 9.0,
+    pat: 'B',
+    dup: false,
+    x: 1360
+  }];
+  const patColor = {
+    A: C.purpleDk,
+    B: C.blueDk
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: C.lav2
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 9",
+    title: "Nullifiers: anonymous receipts"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 360,
+      transform: 'translate(-50%,-50%)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 240,
+      height: 120,
+      background: C.purpleDk,
+      borderRadius: '18px 18px 0 0',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 28,
+      boxShadow: SH.md
+    }
+  }, "VOTE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 240,
+      height: 12,
+      background: C.amber
+    }
+  })), voters.map((v, i) => {
+    const stamped = lt > v.at + 1.0;
+    const op = env(lt, v.at, v.at + 0.4);
+    const col = patColor[v.pat];
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        position: 'absolute',
+        left: v.x,
+        top: 620,
+        transform: 'translate(-50%,-50%)',
+        opacity: op
+      }
+    }, /*#__PURE__*/React.createElement(Critter, {
+      kind: i === 1 ? 'villain' : 'human',
+      x: 0,
+      y: -40,
+      size: 130,
+      t: lt,
+      phase: i,
+      mood: v.dup ? 'sneaky' : 'happy',
+      style: {
+        position: 'static'
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 150,
+        height: 110,
+        background: '#fff',
+        borderRadius: 12,
+        boxShadow: SH.sm,
+        border: `2px solid ${C.purple}44`,
+        marginTop: 80,
+        position: 'relative',
+        overflow: 'hidden'
+      }
+    }, stamped && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: rise(lt, v.at + 1.0, v.at + 1.5)
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "80",
+      height: "80",
+      viewBox: "0 0 80 80"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "40",
+      cy: "40",
+      r: "34",
+      fill: "none",
+      stroke: v.dup ? C.redDk : col,
+      strokeWidth: "5"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: "40",
+      y: "52",
+      textAnchor: "middle",
+      fontFamily: "JetBrains Mono",
+      fontWeight: "700",
+      fontSize: "34",
+      fill: v.dup ? C.redDk : col
+    }, v.pat)))), stamped && /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: 'center',
+        marginTop: 8,
+        fontFamily: FH,
+        fontWeight: 600,
+        fontSize: 22,
+        color: v.dup ? C.redDk : C.greenDk,
+        opacity: rise(lt, v.at + 1.3, v.at + 1.8)
+      }
+    }, v.dup ? '⚠ DUPLICATE!' : '✓ unique'));
+  }), /*#__PURE__*/React.createElement(Bubble, {
+    x: 960,
+    y: 520,
+    text: "Same stamp \u2014 voted twice!",
+    op: env(lt, 6.4, 6.8, 8.8, 9.2),
+    scale: rise(lt, 6.4, 6.9),
+    accent: C.redDk,
+    color: "#FFF0F2",
+    size: 26
+  }), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 11.2,
+    b: 11.8,
+    c: 13.4,
+    d: 13.9,
+    text: "Detect cheaters \u2014 without ever knowing names.",
+    accent: C.redDk
+  }), lt > 13.4 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 968,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 13.4, 14.0)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#fff',
+      borderRadius: 999,
+      padding: '14px 32px',
+      boxShadow: SH.md,
+      borderBottom: `4px solid ${C.purpleDk}`,
+      fontFamily: "'JetBrains Mono',monospace",
+      fontWeight: 700,
+      fontSize: 28,
+      color: C.ink
+    }
+  }, "nullifier = Poseidon(", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.purpleDk
+    }
+  }, "scope"), ", ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.amberDk
+    }
+  }, "secret"), ")")));
+}
+
+// =============================================================================
+// SCENE 10 — SCOPE COMMITMENTS: THE CHAIN
+// =============================================================================
+function ChainLink({
+  x,
+  y,
+  size,
+  color,
+  idx,
+  contents,
+  op = 1
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: 'translate(-50%,-50%)',
+      opacity: op
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: size,
+      height: size * 0.78,
+      borderRadius: 999,
+      border: `${size * 0.13}px solid ${color}`,
+      background: '#fff',
+      boxShadow: SH.md,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: size * 0.13,
+      color
+    }
+  }, "scope_", idx), contents && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: size * 0.085,
+      color: C.inkSoft,
+      textAlign: 'center',
+      lineHeight: 1.3,
+      marginTop: 4
+    }
+  }, contents)));
+}
+function S10() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.warm,
+    glow: "#FFF0DA"
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 10",
+    title: "Scope commitments: the chain"
+  }), /*#__PURE__*/React.createElement(ChainLink, {
+    x: 520,
+    y: 540,
+    size: 300,
+    color: C.amberDk,
+    idx: "0",
+    op: env(lt, 1.0, 1.8),
+    contents: /*#__PURE__*/React.createElement(React.Fragment, null, "permissions", /*#__PURE__*/React.createElement("br", null), "+ credential", /*#__PURE__*/React.createElement("br", null), "+ expiry")
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 720,
+      top: 540,
+      width: 120,
+      height: 20,
+      background: C.amber,
+      borderRadius: 999,
+      transform: 'translateY(-50%)',
+      opacity: env(lt, 4.4, 5.0)
+    }
+  }), /*#__PURE__*/React.createElement(ChainLink, {
+    x: 960,
+    y: 540,
+    size: 230,
+    color: C.greenDk,
+    idx: "1",
+    op: env(lt, 4.6, 5.4),
+    contents: /*#__PURE__*/React.createElement(React.Fragment, null, "narrower", /*#__PURE__*/React.createElement("br", null), "+ expiry")
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1110,
+      top: 540,
+      width: 100,
+      height: 18,
+      background: C.green,
+      borderRadius: 999,
+      transform: 'translateY(-50%)',
+      opacity: env(lt, 7.6, 8.2)
+    }
+  }), /*#__PURE__*/React.createElement(ChainLink, {
+    x: 1330,
+    y: 540,
+    size: 175,
+    color: C.purpleDk,
+    idx: "2",
+    op: env(lt, 7.8, 8.6),
+    contents: /*#__PURE__*/React.createElement(React.Fragment, null, "narrowest")
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 740,
+      top: 420,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.greenDk,
+      fontSize: 22,
+      opacity: env(lt, 4.2, 4.8)
+    }
+  }, "delegate \u2193"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1115,
+      top: 440,
+      transform: 'translate(-50%,-50%)',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.purpleDk,
+      fontSize: 22,
+      opacity: env(lt, 7.4, 8.0)
+    }
+  }, "delegate \u2193"), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 9.4,
+    b: 10.0,
+    text: "Each link proves the one before it was valid.",
+    sub: "Unbreakable \u2014 like a chain of custody.",
+    accent: C.amberDk
+  }));
+}
+
+// =============================================================================
+// SCENE 11 — THE THREE CIRCUITS
+// =============================================================================
+function Factory({
+  x,
+  color,
+  title,
+  sub,
+  inLabel,
+  outLabel,
+  steps,
+  meta,
+  t,
+  appear
+}) {
+  const belt = t * 60 % 40;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: 540,
+      transform: 'translate(-50%,-50%)',
+      opacity: appear
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 440,
+      height: 470,
+      background: '#fff',
+      borderRadius: 26,
+      boxShadow: SH.md,
+      border: `4px solid ${color}55`,
+      padding: 22,
+      boxSizing: 'border-box'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 54,
+      background: color,
+      borderRadius: '14px 14px 0 0',
+      margin: '-22px -22px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 28,
+      clipPath: 'polygon(0 100%, 8% 0, 92% 0, 100% 100%)'
+    }
+  }, title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.inkSoft,
+      fontSize: 18,
+      marginBottom: 14
+    }
+  }, sub), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement(Chip, {
+    label: inLabel,
+    color: color,
+    size: 22
+  }), steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      color: color,
+      fontSize: 19
+    }
+  }, "\u2193 ", s)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: color,
+      color: '#fff',
+      borderRadius: 12,
+      padding: '10px 18px',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 22,
+      boxShadow: SH.sm
+    }
+  }, outLabel)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 18,
+      height: 22,
+      borderRadius: 6,
+      background: `repeating-linear-gradient(90deg, ${color}33 0 ${20 - belt / 2}px, ${color}66 ${20 - belt / 2}px 40px)`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 12,
+      fontFamily: "'JetBrains Mono',monospace",
+      fontWeight: 700,
+      fontSize: 15,
+      color
+    }
+  }, meta)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 12,
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.inkSoft,
+      fontSize: 16
+    }
+  }, "\u201C", sub, "\u201D"));
+}
+function S11() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.lav,
+    glow: C.lav2
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 11",
+    title: "The three circuits"
+  }), /*#__PURE__*/React.createElement(Factory, {
+    x: 490,
+    color: C.blueDk,
+    title: "HumanUniqueness",
+    sub: "I'm in the group",
+    inLabel: "secret",
+    steps: ['Merkle proof checked'],
+    outLabel: "nullifier + nonce",
+    meta: "16,409 constraints",
+    t: lt,
+    appear: env(lt, 0.8, 1.6)
+  }), /*#__PURE__*/React.createElement(Factory, {
+    x: 960,
+    color: C.greenDk,
+    title: "AgentPolicy",
+    sub: "I have valid credentials",
+    inLabel: "credential",
+    steps: ['signature verified', 'permissions checked'],
+    outLabel: "scope commitment",
+    meta: "20,923 constraints",
+    t: lt,
+    appear: env(lt, 1.6, 2.4)
+  }), /*#__PURE__*/React.createElement(Factory, {
+    x: 1430,
+    color: C.amberDk,
+    title: "Delegation",
+    sub: "I'm giving fewer permissions",
+    inLabel: "parent + child scope",
+    steps: ['narrowing verified'],
+    outLabel: "new chain link",
+    meta: "22,398 constraints",
+    t: lt,
+    appear: env(lt, 2.4, 3.2)
+  }), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 11.0,
+    b: 11.6,
+    text: "Three Groth16 circuits \u2014 rapidsnark proves each in ~100ms.",
+    accent: C.purpleDk
+  }));
+}
+
+// =============================================================================
+// SCENE 12 — ON-CHAIN VERIFICATION
+// =============================================================================
+function S12() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const riseY = tw(lt, 760, 360, 2.0, 5.0, E.easeInOutCubic);
+  const proofOp = env(lt, 1.6, 2.0, 5.0, 5.4);
+  const gas = Math.min(590000, Math.max(0, (lt - 9.0) / 2.5 * 590000));
+  // off-chain phase geometry
+  const leaves = [750, 810, 870, 930, 990, 1050, 1110, 1170];
+  const l1 = [780, 900, 1020, 1140],
+    l2 = [840, 1080],
+    rootX = 960;
+  const yL = 450,
+    y1 = 545,
+    y2 = 635,
+    yR = 720;
+  const oL1 = rise(lt, 16.0, 16.7),
+    oL2 = rise(lt, 16.9, 17.5),
+    oR = rise(lt, 17.6, 18.4);
+  const sessCount = Math.min(100, Math.floor(rise(lt, 14.6, 16.6) * 100));
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneBg, {
+    lt: lt,
+    D: D,
+    base: C.cool,
+    glow: "#E6EEFF",
+    gy: 30
+  }), /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 0.2,
+    b: 1.0,
+    c: 2.0,
+    d: 2.6,
+    kicker: "Scene 12",
+    title: "On-chain verification"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      opacity: 1 - rise(lt, 13.0, 13.8)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 880,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 0.6, 1.2)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 260,
+      height: 150,
+      background: '#fff',
+      borderRadius: '14px 14px 4px 4px',
+      boxShadow: SH.md,
+      border: `4px solid ${C.purple}44`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.inkSoft,
+      fontSize: 18,
+      textAlign: 'center'
+    }
+  }, "your computer", /*#__PURE__*/React.createElement("br", null), "~140 ms")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 320,
+      height: 16,
+      background: C.purple,
+      borderRadius: '0 0 12px 12px',
+      marginLeft: -30
+    }
+  })), /*#__PURE__*/React.createElement(Token, {
+    x: 860,
+    y: riseY,
+    text: "\u03C0 human",
+    accent: C.purpleDk,
+    op: proofOp
+  }), /*#__PURE__*/React.createElement(Token, {
+    x: 1060,
+    y: riseY,
+    text: "\u03C0 agent",
+    accent: C.tealDk,
+    op: proofOp
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 360,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 4.0, 4.8)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 760,
+      height: 300,
+      background: 'linear-gradient(160deg,#fff,#F0F4FF)',
+      borderRadius: 60,
+      boxShadow: SH.lg,
+      border: `4px solid ${C.blue}44`,
+      padding: 24,
+      boxSizing: 'border-box'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 30,
+      color: C.blueDk
+    }
+  }, "\u2601 Base Blockchain"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.inkSoft,
+      marginTop: 2,
+      fontSize: 18
+    }
+  }, "IdentityRegistry contract"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'center',
+      gap: 18,
+      marginTop: 18
+    }
+  }, [{
+    l: 'verify π human',
+    at: 5.6
+  }, {
+    l: 'verify π agent',
+    at: 6.4
+  }, {
+    l: 'nonce binding',
+    at: 7.2
+  }].map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      background: '#fff',
+      borderRadius: 14,
+      padding: '12px 16px',
+      boxShadow: SH.sm,
+      border: `2px solid ${lt > c.at ? C.green : '#ddd'}`,
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 18,
+      color: C.ink,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      opacity: env(lt, 5.0, 5.4)
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.greenDk,
+      opacity: lt > c.at ? 1 : 0.2
+    }
+  }, "\u2713"), c.l))), lt > 8.0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 18,
+      opacity: rise(lt, 8.0, 8.6),
+      transform: `scale(${mix(rise(lt, 8.0, 8.5), 1.4, 1)})`
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: 'inline-block',
+      background: C.green,
+      color: '#fff',
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      padding: '8px 24px',
+      borderRadius: 12,
+      boxShadow: SH.glow(C.green),
+      border: '3px solid #fff',
+      transform: 'rotate(-3deg)'
+    }
+  }, "\u25CF HandshakeVerified")))), lt > 9.0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 760,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 9.0, 9.6),
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      background: '#fff',
+      borderRadius: 999,
+      padding: '12px 28px',
+      boxShadow: SH.md
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "'JetBrains Mono',monospace",
+      fontWeight: 700,
+      fontSize: 30,
+      color: C.purpleDk
+    }
+  }, "~", Math.round(gas).toLocaleString(), " gas"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FH,
+      fontSize: 28,
+      color: C.ink
+    }
+  }, "\u2248"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 30,
+      color: C.greenDk
+    }
+  }, "$0.15")), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 12.0,
+    b: 12.6,
+    c: 12.9,
+    d: 13.6,
+    text: "Permanent. Trustless. Verifiable. Forever.",
+    accent: C.greenDk
+  })), lt > 13.6 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SceneTitle, {
+    lt: lt,
+    a: 13.9,
+    b: 14.6,
+    c: 23.4,
+    d: 24,
+    kicker: "Scene 12 \xB7 Off-chain mode",
+    title: "Or \u2014 skip the chain almost entirely"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 430,
+      top: 610,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 13.9, 14.6, 23.6, 24)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 240,
+      height: 150,
+      background: '#fff',
+      borderRadius: '14px 14px 4px 4px',
+      boxShadow: SH.md,
+      border: `4px solid ${C.green}66`,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      color: C.inkSoft,
+      fontSize: 16
+    }
+  }, "verify locally"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 38,
+      color: C.greenDk
+    }
+  }, "0 gas")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 300,
+      height: 16,
+      background: C.green,
+      borderRadius: '0 0 12px 12px',
+      marginLeft: -30
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 16,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      color: C.ink
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.greenDk
+    }
+  }, sessCount), " / 100 sessions \u2713")), /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 1920 1080",
+    width: "1920",
+    height: "1080",
+    style: {
+      position: 'absolute',
+      inset: 0,
+      opacity: env(lt, 14.5, 15.0, 23.6, 24)
+    }
+  }, leaves.map((x, i) => /*#__PURE__*/React.createElement("line", {
+    key: 'e' + i,
+    x1: x,
+    y1: yL,
+    x2: l1[i >> 1],
+    y2: y1,
+    stroke: C.blue,
+    strokeWidth: "2.5",
+    opacity: oL1 * 0.55
+  })), l1.map((x, i) => /*#__PURE__*/React.createElement("line", {
+    key: 'f' + i,
+    x1: x,
+    y1: y1,
+    x2: l2[i >> 1],
+    y2: y2,
+    stroke: C.blueDk,
+    strokeWidth: "2.5",
+    opacity: oL2 * 0.6
+  })), l2.map((x, i) => /*#__PURE__*/React.createElement("line", {
+    key: 'g' + i,
+    x1: x,
+    y1: y2,
+    x2: rootX,
+    y2: yR,
+    stroke: C.amberDk,
+    strokeWidth: "3.5",
+    opacity: oR * 0.7
+  })), leaves.map((x, i) => /*#__PURE__*/React.createElement("rect", {
+    key: 'l' + i,
+    x: x - 13,
+    y: yL - 13,
+    width: "26",
+    height: "26",
+    rx: "6",
+    fill: C.blue,
+    opacity: rise(lt, 14.8 + i * 0.09, 15.1 + i * 0.09)
+  })), l1.map((x, i) => /*#__PURE__*/React.createElement("rect", {
+    key: 'a' + i,
+    x: x - 12,
+    y: y1 - 12,
+    width: "24",
+    height: "24",
+    rx: "6",
+    fill: C.blueDk,
+    opacity: oL1
+  })), l2.map((x, i) => /*#__PURE__*/React.createElement("rect", {
+    key: 'b' + i,
+    x: x - 14,
+    y: y2 - 14,
+    width: "28",
+    height: "28",
+    rx: "7",
+    fill: C.purpleDk,
+    opacity: oL2
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 400,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 15.0, 15.6, 23.6, 24),
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 22,
+      color: C.blueDk
+    }
+  }, "100 verified sessions"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: rootX,
+      top: yR,
+      transform: `translate(-50%,-50%) scale(${mix(rise(lt, 17.6, 18.2), 0.5, 1)})`,
+      opacity: oR
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 96,
+      height: 96,
+      borderRadius: 24,
+      background: `radial-gradient(circle at 35% 30%, #FFE08A, ${C.amber})`,
+      boxShadow: SH.glow(C.amber),
+      border: `4px solid ${C.amberDk}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: FH,
+      fontWeight: 700,
+      fontSize: 40,
+      color: C.amberDk,
+      margin: '0 auto'
+    }
+  }, "\u2B22"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 900,
+      fontSize: 18,
+      color: C.amberDk,
+      marginTop: 6
+    }
+  }, "MERKLE ROOT")), oR > 0.3 && [0, 1, 2, 3].map(i => /*#__PURE__*/React.createElement(Sparkle, {
+    key: i,
+    x: 910 + i * 34,
+    y: 690 + i % 2 * 60,
+    t: lt,
+    d: i
+  })), lt > 18.4 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 958,
+      top: 788,
+      width: 5,
+      height: 70,
+      background: C.amber,
+      borderRadius: 3,
+      opacity: env(lt, 18.4, 19.0, 23.6, 24)
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 852,
+      transform: 'translate(-50%,-50%)',
+      opacity: env(lt, 18.6, 19.2, 23.6, 24)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'linear-gradient(160deg,#fff,#F0F4FF)',
+      borderRadius: 18,
+      padding: '14px 30px',
+      boxShadow: SH.md,
+      whiteSpace: 'nowrap',
+      border: `3px solid ${C.blue}55`,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      color: C.blueDk,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12
+    }
+  }, "\u2601 Base L2 ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.inkSoft,
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 22
+    }
+  }, "\xB7 1 transaction settles all 100")))), lt > 19.6 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 1480,
+      top: 600,
+      transform: `translate(-50%,-50%) rotate(-4deg) scale(${mix(rise(lt, 19.6, 20.1), 1.35, 1)})`,
+      opacity: env(lt, 19.6, 20.1, 23.6, 24)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.green,
+      color: '#fff',
+      borderRadius: 18,
+      padding: '16px 28px',
+      boxShadow: SH.glow(C.green),
+      border: '3px solid #fff',
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 38
+    }
+  }, "~375\xD7 less gas"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 20
+    }
+  }, "at a batch of 100"))), /*#__PURE__*/React.createElement(Cap, {
+    lt: lt,
+    a: 20.6,
+    b: 21.2,
+    text: "Verify locally for free \u2014 settle 100 sessions in ONE transaction.",
+    accent: C.greenDk
+  })));
+}
+
+// =============================================================================
+// SCENE 13 — WHY THIS MATTERS
+// =============================================================================
+function S13() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const fade = rise(lt, 3.0, 6.0); // left fades to grayscale
+  const glowR = rise(lt, 3.0, 6.0);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      background: C.lav,
+      opacity: env(lt, 0, 0.4, D - 0.4, D)
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 0,
+      bottom: 0,
+      width: 4,
+      background: '#fff',
+      opacity: env(lt, 0.6, 1.2)
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      width: 960,
+      height: 1080,
+      filter: `grayscale(${fade}) brightness(${mix(fade, 1, 0.82)})`,
+      opacity: mix(fade, 1, 0.55)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 120,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 40,
+      color: C.inkSoft
+    }
+  }, "The old way"), [{
+    x: 240,
+    y: 360,
+    l: '🔑 API key'
+  }, {
+    x: 600,
+    y: 300,
+    l: '🔑 copied'
+  }, {
+    x: 420,
+    y: 520,
+    l: '🔑 stolen'
+  }].map((k, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      position: 'absolute',
+      left: k.x,
+      top: k.y + Math.sin((lt + i) * 1.2) * 10,
+      transform: 'translate(-50%,-50%)',
+      background: '#fff',
+      borderRadius: 14,
+      padding: '12px 20px',
+      boxShadow: SH.sm,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      color: C.redDk,
+      border: `2px solid ${C.red}55`
+    }
+  }, k.l)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 480,
+      top: 720,
+      transform: 'translate(-50%,-50%)',
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 24,
+      color: C.inkSoft
+    }
+  }, "servers peek at your data \xB7", /*#__PURE__*/React.createElement("br", null), "single agents, no hierarchy")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 0,
+      width: 960,
+      height: 1080,
+      filter: glowR > 0.1 ? `drop-shadow(0 0 30px ${C.purple}66)` : 'none'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 120,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 40,
+      color: C.purpleDk
+    }
+  }, "The Bolyra way"), [{
+    x: 240,
+    y: 320,
+    l: '✓ ZK proof',
+    c: C.greenDk
+  }, {
+    x: 560,
+    y: 300,
+    l: '✓ unforgeable',
+    c: C.greenDk
+  }, {
+    x: 400,
+    y: 470,
+    l: '✓ learns nothing',
+    c: C.blueDk
+  }, {
+    x: 640,
+    y: 520,
+    l: '✓ narrowing',
+    c: C.purpleDk
+  }].map((k, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      position: 'absolute',
+      left: k.x,
+      top: k.y + Math.sin((lt + i) * 1.2) * 10,
+      transform: 'translate(-50%,-50%)',
+      background: '#fff',
+      borderRadius: 14,
+      padding: '12px 20px',
+      boxShadow: glowR > 0.2 ? SH.glow(k.c) : SH.sm,
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 26,
+      color: k.c,
+      border: `2px solid ${k.c}55`,
+      opacity: env(lt, 1.0 + i * 0.3, 1.4 + i * 0.3)
+    }
+  }, k.l)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 480,
+      top: 720,
+      transform: 'translate(-50%,-50%)',
+      textAlign: 'center',
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 24,
+      color: C.inkSoft
+    }
+  }, "agents delegate to sub-agents \xB7", /*#__PURE__*/React.createElement("br", null), "provably narrowing permissions")), lt > 7.0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 920,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 7.0, 8.0),
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.ink,
+      borderRadius: 22,
+      padding: '22px 46px',
+      boxShadow: SH.lg
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 44,
+      color: '#fff'
+    }
+  }, "Identity isn't who you ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.amber
+    }
+  }, "ARE"), ". It's what you can ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.green
+    }
+  }, "PROVE"), "."))));
+}
+
+// =============================================================================
+// LOGO OUTRO
+// =============================================================================
+function Logo() {
+  const {
+    localTime: lt,
+    duration: D
+  } = useSprite();
+  const pop = rise(lt, 0.3, 1.4);
+  const ring = lt * 0.4;
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      background: `radial-gradient(60% 60% at 50% 45%, ${C.lav2}, ${C.lav})`,
+      opacity: env(lt, 0, 0.4, D - 0.5, D)
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 460,
+      transform: `translate(-50%,-50%) scale(${0.6 + 0.4 * smooth(pop)})`,
+      opacity: pop
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "220",
+    height: "220",
+    viewBox: "0 0 100 100",
+    style: {
+      overflow: 'visible'
+    }
+  }, /*#__PURE__*/React.createElement("g", {
+    transform: `rotate(${ring * 40} 50 50)`
+  }, Array.from({
+    length: 6
+  }).map((_, i) => /*#__PURE__*/React.createElement("circle", {
+    key: i,
+    cx: 50 + Math.cos(i / 6 * TAU) * 34,
+    cy: 50 + Math.sin(i / 6 * TAU) * 34,
+    r: "6",
+    fill: [C.purple, C.amber, C.green, C.teal, C.blue, C.red][i],
+    opacity: "0.9"
+  }))), /*#__PURE__*/React.createElement("circle", {
+    cx: "50",
+    cy: "50",
+    r: "26",
+    fill: C.purpleDk
+  }), /*#__PURE__*/React.createElement("text", {
+    x: "50",
+    y: "62",
+    textAnchor: "middle",
+    fontFamily: "'Fredoka',sans-serif",
+    fontWeight: "600",
+    fontSize: "34",
+    fill: "#fff"
+  }, "B"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 960,
+      top: 660,
+      transform: 'translate(-50%,-50%)',
+      opacity: rise(lt, 1.2, 2.0),
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FH,
+      fontWeight: 600,
+      fontSize: 76,
+      color: C.ink,
+      letterSpacing: '0.02em'
+    }
+  }, "Bolyra"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FB,
+      fontWeight: 800,
+      fontSize: 26,
+      color: C.purpleDk,
+      letterSpacing: '0.16em',
+      marginTop: 6
+    }
+  }, "PROVE WHO YOU ARE \xB7 TELL NO SECRETS")), lt > 1.0 && [0, 1, 2, 3, 4, 5].map(i => /*#__PURE__*/React.createElement(Sparkle, {
+    key: i,
+    x: 760 + i * 80,
+    y: 380 + i % 2 * 220,
+    t: lt,
+    d: i,
+    s: 20
+  })));
+}
+
+// =============================================================================
+// ROOT
+// =============================================================================
+const SCENES = [S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, Logo];
+const DUR = [16, 15, 18, 13, 14, 16, 16, 17, 15, 14, 15, 24, 14, 7];
+const TOTAL = DUR.reduce((a, b) => a + b, 0);
+function BolyraExplainer() {
+  let off = 0;
+  const items = SCENES.map((Comp, i) => {
+    const s = off;
+    off += DUR[i];
+    return /*#__PURE__*/React.createElement(Sprite, {
+      key: i,
+      start: s,
+      end: off
+    }, /*#__PURE__*/React.createElement(Comp, null));
+  });
+  return /*#__PURE__*/React.createElement(Stage, {
+    width: 1920,
+    height: 1080,
+    duration: TOTAL,
+    background: C.lav,
+    persistKey: "bolyra"
+  }, items);
+}
+window.BolyraExplainer = BolyraExplainer;
+})();
+
+// Mount
+ReactDOM.createRoot(document.getElementById('root')).render(
+  React.createElement(window.BolyraExplainer)
+);
 </script>
 </body>
 </html>
