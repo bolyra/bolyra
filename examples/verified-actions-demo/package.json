@@ -1,0 +1,22 @@
+{
+  "name": "@bolyra/verified-actions-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verified agent actions demo: allow, deny, signed audit receipts, independent verification. One command.",
+  "scripts": {
+    "demo": "ts-node src/demo.ts",
+    "verify": "ts-node src/verify-audit.ts",
+    "build": "tsc",
+    "test": "tsc && node --test dist/test/demo.test.js"
+  },
+  "dependencies": {
+    "@bolyra/gateway": "file:../../integrations/gateway",
+    "@bolyra/mcp": "file:../../integrations/mcp",
+    "@bolyra/receipts": "file:../../integrations/receipts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.5.0"
+  }
+}

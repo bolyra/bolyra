@@ -1,0 +1,33 @@
+# Verified-actions demo policy.
+#
+# This file is loaded with @bolyra/gateway's own loadConfig() — it is the
+# exact same config format you would hand to `npx @bolyra/gateway` in
+# production. The demo overrides `target` at runtime with the port the
+# in-process upstream server actually got.
+
+target: http://127.0.0.1:4000/mcp   # overridden at runtime
+port: 4100
+network: base-sepolia
+
+# Dev mode: mock proof verification, no circuit artifacts needed.
+# Production runs the same four checks against real Groth16 proofs.
+devMode: true
+
+# Nonce replay protection (in-memory store; use redis for multi-instance).
+nonce:
+  store: memory
+  maxProofAge: 300
+
+# The gateway's built-in raw JSON decision log is disabled here because the
+# demo signs richer ES256K receipts for every decision instead (src/audit.ts).
+receipts:
+  enabled: false
+
+# Per-tool policy. Bitmask reference (cumulative bits):
+#   1 = READ_DATA, 2 = WRITE_DATA, 4/8/16 = FINANCIAL_*, 32 = SIGN_ON_BEHALF,
+#   64 = SUB_DELEGATE, 128 = ACCESS_PII
+tools:
+  read_ledger:
+    requireBitmask: 1      # READ_DATA
+  refund_customer:
+    requireBitmask: 2      # WRITE_DATA
