@@ -17,6 +17,17 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.6] — 2026-07-10
+
+### Changed
+
+#### SDK (`@bolyra/sdk` 0.6.0 → 0.6.1)
+
+- snarkjs is now lazy-loaded at Groth16 prove/verify call sites (`src/zk.ts`
+  cached loader). Bolyra Core paths — dev identities, receipts, gateway
+  middleware, JWT delegation — never import it; module load cost and any
+  snarkjs resolution problems no longer affect classical usage. No API changes.
+
 ## [0.7.5] — 2026-07-10
 
 ### Added
