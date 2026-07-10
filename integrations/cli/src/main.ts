@@ -76,6 +76,8 @@ Commands:
 
   receipt verify    Verify a signed audit receipt
 
+  verify            Verify an external proof bundle (stdin JSON → verdict JSON)
+
   shield test       Safety test runner for MCP servers (base-mcp preset)
   run               Run any MCP server with auth + HTTP exposure
   observe           Live activity viewer for bolyra run receipts
@@ -181,6 +183,10 @@ export async function main(argv: string[]): Promise<void> {
       return runObserve(args.slice(1));
     case 'replay':
       return runReplay(args.slice(1));
+    case 'verify': {
+      const { run } = await import('./commands/verify');
+      return run(args.slice(1));
+    }
     case 'dev':
       if (args[1] === 'from-receipt') {
         const { run: runFromReceipt } = await import('./commands/from-receipt');

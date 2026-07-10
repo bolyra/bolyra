@@ -17,6 +17,40 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.4] — 2026-07-09
+
+### Added
+
+#### External verifier CLI (`@bolyra/cli` 0.3.1 → 0.4.0)
+
+- New `bolyra verify` subcommand: a spawnable external verifier for MCP hosts
+  and agent-coordination servers. Reads one JSON request on stdin (an opaque
+  proof bundle + the action to authorize + `now_unix`) and writes exactly one
+  allow/deny verdict on stdout, fail-closed on everything else. Verifies the
+  Bolyra proof envelope, delegation-chain non-expansion, scope/capability
+  binding, model binding, strict expiry, trusted Merkle roots, and nonce replay
+  — all anchored to the proof's public commitments — with fd-level stdout
+  isolation so native prover writes can never corrupt the verdict.
+- Host-agnostic contract published at `spec/external-verifier-contract-v1.md`;
+  an `external_verifier` conformance vector type added to the conformance runner.
+- First integration target: `mcp_agent_mail_rust#183` (see
+  `docs/integrations/mcp-agent-mail-verifier.md`).
+- Raises the `@bolyra/sdk` dependency floor to `^0.6.0`.
+
+#### SDK primitives (`@bolyra/sdk` 0.5.3 → 0.6.0)
+
+- New public exports (additive minor bump): `eddsaVerify` (BabyJubjub
+  EdDSA-Poseidon signature verification — the inverse of `eddsaSign`), plus
+  `poseidon5`, `eddsaSign`, and `derivePublicKey`. Previously internal; now
+  public so the external verifier and third-party hosts can recompute
+  credential/scope commitments and verify binding signatures.
+
+### Fixed
+
+- Conformance `proof_envelope` vectors: `content_type` corrected from the stale
+  `application/bolyra-proof+json` to the canonical
+  `application/vnd.bolyra.proof+json` (matches `sdk/src/envelope.ts`).
+
 ## [0.7.3] — 2026-07-08
 
 ### Added

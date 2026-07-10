@@ -118,3 +118,30 @@ export async function eddsaSign(
     S: sig.S,
   };
 }
+
+/**
+ * Verify an EdDSA-Poseidon signature (Baby Jubjub).
+ *
+ * Inverse of {@link eddsaSign}: reconstructs the circomlibjs signature object
+ * `{ R8: [F.e(x), F.e(y)], S }` and public-key point `A = [F.e(x), F.e(y)]`
+ * from their bigint field-element components, then calls
+ * `eddsa.verifyPoseidon(msg, sig, A)` — matching circomlibjs's argument order
+ * (message field element, signature, public-key point).
+ *
+ * Returns false (rather than throwing) for malformed or invalid signatures,
+ * mirroring circomlibjs's own parameter-validation behaviour.
+ */
+export async function eddsaVerify(
+  pubkey: { x: bigint; y: bigint },
+  message: bigint,
+  sig: { R8: { x: bigint; y: bigint }; S: bigint },
+): Promise<boolean> {
+  await ensureCrypto();
+  const msgFe = _F.e(message);
+  const sigObj = {
+    R8: [_F.e(sig.R8.x), _F.e(sig.R8.y)],
+    S: sig.S,
+  };
+  const A = [_F.e(pubkey.x), _F.e(pubkey.y)];
+  return Boolean(_eddsa.verifyPoseidon(msgFe, sigObj, A));
+}

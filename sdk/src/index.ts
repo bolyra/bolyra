@@ -48,6 +48,9 @@ export type { DelegateInput } from './delegation';
 // Poseidon hashes (exposed for chain-link verification in integrations)
 export { poseidon2, poseidon3, poseidon4 } from './utils';
 
+// EdDSA-Poseidon primitives (exposed for the external verifier CLI + fixtures)
+export { poseidon5, eddsaSign, eddsaVerify, derivePublicKey } from './utils';
+
 // Dev mode (v0.4 — test identities without circuit artifacts)
 export { createDevIdentities } from './dev';
 export type { DevIdentities, DevIdentityOptions } from './dev';

@@ -43,9 +43,10 @@
             "signature_verification",
             "sd_jwt",
             "proof_envelope",
-            "session_token"
+            "session_token",
+            "external_verifier"
           ],
-          "description": "The category of conformance behavior being tested"
+          "description": "The category of conformance behavior being tested. 'external_verifier' is an IO-contract class: the runner spawns the built 'bolyra verify' CLI and diffs the stdout verdict (see spec/external-verifier-contract-v1.md)."
         },
         "status": {
           "type": "string",
@@ -65,6 +66,15 @@
               "type": "string",
               "enum": ["PASS", "FAIL"],
               "description": "Whether this input combination should pass or fail conformance"
+            },
+            "verdict": {
+              "type": "string",
+              "enum": ["allow", "deny"],
+              "description": "For 'external_verifier' vectors: the expected wire verdict on the CLI's stdout"
+            },
+            "code": {
+              "type": "string",
+              "description": "For 'external_verifier' deny vectors: the expected denial code from the External Verifier Contract v1 registry"
             }
           },
           "description": "Expected outcome, including result and any additional behavioral checks"

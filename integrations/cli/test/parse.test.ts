@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import {
   parseDuration,
   parseExpiry,
@@ -5,8 +6,13 @@ import {
   serializeBigInt,
   truncateHex,
   parseKeyFile,
+  hashModel,
 } from '../src/parse';
 import { Permission } from '@bolyra/sdk';
+
+/** BN254 scalar field order — recomputed independently for the reference expression. */
+const BN254_FIELD_ORDER =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
 describe('parseDuration', () => {
   it('parses seconds', () => {
@@ -143,6 +149,32 @@ describe('truncateHex', () => {
 
   it('does not truncate short values', () => {
     expect(truncateHex(0xabcdn)).toBe('0xabcd');
+  });
+});
+
+describe('hashModel', () => {
+  it('matches the reference sha256 -> BigInt -> mod BN254 expression', () => {
+    const model = 'opus-4.1';
+    const expected =
+      BigInt('0x' + crypto.createHash('sha256').update(model).digest('hex')) %
+      BN254_FIELD_ORDER;
+    expect(hashModel(model)).toBe(expected);
+  });
+
+  it('matches the reference expression for a second vector', () => {
+    const model = 'claude-code';
+    const expected =
+      BigInt('0x' + crypto.createHash('sha256').update(model).digest('hex')) %
+      BN254_FIELD_ORDER;
+    expect(hashModel(model)).toBe(expected);
+  });
+
+  it('always returns a value in the BN254 scalar field [0, order)', () => {
+    for (const model of ['opus-4.1', 'claude-code', '', 'a'.repeat(1000), '模型-ünïcode']) {
+      const result = hashModel(model);
+      expect(result).toBeGreaterThanOrEqual(0n);
+      expect(result).toBeLessThan(BN254_FIELD_ORDER);
+    }
   });
 });
 
