@@ -17,7 +17,10 @@ export function checkIssuerClaims(
 ): VerifyFailureReasonV01 | null {
   const skew = opts.clockSkewSeconds ?? 30;
 
-  if (typeof claims.exp !== "number" || claims.exp + skew < now) return "expired";
+  // <= matches jose's expiry boundary (exp + tolerance === now is expired) —
+  // a strict < here would accept a receipt jose already considers expired
+  // when the clock ticks between jwtVerify and this check.
+  if (typeof claims.exp !== "number" || claims.exp + skew <= now) return "expired";
   if (typeof claims.iat === "number" && claims.iat - skew > now) return "not_yet_valid";
 
   if (claims.aud !== opts.audience) return "audience_mismatch";

@@ -73,6 +73,11 @@ under `contracts/deployments/` and `circuits/build/`.
   flight (network DID/JWKS lookup) also reports `EXPIRED` fail-closed
   instead of `INVALID_SIGNATURE` (Codex round 2; clock-advancing-resolver
   regression test).
+- New in 0.2.3 (**security**): `checkIssuerClaims` expiry comparison now
+  uses `<=` to match jose's boundary — previously a receipt at exactly
+  `exp + skew === now` could be *accepted* when the clock ticked between
+  `jwtVerify` and the claim check (Codex round 3). This bug also exists
+  in published 0.2.2.
 - `release.yml` now covers `@bolyra/delegation@*` tags for future OIDC
   releases (Trusted Publisher config on npmjs.com still required first).
 

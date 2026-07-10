@@ -22,6 +22,16 @@ describe("checkIssuerClaims", () => {
     expect(checkIssuerClaims(baseClaims({ exp: 4000 }), baseOpts, NOW)).toBe("expired");
   });
 
+  it("expired exactly on the skew boundary (exp + skew === now)", () => {
+    // default skew 30: exp 4970 + 30 === NOW — jose treats this as expired,
+    // so the claim check must too or a boundary receipt gets accepted.
+    expect(checkIssuerClaims(baseClaims({ exp: NOW - 30 }), baseOpts, NOW)).toBe("expired");
+  });
+
+  it("not expired one second inside the skew window", () => {
+    expect(checkIssuerClaims(baseClaims({ exp: NOW - 29 }), baseOpts, NOW)).toBeNull();
+  });
+
   it("not_yet_valid", () => {
     expect(checkIssuerClaims(baseClaims({ iat: 6000 }), baseOpts, NOW)).toBe("not_yet_valid");
   });
