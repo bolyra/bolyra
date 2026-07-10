@@ -29,6 +29,7 @@ import type {
   ReceiptWriter,
 } from './types';
 import type { BolyraAuthContext } from '@bolyra/mcp';
+import { hasStaticCredentials } from './credential-binding';
 
 /** Options for createGatewayProxy. */
 export interface GatewayProxyOptions extends GatewayMiddlewareOptions {
@@ -358,10 +359,16 @@ function buildAllowInput(
   toolName: string | undefined,
 ): import('@bolyra/receipts').AuthReceiptInput {
   const required = toolName !== undefined ? config.tools?.[toolName]?.requireBitmask : undefined;
-  const reason =
+  let reason =
     `policy_allow: tool "${toolName ?? 'unknown'}" requires ` +
     `${required === undefined ? 'authentication only' : required.toString(2) + 'b'}, ` +
     `agent has ${authCtx.permissionBitmask.toString(2)}b`;
+  // Unbound dev mode: no credential registry, so the permission claim was
+  // taken at face value. Flag it on the receipt itself (the same
+  // make-the-tradeoff-visible pattern as 0.3.0's ephemeral-signer marking).
+  if (config.devMode && !hasStaticCredentials(config.credentials)) {
+    reason += ' [credential-binding: none — permission claims self-asserted]';
+  }
   const bundle = req.bolyraBundle;
   if (bundle) {
     return buildDecisionReceiptInput(bundle, authCtx, config, true, reason);

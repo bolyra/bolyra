@@ -326,3 +326,187 @@ port: 4200
     });
   });
 });
+
+describe('credentials config (v0.4.0 credential binding)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-creds-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function baseConfig(overrides: Partial<GatewayConfig> = {}): Partial<GatewayConfig> {
+    return {
+      target: 'http://localhost:3000/mcp',
+      devMode: true,
+      ...overrides,
+    };
+  }
+
+  describe('validateConfig', () => {
+    it('accepts a static credentials section (number and string masks, optional expiry in dev)', () => {
+      const config = baseConfig({
+        credentials: {
+          type: 'static',
+          map: {
+            '12345678': { permissionBitmask: 3 },
+            '87654321': { permissionBitmask: '7', expiryTimestamp: '1893456000' },
+          },
+        },
+      });
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('rejects type: registry with a clear "not supported" message (fail closed, never silently ignored)', () => {
+      const config = baseConfig({
+        credentials: { type: 'registry', registryAddress: '0xabc', rpcUrl: 'https://rpc' } as never,
+      });
+      expect(() => validateConfig(config)).toThrow(ConfigValidationError);
+      expect(() => validateConfig(config)).toThrow(/registry.*not.*supported/i);
+    });
+
+    it('rejects non-decimal permission masks and map keys', () => {
+      expect(() => validateConfig(baseConfig({
+        credentials: { type: 'static', map: { '12345678': { permissionBitmask: 'not-a-number' } } },
+      }))).toThrow(/permissionBitmask/);
+      expect(() => validateConfig(baseConfig({
+        credentials: { type: 'static', map: { '0xdeadbeef': { permissionBitmask: 3 } } },
+      }))).toThrow(/decimal/);
+    });
+
+    it('rejects an empty static map (configured-but-empty must not silently disable binding)', () => {
+      expect(() => validateConfig(baseConfig({
+        credentials: { type: 'static', map: {} },
+      }))).toThrow(/at least one/i);
+    });
+
+    it('requires expiryTimestamp per entry when devMode is false (needed for scopeCommitment binding)', () => {
+      const config = baseConfig({
+        devMode: false,
+        credentials: { type: 'static', map: { '12345678': { permissionBitmask: 3 } } },
+      });
+      expect(() => validateConfig(config)).toThrow(/expiryTimestamp/);
+    });
+  });
+
+  describe('--credentials <path> flag', () => {
+    it('loads a bare-map credentials file and overrides config.credentials', () => {
+      const credsPath = path.join(tmpDir, 'credentials.yaml');
+      fs.writeFileSync(credsPath, `
+"12345678":
+  permissionBitmask: 3
+`);
+      const config = loadConfig({
+        config: path.join(tmpDir, 'nonexistent.yaml'),
+        target: 'http://localhost:3000/mcp',
+        dev: true,
+        credentials: credsPath,
+      });
+      expect(config.credentials).toEqual({
+        type: 'static',
+        map: { '12345678': { permissionBitmask: 3 } },
+      });
+    });
+
+    it('also accepts the full credentials-section shape in the file', () => {
+      const credsPath = path.join(tmpDir, 'credentials.json');
+      fs.writeFileSync(credsPath, JSON.stringify({
+        type: 'static',
+        map: { '12345678': { permissionBitmask: '3', expiryTimestamp: '1893456000' } },
+      }));
+      const config = loadConfig({
+        config: path.join(tmpDir, 'nonexistent.yaml'),
+        target: 'http://localhost:3000/mcp',
+        dev: true,
+        credentials: credsPath,
+      });
+      expect(config.credentials!.type).toBe('static');
+      expect((config.credentials as { map: Record<string, unknown> }).map['12345678']).toBeDefined();
+    });
+
+    it('errors when the flag points at a missing file (explicit flag must not fail open)', () => {
+      expect(() => loadConfig({
+        config: path.join(tmpDir, 'nonexistent.yaml'),
+        target: 'http://localhost:3000/mcp',
+        dev: true,
+        credentials: path.join(tmpDir, 'missing-credentials.yaml'),
+      })).toThrow(/credentials/i);
+    });
+  });
+});
+
+describe('credentials config — unsafe numbers (Codex P2)', () => {
+  it('rejects numeric masks/expiries above Number.MAX_SAFE_INTEGER (YAML rounds them silently)', () => {
+    const base = { target: 'http://localhost:3000/mcp', devMode: true };
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: 2 ** 53 } } },
+    })).toThrow(/permissionBitmask/);
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: 3, expiryTimestamp: 2 ** 60 } } },
+    })).toThrow(/expiryTimestamp/);
+    // Big values as decimal STRINGS stay exact and are fine up to uint64.
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: '3', expiryTimestamp: '18446744073709551615' } } },
+    })).not.toThrow();
+  });
+});
+
+describe('credentials config — canonical commitment keys (Codex round-2 P2)', () => {
+  it('rejects non-canonical decimal keys (leading zeros) that would silently collide after normalization', () => {
+    const base = { target: 'http://localhost:3000/mcp', devMode: true };
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '001': { permissionBitmask: 3 } } },
+    })).toThrow(/canonical/);
+    // "1" and "001" both validating would let one silently overwrite the
+    // other in the registry while the banner counts both.
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '1': { permissionBitmask: 3 }, '001': { permissionBitmask: 255 } } },
+    })).toThrow(/canonical/);
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '0': { permissionBitmask: 1 }, '10': { permissionBitmask: 3 } } },
+    })).not.toThrow();
+  });
+});
+
+describe('credentials config — circuit semantics (Codex round-3 P2)', () => {
+  const base = { target: 'http://localhost:3000/mcp', devMode: true };
+
+  it('rejects masks/expiries outside uint64 (AgentPolicy/Delegation are 64-bit)', () => {
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: '18446744073709551616' } } },
+    })).toThrow(/uint64/);
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: 3, expiryTimestamp: '18446744073709551616' } } },
+    })).toThrow(/uint64/);
+  });
+
+  it('rejects masks that violate the cumulative-bit encoding the circuits enforce', () => {
+    // 16 = FINANCIAL_UNLIMITED (bit 4) without FINANCIAL_SMALL/MEDIUM —
+    // createAgentCredential and the circuits both reject this shape.
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: 16 } } },
+    })).toThrow(/cumulative/);
+    // 8 = FINANCIAL_MEDIUM (bit 3) without FINANCIAL_SMALL (bit 2).
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: 8 } } },
+    })).toThrow(/cumulative/);
+    // 28 = FINANCIAL_* stack (bits 2+3+4) — valid cumulative shape.
+    expect(() => validateConfig({
+      ...base,
+      credentials: { type: 'static', map: { '12345678': { permissionBitmask: 28 } } },
+    })).not.toThrow();
+  });
+});

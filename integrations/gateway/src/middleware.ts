@@ -23,6 +23,11 @@ import type {
   JsonRpcError,
 } from './types';
 import { isReceiptableBundle } from './receipt-signer';
+import {
+  buildCredentialRegistry,
+  checkCredentialBinding,
+  createStaticCredentialResolver,
+} from './credential-binding';
 
 /**
  * Create gateway auth middleware. Returns an async function that verifies
@@ -37,6 +42,15 @@ export function createGatewayMiddleware(
 
   // Build the MCP config from gateway config
   const mcpConfig = buildMcpConfig(config, options);
+
+  // Dev-mode credential binding registry (packaged check 3). Dev proofs are
+  // mocked, so when credentials are configured the claimed mask MUST match
+  // the registered grant. Built once at startup — a malformed map fails here,
+  // not mid-request. Production binding happens inside verifyBundle instead
+  // (resolveCredential + Poseidon3 scopeCommitment).
+  const devCredentialRegistry = config.devMode
+    ? buildCredentialRegistry(config.credentials)
+    : undefined;
 
   return async (req: GatewayRequest, res: ServerResponse, toolName?: string): Promise<boolean> => {
     const authHeader = headerString(req.headers['authorization']);
@@ -123,6 +137,31 @@ export function createGatewayMiddleware(
       return false;
     }
 
+    // Dev-mode credential binding: the claimed identity/permissions must
+    // match the registered credential. Mismatch is an authentication failure
+    // — fail closed with 401, and record the denial so the proxy signs a
+    // deny receipt whose reasonCode names the mismatch class.
+    if (devCredentialRegistry) {
+      const binding = checkCredentialBinding(bundle, authCtx, devCredentialRegistry);
+      if (!binding.ok) {
+        req.bolyraDenial = {
+          stage: 'credential_binding_failed',
+          reason: binding.reasonCode,
+          authCtx,
+          bundle: req.bolyraBundle,
+        };
+        sendJsonRpcError(res, 401, {
+          jsonrpc: '2.0',
+          id: req.jsonRpcBody?.id ?? null,
+          error: {
+            code: -32000,
+            message: `Bolyra auth failed: ${binding.reasonCode}`,
+          },
+        });
+        return false;
+      }
+    }
+
     // Check per-tool policy if tool name is known
     if (toolName) {
       const decision = checkToolPolicy(toolName, authCtx, mcpConfig);
@@ -177,11 +216,16 @@ function buildMcpConfig(
     toolPolicy,
     nonceStore: options.nonceStore ?? new MemoryNonceStore(),
     receiptSigner: options.receiptSigner,
-    resolveCredential: options.resolveCredential,
+    // Explicit resolver (library embedders) wins; otherwise static
+    // credentials from the config become the production resolver, engaging
+    // verifyBundle's Poseidon3 scopeCommitment binding.
+    resolveCredential:
+      options.resolveCredential ?? createStaticCredentialResolver(config.credentials),
   };
 
-  // In dev mode, resolveCredential is not required
-  // In production, we need it — but @bolyra/mcp will throw if missing
+  // In dev mode, resolveCredential is not required (binding is enforced by
+  // the gateway's own registry check when credentials are configured).
+  // In production, verifyBundle throws without it — fail closed per request.
 
   return mcpConfig;
 }

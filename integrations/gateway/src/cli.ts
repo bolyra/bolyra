@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadConfig } from './config';
+import { hasStaticCredentials } from './credential-binding';
 import { createGatewayProxy } from './proxy';
 import { createReceiptWriter } from './receipts';
 import { createGatewayReceiptSigner } from './receipt-signer';
@@ -37,7 +38,13 @@ Options:
   --target <url>       Upstream MCP server URL (required unless in config)
   --port <number>      Gateway listen port (default: 4100)
   --config <path>      Path to gateway config file (default: ./gateway.yaml)
-  --dev                Enable dev mode (mock verification, no real ZKP)
+  --dev                Bolyra Core mode: classical checks, no ZK circuits.
+                       With registered credentials (credentials section or
+                       --credentials) permission claims are enforced against
+                       the registry; without them, claims are self-asserted.
+  --credentials <path> Credentials file (YAML/JSON map: commitment ->
+                       { permissionBitmask, expiryTimestamp? }); overrides
+                       the config's credentials section
   --receipt-dir <path> Directory for receipt JSON files (default: ./receipts/)
   --receipt-stdout     Write receipts to stdout (NDJSON)
   --no-receipts        Disable receipt generation
@@ -46,8 +53,11 @@ Options:
   --version            Show version
 
 Examples:
-  # Minimal: proxy with dev mode
+  # Minimal: proxy in Core mode (tutorial-friendly, claims self-asserted)
   bolyra-gateway --target http://localhost:3000/mcp --dev
+
+  # Core mode with enforced credential binding
+  bolyra-gateway --target http://localhost:3000/mcp --dev --credentials ./credentials.yaml
 
   # Production with config file
   bolyra-gateway --config ./gateway.yaml
@@ -67,6 +77,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
         port: { type: 'string' }, // parse as string, convert to number
         config: { type: 'string' },
         dev: { type: 'boolean', default: false },
+        credentials: { type: 'string' },
         'receipt-dir': { type: 'string' },
         'receipt-stdout': { type: 'boolean', default: false },
         'no-receipts': { type: 'boolean', default: false },
@@ -100,6 +111,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     port: values.port ? parseInt(values.port as string, 10) : undefined,
     config: values.config as string | undefined,
     dev: values.dev as boolean | undefined,
+    credentials: values.credentials as string | undefined,
     receiptDir: values['receipt-dir'] as string | undefined,
     receiptStdout: values['receipt-stdout'] as boolean | undefined,
     noReceipts: values['no-receipts'] as boolean | undefined,
@@ -113,6 +125,16 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   } catch (err) {
     console.error(`Configuration error: ${(err as Error).message}`);
     process.exit(1);
+  }
+
+  // Credential binding visibility (v0.4.0). Unconfigured dev stays
+  // frictionless for tutorials, but the tradeoff must be loud.
+  const credentialsConfigured = hasStaticCredentials(config.credentials);
+  if (config.devMode && !credentialsConfigured) {
+    console.warn('[gateway] WARNING: Core mode without registered credentials — permission claims are self-asserted and NOT verified. Add a credentials section to gateway.yaml (or pass --credentials <path>) to enforce credential binding.');
+  }
+  if (!config.devMode && !credentialsConfigured) {
+    console.warn('[gateway] WARNING: production mode without credentials — every tools/call will be denied (verification requires a credential resolver). Add a static credentials section or embed the middleware with resolveCredential.');
   }
 
   // Warn if HMAC is not configured in production mode
@@ -227,7 +249,7 @@ function redactUrl(url: string): string {
 
 /** Print the startup banner. */
 function printBanner(
-  config: { target: string; port: number; devMode: boolean; nonce: { store: string; redis?: { url: string } }; receipts: { enabled: boolean; output: string; dir?: string }; network: string },
+  config: import('./types').GatewayConfig,
   receiptSigner?: GatewayReceiptSigner,
 ): void {
   const receiptInfo = !config.receipts.enabled
@@ -246,11 +268,23 @@ function printBanner(
     ? `${receiptSigner.signer} (ES256K${receiptSigner.ephemeral ? ', ephemeral — set receipts.privateKey to persist' : ''})`
     : 'n/a';
 
+  const registeredCount = hasStaticCredentials(config.credentials)
+    ? Object.keys(config.credentials.map).length
+    : 0;
+  const bindingInfo = config.devMode
+    ? registeredCount > 0
+      ? `enforcing (${registeredCount} registered credential${registeredCount === 1 ? '' : 's'})`
+      : 'NONE — permission claims self-asserted (add credentials to enforce)'
+    : registeredCount > 0
+      ? `scopeCommitment (static registry, ${registeredCount} credential${registeredCount === 1 ? '' : 's'})`
+      : 'scopeCommitment (resolver required — none configured)';
+
   console.log(`
 @bolyra/gateway v${VERSION}
   Mode:     ${config.devMode ? 'dev' : 'production'}
   Target:   ${config.target}
   Port:     ${config.port}
+  Binding:  ${bindingInfo}
   Nonce:    ${nonceInfo}
   Receipts: ${receiptInfo}
   Signer:   ${signerInfo}

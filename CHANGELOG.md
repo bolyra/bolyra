@@ -17,6 +17,70 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.7] — 2026-07-10
+
+### Added
+
+#### Gateway (`@bolyra/gateway` 0.3.0 → 0.4.0 — not yet published)
+
+- **Credential binding in packaged Core mode (`--dev`)** — closes the
+  self-asserted-claims gap. Previously the packaged gateway trusted the
+  permission mask inside a dev bundle; the registered-credential check lived
+  only in `examples/verified-actions-demo`'s host code. Now a `credentials`
+  section in `gateway.yaml` (or a `--credentials <path>` file: bare
+  commitment → `{ permissionBitmask, expiryTimestamp? }` map, YAML/JSON)
+  registers credentials with the gateway, and every verified claim must
+  match the registry:
+  - unknown commitment → 401 fail-closed + signed deny receipt
+    (`credential_unknown`)
+  - claimed mask ≠ registered grant (forged bundle) → 401 + signed deny
+    receipt (`credential_mismatch`)
+  - delegation chains are held to the Delegation circuit's production
+    semantics: permissions may only narrow at EVERY hop
+    (`credential_mismatch`), expiry may never outlive the delegator's
+    (`delegateeExpiry <= delegatorExpiry`), expired hops are rejected
+    against the gateway clock (`credential_expired` — the bundle's own
+    `currentTimestamp` is caller-supplied and never trusted), and hop
+    fields use the same strict decimal wire format, uint64 range, and
+    cumulative-bit mask encoding production enforces
+  - config validation enforces circuit semantics on registered credentials
+    too: masks/expiries must fit uint64 and masks must satisfy the
+    cumulative-bit encoding (a grant the circuits could never accept would
+    make production binding permanently unsatisfiable); commitment keys
+    must be canonical decimal (no leading zeros), numeric values must be
+    safe integers (larger values as decimal strings)
+  - registered expiry passed → 401 + signed deny receipt
+    (`credential_expired`)
+- **Unconfigured Core mode stays tutorial-friendly but loud**: behavior is
+  unchanged (any claim passes), the CLI warns at startup, the banner shows
+  `Binding: NONE — permission claims self-asserted`, and every allow receipt
+  is flagged `[credential-binding: none — permission claims self-asserted]`
+  (same visibility pattern as 0.3.0's ephemeral-signer marking).
+- **Production mode gains a packaged credential resolver**: the same static
+  `credentials` section is compiled into a `resolveCredential`
+  implementation, engaging `verifyBundle`'s Poseidon3 `scopeCommitment`
+  binding (the CLI previously could not run production verification at all —
+  every request failed closed with "resolveCredential is required").
+  `expiryTimestamp` is required per entry in production (it is a binding
+  input), and expired registrations resolve to `null` — fail closed, not
+  score-docked. An explicit library `resolveCredential` still takes
+  precedence.
+- New exports: `loadCredentialsFile`, `hasStaticCredentials`,
+  `buildCredentialRegistry`, `checkCredentialBinding`,
+  `createStaticCredentialResolver`, `StaticCredentialEntry` type, and a
+  `credential_binding_failed` stage on `GatewayDenial`.
+
+### Changed
+
+- `credentials.type: registry` (documented but never implemented) now fails
+  gateway config validation with a clear "not supported yet" error instead
+  of being silently ignored — a security-relevant config section must never
+  no-op.
+- README caveats updated (gateway, root, verified-actions demo): the
+  "credential permission claims are self-asserted and not cryptographically
+  bound" caveat is now conditional on running Core mode without registered
+  credentials.
+
 ## [0.7.6] — 2026-07-10
 
 ### Changed

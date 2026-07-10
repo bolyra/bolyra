@@ -15,7 +15,7 @@ export { createGatewayProxy } from './proxy';
 export type { GatewayProxyOptions } from './proxy';
 
 // Config — load and validate gateway configuration
-export { loadConfig, loadConfigFile, substituteEnvVars, validateConfig, mergeCliFlags, ConfigValidationError } from './config';
+export { loadConfig, loadConfigFile, loadCredentialsFile, substituteEnvVars, validateConfig, mergeCliFlags, ConfigValidationError } from './config';
 export type { CliFlags } from './config';
 
 // Headers — X-Bolyra-* header injection and HMAC signing
@@ -39,6 +39,16 @@ export {
 } from './receipt-signer';
 export type { GatewayReceiptSigner } from './receipt-signer';
 
+// Credential binding — enforce registered credentials in --dev (v0.4.0+),
+// static resolveCredential for production
+export {
+  hasStaticCredentials,
+  buildCredentialRegistry,
+  checkCredentialBinding,
+  createStaticCredentialResolver,
+} from './credential-binding';
+export type { RegisteredCredential, CredentialBindingResult } from './credential-binding';
+
 // Health — health check endpoint handler
 export { createHealthHandler } from './health';
 
@@ -49,6 +59,7 @@ export type {
   ToolPolicyEntry,
   ReceiptOutputConfig,
   CredentialSource,
+  StaticCredentialEntry,
   NonceConfig,
   RedisNonceConfig,
   HealthConfig,

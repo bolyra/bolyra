@@ -9,7 +9,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse as parseYaml } from 'yaml';
-import type { GatewayConfig, ToolPolicyEntry } from './types';
+import type { CredentialSource, GatewayConfig, StaticCredentialEntry, ToolPolicyEntry } from './types';
+import { cumulativeMaskError, UINT64_MAX } from './credential-binding';
 
 /** Defaults applied when values are missing from config + CLI. */
 const DEFAULTS: GatewayConfig = {
@@ -138,6 +139,11 @@ export function validateConfig(config: Partial<GatewayConfig>): asserts config i
     }
   }
 
+  // Credential binding validation
+  if (config.credentials !== undefined) {
+    validateCredentials(config.credentials, config.devMode === true, errors);
+  }
+
   // HMAC secret validation
   if (config.hmac) {
     if (!config.hmac.secret || typeof config.hmac.secret !== 'string') {
@@ -157,6 +163,97 @@ export function validateConfig(config: Partial<GatewayConfig>): asserts config i
   }
 }
 
+/**
+ * True when the value is a non-negative decimal integer (number or decimal
+ * string). Numbers must be SAFE integers — YAML/JSON silently rounds values
+ * above 2^53-1, which would register a different grant than the one written.
+ * Larger values must be decimal strings (exact through BigInt).
+ */
+function isDecimal(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0;
+  return typeof value === 'string' && /^\d+$/.test(value);
+}
+
+/**
+ * Validate the credentials section. Static maps are checked entry-by-entry;
+ * `type: registry` is rejected outright — a security-relevant config section
+ * the gateway cannot enforce must fail loudly, never be silently ignored.
+ */
+function validateCredentials(
+  credentials: CredentialSource,
+  devMode: boolean,
+  errors: string[],
+): void {
+  if (!credentials || typeof credentials !== 'object') {
+    errors.push('"credentials" must be an object with type: static');
+    return;
+  }
+  if (credentials.type === 'registry') {
+    errors.push(
+      '"credentials.type: registry" is not supported by the packaged gateway yet. ' +
+      'Use type: static (commitment -> permission map), or embed the middleware ' +
+      'with a custom resolveCredential (library API).',
+    );
+    return;
+  }
+  if (credentials.type !== 'static') {
+    errors.push('"credentials.type" must be "static"');
+    return;
+  }
+  const map = credentials.map;
+  if (!map || typeof map !== 'object' || Array.isArray(map)) {
+    errors.push('"credentials.map" must be an object mapping commitment -> credential entry');
+    return;
+  }
+  const entries = Object.entries(map);
+  if (entries.length === 0) {
+    errors.push('"credentials.map" must register at least one credential (an empty map would silently disable binding — omit the section instead)');
+    return;
+  }
+  for (const [commitment, entry] of entries) {
+    const label = `"credentials.map[${commitment}]"`;
+    // Canonical decimal only (no leading zeros): the runtime registry
+    // normalizes keys through BigInt, so "1" and "001" would silently
+    // collide after validation if both were accepted.
+    if (!/^(0|[1-9]\d*)$/.test(commitment)) {
+      errors.push(`${label}: map keys must be credential commitments as canonical decimal strings (no leading zeros)`);
+      continue;
+    }
+    if (!entry || typeof entry !== 'object') {
+      errors.push(`${label} must be an object with permissionBitmask`);
+      continue;
+    }
+    const e = entry as StaticCredentialEntry;
+    if (!isDecimal(e.permissionBitmask)) {
+      errors.push(`${label}.permissionBitmask is required and must be a decimal integer (safe number, or decimal string for values above 2^53-1)`);
+    } else {
+      // Circuit semantics: AgentPolicy/Delegation masks are uint64 with a
+      // cumulative-bit encoding. Registering a mask the circuits could never
+      // accept would make production binding permanently unsatisfiable.
+      const mask = BigInt(e.permissionBitmask);
+      if (mask > UINT64_MAX) {
+        errors.push(`${label}.permissionBitmask exceeds uint64 — circuit masks are 64-bit`);
+      } else {
+        const maskError = cumulativeMaskError(mask);
+        if (maskError) {
+          errors.push(`${label}.permissionBitmask violates cumulative-bit encoding: ${maskError}`);
+        }
+      }
+    }
+    if (e.expiryTimestamp !== undefined && !isDecimal(e.expiryTimestamp)) {
+      errors.push(`${label}.expiryTimestamp must be a decimal unix timestamp in seconds (safe number, or decimal string for values above 2^53-1)`);
+    } else if (e.expiryTimestamp !== undefined && BigInt(e.expiryTimestamp) > UINT64_MAX) {
+      errors.push(`${label}.expiryTimestamp exceeds uint64 — circuit timestamps are 64-bit`);
+    }
+    if (!devMode && e.expiryTimestamp === undefined) {
+      errors.push(`${label}.expiryTimestamp is required in production mode (it is an input to the Poseidon3 scopeCommitment binding)`);
+    }
+    if (e.commitment !== undefined && e.commitment !== commitment) {
+      errors.push(`${label}.commitment ("${e.commitment}") does not match the map key — remove it or fix the mismatch`);
+    }
+  }
+}
+
 /** CLI flags that map to config fields. */
 export interface CliFlags {
   target?: string;
@@ -167,6 +264,28 @@ export interface CliFlags {
   receiptStdout?: boolean;
   noReceipts?: boolean;
   network?: string;
+  /** Path to a credentials file (--credentials); overrides config.credentials. */
+  credentials?: string;
+}
+
+/**
+ * Load a credentials file referenced by --credentials. Accepts either the
+ * full config-section shape ({ type: static, map: {...} }) or a bare
+ * commitment -> entry map. Unlike gateway.yaml, the file is NOT optional:
+ * an explicit flag pointing at a missing file must fail, not fail open.
+ */
+export function loadCredentialsFile(filePath: string): CredentialSource {
+  const raw = loadConfigFile(filePath);
+  if (raw === null) {
+    throw new ConfigValidationError([
+      `credentials file not found: ${path.resolve(filePath)} (--credentials must point at an existing YAML/JSON file)`,
+    ]);
+  }
+  const substituted = substituteEnvVars(raw);
+  if (typeof substituted.type === 'string') {
+    return substituted as unknown as CredentialSource;
+  }
+  return { type: 'static', map: substituted as Record<string, StaticCredentialEntry> };
 }
 
 /**
@@ -230,6 +349,12 @@ export function loadConfig(flags: CliFlags = {}): GatewayConfig {
 
   // Merge CLI flags (CLI wins)
   const merged = mergeCliFlags(base, flags);
+
+  // --credentials <path> loads a credentials file and wins over the config
+  // section (same CLI-over-config precedence as every other flag).
+  if (flags.credentials !== undefined) {
+    merged.credentials = loadCredentialsFile(flags.credentials);
+  }
 
   // Validate
   validateConfig(merged);

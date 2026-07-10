@@ -9,10 +9,28 @@ import type { ToolPolicyMap, NonceStore, BolyraAuthContext, BolyraProofBundle } 
 import type { ReceiptSignerConfig, SignedReceipt } from '@bolyra/receipts';
 import type { IncomingMessage, ServerResponse } from 'http';
 
+/**
+ * One registered credential in a static credential map. Mirrors the
+ * verified-actions demo's registered-credential shape: the credential
+ * commitment (the map key) is the identity, the mask is the grant.
+ */
+export interface StaticCredentialEntry {
+  /** Granted permission bitmask (decimal number or decimal string). */
+  permissionBitmask: string | number;
+  /**
+   * Credential expiry (unix seconds, decimal). Optional in dev mode
+   * (enforced when present); required in production mode, where it is an
+   * input to the Poseidon3 scopeCommitment binding.
+   */
+  expiryTimestamp?: string | number;
+  /** Redundant copy of the commitment; must match the map key if present. */
+  commitment?: string;
+}
+
 /** Credential resolution strategy. */
 export type CredentialSource =
   | { type: 'registry'; registryAddress: string; rpcUrl: string }
-  | { type: 'static'; map: Record<string, { permissionBitmask: string; expiryTimestamp: string; commitment: string }> };
+  | { type: 'static'; map: Record<string, StaticCredentialEntry> };
 
 /** Receipt output configuration. */
 export interface ReceiptOutputConfig {
@@ -119,7 +137,7 @@ export interface ReceiptWriter {
 /** Why the middleware denied a request — recorded so the proxy can sign a deny receipt. */
 export interface GatewayDenial {
   /** Which check failed. */
-  stage: 'missing_auth' | 'malformed_bundle' | 'verification_failed' | 'policy_denied';
+  stage: 'missing_auth' | 'malformed_bundle' | 'verification_failed' | 'credential_binding_failed' | 'policy_denied';
   /** Human-readable reason (becomes the receipt's reasonCode). */
   reason: string;
   /** Auth context when verification produced one (verification/policy failures). */

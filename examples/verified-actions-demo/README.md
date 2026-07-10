@@ -154,11 +154,15 @@ Both enforce the same trust boundary shown here — proof-bundle
 verification, nonce replay protection, and per-tool policy. Two honest
 caveats about what is demo-host code rather than packaged behavior:
 
-- **Credential binding (check 3):** in production, `verifyBundle` binds the
-  proof to the resolved credential via its `scopeCommitment` — but the
-  credential resolver is wired by the embedder (`resolveCredential` in the
-  library API), which is exactly the role this demo's registered-credential
-  map plays. The packaged CLI does not ship a resolver out of the box today.
+- **Credential binding (check 3):** as of `@bolyra/gateway` 0.4.0, this is
+  packaged behavior too. A `credentials` section in `gateway.yaml` (or
+  `--credentials <path>`) registers credentials with the gateway: in Core
+  mode (`--dev`) claims are enforced against the registry exactly like this
+  demo's registered-credential map (unknown/forged/expired → 401 + signed
+  deny receipt), and in production mode the same section becomes the
+  `resolveCredential` source for `verifyBundle`'s `scopeCommitment` binding.
+  Library embedders can still wire a custom `resolveCredential`. This demo
+  keeps its own map because it narrates the check inline.
 - **Receipts:** as of `@bolyra/gateway` 0.3.0, the packaged proxy emits
   ES256K-signed receipts on every allow *and* deny decision in both dev and
   production modes (including signed anonymous receipts for missing or

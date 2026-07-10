@@ -61,8 +61,13 @@ Options:
   --port <number>      Gateway listen port (default: 4100)
   --config <path>      Path to gateway config file (default: ./gateway.yaml)
   --dev                Enable Bolyra Core mode (classical checks: tool policy,
-                       nonce replay, signed receipts; ZK proof verification off —
-                       credential claims are not cryptographically bound)
+                       nonce replay, signed receipts, credential binding
+                       against registered credentials; ZK proof verification
+                       off. Without registered credentials, permission claims
+                       are self-asserted — see Credential Binding below)
+  --credentials <path> Credentials file (YAML/JSON map: commitment ->
+                       { permissionBitmask, expiryTimestamp? }); overrides
+                       the config's credentials section
   --receipt-dir <path> Directory for receipt JSON files (default: ./receipts/)
   --receipt-stdout     Write receipts to stdout (NDJSON)
   --no-receipts        Disable receipt generation
@@ -84,11 +89,21 @@ network: base-sepolia
 # Bolyra Core mode: classical checks only, ZK proof verification skipped
 devMode: false
 
-# Credential resolution
+# Registered credentials (see "Credential Binding" below).
+# Core mode (devMode: true): claims are checked against this registry —
+#   unknown commitments, forged masks, and expired credentials are denied.
+# Production mode: this map becomes the resolveCredential source for
+#   verifyBundle's Poseidon3 scopeCommitment binding (expiryTimestamp
+#   required per entry).
+# type: registry (on-chain resolution) is not supported by the packaged
+# gateway yet and fails validation — use the library resolveCredential
+# option for custom resolution.
 credentials:
-  type: registry
-  registryAddress: "0x..."
-  rpcUrl: "https://base-sepolia.g.alchemy.com/v2/..."
+  type: static
+  map:
+    "48201394857102938471029384":     # credential commitment (decimal)
+      permissionBitmask: 3            # READ_DATA | WRITE_DATA
+      expiryTimestamp: "1893456000"   # unix seconds; optional in Core mode
 
 # Per-tool policies
 tools:
@@ -180,6 +195,11 @@ const middleware = createGatewayMiddleware({ config });
 | `createGatewayReceiptSigner(config, override?)` | Resolve the ES256K receipt signer (configured key or ephemeral) |
 | `createHealthHandler(config)` | Create /healthz endpoint handler |
 | `extractToolName(body)` | Extract tool name from JSON-RPC body |
+| `loadCredentialsFile(path)` | Load a `--credentials` file (bare map or full section) |
+| `buildCredentialRegistry(credentials)` | Compile a static credentials section into a lookup registry |
+| `checkCredentialBinding(bundle, authCtx, registry)` | Core-mode registered-credential check (see Credential Binding) |
+| `createStaticCredentialResolver(credentials)` | Static `resolveCredential` for production scopeCommitment binding |
+| `hasStaticCredentials(credentials)` | True when a usable static credential map is configured |
 | `RedisNonceStore` | Redis-backed NonceStore for multi-instance deployments |
 
 ## Redis Nonce Store (v0.2.0+)
@@ -282,6 +302,63 @@ authenticates successfully but fails tool policy gets a *deny* receipt. A
 bundle that parses as JSON but is missing proof material entirely is denied
 fail-closed (HTTP 401) with a signed anonymous receipt.
 
+## Credential Binding (v0.4.0+)
+
+In **Core mode** (`--dev`) proofs are mocked, so the permission mask inside a
+bundle is asserted by the caller. Registering credentials turns that claim
+into an enforced check — the same registered-credential pattern as
+[`examples/verified-actions-demo`](../../examples/verified-actions-demo/README.md),
+now packaged:
+
+- **unknown commitment** → 401 + signed deny receipt (`credential_unknown`)
+- **claimed mask ≠ registered grant** (forged bundle) → 401 + signed deny
+  receipt (`credential_mismatch`)
+- **delegation chain expanding beyond the grant** → 401 (`credential_mismatch`
+  — scope narrowing is one-way)
+- **registered expiry passed** → 401 + signed deny receipt
+  (`credential_expired`)
+
+All denials are fail-closed and receipted like every other decision.
+
+**Registering a dev credential.** A commitment in Core mode is an opaque
+identifier the platform assigns (production commitments are Poseidon hashes
+of the credential). Generate one and register it:
+
+```bash
+# 1. Generate a commitment
+node -e "console.log(BigInt('0x' + require('crypto').randomBytes(16).toString('hex')).toString())"
+
+# 2. Register it (credentials.yaml)
+cat > credentials.yaml << 'EOF'
+"48201394857102938471029384":
+  permissionBitmask: 3        # READ_DATA | WRITE_DATA
+EOF
+
+# 3. Run with binding enforced
+npx @bolyra/gateway --target http://localhost:3000/mcp --dev --credentials ./credentials.yaml
+```
+
+Hand the commitment (and its granted mask) to the agent; its proof bundles
+must carry exactly that identity and mask. The `--credentials` file can be a
+bare map (above) or the full config-section shape (`type: static`, `map:`);
+the `credentials:` section in `gateway.yaml` is equivalent.
+
+**Without registered credentials**, Core mode stays frictionless for
+tutorials: any claim passes (current behavior), but the gateway warns at
+startup and every allow receipt is flagged
+`[credential-binding: none — permission claims self-asserted]` so audit
+consumers can see the tradeoff — the same visibility pattern as the
+ephemeral receipt-signing key.
+
+**In production mode** the same `credentials` section is compiled into a
+`resolveCredential` implementation, engaging `verifyBundle`'s cryptographic
+binding: the verifier recomputes `Poseidon3(permissionBitmask, commitment,
+expiryTimestamp)` from the registered credential and requires it to equal
+the proof's public `scopeCommitment` output — a forged mask cannot produce
+a valid proof. `expiryTimestamp` is therefore required per entry in
+production. Library embedders can still pass `resolveCredential` directly;
+it takes precedence over the config section.
+
 ## Security Model
 
 The gateway is the **trust boundary**. Agents present proof bundles; the gateway verifies them before forwarding.
@@ -294,7 +371,8 @@ The gateway is the **trust boundary**. Agents present proof bundles; the gateway
 
 **Threats addressed:**
 - Replay attacks (nonce store)
-- Credential substitution (Poseidon3 scope commitment binding)
+- Credential substitution (production: Poseidon3 scope commitment binding)
+- Forged permission claims in Core mode (registered-credential binding, when credentials are configured)
 - Delegation escalation (one-way scope narrowing, circuit-enforced)
 - Scope bypass (per-tool bitmask enforcement)
 - Header injection (optional HMAC signing)
