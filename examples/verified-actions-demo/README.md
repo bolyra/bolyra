@@ -159,13 +159,13 @@ caveats about what is demo-host code rather than packaged behavior:
   credential resolver is wired by the embedder (`resolveCredential` in the
   library API), which is exactly the role this demo's registered-credential
   map plays. The packaged CLI does not ship a resolver out of the box today.
-- **Receipts:** the packaged gateway signs receipts for verification
-  decisions in production mode and writes unsigned JSON decision records
-  otherwise. The full-context *signed allow-and-deny* receipts you saw here
-  come from this demo's audit layer (`src/gateway-host.ts` + `src/audit.ts`,
-  ~150 lines on top of `@bolyra/receipts`), which you embed exactly the way
-  this demo does. If you want that behavior inside the packaged proxy
-  itself, tell us — it is on the roadmap.
+- **Receipts:** as of `@bolyra/gateway` 0.3.0, the packaged proxy emits
+  ES256K-signed receipts on every allow *and* deny decision in both dev and
+  production modes (including signed anonymous receipts for missing or
+  malformed bundles), with the signer address pinned in `signer.json` — the
+  same pattern as this demo's audit layer. This demo still embeds its own
+  audit layer (`src/gateway-host.ts` + `src/audit.ts`) because it narrates
+  each decision and adds the registered-credential binding above.
 
 ## Test
 
