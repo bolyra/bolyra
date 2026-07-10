@@ -16,6 +16,13 @@
  *   - allow-agent-only/{bundle,request}.json   — real agent-only AgentPolicy proof.
  *   - allow-human/{bundle,request}.json         — real proof + HumanUniqueness proof.
  *   - allow-delegation-1hop/{bundle,request}.json — real 1-hop SDK delegation.
+ *   - deny-scope-exceeded/{bundle,request}.json — real proof over a READ-only
+ *       credential; the request grants a WRITE-requiring capability → the
+ *       capability→scope subset check denies `scope_exceeded` (Task 15b).
+ *   - deny-model-mismatch/{bundle,request}.json — real proof over a
+ *       "model-alpha" credential; binding + request both assert "model-beta"
+ *       (equal, so the request-binding check passes) → the model-binding check
+ *       denies `model_mismatch` (Task 15b).
  *   - roots.json           — namespaced real merkle roots {agent,human,delegatee}.
  *   - capability-map.json  — capability→permission map covering the requests.
  *
@@ -98,19 +105,29 @@ function writeJson(file: string, value: unknown): void {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 }
 
-/** The signed binding for a golden (capabilities cover the request). */
-function makeBinding(capabilities: string[]) {
+/**
+ * The signed binding for a golden (capabilities cover the request). `model`
+ * defaults to {@link MODEL}; the `model_mismatch` golden overrides it so the
+ * binding claims a model DISTINCT from the one the proof commits to.
+ */
+function makeBinding(capabilities: string[], model: string = MODEL) {
   return {
     agent_name: AGENT_NAME,
     project_key: PROJECT_KEY,
     program: PROGRAM,
-    model: MODEL,
+    model,
     capabilities,
   };
 }
 
-/** Assemble the full VerifierRequest (§2.1 nested shape) around a bundle. */
-function makeRequest(bundle: unknown, grantedCapabilities: string[]) {
+/**
+ * Assemble the full VerifierRequest (§2.1 nested shape) around a bundle.
+ * `model` defaults to {@link MODEL} and MUST equal the binding's model for the
+ * request-binding check to pass (the `model_mismatch` golden sets both to the
+ * same distinct value so the failure is the proof↔model check, not the request
+ * check).
+ */
+function makeRequest(bundle: unknown, grantedCapabilities: string[], model: string = MODEL) {
   return {
     version: 1,
     bundle: JSON.stringify(bundle),
@@ -118,7 +135,7 @@ function makeRequest(bundle: unknown, grantedCapabilities: string[]) {
       agent_name: AGENT_NAME,
       project_key: PROJECT_KEY,
       program: PROGRAM,
-      model: MODEL,
+      model,
       granted_capabilities: grantedCapabilities,
     },
     now_unix: NOW_UNIX,
@@ -286,6 +303,123 @@ async function buildDelegationGolden(dir: string): Promise<void> {
   console.log(`  ${dir}/ ← delegator agent proof + 1-hop delegation proof`);
 }
 
+/**
+ * Build the `deny scope_exceeded` golden (Task 15b): a REAL AgentPolicy proof
+ * over a READ_DATA-only credential. The signed binding authorizes BOTH
+ * capabilities, but the request grants only `send_message` (→ WRITE_DATA), which
+ * the READ-only effective scope does NOT contain. Every earlier §5 check —
+ * Groth16, root trust, scope anchor, binding signature, request binding, model
+ * binding — PASSES; only the capability→scope subset test (§5 step 9) fails, so
+ * the verdict is a genuine `scope_exceeded` (not `untrusted_root` etc.).
+ */
+async function buildScopeExceededGolden(dir: string): Promise<void> {
+  const human = await createHumanIdentity(123456789n);
+  // READ_DATA ONLY: the credential cannot satisfy a WRITE_DATA request.
+  const agent = await createAgentCredential(
+    hashModel(MODEL),
+    OPERATOR_PRIV,
+    [Permission.READ_DATA],
+    BigInt(EXPIRY),
+  );
+
+  const { agentProof } = await proveHandshake(human, agent, {
+    config: { circuitDir: CIRCUITS_DIR },
+    backend: 'snarkjs',
+  });
+
+  const agentEnvelope: ProofEnvelope = envelopeFromSnarkjsProof(
+    'AgentPolicy',
+    agentProof.proof,
+    agentProof.publicSignals,
+    { vkeyHash: computeVkeyHash(loadBuildVkey('AgentPolicy')) },
+  );
+
+  // Binding authorizes BOTH capabilities; the operator signs it for real so the
+  // binding-signature and request-binding checks both PASS.
+  const binding = makeBinding(['fetch_inbox', 'send_message']);
+  const sig = await eddsaSign(OPERATOR_PRIV, await bindingDigest(binding));
+
+  const bundle: Record<string, unknown> = {
+    bvp: 1,
+    agent: { envelope: agentEnvelope, credential: credentialBlock(agent) },
+    binding,
+    sig: {
+      R8: { x: sig.R8.x.toString(), y: sig.R8.y.toString() },
+      S: sig.S.toString(),
+    },
+  };
+
+  roots.agent.add(agentProof.publicSignals[0]);
+
+  // Grant the WRITE-requiring `send_message` (⊆ binding capabilities, but the
+  // required WRITE_DATA bit ⊄ the READ-only effective scope → scope_exceeded).
+  const request = makeRequest(bundle, ['send_message']);
+
+  writeJson(path.join(FIXTURES_DIR, dir, 'bundle.json'), bundle);
+  writeJson(path.join(FIXTURES_DIR, dir, 'request.json'), request);
+  console.log(`  ${dir}/ ← READ-only agent proof (deny: scope_exceeded)`);
+}
+
+/**
+ * Build the `deny model_mismatch` golden (Task 15b): a REAL AgentPolicy proof
+ * over a credential minted with model "model-alpha" (so the proven `model_hash`
+ * = `hashModel("model-alpha")`). The signed binding AND the request BOTH assert
+ * model "model-beta" — they are EQUAL, so §5's `checkRequestBinding` passes —
+ * and the credential carries READ+WRITE so the requested capabilities are in
+ * scope. The subsequent model-binding check (§5 step 8b) then fails because the
+ * proven `model_hash` for "model-alpha" ≠ `hashModel("model-beta")`, yielding a
+ * genuine `model_mismatch`. The beta-binding is signed by the real operator key,
+ * so the binding signature still verifies.
+ */
+async function buildModelMismatchGolden(dir: string): Promise<void> {
+  const human = await createHumanIdentity(123456789n);
+  // Credential commits to "model-alpha"; scope READ+WRITE covers the request.
+  const agent = await createAgentCredential(
+    hashModel('model-alpha'),
+    OPERATOR_PRIV,
+    [Permission.READ_DATA, Permission.WRITE_DATA],
+    BigInt(EXPIRY),
+  );
+
+  const { agentProof } = await proveHandshake(human, agent, {
+    config: { circuitDir: CIRCUITS_DIR },
+    backend: 'snarkjs',
+  });
+
+  const agentEnvelope: ProofEnvelope = envelopeFromSnarkjsProof(
+    'AgentPolicy',
+    agentProof.proof,
+    agentProof.publicSignals,
+    { vkeyHash: computeVkeyHash(loadBuildVkey('AgentPolicy')) },
+  );
+
+  // Binding (and request) both claim "model-beta" — equal to each other but
+  // DISTINCT from the proven "model-alpha". Signing the beta-binding with the
+  // real operator key keeps the binding signature valid.
+  const binding = makeBinding(['fetch_inbox', 'send_message'], 'model-beta');
+  const sig = await eddsaSign(OPERATOR_PRIV, await bindingDigest(binding));
+
+  const bundle: Record<string, unknown> = {
+    bvp: 1,
+    agent: { envelope: agentEnvelope, credential: credentialBlock(agent) },
+    binding,
+    sig: {
+      R8: { x: sig.R8.x.toString(), y: sig.R8.y.toString() },
+      S: sig.S.toString(),
+    },
+  };
+
+  roots.agent.add(agentProof.publicSignals[0]);
+
+  // Request asserts "model-beta" (== binding.model) and stays within scope, so
+  // the ONLY failing check is proof modelHash(alpha) ≠ hashModel("model-beta").
+  const request = makeRequest(bundle, ['fetch_inbox', 'send_message'], 'model-beta');
+
+  writeJson(path.join(FIXTURES_DIR, dir, 'bundle.json'), bundle);
+  writeJson(path.join(FIXTURES_DIR, dir, 'request.json'), request);
+  console.log(`  ${dir}/ ← model-alpha agent proof, model-beta binding (deny: model_mismatch)`);
+}
+
 async function main(): Promise<void> {
   if (!fs.existsSync(CIRCUITS_DIR)) {
     throw new Error(
@@ -299,6 +433,8 @@ async function main(): Promise<void> {
   await buildAgentGolden(false, 'allow-agent-only');
   await buildAgentGolden(true, 'allow-human');
   await buildDelegationGolden('allow-delegation-1hop');
+  await buildScopeExceededGolden('deny-scope-exceeded');
+  await buildModelMismatchGolden('deny-model-mismatch');
 
   writeJson(path.join(FIXTURES_DIR, 'roots.json'), {
     agent: [...roots.agent],

@@ -21,6 +21,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { verify, type VerifierRequest, type VerifyFlags } from '../../src/verify/core';
+import type { DenyCode } from '../../src/verify/verdict';
 import { FileNonceStore } from '../../src/verify/nonce-store';
 
 const FIXTURES = path.resolve(__dirname, '../fixtures/verify');
@@ -30,6 +31,17 @@ const CAP_MAP_FILE = path.join(FIXTURES, 'capability-map.json');
 
 /** The committed allow goldens, each a directory with bundle.json + request.json. */
 const ALLOW_GOLDENS = ['allow-agent-only', 'allow-human', 'allow-delegation-1hop'] as const;
+
+/**
+ * The committed deny goldens (Task 15b): each is a REAL proof that reaches — and
+ * fails at — exactly one late §5 check, so the denial code is genuine (not a
+ * cheaper upstream failure like `untrusted_root`). Both are verified against the
+ * COMMITTED vkeys + roots.json + capability-map only, like the allow goldens.
+ */
+const DENY_GOLDENS: ReadonlyArray<readonly [dir: string, code: DenyCode]> = [
+  ['deny-scope-exceeded', 'scope_exceeded'],
+  ['deny-model-mismatch', 'model_mismatch'],
+] as const;
 
 /** Load a committed golden's VerifierRequest from its request.json. */
 function loadRequest(goldenDir: string): VerifierRequest {
@@ -73,6 +85,23 @@ describe('verify golden drift guard (committed vkeys only — no circuits/build)
       };
       const verdict = await verify(request, flags);
       expect(verdict.verdict).toBe('allow');
+    });
+  }
+
+  for (const [golden, code] of DENY_GOLDENS) {
+    it(`${golden} → deny ${code} (verified against committed vkeys)`, async () => {
+      const request = loadRequest(golden);
+      const flags: VerifyFlags = {
+        circuitsDir: VKEYS_DIR,
+        rootsFile: ROOTS_FILE,
+        capabilityMapFile: CAP_MAP_FILE,
+        nonceStore: freshNonceStore(),
+      };
+      const verdict = await verify(request, flags);
+      expect(verdict.verdict).toBe('deny');
+      // Narrow to DenyVerdict for the code assertion.
+      if (verdict.verdict !== 'deny') throw new Error('expected a deny verdict');
+      expect(verdict.code).toBe(code);
     });
   }
 });
