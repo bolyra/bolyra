@@ -144,21 +144,28 @@ The verifier **MUST** write exactly one JSON object to stdout and nothing else
 
 ### 3.2 Allow with host-owned nonce consumption
 
-Emitted only in host nonce mode (§8). Instructs the host to durably record the
-one-time nonce so the same proof cannot be replayed.
+Emitted only in host nonce mode (§8). Instructs the host to durably record each
+one-time nonce so the same proof cannot be replayed. A presentation can carry
+more than one nonce to reserve — e.g. the agent nullifier **plus** a
+human-uniqueness nullifier when the bundle is human-backed (the human entry's
+`nonce` is namespaced `human:<nullifierHash>`).
 
 ```json
 {
   "verdict": "allow",
-  "consume_nonce": {
-    "issuer_key": "15617329...:20201653...",
-    "nonce": "12616665119450508255185458876855962314592339945640375882344193391684757282246",
-    "retain_until": 4102444800
-  }
+  "consume_nonces": [
+    {
+      "issuer_key": "15617329...:20201653...",
+      "nonce": "12616665119450508255185458876855962314592339945640375882344193391684757282246",
+      "retain_until": 4102444800
+    }
+  ]
 }
 ```
 
-- `consume_nonce` (object, **OPTIONAL**, allow-only). When present:
+- `consume_nonces` (array of objects, **OPTIONAL**, allow-only). When present it
+  is a **non-empty** list (the key is omitted entirely when there is nothing to
+  burn). The host **MUST** reserve-before-act **EACH** entry (§7.3). Each entry:
   - `issuer_key` (string, **REQUIRED**) — the issuer/operator key that scopes the
     nonce namespace. For host bookkeeping only; the `nonce` is already globally
     unique (§8).
@@ -200,14 +207,18 @@ one-time nonce so the same proof cannot be replayed.
       "additionalProperties": false,
       "properties": {
         "verdict": { "const": "allow" },
-        "consume_nonce": {
-          "type": "object",
-          "required": ["issuer_key", "nonce", "retain_until"],
-          "additionalProperties": false,
-          "properties": {
-            "issuer_key": { "type": "string" },
-            "nonce": { "type": "string" },
-            "retain_until": { "type": "integer" }
+        "consume_nonces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["issuer_key", "nonce", "retain_until"],
+            "additionalProperties": false,
+            "properties": {
+              "issuer_key": { "type": "string" },
+              "nonce": { "type": "string" },
+              "retain_until": { "type": "integer" }
+            }
           }
         }
       }
@@ -409,18 +420,19 @@ outcome it can reason about is an explicit `deny` with a `code` (§9).
 ### 7.3 Reserve-before-act (host nonce mode)
 
 When the host runs the verifier in **host nonce mode** (§8) and receives
-`allow` with a `consume_nonce`, the host **MUST** reserve the nonce **before**
-performing the privileged action:
+`allow` with `consume_nonces`, the host **MUST** reserve **every** entry in the
+list **before** performing the privileged action:
 
-1. Atomically insert `consume_nonce.nonce` into durable storage with a
-   unique-insert / "on conflict reject" semantic, retaining it until
-   `retain_until`.
-2. If the insert is **novel**, proceed with the action.
-3. If the insert **conflicts** (the nonce was already recorded), the host **MUST**
-   reject the action as a replay — even though the verifier returned `allow`.
+1. For **each** `entry` in `consume_nonces`, atomically insert `entry.nonce` into
+   durable storage with a unique-insert / "on conflict reject" semantic,
+   retaining it until `entry.retain_until`.
+2. If **all** inserts are **novel**, proceed with the action.
+3. If **any** insert **conflicts** (that nonce was already recorded), the host
+   **MUST** reject the action as a replay — even though the verifier returned
+   `allow`.
 
 "Record after proceeding" is a replay window and is **FORBIDDEN**. The verifier's
-`allow` in host mode is **conditional** on the host's insert being novel.
+`allow` in host mode is **conditional** on every host insert being novel.
 
 ## 8. Replay protection modes
 
@@ -434,12 +446,16 @@ A verifier supports one of two replay modes, selected by the host at spawn time
   errors, the verifier **MUST** fail closed (`deny code=internal_error`, non-zero
   exit).
 - **host.** The verifier does **not** persist nonces. On an otherwise-allow it
-  returns `consume_nonce` (§3.2) and the host owns durable storage under the
-  reserve-before-act rule (§7.3). This is the mode for multi-host / clustered
-  deployments where the host already owns a database.
+  returns `consume_nonces` (§3.2) — one entry per one-time nullifier the
+  presentation carries (the agent nullifier, plus the human-uniqueness nullifier
+  for a human-backed bundle) — and the host owns durable storage under the
+  reserve-before-act rule (§7.3). Delegation hops add **no** entry: each per-hop
+  delegation nullifier is bound to the agent's session nonce, so reserving the
+  agent nullifier already covers delegation replay. This is the mode for
+  multi-host / clustered deployments where the host already owns a database.
 
-The one-time nonce value is globally unique per (credential, session-nonce), so no
-separate operator namespacing is needed; `consume_nonce.issuer_key` is provided
+The agent nonce value is globally unique per (credential, session-nonce), so no
+separate operator namespacing is needed; `consume_nonces[].issuer_key` is provided
 for host-side bookkeeping only.
 
 ## 9. Denial-code registry
@@ -482,7 +498,7 @@ opaque throughout; the host never parses proofs.
 3. **Read** exactly one JSON verdict from the child's stdout under the strict
    single-object rule (§5.2), enforcing the host timeout (§6).
 4. **Decide, fail-closed** (§7): `allow` → proceed (and, in host nonce mode,
-   reserve-before-act the `consume_nonce`, §7.3); anything else — `deny`, non-zero
+   reserve-before-act EVERY `consume_nonces` entry, §7.3); anything else — `deny`, non-zero
    exit, timeout, signal death, unparseable/oversized/multi-object stdout, unknown
    verdict — → reject.
 
@@ -500,8 +516,8 @@ if verdict is null:                            reject("unparseable stdout")
 
 switch verdict.verdict:
   case "allow":
-    if verdict.consume_nonce:                                            // §8 host mode
-      if not reserve_nonce_atomically(verdict.consume_nonce): reject("replay")  // §7.3
+    for entry in (verdict.consume_nonces or []):                         // §8 host mode
+      if not reserve_nonce_atomically(entry): reject("replay")           // §7.3 (reserve ALL)
     proceed()
   case "deny":
     reject(verdict.code)                        // branch on §9 registry if desired
@@ -572,22 +588,26 @@ Verdict (exit 0):
 { "verdict": "allow" }
 ```
 
-### 13.2 Allow with `consume_nonce` (host nonce mode)
+### 13.2 Allow with `consume_nonces` (host nonce mode)
 
-Same request, verifier spawned with `--nonce-mode host`. Verdict (exit 0):
+Same request, verifier spawned with `--nonce-mode host`. This agent-only bundle
+yields a single entry; a human-backed bundle would add a second
+`human:<nullifierHash>` entry. Verdict (exit 0):
 
 ```json
 {
   "verdict": "allow",
-  "consume_nonce": {
-    "issuer_key": "15617329766995256858590222302430068383949745072531974464084158078905448850943:20201653676552407165606319978171745645181779505176156736762229713293662347780",
-    "nonce": "12616665119450508255185458876855962314592339945640375882344193391684757282246",
-    "retain_until": 4102444800
-  }
+  "consume_nonces": [
+    {
+      "issuer_key": "15617329766995256858590222302430068383949745072531974464084158078905448850943:20201653676552407165606319978171745645181779505176156736762229713293662347780",
+      "nonce": "12616665119450508255185458876855962314592339945640375882344193391684757282246",
+      "retain_until": 4102444800
+    }
+  ]
 }
 ```
 
-The host **MUST** reserve `nonce` atomically before acting (§7.3).
+The host **MUST** reserve every entry's `nonce` atomically before acting (§7.3).
 
 ### 13.3 Deny — `scope_exceeded`
 

@@ -28,6 +28,7 @@ import type { NonceStore } from '@bolyra/mcp';
 
 import { verify, type VerifierRequest, type VerifyFlags } from '../../src/verify/core';
 import { computeVkeyHash, resolveVkeyPath } from '../../src/verify/proofs';
+import { FileNonceStore } from '../../src/verify/nonce-store';
 import { bindingDigest } from '../../src/verify/binding';
 import { hashModel } from '../../src/parse';
 
@@ -171,12 +172,17 @@ describe('verify/core — REAL end-to-end (generates proofs via the SDK)', () =>
     bundleString: string;
     rootsFile: string;
     agentNullifier: string;
+    /** HumanUniqueness nullifierHash (publicSignals[1]), when the bundle is human-backed. */
+    humanNullifier?: string;
     operatorKey: string;
     expiry: number;
   }
 
   let agentOnly: Built;
   let withHuman: Built;
+  /** A SECOND human handshake for the SAME identity — same human root + nullifier,
+   *  but a DIFFERENT (fresh) sessionNonce and a fresh agent nullifier. */
+  let withHumanB: Built;
   let tmpDir: string;
 
   /** Assemble a signed bvp/1 bundle (+ its roots file) from real proofs. */
@@ -242,6 +248,7 @@ describe('verify/core — REAL end-to-end (generates proofs via the SDK)', () =>
       bundleString: JSON.stringify(bundle),
       rootsFile,
       agentNullifier: agentProof.publicSignals[1],
+      ...(includeHuman ? { humanNullifier: humanProof.publicSignals[1] } : {}),
       operatorKey: `${agent.operatorPublicKey.x}:${agent.operatorPublicKey.y}`,
       expiry,
     };
@@ -251,6 +258,7 @@ describe('verify/core — REAL end-to-end (generates proofs via the SDK)', () =>
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-core-'));
     agentOnly = await build(false, 'agent');
     withHuman = await build(true, 'human');
+    withHumanB = await build(true, 'humanB');
   });
 
   const req = (b: Built): VerifierRequest => ({
@@ -284,7 +292,7 @@ describe('verify/core — REAL end-to-end (generates proofs via the SDK)', () =>
     expect(v).toEqual({ verdict: 'allow' });
   });
 
-  it('host mode → allow WITH consume_nonce (issuer_key/nonce/retain_until)', async () => {
+  it('host mode → allow WITH consume_nonces (single agent entry)', async () => {
     const request = req(agentOnly);
     const v = await verify(request, {
       circuitsDir: CIRCUITS_DIR,
@@ -294,11 +302,130 @@ describe('verify/core — REAL end-to-end (generates proofs via the SDK)', () =>
     });
     expect(v).toEqual({
       verdict: 'allow',
-      consume_nonce: {
-        issuer_key: agentOnly.operatorKey,
-        nonce: agentOnly.agentNullifier,
-        retain_until: agentOnly.expiry,
-      },
+      consume_nonces: [
+        {
+          issuer_key: agentOnly.operatorKey,
+          nonce: agentOnly.agentNullifier,
+          retain_until: agentOnly.expiry,
+        },
+      ],
     });
+  });
+
+  // ── FIX 1: human proof must be bound to the session + consumed ──────────────
+
+  it('human proof from a DIFFERENT session (spliced) → deny invalid_proof (not session-bound)', async () => {
+    const a = (JSON.parse(withHuman.bundleString) as { human: { envelope: { publicSignals: string[] } } })
+      .human.envelope.publicSignals;
+    const b = (JSON.parse(withHumanB.bundleString) as { human: { envelope: { publicSignals: string[] } } })
+      .human.envelope.publicSignals;
+    // Same identity → identical human merkle root (trust gate passes); only the
+    // sessionNonce differs, isolating the §4b session-binding check.
+    expect(b[0]).toBe(a[0]);
+    expect(b[4]).not.toBe(a[4]);
+
+    const spliced = JSON.parse(withHuman.bundleString) as { human: unknown };
+    spliced.human = (JSON.parse(withHumanB.bundleString) as { human: unknown }).human;
+    const request = req(withHuman);
+    request.bundle = JSON.stringify(spliced);
+
+    const v = await verify(request, {
+      circuitsDir: CIRCUITS_DIR,
+      rootsFile: withHuman.rootsFile,
+      nonceStore: memStore(),
+    });
+    expect(v).toMatchObject({ verdict: 'deny', code: 'invalid_proof' });
+  });
+
+  it('reused human nullifier (local mode, fresh agent session) → deny nonce_replayed', async () => {
+    // Shared human identity → same human nullifier; distinct sessions → distinct
+    // agent nullifiers, so the 2nd verify clears the agent burn and trips ONLY
+    // the human-nullifier replay.
+    expect(withHumanB.humanNullifier).toBe(withHuman.humanNullifier);
+    expect(withHumanB.agentNullifier).not.toBe(withHuman.agentNullifier);
+
+    const store = new FileNonceStore(fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-human-replay-')));
+    const first = await verify(req(withHuman), {
+      circuitsDir: CIRCUITS_DIR,
+      rootsFile: withHuman.rootsFile,
+      nonceStore: store,
+    });
+    expect(first).toEqual({ verdict: 'allow' });
+
+    const second = await verify(req(withHumanB), {
+      circuitsDir: CIRCUITS_DIR,
+      rootsFile: withHumanB.rootsFile,
+      nonceStore: store,
+    });
+    expect(second).toMatchObject({ verdict: 'deny', code: 'nonce_replayed' });
+    expect((second as { message?: string }).message).toBe('human nullifier replayed');
+  });
+
+  it('host mode + human → allow with TWO consume_nonces (agent + human:), NO local nonce state', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-host-human-'));
+    const store = new FileNonceStore(dir);
+    const v = await verify(req(withHuman), {
+      circuitsDir: CIRCUITS_DIR,
+      rootsFile: withHuman.rootsFile,
+      nonceMode: 'host',
+      nonceStore: store,
+    });
+    expect(v).toMatchObject({ verdict: 'allow' });
+    const nonces = (v as { consume_nonces?: Array<{ nonce: string }> }).consume_nonces ?? [];
+    expect(nonces).toHaveLength(2);
+    expect(nonces[0].nonce).toBe(withHuman.agentNullifier);
+    expect(nonces[1].nonce).toBe(`human:${withHuman.humanNullifier}`);
+    // Host mode holds NO local state — the store dir stays empty.
+    const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+    expect(files).toHaveLength(0);
+  });
+
+  // ── FIX 3: internal_error must not echo raw exception text on stdout ────────
+
+  it('unexpected fault → generic internal_error verdict; --verbose routes raw detail to stderr', async () => {
+    const secretPath = '/private/secret/vkey-abcdef.json';
+    const throwingStore: NonceStore = {
+      markIfFresh: async (): Promise<boolean> => {
+        throw new Error(`ENOENT: no such file or directory, open '${secretPath}'`);
+      },
+    };
+
+    // Without --verbose: the verdict is generic and carries no path anywhere.
+    const v1 = await verify(req(agentOnly), {
+      circuitsDir: CIRCUITS_DIR,
+      rootsFile: agentOnly.rootsFile,
+      nonceStore: throwingStore,
+    });
+    expect(v1).toEqual({
+      verdict: 'deny',
+      code: 'internal_error',
+      message: 'internal verification error',
+    });
+    expect(JSON.stringify(v1)).not.toContain(secretPath);
+
+    // With --verbose: the verdict stays generic, but the raw detail hits stderr.
+    const writes: string[] = [];
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown): boolean => {
+      writes.push(String(chunk));
+      return true;
+    }) as unknown as typeof process.stderr.write);
+    let v2: unknown;
+    try {
+      v2 = await verify(req(agentOnly), {
+        circuitsDir: CIRCUITS_DIR,
+        rootsFile: agentOnly.rootsFile,
+        nonceStore: throwingStore,
+        verbose: true,
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(v2).toMatchObject({
+      verdict: 'deny',
+      code: 'internal_error',
+      message: 'internal verification error',
+    });
+    expect(JSON.stringify(v2)).not.toContain(secretPath);
+    expect(writes.join('')).toContain(secretPath);
   });
 });

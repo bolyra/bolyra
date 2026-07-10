@@ -9,8 +9,9 @@
  *     proof cannot be replayed across CLI invocations within its TTL.
  *
  *   - **host** — {@link buildConsumeNonce}: the CLI does not persist anything
- *     itself; instead it emits a `consume_nonce` instruction telling the calling
- *     host to burn the one-time nonce in its own store.
+ *     itself; instead it emits one or more nonce-consumption entries (the
+ *     verdict's `consume_nonces` list) telling the calling host to burn each
+ *     one-time nonce in its own store.
  *
  * The store implements the `@bolyra/mcp` {@link NonceStore} contract
  * (`markIfFresh(key, ttlSeconds)`), so it is a drop-in replacement for the
@@ -197,7 +198,7 @@ export class FileNonceStore implements NonceStore {
 }
 
 /**
- * Build a `consume_nonce` instruction for the host nonce mode (spec §5.2, F7).
+ * Build a single `consume_nonces` entry for the host nonce mode (spec §5.2, F7).
  *
  * The verifier keys replay protection on the proof's `nullifierHash`; the host
  * is told to retain that burned nonce (scoped to `issuerKey`) until

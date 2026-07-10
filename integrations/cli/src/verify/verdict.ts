@@ -22,8 +22,14 @@ export interface ConsumeNonce {
 /** Successful verification. */
 export interface AllowVerdict {
   verdict: 'allow';
-  /** Present only when the verifier wants the caller to burn a nonce. */
-  consume_nonce?: ConsumeNonce;
+  /**
+   * Present only when the verifier wants the caller to burn one or more
+   * one-time nonces (host nonce mode). A single presentation can carry more than
+   * one nullifier to reserve — e.g. the agent nullifier PLUS a human-uniqueness
+   * nullifier when the bundle is human-backed. The host MUST reserve-before-act
+   * EACH entry (spec §7.3). Omitted (not `[]`) when there is nothing to burn.
+   */
+  consume_nonces?: ConsumeNonce[];
 }
 
 /**
@@ -58,11 +64,15 @@ export interface DenyVerdict {
 
 export type Verdict = AllowVerdict | DenyVerdict;
 
-/** Build an `allow` verdict, optionally with a nonce-consumption instruction. */
-export function allow(consumeNonce?: ConsumeNonce): AllowVerdict {
-  return consumeNonce === undefined
+/**
+ * Build an `allow` verdict, optionally with one or more nonce-consumption
+ * instructions. An empty or absent list yields a bare `allow` (the
+ * `consume_nonces` key is omitted entirely, never `[]`).
+ */
+export function allow(consumeNonces?: ConsumeNonce[]): AllowVerdict {
+  return consumeNonces === undefined || consumeNonces.length === 0
     ? { verdict: 'allow' }
-    : { verdict: 'allow', consume_nonce: consumeNonce };
+    : { verdict: 'allow', consume_nonces: consumeNonces };
 }
 
 /** Build a `deny` verdict. `detail` is included only when provided. */

@@ -76,17 +76,30 @@ describe('allow', () => {
   it('produces a bare allow verdict', () => {
     const v = allow();
     expect(v).toEqual({ verdict: 'allow' });
-    expect('consume_nonce' in v).toBe(false);
+    expect('consume_nonces' in v).toBe(false);
   });
 
-  it('includes consume_nonce when passed', () => {
+  it('omits consume_nonces for an empty list', () => {
+    const v = allow([]);
+    expect(v).toEqual({ verdict: 'allow' });
+    expect('consume_nonces' in v).toBe(false);
+  });
+
+  it('includes consume_nonces (a list) when passed', () => {
     const cn: ConsumeNonce = {
       issuer_key: 'did:key:zIssuer',
       nonce: 'abc123',
       retain_until: 1893456000,
     };
-    const v = allow(cn);
-    expect(v).toEqual({ verdict: 'allow', consume_nonce: cn });
+    const v = allow([cn]);
+    expect(v).toEqual({ verdict: 'allow', consume_nonces: [cn] });
+  });
+
+  it('carries multiple consume_nonces (e.g. agent + human)', () => {
+    const agent: ConsumeNonce = { issuer_key: 'iss', nonce: 'agent-null', retain_until: 100 };
+    const human: ConsumeNonce = { issuer_key: 'iss', nonce: 'human:human-null', retain_until: 100 };
+    const v = allow([agent, human]);
+    expect(v).toEqual({ verdict: 'allow', consume_nonces: [agent, human] });
   });
 });
 

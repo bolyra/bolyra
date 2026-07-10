@@ -100,6 +100,12 @@ export interface VerifyFlags {
   nonceStore?: NonceStore;
   /** SDK config forwarded to the delegation verifier (e.g. circuit dir). */
   config?: BolyraConfig;
+  /**
+   * `--verbose`: when set, an unexpected (non-{@link VerifyDenial}) failure
+   * writes its raw detail (message/stack, which may include filesystem paths) to
+   * STDERR. The wire `internal_error` verdict on stdout stays generic regardless.
+   */
+  verbose?: boolean;
 }
 
 /** Max retention for a burned nonce: 30 days (spec §5.2). */
@@ -203,7 +209,22 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
     });
     assertTrusted(rootSource, agentSignals[0], 'agent');
     if (bundle.human !== undefined) {
-      assertTrusted(rootSource, bundle.human.envelope.publicSignals[0], 'human');
+      const humanSignals = bundle.human.envelope.publicSignals;
+      assertTrusted(rootSource, humanSignals[0], 'human');
+
+      // 4b. Bind the human proof to THIS session. HumanUniqueness public signals
+      //     are [0]humanMerkleRoot [1]nullifierHash [2]nonceBinding [3]scope
+      //     [4]sessionNonce; the agent proof's sessionNonce is agentSignals[5].
+      //     Without this bind, a valid human proof captured from ANOTHER
+      //     handshake could be stapled onto an unrelated agent proof to forge a
+      //     "human-backed" verdict (forgeable-when-present replay).
+      if (BigInt(humanSignals[4]) !== BigInt(agentSignals[5])) {
+        throw new VerifyDenial('invalid_proof', 'human proof not bound to session');
+      }
+      // v1 handshakes fix the human scope at 1; anything else is not a v1 proof.
+      if (BigInt(humanSignals[3]) !== 1n) {
+        throw new VerifyDenial('invalid_proof', 'human proof wrong scope');
+      }
     }
 
     // 5. Scope anchor (F1/F2): recompute scopeCommitment from the revealed
@@ -235,13 +256,11 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
     let effectiveScope: bigint;
     let effectiveExpiry: bigint;
     if (bundle.delegation && bundle.delegation.length > 0) {
-      // NOTE (host-mode / delegation nuance — flag for Gate 3 security review):
-      // Even under `--nonce-mode host` (where the TOP-LEVEL agent nullifier is
-      // NOT burned here, but emitted as a `consume_nonce` for the host to burn),
-      // delegation per-hop nullifiers are ALWAYS burned in the LOCAL nonceStore
-      // below. So a `host`-mode verifier is stateful for delegation hops but
-      // stateless for the agent nonce. This is implemented as the approved spec
-      // describes; it is a known spec gap surfaced deliberately, not hidden.
+      // In host nonce mode the verifier holds NO local state: per-hop delegation
+      // nullifiers are session-bound (pinned to the agent's sessionNonce), so the
+      // host reserving the agent nullifier already covers delegation replay. We
+      // therefore skip the local per-hop burn under host mode (and emit no extra
+      // host entry for delegation).
       const delegationConfig: BolyraConfig | undefined =
         flags.config ??
         (flags.circuitsDir !== undefined ? { circuitDir: flags.circuitsDir } : undefined);
@@ -254,6 +273,7 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
         rootSource,
         nonceStore,
         nonceTtlSeconds: nonceTtl(BigInt(cred.expiry), request.now_unix),
+        skipNonceConsumption: nonceMode === 'host',
         ...(delegationConfig !== undefined ? { config: delegationConfig } : {}),
       };
       const effective = await verifyDelegationChain(
@@ -281,16 +301,28 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
     // 10. Strict expiry against the effective expiry (now == expiry is EXPIRED).
     assertNotExpired(BigInt(request.now_unix), effectiveExpiry);
 
-    // 11. Nonce / replay protection on the agent nullifier.
+    // 11. Nonce / replay protection on the agent nullifier — plus, when the
+    //     bundle is human-backed, the human-uniqueness nullifier under its own
+    //     `human:` namespace (distinct from the agent key so the two never
+    //     collide in the same local store).
     const nullifier = requireNullifier(agentSignals);
+    const humanNonceKey =
+      bundle.human !== undefined
+        ? `human:${bundle.human.envelope.publicSignals[1]}`
+        : undefined;
 
     if (nonceMode === 'host') {
-      // Host mode: do NOT burn the agent nullifier here; instruct the host to
-      // burn it (scoped to the issuer key) until the effective expiry. (See the
-      // delegation nuance NOTE above re: per-hop nullifiers still burned locally.)
+      // Host mode: burn NOTHING locally; instruct the host to reserve each
+      // one-time nullifier (scoped to the issuer key) until the effective
+      // expiry, reserve-before-act (spec §7.3). Human-backed bundles carry a
+      // second entry for the human nullifier.
       const issuerKey = `${cred.operator_pubkey.x}:${cred.operator_pubkey.y}`;
-      const consumeNonce = buildConsumeNonce(nullifier, issuerKey, Number(effectiveExpiry));
-      return allow(consumeNonce);
+      const retainUntil = Number(effectiveExpiry);
+      const consumeNonces = [buildConsumeNonce(nullifier, issuerKey, retainUntil)];
+      if (humanNonceKey !== undefined) {
+        consumeNonces.push(buildConsumeNonce(humanNonceKey, issuerKey, retainUntil));
+      }
+      return allow(consumeNonces);
     }
 
     // Local mode (default): burn the agent nullifier now; a replay denies.
@@ -299,11 +331,25 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
     if (!fresh) {
       throw new VerifyDenial('nonce_replayed', 'agent nullifier replayed');
     }
+    // Human-backed: also burn the human-uniqueness nullifier so the same human
+    // proof cannot be re-presented within its retention window.
+    if (humanNonceKey !== undefined) {
+      const humanFresh = await nonceStore.markIfFresh(humanNonceKey, ttl);
+      if (!humanFresh) {
+        throw new VerifyDenial('nonce_replayed', 'human nullifier replayed');
+      }
+    }
 
     return allow();
   } catch (e) {
-    return isVerifyDenial(e)
-      ? e.toVerdict()
-      : deny('internal_error', e instanceof Error ? e.message : String(e));
+    if (isVerifyDenial(e)) return e.toVerdict();
+    // An unexpected fault. NEVER echo the raw exception text on the wire verdict
+    // — it can leak filesystem paths or other internal detail. Emit a generic
+    // message; surface the real detail on STDERR only under --verbose.
+    if (flags.verbose) {
+      const detail = e instanceof Error ? (e.stack ?? e.message) : String(e);
+      process.stderr.write(`bolyra verify: internal error: ${detail}\n`);
+    }
+    return deny('internal_error', 'internal verification error');
   }
 }

@@ -80,6 +80,15 @@ export interface DelegationChainContext {
   nonceStore: NonceStore;
   /** TTL (seconds) for which a burned delegation nullifier is retained. */
   nonceTtlSeconds: number;
+  /**
+   * When `true`, do NOT burn per-hop delegation nullifiers into the local store.
+   * Used in host nonce mode: every `delegationNullifier` is session-bound
+   * (`Poseidon2(tokenHash, sessionNonce)`, pinned to the agent's `sessionNonce`),
+   * so the host reserving the agent nullifier already covers delegation replay —
+   * a host-mode verifier must therefore write no local delegation state and emit
+   * no extra host entry for it. Defaults to `false` (local mode burns per hop).
+   */
+  skipNonceConsumption?: boolean;
   /** Injectable per-hop verifier; defaults to the SDK `verifyDelegation`. */
   verifyFn?: typeof verifyDelegation;
   /** Optional SDK config (e.g. circuit artifact dir) forwarded to the verifier. */
@@ -138,13 +147,18 @@ export async function verifyDelegationChain(
     // 3. Delegatee-root trust — phantom-delegatee defense.
     assertTrusted(ctx.rootSource, result.delegateeMerkleRoot.toString(), 'delegatee');
 
-    // 4. Per-hop nullifier replay.
-    const fresh = await ctx.nonceStore.markIfFresh(
-      result.delegationNullifier.toString(),
-      ctx.nonceTtlSeconds,
-    );
-    if (!fresh) {
-      throw new VerifyDenial('nonce_replayed', 'delegation nullifier replayed', { hop: i });
+    // 4. Per-hop nullifier replay. Skipped in host nonce mode: the per-hop
+    //    delegation nullifier is bound to the agent's session nonce, so the
+    //    host reserving the agent nullifier already covers delegation replay —
+    //    the verifier writes no local delegation state in host mode.
+    if (ctx.skipNonceConsumption !== true) {
+      const fresh = await ctx.nonceStore.markIfFresh(
+        result.delegationNullifier.toString(),
+        ctx.nonceTtlSeconds,
+      );
+      if (!fresh) {
+        throw new VerifyDenial('nonce_replayed', 'delegation nullifier replayed', { hop: i });
+      }
     }
 
     // Thread this hop's new scope into the next hop's previous scope.

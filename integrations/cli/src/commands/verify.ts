@@ -90,13 +90,15 @@ function toVerifyFlags(values: ParsedValues): VerifyFlags {
   if (values['roots-file'] !== undefined) flags.rootsFile = values['roots-file'];
   if (values.root !== undefined && values.root.length > 0) flags.rootPins = values.root;
   if (values['capability-map'] !== undefined) flags.capabilityMapFile = values['capability-map'];
+  if (values.verbose === true) flags.verbose = true;
   return flags;
 }
 
 /**
  * Reconstruct the value-carrying flags for the worker re-invocation. Only the
- * flags that affect the verification algorithm are forwarded; `--verbose` /
- * `--help` / `--__verify-worker` are intentionally NOT re-emitted.
+ * flags that affect the verification algorithm — plus `--verbose`, which the
+ * worker needs so an unexpected fault's raw detail reaches the (inherited)
+ * stderr — are forwarded; `--help` / `--__verify-worker` are NOT re-emitted.
  */
 function reconstructFlags(values: ParsedValues): string[] {
   const out: string[] = ['--nonce-mode', values['nonce-mode'] ?? 'local'];
@@ -104,6 +106,7 @@ function reconstructFlags(values: ParsedValues): string[] {
   for (const root of values.root ?? []) out.push('--root', root);
   if (values['capability-map'] !== undefined) out.push('--capability-map', values['capability-map']);
   if (values['circuits-dir'] !== undefined) out.push('--circuits-dir', values['circuits-dir']);
+  if (values.verbose === true) out.push('--verbose');
   return out;
 }
 

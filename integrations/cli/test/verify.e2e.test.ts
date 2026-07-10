@@ -146,7 +146,7 @@ function parseSingleVerdict(stdout: string): Record<string, unknown> {
 
 jest.setTimeout(60_000);
 
-describe('bolyra verify — 22-fixture e2e matrix', () => {
+describe('bolyra verify — 24-fixture e2e matrix', () => {
   // ── 1. valid allow (agent-only golden, as-is) ───────────────────────────────
   it('#1 valid allow → allow (exit 0)', () => {
     const r = runVerify(loadGolden('allow-agent-only'));
@@ -154,13 +154,15 @@ describe('bolyra verify — 22-fixture e2e matrix', () => {
     expect(r.exitCode).toBe(0);
   });
 
-  // ── 2. allow + consume_nonce (host mode) ────────────────────────────────────
-  it('#2 host nonce-mode → allow WITH consume_nonce (exit 0)', () => {
+  // ── 2. allow + consume_nonces (host mode) ───────────────────────────────────
+  it('#2 host nonce-mode → allow WITH consume_nonces list (exit 0)', () => {
     const r = runVerify(loadGolden('allow-agent-only'), {
       extraFlags: ['--nonce-mode', 'host'],
     });
     expect(r.verdict.verdict).toBe('allow');
-    expect(r.verdict.consume_nonce).toMatchObject({
+    // Agent-only bundle → exactly one entry (the agent nullifier).
+    expect(r.verdict.consume_nonces).toHaveLength(1);
+    expect((r.verdict.consume_nonces as unknown[])[0]).toMatchObject({
       issuer_key: expect.any(String),
       nonce: expect.any(String),
       retain_until: expect.any(Number),
@@ -436,5 +438,45 @@ describe('bolyra verify — 22-fixture e2e matrix', () => {
     const r = runVerify(loadGolden('allow-agent-only'), { omitRoots: true });
     expect(r.verdict).toMatchObject({ verdict: 'deny', code: 'internal_error' });
     expect(r.exitCode).not.toBe(0);
+  });
+
+  // ── 23. host-mode delegation writes NO local nonce state (FIX 2 / M1) ────────
+  it('#23 host-mode delegation → allow, writes NO local nonce state, repeatable', () => {
+    const home = freshHome();
+    const first = runVerify(loadGolden('allow-delegation-1hop'), {
+      home,
+      extraFlags: ['--nonce-mode', 'host'],
+    });
+    expect(first.verdict.verdict).toBe('allow');
+    // Agent-only authority (no human) → exactly one consume_nonces entry; the
+    // delegation hop contributes NONE (its nullifier is session-bound).
+    expect(first.verdict.consume_nonces).toHaveLength(1);
+    expect(first.exitCode).toBe(0);
+
+    // Host mode persisted nothing locally: the durable nonce dir is absent/empty.
+    const nonceDir = path.join(home, '.bolyra', 'nonces');
+    const files = fs.existsSync(nonceDir)
+      ? fs.readdirSync(nonceDir).filter((f) => !f.endsWith('.tmp') && !f.endsWith('.lock'))
+      : [];
+    expect(files).toHaveLength(0);
+
+    // No local poisoning: a second identical host-mode verify still allows.
+    const second = runVerify(loadGolden('allow-delegation-1hop'), {
+      home,
+      extraFlags: ['--nonce-mode', 'host'],
+    });
+    expect(second.verdict.verdict).toBe('allow');
+    expect(second.exitCode).toBe(0);
+  });
+
+  // ── 24. local-mode delegation replay still denies (FIX 2 regression) ─────────
+  it('#24 local-mode delegation replay → 2nd spawn deny nonce_replayed', () => {
+    const home = freshHome();
+    const first = runVerify(loadGolden('allow-delegation-1hop'), { home });
+    expect(first.verdict).toEqual({ verdict: 'allow' });
+    expect(first.exitCode).toBe(0);
+    const second = runVerify(loadGolden('allow-delegation-1hop'), { home });
+    expect(second.verdict).toMatchObject({ verdict: 'deny', code: 'nonce_replayed' });
+    expect(second.exitCode).toBe(0);
   });
 });
