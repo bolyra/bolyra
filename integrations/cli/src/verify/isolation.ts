@@ -33,7 +33,18 @@ export interface IsolationOptions {
   workerEntry: string;
   /** Extra argv passed to the worker (e.g. ['verify','--__verify-worker', ...flags]). */
   workerArgs?: string[];
+  /**
+   * Wall-clock budget (ms) for the whole worker run. If the worker has not
+   * produced a `close` event by this deadline, it is killed and the parent
+   * fails closed. Defends against a worker that flushes its verdict on fd 3 but
+   * never exits (e.g. snarkjs/bn128 leaving worker threads / handles alive).
+   * Default: 10000.
+   */
+  timeoutMs?: number;
 }
+
+/** Default wall-clock budget for a worker run (ms). */
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 export interface IsolatedResult {
   /** The parsed verdict object read from the worker's private fd-3 channel. */
@@ -61,9 +72,17 @@ export function runVerificationIsolated(
 ): Promise<IsolatedResult> {
   return new Promise<IsolatedResult>((resolve) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clearTimer = (): void => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
     const done = (result: IsolatedResult): void => {
       if (settled) return;
       settled = true;
+      clearTimer();
       resolve(result);
     };
 
@@ -80,6 +99,20 @@ export function runVerificationIsolated(
       done(failClosed(`failed to spawn verification worker: ${errMsg(err)}`));
       return;
     }
+
+    // Wall-clock watchdog. A worker can flush its verdict on fd 3 yet never emit
+    // 'close' (snarkjs/bn128 leaves worker threads/handles alive). Without this,
+    // the parent would wait forever. On fire: kill the child and fail closed.
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore — best-effort kill */
+      }
+      done(failClosed(`verification worker timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
 
     // Buffer for the private verdict channel (fd 3).
     const verdictChunks: Buffer[] = [];

@@ -58,6 +58,27 @@ describe('runVerificationIsolated', () => {
     });
   });
 
+  it('fails closed when the worker emits a verdict then hangs (never exits)', async () => {
+    // The worker writes a valid verdict to fd 3 and then stays alive forever
+    // (simulating snarkjs/bn128 keeping the process alive). The parent must NOT
+    // wait on 'close' indefinitely — it must time out and fail closed.
+    const start = Date.now();
+    const result = await runVerificationIsolated('{}', {
+      workerEntry: WORKER,
+      workerArgs: ['hang'],
+      timeoutMs: 200,
+    });
+    const elapsed = Date.now() - start;
+
+    expect(result.exitCode).toBe(1);
+    expect(result.verdict).toMatchObject({
+      verdict: 'deny',
+      code: 'internal_error',
+    });
+    // Resolved via the timeout, well before any test-runner timeout.
+    expect(elapsed).toBeLessThan(5000);
+  });
+
   it('delivers the request JSON to the worker over stdin', async () => {
     const request = JSON.stringify({ hello: 'world' });
     const result = await runVerificationIsolated(request, {

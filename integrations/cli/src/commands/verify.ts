@@ -21,6 +21,7 @@
  */
 
 import { parseArgs } from 'node:util';
+import * as fs from 'node:fs';
 
 import { verify, type VerifierRequest, type VerifyFlags, type NonceMode } from '../verify/core';
 import { deny } from '../verify/verdict';
@@ -166,6 +167,14 @@ export async function run(
   // Never touch stdout. On unreadable/oversized/unparseable input, fail closed
   // with a malformed_input deny on fd 3.
   if (parsed['__verify-worker']) {
+    // Test-only hazard injection (F8, fixture #17): when this env var is set,
+    // the worker writes native-style noise DIRECTLY to fd 1 — the exact hazard
+    // real proving libs pose. It must be captured by the parent and rerouted to
+    // stderr, never leaking into the single host-facing stdout verdict. Gated
+    // behind an env var so it never runs on any normal code path.
+    if (process.env.BOLYRA_VERIFY_TEST_FD1_NOISE) {
+      fs.writeSync(1, 'RAW-FD1-NATIVE-NOISE\n');
+    }
     let request: VerifierRequest;
     try {
       const { data, oversize } = await readStdinBounded(MAX_STDIN);
@@ -173,11 +182,17 @@ export async function run(
       request = JSON.parse(data) as VerifierRequest;
     } catch {
       emitVerdictFromWorker(deny('malformed_input', 'worker: request stdin is not valid JSON'));
-      return;
+      // fs.writeSync(3, …) already flushed the verdict synchronously. Force-exit
+      // because native proving libs (snarkjs/bn128) can leave worker threads /
+      // open handles alive, so a plain `return` would never let the process exit
+      // and the parent would hang on 'close'. Exit 0: fd-3 carries the verdict.
+      process.exit(0);
     }
     const verdict = await verify(request, flags);
     emitVerdictFromWorker(verdict);
-    return;
+    // Same rationale as above: force-exit after the synchronous fd-3 flush so a
+    // hung native handle can't keep the worker alive and stall the parent.
+    process.exit(0);
   }
 
   // ── Parent mode (default) ───────────────────────────────────────────────────

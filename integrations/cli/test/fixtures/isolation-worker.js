@@ -46,6 +46,15 @@ switch (mode) {
     fs.writeSync(3, 'this-is-not-json{{{');
     break;
   }
+  case 'hang': {
+    // Emit a valid verdict on fd 3, then stay alive forever. This is the
+    // faithful analog of snarkjs/bn128 leaving open handles/worker threads
+    // that keep the worker PROCESS alive after the verdict is flushed. The
+    // parent MUST time out and fail closed rather than wait on 'close'.
+    emitVerdict({ verdict: 'allow' });
+    setInterval(() => {}, 1e9);
+    break;
+  }
   case 'echo': {
     let input = '';
     process.stdin.setEncoding('utf8');
