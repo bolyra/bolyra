@@ -1,5 +1,5 @@
 /**
- * Signed audit log.
+ * Signed, hash-chained audit log.
  *
  * Every gateway decision — allow AND deny — becomes an ES256K-signed receipt
  * (via @bolyra/receipts) appended to audit/audit-log.jsonl, one receipt per
@@ -7,17 +7,30 @@
  * signer address can check every line with @bolyra/receipts' verifyReceipt(),
  * no gateway or database required. Any edit to a receipt breaks its signature.
  *
- * Scope note: signatures make each RECEIPT tamper-evident, not the log as a
- * whole — deleting or reordering whole lines is not detected by this demo.
- * Production deployments that need whole-log integrity add sequence numbers
- * or hash-chaining across receipts and anchor periodic checkpoints externally.
+ * Whole-log integrity comes from hash-chaining (ReceiptChain): each receipt's
+ * signed payload carries { seq, prevReceiptHash }, so deleting, reordering, or
+ * inserting log lines breaks verifyReceiptChain() even though every remaining
+ * signature stays individually valid. Truncation from the TAIL is the one
+ * thing the log alone cannot reveal — that requires anchoring the head hash /
+ * receipt count externally, at a cadence the deploying enterprise configures.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { createAuthReceipt, signReceipt, verifyReceipt } from '@bolyra/receipts';
-import type { AuthReceiptInput, ReceiptSignerConfig, SignedReceipt } from '@bolyra/receipts';
+import {
+  ReceiptChain,
+  createAuthReceipt,
+  signReceipt,
+  verifyReceipt,
+  verifyReceiptChain,
+} from '@bolyra/receipts';
+import type {
+  AuthReceiptInput,
+  ChainVerifyResult,
+  ReceiptSignerConfig,
+  SignedReceipt,
+} from '@bolyra/receipts';
 
 export interface AuditSignerInfo {
   issuer: string;
@@ -31,6 +44,8 @@ export class AuditLog {
   readonly logPath: string;
   readonly signerInfo: AuditSignerInfo;
   private readonly signerConfig: ReceiptSignerConfig;
+  /** Hash-chain state — one chain per log (the log is truncated per run). */
+  private readonly chain = new ReceiptChain();
 
   constructor(dir: string) {
     fs.mkdirSync(dir, { recursive: true });
@@ -64,13 +79,13 @@ export class AuditLog {
     );
   }
 
-  /** Sign one decision and append it to the JSONL log. */
+  /** Sign one decision as the next chain link and append it to the JSONL log. */
   record(input: AuthReceiptInput): SignedReceipt {
     const payload = createAuthReceipt(input, {
       issuer: this.signerConfig.issuer,
       keyId: this.signerConfig.keyId,
     });
-    const receipt = signReceipt(payload, this.signerConfig);
+    const receipt = this.chain.sign(payload, this.signerConfig);
     fs.appendFileSync(this.logPath, JSON.stringify(receipt) + '\n');
     return receipt;
   }
@@ -132,6 +147,49 @@ export function tamperChecks(receipt: SignedReceipt, other?: SignedReceipt): Tam
       stillVerifies: verifyReceipt(spliced),
     });
   }
+
+  return results;
+}
+
+/** Verify the log as a hash chain: every signature AND the links. */
+export function verifyAuditChain(
+  receipts: SignedReceipt[],
+  expectedSigner?: string,
+): ChainVerifyResult {
+  return verifyReceiptChain(receipts, { expectedSigner });
+}
+
+export interface LogTamperResult {
+  description: string;
+  /** Should always be false — a tampered LOG must not chain-verify. */
+  chainStillVerifies: boolean;
+  /** Individual signatures stay valid — the reason chaining is needed at all. */
+  individualSignaturesStillValid: boolean;
+}
+
+/**
+ * Demonstrate whole-log tamper-evidence: delete a line and reorder two lines.
+ * Both leave every remaining per-receipt signature valid — only the hash chain
+ * catches them.
+ */
+export function logTamperChecks(receipts: SignedReceipt[]): LogTamperResult[] {
+  const results: LogTamperResult[] = [];
+  if (receipts.length < 3) return results;
+
+  const deleted = [...receipts.slice(0, 1), ...receipts.slice(2)];
+  results.push({
+    description: `delete line 2 of ${receipts.length} (receipt ${receipts[1].id})`,
+    chainStillVerifies: verifyReceiptChain(deleted).ok,
+    individualSignaturesStillValid: deleted.every((r) => verifyReceipt(r)),
+  });
+
+  const reordered = [...receipts];
+  [reordered[1], reordered[2]] = [reordered[2], reordered[1]];
+  results.push({
+    description: 'swap lines 2 and 3',
+    chainStillVerifies: verifyReceiptChain(reordered).ok,
+    individualSignaturesStillValid: reordered.every((r) => verifyReceipt(r)),
+  });
 
   return results;
 }

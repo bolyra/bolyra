@@ -19,7 +19,7 @@ import type { AddressInfo } from 'node:net';
 import { loadConfig } from '@bolyra/gateway';
 import { createDemoAgent, buildDevBundle, fmtMask, READ_DATA, WRITE_DATA } from './agents';
 import type { DemoAgent } from './agents';
-import { AuditLog, readAuditLog, verifyAuditLog, tamperChecks } from './audit';
+import { AuditLog, readAuditLog, verifyAuditLog, verifyAuditChain, tamperChecks, logTamperChecks } from './audit';
 import { createVerifiedActionsHost } from './gateway-host';
 import { pkgRoot } from './paths';
 import { createUpstreamServer } from './upstream';
@@ -190,6 +190,35 @@ async function main(): Promise<void> {
     console.log(`  tamper: ${check.description} -> ${ok ? green('verification FAILED as expected') : red('STILL VERIFIES (bug!)')}`);
   }
 
+  section('Chain — the LOG is tamper-evident, not just each receipt');
+  console.log(dim('  each signed payload carries { seq, prevReceiptHash } — deleting or'));
+  console.log(dim('  reordering lines breaks the chain even though every remaining'));
+  console.log(dim('  signature stays individually valid.'));
+  const chainResult = verifyAuditChain(receipts, audit.signerInfo.signer);
+  const chainValid = chainResult.ok;
+  console.log(
+    chainValid
+      ? green(`  chain intact: seq 0..${receipts.length - 1}, head ${chainResult.headHash}`)
+      : red('  CHAIN VERIFICATION FAILED — audit log is not trustworthy'),
+  );
+
+  console.log('\n  Now tamper with the LOG itself and re-verify the chain:');
+  let logTamperCaught = true;
+  for (const check of logTamperChecks(receipts)) {
+    const ok = !check.chainStillVerifies && check.individualSignaturesStillValid;
+    logTamperCaught = logTamperCaught && ok;
+    console.log(
+      `  tamper: ${check.description} -> ` +
+        (check.chainStillVerifies
+          ? red('chain STILL VERIFIES (bug!)')
+          : green('chain verification FAILED as expected')) +
+        dim(check.individualSignaturesStillValid ? ' (every remaining signature still valid — signatures alone would miss this)' : ''),
+    );
+  }
+  console.log(dim('  limitation: truncating the newest lines off the tail still chain-verifies —'));
+  console.log(dim('  detecting that needs the head hash/count anchored externally (cadence is'));
+  console.log(dim('  enterprise-configurable):  bolyra receipt verify-chain --expect-head/--expect-count'));
+
   section('Done');
   console.log('  Re-verify any time without the gateway running:  npm run verify');
   console.log(dim('  (needs only audit/audit-log.jsonl + audit/signer.json + @bolyra/receipts)'));
@@ -197,7 +226,7 @@ async function main(): Promise<void> {
   upstream.close();
   host.close();
 
-  if (!allValid || !tamperCaught) {
+  if (!allValid || !tamperCaught || !chainValid || !logTamperCaught) {
     process.exitCode = 1;
   }
 }

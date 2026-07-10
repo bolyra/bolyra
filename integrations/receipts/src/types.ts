@@ -1,3 +1,20 @@
+/**
+ * Optional hash-chain fields linking a receipt to its predecessor in a log.
+ * Additive and backward-compatible: chain-less receipts remain valid, and
+ * chained receipts still verify with the plain per-receipt verifyReceipt().
+ * Living inside the signed payload, these fields cannot be rewritten without
+ * breaking the ES256K signature.
+ */
+export interface ReceiptChainFields {
+  /** 0-based, monotonic position in the log (per writer process). */
+  seq: number;
+  /**
+   * computeReceiptHash() of the previous receipt in the log;
+   * GENESIS_PREV_RECEIPT_HASH (32 zero bytes) for the first receipt.
+   */
+  prevReceiptHash: string;
+}
+
 export interface ReceiptPayload {
   v: 1;
   kind: 'bolyra.auth' | 'bolyra.commerce';
@@ -42,6 +59,9 @@ export interface ReceiptPayload {
 
   /** Present only when kind === 'bolyra.commerce'. */
   commerce?: CommerceFields;
+
+  /** Present only on hash-chained receipts (written via ReceiptChain). */
+  chain?: ReceiptChainFields;
 }
 
 export interface SignedReceipt {
@@ -58,6 +78,13 @@ export interface SignedReceipt {
     /** r (32 bytes) + s (32 bytes) + v (1 byte) = 65 bytes (hex). */
     value: string;
   };
+  /**
+   * Convenience copy of computeReceiptHash(this) — keccak256 over the
+   * canonical { payload, signature }. Present on hash-chained receipts; the
+   * next receipt's payload.chain.prevReceiptHash equals it. Verifiers must
+   * recompute rather than trust it (verifyReceiptChain does).
+   */
+  receiptHash?: string;
 }
 
 export interface ReceiptSignerConfig {

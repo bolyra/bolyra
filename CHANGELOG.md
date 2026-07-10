@@ -17,6 +17,74 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.8] — 2026-07-10
+
+### Added
+
+#### Receipts (`@bolyra/receipts` 0.7.0 → 0.8.0 — not yet published)
+
+- **Receipt hash-chaining — whole-log integrity.** Signatures made each
+  receipt tamper-evident; the LOG was not — deleting or reordering lines was
+  undetectable. New additive, backward-compatible chain fields:
+  - `payload.chain: { seq, prevReceiptHash }` — lives INSIDE the signed
+    payload, so chain fields cannot be rewritten without breaking the ES256K
+    signature. `seq` is 0-based and monotonic per log; genesis links to the
+    documented sentinel `GENESIS_PREV_RECEIPT_HASH` (32 zero bytes).
+  - envelope `receiptHash` — `computeReceiptHash(receipt)`: keccak256 over
+    the canonical `{ payload, signature }` (commits to the exact signature
+    bytes; excludes `id` and itself). The next receipt's `prevReceiptHash`
+    equals it. Verifiers recompute it — the stored copy is convenience.
+  - New exports: `ReceiptChain` (stateful writer-side chain),
+    `verifyReceiptChain(receipts, options)` (every signature AND the chain:
+    shape guard for foreign/corrupted log lines (`malformed-receipt` —
+    Codex round 2), seq continuity, prev-hash links, genesis, chain restarts, plus
+    `expectedSigner` / `expectedCount` / `expectedHeadHash` /
+    `allowUnchained`), `computeReceiptHash`, `GENESIS_PREV_RECEIPT_HASH`,
+    and the `ReceiptChainFields` / `ChainVerifyOptions` / `ChainVerifyResult`
+    / `ReceiptChainIssue` types.
+  - Backward compatible: chain-less receipts keep signing/verifying, chained
+    receipts still pass the existing per-receipt `verifyReceipt()`, and chain
+    verification is a separate step. `allowUnchained` tolerates only a
+    pre-chaining PREFIX — a chain-less receipt after any chained receipt is
+    always flagged (`unchained-after-chained`), closing the splice-a-valid-
+    chainless-receipt-into-the-log hole (Codex review round 1, P1).
+  - Precision on limits (docs + verifier output): deletions, reorderings,
+    insertions, edits, and head truncation are detectable from the log alone;
+    truncation from the TAIL is provably not — it requires an externally
+    pinned head hash or count. Anchoring mechanism and checkpoint cadence are
+    enterprise-configurable deployment policy, not library behavior.
+
+#### CLI (`@bolyra/cli` 0.4.0 → 0.5.0 — not yet published)
+
+- **`bolyra receipt verify-chain <file>`** — verifies a JSONL receipt log:
+  every ES256K signature AND the hash chain. Reports seq gaps, prev-hash
+  mismatches (deleted/reordered/inserted lines), head truncation
+  (genesis-mismatch), mid-file chain restarts, and tampered receipts, each
+  with the original file line number (blank-line safe). Flags: `--signer`,
+  `--expect-count` (strict non-negative integer), `--expect-head` (the only
+  way to detect tail truncation — PASS output says so explicitly and prints
+  the head hash to pin), `--allow-unchained` (pre-chaining PREFIX only).
+  Exit codes: 0 pass, 1 verification failure, 2 usage error.
+
+#### Gateway (`@bolyra/gateway` 0.4.0 → 0.5.0 — not yet published)
+
+- **Every signed gateway receipt is now hash-chained** (allow, deny, and
+  anonymous deny alike): one `ReceiptChain` per gateway process, startup
+  probe excluded so the first written receipt is genesis (seq 0). A restart
+  starts a new chain — rotate collected logs per process run to verify each
+  as a single chain (README documents this and the tail-truncation caveat).
+
+#### Verified-actions demo (`examples/verified-actions-demo`)
+
+- Audit log receipts are hash-chained via the same `ReceiptChain`; the demo
+  gains a whole-log tamper section that DELETES a line and REORDERS two lines
+  and shows chain verification failing both times while every remaining
+  individual signature stays valid. `npm run verify` (standalone
+  verify-audit) now chain-verifies too and prints the head hash to pin.
+  README's "whole-log integrity is a production add-on" paragraph replaced
+  with the shipped chaining semantics, anchoring/checkpoint cadence
+  explicitly enterprise-configurable (buyer-specified).
+
 ## [0.7.7] — 2026-07-10
 
 ### Added
