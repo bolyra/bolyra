@@ -41,6 +41,23 @@ for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG
   fi
 done
 
+# Pre-upload version drift gate — block stale copy from ever reaching S3.
+# (verify.sh re-checks the LIVE page post-deploy; this catches it earlier.)
+echo "→ pre-upload version drift gate (local index.html vs npm registry)"
+preflight_version() { # $1=pkg  $2=literal prefix the page must show before the version
+  local pkg="$1" prefix="$2" published
+  published=$(npm view "$pkg" version 2>/dev/null) || { echo "ERROR: npm view $pkg failed — cannot verify advertised versions" >&2; exit 1; }
+  if ! grep -qF "${prefix}${published}" "$INDEX"; then
+    echo "ERROR: version drift — npm has $pkg@$published but landing/index.html lacks '${prefix}${published}'. Fix the copy before deploying." >&2
+    exit 1
+  fi
+  echo "OK: local page advertises ${prefix}${published} ($pkg)"
+}
+preflight_version "@bolyra/gateway" "@bolyra/gateway@"
+preflight_version "@bolyra/gateway" "npm v"
+preflight_version "@bolyra/sdk"     "TS SDK at v"
+preflight_version "@bolyra/cli"     "@bolyra/cli@"
+
 echo "→ uploading index.html to s3://$BUCKET/"
 aws s3 cp "$INDEX" "s3://$BUCKET/index.html" \
   --content-type "text/html; charset=utf-8" \

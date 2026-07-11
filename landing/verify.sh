@@ -178,6 +178,25 @@ const nonce      = BigInt(fs.readFileSync(path.join(fixturesDir, "nonce.txt"), "
 })().catch((e) => { console.error("FAIL: tamper test threw unexpectedly:", e); process.exit(1); });
 ' ) || fail "tamper-rejection runtime gate failed"
 
+# Version drift guard — the page must advertise the versions npm actually
+# serves. Landing copy went stale twice in two days (still selling 0.2.x
+# after 0.4.0 shipped, then 0.4.0 after 0.5.0); a third drift now blocks
+# the deploy instead of shipping.
+LIVE_HTML=$(curl -s "https://bolyra.ai/?vguard=$(date +%s)")
+guard_version() { # $1=pkg  $2=literal prefix the page must show before the version
+  local pkg="$1" prefix="$2" published
+  published=$(npm view "$pkg" version 2>/dev/null) || fail "npm view $pkg failed — cannot verify advertised versions"
+  if echo "$LIVE_HTML" | grep -qF "${prefix}${published}"; then
+    pass "version match: page advertises ${prefix}${published} ($pkg)"
+  else
+    fail "version drift: npm has $pkg@$published but page lacks '${prefix}${published}' — update landing/index.html"
+  fi
+}
+guard_version "@bolyra/gateway" "@bolyra/gateway@"
+guard_version "@bolyra/gateway" "npm v"
+guard_version "@bolyra/sdk"     "TS SDK at v"
+guard_version "@bolyra/cli"     "@bolyra/cli@"
+
 # GitHub link sanity — the page CTAs must resolve for unauthenticated visitors.
 # GitHub returns 404 (not 403) for private repos, so this catches re-privatization too.
 declare -a GH_URLS=(
