@@ -1334,6 +1334,160 @@
         "result": "FAIL",
         "reason": "kind value outside the classical|zk|external enum must be rejected by the §3.4 verdict schema"
       }
+    },
+    {
+      "id": "host-allow-well-behaved",
+      "description": "Host conformance positive control (§16.3): a well-behaved verifier returns a bare `allow` at exit 0 and the host-under-test MUST relay `allow`. Proves the host-conformance suite is not vacuously always-deny.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "well-behaved-allow.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "allow" }
+    },
+    {
+      "id": "host-relay-well-behaved-deny",
+      "description": "Host conformance positive control (§16.3): a well-behaved verifier returns a schema-valid `deny code=expired` at exit 0. The host MUST relay the deny with the verifier's code and MUST NOT attach a host failure_class — this is the verifier's decision, not a fail-closed override.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "well-behaved-deny.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "verifier_code": "expired" }
+    },
+    {
+      "id": "host-deny-non-json-stdout",
+      "description": "Offered case (1) malformed stdout (§5.2/§7.2): the verifier writes non-JSON to stdout at exit 0. The host MUST fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "non-json-stdout.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+    },
+    {
+      "id": "host-deny-multiple-objects",
+      "description": "Offered case (1) malformed stdout, single-object framing (§5.2/§7.2): the verifier writes TWO concatenated JSON verdicts. A lenient parser that reads only the first object is forbidden; the host MUST fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "multiple-objects.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": ["multiple_objects", "unparseable_stdout"] }
+    },
+    {
+      "id": "host-deny-schema-invalid-verdict",
+      "description": "Offered case (1) malformed stdout, verdict schema (§3.4/§7.2): the verifier writes valid JSON whose `verdict` is neither allow nor deny. The host MUST fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "schema-invalid-verdict.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-deny-missing-fields",
+      "description": "Offered case (1) malformed stdout, verdict schema (§3.3/§3.4/§7.2): a `deny` verdict missing the REQUIRED `code`/`message`. The host MUST fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "deny-missing-fields.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-allow-trailing-garbage",
+      "description": "Offered case (1) malformed stdout, single-object parse (§5.2/§7.2): a valid `allow` verdict followed by trailing non-JSON bytes. Trailing bytes after the one object are a fail-closed condition; the host MUST NOT act on the leading allow.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "allow-trailing-garbage.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+    },
+    {
+      "id": "host-deny-no-output-timeout",
+      "description": "Offered case (2) timeout / no output (§6/§7.2): the verifier reads stdin, writes nothing, and never exits. The host owns the timeout; it MUST kill the process and deny.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "no-output-hang.js", "timeout_ms": 1000, "assert_verifier_killed": true },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "timeout" }
+    },
+    {
+      "id": "host-deny-partial-json-timeout",
+      "description": "Offered case (2) timeout / no output (§6/§7.2): the verifier writes a partial JSON verdict then hangs forever. No complete object arrives and the process never exits; the host timeout MUST fire.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "partial-json-hang.js", "timeout_ms": 1000, "assert_verifier_killed": true },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "timeout" }
+    },
+    {
+      "id": "host-deny-nonzero-exit-after-allow",
+      "description": "Offered case (3) nonzero exit (§7.1/§7.2/§16.4): the verifier prints a syntactically valid `allow` and then exits NON-ZERO. Exit status is part of the contract; the host MUST treat this as deny and MUST NOT act on the stdout allow.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "nonzero-exit-after-allow.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "nonzero_exit" }
+    },
+    {
+      "id": "host-deny-killed-by-signal",
+      "description": "Offered case (3) killed-by-signal (§7.2): the verifier terminates via an unsolicited fatal signal before producing a verdict. The host MUST treat this as deny. The process both dies by signal AND leaves stdout empty — both are §7.2 fail-closed conditions — so a conforming host may report either `signal_death` (checks termination first, like the reference host) or `unparseable_stdout` (checks the empty stdout first).",
+      "type": "host_behavior",
+      "inputs": { "fixture": "killed-by-signal.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": ["signal_death", "unparseable_stdout"] }
+    },
+    {
+      "id": "host-deny-oversize-stdout",
+      "description": "Offered case (4) oversize output (§6/§7.2): the verifier floods stdout past the host's output bound. The host MUST bound the read, kill the process, and deny — it MUST NOT buffer unboundedly.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "oversize-flood.js", "timeout_ms": 5000, "max_stdout_bytes": 65536, "assert_verifier_killed": true },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "oversize_stdout" }
+    },
+    {
+      "id": "host-nonce-reserve-novel-allow",
+      "description": "Offered case (5) reserve-before-act (§7.3/§16.5): in host nonce mode the verifier returns `allow` with `consume_nonces`. With an empty durable store the host MUST reserve every nonce THEN allow. Observable: decision=allow AND the nonce is durably present in the store afterwards.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "allow-consume-nonces.js", "nonce_mode": "host", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "allow", "nonce_reserved": ["1000000000000000000000000000000000000001"], "action_taken": true }
+    },
+    {
+      "id": "host-nonce-reserve-replay-deny",
+      "description": "Offered case (5) reserve-before-act, replay (§7.3/§16.5): the same allow+consume_nonces verdict, but the nonce is ALREADY in the durable store. The host MUST reject as replay even though the verifier returned allow — proving reservation happens before the host acts on the verdict.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "allow-consume-nonces.js", "nonce_mode": "host", "timeout_ms": 5000, "seed_nonces": ["1000000000000000000000000000000000000001"] },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "replay", "action_taken": false }
+    },
+    {
+      "id": "host-nonce-reserve-all-any-conflict-deny",
+      "description": "Offered case (5) reserve EVERY entry (§7.3/§16.5): an allow carrying TWO nonces where only the second is already reserved. Because ANY conflict is a replay, the host MUST deny — proving it reserves the whole list, not just the first entry.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "allow-consume-nonces-multi.js", "nonce_mode": "host", "timeout_ms": 5000, "seed_nonces": ["2000000000000000000000000000000000000002"] },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "replay", "action_taken": false }
+    },
+    {
+      "id": "host-deny-allow-extra-property",
+      "description": "Offered case (1) malformed stdout, closed verdict schema (§3.4/§7.2): an `allow` carrying a disallowed additional property. The §3.4 schema is closed (additionalProperties:false); the host MUST fail closed rather than ignore the unknown field.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "allow-extra-property.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-bad-kind",
+      "description": "Offered case (1) malformed stdout, verdict `kind` enum (§3.5/§7.2): an `allow` with a `kind` outside classical|zk|external. §7.2 requires the host to treat an unrecognized `kind` as a malformed verdict and fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "bad-kind.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-empty-consume-nonces",
+      "description": "Offered cases (1)+(5), verdict schema (§3.2/§3.4/§7.2): an `allow` with an EMPTY `consume_nonces` array. The schema requires minItems:1 (the key is omitted when there is nothing to burn); the host MUST fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "empty-consume-nonces.js", "nonce_mode": "host", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-malformed-consume-nonce",
+      "description": "Offered cases (1)+(5), verdict schema (§3.2/§3.4/§7.2): an `allow` whose `consume_nonces` entry omits the REQUIRED `issuer_key` and `retain_until`. The host MUST validate the full closed schema and fail closed — it MUST NOT reserve a partial nonce entry.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "malformed-consume-nonce.js", "nonce_mode": "host", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-deny-extra-property",
+      "description": "Offered case (1) malformed stdout, closed deny schema (§3.4/§7.2): a `deny` verdict carrying a disallowed additional property. The deny shape is closed; the host MUST fail closed rather than relay an unrecognized field.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "deny-extra-property.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-nonce-entry-extra-property",
+      "description": "Offered cases (1)+(5), closed consume_nonces entry schema (§3.2/§3.4/§7.2): an `allow` whose nonce entry carries a disallowed additional property. The host MUST validate each entry as a closed object and fail closed — it MUST NOT reserve an entry with unrecognized fields.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "nonce-entry-extra-property.js", "nonce_mode": "host", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-nonce-entry-wrong-type",
+      "description": "Offered cases (1)+(5), consume_nonces entry field types (§3.2/§3.4/§7.2): an `allow` whose nonce entry has a string `retain_until` instead of an integer. The host MUST validate entry field types and fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "nonce-entry-wrong-type.js", "nonce_mode": "host", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
     }
   ]
 }

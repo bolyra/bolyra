@@ -27,6 +27,29 @@ const { spawnSync } = require('child_process');
 const VERIFY_CLI = path.join(__dirname, '../integrations/cli/dist/main.js');
 const VERIFY_FIXTURES = path.join(__dirname, '../integrations/cli/test/fixtures/verify');
 
+// Host-conformance class (spec/external-verifier-contract-v1.md §16): drive a
+// misbehaving-verifier fixture against the host-under-test and assert the host
+// fails closed. The default host is the in-repo reference host; a third party
+// points HOST_CMD at their own host (see §16.2 for the HUT convention).
+const HOST_CONF_FIXTURES = path.join(__dirname, 'fixtures/host-conformance');
+const REFERENCE_HOST = path.join(__dirname, 'reference-host.js');
+
+// Canned §2.1 request fed to the verifier (via the host) when a host_behavior
+// vector does not specify its own. Misbehaving fixtures ignore the request, so
+// its exact contents are immaterial — it only needs to be a well-formed request.
+const DEFAULT_HOST_REQUEST = JSON.stringify({
+    version: 1,
+    bundle: 'host-conformance-placeholder-bundle',
+    request: {
+        agent_name: 'research-bot',
+        project_key: '/work/acme/research',
+        program: 'crewai',
+        model: 'opus-4.1',
+        granted_capabilities: ['fetch_inbox'],
+    },
+    now_unix: 1751990400,
+});
+
 function generateReport(vectors, results) {
     const specVersion = vectors.version;
     const generated = new Date().toISOString();
@@ -95,7 +118,12 @@ for (const candidate of [...CANDIDATE_MODULE_PATHS].reverse()) {
     if (fs.existsSync(candidate)) module.paths.unshift(candidate);
 }
 
-const { buildPoseidon, buildEddsa, buildBabyjub } = require('circomlibjs');
+// Vector types that need NO circuit crypto: the IO-contract (`external_verifier`)
+// and host-conformance (`host_behavior`) classes exercise the wire/host contract
+// with Node builtins only, and `session_token` is experimental (skipped). Crypto
+// (circomlibjs) is loaded lazily so a host maintainer can run
+// `node spec/conformance-runner.js --type host_behavior` with zero npm deps.
+const NON_CRYPTO_TYPES = new Set(['external_verifier', 'host_behavior', 'session_token']);
 
 const VECTORS_PATH = path.join(__dirname, 'test-vectors.json');
 const CIRCUITS_DIR = path.join(__dirname, '../circuits');
@@ -138,10 +166,18 @@ async function main() {
         selectedVectors = selectedVectors.filter(v => v.status !== 'experimental');
     }
 
-    const poseidon = await buildPoseidon();
-    const eddsa = await buildEddsa();
-    const babyJub = await buildBabyjub();
-    const F = poseidon.F;
+    // Lazy-load circuit crypto ONLY when a selected vector needs it, so
+    // host_behavior / external_verifier runs stay dependency-free (see
+    // NON_CRYPTO_TYPES).
+    let poseidon, eddsa, babyJub, F;
+    const needsCrypto = selectedVectors.some(v => !NON_CRYPTO_TYPES.has(v.type));
+    if (needsCrypto) {
+        const { buildPoseidon, buildEddsa, buildBabyjub } = require('circomlibjs');
+        poseidon = await buildPoseidon();
+        eddsa = await buildEddsa();
+        babyJub = await buildBabyjub();
+        F = poseidon.F;
+    }
 
     let passed = 0;
     let failed = 0;
@@ -219,6 +255,8 @@ async function runVector(vector, crypto) {
             return { skipped: true, reason: 'experimental — no implementation yet' };
         case 'external_verifier':
             return runExternalVerifierVector(vector);
+        case 'host_behavior':
+            return runHostBehaviorVector(vector);
         default:
             return { skipped: true, reason: `unknown vector type: ${vector.type}` };
     }
@@ -335,6 +373,234 @@ function runExternalVerifierVector(vector) {
     }
     if (!wantNonZero && status !== 0) {
         return { pass: false, reason: `expected exit 0 for a verdict but got ${status}` };
+    }
+
+    return { pass: expected.result === 'PASS' };
+}
+
+/**
+ * Host-conformance class runner (spec/external-verifier-contract-v1.md §16).
+ *
+ * Unlike `external_verifier` (which tests the VERIFIER), this tests the HOST: it
+ * spawns a misbehaving-verifier fixture via the host-under-test and asserts the
+ * host fails closed (§7.2) or reserves-before-acting (§7.3). The host-under-test
+ * is the in-repo reference host by default, or `HOST_CMD` (a shell command)
+ * when a third party wants to test their own host against the same fixtures.
+ *
+ * HUT convention (§16.2) — the runner passes, via env:
+ *   HUT_VERIFIER_CMD      JSON argv array the host MUST spawn as its verifier
+ *   HUT_TIMEOUT_MS        host wall-clock timeout to enforce (§6)
+ *   HUT_MAX_STDOUT_BYTES  host stdout output bound to enforce (§6)
+ *   HUT_NONCE_MODE        'local' | 'host' (§8)
+ *   HUT_NONCE_STORE       path to a durable nonce store the host owns (§7.3)
+ * — writes the §2.1 request to the host's stdin, and reads exactly one decision
+ * object from the host's stdout: {"decision":"allow"} |
+ * {"decision":"deny","code":<§9 code>} (relayed verifier deny) |
+ * {"decision":"deny","failure_class":<§16.3 class>} (host fail-closed / replay).
+ *
+ * inputs:
+ *   fixture           string  — fixture filename under fixtures/host-conformance/
+ *   request_fixture   string  — reuse a verify/ request fixture as the stdin
+ *   request_raw       string  — raw stdin payload
+ *   timeout_ms        number  — host timeout (default 10000)
+ *   max_stdout_bytes  number  — host output bound (default 1 MiB)
+ *   nonce_mode        string  — 'local' (default) | 'host'
+ *   seed_nonces       array   — pre-seed the durable store (replay scenarios)
+ * expected:
+ *   result            'PASS'|'FAIL'
+ *   host_decision     'allow'|'deny'
+ *   failure_class     string | array of acceptable classes (fail-closed denies)
+ *   verifier_code     string  — a relayed verifier deny code (no failure_class)
+ *   nonce_reserved    array   — nonces that MUST be durably reserved after allow
+ */
+// Is `pid` a live process? `kill(pid, 0)` throws ESRCH when it is gone, EPERM
+// when it exists but we may not signal it (still "alive" for our purposes).
+function isProcessAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return e.code === 'EPERM';
+    }
+}
+
+// Enforce the §16.2 host decision envelope: EXACTLY one of the three shapes
+//   { decision: "allow" }
+//   { decision: "deny", code: <string> }              (relayed verifier deny)
+//   { decision: "deny", failure_class: <string> }     (host fail-closed / replay)
+// Returns an error string, or null when the envelope is well-formed.
+function validateHostDecisionEnvelope(d) {
+    if (d === null || typeof d !== 'object' || Array.isArray(d)) return 'not a JSON object';
+    const keys = Object.keys(d);
+    if (d.decision === 'allow') {
+        if (keys.length !== 1) return `allow must carry only {decision}, got keys ${JSON.stringify(keys)}`;
+        return null;
+    }
+    if (d.decision === 'deny') {
+        const hasCode = d.code !== undefined;
+        const hasClass = d.failure_class !== undefined;
+        if (hasCode && hasClass) return 'deny must not carry both code and failure_class';
+        if (!hasCode && !hasClass) return 'deny must carry exactly one of code or failure_class';
+        if (hasCode && (typeof d.code !== 'string' || keys.length !== 2)) return 'relayed deny must be {decision, code:string}';
+        if (hasClass && (typeof d.failure_class !== 'string' || keys.length !== 2)) return 'fail-closed deny must be {decision, failure_class:string}';
+        return null;
+    }
+    return `decision must be "allow" or "deny", got ${JSON.stringify(d.decision)}`;
+}
+
+function runHostBehaviorVector(vector) {
+    const inputs = vector.inputs || {};
+    const expected = vector.expected || {};
+
+    if (!inputs.fixture) {
+        return { pass: false, reason: 'host_behavior vector needs inputs.fixture' };
+    }
+    const fixturePath = path.join(HOST_CONF_FIXTURES, inputs.fixture);
+    if (!fs.existsSync(fixturePath)) {
+        return { pass: false, reason: `fixture not found: ${fixturePath}` };
+    }
+
+    // Resolve the request fed to the verifier (through the host).
+    let request = DEFAULT_HOST_REQUEST;
+    if (typeof inputs.request_raw === 'string') {
+        request = inputs.request_raw;
+    } else if (typeof inputs.request_fixture === 'string') {
+        const reqPath = path.join(VERIFY_FIXTURES, inputs.request_fixture, 'request.json');
+        if (fs.existsSync(reqPath)) request = fs.readFileSync(reqPath, 'utf-8');
+    }
+
+    // Fresh temp dir holding the HUT-owned side channels (§16.2): the durable
+    // nonce store (pre-seeded for replay scenarios), the action log (proves
+    // reserve-before-act ordering, §16.5), and the fixture pidfile (proves the
+    // host killed the verifier, §16.3).
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-hut-'));
+    const nonceStore = path.join(tmp, 'nonces');
+    const actionLog = path.join(tmp, 'action-log');
+    const pidFile = path.join(tmp, 'verifier.pid');
+    if (Array.isArray(inputs.seed_nonces) && inputs.seed_nonces.length) {
+        fs.writeFileSync(nonceStore, inputs.seed_nonces.join('\n') + '\n');
+    }
+
+    const timeoutMs = inputs.timeout_ms || 10000;
+    const env = {
+        ...process.env,
+        HUT_VERIFIER_CMD: JSON.stringify([process.execPath, fixturePath]),
+        HUT_TIMEOUT_MS: String(timeoutMs),
+        HUT_MAX_STDOUT_BYTES: String(inputs.max_stdout_bytes || 1048576),
+        HUT_NONCE_MODE: inputs.nonce_mode || 'local',
+        HUT_NONCE_STORE: nonceStore,
+        HUT_ACTION_LOG: actionLog,
+        HUT_FIXTURE_PIDFILE: pidFile,
+    };
+
+    // Spawn the host-under-test. A hung host is bounded by the runner's own
+    // spawnSync timeout (host timeout + 5s slack), independent of the host's.
+    const hostCmd = process.env.HOST_CMD;
+    let res;
+    let storeContents = '';
+    let actionContents = '';
+    let pidContents = '';
+    try {
+        const opts = {
+            input: request,
+            env,
+            encoding: 'utf-8',
+            timeout: timeoutMs + 5000,
+            maxBuffer: 8 * 1024 * 1024,
+        };
+        res = hostCmd
+            ? spawnSync(hostCmd, { ...opts, shell: true })
+            : spawnSync(process.execPath, [REFERENCE_HOST], opts);
+        try { storeContents = fs.readFileSync(nonceStore, 'utf-8'); } catch (e) { /* no store */ }
+        try { actionContents = fs.readFileSync(actionLog, 'utf-8'); } catch (e) { /* not written */ }
+        try { pidContents = fs.readFileSync(pidFile, 'utf-8'); } catch (e) { /* not written */ }
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    if (res.error) {
+        // A host that ignored the timeout (§6) hangs until the runner's own
+        // timeout fires — surface that as a fail-closed violation, not a crash.
+        const hung = res.error.code === 'ETIMEDOUT';
+        return { pass: false, reason: hung ? 'host-under-test did not return within the timeout (did it enforce §6?)' : `host spawn failed: ${res.error.message}` };
+    }
+    // A conforming host emits a decision and exits 0 even when it fails closed
+    // (the fail-closed signal is the decision object, not the host's exit code).
+    if (res.status !== 0) {
+        return {
+            pass: false,
+            reason: `host-under-test exited ${res.status} (expected 0 with a decision on stdout); stderr=${JSON.stringify((res.stderr || '').slice(0, 200))}`,
+        };
+    }
+
+    let decision;
+    try {
+        decision = JSON.parse((res.stdout || '').trim());
+    } catch (e) {
+        return { pass: false, reason: `host stdout is not a single JSON decision object: ${JSON.stringify((res.stdout || '').slice(0, 200))}` };
+    }
+
+    // Enforce the §16.2 decision envelope: exactly one of three shapes.
+    const envelopeError = validateHostDecisionEnvelope(decision);
+    if (envelopeError) {
+        return { pass: false, reason: `host decision envelope invalid (§16.2): ${envelopeError}` };
+    }
+
+    if (expected.host_decision && decision.decision !== expected.host_decision) {
+        return { pass: false, reason: `host decision mismatch: got '${decision.decision}', want '${expected.host_decision}'` };
+    }
+
+    // Kill-proof (§16.3): the host MUST have killed the verifier. The fixture
+    // records its PID via HUT_FIXTURE_PIDFILE, which the host MUST propagate to
+    // the verifier (§16.2). A missing/invalid pidfile is itself a failure — it
+    // means the host did not propagate the var, so the kill cannot be proven and
+    // a leak could hide; a still-live PID means the host leaked an orphan.
+    if (inputs.assert_verifier_killed) {
+        const pid = parseInt(pidContents.trim(), 10);
+        if (!Number.isInteger(pid) || pid <= 0) {
+            return { pass: false, reason: 'no valid verifier pidfile — the host MUST propagate HUT_FIXTURE_PIDFILE so the kill can be proven (§16.2/§16.3)' };
+        }
+        if (isProcessAlive(pid)) {
+            try { process.kill(pid, 'SIGKILL'); } catch (e) { /* reap the orphan we detected */ }
+            return { pass: false, reason: `host left the verifier process (pid ${pid}) alive — it MUST kill on timeout/oversize (§6/§7.2)` };
+        }
+    }
+
+    // Reserve-before-act ordering (§16.5): the host authorizes the action (writes
+    // the action-log marker) ONLY after reservations succeed. On a replay it must
+    // NOT have acted.
+    if (expected.action_taken !== undefined) {
+        const acted = actionContents.trim().length > 0;
+        if (acted !== expected.action_taken) {
+            return { pass: false, reason: `action_taken mismatch: host ${acted ? 'authorized' : 'did not authorize'} the action, want action_taken=${expected.action_taken}` };
+        }
+    }
+
+    if (expected.failure_class !== undefined) {
+        const allowed = Array.isArray(expected.failure_class) ? expected.failure_class : [expected.failure_class];
+        if (!allowed.includes(decision.failure_class)) {
+            return { pass: false, reason: `failure_class mismatch: got '${decision.failure_class}', want one of ${JSON.stringify(allowed)}` };
+        }
+    }
+
+    if (expected.verifier_code !== undefined) {
+        if (decision.code !== expected.verifier_code) {
+            return { pass: false, reason: `relayed verifier code mismatch: got '${decision.code}', want '${expected.verifier_code}'` };
+        }
+        if (decision.failure_class !== undefined) {
+            return { pass: false, reason: `a relayed verifier deny must not carry a host failure_class, got '${decision.failure_class}'` };
+        }
+    }
+
+    // Reserve-before-act observability (§7.3): the reserved nonce must be durably
+    // present in the host store after an allow.
+    if (Array.isArray(expected.nonce_reserved)) {
+        const reserved = new Set(storeContents.split('\n').map(s => s.trim()).filter(Boolean));
+        for (const n of expected.nonce_reserved) {
+            if (!reserved.has(n)) {
+                return { pass: false, reason: `expected nonce '${n}' to be durably reserved but the host store did not contain it` };
+            }
+        }
     }
 
     return { pass: expected.result === 'PASS' };

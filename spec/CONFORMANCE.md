@@ -1,6 +1,6 @@
 # Bolyra Protocol Conformance Report
 
-**Generated:** 2026-06-21T05:49:58.101Z
+**Generated:** 2026-07-11T17:26:04.183Z
 **Spec version:** 0.4.0
 **Runner:** spec/conformance-runner.js
 
@@ -8,8 +8,8 @@
 
 | Metric | Count |
 |--------|-------|
-| Total vectors | 67 |
-| Passed | 62 |
+| Total vectors | 99 |
+| Passed | 94 |
 | Failed | 0 |
 | Skipped | 5 |
 
@@ -127,82 +127,50 @@
 | 4 | session-missing-nullifier-binding | FAIL | – SKIP |
 | 5 | session-nonce-replay | FAIL | – SKIP |
 
-## Vector Classes
+### External Verifier (10 vectors)
 
-Conformance vectors fall into **two distinct classes**, and the summary counts
-above must not conflate them:
+| # | Vector ID | Expected | Status |
+|---|-----------|----------|--------|
+| 1 | external-verifier-allow-agent | PASS | ✓ PASS |
+| 2 | external-verifier-allow-host-nonce | PASS | ✓ PASS |
+| 3 | external-verifier-deny-malformed-input | PASS | ✓ PASS |
+| 4 | external-verifier-deny-scope-exceeded | PASS | ✓ PASS |
+| 5 | external-verifier-deny-model-mismatch | PASS | ✓ PASS |
+| 6 | external-verifier-kind-zk-default | PASS | ✓ PASS |
+| 7 | external-verifier-kind-zk-explicit | PASS | ✓ PASS |
+| 8 | external-verifier-kind-classical-allow | PASS | ✓ PASS |
+| 9 | external-verifier-kind-external-deny | PASS | ✓ PASS |
+| 10 | external-verifier-kind-invalid-rejected | FAIL | ✓ PASS |
 
-- **Crypto re-derivation class** (`handshake`, `delegation`, `delegation_chain`,
-  `enrollment`, `merkle_inclusion`, `signature_verification`, `sd_jwt`,
-  `proof_envelope`, `session_token`). The runner re-derives the crypto in-process
-  (Poseidon / EdDSA / Merkle) and checks the expected PASS/FAIL result. It never
-  spawns a subprocess.
+### Host Behavior (22 vectors)
 
-- **IO-contract class** (`external_verifier`). These vectors exercise the
-  host↔verifier *wire contract* defined in
-  [External Verifier Contract v1](external-verifier-contract-v1.md): the runner
-  **spawns the built `bolyra verify` command**, pipes the vector's §2.1 request to
-  the child's stdin, reads exactly one stdout verdict, and diffs it against
-  `expected.verdict` (and `expected.code` for denies). `expected.result`
-  (PASS/FAIL, required by the schema) means "did the verifier behave as
-  specified"; the *semantic* outcome lives in `expected.verdict` / `expected.code`.
-  Each spawn runs with a fresh temporary `$HOME` so the verifier's local nonce
-  store is isolated, and points `--circuits-dir` at committed Groth16 verifying
-  keys (verify-only; no proving). This class tests the transport and verdict
-  envelope, not the internal crypto — do not fold verdict logic into the
-  re-derivation harness.
-
-## Normative Requirements
-
-The following requirements are semantic constraints that the JSON Schema cannot
-express. A conformant implementation MUST satisfy all of them.
-
-The key words "MUST", "MUST NOT", "SHOULD", and "MAY" in this section are to be
-interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
-
-### Nonce Replay
-
-A conformant implementation MUST reject a handshake proof that reuses a
-`sessionNonce` seen in any prior verified handshake within the same scope.
-Implementations SHOULD maintain a nonce registry scoped to the verifier's
-operational lifetime.
-
-### Token Replay
-
-A session token MUST be rejected if its nonce has been consumed by a prior
-verification within the token's audience scope. Stateless verifiers MAY use
-short-lived nonce windows instead of persistent registries.
-
-### Vault JTI Uniqueness
-
-SD-JWT issuers MUST generate globally unique JTI values. Collision across any
-two receipts issued by the same issuer constitutes a conformance failure.
-Implementations SHOULD use UUID v4 or equivalent entropy source.
-
-### Audience Binding
-
-An SD-JWT receipt presented to an audience not matching the `aud` claim MUST be
-rejected, even if the cryptographic signature is valid. The audience comparison
-MUST be case-sensitive and exact-match.
-
-### Nullifier Binding
-
-Session tokens MUST include the `humanNullifierHash` from the originating
-handshake as a claim. Tokens without this binding are non-conformant. Verifiers
-MUST check that the nullifier claim matches the handshake that produced the
-session.
-
-### Forward Compatibility
-
-Implementations MUST preserve unknown fields in proof envelopes without error.
-Rejecting unknown fields is a conformance failure. This enables protocol
-evolution without breaking existing implementations.
+| # | Vector ID | Expected | Status |
+|---|-----------|----------|--------|
+| 1 | host-allow-well-behaved | PASS | ✓ PASS |
+| 2 | host-relay-well-behaved-deny | PASS | ✓ PASS |
+| 3 | host-deny-non-json-stdout | PASS | ✓ PASS |
+| 4 | host-deny-multiple-objects | PASS | ✓ PASS |
+| 5 | host-deny-schema-invalid-verdict | PASS | ✓ PASS |
+| 6 | host-deny-deny-missing-fields | PASS | ✓ PASS |
+| 7 | host-deny-allow-trailing-garbage | PASS | ✓ PASS |
+| 8 | host-deny-no-output-timeout | PASS | ✓ PASS |
+| 9 | host-deny-partial-json-timeout | PASS | ✓ PASS |
+| 10 | host-deny-nonzero-exit-after-allow | PASS | ✓ PASS |
+| 11 | host-deny-killed-by-signal | PASS | ✓ PASS |
+| 12 | host-deny-oversize-stdout | PASS | ✓ PASS |
+| 13 | host-nonce-reserve-novel-allow | PASS | ✓ PASS |
+| 14 | host-nonce-reserve-replay-deny | PASS | ✓ PASS |
+| 15 | host-nonce-reserve-all-any-conflict-deny | PASS | ✓ PASS |
+| 16 | host-deny-allow-extra-property | PASS | ✓ PASS |
+| 17 | host-deny-bad-kind | PASS | ✓ PASS |
+| 18 | host-deny-empty-consume-nonces | PASS | ✓ PASS |
+| 19 | host-deny-malformed-consume-nonce | PASS | ✓ PASS |
+| 20 | host-deny-deny-extra-property | PASS | ✓ PASS |
+| 21 | host-deny-nonce-entry-extra-property | PASS | ✓ PASS |
+| 22 | host-deny-nonce-entry-wrong-type | PASS | ✓ PASS |
 
 ## References
 
 - [Protocol Specification](draft-bolyra-mutual-zkp-auth-01.md)
 - [DID Method](did-method-bolyra.md)
 - [Test Vectors](test-vectors.json)
-- [External Verifier Contract v1](external-verifier-contract-v1.md) — the
-  host-agnostic wire contract exercised by the `external_verifier` IO-contract
-  vector class

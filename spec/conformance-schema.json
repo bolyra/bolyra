@@ -19,6 +19,21 @@
     }
   },
   "$defs": {
+    "failureClass": {
+      "type": "string",
+      "enum": [
+        "nonzero_exit",
+        "timeout",
+        "signal_death",
+        "unparseable_stdout",
+        "multiple_objects",
+        "oversize_stdout",
+        "schema_invalid",
+        "replay",
+        "spawn_error"
+      ],
+      "description": "A host fail-closed classification (External Verifier Contract v1 §16.3): the specific reason a conforming host denied when the spawned verifier misbehaved."
+    },
     "vector": {
       "type": "object",
       "required": ["id", "description", "type", "inputs", "expected"],
@@ -44,9 +59,10 @@
             "sd_jwt",
             "proof_envelope",
             "session_token",
-            "external_verifier"
+            "external_verifier",
+            "host_behavior"
           ],
-          "description": "The category of conformance behavior being tested. 'external_verifier' is an IO-contract class: the runner spawns the built 'bolyra verify' CLI and diffs the stdout verdict, OR — when inputs.static_verdict is present — validates a literal verdict object against the §3.4 verdict schema without spawning (used to exercise the proof-system `kind` self-description across classes). See spec/external-verifier-contract-v1.md."
+          "description": "The category of conformance behavior being tested. 'external_verifier' is an IO-contract class: the runner spawns the built 'bolyra verify' CLI and diffs the stdout verdict, OR — when inputs.static_verdict is present — validates a literal verdict object against the §3.4 verdict schema without spawning (used to exercise the proof-system `kind` self-description across classes). 'host_behavior' is a HOST-conformance class: the runner spawns a misbehaving-verifier fixture (spec/fixtures/host-conformance/) via the host-under-test (default spec/reference-host.js, overridable with the HOST_CMD env) and asserts the host fails closed per §7.2/§7.3. See spec/external-verifier-contract-v1.md §16."
         },
         "status": {
           "type": "string",
@@ -80,6 +96,31 @@
               "type": "string",
               "enum": ["classical", "zk", "external"],
               "description": "For 'external_verifier' static-verdict vectors: the expected verifier proof-system self-description (External Verifier Contract v1 §3.5). An absent verdict `kind` defaults to 'zk'."
+            },
+            "host_decision": {
+              "type": "string",
+              "enum": ["allow", "deny"],
+              "description": "For 'host_behavior' vectors: the REQUIRED decision the host-under-test must emit when the fixture verifier misbehaves (External Verifier Contract v1 §16)."
+            },
+            "failure_class": {
+              "description": "For 'host_behavior' fail-closed vectors: the required host failure class (or an array of acceptable classes for genuinely ambiguous framing violations). See §16.3.",
+              "oneOf": [
+                { "$ref": "#/$defs/failureClass" },
+                { "type": "array", "items": { "$ref": "#/$defs/failureClass" }, "minItems": 1 }
+              ]
+            },
+            "verifier_code": {
+              "type": "string",
+              "description": "For 'host_behavior' relayed-deny vectors: the §9 denial code the host must relay unchanged, with NO host failure_class attached (§16.3)."
+            },
+            "nonce_reserved": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "For 'host_behavior' host-nonce vectors: nonce values that MUST be durably reserved in the host store after an allow (reserve-before-act, §7.3/§16.5)."
+            },
+            "action_taken": {
+              "type": "boolean",
+              "description": "For 'host_behavior' host-nonce vectors: whether the host must have authorized the action (written the §16.5 action-log marker). true after a novel allow; false on a replay deny — proving reservations gate the action."
             }
           },
           "description": "Expected outcome, including result and any additional behavioral checks"

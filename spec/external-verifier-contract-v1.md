@@ -2,8 +2,8 @@
 
 - **Status:** Stable (v1)
 - **Wire version:** `1` (integer-major; see §11)
-- **Document revision:** 2026-07-10 (additive, backward-compatible; wire major
-  unchanged — see the changelog in §15)
+- **Document revision:** 2026-07-11 (additive, backward-compatible; wire major
+  unchanged — see the changelog in §15). Adds §16 Host conformance.
 - **Reference implementation:** `bolyra verify` in `@bolyra/cli`
   (`integrations/cli`) — a `zk`-class verifier (§3.5)
 - **Companion documents:** `spec/CONFORMANCE.md` (conformance vectors), design spec
@@ -804,6 +804,241 @@ adopts that revision's obligations (e.g. it **MUST** set `kind`, §3.5).
   with a defined default does not bump the wire major. Motivated by the split of
   Bolyra into **Bolyra Core** (`classical`) and **Bolyra ZK** (`zk`), alongside
   third-party (`external`) verifiers.
+- **2026-07-11 (wire version `1`, additive; documentation + conformance only).**
+  Added §16 **Host conformance** — a fixture-and-vector suite that tests a *host*
+  (not a verifier) against the §7.2 fail-closed and §7.3 reserve-before-act
+  obligations, covering the five cases the project offered publicly: malformed
+  stdout, timeout / no output, nonzero exit / killed-by-signal, oversize output,
+  and reserve-before-act nonce consumption. Added the Host-Under-Test (HUT)
+  convention (§16.2) the conformance runner drives — including the durable
+  nonce-store, action-log, and fixture-pidfile side channels that make
+  reserve-before-act ordering (§16.5) and the verifier-kill obligation (§16.3)
+  observable — the misbehaving-verifier fixtures (`spec/fixtures/host-conformance/`,
+  covering the full closed §3.4 verdict schema), the `host_behavior` vector type in
+  `spec/test-vectors.json` / `spec/conformance-schema.json`, and a reference host
+  (`spec/reference-host.js`). Added one clarifying normative sentence (§16.4)
+  resolving a latent ambiguity: a non-zero exit is a deny **even when** a
+  syntactically valid `allow` reached stdout. No wire envelope, verdict schema, or
+  denial-code change; the verifier-facing contract is untouched.
+
+## 16. Host conformance
+
+Sections 5–7 place the load-bearing obligations on the **host**: it owns the
+timeout (§6), the single-object stdout parse (§5.2), the exit-code interpretation
+(§7.1–§7.2), and reserve-before-act nonce consumption (§7.3). A verifier that
+follows the contract is not enough — a host that trusts a *misbehaving* verifier
+is the actual vulnerability. This section makes those host obligations testable.
+
+The suite inverts the `external_verifier` conformance class (§13, which spawns the
+real verifier and checks its verdict): here the runner spawns a **deliberately
+misbehaving verifier fixture** in place of a real one and asserts that the
+**host-under-test fails closed**. A conforming host **MUST** deny in every case
+below.
+
+### 16.1 Misbehaving-verifier fixtures
+
+The fixtures live in `spec/fixtures/host-conformance/` as small, dependency-free
+Node scripts. Each violates exactly one contract obligation. The `Required host
+outcome` column is the normative behavior a conforming host **MUST** produce; the
+`Class` column is the reference host's canonical §16.3 classification.
+
+| Fixture | Violates | Required host outcome | Class |
+|---|---|---|---|
+| `well-behaved-allow.js` | — (positive control) | relay `allow` | — |
+| `well-behaved-deny.js` | — (positive control) | relay `deny code=expired` | — |
+| `non-json-stdout.js` | §5.2 stdout not valid JSON | **deny** | `unparseable_stdout` |
+| `multiple-objects.js` | §5.2 two concatenated verdicts (single-object framing) | **deny** | `multiple_objects` |
+| `schema-invalid-verdict.js` | §3.4 `verdict` is neither `allow` nor `deny` | **deny** | `schema_invalid` |
+| `deny-missing-fields.js` | §3.3/§3.4 `deny` missing `code`/`message` | **deny** | `schema_invalid` |
+| `allow-trailing-garbage.js` | §5.2 valid `allow` then trailing bytes | **deny** | `unparseable_stdout` |
+| `allow-extra-property.js` | §3.4 closed schema — disallowed additional property | **deny** | `schema_invalid` |
+| `bad-kind.js` | §3.5 `kind` outside `classical`\|`zk`\|`external` | **deny** | `schema_invalid` |
+| `empty-consume-nonces.js` | §3.2/§3.4 `consume_nonces` violates `minItems:1` | **deny** | `schema_invalid` |
+| `malformed-consume-nonce.js` | §3.2/§3.4 nonce entry missing `issuer_key`/`retain_until` | **deny** | `schema_invalid` |
+| `deny-extra-property.js` | §3.4 closed `deny` — disallowed additional property | **deny** | `schema_invalid` |
+| `nonce-entry-extra-property.js` | §3.2/§3.4 nonce entry has an extra property | **deny** | `schema_invalid` |
+| `nonce-entry-wrong-type.js` | §3.2/§3.4 nonce entry `retain_until` is not an integer | **deny** | `schema_invalid` |
+| `no-output-hang.js` | §6 no output, never exits | **deny** (kill on timeout) | `timeout` |
+| `partial-json-hang.js` | §6 partial verdict then hangs | **deny** (kill on timeout) | `timeout` |
+| `nonzero-exit-after-allow.js` | §7.1 valid `allow` on stdout **but** non-zero exit | **deny** (§16.4) | `nonzero_exit` |
+| `killed-by-signal.js` | §7.2 death by signal, no verdict | **deny** | `signal_death` \| `unparseable_stdout` |
+| `oversize-flood.js` | §6 floods stdout past the output bound | **deny** (bound + kill) | `oversize_stdout` |
+| `allow-consume-nonces.js` | — (drives §7.3 reserve-before-act) | reserve then allow, or deny on replay | `replay` on conflict |
+| `allow-consume-nonces-multi.js` | — (drives §7.3 reserve-**all**) | deny if **any** entry conflicts | `replay` on conflict |
+
+The `schema_invalid` fixtures collectively exercise the **closed** §3.4 verdict
+schema at every level: an unknown `verdict`, a `deny` missing `code`/`message`,
+additional properties on **both** the `allow` and `deny` objects, a bad `kind`,
+and — for `consume_nonces` — an empty array, a missing required entry field, an
+**extra** entry property, and a wrong-typed entry field. A host that validates
+only the outer object, or only a subset of the nonce-entry schema, is therefore
+caught.
+
+The fixtures that flood or hang are **bounded**: `oversize-flood.js` streams only
+to the stdout pipe (never to disk) and, after an 8 MiB burst, **hangs** rather than
+exiting — so a host that never enforces the output bound cannot "buffer everything
+then observe a clean exit"; it is instead caught by its own or the runner's
+timeout. The hang fixtures perform no I/O beyond an optional partial write. The
+three "kill-proof" fixtures (`no-output-hang.js`, `partial-json-hang.js`,
+`oversize-flood.js`) record their PID (§16.2 `HUT_FIXTURE_PIDFILE`) so the runner
+can verify the host **actually killed** the verifier rather than leaking an orphan
+(§16.3).
+
+### 16.2 Host-Under-Test (HUT) convention
+
+The runner drives any host through a thin, language-neutral convention so a host
+in any ecosystem can be tested against the same fixtures. By default the runner
+tests the in-repo reference host (`spec/reference-host.js`); set the `HOST_CMD`
+environment variable to a shell command to test a different host.
+
+The runner spawns the host once per vector and communicates as follows:
+
+- **Environment** — the runner sets, and the host **MUST** honor:
+  - `HUT_VERIFIER_CMD` — a JSON array (`argv`) the host **MUST** spawn as its
+    verifier. The host **MUST NOT** substitute a different command.
+  - `HUT_TIMEOUT_MS` — the wall-clock timeout the host **MUST** enforce (§6).
+  - `HUT_MAX_STDOUT_BYTES` — the stdout output bound the host **MUST** enforce
+    (§6); exceeding it is a fail-closed condition (§7.2).
+  - `HUT_NONCE_MODE` — `local` or `host` (§8).
+  - `HUT_NONCE_STORE` — a filesystem path the host uses as its durable nonce
+    store when in host nonce mode (§7.3). **For the harness only**, the store
+    format is the simplest possible: **newline-delimited decimal nonce strings,
+    UTF-8**. The runner pre-seeds it to stage replay scenarios and inspects it
+    afterward to confirm reservation. A production host with a different store
+    (SQLite, a KV, issuer-scoped keys, expiry columns) tests against this suite by
+    pointing a thin test adapter at this file format; the format is a test
+    convention, not part of the wire contract.
+  - `HUT_ACTION_LOG` — a filesystem path. The host **MUST** append a non-empty
+    marker here at the moment it **authorizes the action** — i.e. after every
+    §7.3 reservation succeeds and immediately before returning `allow` — and
+    **MUST NOT** write on any deny. This is the observable proxy for the "act" in
+    reserve-before-act (§16.5).
+  - `HUT_FIXTURE_PIDFILE` — a filesystem path. The host **MUST** propagate this
+    variable to the spawned verifier so the kill-proof fixtures can record their
+    PID; the runner then confirms the host killed the verifier on timeout/oversize
+    (§16.3). For kill-proof vectors a **missing** pidfile is itself a failure — a
+    host that scrubs its environment to the verifier must still forward this one
+    test-only variable, otherwise the kill cannot be proven and a leaked orphan
+    could hide. (This is a harness requirement, not a production one.)
+- **stdin** — the runner writes exactly one §2.1 request object to the host's
+  stdin and closes it. The host forwards this to the verifier per §2.
+- **stdout** — the host **MUST** write exactly one **decision** object and exit
+  `0`. The fail-closed signal is the decision object, **not** the host's own exit
+  code; a host that itself exits non-zero fails the convention. The runner
+  **enforces** that the decision is **exactly one** of these three closed shapes
+  (any additional or mutually-exclusive field fails the vector):
+  - `{"decision":"allow"}` — the verifier allowed (and, in host nonce mode, every
+    nonce was reserved as novel, §7.3); no other key is permitted;
+  - `{"decision":"deny","code":"<§9 code>"}` — a schema-valid verifier `deny`,
+    relayed unchanged; the host **MUST NOT** attach a `failure_class` to a genuine
+    verifier deny;
+  - `{"decision":"deny","failure_class":"<§16.3 class>"}` — the host itself
+    fail-closed (§7.2) or rejected a replay (§7.3); it **MUST NOT** also carry a
+    `code`.
+
+This decision envelope exists only for the conformance harness; it is **not** part
+of the wire contract (§2–§9) and imposes nothing on a production host's internal
+API. It merely makes the host's allow/deny decision, its *reason* for a
+fail-closed deny, and whether it authorized the action, observable to the runner.
+
+### 16.3 Host failure classes
+
+When a host fails closed, the runner asserts *why*, using the classification the
+host reports in `decision.failure_class`. This proves the host detected the
+specific violation rather than denying by accident. The normative requirement is
+always **deny**; the failure class is the finer-grained assertion.
+
+| `failure_class` | Fail-closed condition (§7.2 unless noted) |
+|---|---|
+| `nonzero_exit` | verifier exited non-zero (§7.1/§16.4) |
+| `timeout` | host timeout fired; host killed the process (§6) |
+| `signal_death` | verifier died by an unsolicited signal |
+| `unparseable_stdout` | stdout empty, not JSON, or with trailing bytes (§5.2) |
+| `multiple_objects` | stdout carried more than one JSON value (§5.2) |
+| `oversize_stdout` | stdout exceeded the host output bound (§6) |
+| `schema_invalid` | a parsed verdict failed the §3.4 verdict schema |
+| `replay` | a `consume_nonces` entry was already reserved (§7.3) |
+| `spawn_error` | the host could not spawn or drive the verifier at all |
+
+Because several §7.2 conditions can co-occur for one input, a vector **MAY** admit
+more than one acceptable class. For example, a verifier killed by a signal both
+dies by signal **and** leaves stdout empty, so `host-deny-killed-by-signal`
+accepts `signal_death` or `unparseable_stdout` depending on the order a
+conforming host checks. Where a fixture triggers a single unambiguous condition,
+the vector pins the single class — a host that denies but misclassifies it
+(e.g. calling an unbounded flood `unparseable_stdout` instead of enforcing the
+`oversize_stdout` bound) is flagged, because the misclassification reveals a real
+gap. The `well-behaved-*` positive controls assert that the suite is not
+vacuously always-deny: a conforming host **MUST** relay their `allow` / `deny`.
+
+### 16.4 Exit status dominates a stdout allow (clarification)
+
+§7.1 defines a non-zero exit as "the verifier could not produce a trustworthy
+verdict at all," and §7.2 requires the host to treat a non-zero exit as deny. This
+section states the interaction explicitly, because it is the one place an
+implementer may be tempted to trust stdout: a host **MUST** treat a non-zero exit
+as **deny even when a syntactically valid `allow` was written to stdout**. Exit
+status is part of the contract; whenever it is non-zero the host **MUST** ignore
+stdout for the purpose of the decision. `nonzero-exit-after-allow.js` exercises
+exactly this. (The reference §10 pseudocode's `INTERNAL_ALLOWED` token is **not**
+an exception to this rule: no non-zero exit — including `internal_error`, §7.1 —
+ever yields an allow.)
+
+### 16.5 Reserve-before-act, made observable
+
+The reserve-before-act rule (§7.3) is an *ordering* obligation: the host **MUST**
+durably reserve every nonce **before** it authorizes the action. The suite makes
+the observable parts of this testable with two side channels — the durable nonce
+store (`HUT_NONCE_STORE`, proving the reservation was written) and the **action
+log** (`HUT_ACTION_LOG`, the observable proxy for "the action": the host appends a
+marker only when it authorizes, §16.2). Three vectors drive the
+`allow-consume-nonces*` fixtures in host nonce mode:
+
+- **`host-nonce-reserve-novel-allow`** — the store starts empty. The verifier
+  returns `allow` with `consume_nonces`. *Observable assertion:* the decision is
+  `allow`, the nonce is durably present in the store afterward, **and** the
+  action-log marker is present (`action_taken: true`). This shows the reservation
+  was actually written and the action was authorized.
+- **`host-nonce-reserve-replay-deny`** — the store is pre-seeded with the nonce
+  the verifier will emit. The verifier still returns `allow`, but a conforming host
+  **MUST** deny (`replay`) **and MUST NOT authorize** — the action log stays empty
+  (`action_taken: false`). *Observable assertion:* an `allow` from the verifier is
+  flipped to a host `deny` by pre-existing durable state, with **no** action
+  marker written. This is the load-bearing check: it proves authorization is
+  **gated on the durable uniqueness check**, and it catches any host that
+  authorizes a replayed presentation.
+- **`host-nonce-reserve-all-any-conflict-deny`** — the verifier emits **two**
+  nonces; only the second is pre-seeded. Because §7.3 requires reserving **every**
+  entry and rejecting on **any** conflict, a conforming host **MUST** deny
+  (`replay`) with no action taken, proving it reserves the whole list rather than
+  short-circuiting on the first novel entry.
+
+**Scope and limits.** As a black-box harness the suite proves three things: the
+reservation is durably written (novel case), authorization is gated on the durable
+uniqueness check (replay case, the primary guarantee), and every entry is checked
+(reserve-all case). It does **not** prove the fine-grained *intra-allow-path*
+ordering — that within a single `allow` the durable write is committed strictly
+**before** the action marker — because distinguishing "reserve then act" from "act
+then reserve, both before returning `allow`" would require fault injection (a crash
+between the two steps), which a portable black-box runner cannot induce. That
+crash-safety property remains a §7.3 obligation on the host; this suite asserts the
+observable gate, not the write barrier. Implementers **SHOULD** additionally
+cover the crash-window ordering with an in-process test in their own codebase.
+
+### 16.6 Running the suite
+
+```bash
+# Against the in-repo reference host (default):
+node spec/conformance-runner.js --type host_behavior
+
+# Against your own host (any language), via the HUT convention (§16.2):
+HOST_CMD="/path/to/your-host --flags" node spec/conformance-runner.js --type host_behavior
+```
+
+The `host_behavior` vectors also run as part of the full suite
+(`node spec/conformance-runner.js --validate-schema`). A conforming host passes
+every vector; the reference host is validated end-to-end as the suite's own
+self-test.
 
 [RFC 2119]: https://www.rfc-editor.org/rfc/rfc2119
 [RFC 8174]: https://www.rfc-editor.org/rfc/rfc8174
