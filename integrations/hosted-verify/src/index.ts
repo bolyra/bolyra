@@ -16,8 +16,10 @@
  * (401/404/405) happen BEFORE the contract and carry an `{ "error": ... }`
  * body, not a verdict.
  *
- * NOT in this preview (deliberately): SLAs, billing, metering, dashboards,
+ * NOT in this preview (deliberately): SLAs, billing, dashboards,
  * multi-tenancy, zk verification, custom policy UI, customer-managed keys.
+ * Observability IS here: Workers Logs + one Analytics Engine data point per
+ * request (labels/verdicts/latency only — see README "Observability").
  */
 
 import {
@@ -31,11 +33,15 @@ import { buildReceiptHeader } from './receipt';
 
 export interface Env {
   PREVIEW_TOKEN?: string;
+  /** JSON object mapping partner label → bearer token, e.g. {"theseus":"…"}. */
+  PARTNER_TOKENS?: string;
   TRUSTED_OPERATORS?: string;
   CAPABILITY_MAP?: string;
   RECEIPT_SIGNER_KEY?: string;
   RECEIPT_ISSUER?: string;
   RECEIPT_KEY_ID?: string;
+  /** Workers Analytics Engine dataset for usage data points (optional). */
+  USAGE?: AnalyticsEngineDataset;
 }
 
 /** Request-body bound — mirrors the spec §6 1 MiB stdin bound. */
@@ -67,13 +73,55 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function authorized(request: Request, env: Env): boolean {
-  const token = env.PREVIEW_TOKEN;
-  if (token === undefined || token === '') return false; // fail closed
+/** Reserved partner label recorded for requests with no valid bearer token. */
+const UNAUTHENTICATED = 'unauthenticated';
+
+/**
+ * Resolve the presented bearer token to a partner label, or null.
+ *
+ * Two token sources, both optional (no source configured = fail closed):
+ *   - PARTNER_TOKENS: JSON object mapping label → token. Named bearer tokens
+ *     only — NOT multi-tenant admin. Malformed JSON, non-string tokens, empty
+ *     labels/tokens, and the reserved "unauthenticated" label grant nothing.
+ *   - PREVIEW_TOKEN: the legacy shared token, kept working as label "preview".
+ *
+ * Every candidate token is compared with the constant-time comparator, and
+ * ALL candidates are always scanned (no early exit on match).
+ */
+function authenticate(request: Request, env: Env): string | null {
   const header = request.headers.get('authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(header);
-  if (match === null || match[1] === undefined) return false;
-  return timingSafeEqual(match[1], token);
+  if (match === null || match[1] === undefined) return null;
+  const presented = match[1];
+
+  let label: string | null = null;
+
+  if (env.PARTNER_TOKENS !== undefined && env.PARTNER_TOKENS !== '') {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(env.PARTNER_TOKENS);
+    } catch {
+      parsed = undefined; // malformed mapping grants nothing (fail closed)
+    }
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      for (const [name, token] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof token !== 'string' || token === '') continue;
+        if (name === '' || name === UNAUTHENTICATED) continue;
+        if (timingSafeEqual(presented, token) && label === null) label = name;
+      }
+    }
+  }
+
+  if (
+    env.PREVIEW_TOKEN !== undefined &&
+    env.PREVIEW_TOKEN !== '' &&
+    timingSafeEqual(presented, env.PREVIEW_TOKEN) &&
+    label === null
+  ) {
+    label = 'preview';
+  }
+
+  return label;
 }
 
 /**
@@ -115,28 +163,26 @@ function verdictResponse(verdict: Verdict, body: unknown, env: Env): Response {
   return json(status, verdict, receipt !== undefined ? { 'x-bolyra-receipt': receipt } : undefined);
 }
 
-async function handleVerify(request: Request, env: Env): Promise<Response> {
-  if (!authorized(request, env)) {
-    return json(401, { error: 'unauthorized', hint: 'Authorization: Bearer <preview token>' });
-  }
-
+async function handleVerify(
+  request: Request,
+  env: Env,
+): Promise<{ verdict: Verdict; response: Response }> {
   const text = await readBodyCapped(request);
   if (text === null) {
-    return verdictResponse(
-      deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`),
-      undefined,
-      env,
-    );
+    const verdict = deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`);
+    return { verdict, response: verdictResponse(verdict, undefined, env) };
   }
 
   let body: unknown;
   try {
     body = JSON.parse(text);
   } catch {
-    return verdictResponse(deny('malformed_input', 'request body is not valid JSON'), undefined, env);
+    const verdict = deny('malformed_input', 'request body is not valid JSON');
+    return { verdict, response: verdictResponse(verdict, undefined, env) };
   }
 
-  return verdictResponse(verifyClassical(body, env), body, env);
+  const verdict = verifyClassical(body, env);
+  return { verdict, response: verdictResponse(verdict, body, env) };
 }
 
 function handleHealth(env: Env): Response {
@@ -159,24 +205,102 @@ function handleHealth(env: Env): Response {
   });
 }
 
+/**
+ * One structured Analytics Engine data point per request — and NOTHING else.
+ * Explicitly never stored: request bodies, proofs, credentials, bearer
+ * tokens, IPs. Documented in README "Observability" (trust statement).
+ *
+ *   blobs   = [route, partner_label, verdict, code, proof_kind, request_id]
+ *   doubles = [latency_ms, http_status]
+ *   indexes = [partner_label]
+ */
+interface Usage {
+  route: string; // '/v1/verify' | '/health' | 'other' (never raw paths)
+  label: string; // partner label, or 'unauthenticated'
+  verdict: 'allow' | 'deny' | 'error';
+  code: string; // deny code, transport-error code, or '' on allow
+  kind: string; // verdict proof kind ('classical'), '' for non-verdicts
+  requestId: string;
+  latencyMs: number;
+  status: number;
+}
+
+/** Fire-and-forget: an Analytics Engine outage must never affect verdicts. */
+function writeUsage(env: Env, usage: Usage): void {
+  try {
+    env.USAGE?.writeDataPoint({
+      blobs: [usage.route, usage.label, usage.verdict, usage.code, usage.kind, usage.requestId],
+      doubles: [usage.latencyMs, usage.status],
+      indexes: [usage.label],
+    });
+  } catch {
+    // Observability failures are swallowed by design.
+  }
+}
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
+    const start = Date.now();
+    const requestId = request.headers.get('cf-ray') ?? crypto.randomUUID();
     const url = new URL(request.url);
 
+    let route = 'other';
+    let label = UNAUTHENTICATED;
+    let outcome: Usage['verdict'] = 'error';
+    let code = '';
+    let kind = '';
+    let response: Response;
+
     if (url.pathname === '/health') {
+      route = '/health';
       if (request.method !== 'GET') {
-        return json(405, { error: 'method_not_allowed' }, { allow: 'GET' });
+        code = 'method_not_allowed';
+        response = json(405, { error: 'method_not_allowed' }, { allow: 'GET' });
+      } else {
+        outcome = 'allow';
+        response = handleHealth(env);
       }
-      return handleHealth(env);
-    }
-
-    if (url.pathname === '/v1/verify') {
+    } else if (url.pathname === '/v1/verify') {
+      route = '/v1/verify';
       if (request.method !== 'POST') {
-        return json(405, { error: 'method_not_allowed' }, { allow: 'POST' });
+        code = 'method_not_allowed';
+        response = json(405, { error: 'method_not_allowed' }, { allow: 'POST' });
+      } else {
+        const partner = authenticate(request, env);
+        if (partner === null) {
+          code = 'unauthorized';
+          response = json(401, { error: 'unauthorized', hint: 'Authorization: Bearer <token>' });
+        } else {
+          label = partner;
+          const { verdict, response: verdictRes } = await handleVerify(request, env);
+          response = verdictRes;
+          outcome = verdict.verdict;
+          code = verdict.verdict === 'deny' ? verdict.code : '';
+          kind = verdict.kind;
+        }
       }
-      return handleVerify(request, env);
+    } else {
+      code = 'not_found';
+      response = json(404, { error: 'not_found', routes: ['GET /health', 'POST /v1/verify'] });
     }
 
-    return json(404, { error: 'not_found', routes: ['GET /health', 'POST /v1/verify'] });
+    const usage: Usage = {
+      route,
+      label,
+      verdict: outcome,
+      code,
+      kind,
+      requestId,
+      latencyMs: Date.now() - start,
+      status: response.status,
+    };
+    // After the response is decided; writeDataPoint itself is non-blocking.
+    if (ctx !== undefined) {
+      ctx.waitUntil(Promise.resolve().then(() => writeUsage(env, usage)));
+    } else {
+      writeUsage(env, usage);
+    }
+
+    return response;
   },
 };

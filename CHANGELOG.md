@@ -17,6 +17,31 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [Unreleased]
+
+### Added
+
+#### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
+
+- **Observability for the design-partner preview.** Workers Logs enabled
+  (`observability.enabled: true`, `head_sampling_rate: 1`) and a Workers
+  Analytics Engine dataset (`bolyra_hosted_verify_usage`, binding `USAGE`)
+  receiving exactly **one structured data point per request**: route, partner
+  label, verdict (`allow`/`deny`/`error`), deny/error code, proof kind,
+  latency_ms, HTTP status, and request id — **nothing else: no request
+  bodies, no proofs, no credentials, no bearer tokens, no IPs**. Writes are
+  fire-and-forget after the verdict is decided; an Analytics Engine outage
+  never affects verdicts.
+- **Labeled partner tokens.** New `PARTNER_TOKENS` secret (JSON object
+  mapping partner label → bearer token) with constant-time comparison per
+  token; the legacy `PREVIEW_TOKEN` keeps working as label `preview`, and
+  auth failures are recorded under the reserved label `unauthenticated`.
+  Named bearer tokens only — not multi-tenant admin.
+- **Usage report script** (`scripts/usage.mjs`, `npm run usage`): last-24h/7d
+  requests by partner label, verdict breakdown, top deny codes, and p50/p95
+  verify latency via the Analytics Engine SQL API (token scope: Account →
+  Account Analytics → Read). 16 new tests (55 total in the package).
+
 ## [0.7.9] — 2026-07-11
 
 ### Added

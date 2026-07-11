@@ -8,6 +8,20 @@
   "compatibility_date": "2026-06-01",
   "workers_dev": true,
 
+  // Workers Logs: persist structured invocation logs, no sampling.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // Workers Analytics Engine: exactly ONE structured usage data point per
+  // request (route, partner label, verdict, code, proof kind, latency, HTTP
+  // status, request id — and NOTHING else; see README "Observability").
+  // Writes are fire-and-forget: an AE outage never affects verdicts.
+  "analytics_engine_datasets": [
+    { "binding": "USAGE", "dataset": "bolyra_hosted_verify_usage" }
+  ],
+
   // The classical (Bolyra Core) path never executes circuit crypto. The SDK
   // lazy-imports circomlibjs/snarkjs (sdk >= 0.6.1); these aliases stub them so
   // the bundle stays small and no WASM-from-buffer ever loads (workerd forbids
@@ -32,7 +46,10 @@
   }
 
   // Secrets (set via `wrangler secret put`):
-  //   PREVIEW_TOKEN       — static bearer token for POST /v1/verify
+  //   PREVIEW_TOKEN       — legacy shared bearer token (partner label "preview")
+  //   PARTNER_TOKENS      — JSON object mapping partner label → bearer token,
+  //                         e.g. {"theseus":"...","internal":"..."}. Labels
+  //                         (never the tokens) are what usage analytics record.
   //   RECEIPT_SIGNER_KEY  — optional secp256k1 private key (0x-hex) for signed
   //                         receipts; receipts are omitted when unset
 }

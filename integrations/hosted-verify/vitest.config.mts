@@ -36,6 +36,11 @@ export default defineConfig({
       miniflare: {
         bindings: {
           PREVIEW_TOKEN: 'test-preview-token',
+          // Labeled partner tokens (test-only values, NOT real secrets).
+          PARTNER_TOKENS: JSON.stringify({
+            theseus: 'theseus-test-token',
+            internal: 'internal-test-token',
+          }),
           TRUSTED_OPERATORS: opKey,
           // Deterministic test signing key (NOT a real secret).
           RECEIPT_SIGNER_KEY:

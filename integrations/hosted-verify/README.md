@@ -3,8 +3,8 @@
 > ## ⚠️ DESIGN PARTNER PREVIEW
 >
 > This is a **preview for design partners** — not a production service. No
-> SLA, no uptime guarantee, no billing, single shared bearer token, and the
-> deployment may be reset at any time. It exists so a host team can try the
+> SLA, no uptime guarantee, no billing, named bearer tokens (one label per
+> design partner), and the deployment may be reset at any time. It exists so a host team can try the
 > [External Verifier Contract v1](../../spec/external-verifier-contract-v1.md)
 > over HTTP in five minutes, before wiring up the `bolyra verify` CLI.
 
@@ -79,7 +79,14 @@ deployment's `TRUSTED_OPERATORS` — that is the design-partner conversation.
 
 ### `POST /v1/verify`
 
-- **Auth:** `Authorization: Bearer <preview token>` — anything else is `401`.
+- **Auth:** `Authorization: Bearer <token>` — anything else is `401`. Tokens
+  are **labeled bearer tokens**: the deployment's `PARTNER_TOKENS` secret is a
+  JSON object mapping a partner label to its token (e.g.
+  `{"theseus":"…","internal":"…"}`), each compared in constant time. The
+  legacy `PREVIEW_TOKEN` secret keeps working as label `preview`. Labels
+  attribute usage analytics (below) — this is **not** multi-tenant admin, just
+  named tokens. Auth failures are recorded under the reserved label
+  `unauthenticated`.
 - **Body:** one spec §2.1 request object (`version`, `bundle`, `request`,
   `now_unix`), capped at **1 MiB** (the spec §6 stdin bound). The optional
   extension field `kind` may be set to `"classical"`; any other value (e.g.
@@ -186,6 +193,51 @@ runtime, so Poseidon runs on `poseidon-lite` and EdDSA-Poseidon on
 `@zk-kit/eddsa-poseidon` — both use the same circomlibjs-derived constants and
 are pinned to the SDK's outputs by this package's conformance tests.
 
+## Observability
+
+Two layers, both configured in `wrangler.jsonc`:
+
+1. **Workers Logs** — `observability.enabled: true`,
+   `head_sampling_rate: 1` (every invocation, no sampling). Structured
+   invocation logs, queryable in the Cloudflare dashboard.
+2. **Workers Analytics Engine** — the Worker writes **exactly one data point
+   per request** to the `bolyra_hosted_verify_usage` dataset (binding
+   `USAGE`). The write happens after the verdict is decided and is
+   fire-and-forget: **an Analytics Engine outage never affects verdicts**,
+   and a missing binding is a no-op.
+
+### What is stored (the complete list)
+
+| Column    | Field         | Values                                                        |
+| --------- | ------------- | ------------------------------------------------------------- |
+| timestamp | (implicit)    | write time                                                    |
+| `blob1`   | route         | `/v1/verify`, `/health`, or `other` (raw paths are never stored) |
+| `blob2`   | partner label | the token's label, `preview`, or `unauthenticated`             |
+| `blob3`   | verdict       | `allow` / `deny` / `error` (transport-level 401/404/405)       |
+| `blob4`   | code          | deny code (spec §9), transport-error code, or empty on allow   |
+| `blob5`   | proof kind    | `classical` for verdict responses, empty otherwise             |
+| `blob6`   | request id    | the `cf-ray` id (or a random UUID)                             |
+| `double1` | latency_ms    | request handling time                                          |
+| `double2` | HTTP status   | response status code                                           |
+| `index1`  | partner label | same as `blob2` (query/sampling index)                         |
+
+**We store nothing else — explicitly no request bodies, no proofs, no
+credentials, no bearer tokens, no IPs.** Partner attribution is by token
+*label* only; the raw token never leaves the auth comparison.
+
+### Querying usage
+
+```bash
+CF_API_TOKEN=<token> npm run usage    # or: node scripts/usage.mjs
+```
+
+Prints last-24h/7d requests by partner label, the verdict breakdown, top deny
+codes, and p50/p95 verify latency, via the [Analytics Engine SQL
+API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/).
+The API token needs exactly one scope: **Account → Account Analytics → Read**
+(create at dash.cloudflare.com → My Profile → API Tokens). Overrides:
+`CF_ACCOUNT_ID`, `USAGE_DATASET`.
+
 ## Conformance
 
 `npm test` runs the spec's `external_verifier` vectors
@@ -205,10 +257,15 @@ carries `consume_nonces` because this preview is host-mode only.
 npm install
 npm test && npm run typecheck
 npx wrangler login                      # founder account
-npx wrangler secret put PREVIEW_TOKEN   # static preview bearer token
+npx wrangler secret put PREVIEW_TOKEN   # legacy shared token (label "preview")
+npx wrangler secret put PARTNER_TOKENS  # JSON: {"<label>":"<token>", …}
 npx wrangler secret put RECEIPT_SIGNER_KEY  # optional: 0x-hex secp256k1 key
 npm run deploy                          # workers.dev subdomain ONLY
 ```
+
+`PARTNER_TOKENS` labels are what usage analytics attribute requests to — use
+one label per design partner (e.g. `{"theseus":"…","internal":"…"}`). The
+reserved label `unauthenticated` is ignored if configured.
 
 Config lives in `wrangler.jsonc`: `TRUSTED_OPERATORS` (comma-separated `x:y`
 decimal operator-key pairs — the deployed default is the repo fixture operator
@@ -218,7 +275,8 @@ subdomain only — no custom domains, no routes on bolyra.ai.
 
 ## Deliberately out of scope
 
-No SLA, no billing or metering (logs only), no dashboard, no multi-tenant
-admin, no zk proving/verification, no custom policy UI, no customer-managed
-keys, no status page. If the preview is useful, those conversations come
-after.
+No SLA, no billing, no dashboard (usage is a query script over Analytics
+Engine, see [Observability](#observability)), no multi-tenant admin (labeled
+tokens are just named bearer tokens), no zk proving/verification, no custom
+policy UI, no customer-managed keys, no status page. If the preview is
+useful, those conversations come after.
