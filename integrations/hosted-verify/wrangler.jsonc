@@ -1,0 +1,38 @@
+// Bolyra hosted verify — DESIGN PARTNER PREVIEW.
+// Deploys to the workers.dev preview subdomain ONLY. No custom domains, no
+// routes on bolyra.ai, no DNS changes.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bolyra-hosted-verify",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": true,
+
+  // The classical (Bolyra Core) path never executes circuit crypto. The SDK
+  // lazy-imports circomlibjs/snarkjs (sdk >= 0.6.1); these aliases stub them so
+  // the bundle stays small and no WASM-from-buffer ever loads (workerd forbids
+  // runtime WebAssembly compilation anyway). Any accidental ZK call fails loudly.
+  "alias": {
+    "circomlibjs": "./src/stubs/zk-not-available.ts",
+    "snarkjs": "./src/stubs/zk-not-available.ts"
+  },
+
+  "vars": {
+    // Classical trust anchor: the set of trusted OPERATOR public keys, as
+    // comma-separated "x:y" decimal coordinate pairs. An allow requires the
+    // credential's operator key to be in this set AND the binding signature to
+    // verify against it (the proof's Merkle root is NOT trusted here — see the
+    // trust model in src/verify/core.ts). Unset ⇒ fail closed (internal_error).
+    // Default = the operator key behind the repo conformance fixtures so the
+    // README quickstart verifies out of the box; design partners get their own
+    // operator key pinned here.
+    "TRUSTED_OPERATORS": "15617329766995256858590222302430068383949745072531974464084158078905448850943:20201653676552407165606319978171745645181779505176156736762229713293662347780",
+    "RECEIPT_ISSUER": "bolyra-hosted-verify-preview",
+    "RECEIPT_KEY_ID": "preview-1"
+  }
+
+  // Secrets (set via `wrangler secret put`):
+  //   PREVIEW_TOKEN       — static bearer token for POST /v1/verify
+  //   RECEIPT_SIGNER_KEY  — optional secp256k1 private key (0x-hex) for signed
+  //                         receipts; receipts are omitted when unset
+}

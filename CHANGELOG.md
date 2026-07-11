@@ -17,6 +17,55 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## [0.7.9] — 2026-07-11
+
+### Added
+
+#### Hosted verify endpoint (`integrations/hosted-verify` — new, private, not published)
+
+- **DESIGN PARTNER PREVIEW: External Verifier Contract v1 over HTTP** on
+  Cloudflare Workers. `POST /v1/verify` accepts the exact spec §2.1 request
+  object `bolyra verify` reads on stdin and returns exactly one strict §3.4
+  verdict object, always `kind: "classical"` (spec §3.5) — this is a
+  **classical (Bolyra Core) verifier**: no zk verification (explicit
+  `kind: "zk"` requests and human/delegation-slot bundles are denied with a
+  clear reason).
+  - Trust model (honest, disclosed live on `GET /health`): because the proof
+    is NOT verified, every public signal and credential field is
+    self-asserted. The load-bearing anchor is the set of trusted OPERATOR keys
+    (`TRUSTED_OPERATORS`, fail-closed when unset) plus the EdDSA-Poseidon
+    binding signature (spec §4) over the request binding — an `allow` means a
+    trusted operator signed a binding authorizing this exact
+    {agent_name, project_key, program, model, capabilities} and the request
+    matches it. Signature-authenticated checks: trusted-operator gate, binding
+    signature, request↔binding match, granted ⊆ signed capabilities.
+    Consistency-only checks over the (unsigned) revealed credential: schema +
+    bvp/1 shape, Poseidon scope anchor, model-hash, capability→scope subset,
+    strict expiry — sound scope/expiry enforcement needs the zk-class CLI. NOT
+    performed: Groth16 verification + vkey pinning, Merkle-root inclusion,
+    human/delegation proofs, local replay state.
+  - workerd cannot compile circomlibjs' runtime WASM, so Poseidon/EdDSA run
+    on pure-JS `poseidon-lite` + `@zk-kit/eddsa-poseidon` (same
+    circomlibjs-derived constants), pinned to the SDK's outputs by the
+    conformance fixtures; the SDK's pure Core modules (`validateEnvelope`,
+    `Permission`, `validateCumulativeBitEncoding`) are reused via deep
+    imports with circuit libs aliased to a fail-loud stub.
+  - Fail-closed everywhere: malformed/oversized (1 MiB bound, spec §6)
+    bodies, wrong versions, undecodable bundles → explicit §9 denials;
+    `internal_error` → HTTP 500 (the CLI's non-zero-exit analog); bearer
+    auth (constant-time compare) on `/v1/verify`.
+  - Host nonce mode only (stateless): every allow carries `consume_nonces`
+    for the caller to reserve-before-act (spec §7.3).
+  - Optional ES256K signed receipts (`@bolyra/receipts`) on every decision
+    via the `X-Bolyra-Receipt` response header (body stays a pure closed-
+    schema verdict).
+  - Conformance: the 10 `external_verifier` vectors from
+    `spec/test-vectors.json` pass — 5 driven end-to-end over HTTP against the
+    Worker in workerd (`@cloudflare/vitest-pool-workers`) and 5 `static_verdict`
+    schema vectors against the executable spec §3.4 schema; 39 tests total,
+    including a regression that a forged bundle signed by an attacker-generated
+    operator key is denied.
+
 ## [0.7.8] — 2026-07-10
 
 ### Added
