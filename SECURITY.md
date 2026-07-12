@@ -102,14 +102,17 @@ the affected code is not reachable from any shipped Bolyra package or because
 no upstream patch is yet available. They are documented here so consumers and
 auditors can independently confirm our reasoning.
 
-- **`elliptic` advisories (multiple).** `elliptic` is pulled in transitively
-  via `circomlibjs` and `ethers@5` (Hardhat dev tooling). At the time of
-  writing there is no published `elliptic` release that addresses the open
-  advisories. The affected code is not invoked by `@bolyra/sdk` or
-  `@bolyra/mcp` at runtime — it is reachable only from the contracts build
-  toolchain and the circomlibjs Poseidon helpers used during proof
-  generation. We are tracking upstream and will bump the override as soon as
-  a fixed release lands.
+- **`elliptic` advisories (multiple, currently GHSA-848j-6mx2-7j84).**
+  `elliptic` is pulled in transitively via `circomlibjs` (and its nested
+  `ethers@5` subtree) in every package that depends on `@bolyra/sdk` —
+  including `@bolyra/mcp`, `@bolyra/gateway`, `@bolyra/cli`,
+  `@bolyra/shield`, `@bolyra/ai`, and `@bolyra/hosted-verify` — plus the
+  contracts Hardhat toolchain. At the time of writing there is no published
+  `elliptic` release that addresses the open advisories (latest on npm is
+  still 6.6.1). The affected code is not invoked by the Bolyra packages at
+  runtime — signing in the shipped paths uses `@noble/*` and the
+  circomlibjs Poseidon helpers, not `elliptic`'s EC primitives. We are
+  tracking upstream and will pin a patched release as soon as one lands.
 
 - **`snarkjs` v0.5.x transitively via `circom_tester` → `circomkit` →
   `@zk-kit/artifacts` (CLI).** The vulnerable `snarkjs` is only reachable via
@@ -128,6 +131,16 @@ auditors can independently confirm our reasoning.
   Bolyra package. A clean fix requires a major-version Hardhat toolchain
   bump, which is on the roadmap but is deferred to keep the contracts build
   reproducible against the audited circuit verifier contracts.
+
+- **`ai` (Vercel AI SDK) `< 5.0.52` (GHSA-rwvc-j5jr-mgvh) in
+  `integrations/ai/`.** Low severity (file-upload whitelist bypass in the AI
+  SDK's file handling). `ai` is a devDependency (tests) and a peerDependency
+  (`>=3.0.0`) of `@bolyra/ai` — it does not ship in the published package,
+  and consumers resolve their own `ai` version. The fix requires the
+  `ai` v4 → v5 major migration (`LanguageModelV1` → `V2` breaking API
+  change), which is tracked as a separate feature change rather than a
+  dependency bump. The transitive `jsondiffpatch` advisory in the same tree
+  is already pinned to a patched version via an override.
 
 - **`@modelcontextprotocol/sdk` consumer caveat (`integrations/mcp/`).**
   `@bolyra/mcp` lists `@modelcontextprotocol/sdk` as a peer dependency.
