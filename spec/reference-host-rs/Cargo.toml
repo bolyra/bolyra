@@ -1,0 +1,25 @@
+[package]
+name = "evc-reference-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+description = "Reference host for the Bolyra External Verifier Contract v1 host-conformance suite (spec/external-verifier-contract-v1.md §16). NOT a supported SDK."
+
+[dependencies]
+# Deliberately minimal and auditable: JSON handling only, std threads for
+# process supervision (no async runtime).
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+# Only for kill(-pgid, SIGKILL): the verifier runs in its own process group so
+# descendants that inherited the stdout pipe die with it (§16.3 kill hygiene).
+libc = "0.2"
+
+[[bin]]
+name = "evc-reference-host"
+path = "src/main.rs"
+
+[lib]
+name = "evc_reference_host"
+path = "src/lib.rs"

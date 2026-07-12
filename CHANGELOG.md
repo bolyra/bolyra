@@ -42,6 +42,26 @@ under `contracts/deployments/` and `circuits/build/`.
   verify latency via the Analytics Engine SQL API (token scope: Account →
   Account Analytics → Read). 16 new tests (55 total in the package).
 
+#### Spec (`spec/reference-host-rs` — reference only, not published)
+
+- **Rust reference host for the External Verifier Contract v1**
+  (`spec/reference-host-rs/`, binary `evc-reference-host`): a second,
+  independent implementation of the §16.2 host-under-test convention —
+  verifier spawn + strict single-object stdin/stdout framing (§5.2), wall-clock
+  timeout and stdout byte bound with kill + reap (§6), fail-closed exit /
+  signal / parse / closed-schema handling (§3.4, §7.1–§7.2, §16.4), and
+  reserve-before-act durable nonce consumption (§7.3, §16.5). The verifier
+  runs in its own process group and classification happens at stdout EOF
+  (bounded by the wall-clock budget), so a descendant flooding the inherited
+  pipe after a non-zero exit is still `oversize_stdout` (Codex round 1) and a
+  quiet pipe-holder past the budget is `timeout`, beating signal/non-zero
+  precedence exactly like the JS reference (Codex round 2). Passes all 22
+  `host_behavior` conformance vectors (and the full runner with `HOST_CMD`
+  pointed at it), matching `spec/reference-host.js`. 52 Rust unit tests.
+  Dependency tree is `serde_json` + `libc` (Unix, for the process-group kill)
+  + std (no async runtime). Not a supported SDK, not on crates.io,
+  deliberately not wired into CI (see its README).
+
 ## [0.7.9] — 2026-07-11
 
 ### Added

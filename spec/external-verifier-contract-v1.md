@@ -1040,5 +1040,9 @@ The `host_behavior` vectors also run as part of the full suite
 every vector; the reference host is validated end-to-end as the suite's own
 self-test.
 
+A second, independent reference implementation in Rust lives at
+`spec/reference-host-rs/` (build with `cargo build`, then point `HOST_CMD` at
+the built `evc-reference-host` binary).
+
 [RFC 2119]: https://www.rfc-editor.org/rfc/rfc2119
 [RFC 8174]: https://www.rfc-editor.org/rfc/rfc8174
