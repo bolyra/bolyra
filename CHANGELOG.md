@@ -21,6 +21,44 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Added
 
+#### MPP authorization gate (`integrations/mpp-payments` — new, `@bolyra/mpp` 0.1.0, not yet published)
+
+- **Verify an agent's delegated spend mandate before accepting an MPP payment
+  credential.** A small authorization middleware for the Machine Payments
+  Protocol ecosystem ([mppx](https://github.com/wevm/mppx) servers):
+  `bolyraGate(method, options)` wraps an mppx `Method.Server` (the same
+  integration shape as other mppx extensions) and composes into the method's
+  `preflight` hook, so the mandate check runs **before** the challenge /
+  payment path — denials are RFC 9457 Problem Details with stable EVC §9
+  codes, fail-closed on every error path, and no payment logic ever runs.
+  Implements the `docs/mpp-authorization-companion.md` mapping.
+- **Amount → tier mapping.** Route amounts resolve to USD (exact-decimal
+  comparison, never float; `amountToUsd` hook for token base units) and map
+  to the cumulative `FINANCIAL_SMALL` (< $100) / `FINANCIAL_MEDIUM`
+  (< $10,000) / `FINANCIAL_UNLIMITED` Permission tiers via the
+  `mpp:financial:*` capability vocabulary (`MPP_CAPABILITY_MAP`, round-trips
+  through `bolyra verify --capability-map`).
+- **Three verifier backends, classical default.** In-process classical
+  verification (the hosted-verify pipeline: trusted-operator gate, EdDSA-
+  Poseidon binding signature, byte-literal audience binding, capability
+  subset, scope anchoring, strict expiry — **no ZK dependency**); or delegate
+  the decision to an External Verifier Contract v1 command spawn or a hosted
+  verifier URL, with the full host obligations (timeout → SIGKILL, output
+  caps, strict single-object closed-schema verdict parsing, non-zero-exit
+  fail-closed, reserve-before-act `consume_nonces`).
+- **Authorization receipts.** Every decision (allow AND deny) signs an
+  ES256K, hash-chained `bolyra.commerce` receipt via `@bolyra/receipts`
+  (gateway 0.5.0 receipt-signer pattern; ephemeral key by default, pinnable);
+  on allow the mppx receipt gains a `bolyraAuthorization` extension field
+  that rides into MPP's `Payment-Receipt` header — the approved → paid audit
+  pair.
+- **Tests + example.** 62 jest tests (tier boundaries, classical pipeline
+  denial matrix, hostile-verifier fail-closed, gate contract incl. verify
+  fail-closed without a preflight decision) and a self-contained runnable
+  demo (`examples/mandate-demo`) driving the real `mppx` request lifecycle:
+  $25 allowed within a small-tier mandate, $500 denied `request_mismatch`
+  before payment, missing mandate denied 401.
+
 #### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
 
 - **Observability for the design-partner preview.** Workers Logs enabled
