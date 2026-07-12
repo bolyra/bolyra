@@ -95,7 +95,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Added
 
-#### Receipts (`@bolyra/receipts` 0.7.0 → 0.8.0 — not yet published)
+#### Receipts (`@bolyra/receipts` 0.7.0 → 0.8.0)
 
 - **Receipt hash-chaining — whole-log integrity.** Signatures made each
   receipt tamper-evident; the LOG was not — deleting or reordering lines was
@@ -128,7 +128,7 @@ under `contracts/deployments/` and `circuits/build/`.
     pinned head hash or count. Anchoring mechanism and checkpoint cadence are
     enterprise-configurable deployment policy, not library behavior.
 
-#### CLI (`@bolyra/cli` 0.4.0 → 0.5.0 — not yet published)
+#### CLI (`@bolyra/cli` 0.4.0 → 0.5.0)
 
 - **`bolyra receipt verify-chain <file>`** — verifies a JSONL receipt log:
   every ES256K signature AND the hash chain. Reports seq gaps, prev-hash
@@ -140,7 +140,7 @@ under `contracts/deployments/` and `circuits/build/`.
   the head hash to pin), `--allow-unchained` (pre-chaining PREFIX only).
   Exit codes: 0 pass, 1 verification failure, 2 usage error.
 
-#### Gateway (`@bolyra/gateway` 0.4.0 → 0.5.0 — not yet published)
+#### Gateway (`@bolyra/gateway` 0.4.0 → 0.5.0)
 
 - **Every signed gateway receipt is now hash-chained** (allow, deny, and
   anonymous deny alike): one `ReceiptChain` per gateway process, startup
@@ -163,7 +163,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Added
 
-#### Gateway (`@bolyra/gateway` 0.3.0 → 0.4.0 — not yet published)
+#### Gateway (`@bolyra/gateway` 0.3.0 → 0.4.0)
 
 - **Credential binding in packaged Core mode (`--dev`)** — closes the
   self-asserted-claims gap. Previously the packaged gateway trusted the
@@ -238,7 +238,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Added
 
-#### Gateway (`@bolyra/gateway` 0.2.1 → 0.3.0 — not yet published)
+#### Gateway (`@bolyra/gateway` 0.2.1 → 0.3.0)
 
 - **ES256K-signed receipts for EVERY decision** — allow and deny, dev mode
   and production. This makes the landing-page claim ("ES256K-signed receipt
@@ -321,7 +321,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Fixed
 
-#### Delegation (`@bolyra/delegation` 0.2.3 — not yet published)
+#### Delegation (`@bolyra/delegation` 0.2.3)
 
 - Repo reconciled with the published 0.2.2: the 0.2.1/0.2.2 hotfixes
   (published 2026-05-13) were cut from a working tree that was never

@@ -27,7 +27,7 @@ BOLYRA_VERIFIER_TIMEOUT_MS=10000
 ```
 
 - `--nonce-mode host` selects **host-owned replay storage** (§8): the verifier
-  stays stateless and returns a `consume_nonce` the host durably records. Use this
+  stays stateless and returns `consume_nonces` entries the host durably records. Use this
   mode for any multi-instance / clustered host that already owns a database. (Drop
   the flag to use the default `local` mode, where the verifier owns a file-backed
   nonce store — only correct for a single-host deployment.)
@@ -91,32 +91,36 @@ stdout, an unknown `verdict` value, or a `deny` missing `code`/`message` (§7.2)
 
 ## 3. Reserve-before-act (mandatory in host nonce mode)
 
-Under `--nonce-mode host`, an `allow` carries a `consume_nonce`:
+Under `--nonce-mode host`, an `allow` carries `consume_nonces` — a **non-empty
+array** with one entry per nullifier to burn (e.g. a second entry appears when an
+optional human proof is consumed):
 
 ```json
 {
   "verdict": "allow",
-  "consume_nonce": {
-    "issuer_key": "z6Mk...",
-    "nonce": "e3b0c44298fc1c14...",
-    "retain_until": 1751993600
-  }
+  "consume_nonces": [
+    {
+      "issuer_key": "z6Mk...",
+      "nonce": "e3b0c44298fc1c14...",
+      "retain_until": 1751993600
+    }
+  ]
 }
 ```
 
-The host **must reserve the nonce before acting** (§7.3):
+The host **must reserve every nonce before acting** (§7.3):
 
-1. **Atomically insert** `consume_nonce.nonce` into durable storage with a
-   unique-insert / "on conflict reject" semantic, retaining it until
+1. **Atomically insert each** `consume_nonces[].nonce` into durable storage with a
+   unique-insert / "on conflict reject" semantic, retaining each until its
    `retain_until`.
-2. If the insert is **novel**, proceed with the registration.
-3. If the insert **conflicts** (the nonce was already recorded), **reject** the
+2. If **all** inserts are **novel**, proceed with the registration.
+3. If **any** insert **conflicts** (a nonce was already recorded), **reject** the
    action as a replay — even though the verifier returned `allow`.
 
 "Record after proceeding" opens a replay window and is **forbidden**. The
-verifier's `allow` in host mode is *conditional* on the host's insert being novel.
-`consume_nonce.issuer_key` is for host bookkeeping only; the `nonce` is already
-globally unique per (credential, session-nonce).
+verifier's `allow` in host mode is *conditional* on every insert being novel.
+`consume_nonces[].issuer_key` is for host bookkeeping only; each `nonce` is
+already globally unique per (credential, session-nonce).
 
 ## 4. Reference host glue (language-neutral)
 
@@ -140,15 +144,26 @@ fn verify_registration(bundle, request_ctx, now_unix) -> Decision {
     if status != 0                 { return Decision::Reject("non-zero exit"); }
 
     // Strict single-object parse (§5.2): reject trailing bytes / multiple objects.
-    let verdict = match parse_single_json_object(stdout) {
+    // Then validate against the FULL §3.4 verdict schema before matching — bad
+    // `kind`, extra properties, or malformed nonce entries must fail closed here.
+    let verdict = match parse_single_json_object(stdout)
+        .and_then(validate_verdict_schema)          // §3.4 JSON Schema
+    {
         Some(v) => v,
-        None    => return Decision::Reject("unparseable stdout"),
+        None    => return Decision::Reject("unparseable or non-conformant stdout"),
     };
 
     match verdict["verdict"].as_str() {
         Some("allow") => {
-            if let Some(cn) = verdict.get("consume_nonce") {
-                // Reserve-before-act (§7.3): atomic unique-insert.
+            // This integration runs `--nonce-mode host`: an allow MUST carry a
+            // non-empty consume_nonces[] (schema-valid entries). Missing/empty
+            // in host mode → fail closed, do not proceed.
+            let cns = match verdict.get("consume_nonces").and_then(|v| v.as_array()) {
+                Some(arr) if !arr.is_empty() => arr,
+                _ => return Decision::Reject("host mode requires non-empty consume_nonces"),
+            };
+            // Reserve-before-act (§7.3): atomic unique-insert for EACH entry.
+            for cn in cns {
                 if !reserve_nonce_atomic(cn["nonce"], cn["retain_until"]) {
                     return Decision::Reject("nonce replay");
                 }
