@@ -122,7 +122,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Changed
 
-#### CLI (`@bolyra/cli` 0.5.1 — not yet published)
+#### CLI (`@bolyra/cli` 0.5.1 — published 2026-07-13)
 
 - **`bolyra receipt verify` now works on real receipts** (found by the
   scoring-kit build): the command read `receipt.signer` at the top level and
