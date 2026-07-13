@@ -102,7 +102,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Changed
 
-#### Gateway (`@bolyra/gateway` 0.5.1 — not yet published)
+#### Gateway (`@bolyra/gateway` 0.5.1 — published 2026-07-13)
 
 - **`@bolyra/sdk` floor raised from `>=0.5.0` to `^0.6.1`** (dependencies and
   peerDependencies). The old floor admitted pre-0.6.1 SDKs that eagerly
@@ -128,22 +128,20 @@ under `contracts/deployments/` and `circuits/build/`.
   `@bolyra/sdk@0.5.3` under `@bolyra/mcp` — and `verifyBundle` resolves
   `@bolyra/sdk` relative to itself, putting the old SDK on the gateway's
   production verification path regardless of the top-level floor. Fixed
-  twice over: a nested override in the gateway manifest
-  (`"@bolyra/mcp": { "@bolyra/sdk": "^0.6.1" }`) dedupes this repo's tree
-  now, and `@bolyra/mcp` 0.6.5 raises its own dependency to `^0.6.1` (see
-  below — until it ships, npm consumers of `@bolyra/gateway` still get the
-  nested copy, since overrides do not reach consumers). A tree-scan test
-  now fails the gateway suite if any pre-0.6.1 `@bolyra/sdk` appears
-  anywhere under `node_modules`.
-- **REQUIRED RELEASE ORDERING for gateway 0.5.1** (do not skip): (1) publish
-  `@bolyra/mcp` 0.6.5 first; (2) in the gateway 0.5.1 release commit, raise
-  the gateway's `@bolyra/mcp` range from `~0.6.0` to `~0.6.5` and refresh
-  the lockfile; (3) publish `@bolyra/gateway` 0.5.1. Same lockstep pattern
-  as the sdk 0.6.0 → cli 0.4.0 release (caret-trap lesson): shipping the
-  gateway without step (2) leaves consumers free to resolve an mcp that
-  reintroduces the pre-0.6.1 sdk.
+  twice over: `@bolyra/mcp` 0.6.5 raises its own dependency to `^0.6.1`
+  (see below), and the gateway's `@bolyra/mcp` range is raised from
+  `~0.6.0` to `~0.6.5` so consumers can never resolve an mcp that
+  reintroduces the pre-0.6.1 sdk. A tree-scan test fails the gateway suite
+  if any pre-0.6.1 `@bolyra/sdk` appears anywhere under `node_modules`.
+  (During review a temporary nested override pinned mcp's sdk in this
+  repo's tree; it was removed once the `~0.6.5` range made it redundant.)
+- **RELEASE ORDERING (executed 2026-07-13):** `@bolyra/mcp` 0.6.5 published
+  first (OIDC, attestation verified), then the gateway range bump + lockfile
+  refresh in the gateway 0.5.1 release commit, then `@bolyra/gateway` 0.5.1
+  published. Same lockstep pattern as the sdk 0.6.0 → cli 0.4.0 release
+  (caret-trap lesson).
 
-#### MCP (`@bolyra/mcp` 0.6.5 — not yet published)
+#### MCP (`@bolyra/mcp` 0.6.5 — published 2026-07-13)
 
 - **`@bolyra/sdk` dependency raised from `^0.5.0` to `^0.6.1`** so consumers
   installing `@bolyra/mcp` resolve the lazy-snarkjs SDK instead of nesting a
