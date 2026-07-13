@@ -186,7 +186,9 @@ LIVE_HTML=$(curl -s "https://bolyra.ai/?vguard=$(date +%s)")
 guard_version() { # $1=pkg  $2=literal prefix the page must show before the version
   local pkg="$1" prefix="$2" published
   published=$(npm view "$pkg" version 2>/dev/null) || fail "npm view $pkg failed — cannot verify advertised versions"
-  if echo "$LIVE_HTML" | grep -qF "${prefix}${published}"; then
+  # Herestring, not a pipe: under `set -o pipefail`, grep -q exiting on an
+  # early match SIGPIPEs the echo and the successful check reads as failure.
+  if grep -qF "${prefix}${published}" <<< "$LIVE_HTML"; then
     pass "version match: page advertises ${prefix}${published} ($pkg)"
   else
     fail "version drift: npm has $pkg@$published but page lacks '${prefix}${published}' — update landing/index.html"
