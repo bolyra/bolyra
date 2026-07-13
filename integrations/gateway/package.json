@@ -1,6 +1,6 @@
 {
   "name": "@bolyra/gateway",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "mcpName": "io.github.bolyra/gateway",
   "description": "Bolyra MCP Auth Gateway — standalone reverse proxy that verifies agent ZKP credentials before forwarding to upstream MCP servers.",
   "main": "dist/index.js",
@@ -22,13 +22,13 @@
   "dependencies": {
     "@bolyra/mcp": "~0.6.0",
     "@bolyra/receipts": "~0.8.0",
-    "@bolyra/sdk": ">=0.5.0",
+    "@bolyra/sdk": "^0.6.1",
     "@noble/hashes": "^1.7.0",
     "redis": "^4.7.1",
     "yaml": "^2.7.0"
   },
   "peerDependencies": {
-    "@bolyra/sdk": ">=0.5.0"
+    "@bolyra/sdk": "^0.6.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -63,6 +63,10 @@
   ],
   "license": "Apache-2.0",
   "overrides": {
-    "ws": "8.21.0"
+    "ws": "8.21.0",
+    "underscore": "1.13.8",
+    "@bolyra/mcp": {
+      "@bolyra/sdk": "^0.6.1"
+    }
   }
 }

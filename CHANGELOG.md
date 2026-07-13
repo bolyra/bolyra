@@ -100,6 +100,56 @@ under `contracts/deployments/` and `circuits/build/`.
   + std (no async runtime). Not a supported SDK, not on crates.io,
   deliberately not wired into CI (see its README).
 
+### Changed
+
+#### Gateway (`@bolyra/gateway` 0.5.1 — not yet published)
+
+- **`@bolyra/sdk` floor raised from `>=0.5.0` to `^0.6.1`** (dependencies and
+  peerDependencies). The old floor admitted pre-0.6.1 SDKs that eagerly
+  import snarkjs at module load, which is why the credential-binding module
+  kept a local copy of the cumulative-bit mask validator instead of importing
+  the SDK's. With the floor at 0.6.1 (lazy snarkjs), that local mirror is
+  deleted: `cumulativeMaskError` now delegates to the SDK's canonical
+  `validateCumulativeBitEncoding`, so gateway mask semantics can never drift
+  from the SDK/circuits. A new out-of-process test
+  (`test/sdk-canonical-validator.test.ts`) proves the emitted package runs
+  classical credential binding with snarkjs resolution blocked — the Core
+  guarantee now holds for the gateway's installed dependency tree, not just
+  for jest's source mapping.
+- **`underscore` override pinned to 1.13.8** (same pattern as sdk/cli/mcp
+  manifests) — the sdk 0.6.1 install surfaced the known
+  snarkjs→bfj→jsonpath→underscore advisory chain in the gateway lockfile;
+  `npm audit --omit=dev --audit-level=high` gate is green again (the
+  remaining elliptic chain is the documented no-patch residual in
+  SECURITY.md).
+- **No nested pre-0.6.1 sdk on the verification path** (Codex review
+  finding): every published `@bolyra/mcp` (≤0.6.4) declares
+  `@bolyra/sdk ^0.5.0`, so npm nests a second, pre-lazy-ZK
+  `@bolyra/sdk@0.5.3` under `@bolyra/mcp` — and `verifyBundle` resolves
+  `@bolyra/sdk` relative to itself, putting the old SDK on the gateway's
+  production verification path regardless of the top-level floor. Fixed
+  twice over: a nested override in the gateway manifest
+  (`"@bolyra/mcp": { "@bolyra/sdk": "^0.6.1" }`) dedupes this repo's tree
+  now, and `@bolyra/mcp` 0.6.5 raises its own dependency to `^0.6.1` (see
+  below — until it ships, npm consumers of `@bolyra/gateway` still get the
+  nested copy, since overrides do not reach consumers). A tree-scan test
+  now fails the gateway suite if any pre-0.6.1 `@bolyra/sdk` appears
+  anywhere under `node_modules`.
+- **REQUIRED RELEASE ORDERING for gateway 0.5.1** (do not skip): (1) publish
+  `@bolyra/mcp` 0.6.5 first; (2) in the gateway 0.5.1 release commit, raise
+  the gateway's `@bolyra/mcp` range from `~0.6.0` to `~0.6.5` and refresh
+  the lockfile; (3) publish `@bolyra/gateway` 0.5.1. Same lockstep pattern
+  as the sdk 0.6.0 → cli 0.4.0 release (caret-trap lesson): shipping the
+  gateway without step (2) leaves consumers free to resolve an mcp that
+  reintroduces the pre-0.6.1 sdk.
+
+#### MCP (`@bolyra/mcp` 0.6.5 — not yet published)
+
+- **`@bolyra/sdk` dependency raised from `^0.5.0` to `^0.6.1`** so consumers
+  installing `@bolyra/mcp` resolve the lazy-snarkjs SDK instead of nesting a
+  pre-0.6.1 copy (see the gateway entry above). The peer range stays
+  `>=0.4.0` pending a deliberate compatibility decision at release time.
+
 ## [0.7.9] — 2026-07-11
 
 ### Added

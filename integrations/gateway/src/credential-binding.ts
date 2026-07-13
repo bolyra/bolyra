@@ -16,6 +16,7 @@
  * embedding code required.
  */
 
+import { validateCumulativeBitEncoding } from '@bolyra/sdk';
 import type { AgentCredential } from '@bolyra/sdk';
 import type { BolyraProofBundle, BolyraAuthContext } from '@bolyra/mcp';
 import type { CredentialSource, GatewayConfig } from './types';
@@ -84,23 +85,21 @@ function parseDecimal(value: unknown): bigint | null {
 
 /**
  * Cumulative-bit encoding check — bit 4 (FINANCIAL_UNLIMITED) implies bits
- * 3+2, bit 3 (FINANCIAL_MEDIUM) implies bit 2. Mirrors the SDK's
- * validateCumulativeBitEncoding and the AgentPolicy/Delegation circuits.
- * (Local mirror rather than a runtime @bolyra/sdk import: the gateway allows
- * sdk >=0.5.0, and pre-0.6.1 SDKs eagerly import snarkjs at module load.)
+ * 3+2, bit 3 (FINANCIAL_MEDIUM) implies bit 2. Delegates to the SDK's
+ * validateCumulativeBitEncoding (the canonical mirror of the
+ * AgentPolicy/Delegation circuits), adapted to the gateway's
+ * error-description-or-null shape. The sdk floor is ^0.6.1, whose entry
+ * loads snarkjs lazily, so this runtime import keeps the Core path
+ * snarkjs-free (proven by test/sdk-canonical-validator.test.ts).
  * Returns an error description, or null when the mask is valid.
  */
 export function cumulativeMaskError(mask: bigint): string | null {
-  const bit2 = (mask >> 2n) & 1n;
-  const bit3 = (mask >> 3n) & 1n;
-  const bit4 = (mask >> 4n) & 1n;
-  if (bit4 && (!bit3 || !bit2)) {
-    return 'FINANCIAL_UNLIMITED (bit 4) requires FINANCIAL_MEDIUM (bit 3) and FINANCIAL_SMALL (bit 2)';
+  try {
+    validateCumulativeBitEncoding(mask);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
   }
-  if (bit3 && !bit2) {
-    return 'FINANCIAL_MEDIUM (bit 3) requires FINANCIAL_SMALL (bit 2)';
-  }
-  return null;
 }
 
 /**
