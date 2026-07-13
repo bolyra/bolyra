@@ -21,8 +21,16 @@ One line: **MPP moves the money; Bolyra proves the mandate.**
 
 ## Install
 
+Into an existing mppx server:
+
 ```bash
 npm install @bolyra/mpp
+```
+
+Starting fresh? Install both:
+
+```bash
+npm install @bolyra/mpp mppx
 ```
 
 `mppx` is an optional peer dependency — this package never imports it at
@@ -30,6 +38,9 @@ runtime; it wraps the method objects you already build with mppx.
 
 ## Quickstart
 
+This snippet shows the integration shape (placeholders like `secretKey` and the
+operator pubkeys are yours to fill in); for a copy-paste-runnable version with
+a mock agent and real values, see [`examples/mandate-demo`](./examples/mandate-demo).
 The adapter wraps `Method.Server` *before* it is passed to `Mppx.create()`, so
 no middleware changes are needed and every mppx framework adapter (Express,
 Hono, Elysia, Next.js) is covered automatically:
