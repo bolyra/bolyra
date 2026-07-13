@@ -79,6 +79,38 @@ export function createGatewayProxy(options: GatewayProxyOptions): http.Server {
         return;
       }
 
+      // Receipt Signer Discovery v1 (spec/receipt-signer-discovery-v1.md):
+      // publish the active receipt signer so third parties can verify with
+      // `--signer-from` instead of manual key exchange. 404 when receipts
+      // are inactive — there is no signer to discover. Discovery is not
+      // endorsement: the consumer still decides to trust this origin.
+      if (req.method === 'GET' && req.url === '/.well-known/bolyra-signers.json') {
+        if (!receiptSigner) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'receipts are not enabled on this gateway' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            v: 1,
+            issuer: receiptSigner.issuer,
+            updatedAt: Math.floor(Date.now() / 1000),
+            signers: [
+              {
+                keyId: receiptSigner.keyId,
+                alg: receiptSigner.alg,
+                signer: receiptSigner.signer,
+                ...(receiptSigner.ephemeral
+                  ? { label: 'ephemeral key generated at startup — rotates on restart' }
+                  : {}),
+              },
+            ],
+          }),
+        );
+        return;
+      }
+
       // Read the full body for JSON-RPC parsing
       const rawBody = await readBody(req, config.maxBodySize);
       req.rawBody = rawBody;

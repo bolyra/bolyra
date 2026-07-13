@@ -16,6 +16,7 @@ import { parseArgs } from 'node:util';
 import * as fs from 'node:fs';
 import { verifyReceiptChain } from '@bolyra/receipts';
 import type { ChainVerifyOptions, SignedReceipt } from '@bolyra/receipts';
+import { fetchAcceptedSigners } from './signer-discovery-fetch';
 
 const HELP = `bolyra receipt verify-chain <file> — Verify a JSONL receipt log as a hash chain
 
@@ -30,6 +31,10 @@ Arguments:
 
 Flags:
   --signer <address>     Require every signature to recover to this address
+  --signer-from <url>    Accept signers from a Receipt Signer Discovery v1
+                         document (/.well-known/bolyra-signers.json).
+                         Fail-closed on any fetch/schema error. With --signer
+                         too, both must agree (the address must be listed)
   --expect-count <n>     Externally known receipt count (detects tail truncation)
   --expect-head <hash>   Externally known head receiptHash (detects tail truncation)
   --allow-unchained      Tolerate a PREFIX of receipts without chain fields
@@ -47,6 +52,7 @@ export async function run(args: string[]): Promise<void> {
       args,
       options: {
         signer: { type: 'string' },
+        'signer-from': { type: 'string' },
         'expect-count': { type: 'string' },
         'expect-head': { type: 'string' },
         'allow-unchained': { type: 'boolean', default: false },
@@ -114,6 +120,28 @@ export async function run(args: string[]): Promise<void> {
     }
   }
 
+  // Signer discovery (spec/receipt-signer-discovery-v1.md): fetch failures
+  // and schema violations are verification failures, never "no restriction".
+  // Checked against undefined, not truthiness: `--signer-from=` (empty value)
+  // must fail closed via URL validation, not silently skip discovery.
+  let accepted: Set<string> | undefined;
+  if (values['signer-from'] !== undefined) {
+    try {
+      accepted = await fetchAcceptedSigners(values['signer-from']);
+    } catch (err) {
+      console.error(`FAIL: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (values.signer && !accepted.has(values.signer.toLowerCase())) {
+      console.error(
+        `FAIL: --signer and --signer-from do not agree: ${values.signer} is not listed in the discovery document`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const options: ChainVerifyOptions = {
     expectedSigner: values.signer,
     expectedCount,
@@ -122,16 +150,43 @@ export async function run(args: string[]): Promise<void> {
   };
   const result = verifyReceiptChain(receipts, options);
 
+  // Discovery-only mode: verifyReceiptChain validated every signature; now
+  // require each recovered signer to be listed in the discovery document.
+  const discoveryFailures: string[] = [];
+  if (accepted && !values.signer) {
+    receipts.forEach((r, i) => {
+      // Guard the receipt itself: JSON.parse accepts `null`/primitives, which
+      // verifyReceiptChain reports as malformed-receipt — this pass must
+      // report the same line, not crash reading .signature off null.
+      const signer =
+        typeof r === 'object' && r !== null ? r.signature?.signer : undefined;
+      if (typeof signer !== 'string' || !accepted!.has(signer.toLowerCase())) {
+        discoveryFailures.push(
+          `  FAIL line ${lineNoByReceiptIndex[i]}: [signer-not-listed] signer ${signer ?? 'unknown'} is not in the discovery document`,
+        );
+      }
+    });
+  }
+
   console.log(
     `Checked ${result.total} receipts (${result.chained} chained, ${result.unchained} unchained)` +
-      (values.signer ? ` against signer ${values.signer}` : ''),
+      (values.signer ? ` against signer ${values.signer}` : '') +
+      (accepted && !values.signer ? ` against discovery document (${accepted.size} signer(s))` : ''),
   );
 
   for (const issue of result.issues) {
     const where = issue.index >= 0 ? `line ${lineNoByReceiptIndex[issue.index]}: ` : '';
     console.error(`  FAIL ${where}[${issue.code}] ${issue.message}`);
   }
+  for (const failure of discoveryFailures) {
+    console.error(failure);
+  }
 
+  if (discoveryFailures.length > 0) {
+    console.error('FAIL: receipt chain verification failed');
+    process.exitCode = 1;
+    return;
+  }
   if (!result.ok) {
     if (result.issues.some((i) => i.code === 'missing-chain-fields')) {
       console.error(

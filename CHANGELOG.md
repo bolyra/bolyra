@@ -120,6 +120,38 @@ under `contracts/deployments/` and `circuits/build/`.
   standing caveats plainly (operator-pinned signer keys; tail truncation
   requires externally pinned count/head).
 
+#### Receipt Signer Discovery v1 (spec + `@bolyra/receipts` 0.9.0 + `@bolyra/cli` 0.6.0 + `@bolyra/gateway` 0.6.0 — not yet published)
+
+- **Fetchable signer trust anchors** (`spec/receipt-signer-discovery-v1.md`):
+  a minimal `/.well-known/bolyra-signers.json` document (version, issuer,
+  updatedAt, signers[{keyId, alg: ES256K, signer, label?}]) that replaces
+  manual signer-key exchange for third-party receipt verification.
+  Explicitly NOT a PKI: discovery moves the trust decision from "trust this
+  key" to "trust this origin" — the spec says so in plain language, and when
+  `--signer` and `--signer-from` are both supplied they must agree.
+- **`@bolyra/receipts` 0.9.0**: canonical `parseSignerDiscovery` /
+  `acceptedSigners` / `SignerDiscoveryError` exports — strict validation
+  (closed `alg` set, address regex, duplicate-keyId conflict rejection,
+  unknown fields ignored for forward compat). 24 new tests.
+- **`@bolyra/cli` 0.6.0**: `--signer-from <url>` on `receipt verify` and
+  `receipt verify-chain`. Fail-closed on every path: bad URL, plain http to
+  non-loopback hosts, non-200, malformed document, signer not listed. 10 new
+  tests against a live local HTTP fixture.
+- **`@bolyra/gateway` 0.6.0**: serves the document for its active receipt
+  signer (404 when receipts are disabled; ephemeral keys are labeled as
+  rotating). The hosted-verify preview serves the same route for its pinned
+  signer.
+- **Scoring kit**: the corpus now ships `corpus/bolyra-signers.json` for
+  operator A (operator B deliberately stays manual-pin-only, so the corpus
+  demonstrates both trust modes).
+- **REQUIRED RELEASE ORDERING (do not skip):** (1) publish `@bolyra/receipts`
+  0.9.0 first; (2) in the cli release commit, raise the cli's
+  `@bolyra/receipts` range from `~0.8.0` to `~0.9.0` and refresh the
+  lockfile (`--signer-from` calls `parseSignerDiscovery` at runtime — a cli
+  0.6.0 built against 0.8.0 crashes on the new flag); (3) publish
+  `@bolyra/cli` 0.6.0. `@bolyra/gateway` 0.6.0 is independent (it uses no
+  new receipts API) and can publish any time.
+
 ### Changed
 
 #### CLI (`@bolyra/cli` 0.5.1 — published 2026-07-13)

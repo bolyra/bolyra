@@ -22,3 +22,10 @@ export type {
   CommerceReceiptInput,
   CommerceFields,
 } from './types';
+export {
+  parseSignerDiscovery,
+  acceptedSigners,
+  SignerDiscoveryError,
+  type SignerDiscoveryDocument,
+  type DiscoveredSigner,
+} from './signer-discovery';

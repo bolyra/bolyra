@@ -228,6 +228,26 @@ function main(): void {
     JSON.stringify({ issuer: OPERATOR_B.issuer, keyId: OPERATOR_B.keyId, alg: 'ES256K', signer: signerB }, null, 2) + '\n',
   );
 
+  // Receipt Signer Discovery v1 doc for operator A (spec/receipt-signer-
+  // discovery-v1.md) — servable via raw.githubusercontent so --signer-from
+  // (cli 0.6.0+) can replace manual key exchange. Operator B deliberately
+  // stays manual-pin-only: the corpus demonstrates BOTH trust modes.
+  fs.writeFileSync(
+    path.join(CORPUS_DIR, 'bolyra-signers.json'),
+    JSON.stringify(
+      {
+        v: 1,
+        issuer: OPERATOR_A.issuer,
+        updatedAt: T0,
+        signers: [
+          { keyId: OPERATOR_A.keyId, alg: 'ES256K', signer: signerA, label: 'scoring-kit corpus signer (operator A)' },
+        ],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+
   const manifest = {
     generatedBy: 'examples/receipt-scoring-kit/src/generate.ts (deterministic)',
     chains: {

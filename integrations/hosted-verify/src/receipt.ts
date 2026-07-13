@@ -146,3 +146,55 @@ export function buildReceiptHeader(
     return undefined;
   }
 }
+
+/** Cache: privateKey -> derived signer address (probe signing is not free). */
+const signerAddressCache = new Map<string, string>();
+
+/**
+ * Receipt Signer Discovery v1 document for the configured signer
+ * (spec/receipt-signer-discovery-v1.md), or undefined when receipts are
+ * disabled. Discovery is not endorsement — consumers still choose whether
+ * to trust this origin.
+ */
+export function buildSignerDiscoveryDoc(env: ReceiptEnv): object | undefined {
+  const privateKey = env.RECEIPT_SIGNER_KEY;
+  if (privateKey === undefined || privateKey === '') return undefined;
+  const config = {
+    issuer: env.RECEIPT_ISSUER ?? 'bolyra-hosted-verify-preview',
+    keyId: env.RECEIPT_KEY_ID ?? 'preview-1',
+    privateKey,
+  };
+  let signer = signerAddressCache.get(privateKey);
+  if (signer === undefined) {
+    // Derive the address by signing a throwaway probe (same trick as the
+    // gateway); throws on malformed key material, which the caller surfaces.
+    const probe = createAuthReceipt(
+      {
+        rootDid: 'did:bolyra:preview:probe',
+        actingDid: 'did:bolyra:preview:probe',
+        credentialCommitment: '0',
+        effectiveCommitment: '0',
+        allowed: false,
+        reasonCode: 'signer-probe',
+        score: 0,
+        permissionBitmask: '0',
+        chainDepth: 0,
+        humanProof: { proof: [] },
+        agentProof: { proof: [] },
+        humanPublicSignals: [],
+        agentPublicSignals: [],
+        bundleVersion: 1,
+        nonce: '0',
+      },
+      config,
+    );
+    signer = signReceipt(probe, config).signature.signer;
+    signerAddressCache.set(privateKey, signer);
+  }
+  return {
+    v: 1,
+    issuer: config.issuer,
+    updatedAt: Math.floor(Date.now() / 1000),
+    signers: [{ keyId: config.keyId, alg: 'ES256K', signer }],
+  };
+}

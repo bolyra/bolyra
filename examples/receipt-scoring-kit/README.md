@@ -54,6 +54,7 @@ Expected counts and head hashes for all files live in
 | `tampered.jsonl` | `receipts.jsonl` with line 3's decision flipped **after** signing — intentionally fails |
 | `allow.json`, `deny.json` | Single receipts for standalone verification |
 | `signer.json`, `signer-b.json` | Public trust anchors: `{ issuer, keyId, alg, signer }` — address only, no key material |
+| `bolyra-signers.json` | Receipt Signer Discovery v1 document for operator A (`spec/receipt-signer-discovery-v1.md`) — with `@bolyra/cli` 0.6.0+, `--signer-from <raw URL of this file>` replaces the manual `--signer` pin. Operator B stays manual-pin-only on purpose: the corpus demonstrates both trust modes |
 | `manifest.json` | Counts + head hashes to pin with `--expect-count` / `--expect-head` |
 
 ## Receipt fields a scoring system can consume
@@ -73,11 +74,13 @@ Expected counts and head hashes for all files live in
 
 ## Known caveats (stated plainly)
 
-1. **Signer key distribution is operator-pinned today.** You get the signer
-   address from `signer.json` (or any out-of-band channel you trust) — there
-   is no key discovery/registry mechanism yet. Verification proves the log is
-   internally consistent and signed by *that* key; binding the key to a
-   real-world operator is currently a manual trust decision.
+1. **Signer key distribution is a trust decision you still make.** You get
+   the signer address from `signer.json` (out-of-band pin) or, once
+   `@bolyra/cli` 0.6.0 ships, from `corpus/bolyra-signers.json` via
+   `--signer-from` (Receipt Signer Discovery v1,
+   `spec/receipt-signer-discovery-v1.md`). Discovery is not endorsement:
+   it moves the decision from "trust this key" to "trust this origin" — it
+   does not eliminate it, and there is no registry or transparency log.
 2. **Tail truncation is only detectable externally.** Deleting receipts from
    the *end* of a log leaves a shorter but internally valid chain. Pin
    `--expect-count` / `--expect-head` from a source you trust (this kit's
@@ -86,7 +89,7 @@ Expected counts and head hashes for all files live in
 ## Regenerating
 
 ```bash
-npm install && npm test   # builds, regenerates corpus deterministically, runs 7 invariant tests
+npm install && npm test   # builds, regenerates corpus deterministically, runs 8 invariant tests
 ```
 
 The signing keys in `src/generate.ts` are **test keys, published on purpose**

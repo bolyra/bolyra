@@ -114,6 +114,7 @@ Note: Revocation is local-only in v1. It does not propagate to any registry or o
 ```bash
 bolyra receipt verify receipt.json
 bolyra receipt verify receipt.json --signer 0xabc...
+bolyra receipt verify receipt.json --signer-from https://gateway.example/.well-known/bolyra-signers.json
 cat receipt.json | bolyra receipt verify --stdin --max-age 3600
 ```
 
@@ -127,6 +128,7 @@ ES256K signature AND the hash chain each signed payload carries
 ```bash
 bolyra receipt verify-chain audit-log.jsonl
 bolyra receipt verify-chain audit-log.jsonl --signer 0xabc...
+bolyra receipt verify-chain audit-log.jsonl --signer-from https://gateway.example/.well-known/bolyra-signers.json
 bolyra receipt verify-chain audit-log.jsonl --expect-count 128 --expect-head 0xdef...
 bolyra receipt verify-chain audit-log.jsonl --allow-unchained   # log STARTS with pre-chaining receipts
 ```

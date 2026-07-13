@@ -29,7 +29,7 @@ import {
   CHECKS_NOT_PERFORMED,
 } from './verify/core';
 import { deny, type Verdict } from './verify/verdict';
-import { buildReceiptHeader } from './receipt';
+import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
 
 export interface Env {
   PREVIEW_TOKEN?: string;
@@ -279,9 +279,29 @@ export default {
           kind = verdict.kind;
         }
       }
+    } else if (url.pathname === '/.well-known/bolyra-signers.json') {
+      // Receipt Signer Discovery v1 (spec/receipt-signer-discovery-v1.md):
+      // public, like /health — publishing the signer address is the point.
+      route = '/.well-known/bolyra-signers.json';
+      if (request.method !== 'GET') {
+        code = 'method_not_allowed';
+        response = json(405, { error: 'method_not_allowed' }, { allow: 'GET' });
+      } else {
+        const doc = buildSignerDiscoveryDoc(env);
+        if (doc === undefined) {
+          code = 'not_found';
+          response = json(404, { error: 'not_found', hint: 'receipt signing is not configured' });
+        } else {
+          outcome = 'allow';
+          response = json(200, doc);
+        }
+      }
     } else {
       code = 'not_found';
-      response = json(404, { error: 'not_found', routes: ['GET /health', 'POST /v1/verify'] });
+      response = json(404, {
+        error: 'not_found',
+        routes: ['GET /health', 'POST /v1/verify', 'GET /.well-known/bolyra-signers.json'],
+      });
     }
 
     const usage: Usage = {
