@@ -22,7 +22,10 @@ export async function fetchAcceptedSigners(rawUrl: string): Promise<Set<string>>
 
   let res: Response;
   try {
-    res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    // redirect:'error' — following redirects would let an https URL land on
+    // a plaintext or attacker-chosen origin AFTER the protocol check (spec:
+    // consumers MUST NOT follow redirects).
+    res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'error' });
   } catch (err) {
     throw new Error(
       `signer discovery fetch failed: ${err instanceof Error ? err.message : String(err)}`,

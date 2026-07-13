@@ -1,7 +1,7 @@
 {
   "name": "@bolyra/cli",
   "version": "0.6.0",
-  "description": "CLI for Bolyra credential lifecycle management — create, inspect, revoke credentials; generate Ed25519 keys; verify receipts; generate dev identities.",
+  "description": "CLI for Bolyra credential lifecycle management \u2014 create, inspect, revoke credentials; generate Ed25519 keys; verify receipts; generate dev identities.",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
   "bin": {
@@ -11,7 +11,8 @@
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "test": "jest --passWithNoTests --forceExit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pretypecheck": "[ -f ../receipts/dist/index.d.ts ] || (cd ../receipts && npm install --silent --no-audit --no-fund && npm run build)"
   },
   "dependencies": {
     "@bolyra/sdk": "^0.6.0",

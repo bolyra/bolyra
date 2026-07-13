@@ -75,7 +75,10 @@ A verifier given a discovery URL (for example `bolyra receipt verify
 --signer-from <url>`):
 
 1. MUST fetch over HTTPS. Plain `http://` MUST be rejected except for
-   loopback addresses (development).
+   loopback addresses (development). Consumers MUST NOT follow redirects —
+   a redirect can move the fetch to a plaintext or attacker-chosen origin
+   after the protocol check. Operators serve the document directly at the
+   well-known path.
 2. MUST treat any transport failure, non-200 status, non-JSON body, or
    schema violation as a **verification failure** (fail closed), never as
    "no signer restriction".

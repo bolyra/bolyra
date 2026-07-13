@@ -64,8 +64,16 @@ describe('/.well-known/bolyra-signers.json', () => {
   });
 
   it('document round-trips through the canonical parser', async () => {
+    // jest maps @bolyra/receipts to ../receipts/dist (committed convention,
+    // same as every cross-package test here) — the parser ships in receipts
+    // 0.9.0, so a stale dist means "build integrations/receipts", not a bug.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { parseSignerDiscovery, acceptedSigners } = require('@bolyra/receipts');
+    if (typeof parseSignerDiscovery !== 'function') {
+      throw new Error(
+        'parseSignerDiscovery missing from the jest-mapped @bolyra/receipts dist — run `npm run build` in integrations/receipts (needs >=0.9.0 source)',
+      );
+    }
     await withGateway(makeConfig(), async (port) => {
       const { body } = await get(port, '/.well-known/bolyra-signers.json');
       const doc = parseSignerDiscovery(JSON.parse(body));

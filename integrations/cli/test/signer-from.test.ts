@@ -228,3 +228,24 @@ describe('fail-closed edge cases (Codex round 1)', () => {
     } finally { cap.restore(); await srv.close(); }
   });
 });
+
+describe('redirect hardening (Codex round 3)', () => {
+  afterEach(() => { process.exitCode = undefined; });
+
+  it('rejects discovery URLs that redirect (no https-to-http downgrade window)', async () => {
+    // The redirect TARGET serves a fully valid doc listing the real signer:
+    // if fetch followed redirects, verification would PASS — proving the
+    // downgrade window. redirect:'error' must fail closed instead.
+    const target = await serve((res) => json(res, 200, doc(realSigner)));
+    const redirector = await serve((res) => {
+      res.writeHead(302, { Location: target.url });
+      res.end();
+    });
+    const cap = capture();
+    try {
+      await main(['receipt', 'verify', receiptFile, '--signer-from', redirector.url]);
+      expect(process.exitCode).toBe(1);
+      expect(cap.err.join('\n')).toMatch(/redirect|fetch failed/i);
+    } finally { cap.restore(); await redirector.close(); await target.close(); }
+  });
+});
