@@ -1,0 +1,20 @@
+{
+  "name": "@bolyra/receipt-scoring-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic corpus of signed, hash-chained Bolyra receipts for third-party consumers (scoring systems, auditors) to test verification against — no contact with the issuer required.",
+  "scripts": {
+    "generate": "ts-node src/generate.ts",
+    "build": "tsc",
+    "test": "npm run build && npm run generate && node --test dist/test/*.js"
+  },
+  "dependencies": {
+    "@bolyra/receipts": "file:../../integrations/receipts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  },
+  "license": "Apache-2.0"
+}

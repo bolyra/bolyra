@@ -80,9 +80,11 @@ export async function run(args: string[]): Promise<void> {
       return;
     }
 
-    // Check signer if specified
-    const receiptSigner = (receipt as unknown as Record<string, unknown>).signer as string | undefined;
-    if (values.signer && receiptSigner !== values.signer) {
+    // Check signer if specified. SignedReceipt carries the recovered signer
+    // address at signature.signer (addresses are lowercase hex; compare
+    // case-insensitively so checksummed input still matches).
+    const receiptSigner = receipt.signature?.signer;
+    if (values.signer && receiptSigner?.toLowerCase() !== values.signer.toLowerCase()) {
       console.error(`FAIL: signer mismatch`);
       console.error(`  Expected: ${values.signer}`);
       console.error(`  Got:      ${receiptSigner ?? 'unknown'}`);
@@ -90,13 +92,12 @@ export async function run(args: string[]): Promise<void> {
       return;
     }
 
-    // Check age
-    const payload = (receipt as unknown as Record<string, unknown>).payload as Record<string, unknown> | undefined;
-    if (payload && 'timestamp' in payload) {
-      const receiptTime = new Date(payload.timestamp as string).getTime();
-      const ageSeconds = (Date.now() - receiptTime) / 1000;
+    // Check age — ReceiptPayload.issuedAt is Unix SECONDS.
+    const issuedAt = receipt.payload?.issuedAt;
+    if (typeof issuedAt === 'number') {
+      const ageSeconds = Math.floor(Date.now() / 1000) - issuedAt;
       if (ageSeconds > maxAge) {
-        console.error(`FAIL: receipt too old (${Math.floor(ageSeconds)}s > ${maxAge}s max)`);
+        console.error(`FAIL: receipt too old (${ageSeconds}s > ${maxAge}s max)`);
         process.exitCode = 1;
         return;
       }

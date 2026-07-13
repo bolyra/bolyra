@@ -100,7 +100,39 @@ under `contracts/deployments/` and `circuits/build/`.
   + std (no async runtime). Not a supported SDK, not on crates.io,
   deliberately not wired into CI (see its README).
 
+#### Receipt scoring test kit (`examples/receipt-scoring-kit` — new, not published)
+
+- **A committed, deterministic corpus of signed, hash-chained receipts for
+  third-party consumers** (counterparty scoring systems, auditors, indexers)
+  to test verification against with zero contact with the issuer: an
+  8-receipt chained log (allows, denies with reason codes, a depth-2
+  delegated action, x402-style commerce allow + tier-exceeded deny), a
+  3-receipt log from an independent second operator, an intentionally
+  tampered variant that fails with `receipt-hash-mismatch` +
+  `prev-hash-mismatch`, standalone allow/deny receipts, public signer
+  anchors, and a manifest with pinned counts + head hashes. Verification is
+  5 documented commands against the *published* packages
+  (`@bolyra/cli@0.5.0` `receipt verify-chain`, `@bolyra/receipts@0.8.0`
+  `bolyra-receipt-verify`). Fixed test keys (published on purpose) + fixed
+  timestamps + RFC 6979 signatures make regeneration byte-reproducible;
+  8 invariant tests pin golden signer/count/head values against drift. The
+  README maps every receipt field to a scoring input and states the two
+  standing caveats plainly (operator-pinned signer keys; tail truncation
+  requires externally pinned count/head).
+
 ### Changed
+
+#### CLI (`@bolyra/cli` 0.5.1 — not yet published)
+
+- **`bolyra receipt verify` now works on real receipts** (found by the
+  scoring-kit build): the command read `receipt.signer` at the top level and
+  `payload.timestamp`, but the `SignedReceipt` schema carries
+  `signature.signer` and `payload.issuedAt` (Unix seconds) — so `--signer`
+  always failed on real receipts ("Got: unknown") and `--max-age` silently
+  never applied. Both now read the schema fields (signer compare is
+  case-insensitive); 4 regression tests generate real signed receipts and
+  cover signer pass/fail and stale/fresh age handling. `verify-chain` and
+  the receipts-package verifier were never affected.
 
 #### Gateway (`@bolyra/gateway` 0.5.1 — published 2026-07-13)
 
