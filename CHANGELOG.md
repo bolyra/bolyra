@@ -120,7 +120,7 @@ under `contracts/deployments/` and `circuits/build/`.
   standing caveats plainly (operator-pinned signer keys; tail truncation
   requires externally pinned count/head).
 
-#### Receipt Signer Discovery v1 (spec + `@bolyra/receipts` 0.9.0 published 2026-07-13; `@bolyra/cli` 0.6.0 + `@bolyra/gateway` 0.6.0 not yet published)
+#### Receipt Signer Discovery v1 (spec + `@bolyra/receipts` 0.9.0 + `@bolyra/cli` 0.6.0 + `@bolyra/gateway` 0.6.0 — all published 2026-07-13)
 
 - **Fetchable signer trust anchors** (`spec/receipt-signer-discovery-v1.md`):
   a minimal `/.well-known/bolyra-signers.json` document (version, issuer,
@@ -149,9 +149,7 @@ under `contracts/deployments/` and `circuits/build/`.
   `@bolyra/receipts` range raised `~0.8.0` → `~0.9.0` with the lockfile
   resolving the registry release (`--signer-from` calls
   `parseSignerDiscovery` at runtime, so a cli built against 0.8.x would
-  crash on the new flag). Remaining: publish `@bolyra/cli` 0.6.0 (founder
-  gate). `@bolyra/gateway` 0.6.0 is independent (no new receipts API) and
-  can publish any time.
+  crash on the new flag). cli 0.6.0 and gateway 0.6.0 published same day (attested).
 
 ### Changed
 
