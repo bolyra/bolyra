@@ -120,6 +120,21 @@ under `contracts/deployments/` and `circuits/build/`.
   standing caveats plainly (operator-pinned signer keys; tail truncation
   requires externally pinned count/head).
 
+#### Receipt scoring consumer (`examples/receipt-scoring-consumer` — new, not published)
+
+- **Reference receipts CONSUMER** — the demand-side twin of the scoring kit:
+  what an indexer/counterparty-risk engine does with receipt logs. Verify
+  FIRST and fail closed (signer set via a Receipt Signer Discovery v1
+  document, `verifyReceiptChain`, externally pinned count/head — an
+  unverifiable log contributes nothing), then extract per-actor features:
+  deny rate + reason-code histogram, max financial tier from the cumulative
+  mask, max delegation depth, commerce volume by currency + denied payment
+  attempts, first/last seen. Built entirely on the PUBLISHED
+  `@bolyra/receipts@0.9.0`. 5 tests against the kit's golden corpus,
+  including the fail-closed paths (tampered log, foreign signer, wrong
+  pinned head). States the delivery caveat plainly: receipts prove
+  authorization and approved→paid, not fulfillment.
+
 #### Receipt Signer Discovery v1 (spec + `@bolyra/receipts` 0.9.0 + `@bolyra/cli` 0.6.0 + `@bolyra/gateway` 0.6.0 — all published 2026-07-13)
 
 - **Fetchable signer trust anchors** (`spec/receipt-signer-discovery-v1.md`):
