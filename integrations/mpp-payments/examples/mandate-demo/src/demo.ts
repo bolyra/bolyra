@@ -17,82 +17,84 @@
  * Run: npm install && npm run demo
  */
 
+import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { Challenge, Credential, Method, Receipt, z } from 'mppx';
 import { Mppx } from 'mppx/server';
-import {
-  derivePublicKey,
-  eddsaSign,
-  permissionsToBitmask,
-  poseidon3,
-  poseidon5,
-  Permission,
-} from '@bolyra/sdk';
-import {
-  bolyraGate,
-  bindingDigest,
-  hashModel,
-  BOLYRA_AUTHORIZATION_HEADER,
-  type BindingClaim,
-} from '@bolyra/mpp';
+import { derivePublicKey } from '@bolyra/sdk';
+import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER } from '@bolyra/mpp';
 
-// ─── 1. OPERATOR: delegate a small-tier spend mandate to the agent ─────────
+// ─── 1. OPERATOR: delegate a small-tier spend mandate with `bolyra mandate` ──
 //
-// The operator signs a request binding naming the agent, the audience
-// (payee), and the capability set — here the FINANCIAL_SMALL tier only.
-// In production this presentation is minted by Bolyra tooling; the demo
-// builds it inline to stay dependency-free.
+// The operator issues the presentation with the REAL CLI — `bolyra mandate
+// issue` — signing a request binding that names the agent, the audience
+// (payee), the financial tier, and an expiry. This is the same issuance path
+// the @bolyra/mpp test fixtures use; there is no inline minting. The CLI takes
+// an operator key file (here a throwaway scalar) and prints the bvp/1
+// presentation on stdout.
 
 const OPERATOR_PRIVATE_KEY = 42n; // demo only — never a real key
 const AUDIENCE = 'api.merchant.example';
 const MODEL = 'opus-4.1';
-const EXPIRY = Math.floor(Date.now() / 1000) + 3600; // 1 hour mandate
 
-async function mintMandatePresentation(): Promise<string> {
-  const binding: BindingClaim = {
-    agent_name: 'shopper-bot',
-    project_key: AUDIENCE,
-    program: 'mpp',
-    model: MODEL,
-    capabilities: ['mpp:financial:small'], // < $100, nothing more
-  };
+/** The built CLI entry point, relative to this example. */
+const CLI_MAIN = fileURLToPath(new URL('../../../../cli/dist/main.js', import.meta.url));
 
-  const operatorPub = await derivePublicKey(OPERATOR_PRIVATE_KEY);
-  const modelHash = hashModel(MODEL);
-  const bitmask = permissionsToBitmask([Permission.READ_DATA, Permission.FINANCIAL_SMALL]);
-  const credentialCommitment = await poseidon5(
-    modelHash,
-    operatorPub.x,
-    operatorPub.y,
-    bitmask,
-    BigInt(EXPIRY),
+/**
+ * Issue the mandate by invoking `bolyra mandate issue`. Writes the demo
+ * operator scalar to a 32-byte key file (the `bolyra key generate` shape) and
+ * shells out to the CLI, returning the presentation it prints on stdout.
+ */
+function issueMandateViaCli(): string {
+  if (!fs.existsSync(CLI_MAIN)) {
+    throw new Error(
+      `Bolyra CLI is not built at ${CLI_MAIN}.\n` +
+        'Build it first:  (cd ../../../cli && npm install && npm run build)',
+    );
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-mandate-demo-'));
+  const keyFile = path.join(tmpDir, 'operator.key');
+  fs.writeFileSync(
+    keyFile,
+    Buffer.from(OPERATOR_PRIVATE_KEY.toString(16).padStart(64, '0'), 'hex'),
+    { mode: 0o600 },
   );
-  const scopeCommitment = await poseidon3(bitmask, credentialCommitment, BigInt(EXPIRY));
-  const sig = await eddsaSign(OPERATOR_PRIVATE_KEY, bindingDigest(binding));
 
-  const bundle = {
-    bvp: 1,
-    agent: {
-      envelope: {
-        version: '1.0.0',
-        circuit: { name: 'AgentPolicy', version: '1.0.0' },
-        proofType: 'groth16',
-        publicSignals: ['1', '2', scopeCommitment.toString(), bitmask.toString(), '1', '3'],
-        proof: { pi_a: ['1', '2'], pi_b: [['1', '2'], ['3', '4']], pi_c: ['5', '6'] },
-      },
-      credential: {
-        model_hash: modelHash.toString(),
-        operator_pubkey: { x: operatorPub.x.toString(), y: operatorPub.y.toString() },
-        permission_bitmask: bitmask.toString(),
-        expiry: EXPIRY,
-      },
-    },
-    binding,
-    sig: {
-      R8: { x: sig.R8.x.toString(), y: sig.R8.y.toString() },
-      S: sig.S.toString(),
-    },
-  };
-  return Buffer.from(JSON.stringify(bundle), 'utf8').toString('base64url');
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        CLI_MAIN,
+        'mandate',
+        'issue',
+        '--operator-key',
+        keyFile,
+        '--agent',
+        'shopper-bot',
+        '--audience',
+        AUDIENCE,
+        '--model',
+        MODEL,
+        '--tier',
+        'small', // < $100, nothing more
+        '--expiry',
+        '1h',
+      ],
+      { encoding: 'utf-8' },
+    );
+    if (result.status !== 0) {
+      throw new Error(`bolyra mandate issue failed:\n${result.stderr}`);
+    }
+    // stdout is exactly the presentation (pipe-clean by design).
+    return result.stdout.trim();
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
 
 // ─── 2. SERVER: an mppx payment method wrapped with bolyraGate ─────────────
@@ -209,7 +211,7 @@ async function main() {
   console.log(`Operator delegates: mpp:financial:small (< $100) to "shopper-bot" for ${AUDIENCE}`);
 
   const handler = await createServer();
-  const mandate = await mintMandatePresentation();
+  const mandate = issueMandateViaCli();
 
   // Allowed: $25 is within the delegated FINANCIAL_SMALL tier.
   await describeResponse(

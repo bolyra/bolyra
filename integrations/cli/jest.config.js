@@ -8,6 +8,7 @@ module.exports = {
   moduleNameMapper: {
     '^@bolyra/sdk$': '<rootDir>/../../sdk/src/index.ts',
     '^@bolyra/receipts$': '<rootDir>/../receipts/dist/index.js',
+    '^@bolyra/mpp$': '<rootDir>/../mpp-payments/src/index.ts',
   },
   transform: {
     'node_modules/@noble/.+\\.js$': [
@@ -40,6 +41,7 @@ module.exports = {
           paths: {
             '@bolyra/sdk': ['../../sdk/src/index.ts'],
             '@bolyra/receipts': ['../receipts/dist/index.js'],
+            '@bolyra/mpp': ['../mpp-payments/src/index.ts'],
           },
         },
       },

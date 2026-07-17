@@ -12,11 +12,12 @@
     "prepublishOnly": "npm run build",
     "test": "jest --passWithNoTests --forceExit",
     "typecheck": "tsc --noEmit",
-    "pretypecheck": "[ -f ../receipts/dist/index.d.ts ] || (cd ../receipts && npm install --silent --no-audit --no-fund && npm run build)"
+    "pretypecheck": "([ -f ../receipts/dist/index.d.ts ] || (cd ../receipts && npm install --silent --no-audit --no-fund && npm run build)) && ([ -f ../mpp-payments/dist/index.d.ts ] || (cd ../mpp-payments && npm install --silent --no-audit --no-fund && npm run build))"
   },
   "dependencies": {
     "@bolyra/sdk": "^0.6.0",
     "@bolyra/mcp": "^0.6.4",
+    "@bolyra/mpp": "file:../mpp-payments",
     "@bolyra/receipts": "~0.9.0",
     "circomlibjs": "^0.1.7",
     "snarkjs": "^0.7.6",

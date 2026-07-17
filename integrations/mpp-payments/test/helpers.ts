@@ -1,19 +1,18 @@
 /**
- * Test fixtures: build classical `bvp/1` presentation bundles with a REAL
- * operator EdDSA-Poseidon binding signature (the load-bearing fact in
- * classical verification) and a structurally-valid mock proof envelope (the
- * proof math is never checked on the classical path).
+ * Test fixtures: build classical `bvp/1` presentation bundles through the SAME
+ * issuance assembler the operator-facing `issueMandate` / `bolyra mandate
+ * issue` path uses (`mintPresentation`), so fixtures and real issuance share one
+ * minting code path. The load-bearing fact is the real operator EdDSA-Poseidon
+ * binding signature; the proof envelope is a structurally-valid placeholder (the
+ * classical path never checks proof math).
+ *
+ * Adversarial fixtures layer explicit tampering (a corrupted signature, an
+ * injected zk-only slot) ON TOP of a validly-minted presentation — issue a real
+ * mandate, then break it — rather than hand-assembling a second bundle shape.
  */
 
-import {
-  derivePublicKey,
-  eddsaSign,
-  permissionsToBitmask,
-  poseidon3,
-  poseidon5,
-  Permission,
-} from '@bolyra/sdk';
-import { bindingDigest, hashModel } from '../src/classical';
+import { derivePublicKey, Permission } from '@bolyra/sdk';
+import { mintPresentation } from '../src/issue';
 import type { BindingClaim } from '../src/bundle';
 import type { OperatorKey } from '../src/types';
 
@@ -43,20 +42,19 @@ export interface MakeBundleOptions {
   permissions?: Permission[];
   /** Credential expiry (unix seconds). */
   expiry?: number;
-  /** Override the revealed bitmask AFTER signing (tamper helper). */
-  tamperBitmask?: bigint;
-  /** Corrupt the binding signature. */
+  /** Corrupt the binding signature (post-issuance tamper). */
   breakSignature?: boolean;
-  /** Add zk-only slots to the raw bundle. */
+  /** Add zk-only slots to the raw bundle (post-issuance tamper). */
   withHumanSlot?: boolean;
   /** Encode as base64url instead of raw JSON. */
   base64?: boolean;
 }
 
 /**
- * Build a serialized `bvp/1` bundle string. The credential's scopeCommitment
- * public signal is recomputed from the revealed preimage so the classical
- * scope-anchoring check passes unless a tamper option breaks it.
+ * Build a serialized `bvp/1` bundle string via {@link mintPresentation}. The
+ * scopeCommitment public signal is recomputed from the revealed preimage inside
+ * the assembler so classical scope-anchoring passes, then optional tamper
+ * options corrupt the valid presentation for negative-path tests.
  */
 export async function makeBundle(options: MakeBundleOptions = {}): Promise<string> {
   const {
@@ -77,72 +75,30 @@ export async function makeBundle(options: MakeBundleOptions = {}): Promise<strin
     ...options.binding,
   };
 
-  const operatorPub = await derivePublicKey(operatorPriv);
-  const modelHash = hashModel(binding.model);
-  const bitmask = permissionsToBitmask(permissions);
-  const revealedBitmask = options.tamperBitmask ?? bitmask;
-
-  const credentialCommitment = await poseidon5(
-    modelHash,
-    operatorPub.x,
-    operatorPub.y,
-    revealedBitmask,
-    BigInt(expiry),
-  );
-  const scopeCommitment = await poseidon3(
-    revealedBitmask,
-    credentialCommitment,
-    BigInt(expiry),
-  );
-
-  const sig = await eddsaSign(operatorPriv, bindingDigest(binding));
-  const sigBlock = {
-    R8: { x: sig.R8.x.toString(), y: sig.R8.y.toString() },
-    S: (breakSignature ? sig.S + 1n : sig.S).toString(),
-  };
-
-  const envelope = {
-    version: '1.0.0',
-    circuit: { name: 'AgentPolicy', version: '1.0.0' },
-    proofType: 'groth16',
-    publicSignals: [
-      '1', // agentMerkleRoot (carries no weight classically)
-      '2', // nullifierHash
-      scopeCommitment.toString(),
-      revealedBitmask.toString(),
-      String(NOW_UNIX),
-      '3', // sessionNonce
-    ],
-    proof: {
-      pi_a: ['1', '2'],
-      pi_b: [
-        ['1', '2'],
-        ['3', '4'],
-      ],
-      pi_c: ['5', '6'],
-    },
-  };
-
-  const bundle: Record<string, unknown> = {
-    bvp: 1,
-    agent: {
-      envelope,
-      credential: {
-        model_hash: modelHash.toString(),
-        operator_pubkey: { x: operatorPub.x.toString(), y: operatorPub.y.toString() },
-        permission_bitmask: revealedBitmask.toString(),
-        expiry,
-      },
-    },
+  const json = await mintPresentation({
+    operatorPrivateKey: operatorPriv,
     binding,
-    sig: sigBlock,
+    permissions,
+    expiry,
+    encoding: 'json',
+  });
+  const bundle = JSON.parse(json) as Record<string, unknown> & {
+    sig: { S: string };
+    agent: { envelope: unknown };
   };
+
+  if (breakSignature) {
+    bundle.sig.S = (BigInt(bundle.sig.S) + 1n).toString();
+  }
   if (withHumanSlot) {
-    bundle.human = { envelope: { ...envelope, circuit: { name: 'HumanUniqueness', version: '1.0.0' } } };
+    const agentEnvelope = bundle.agent.envelope as { circuit: unknown };
+    bundle.human = {
+      envelope: { ...agentEnvelope, circuit: { name: 'HumanUniqueness', version: '1.0.0' } },
+    };
   }
 
-  const json = JSON.stringify(bundle);
-  return base64 ? Buffer.from(json, 'utf8').toString('base64url') : json;
+  const out = JSON.stringify(bundle);
+  return base64 ? Buffer.from(out, 'utf8').toString('base64url') : out;
 }
 
 /** The spec §2.1 request context matching the standard fixture binding. */

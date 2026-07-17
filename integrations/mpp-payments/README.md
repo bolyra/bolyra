@@ -95,6 +95,42 @@ a `bolyraAuthorization` extension field — tier, amount, verifier kind, and the
 ES256K-signed, hash-chained authorization receipt reference — giving the
 **approved → paid** audit pair described in the companion note.
 
+### Issuing the mandate (operator side)
+
+The presentation the agent carries is minted by the operator with the Bolyra
+CLI — [`bolyra mandate issue`](../cli#issue-a-spend-mandate-bolyra-mandate-issue)
+— not hand-assembled. The operator signs a request binding for one agent, one
+audience, and one financial tier, and the CLI prints the exact `bvp/1`
+presentation this gate verifies:
+
+```bash
+bolyra key generate --out operator.key         # one-time: the operator key
+bolyra mandate issue \
+  --operator-key operator.key \
+  --agent shopper-bot \
+  --audience api.merchant.example \
+  --model opus-4.1 \
+  --tier small \
+  --expiry 30d
+# stdout: the base64url bvp/1 presentation → the X-Bolyra-Authorization header.
+# stderr: a summary + the operator public key to list in `trustedOperators` above.
+```
+
+The operator public key printed on stderr is exactly what you configure as a
+`trustedOperators` entry in the gate. **This is issuance, not key management or
+a wallet:** the operator key is one you already hold; `bolyra mandate issue`
+never generates, stores, or rotates keys, holds funds, or settles payments — it
+signs one standing spend mandate. `@bolyra/mpp`'s test fixtures mint through the
+same issuance path (`issueMandate`), so there is one code path, not two.
+
+In classical mode the operator signature binds only the request binding
+(`{agent, audience, program, model, capabilities}`), so the **spend ceiling**
+(signed capability tier) is tamper-evident but the mandate's **`expiry` is not
+signature-bound** — a presenter can re-anchor a later expiry and still verify.
+Treat classical-mode expiry as advisory (prefer short expiries; lean on the
+capability ceiling); use the zk-class verifier for cryptographic time-bounding.
+See "What is and isn't checked" below.
+
 ## Amount → tier mapping
 
 The route's `amount` is resolved to USD and mapped to the cumulative
@@ -189,6 +225,14 @@ Checked (classical):
   delegation-chain proofs — bundles carrying zk-only slots are **denied**,
   not half-verified; use a zk-class external verifier (`bolyra verify`) via
   `verifier: { kind: 'command', … }` for those
+- tamper-evident **expiry** against an adversarial presenter: `expiry` is a
+  self-asserted credential field, **not** covered by the operator signature
+  (only the binding is), and the scope commitment that references it is
+  recomputable from public inputs — so a presenter can re-anchor a later expiry
+  and still verify. The strict expiry check binds an *unmodified* presentation
+  to the caller's clock; for cryptographic time-bounds use the zk-class
+  verifier. The signed capability tier remains the load-bearing spend ceiling —
+  prefer short expiries in classical mode.
 - replay: a spend mandate is a *standing* authorization, reusable within tier
   and expiry by design; per-payment idempotency is MPP's challenge binding.
   (External verifiers in host nonce mode DO make presentations one-shot —
@@ -213,10 +257,13 @@ calls, non-HTTP transports), the wrapped `verify` **fails closed**.
 ## Example
 
 A self-contained runnable demo — mppx server + this gate, a mock agent with a
-delegated small-tier mandate, an allowed $25 spend and a denied $500 spend —
-lives in [`examples/mandate-demo`](./examples/mandate-demo):
+delegated small-tier mandate issued by the real `bolyra mandate issue` CLI, an
+allowed $25 spend and a denied $500 spend — lives in
+[`examples/mandate-demo`](./examples/mandate-demo). It shells out to the CLI, so
+build the CLI first:
 
 ```bash
+(cd ../cli && npm install && npm run build)   # once: build the CLI the demo calls
 cd examples/mandate-demo && npm install && npm run demo
 ```
 

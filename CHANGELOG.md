@@ -52,12 +52,47 @@ under `contracts/deployments/` and `circuits/build/`.
   on allow the mppx receipt gains a `bolyraAuthorization` extension field
   that rides into MPP's `Payment-Receipt` header — the approved → paid audit
   pair.
-- **Tests + example.** 62 jest tests (tier boundaries, classical pipeline
-  denial matrix, hostile-verifier fail-closed, gate contract incl. verify
-  fail-closed without a preflight decision) and a self-contained runnable
-  demo (`examples/mandate-demo`) driving the real `mppx` request lifecycle:
+- **Operator-side mandate issuance (`issueMandate`).** The minting counterpart
+  to `verifyClassical`: given an operator key the caller already holds, resolve
+  a financial tier (from `tier` or a `maxUsd` amount, cumulative capability
+  tokens) and emit the signed `bvp/1` presentation the gate consumes. This
+  closes the "how do I mint the header value?" gap — the demo and test fixtures
+  no longer hand-assemble bundles inline; `issueMandate` (and its internal
+  `mintPresentation` assembler) is the single issuance code path. Issuance
+  only: no key generation/storage/rotation, no custody, no settlement,
+  classical EdDSA-binding (no ZK proof), matching the default verifier.
+  Fail-closed on bad input (`MandateIssueError`).
+- **Tests + example.** 79 jest tests (was 62; +17 for issuance: tier
+  round-trips through classical verify, over-tier / expired / wrong-audience /
+  tampered / untrusted-operator denials, `maxUsd`→tier mapping, Buffer key
+  shape, fail-closed input validation) and a self-contained runnable demo
+  (`examples/mandate-demo`) that now issues its mandate with the real
+  `bolyra mandate issue` CLI, then drives the real `mppx` request lifecycle:
   $25 allowed within a small-tier mandate, $500 denied `request_mismatch`
   before payment, missing mandate denied 401.
+
+#### CLI — `bolyra mandate issue` (`@bolyra/cli` — not yet published, founder-gated)
+
+- **New `bolyra mandate issue` subcommand.** Issues a delegated spend mandate
+  for an agent and prints the `bvp/1` presentation `@bolyra/mpp` consumes.
+  Inputs: `--operator-key` (the key file from `bolyra key generate`, same
+  `parseKeyFile` shape as `cred create` — issuance reuses the existing operator
+  key mechanism, no new key handling), `--agent`, `--audience`, `--model`,
+  `--tier` **or** `--max-usd` (amount → smallest covering tier), `--expiry`
+  (future-only duration/timestamp via the shared `parseExpiry`), optional
+  `--program`, `--nonce` (opaque audit id, not a replay nonce), `--encoding`,
+  `--out`. Presentation goes to stdout (pipe-clean); a summary + the operator
+  public key to trust goes to stderr. Fail-closed: missing/invalid inputs
+  refuse to emit and exit non-zero. Thin wrapper over `@bolyra/mpp`'s
+  `issueMandate` — one issuance code path shared with the demo and fixtures.
+  12 new jest tests (277 → 289); round-trips through the same `verifyClassical`
+  the gate runs.
+- **Release note (founder-gated).** This wires a new `@bolyra/cli` →
+  `@bolyra/mpp` dependency (currently `file:../mpp-payments` for local dev).
+  Publishing the CLI requires **(1)** publishing `@bolyra/mpp` at a new minor
+  (it must carry `issueMandate`; the source is `0.1.0`, not yet published) and
+  **(2)** switching the CLI dependency from `file:` to that published semver.
+  No versions were bumped or published here.
 
 #### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
 

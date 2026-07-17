@@ -81,6 +81,8 @@ Commands:
   receipt verify    Verify a signed audit receipt
   receipt verify-chain  Verify a JSONL receipt log as a hash chain
 
+  mandate issue     Issue a delegated spend mandate for the @bolyra/mpp gate
+
   verify            Verify an external proof bundle (stdin JSON → verdict JSON)
 
   shield test       Safety test runner for MCP servers (base-mcp preset)
@@ -191,6 +193,15 @@ export async function main(argv: string[]): Promise<void> {
       return runObserve(args.slice(1));
     case 'replay':
       return runReplay(args.slice(1));
+    case 'mandate':
+      if (args[1] === 'issue') {
+        const { run: runMandateIssue } = await import('./commands/mandate-issue');
+        return runMandateIssue(args.slice(2));
+      }
+      console.error(`Unknown mandate command: ${args[1] ?? '(none)'}`);
+      console.error('Available: issue');
+      process.exitCode = 2;
+      return;
     case 'verify': {
       const { run } = await import('./commands/verify');
       return run(args.slice(1));

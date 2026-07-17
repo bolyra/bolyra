@@ -22,6 +22,9 @@ export {
 } from './tiers';
 
 export { verifyClassical, bindingDigest, hashModel } from './classical';
+
+export { issueMandate, MandateIssueError } from './issue';
+export type { IssueMandateInput, IssuedMandate, MandateEncoding } from './issue';
 export { parseBundle, peekBundle } from './bundle';
 export type {
   BindingClaim,

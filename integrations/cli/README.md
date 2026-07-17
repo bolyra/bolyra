@@ -141,6 +141,56 @@ prints the chain head hash; pin it (and the count) externally — anchoring
 mechanism and cadence are enterprise-configurable — and pass them back via
 `--expect-head` / `--expect-count` to close that gap.
 
+### Issue a spend mandate (`bolyra mandate issue`)
+
+Issue a delegated spend mandate an AI agent presents to a payment route gated by
+[`@bolyra/mpp`](../mpp-payments). The operator signs a request binding — the
+agent, the audience (payee), a financial tier, and an expiry — and the command
+prints the `bvp/1` presentation the gate verifies (the `X-Bolyra-Authorization`
+header value):
+
+```bash
+# One-time: create the operator key the mandate is signed with.
+bolyra key generate --out operator.key
+
+# Issue a small-tier (< $100) mandate for one agent + one payee, good for 30 days.
+bolyra mandate issue \
+  --operator-key operator.key \
+  --agent shopper-bot \
+  --audience api.merchant.example \
+  --model opus-4.1 \
+  --tier small \
+  --expiry 30d
+# stdout: the bvp/1 presentation (base64url) — pipe it straight into a header.
+# stderr: a human-readable summary + the operator public key to trust in the gate.
+
+# Amount-first alternative: map a max USD spend to the smallest covering tier.
+bolyra mandate issue --operator-key operator.key --agent shopper-bot \
+  --audience api.merchant.example --model opus-4.1 --max-usd 5000 --expiry 30d
+# $5000 -> medium tier (covers small + medium spends)
+```
+
+Tiers are cumulative: `small` (< $100), `medium` (< $10,000, covers small),
+`unlimited` (covers small + medium). The agent presents the output to the gate,
+which verifies it **before** any payment logic runs (allow within tier, deny
+over tier / expired / wrong-audience / tampered).
+
+**This is issuance, not key management or a wallet.** The `--operator-key` is a
+key you already hold (from `bolyra key generate`); this command never generates,
+stores, or rotates keys, holds funds, or settles payments — it only signs one
+mandate. Classical (EdDSA-binding) issuance only; it emits no ZK proof, matching
+`@bolyra/mpp`'s default verifier.
+
+**Classical trust boundary.** The operator signature binds the request binding —
+`{agent, audience, program, model, capabilities}` — so the **spend ceiling**
+(the signed capability tier) is tamper-evident. In classical mode `--expiry` is
+**not** bound by the signature (a presenter can re-anchor a later expiry and
+still verify), so treat it as advisory: prefer short expiries and rely on the
+capability ceiling; cryptographic time-bounding needs the zk-class verifier
+(`bolyra verify`). `--nonce` is an **unsigned, unverified** id for your own
+audit — not a replay nonce and not tamper-evident. A spend mandate is a standing
+authorization reusable within its tier and expiry by design.
+
 ### Generate dev identities
 
 ```bash
