@@ -200,38 +200,65 @@ jobs:
       # alerts". --audit-level=high means low/moderate are reported but do
       # not fail the build; high and critical fail.
       #
-      # For the workspace packages that depend on file:../../sdk we still
-      # need a built SDK on disk so npm install can resolve.
-      - name: Build local @bolyra/sdk
-        run: cd sdk && npm ci && npm run build
-
-      - name: Audit @bolyra/sdk
-        working-directory: sdk
-        run: npm audit --omit=dev --audit-level=high
-
-      - name: Audit @bolyra/mcp
-        working-directory: integrations/mcp
+      # Every package resolves its LOCAL @bolyra/* siblings via file: rewrites
+      # (not just @bolyra/sdk — cli/gateway/ai also depend on mcp/receipts) so
+      # the audit gates the tree a consumer would get from THIS commit, and
+      # --package-lock-only means no build artifacts are needed on disk.
+      # Covers all 13 packages (12 published + the operated hosted-verify).
+      - name: Audit all packages (runtime deps)
         run: |
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));if(p.dependencies&&p.dependencies['@bolyra/sdk'])p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
-          rm -f package-lock.json
-          npm install --package-lock-only
-          npm audit --omit=dev --audit-level=high
-
-      - name: Audit @bolyra/openclaw
-        working-directory: integrations/openclaw
-        run: |
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));if(p.dependencies&&p.dependencies['@bolyra/sdk'])p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
-          rm -f package-lock.json
-          npm install --package-lock-only
-          npm audit --omit=dev --audit-level=high
-
-      - name: Audit @bolyra/payment-protocols
-        working-directory: integrations/payment-protocols
-        run: |
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));if(p.dependencies&&p.dependencies['@bolyra/sdk'])p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
-          rm -f package-lock.json
-          npm install --package-lock-only
-          npm audit --omit=dev --audit-level=high
+          set -euo pipefail
+          export BOLYRA_REPO_ROOT="$PWD"
+          for dir in \
+            sdk \
+            integrations/receipts \
+            delegation \
+            circuits-package \
+            integrations/mcp \
+            integrations/openclaw \
+            integrations/payment-protocols \
+            integrations/cli \
+            integrations/gateway \
+            integrations/ai \
+            integrations/shield \
+            integrations/mpp-payments \
+            integrations/hosted-verify
+          do
+            echo "::group::Audit $dir"
+            (
+              cd "$dir"
+              node -e '
+                const fs = require("fs"), path = require("path");
+                const local = {
+                  "@bolyra/sdk": "sdk",
+                  "@bolyra/receipts": "integrations/receipts",
+                  "@bolyra/delegation": "delegation",
+                  "@bolyra/circuits": "circuits-package",
+                  "@bolyra/mcp": "integrations/mcp",
+                  "@bolyra/openclaw": "integrations/openclaw",
+                  "@bolyra/payment-protocols": "integrations/payment-protocols",
+                  "@bolyra/cli": "integrations/cli",
+                  "@bolyra/gateway": "integrations/gateway",
+                  "@bolyra/ai": "integrations/ai",
+                  "@bolyra/shield": "integrations/shield",
+                  "@bolyra/mpp": "integrations/mpp-payments",
+                };
+                const root = process.env.BOLYRA_REPO_ROOT;
+                const p = JSON.parse(fs.readFileSync("package.json"));
+                for (const name of Object.keys(p.dependencies || {})) {
+                  if (local[name]) {
+                    p.dependencies[name] =
+                      "file:" + path.relative(process.cwd(), path.join(root, local[name]));
+                  }
+                }
+                fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
+              '
+              rm -f package-lock.json
+              npm install --package-lock-only
+              npm audit --omit=dev --audit-level=high
+            )
+            echo "::endgroup::"
+          done
 
   smoke-test:
     name: Smoke test — fresh install from npm
