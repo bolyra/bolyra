@@ -34,7 +34,8 @@ npm install @bolyra/mpp mppx
 ```
 
 `mppx` is an optional peer dependency — this package never imports it at
-runtime; it wraps the method objects you already build with mppx.
+runtime; it wraps the method objects you already build with mppx. The test
+suite runs against real mppx (currently 0.8.12).
 
 ## Quickstart
 

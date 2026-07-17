@@ -17,6 +17,13 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/mpp 0.2.1 (2026-07-17)
+
+- Test suite now pinned against mppx 0.8.12 (the release carrying our upstream
+  session/channel fix, wevm/mppx#632); README states the tested version.
+- No code changes from 0.2.0. First release published via npm Trusted
+  Publisher (OIDC) for this package.
+
 ## [Unreleased]
 
 ### Security
