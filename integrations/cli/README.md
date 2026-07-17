@@ -182,13 +182,11 @@ mandate. Classical (EdDSA-binding) issuance only; it emits no ZK proof, matching
 `@bolyra/mpp`'s default verifier.
 
 **Classical trust boundary.** The operator signature binds the request binding —
-`{agent, audience, program, model, capabilities}` — so the **spend ceiling**
-(the signed capability tier) is tamper-evident. In classical mode `--expiry` is
-**not** bound by the signature (a presenter can re-anchor a later expiry and
-still verify), so treat it as advisory: prefer short expiries and rely on the
-capability ceiling; cryptographic time-bounding needs the zk-class verifier
-(`bolyra verify`). `--nonce` is an **unsigned, unverified** id for your own
-audit — not a replay nonce and not tamper-evident. A spend mandate is a standing
+`{agent, audience, program, model, capabilities, expiry}` (binding v2) — so the
+**spend ceiling** (the signed capability tier) and the **time bound** (`--expiry`)
+are both tamper-evident: a presenter can no longer re-anchor a later expiry on an
+issued mandate. `--nonce` is an **unsigned, unverified** id for your own audit —
+not a replay nonce and not tamper-evident. A spend mandate is a standing
 authorization reusable within its tier and expiry by design.
 
 ### Generate dev identities

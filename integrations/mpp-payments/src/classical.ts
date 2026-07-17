@@ -12,9 +12,17 @@
  * operator's EdDSA-Poseidon signature over the request binding (spec §4). An
  * `allow` therefore means, and only means: **a configured trusted operator
  * signed a binding authorizing this exact {agent_name, project_key, program,
- * model, capabilities}, the request matches that signed binding, and the
- * granted capabilities are a subset of it.** The trust anchor is
+ * model, capabilities, expiry}, the request matches that signed binding, and
+ * the granted capabilities are a subset of it.** The trust anchor is
  * `trustedOperators`, not the proof's Merkle root.
+ *
+ * BINDING v2 — EXPIRY IS SIGNATURE-BOUND. The signed binding now includes
+ * `expiry` (unix seconds), pinned equal to the revealed credential expiry
+ * (check 4b). A presenter can no longer re-anchor a later expiry on an issued
+ * mandate: rewriting `binding.expiry` breaks the signature, and rewriting only
+ * `credential.expiry` fails the binding↔credential expiry equality. The
+ * obsolete five-field v1 binding (expiry NOT signed) is rejected
+ * `unsupported_version`.
  *
  * Checks, in order (mirrors integrations/cli/src/verify/core.ts and
  * integrations/hosted-verify/src/verify/core.ts — field orders are
@@ -57,14 +65,15 @@ import {
   type VerifierRequest,
 } from './types';
 
-/** Domain-separation tag for the binding-signature digest (spec §5.9). */
-const BINDING_DST = 'bolyra.external-verifier.binding.v1';
+/** Domain-separation tag for the binding-signature digest (spec §4.2, v2). */
+const BINDING_DST = 'bolyra.external-verifier.binding.v2';
 
 /**
  * The field element the operator signs to authorize a binding:
  * `sha256( DST || 0x00 || canonicalize(binding) )` reduced mod the BN254
- * scalar field order. Byte-compatible with `bolyra verify` — the same bundle
- * verifies under either verifier.
+ * scalar field order. Binding v2 canonicalizes the six-field binding (including
+ * `expiry`) under the v2 DST. Byte-compatible with `bolyra verify` — the same
+ * bundle verifies under either verifier.
  */
 export function bindingDigest(binding: BindingClaim): bigint {
   const payload = Buffer.concat([
@@ -166,6 +175,19 @@ export async function verifyClassical(
       throw new VerifyDenial(
         'invalid_signature',
         'binding signature does not verify against the operator key',
+      );
+    }
+
+    // 4b. Bind the signed expiry to the revealed credential expiry (binding v2).
+    //     The signature now covers binding.expiry; requiring it to equal the
+    //     credential expiry the scope math + strict-expiry check consume means a
+    //     re-anchored expiry either breaks the signature (if binding.expiry is
+    //     rewritten) or is caught here (if only credential.expiry is rewritten).
+    if (bundle.binding.expiry !== bundle.agent.credential.expiry) {
+      throw new VerifyDenial(
+        'invalid_bundle',
+        'binding expiry does not match the credential expiry',
+        { binding_expiry: bundle.binding.expiry, credential_expiry: bundle.agent.credential.expiry },
       );
     }
 

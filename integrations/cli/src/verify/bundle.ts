@@ -57,13 +57,19 @@ export interface DelegationHop {
   leaf?: DelegationLeaf;
 }
 
-/** The request-binding block the presentation commits to. */
+/**
+ * The request-binding block the presentation commits to (spec §4.1, binding v2).
+ * `expiry` (unix seconds) is part of the operator-signed digest and MUST equal
+ * `agent.credential.expiry`. The obsolete five-field v1 binding is rejected.
+ */
 export interface Binding {
   agent_name: string;
   project_key: string;
   program: string;
   model: string;
   capabilities: string[];
+  /** Credential expiry, unix seconds — signature-bound in binding v2. */
+  expiry: number;
 }
 
 /** The EdDSA signature over the binding. Values kept as strings. */
@@ -188,7 +194,8 @@ function parseAgent(raw: unknown): AgentSlot {
     !isPointDec(credential.operator_pubkey) ||
     !isDecString(credential.permission_bitmask) ||
     typeof credential.expiry !== 'number' ||
-    !Number.isFinite(credential.expiry)
+    !Number.isSafeInteger(credential.expiry) ||
+    credential.expiry <= 0
   ) {
     throw new VerifyDenial('invalid_bundle', 'agent.credential has missing or ill-typed fields');
   }
@@ -264,7 +271,24 @@ function parseDelegation(raw: unknown): DelegationHop[] | undefined {
   return hops;
 }
 
-/** Parse + structurally validate the request-binding block. */
+/** Keys a binding v2 object may carry — exactly these six, no more. */
+const BINDING_V2_KEYS = new Set([
+  'agent_name',
+  'project_key',
+  'program',
+  'model',
+  'capabilities',
+  'expiry',
+]);
+
+/**
+ * Parse + structurally validate the request-binding block (spec §4.1, v2).
+ *
+ * A well-formed FIVE-field v1 binding (no `expiry`) is rejected
+ * `unsupported_version` — v1 did not signature-bind expiry and is obsolete.
+ * Malformed shape, a non-integer/non-positive `expiry`, or any unexpected key
+ * is `invalid_bundle`.
+ */
 function parseBinding(raw: unknown): Binding {
   if (
     !isPlainObject(raw) ||
@@ -277,12 +301,30 @@ function parseBinding(raw: unknown): Binding {
   ) {
     throw new VerifyDenial('invalid_bundle', 'binding is missing or has ill-typed fields');
   }
+  // Exact-shape first: only a WELL-FORMED five-field v1 binding earns the
+  // `unsupported_version` "please re-issue" signal; a binding with any
+  // unexpected field is malformed (`invalid_bundle`), not a legacy v1.
+  for (const key of Object.keys(raw)) {
+    if (!BINDING_V2_KEYS.has(key)) {
+      throw new VerifyDenial('invalid_bundle', `binding has unexpected field "${key}"`);
+    }
+  }
+  if (raw.expiry === undefined) {
+    throw new VerifyDenial(
+      'unsupported_version',
+      'binding v1 (expiry not signature-bound) is not accepted; re-issue with a v2 binding',
+    );
+  }
+  if (typeof raw.expiry !== 'number' || !Number.isSafeInteger(raw.expiry) || raw.expiry <= 0) {
+    throw new VerifyDenial('invalid_bundle', 'binding.expiry must be a positive integer');
+  }
   return {
     agent_name: raw.agent_name,
     project_key: raw.project_key,
     program: raw.program,
     model: raw.model,
     capabilities: [...raw.capabilities],
+    expiry: raw.expiry,
   };
 }
 

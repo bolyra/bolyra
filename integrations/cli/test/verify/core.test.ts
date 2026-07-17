@@ -155,6 +155,7 @@ describe('verify/core — step ordering (no real proofs)', () => {
         program: PROGRAM,
         model: MODEL,
         capabilities: CAPS,
+        expiry: 1, // binding v2: == credential expiry (this test fails at groth16 first)
       },
       sig: { R8: { x: '1', y: '2' }, S: '3' },
     };
@@ -222,6 +223,7 @@ describe('verify/core — REAL end-to-end (generates proofs via the SDK)', () =>
       program: PROGRAM,
       model: MODEL,
       capabilities: CAPS,
+      expiry, // binding v2: signature-bound, == credential expiry
     };
     const sig = await eddsaSign(OPERATOR_PRIV, await bindingDigest(binding));
 

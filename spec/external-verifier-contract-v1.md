@@ -2,8 +2,10 @@
 
 - **Status:** Stable (v1)
 - **Wire version:** `1` (integer-major; see §11)
-- **Document revision:** 2026-07-11 (additive, backward-compatible; wire major
-  unchanged — see the changelog in §15). Adds §16 Host conformance.
+- **Document revision:** 2026-07-17 (binding format **v2** — expiry is now
+  signature-bound; see the changelog in §15). Previous: 2026-07-11 (§16 Host
+  conformance). The wire request/verdict envelope major is unchanged; the
+  **binding** sub-structure is versioned separately (v1 → v2, §4).
 - **Reference implementation:** `bolyra verify` in `@bolyra/cli`
   (`integrations/cli`) — a `zk`-class verifier (§3.5)
 - **Companion documents:** `spec/CONFORMANCE.md` (conformance vectors), design spec
@@ -332,11 +334,11 @@ produces or verifies a bundle **MUST** reproduce these exact bytes. A verifier
 consuming a foreign bundle **MUST** recompute the digest from the bundle's own
 `binding` bytes; it **MUST NOT** trust a self-asserted digest.
 
-### 4.1 Canonical payload
+### 4.1 Canonical payload (binding v2)
 
-Let `binding` be the object with exactly the five fields `agent_name`,
-`project_key`, `program`, `model`, `capabilities` (a string array). The canonical
-payload is
+Let `binding` be the object with exactly the six fields `agent_name`,
+`project_key`, `program`, `model`, `capabilities` (a string array), and `expiry`
+(a positive integer, unix seconds). The canonical payload is
 
 ```
 payload = canonicalize(binding)
@@ -349,13 +351,27 @@ reordered. Signer and verifier therefore **MUST** agree on the array order: the
 verifier compares `capabilities` as a set for authorization, but the *signed
 bytes* are order-sensitive.
 
+`expiry` is part of the signed binding as of **binding v2** (this revision).
+A verifier **MUST** reject a binding that omits `expiry` with
+`deny code=unsupported_version` — it is an obsolete **binding v1** (five fields,
+expiry not signature-bound) and, in a classical- or external-class verifier
+where the proof does not independently bind expiry, would let a presenter
+re-anchor a later expiry on an issued mandate. A binding carrying a
+non-integer/non-positive `expiry`, or any field beyond the six, **MUST** be
+rejected `deny code=invalid_bundle`. After the binding signature verifies, a
+verifier **MUST** additionally require `binding.expiry == credential.expiry`
+(the revealed credential expiry that the scope/expiry checks consume), rejecting
+a mismatch `deny code=invalid_bundle`; this binds the strict-expiry check (§7) to
+the signed value.
+
 ### 4.2 Domain separation
 
 A domain-separation tag (DST) prevents a binding signature from being replayed as
-any other Bolyra signature (delegation token, receipt, handshake) and vice-versa:
+any other Bolyra signature (delegation token, receipt, handshake) and vice-versa.
+The DST is versioned; **binding v2** uses the `.v2` tag:
 
 ```
-DST     = utf8("bolyra.external-verifier.binding.v1")
+DST     = utf8("bolyra.external-verifier.binding.v2")
 dsInput = DST || 0x00 || payload
 ```
 
@@ -820,6 +836,24 @@ adopts that revision's obligations (e.g. it **MUST** set `kind`, §3.5).
   resolving a latent ambiguity: a non-zero exit is a deny **even when** a
   syntactically valid `allow` reached stdout. No wire envelope, verdict schema, or
   denial-code change; the verifier-facing contract is untouched.
+
+- **2026-07-17 (wire version `1`; binding format v1 → v2 — NOT binding-backward-
+  compatible).** Made the credential `expiry` **signature-bound**. The signed
+  binding (§4.1) now has **six** fields — the prior five plus `expiry` — and uses
+  the versioned DST `bolyra.external-verifier.binding.v2` (§4.2). Verifiers
+  **MUST** reject an obsolete five-field **v1** binding `unsupported_version`, a
+  non-integer/non-positive `expiry` or any extra field `invalid_bundle`, and —
+  after the signature verifies — a `binding.expiry != credential.expiry`
+  mismatch `invalid_bundle`. Rationale: in a `classical`- or `external`-class
+  verifier the Groth16 proof is not checked, so under v1 a presenter could
+  re-anchor a later `expiry` on an issued mandate (recomputing the public
+  scope-commitment signal from the revealed preimage) and still obtain `allow`,
+  extending duration at the granted tier (a `zk`-class verifier already binds
+  expiry in-circuit). The **wire request/verdict envelope and denial-code
+  registry are unchanged** — this versions only the binding sub-structure. No
+  compatibility flag or advisory-expiry mode is offered: the rejection is
+  fail-closed. Applies uniformly to the `bolyra verify` reference verifier, the
+  in-process `@bolyra/mpp` classical gate, and the hosted-verify preview.
 
 ## 16. Host conformance
 

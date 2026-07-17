@@ -72,6 +72,8 @@ export async function makeBundle(options: MakeBundleOptions = {}): Promise<strin
     program: PROGRAM,
     model: MODEL,
     capabilities: ['mpp:financial:small'],
+    // Binding v2: expiry is part of the signed binding (== credential expiry).
+    expiry,
     ...options.binding,
   };
 

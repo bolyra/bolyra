@@ -13,10 +13,16 @@
  * cryptographically load-bearing fact is the operator's EdDSA-Poseidon
  * signature over the request binding (spec §4). So an `allow` means, and ONLY
  * means: **a configured trusted operator signed a binding authorizing this
- * exact {agent_name, project_key, program, model, capabilities}, the request
- * matches that signed binding, and the granted capabilities are a subset of
- * it.** The trust anchor is the operator key set (`TRUSTED_OPERATORS`), NOT the
- * proof's Merkle root (which is unverified here and carries no weight).
+ * exact {agent_name, project_key, program, model, capabilities, expiry}, the
+ * request matches that signed binding, and the granted capabilities are a
+ * subset of it.** The trust anchor is the operator key set
+ * (`TRUSTED_OPERATORS`), NOT the proof's Merkle root (which is unverified here
+ * and carries no weight).
+ *
+ * BINDING v2 — EXPIRY IS SIGNATURE-BOUND. The signed binding includes `expiry`
+ * (unix seconds), pinned equal to the revealed credential expiry, so a presenter
+ * cannot re-anchor a later expiry on an issued mandate. The obsolete five-field
+ * v1 binding is rejected `unsupported_version`.
  *
  * AUTHENTICATED-BY-SIGNATURE checks (sound):
  *   trusted-operator gate, EdDSA-Poseidon binding signature, byte-literal
@@ -85,9 +91,10 @@ export interface VerifierRequest {
  */
 export const CHECKS_AUTHENTICATED = [
   'trusted-operator gate: credential operator key ∈ configured TRUSTED_OPERATORS (fail-closed if unset)',
-  'BabyJubjub EdDSA-Poseidon binding signature over the request binding, against that operator key (spec §4)',
+  'BabyJubjub EdDSA-Poseidon binding signature over the request binding, against that operator key (spec §4, binding v2)',
   'byte-literal request↔binding match (agent_name/project_key/program/model)',
   'granted_capabilities ⊆ operator-signed capabilities',
+  'signed binding.expiry == revealed credential.expiry (binding v2 — expiry is signature-bound)',
 ] as const;
 
 /**
@@ -101,7 +108,7 @@ export const CHECKS_CONSISTENCY = [
   'Poseidon scope anchoring: revealed preimage recomputes the self-asserted scopeCommitment signal',
   'model-hash binding: sha256(model) mod p equals the revealed modelHash',
   'capability → permission-bit mapping + cumulative-scope subset (over the revealed bitmask)',
-  'strict expiry against caller-supplied now_unix (now == expiry is expired; over the revealed expiry)',
+  'strict expiry against caller-supplied now_unix (now == expiry is expired; over the signature-bound expiry, binding v2)',
   'nullifier presence + consume_nonces emission (host nonce mode, spec §8)',
 ] as const;
 
@@ -225,6 +232,17 @@ export function verifyClassical(body: unknown, env: VerifyEnv): Verdict {
       { R8: { x: BigInt(bundle.sig.R8.x), y: BigInt(bundle.sig.R8.y) }, S: BigInt(bundle.sig.S) },
       operatorPubkey,
     );
+
+    // 5b. Binding v2: the SIGNED binding expiry MUST equal the revealed
+    //     credential expiry that the strict-expiry check consumes. This closes
+    //     the classical re-anchoring gap: rewriting binding.expiry breaks the
+    //     signature, rewriting only credential.expiry is caught here.
+    if (bundle.binding.expiry !== cred.expiry) {
+      throw new VerifyDenial('invalid_bundle', 'binding expiry does not match the credential expiry', {
+        binding_expiry: bundle.binding.expiry,
+        credential_expiry: cred.expiry,
+      });
+    }
 
     // 6. Request binding + model binding — the request must match what the
     //    operator signed (sound: binding fields are covered by the signature).

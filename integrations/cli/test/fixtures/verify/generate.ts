@@ -117,6 +117,8 @@ function makeBinding(capabilities: string[], model: string = MODEL) {
     program: PROGRAM,
     model,
     capabilities,
+    // Binding v2: expiry is signature-bound and MUST equal the credential expiry.
+    expiry: EXPIRY,
   };
 }
 

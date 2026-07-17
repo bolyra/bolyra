@@ -19,6 +19,33 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ## [Unreleased]
 
+### Security
+
+#### Classical binding v2 — `expiry` is now signature-bound (EVC binding v1 → v2)
+
+- **Closed a re-anchored-expiry gap in classical verification.** In classical
+  mode (the in-process `@bolyra/mpp` gate, `bolyra verify`'s classical trust
+  core, and the hosted-verify preview) the operator's EdDSA binding signature
+  covered `{agent_name, project_key, program, model, capabilities}` but **not**
+  `expiry`. Because the scope-commitment public signal is recomputable from the
+  revealed credential preimage, a presenter holding an expired mandate could
+  re-anchor a later `expiry` and still obtain `allow`, extending duration at the
+  granted tier (bounded: no tier/audience/payee escalation). A `zk`-class
+  verifier was never affected — `AgentPolicy.circom` binds `expiry` into the
+  in-circuit EdDSA-signed `credentialCommitment` and enforces expiry in-circuit.
+- **Binding v2.** The operator-signed binding now has **six** fields — the prior
+  five plus `expiry` — under a versioned domain-separation tag
+  `bolyra.external-verifier.binding.v2`. After the signature verifies, all three
+  classical verifiers require `binding.expiry == credential.expiry`. The
+  obsolete five-field **v1** binding is rejected `unsupported_version`
+  (fail-closed, no advisory-expiry mode or compatibility flag); a
+  non-integer/non-positive `expiry` or any extra binding field is
+  `invalid_bundle`. Byte-compatible across the three implementations (pinned
+  cross-implementation digest conformance vector). Spec: EVC
+  `external-verifier-contract-v1.md` §4 + §15 changelog. `issueMandate` /
+  `bolyra mandate issue` emit v2 only. Committed `bolyra verify` goldens
+  re-signed to v2 (proofs byte-identical — the binding is outside the proof).
+
 ### Added
 
 #### MPP authorization gate (`integrations/mpp-payments` — new, `@bolyra/mpp` 0.1.0, not yet published)

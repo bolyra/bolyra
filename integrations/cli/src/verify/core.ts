@@ -246,6 +246,17 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
       operatorPubkey,
     );
 
+    // 6b. Binding v2: the SIGNED binding expiry must equal the credential
+    //     expiry the proof commits to. Together with the in-circuit expiry
+    //     binding this closes the classical re-anchoring gap for a bundle
+    //     verified by a zk-class verifier that also honors the binding.
+    if (bundle.binding.expiry !== cred.expiry) {
+      throw new VerifyDenial('invalid_bundle', 'binding expiry does not match the credential expiry', {
+        binding_expiry: bundle.binding.expiry,
+        credential_expiry: cred.expiry,
+      });
+    }
+
     // Shared nonce store: delegation per-hop replay (step 7) AND the top-level
     // agent nonce (step 11) burn into the SAME store instance.
     const nonceStore = flags.nonceStore ?? new FileNonceStore();

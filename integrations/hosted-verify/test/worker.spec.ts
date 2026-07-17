@@ -10,6 +10,8 @@ import { verifyReceipt } from '@bolyra/receipts';
 import type { SignedReceipt } from '@bolyra/receipts';
 
 import worker from '../src/index';
+import { bindingDigest } from '../src/verify/binding';
+import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
 import { VerifyDenial } from '../src/verify/verdict';
 import { postVerify, cloneWithBundle, BASE, TOKEN } from './helpers';
@@ -31,6 +33,27 @@ function decodeReceipt(header: string): SignedReceipt {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(bytes)) as SignedReceipt;
 }
+
+describe('binding v2 digest conformance', () => {
+  // CROSS-IMPLEMENTATION CONFORMANCE VECTOR (binding v2). The SAME fixed binding
+  // and expected digest are pinned in @bolyra/mpp (classical.test.ts) and
+  // `bolyra verify` (cli binding.test.ts). If any of the three bindingDigest
+  // implementations drifts, exactly its own pinned test breaks — the three
+  // cannot silently diverge and produce mutually unverifiable bundles.
+  it('matches the shared v2 binding-digest conformance vector', () => {
+    const vector: Binding = {
+      agent_name: 'conformance-agent',
+      project_key: 'api.merchant.example',
+      program: 'mpp',
+      model: 'opus-4.1',
+      capabilities: ['mpp:financial:small', 'mpp:financial:medium'],
+      expiry: 1893456000,
+    };
+    expect(bindingDigest(vector).toString()).toBe(
+      '6852214223979096266887740803477328516969972228468997483569432332607241636802',
+    );
+  });
+});
 
 describe('routing + auth', () => {
   it('GET /health is public and prominently labeled as a preview', async () => {
@@ -171,6 +194,25 @@ describe('classical pipeline', () => {
       '255';
     const v = await verdictOf(await postVerify(commit()));
     expect(v.code).toBe('invalid_proof');
+  });
+
+  it('binding v2: signed binding.expiry ≠ credential.expiry → deny invalid_bundle', async () => {
+    // The signed binding.expiry is unchanged (signature still verifies) but the
+    // credential.expiry the strict-expiry check would consume is re-anchored
+    // forward — the §5b equality catches the divergence.
+    const { bundle, commit } = cloneWithBundle(allowAgentOnly);
+    (bundle.agent as { credential: { expiry: number } }).credential.expiry = 4200000000;
+    const v = await verdictOf(await postVerify(commit()));
+    expect(v.verdict).toBe('deny');
+    expect(v.code).toBe('invalid_bundle');
+  });
+
+  it('binding v2: an obsolete v1 binding (no expiry) → deny unsupported_version', async () => {
+    const { bundle, commit } = cloneWithBundle(allowAgentOnly);
+    delete (bundle.binding as Record<string, unknown>).expiry;
+    const v = await verdictOf(await postVerify(commit()));
+    expect(v.verdict).toBe('deny');
+    expect(v.code).toBe('unsupported_version');
   });
 
   it('operator key not in TRUSTED_OPERATORS → deny untrusted_root', async () => {

@@ -36,10 +36,12 @@ export interface BindingClaim {
   program: string;
   model: string;
   capabilities: string[];
+  /** Credential expiry, unix seconds — signature-bound in binding v2. */
+  expiry: number;
 }
 
-/** Domain-separation tag for the binding signature digest (spec §5.9). */
-const BINDING_DST = 'bolyra.external-verifier.binding.v1';
+/** Domain-separation tag for the binding signature digest (spec §4.2, v2). */
+const BINDING_DST = 'bolyra.external-verifier.binding.v2';
 
 /**
  * Compute the field element that the operator signs to authorize a binding.

@@ -14,11 +14,11 @@
  * The presentation is written to stdout (pipe-clean); a human-readable summary
  * goes to stderr so stdout can be piped straight into a request header.
  *
- * Classical trust boundary: the operator signature binds {agent, audience,
- * program, model, capabilities} — the spend ceiling rides the signed capability
- * tier. `expiry` is NOT signature-bound in classical mode (advisory against an
- * adversarial presenter); prefer short expiries and lean on the capability
- * ceiling. See @bolyra/mpp's `issueMandate` docs.
+ * Classical trust boundary (binding v2): the operator signature binds {agent,
+ * audience, program, model, capabilities, expiry} — the spend ceiling rides the
+ * signed capability tier, and `expiry` is signature-bound (pinned to the
+ * credential expiry), so a presenter cannot re-anchor a later expiry. See
+ * @bolyra/mpp's `issueMandate` docs.
  */
 
 import { parseArgs } from 'node:util';
@@ -43,11 +43,8 @@ Flags:
   --max-usd <amount>      Max USD spend; mapped to the smallest covering tier.
                           Provide this OR --tier.
   --expiry <duration>     Duration (30d, 1y, 8h) or Unix timestamp (required).
-                          NOTE: in classical mode expiry is NOT bound by the
-                          operator signature (advisory against an adversarial
-                          presenter) — prefer short expiries and rely on the
-                          signed capability tier; cryptographic time-bounds
-                          require the zk-class verifier (bolyra verify).
+                          Signature-bound in binding v2 (pinned to the credential
+                          expiry), so a presenter cannot re-anchor a later expiry.
   --program <name>        Binding program discriminator (default: mpp)
   --nonce <id>            Opaque mandate/delegation id for your own audit
                           (default: random). UNSIGNED and unverified — not a

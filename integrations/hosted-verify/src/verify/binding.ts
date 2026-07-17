@@ -17,8 +17,8 @@ import { BN254_FIELD_ORDER } from '@bolyra/sdk/dist/identity.js';
 import type { Binding } from './bundle';
 import { VerifyDenial } from './verdict';
 
-/** Domain-separation tag for the binding signature digest (spec §4.2). */
-const BINDING_DST = 'bolyra.external-verifier.binding.v1';
+/** Domain-separation tag for the binding signature digest (spec §4.2, v2). */
+const BINDING_DST = 'bolyra.external-verifier.binding.v2';
 
 const encoder = new TextEncoder();
 

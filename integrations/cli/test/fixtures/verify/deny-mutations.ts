@@ -11,6 +11,9 @@
  * committed proof attests to). This lets cases that must change the SIGNED
  * binding (e.g. an extra capability, a swapped model) still pass the binding
  * signature check so the intended DOWNSTREAM denial code is the one that fires.
+ * Bindings are v2 (six fields incl. `expiry`); mutating `binding.expiry` without
+ * re-signing breaks the signature, and mutating only `credential.expiry` trips
+ * the binding↔credential expiry equality (§6b).
  */
 
 import { eddsaSign } from '@bolyra/sdk';

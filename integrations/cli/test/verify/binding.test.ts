@@ -19,6 +19,7 @@ const BINDING: BindingClaim = {
   program: 'crewai',
   model: 'opus-4.1',
   capabilities: ['read_data', 'write_data', 'financial_small'],
+  expiry: 4102444800, // binding v2: signature-bound
 };
 
 /** Operator private keys, as raw 32-byte buffers. */
@@ -59,6 +60,25 @@ describe('binding signature (F1 request-authorizing signature)', () => {
     const d = await bindingDigest(BINDING);
     expect(d).toBeGreaterThanOrEqual(0n);
     expect(d).toBeLessThan(BN254_FIELD_ORDER);
+  });
+
+  // CROSS-IMPLEMENTATION CONFORMANCE VECTOR (binding v2). The SAME fixed binding
+  // and expected digest are pinned in @bolyra/mpp (classical.test.ts) and the
+  // hosted-verify worker (binding.spec.ts). If any of the three bindingDigest
+  // implementations drifts (DST, canonicalization, field reduction), exactly its
+  // own pinned test breaks — the three cannot silently diverge.
+  it('matches the shared v2 binding-digest conformance vector', async () => {
+    const vector: BindingClaim = {
+      agent_name: 'conformance-agent',
+      project_key: 'api.merchant.example',
+      program: 'mpp',
+      model: 'opus-4.1',
+      capabilities: ['mpp:financial:small', 'mpp:financial:medium'],
+      expiry: 1893456000,
+    };
+    expect((await bindingDigest(vector)).toString()).toBe(
+      '6852214223979096266887740803477328516969972228468997483569432332607241636802',
+    );
   });
 });
 

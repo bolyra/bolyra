@@ -8,8 +8,8 @@
  * within one financial tier, for one audience, until an expiry. The
  * cryptographically load-bearing output is the operator's EdDSA-Poseidon
  * binding signature over `{agent_name, project_key, program, model,
- * capabilities}` (classical.ts §4) — the exact fact `verifyClassical` anchors
- * an `allow` to.
+ * capabilities, expiry}` (classical.ts §4, binding v2) — the exact fact
+ * `verifyClassical` anchors an `allow` to.
  *
  * WHAT THIS IS NOT. This is issuance, not key management and not a wallet. It
  * neither generates, stores, nor rotates keys, holds funds, nor settles
@@ -24,20 +24,19 @@
  * verifier. Issuing a real Groth16 proof is out of scope here.
  *
  * CLASSICAL TRUST BOUNDARY — WHAT THE SIGNATURE ACTUALLY BINDS. The operator
- * EdDSA signature covers ONLY the request binding: `{agent_name, project_key,
- * program, model, capabilities}`. Those are the load-bearing, tamper-evident
- * fields — in particular the SPEND CEILING is enforced through the signed
- * `capabilities` tier tokens. The credential's `expiry` and `permission_bitmask`
- * are self-asserted public fields the classical verifier only cross-checks for
- * internal consistency (the scope commitment is recomputable from public
- * inputs), so classical mode does NOT cryptographically bind `expiry`: the
- * strict expiry check binds an UNMODIFIED presentation to the caller's clock,
- * but a presenter can re-anchor a later expiry and still verify `allow`.
- * Cryptographic time-bounding requires the zk-class verifier (`bolyra verify`).
- * Treat classical-mode expiry as advisory, and use short expiries plus the
- * signed capability ceiling as the real controls. (This is a property of the
- * shared classical verifier / EVC v1 binding, not of issuance — see
- * classical.ts "CLASSICAL TRUST MODEL".)
+ * EdDSA signature covers the request binding: `{agent_name, project_key,
+ * program, model, capabilities, expiry}` (binding v2). Those are the
+ * load-bearing, tamper-evident fields — the SPEND CEILING through the signed
+ * `capabilities` tier tokens, and the TIME BOUND through the signed `expiry`
+ * (pinned equal to the revealed credential expiry). A presenter can no longer
+ * re-anchor a later expiry: rewriting the signed `binding.expiry` breaks the
+ * signature, and rewriting only `credential.expiry` fails the verifier's
+ * binding↔credential expiry equality. The `permission_bitmask` remains a
+ * self-asserted public field the classical verifier only cross-checks for
+ * internal consistency; sound bitmask enforcement still requires the zk-class
+ * verifier (`bolyra verify`). (This is a property of the shared classical
+ * verifier / EVC binding v2, not of issuance — see classical.ts "CLASSICAL
+ * TRUST MODEL".)
  */
 
 import {
@@ -93,10 +92,10 @@ export interface IssueMandateInput {
    */
   maxUsd?: string | number;
   /**
-   * Credential expiry, unix seconds. Must be a positive integer. NOTE: in
-   * classical mode this is NOT bound by the operator signature (see the file
-   * header's "CLASSICAL TRUST BOUNDARY") — it is advisory against an adversarial
-   * presenter. Prefer short expiries.
+   * Credential expiry, unix seconds. Must be a positive integer. Binding v2
+   * signs this value into the binding (pinned equal to the credential expiry),
+   * so it is cryptographically bound against a re-anchoring presenter (see the
+   * file header's "CLASSICAL TRUST BOUNDARY").
    */
   expiry: number;
   /**
@@ -165,8 +164,20 @@ export async function mintPresentation(params: {
   nonce?: string;
   encoding?: MandateEncoding;
 }): Promise<string> {
-  const { operatorPrivateKey, binding, permissions, expiry } = params;
+  const { operatorPrivateKey, permissions, expiry } = params;
   const encoding = params.encoding ?? 'base64url';
+
+  // Binding v2: `expiry` is part of the operator-signed binding and MUST equal
+  // the credential expiry. Validate the shape (positive safe integer — matching
+  // every verifier's parse) and pin the equality here, so the single minting
+  // path can never emit a v2 bundle a verifier would then reject.
+  if (!Number.isSafeInteger(expiry) || expiry <= 0) {
+    throw new MandateIssueError('expiry must be a positive safe integer (unix seconds)');
+  }
+  if (params.binding.expiry !== expiry) {
+    throw new MandateIssueError('binding.expiry must equal the credential expiry');
+  }
+  const binding = params.binding;
 
   const operatorPub = await derivePublicKey(operatorPrivateKey);
   const modelHash = hashModel(binding.model);
@@ -282,10 +293,10 @@ export async function issueMandate(input: IssueMandateInput): Promise<IssuedMand
 
   if (
     typeof input.expiry !== 'number' ||
-    !Number.isInteger(input.expiry) ||
+    !Number.isSafeInteger(input.expiry) ||
     input.expiry <= 0
   ) {
-    throw new MandateIssueError('expiry must be a positive integer (unix seconds)');
+    throw new MandateIssueError('expiry must be a positive safe integer (unix seconds)');
   }
 
   const encoding = input.encoding ?? 'base64url';
@@ -303,6 +314,8 @@ export async function issueMandate(input: IssueMandateInput): Promise<IssuedMand
     program,
     model,
     capabilities,
+    // Binding v2: expiry is part of the signed binding (== credential expiry).
+    expiry: input.expiry,
   };
 
   const presentation = await mintPresentation({

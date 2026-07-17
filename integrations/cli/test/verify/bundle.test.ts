@@ -47,6 +47,7 @@ function makeBundle(overrides: Record<string, unknown> = {}): Record<string, unk
       program: 'claude-code',
       model: 'claude-opus-4',
       capabilities: ['read', 'write'],
+      expiry: 4102444800, // binding v2: == credential expiry
     },
     sig: {
       R8: { x: '33', y: '44' },
@@ -165,6 +166,34 @@ describe('parseBundle', () => {
 
   it('rejects a malformed sig block as invalid_bundle', () => {
     const bad = makeBundle({ sig: { R8: { x: '1' }, S: '2' } });
+    expectDenial(() => parseBundle(JSON.stringify(bad)), 'invalid_bundle');
+  });
+
+  it('rejects an obsolete v1 binding (no expiry) as unsupported_version', () => {
+    const bad = makeBundle();
+    delete (bad.binding as Record<string, unknown>).expiry;
+    expectDenial(() => parseBundle(JSON.stringify(bad)), 'unsupported_version');
+  });
+
+  it('rejects a non-integer binding.expiry as invalid_bundle', () => {
+    const bad = makeBundle();
+    (bad.binding as Record<string, unknown>).expiry = 'later';
+    expectDenial(() => parseBundle(JSON.stringify(bad)), 'invalid_bundle');
+  });
+
+  it('rejects an unexpected extra binding field as invalid_bundle', () => {
+    const bad = makeBundle();
+    (bad.binding as Record<string, unknown>).surprise = 'x';
+    expectDenial(() => parseBundle(JSON.stringify(bad)), 'invalid_bundle');
+  });
+
+  it('an extra field on a no-expiry binding is invalid_bundle, NOT unsupported_version', () => {
+    // Only a WELL-FORMED five-field v1 binding earns unsupported_version; the
+    // unexpected-key check runs first, so a malformed no-expiry binding is
+    // invalid_bundle.
+    const bad = makeBundle();
+    delete (bad.binding as Record<string, unknown>).expiry;
+    (bad.binding as Record<string, unknown>).surprise = 'x';
     expectDenial(() => parseBundle(JSON.stringify(bad)), 'invalid_bundle');
   });
 });

@@ -123,13 +123,13 @@ never generates, stores, or rotates keys, holds funds, or settles payments — i
 signs one standing spend mandate. `@bolyra/mpp`'s test fixtures mint through the
 same issuance path (`issueMandate`), so there is one code path, not two.
 
-In classical mode the operator signature binds only the request binding
-(`{agent, audience, program, model, capabilities}`), so the **spend ceiling**
-(signed capability tier) is tamper-evident but the mandate's **`expiry` is not
-signature-bound** — a presenter can re-anchor a later expiry and still verify.
-Treat classical-mode expiry as advisory (prefer short expiries; lean on the
-capability ceiling); use the zk-class verifier for cryptographic time-bounding.
-See "What is and isn't checked" below.
+In classical mode the operator signature binds the request binding
+(`{agent, audience, program, model, capabilities, expiry}` — binding v2), so both
+the **spend ceiling** (signed capability tier) and the **time bound** (`expiry`,
+pinned equal to the credential expiry) are tamper-evident: a presenter can no
+longer re-anchor a later expiry on an issued mandate. The `permission_bitmask`
+remains a self-asserted consistency field; sound bitmask enforcement still needs
+the zk-class verifier. See "What is and isn't checked" below.
 
 ## Amount → tier mapping
 
@@ -205,19 +205,22 @@ operator's EdDSA-Poseidon signature over the request binding. A classical
 `allow` means, and only means:
 
 > A configured trusted operator signed a binding authorizing this exact
-> `{agent_name, project_key, program, model, capabilities}`, the request
+> `{agent_name, project_key, program, model, capabilities, expiry}`, the request
 > matches that signed binding, and the granted capability (the amount's
 > financial tier) is a subset of it.
 
 Checked (classical):
 
 - trusted-operator gate (`trustedOperators`; empty set fails closed)
-- EdDSA-Poseidon binding signature against that operator key
+- EdDSA-Poseidon binding signature against that operator key (binding v2 — the
+  signed binding includes `expiry`)
+- signed `binding.expiry == credential.expiry` (binding v2); an obsolete
+  five-field v1 binding is rejected `unsupported_version`
 - byte-literal request↔binding match — `project_key` is your `audience`
 - granted tier capability ⊆ operator-signed capabilities
 - consistency checks on the revealed credential: Poseidon scope anchoring,
   model-hash binding, cumulative permission-bit subset, strict expiry
-  (`now == expiry` is expired)
+  (`now == expiry` is expired) over the signature-bound expiry
 
 **Not** checked (classical):
 
@@ -225,14 +228,12 @@ Checked (classical):
   delegation-chain proofs — bundles carrying zk-only slots are **denied**,
   not half-verified; use a zk-class external verifier (`bolyra verify`) via
   `verifier: { kind: 'command', … }` for those
-- tamper-evident **expiry** against an adversarial presenter: `expiry` is a
-  self-asserted credential field, **not** covered by the operator signature
-  (only the binding is), and the scope commitment that references it is
-  recomputable from public inputs — so a presenter can re-anchor a later expiry
-  and still verify. The strict expiry check binds an *unmodified* presentation
-  to the caller's clock; for cryptographic time-bounds use the zk-class
-  verifier. The signed capability tier remains the load-bearing spend ceiling —
-  prefer short expiries in classical mode.
+- sound **permission-bitmask** enforcement against a malicious trusted operator:
+  the revealed `permission_bitmask` is a self-asserted consistency field (the
+  scope commitment is recomputable from public inputs). `expiry`, by contrast,
+  IS tamper-evident as of binding v2 — signed and pinned to the credential
+  expiry — so a re-anchored expiry no longer verifies. For sound bitmask/scope
+  enforcement use the zk-class verifier (`bolyra verify`).
 - replay: a spend mandate is a *standing* authorization, reusable within tier
   and expiry by design; per-payment idempotency is MPP's challenge binding.
   (External verifiers in host nonce mode DO make presentations one-shot —

@@ -28,14 +28,16 @@ So an `allow` means, and only means:
 
 > A configured **trusted operator** (`TRUSTED_OPERATORS`) signed a binding
 > authorizing this exact `{agent_name, project_key, program, model,
-> capabilities}`, the request matches that signed binding, and the granted
-> capabilities are a subset of it.
+> capabilities, expiry}` (binding v2), the request matches that signed binding,
+> and the granted capabilities are a subset of it.
 
 The trust anchor is the **operator key set**, not the proof's Merkle root
-(which is unverified here and carries no weight). Scope-bitmask and expiry are
-checked against the revealed credential for internal consistency, but they are
-**not** part of the operator-signed binding in `bvp/1`, so sound enforcement of
-scope and expiry requires the zk-class [`bolyra verify`](../cli/) CLI. The live
+(which is unverified here and carries no weight). As of **binding v2** the signed
+binding includes `expiry` (pinned equal to the revealed credential expiry), so a
+presenter cannot re-anchor a later expiry — the obsolete five-field v1 binding is
+rejected `unsupported_version`. The scope-bitmask remains checked against the
+revealed credential for internal consistency only, so sound scope enforcement
+still requires the zk-class [`bolyra verify`](../cli/) CLI. The live
 [`/health`](#get-health) response spells out exactly which checks are
 signature-authenticated vs. consistency-only.
 
@@ -120,7 +122,8 @@ verified here (no Groth16). So `consume_nonces` reliably stops replay of the
 holding a trusted-operator-signed binding can mint a fresh nullifier and
 re-present. Sound single-use enforcement (nullifier bound to the proof)
 requires the zk-class `bolyra verify` CLI. Treat host-mode replay reservation
-here as consistency-only, in the same bucket as scope and expiry.
+here as consistency-only, in the same bucket as the permission bitmask/scope
+(expiry, by contrast, is signature-bound as of binding v2).
 
 ### `GET /health`
 
@@ -158,23 +161,28 @@ operator-signed fact or a fail-closed gate:
 3. Byte-literal request↔binding match (`agent_name` / `project_key` /
    `program` / `model`).
 4. `granted_capabilities ⊆` the operator-signed capabilities.
+5. **Signed `binding.expiry == credential.expiry`** (binding v2) — `expiry` is
+   part of the operator-signed binding and pinned to the revealed credential
+   expiry, so a presenter cannot re-anchor a later expiry. An obsolete
+   five-field v1 binding is rejected `unsupported_version`.
 
 **Consistency-only (NOT operator-signed in `bvp/1`)** — these catch honest
 misconfiguration and are needed for internal coherence, but a holder of a
 trusted operator key could self-assert any value here, so they do **not**
-soundly enforce scope/expiry; the zk-class `bolyra verify` CLI does:
+soundly enforce the permission bitmask/scope; the zk-class `bolyra verify` CLI
+does (expiry, by contrast, IS signature-bound as of binding v2, item 5 above):
 
-5. Request schema + version (spec §2) and `bvp/1` structure + proof-envelope
+6. Request schema + version (spec §2) and `bvp/1` structure + proof-envelope
    shape (`@bolyra/sdk` `validateEnvelope`).
-6. Poseidon scope anchoring — the revealed preimage recomputes the
+7. Poseidon scope anchoring — the revealed preimage recomputes the
    *self-asserted* `scopeCommitment` public signal.
-7. Model-hash binding — `sha256(model) mod p` equals the revealed
+8. Model-hash binding — `sha256(model) mod p` equals the revealed
    `modelHash`.
-8. Capability → permission-bit mapping + cumulative-scope subset (over the
+9. Capability → permission-bit mapping + cumulative-scope subset (over the
    revealed bitmask).
-9. Strict expiry against caller-supplied `now_unix` (`now == expiry` is
-   expired; over the revealed expiry).
-10. Nullifier presence + `consume_nonces` emission (host nonce mode).
+10. Strict expiry against caller-supplied `now_unix` (`now == expiry` is
+   expired; over the **signature-bound** expiry, item 5).
+11. Nullifier presence + `consume_nonces` emission (host nonce mode).
 
 **Not** performed (zk-class territory — use the `bolyra verify` CLI):
 
