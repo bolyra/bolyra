@@ -39,6 +39,21 @@ suite runs against real mppx (currently 0.8.12).
 
 ## Quickstart
 
+See it run first — one command, nothing else to install:
+
+```bash
+npx @bolyra/mpp demo
+```
+
+Under two minutes, fully in-process: an operator issues a small-tier spend
+mandate (`issueMandate`), an agent presents it to a route gated by
+`bolyraGate`, a $25 spend **allows**, a $500 spend **denies** with the RFC
+9457 problem body before any payment logic runs, a mandate-less request
+**denies**, and the ES256K-signed authorization receipt is verified. The
+verification path is the real shipped code; only the route is a clearly
+labeled stub standing in for an mppx method (for the same flow against real
+mppx, see [`examples/mandate-demo`](./examples/mandate-demo)).
+
 This snippet shows the integration shape (placeholders like `secretKey` and the
 operator pubkeys are yours to fill in); for a copy-paste-runnable version with
 a mock agent and real values, see [`examples/mandate-demo`](./examples/mandate-demo).

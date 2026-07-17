@@ -17,6 +17,27 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/mpp 0.3.0 (2026-07-17)
+
+### Added
+
+- **One-command runnable demo: `npx @bolyra/mpp demo`.** New `bolyra-mpp` bin
+  (the package's single bin, so `npx @bolyra/mpp` resolves it) runs the full
+  mandate flow in-process with zero setup — no network, no wallet, no mppx
+  install: the operator issues a small-tier spend mandate via the package's
+  own `issueMandate`, an agent presents it to a route gated by `bolyraGate`,
+  a $25 spend allows, a $500 spend denies with the RFC 9457 problem body
+  before any payment logic runs, a mandate-less request denies fail-closed,
+  and the ES256K hash-chained authorization receipt is printed and
+  signature-verified. The verification path is the real shipped code
+  (`issueMandate` → classical verify → `@bolyra/receipts`); only the route is
+  a clearly labeled stub standing in for an mppx method (`bolyraGate` wraps
+  `Method.Server` structurally, so the demo needs no mppx import). Narrated
+  stdout explains each step and the one-line why; a jest smoke test runs the
+  demo programmatically and asserts all six outcomes. README Quickstart now
+  leads with the demo command; `examples/mandate-demo` remains the
+  real-mppx deeper path. Minor bump: new bin, no API changes.
+
 ## @bolyra/mpp 0.2.1 (2026-07-17)
 
 - Test suite now pinned against mppx 0.8.12 (the release carrying our upstream
