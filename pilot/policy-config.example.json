@@ -1,0 +1,37 @@
+{
+  "$comment": "Verify-policy record for one pilot — manual, file-based (no config service). This documents, in one place, the policy the pilot's verifier enforces. It is NOT loaded by any service: each field says where the live value actually lives. Copy next to the partner file as pilot/partners/<label>.policy.json.",
+
+  "partnerLabel": "acme",
+
+  "verifier": {
+    "kind": "classical",
+    "$kinds": "classical = hosted POST /v1/verify (no ZK proof verification; trust anchor is the operator key set). zk = partner runs `bolyra verify` locally (full Groth16 + vkey pinning). See spec/external-verifier-contract-v1.md §3.5.",
+    "endpoint": "https://bolyra-hosted-verify.<account>.workers.dev/v1/verify"
+  },
+
+  "trustedOperators": [
+    "<operator-pubkey-x-decimal>:<operator-pubkey-y-decimal>"
+  ],
+  "$trustedOperators_live": "integrations/hosted-verify/wrangler.jsonc TRUSTED_OPERATORS (redeploy to change). For the CLI path: the partner's --trusted-operators configuration.",
+
+  "capabilityMap": {
+    "mpp:financial:small": ["FINANCIAL_SMALL"],
+    "mpp:financial:medium": ["FINANCIAL_SMALL", "FINANCIAL_MEDIUM"],
+    "mpp:financial:unlimited": ["FINANCIAL_SMALL", "FINANCIAL_MEDIUM", "FINANCIAL_UNLIMITED"]
+  },
+  "$capabilityMap_live": "Same shape as `bolyra verify --capability-map` and the Worker's optional CAPABILITY_MAP var (merged over the built-in default). Unmapped capabilities are ALWAYS denied (unknown_capability, fail-closed).",
+
+  "nonceMode": "host",
+  "$nonceMode_note": "The hosted Worker is stateless: always host mode — the partner MUST reserve every consume_nonces entry in durable storage before acting (reserve-before-act, spec §7.3). Local mode replay state is available only via the `bolyra verify` CLI.",
+
+  "receipts": {
+    "issuer": "bolyra-hosted-verify-preview",
+    "keyId": "preview-1",
+    "signer": "0x<receipt-signer-address>",
+    "$note": "issuer/keyId live in wrangler.jsonc; the signing key is the RECEIPT_SIGNER_KEY Worker secret. Record the signer ADDRESS here so the partner can pass --signer to `bolyra receipt verify-chain` — never the key."
+  },
+
+  "expiry": {
+    "$note": "Credential expiry is signature-bound (binding v2): the operator-signed binding pins expiry to the revealed credential expiry. now_unix >= expiry denies with code=expired (strict; equality is expired)."
+  }
+}
