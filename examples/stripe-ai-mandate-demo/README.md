@@ -2,6 +2,8 @@
 
 **Stripe's toolkit lets the agent spend; Bolyra proves it was authorized to.**
 
+> This is an independent Bolyra example; it is not affiliated with or endorsed by Stripe.
+
 Stripe's agent toolkit ([github.com/stripe/ai](https://github.com/stripe/ai),
 `@stripe/agent-toolkit`) hands an LLM agent Stripe API capabilities as
 framework tools — `getTools()` returns `{ description, execute }` definitions
