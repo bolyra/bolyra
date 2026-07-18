@@ -1,6 +1,6 @@
 # Bolyra Protocol Conformance Report
 
-**Generated:** 2026-07-11T17:26:04.183Z
+**Generated:** 2026-07-18T14:47:37.230Z
 **Spec version:** 0.4.0
 **Runner:** spec/conformance-runner.js
 
@@ -8,8 +8,8 @@
 
 | Metric | Count |
 |--------|-------|
-| Total vectors | 99 |
-| Passed | 94 |
+| Total vectors | 104 |
+| Passed | 99 |
 | Failed | 0 |
 | Skipped | 5 |
 
@@ -142,7 +142,7 @@
 | 9 | external-verifier-kind-external-deny | PASS | ✓ PASS |
 | 10 | external-verifier-kind-invalid-rejected | FAIL | ✓ PASS |
 
-### Host Behavior (22 vectors)
+### Host Behavior (27 vectors)
 
 | # | Vector ID | Expected | Status |
 |---|-----------|----------|--------|
@@ -168,6 +168,11 @@
 | 20 | host-deny-deny-extra-property | PASS | ✓ PASS |
 | 21 | host-deny-nonce-entry-extra-property | PASS | ✓ PASS |
 | 22 | host-deny-nonce-entry-wrong-type | PASS | ✓ PASS |
+| 23 | host-deny-binary-garbage-stdout | PASS | ✓ PASS |
+| 24 | host-deny-leading-garbage | PASS | ✓ PASS |
+| 25 | host-deny-slow-allow-past-deadline | PASS | ✓ PASS |
+| 26 | host-allow-well-behaved-kind-classical | PASS | ✓ PASS |
+| 27 | host-allow-well-behaved-kind-external | PASS | ✓ PASS |
 
 ## References
 

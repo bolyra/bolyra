@@ -1488,6 +1488,41 @@
       "type": "host_behavior",
       "inputs": { "fixture": "nonce-entry-wrong-type.js", "nonce_mode": "host", "timeout_ms": 5000 },
       "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+    },
+    {
+      "id": "host-deny-binary-garbage-stdout",
+      "description": "Offered case (1) malformed stdout, the literal `garbage bytes` variant (§5.2/§7.2): the verifier writes raw, non-UTF-8 bytes (not valid-UTF-8 text) to stdout at exit 0. A conforming host MUST decode/parse defensively and fail closed rather than crash or mis-handle the invalid bytes. Distinct from non-json-stdout.js, which writes valid UTF-8 text.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "binary-garbage-stdout.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+    },
+    {
+      "id": "host-deny-leading-garbage",
+      "description": "Offered cases (1)/(2) malformed stdout, single-object parse (§5.2/§7.2): a non-JSON PREFIX before an otherwise-valid `allow`. §5.2 forbids a leading/trailing prefix around the object; allow-trailing-garbage.js covers the suffix, this covers the LEADING prefix. The host MUST NOT extract the embedded allow — it MUST fail closed.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "leading-garbage.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+    },
+    {
+      "id": "host-deny-slow-allow-past-deadline",
+      "description": "Offered cases (2)/(5) wall-clock timeout, hard-deadline variant (§6/§7.2/§16.3): the verifier WOULD emit a valid `allow` at exit 0, but only after sleeping far past the host deadline. The host timeout is a hard wall-clock deadline, not just a hang detector: the host MUST kill at the deadline and deny `timeout`, never observing the late allow. Sharper than no-output-hang.js (which never produces output).",
+      "type": "host_behavior",
+      "inputs": { "fixture": "slow-allow-past-deadline.js", "timeout_ms": 1000, "assert_verifier_killed": true },
+      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "timeout" }
+    },
+    {
+      "id": "host-allow-well-behaved-kind-classical",
+      "description": "Offered case (6) verify `kind` (§3.5), acceptance side: a well-behaved `allow` self-describing as `kind=classical`. `kind` is OPTIONAL and, when present, MUST be one of classical|zk|external. The host MUST accept every valid kind and relay `allow`, not just the default `zk`. Acceptance counterpart to host-deny-bad-kind; proves the host validates the closed enum without hard-coding one value.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "well-behaved-allow-kind-classical.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "allow" }
+    },
+    {
+      "id": "host-allow-well-behaved-kind-external",
+      "description": "Offered case (6) verify `kind` (§3.5), acceptance side: a well-behaved `allow` self-describing as `kind=external` — the class a third-party (non-Bolyra) verifier declares. The host MUST accept it and relay `allow`, catching a host that hard-codes acceptance of only zk/classical and would wrongly reject a valid external verdict.",
+      "type": "host_behavior",
+      "inputs": { "fixture": "well-behaved-allow-kind-external.js", "timeout_ms": 5000 },
+      "expected": { "result": "PASS", "host_decision": "allow" }
     }
   ]
 }

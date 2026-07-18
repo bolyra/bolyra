@@ -880,7 +880,11 @@ outcome` column is the normative behavior a conforming host **MUST** produce; th
 |---|---|---|---|
 | `well-behaved-allow.js` | — (positive control) | relay `allow` | — |
 | `well-behaved-deny.js` | — (positive control) | relay `deny code=expired` | — |
+| `well-behaved-allow-kind-classical.js` | — (positive control, §3.5 `kind`) | relay `allow` | — |
+| `well-behaved-allow-kind-external.js` | — (positive control, §3.5 `kind`) | relay `allow` | — |
 | `non-json-stdout.js` | §5.2 stdout not valid JSON | **deny** | `unparseable_stdout` |
+| `binary-garbage-stdout.js` | §5.2 raw non-UTF-8 bytes on stdout | **deny** | `unparseable_stdout` |
+| `leading-garbage.js` | §5.2 non-JSON prefix before a valid `allow` | **deny** | `unparseable_stdout` |
 | `multiple-objects.js` | §5.2 two concatenated verdicts (single-object framing) | **deny** | `multiple_objects` |
 | `schema-invalid-verdict.js` | §3.4 `verdict` is neither `allow` nor `deny` | **deny** | `schema_invalid` |
 | `deny-missing-fields.js` | §3.3/§3.4 `deny` missing `code`/`message` | **deny** | `schema_invalid` |
@@ -894,6 +898,7 @@ outcome` column is the normative behavior a conforming host **MUST** produce; th
 | `nonce-entry-wrong-type.js` | §3.2/§3.4 nonce entry `retain_until` is not an integer | **deny** | `schema_invalid` |
 | `no-output-hang.js` | §6 no output, never exits | **deny** (kill on timeout) | `timeout` |
 | `partial-json-hang.js` | §6 partial verdict then hangs | **deny** (kill on timeout) | `timeout` |
+| `slow-allow-past-deadline.js` | §6 valid `allow`, but only after the deadline | **deny** (kill on timeout) | `timeout` |
 | `nonzero-exit-after-allow.js` | §7.1 valid `allow` on stdout **but** non-zero exit | **deny** (§16.4) | `nonzero_exit` |
 | `killed-by-signal.js` | §7.2 death by signal, no verdict | **deny** | `signal_death` \| `unparseable_stdout` |
 | `oversize-flood.js` | §6 floods stdout past the output bound | **deny** (bound + kill) | `oversize_stdout` |
@@ -913,8 +918,9 @@ to the stdout pipe (never to disk) and, after an 8 MiB burst, **hangs** rather t
 exiting — so a host that never enforces the output bound cannot "buffer everything
 then observe a clean exit"; it is instead caught by its own or the runner's
 timeout. The hang fixtures perform no I/O beyond an optional partial write. The
-three "kill-proof" fixtures (`no-output-hang.js`, `partial-json-hang.js`,
-`oversize-flood.js`) record their PID (§16.2 `HUT_FIXTURE_PIDFILE`) so the runner
+four "kill-proof" fixtures (`no-output-hang.js`, `partial-json-hang.js`,
+`slow-allow-past-deadline.js`, `oversize-flood.js`) record their PID (§16.2
+`HUT_FIXTURE_PIDFILE`) so the runner
 can verify the host **actually killed** the verifier rather than leaking an orphan
 (§16.3).
 
