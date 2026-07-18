@@ -1,0 +1,50 @@
+# Code owners for Bolyra.
+#
+# Bolyra is public and welcomes contributions (see CONTRIBUTING.md).
+#
+# Default: all PRs require maintainer review (the repo is solo-maintained today).
+# The paths listed below document the HIGHEST-BAR areas — cryptography,
+# verification, mandate/receipt handling, replay/nonce logic, and supply-chain
+# surfaces — which require threat-model-level review and never take a drive-by
+# merge. If a co-maintainer is added later, remove the catch-all and these
+# explicit entries keep the critical paths gated.
+
+# Default reviewer for everything.
+*                                       @saneGuy
+
+# --- Cryptography and zero-knowledge (threat-model review) ---
+/circuits/                              @saneGuy
+/circuits-package/                      @saneGuy
+/contracts/                             @saneGuy
+
+# --- The verification contract and its reference implementations ---
+/spec/                                  @saneGuy
+/spec/reference-host-rs/                @saneGuy
+
+# --- SDK crypto surface (credential binding, signing, permission model) ---
+/sdk/src/                               @saneGuy
+/sdk-python/                            @saneGuy
+
+# --- Verifiers, gates, receipts, delegation, registry, hosted verification ---
+/integrations/gateway/                  @saneGuy
+/integrations/receipts/                 @saneGuy
+/integrations/hosted-verify/            @saneGuy
+/integrations/cli/src/                  @saneGuy
+/integrations/mpp-payments/src/         @saneGuy
+/integrations/payment-protocols/        @saneGuy
+/integrations/mcp/                      @saneGuy
+/integrations/shield/                   @saneGuy
+/delegation/                            @saneGuy
+/registry/                              @saneGuy
+/actions/replay-check/                  @saneGuy
+/apps/wallet/                           @saneGuy
+
+# --- Supply-chain surfaces: CI, release, and dependency manifests ---
+/.github/workflows/                     @saneGuy
+**/package.json                         @saneGuy
+**/package-lock.json                    @saneGuy
+**/pyproject.toml                       @saneGuy
+**/requirements*.txt                    @saneGuy
+**/Cargo.toml                           @saneGuy
+**/Cargo.lock                           @saneGuy
+**/Dockerfile                           @saneGuy
