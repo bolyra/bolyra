@@ -129,17 +129,18 @@ export function buildDecisionReceiptInput(facts: DecisionFacts): CommerceReceipt
       amount: Number(facts.amountUsd),
       currency: 'USD',
       merchant: request.project_key,
-      intentHash:
-        '0x' +
-        sha256Hex(
-          canonicalize({
-            audience: request.project_key,
-            program: request.program,
-            capabilities: request.granted_capabilities,
-            amountUsd: facts.amountUsd,
-            tier: facts.tier,
-          }),
-        ),
+      // Bare 64-hex (no 0x prefix): the @bolyra/receipts verify CLI validates
+      // commerce.intentHash against /^[0-9a-fA-F]{64}$/, matching the golden
+      // corpus. A 0x prefix here makes an mpp receipt fail `receipt verify`.
+      intentHash: sha256Hex(
+        canonicalize({
+          audience: request.project_key,
+          program: request.program,
+          capabilities: request.granted_capabilities,
+          amountUsd: facts.amountUsd,
+          tier: facts.tier,
+        }),
+      ),
     },
   };
 }
@@ -162,6 +163,6 @@ function probeInput(): CommerceReceiptInput {
     agentPublicSignals: [],
     bundleVersion: 1,
     nonce: '0',
-    commerce: { rail: 'mpp', amount: 0, currency: 'USD', merchant: 'probe', intentHash: '0x0' },
+    commerce: { rail: 'mpp', amount: 0, currency: 'USD', merchant: 'probe', intentHash: '0'.repeat(64) },
   };
 }

@@ -17,6 +17,14 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/mpp 0.3.1 (2026-07-18)
+
+- Fix: gate decision receipts now emit a bare 64-hex commerce.intentHash
+  (no 0x prefix), matching the @bolyra/receipts verify-CLI validator and the
+  golden corpus. Previously mpp-emitted receipts failed `receipt verify` with
+  "commerce.intentHash must be a 64-char hex string" even though they verified
+  programmatically. Found via the stripe-ai-mandate demo build.
+
 ## @bolyra/mpp 0.3.0 (2026-07-17)
 
 ### Added
