@@ -732,7 +732,10 @@
         gap: 24px;
       }
     }
-  </style>
+      .package-rows { display: flex; flex-direction: column; gap: 0; margin-top: 32px; border-top: 1px solid var(--border); }
+    .package-row { display: grid; grid-template-columns: 220px 1fr; gap: 24px; padding: 22px 0; border-bottom: 1px solid var(--border); }
+    @media (max-width: 720px) { .package-row { grid-template-columns: 1fr; gap: 8px; } }
+</style>
 </head>
 <body>
 
@@ -791,67 +794,87 @@
   <section id="before-after">
     <div class="container">
       <p class="section-label">The problem</p>
-      <h2 class="section-title">Every tool is wide open.</h2>
+      <h2 class="section-title">Any agent can spend.</h2>
       <div class="before-after-grid">
         <div class="before-after-col">
           <h3>Before Bolyra</h3>
           <div class="tool-call-row">
-            <span>search()</span>
-            <span class="tool-badge open">OPEN</span>
+            <span>pay $25</span>
+            <span class="tool-badge open">SENT</span>
           </div>
           <div class="tool-call-row">
-            <span>fetch()</span>
-            <span class="tool-badge open">OPEN</span>
+            <span>pay $500</span>
+            <span class="tool-badge open">SENT</span>
           </div>
           <div class="tool-call-row">
-            <span>charge()</span>
-            <span class="tool-badge open">OPEN</span>
+            <span>pay, no mandate</span>
+            <span class="tool-badge open">SENT</span>
           </div>
-          <div class="tool-call-row">
-            <span>delete()</span>
-            <span class="tool-badge open">OPEN</span>
-          </div>
-          <p class="col-subtitle">Any agent can call any tool. No identity, no permissions, no audit trail.</p>
+          <p class="col-subtitle">Any agent can attempt any payment. No mandate, no limit, no proof of who authorized it.</p>
         </div>
         <div class="before-after-col" style="border-color: rgba(74, 222, 128, 0.25);">
           <h3>After Bolyra</h3>
           <div class="tool-call-row">
-            <span>search()</span>
-            <span class="tool-badge gated">GATED</span>
+            <span>pay $25 &middot; mandate: tier small</span>
+            <span class="tool-badge gated">ALLOW</span>
           </div>
           <div class="tool-call-row">
-            <span>fetch()</span>
-            <span class="tool-badge gated">GATED</span>
+            <span>pay $500 &middot; same mandate</span>
+            <span class="tool-badge gated">DENY 403</span>
           </div>
           <div class="tool-call-row">
-            <span>charge()</span>
-            <span class="tool-badge gated">GATED</span>
+            <span>pay, no mandate</span>
+            <span class="tool-badge gated">DENY 401</span>
           </div>
-          <div class="tool-call-row">
-            <span>delete()</span>
-            <span class="tool-badge gated">GATED</span>
-          </div>
-          <p class="col-subtitle">Credentials verified. Scope checked. Replay blocked. Receipt signed.</p>
+          <p class="col-subtitle">Mandate verified before payment. Over-scope fails closed. Every decision, allow and deny, gets a signed receipt.</p>
         </div>
       </div>
       <p class="install-hint" style="margin-top: 32px; text-align: center;">
-        <code>npx @bolyra/gateway --target http://localhost:3000/mcp --dev</code>
+        <code>npx @bolyra/mpp demo</code>
       </p>
     </div>
   </section>
 
-  <!-- 60-Second Quickstart -->
-  <section id="quickstart">
+  <!-- The object: mandate, verdict, receipt -->
+  <section id="the-object">
     <div class="container">
-      <p class="section-label">Try it now</p>
-      <h2 class="section-title">Authenticated in 60 seconds.</h2>
-      <div class="quickstart-terminal">
-        <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/bolyra/gateway-quickstart.git</span></div>
-        <div><span class="prompt">$ </span><span class="cmd">cd gateway-quickstart && npm install</span></div>
-        <div><span class="prompt">$ </span><span class="cmd">npm run server</span>   <span class="comment"># terminal 1</span></div>
-        <div><span class="prompt">$ </span><span class="cmd">npm run gateway</span>  <span class="comment"># terminal 2</span></div>
+      <p class="section-label">What crosses the wire</p>
+      <h2 class="section-title">Mandate in, verdict out, receipt signed.</h2>
+      <div class="checks-grid" style="margin-top: 32px;">
+        <div class="check-card">
+          <h3>1 &middot; The mandate</h3>
+          <pre style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.55; background: var(--bg-code); border-radius: 8px; padding: 14px; overflow-x: auto; margin-top: 10px;">issueMandate({
+  agent: "shopper-bot",
+  audience: "api.merchant.example",
+  tier: "small",   // &lt; $100
+  expires: "+1h"
+})</pre>
+          <p style="margin-top: 10px;">One operator signature binds agent, payee audience, spend tier, and expiry into a tamper-evident mandate.</p>
+        </div>
+        <div class="check-card">
+          <h3>2 &middot; The verdict</h3>
+          <pre style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.55; background: var(--bg-code); border-radius: 8px; padding: 14px; overflow-x: auto; margin-top: 10px;">GET /api/report ($25)
+&rarr; 200 ALLOW
+
+GET /api/bulk-export ($500)
+&rarr; 403 DENY, before payment
+{ "code": "request_mismatch",
+  "title": "Mandate Does Not
+    Cover This Request" }</pre>
+          <p style="margin-top: 10px;">Verified before any payment logic runs. Over-scope and missing mandates fail closed with RFC 9457 problem details.</p>
+        </div>
+        <div class="check-card">
+          <h3>3 &middot; The receipt</h3>
+          <pre style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.55; background: var(--bg-code); border-radius: 8px; padding: 14px; overflow-x: auto; margin-top: 10px;">seq=1  allowed=true  $25
+merchant=api.merchant.example
+signer=0x688c&hellip;2f4e
+payloadHash=0x7358&hellip;7635
+// ES256K, hash-chained
+// verifyReceiptChain &rarr; true</pre>
+          <p style="margin-top: 10px;">Every decision, allow and deny, emits a signed receipt on one hash chain. Verifiable offline by anyone with the public key.</p>
+        </div>
       </div>
-      <p class="quickstart-result">Then <code>curl localhost:4100</code> -- unauthorized calls get <code>401</code>, authorized calls pass through with <code>X-Bolyra-*</code> headers.</p>
+      <p class="section-subtitle" style="margin-top: 20px; text-align: center;">All three are real output from <code>npx @bolyra/mpp demo</code>: real verification path, stub transport.</p>
     </div>
   </section>
 
@@ -882,6 +905,22 @@
           <p>ES256K-signed receipt for every decision. Allow or deny. Timestamped.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- 60-Second MCP Quickstart (same boundary, tool calls) -->
+  <section id="quickstart">
+    <div class="container">
+      <p class="section-label">Beyond payments</p>
+      <h2 class="section-title">The same boundary gates MCP tools.</h2>
+      <p class="section-subtitle">Spend mandates are one instance of the verifier boundary. The same gate sits in front of any MCP server: authenticated in 60 seconds.</p>
+      <div class="quickstart-terminal">
+        <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/bolyra/gateway-quickstart.git</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">cd gateway-quickstart && npm install</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">npm run server</span>   <span class="comment"># terminal 1</span></div>
+        <div><span class="prompt">$ </span><span class="cmd">npm run gateway</span>  <span class="comment"># terminal 2</span></div>
+      </div>
+      <p class="quickstart-result">Then <code>curl localhost:4100</code> -- unauthorized calls get <code>401</code>, authorized calls pass through with <code>X-Bolyra-*</code> headers.</p>
     </div>
   </section>
 
@@ -954,71 +993,6 @@
           <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin: 0;">Stripe ACP spend gating with delegated scope. Authorize vs confirm flow, fails-closed without SIGN_ON_BEHALF, signed commerce receipts with <code style="font-size: 0.85em;">bolyra-receipt-verify</code> CLI.</p>
           <div style="margin-top: 16px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
         </a>
-        <a href="/video-delegation" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 32px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center;">
-              <span style="font-size: 20px; color: #6366f1; font-weight: 700;">&#960;</span>
-            </div>
-            <div>
-              <div style="font-size: 1.15rem; font-weight: 700;">Delegation Chains</div>
-              <div style="font-size: 0.8rem; color: var(--text-muted);">31 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin: 0;">Scope-narrowing delegation: permissions only drop, never widen. Escalation fails by construction. Zero-knowledge privacy: the verifier never sees the delegation path. Groth16, ~100ms.</p>
-          <div style="margin-top: 16px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
-        <a href="/video-handshake" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 32px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.4 7.5 10 4.3-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" stroke="#6366f1" stroke-width="1.6" stroke-linejoin="round" fill="rgba(99,102,241,0.12)"/><path d="M8.6 12.2l2.4 2.4 4.4-4.6" stroke="#6366f1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div>
-              <div style="font-size: 1.15rem; font-weight: 700;">ZKP Handshake</div>
-              <div style="font-size: 0.8rem; color: var(--text-muted);">31 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin: 0;">Mutual ZKP handshake: both human and agent prove identity without revealing it. Groth16 proofs in ~140ms. Tamper one byte and the elliptic-curve pairing fails.</p>
-          <div style="margin-top: 16px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
-        <a href="/video-devmode" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.3); display: flex; align-items: center; justify-content: center;">
-              <span style="font-size: 18px; color: #4ade80;">&#9889;</span>
-            </div>
-            <div>
-              <div style="font-size: 1.05rem; font-weight: 700;">MCP Dev Mode</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">30 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0;">Authenticated MCP server in 60 seconds. Zero circuit artifacts. <code style="font-size: 0.85em;">withBolyraAuthStdio</code> wraps your server. Dev mode is the real protocol.</p>
-          <div style="margin-top: 14px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
-        <a href="/video-offchain" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center;">
-              <span style="font-size: 16px; color: #6366f1; font-weight: 700;">&#8607;</span>
-            </div>
-            <div>
-              <div style="font-size: 1.05rem; font-weight: 700;">Off-Chain Mode</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">30 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0;">Verify locally with zero gas. Batch sessions into a Merkle root. One on-chain transaction settles the whole batch. ~375x gas reduction at batch size 100.</p>
-          <div style="margin-top: 14px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
-        <a href="/video-frameworks" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center;">
-              <span style="font-size: 16px; color: #6366f1; font-weight: 700;">&#9878;</span>
-            </div>
-            <div>
-              <div style="font-size: 1.05rem; font-weight: 700;">Framework Integrations</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">30 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0;">Native adapters for Vercel AI SDK, OpenAI Agents, and LangChain. One line wires auth into your stack. Same 3 Groth16 circuits underneath.</p>
-          <div style="margin-top: 14px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
         <a href="/video-oauth" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
             <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.3); display: flex; align-items: center; justify-content: center;">
@@ -1032,32 +1006,7 @@
           <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0;">OAuth proves a token is valid. It can't prove what an agent is allowed to do — privately. Side-by-side comparison: bearer tokens vs circuit-enforced scope with ZKP privacy path.</p>
           <div style="margin-top: 14px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
         </a>
-        <a href="/video-replay-check" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#6366f1" stroke-width="1.6"/></svg>
-            </div>
-            <div>
-              <div style="font-size: 1.05rem; font-weight: 700;">Replay Check</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">30 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0;">CI for agent behavior regressions. GitHub Action replays receipt history against your policy on every PR. Catches allow→deny changes before merge.</p>
-          <div style="margin-top: 14px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
-        <a href="/video-cli" style="display: block; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s, transform 0.2s; text-decoration: none; color: var(--text);" onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center;">
-              <span style="font-size: 16px; color: #6366f1; font-weight: 700;">&gt;_</span>
-            </div>
-            <div>
-              <div style="font-size: 1.05rem; font-weight: 700;">Credential CLI</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">30 seconds</div>
-            </div>
-          </div>
-          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0;">The whole lifecycle, one command. <code>bolyra run</code> wraps any MCP server. <code>observe</code> watches live calls and generates policy. <code>replay</code> re-judges history. <code>dev from-receipt</code> turns receipts into test fixtures.</p>
-          <div style="margin-top: 14px; font-size: 0.85rem; color: var(--accent); font-weight: 600;">Watch &rarr;</div>
-        </a>
+        <a href="/video" style="display: flex; align-items: center; justify-content: center; background: var(--bg-elevated); border: 1px dashed var(--border); border-radius: 16px; padding: 28px; text-decoration: none; color: var(--text-muted); font-weight: 600; font-size: 0.95rem;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">All 10 walkthroughs &rarr;</a>
       </div>
     </div>
   </section>
@@ -1068,94 +1017,29 @@
       <p class="section-label">Packages</p>
       <h2 class="section-title">Integrations and tools</h2>
       <p class="section-subtitle">Plug Bolyra into your agent framework, wallet, or payment flow.</p>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon mutual">MCP</div>
-          <h3>MCP Middleware</h3>
-          <p><strong style="color: var(--green);">v0.6.5:</strong> Dev mode — authenticated MCP server in 60 seconds, zero circuit artifacts. <code>withBolyraAuthStdio(server, { devMode: true, toolPolicy, receiptSigner })</code>. Per-tool permission gating, delegation chain support, signed verification receipts, stdio + HTTP transports. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mcp">Runnable example included</a>. <code>npm install @bolyra/mcp@0.6.5</code>.</p>
+      <div class="package-rows">
+        <div class="package-row">
+          <h3 style="font-size: 1.05rem; margin: 0;">Spend authorization</h3>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/mpp"><code>@bolyra/mpp@0.3.1</code></a>: operator-signed spend mandates verified before MPP payments execute. <a href="https://www.npmjs.com/package/@bolyra/payment-protocols"><code>@bolyra/payment-protocols@0.7.0</code></a>: x402 authorization and Stripe ACP spend gating against delegated scope. Try: <code>npx @bolyra/mpp demo</code>.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">GW</div>
-          <h3>MCP Auth Gateway</h3>
-          <p><strong style="color: var(--green);">v0.6.0:</strong> Standalone reverse proxy that sits in front of any MCP server. Verifies agent credentials, enforces per-tool permission policies, prevents replay, and emits ES256K-signed receipts for every allow <em>and</em> deny, hash-chained so deleted or reordered log lines are detectable. <strong>Credential binding:</strong> register credentials in <code>gateway.yaml</code> (or <code>--credentials</code>) and Core mode fail-closes on unknown commitments, forged masks, or expired registrations; production mode compiles the same registry, with <code>expiryTimestamp</code> per entry, into <code>resolveCredential</code> for scopeCommitment binding. <code>RedisNonceStore</code> for multi-instance replay protection. <strong>New:</strong> serves <code>/.well-known/bolyra-signers.json</code> (Receipt Signer Discovery v1) so third parties can fetch the receipt-signer trust anchor instead of exchanging keys manually. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <strong>Docker:</strong> <code>docker run ghcr.io/bolyra/gateway --target &lt;your-mcp&gt;</code>. Also: <code>npx @bolyra/gateway</code> or <code>createGatewayMiddleware</code> for Express/Hono/Fastify. <code>npm install @bolyra/gateway@0.6.0</code>.</p>
+        <div class="package-row">
+          <h3 style="font-size: 1.05rem; margin: 0;">Verifier and gateway</h3>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/gateway"><code>@bolyra/gateway@0.6.0</code></a>: reverse proxy in front of any MCP server, per-tool policy, replay protection, signed receipts, Docker or npx. <a href="https://www.npmjs.com/package/@bolyra/cli"><code>@bolyra/cli@0.7.0</code></a>: <code>bolyra verify</code>, a spawnable external verifier any host can call. Hosted <code>POST /v1/verify</code> preview for design partners, same External Verifier Contract.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">SH</div>
-          <h3>MCP Shield</h3>
-          <p><strong style="color: var(--green);">v0.2.0:</strong> Stdio MCP auth proxy. Wrap any stdio MCP server with per-tool permission enforcement, replay protection, and audit receipts. No code changes to the server. <code>npx @bolyra/shield --server "npx some-mcp-server" --dev</code>. Learn mode (<code>--learn</code>) spawns the server, discovers its tools, and writes a default-deny <code>shield.yaml</code> you can tighten. Shield covers stdio; Gateway covers HTTP. Both use the same <code>verifyBundle()</code> and <code>checkToolPolicy()</code>. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <code>npm install @bolyra/shield</code>.</p>
+        <div class="package-row">
+          <h3 style="font-size: 1.05rem; margin: 0;">Receipts and audit</h3>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/receipts"><code>@bolyra/receipts@0.9.0</code></a>: ES256K-signed auth and commerce receipts, hash-chained, offline-verifiable, signer discovery via <code>/.well-known/bolyra-signers.json</code>. Replay Check GitHub Action: replays receipt history against policy on every PR.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">R</div>
-          <h3>Signed Receipts</h3>
-          <p><strong style="color: var(--green);">v0.9.0:</strong> Auth + commerce receipts. Every verification and payment authorization decision produces a cryptographically signed receipt. secp256k1 signatures, keccak256 hashing, EVM-compatible. <strong>Hash-chained logs:</strong> chain fields are signed inside each receipt, so edits, deletions, insertions, and reordering break verification. <code>bolyra-receipt-verify</code> CLI included. <strong>New:</strong> Receipt Signer Discovery v1 parser (<code>parseSignerDiscovery</code>) for consuming <code>/.well-known/bolyra-signers.json</code> trust anchors. Try both sides: the <a href="https://github.com/bolyra/bolyra/tree/main/examples/receipt-scoring-kit">public receipt test corpus</a> (producer side — independently verifiable, no contact with us needed) and the <a href="https://github.com/bolyra/bolyra/tree/main/examples/receipt-scoring-consumer">scoring consumer reference</a> (what an indexer or risk engine does with verified receipts: verify first, fail closed, then extract per-actor features). <code>npm install @bolyra/receipts@0.9.0</code>.</p>
+        <div class="package-row">
+          <h3 style="font-size: 1.05rem; margin: 0;">MCP and tool enforcement</h3>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/mcp"><code>@bolyra/mcp@0.6.5</code></a>: middleware with dev mode, per-tool gating, stdio and HTTP. <a href="https://www.npmjs.com/package/@bolyra/shield"><code>@bolyra/shield@0.2.0</code></a>: stdio auth proxy with learn mode that writes a default-deny <code>shield.yaml</code> from the server's tool list. Both on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">$</div>
-          <h3>Payment Protocols</h3>
-          <p><strong style="color: var(--green);">v0.7.0:</strong> Stripe ACP spend gating. <code>verifyStripeACPSpend(ctx, amount, currency, 'authorize' | 'confirm')</code> gates PaymentIntents against delegated scope. <code>confirm</code> fails closed without <code>SIGN_ON_BEHALF</code>. Signed commerce receipts on every authorization. <strong>New:</strong> <a href="https://github.com/bolyra/bolyra/tree/main/examples/stripe-acp-demo">runnable e2e demo</a> -- $25 allowed, $480 rejected, confirm fails closed, 3/3 receipts verified. <code>npm install @bolyra/payment-protocols@0.7.0</code>. <strong>Also new:</strong> a <a href="https://github.com/bolyra/bolyra/tree/main/examples/stripe-ai-mandate-demo">runnable demo</a> gating a Stripe agent-toolkit-style <em>stubbed</em> spend tool with a Bolyra mandate before execution -- $25 allowed, $500 denied before the tool runs, signed receipts (real authorization path, stubbed Stripe call). Independent example; not affiliated with or endorsed by Stripe.</p>
-          <p><strong style="color: var(--green);">@bolyra/mpp 0.3.1:</strong> delegated spend mandates for <a href="https://mpp.dev">MPP</a> (the Machine Payments Protocol) — an authorization middleware for mppx servers that verifies the operator-signed mandate and financial tier <em>before</em> the payment flow proceeds, and emits signed authorization receipts alongside the Payment-Receipt. Mint mandates with <code>bolyra mandate issue</code>; the mandate's expiry is signature-bound (binding v2). MPP moves the money; Bolyra proves the mandate. Try it: <code>npx @bolyra/mpp demo</code> — the full issue → present → allow/deny → signed-receipt flow runs locally in one command. Community-built; not affiliated with or endorsed by the MPP authors, wevm, Tempo, or Stripe. <a href="https://github.com/bolyra/bolyra/blob/main/docs/mpp-authorization-companion.md">How the two compose</a>. <code>npm install @bolyra/mpp@0.3.1</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">OC</div>
-          <h3>OpenClaw Adapter</h3>
-          <p>ZKP-native trust verification for OpenClaw's onAgentVerify hook. 5-dimension scoring: proof validity, expiry, permissions, freshness, scope. <code>npm install @bolyra/openclaw@0.3.2</code></p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">&rarr;</div>
-          <h3>Off-Chain Mode</h3>
-          <p>Verify handshakes locally with zero gas. Batch sessions and post a single Merkle root on-chain. ~375x gas reduction at batch size 100.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">AI</div>
-          <h3>Vercel AI SDK</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Native adapter for the Vercel AI SDK. <code>withBolyraAuth(model)</code> wraps any language model to inject auth into tool calls. <code>bolyraAuthMiddleware()</code> for server-side verification. <code>createBolyraTools()</code> generates tool definitions. Works with <code>generateText()</code>, <code>streamText()</code>, <code>useChat()</code>. <code>npm install @bolyra/ai</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">OA</div>
-          <h3>OpenAI Agents SDK</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Auth guardrail + tool wrapper for the OpenAI Agents SDK. <code>BolyraAuthGuardrail</code> gates agent runs. <code>BolyraToolWrapper</code> enforces per-tool permissions. <code>bolyra_mcp_auth()</code> wraps MCP server connections with auth headers. SD-JWT and gateway modes. Tracing integration. <code>pip install bolyra-agents</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">CA</div>
-          <h3>CrewAI Adapter</h3>
-          <p><strong style="color: var(--green);">v0.2.0:</strong> Three <code>BaseTool</code> subclasses for CrewAI multi-agent workflows. <code>BolyraAuthTool</code>, <code>BolyraDelegateTool</code>, <code>BolyraSDJWTTool</code>. Pre-execution <code>BolyraGuard</code> with <code>guard_tools()</code> wrapping. Thread-safe <code>BolyraSession</code> chains handshake, delegation, and SD-JWT flows. <strong>BolyraDelegationFlow</strong> for per-agent scoping with proof envelope audit trail. 99 tests. <code>pip install bolyra-crewai</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">LC</div>
-          <h3>LangChain Adapter</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Three proper <code>BaseTool</code> subclasses for LangChain agents. <code>BolyraAuthTool</code> (ZKP mutual handshake), <code>BolyraDelegateTool</code> (ZKP delegation), <code>BolyraSDJWTTool</code> (pure-Python SD-JWT delegation, no Node.js required). Session manager for auth-then-delegate chains. Dev mode with auto-generated credentials. <code>pip install bolyra-langchain</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon privacy">PY</div>
-          <h3>Python SDK</h3>
-          <p><strong style="color: var(--green);">v0.5.0:</strong> Types, validation, and subprocess bridge to the Node SDK for ZKP proving. TS SDK at v0.6.1 (snarkjs now lazy-loaded — Bolyra Core paths never import it). <strong>New:</strong> pure-Python SD-JWT delegation module (<code>allow()</code>, <code>present()</code>, <code>verify()</code>) matching the TypeScript wire format exactly. Ed25519 + PyJWT. <code>pip install bolyra</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">CLI</div>
-          <h3>Credential CLI</h3>
-          <p><strong style="color: var(--green);">v0.7.0:</strong> <strong><code>bolyra verify</code></strong> — a spawnable external verifier any MCP host can call: one JSON request on stdin, one allow/deny verdict on stdout, fail-closed on everything else. Implements the open <a href="https://github.com/bolyra/bolyra/blob/main/spec/external-verifier-contract-v1.md">External Verifier Contract v1</a> with conformance vectors (binding v2: the operator signature now covers expiry). <strong>New: <code>bolyra mandate issue</code></strong> — mint a delegated spend mandate for an agent to present to an MPP payment gate: operator key in, signed presentation out. Issuance only — not key management, not a wallet. Plus: <strong><code>bolyra shield test</code></strong> — safety test runner for MCP servers. <strong><code>bolyra run</code></strong> — stdio→HTTP with auth. <strong><code>bolyra observe</code></strong> — live viewer + policy gen. <strong><code>bolyra replay</code></strong> — receipt re-evaluation. <strong><code>bolyra doctor</code></strong> — health check. Also: <code>cred</code>, <code>key</code>, <code>receipt verify</code>, <code>receipt verify-chain</code> (whole-log tamper evidence, now with <code>--signer-from &lt;url&gt;</code> signer discovery), <code>dev from-receipt</code>. <code>npm install -g @bolyra/cli@0.7.0</code>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">CI</div>
-          <h3>GitHub Action</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> <strong>Bolyra Replay Check</strong> — CI for agent behavior regressions. Replays receipt history against your policy on every PR. Posts a comment showing regressions (allow→deny) and relaxations (deny→allow). Fails the check if regressions are found. Drop-in: <code>uses: bolyra/bolyra/actions/replay-check@main</code>. <a href="https://github.com/bolyra/bolyra/tree/main/actions/replay-check">View on GitHub</a>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">DW</div>
-          <h3>Delegation Wallet</h3>
-          <p><strong style="color: var(--green);">Live:</strong> Human-facing consent screen for AI agent permissions. Create delegations, pick tools, set spend limits, choose expiry. OAuth-style approval flow. Receipt timeline for every agent action. Revoke live. <a href="https://app.bolyra.ai">app.bolyra.ai</a>.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon delegation">ZK</div>
-          <h3>Prebuilt Circuits</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Prebuilt Groth16 circuit artifacts for all three circuits (HumanUniqueness, AgentPolicy, Delegation). No Circom compiler needed. <code>npm install @bolyra/circuits</code>, then pass <code>getArtifactsDir()</code> to the SDK. SHA-256 verified. HumanUniqueness reuses the Semaphore v4 ceremony.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon mutual">CD</div>
-          <h3>Claude Desktop</h3>
-          <p>Tested integration with Claude Desktop as MCP host. Two paths: stdio proxy (bolyra-proxy injects ZKP proofs) or HTTP gateway (reverse proxy in front). Copy-paste <code>claude_desktop_config.json</code> snippets, setup script, 10 E2E tests. <a href="https://github.com/bolyra/bolyra/tree/main/examples/claude-desktop">Step-by-step guide</a>.</p>
+        <div class="package-row">
+          <h3 style="font-size: 1.05rem; margin: 0;">Frameworks and ZK</h3>
+          <p style="margin: 0; color: var(--text-muted);">TS SDK at v0.6.1 and Python SDK v0.5.0. Adapters for Vercel AI SDK, OpenAI Agents, LangChain, and CrewAI. <a href="https://www.npmjs.com/package/@bolyra/circuits"><code>@bolyra/circuits</code></a>: prebuilt Groth16 artifacts, no Circom compiler needed. ZK upgrades use the same verifier boundary when privacy-preserving delegation is needed.</p>
         </div>
       </div>
+      <p class="section-subtitle" style="margin-top: 20px;"><a href="https://github.com/bolyra/bolyra">Full package list on GitHub &rarr;</a></p>
     </div>
   </section>
 
@@ -1230,74 +1114,6 @@
           </tr>
         </tbody>
       </table>
-    </div>
-  </section>
-
-  <!-- ZK Deep Dive -->
-  <section id="architecture">
-    <div class="container">
-      <p class="section-label">Where this goes</p>
-      <h2 class="section-title">Three circuits, one verification</h2>
-      <p class="section-subtitle">The receipts you ship today are wire-compatible with the ZKP circuits underneath. Groth16 across all three, rapidsnark-accelerated for sub-200ms client-side proving. Verified through a unified Solidity contract stack on Base L2.</p>
-      <div class="arch-grid">
-        <div class="arch-card">
-          <p class="circuit-name">Circuit 1</p>
-          <h3>HumanUniqueness</h3>
-          <div class="stat">
-            <span class="label">Constraints</span>
-            <span class="value">16,409</span>
-          </div>
-          <div class="stat">
-            <span class="label">Proof system</span>
-            <span class="value">Groth16</span>
-          </div>
-          <div class="stat">
-            <span class="label">Proving time</span>
-            <span class="value">~100ms (rapidsnark)</span>
-          </div>
-        </div>
-        <div class="arch-card">
-          <p class="circuit-name">Circuit 2</p>
-          <h3>AgentPolicy</h3>
-          <div class="stat">
-            <span class="label">Constraints</span>
-            <span class="value">20,923</span>
-          </div>
-          <div class="stat">
-            <span class="label">Proof system</span>
-            <span class="value">Groth16</span>
-          </div>
-          <div class="stat">
-            <span class="label">Proving time</span>
-            <span class="value">~100ms (rapidsnark)</span>
-          </div>
-        </div>
-        <div class="arch-card">
-          <p class="circuit-name">Circuit 3</p>
-          <h3>Delegation</h3>
-          <div class="stat">
-            <span class="label">Constraints</span>
-            <span class="value">22,398</span>
-          </div>
-          <div class="stat">
-            <span class="label">Proof system</span>
-            <span class="value">Groth16</span>
-          </div>
-          <div class="stat">
-            <span class="label">Proving time</span>
-            <span class="value">~100ms (rapidsnark)</span>
-          </div>
-        </div>
-      </div>
-      <div class="contract-stack">
-        <div class="layer">HumanVerifier.sol</div>
-        <span class="arrow">&rarr;</span>
-        <div class="layer">AgentVerifier.sol</div>
-        <span class="arrow">&rarr;</span>
-        <div class="layer">DelegationVerifier.sol</div>
-        <span class="arrow">&rarr;</span>
-        <div class="layer">IdentityRegistry.sol</div>
-      </div>
     </div>
   </section>
 
