@@ -757,12 +757,12 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <p class="section-label" style="margin-bottom: 20px;">Verified agent actions</p>
-      <h1>Your MCP server has no idea who's calling.</h1>
-      <p class="tagline">Bolyra proves who — and what — authorized every agent tool call. Policy enforcement, signed action receipts, and a tamper-evident audit trail, in front of any MCP server or agent platform.</p>
+      <p class="section-label" style="margin-bottom: 20px;">Agent payment authorization</p>
+      <h1>Prove an agent was authorized before it spends.</h1>
+      <p class="tagline">Bolyra verifies delegated spend mandates before x402/MPP payments and emits signed receipts for audit, disputes, and compliance. The same verifier boundary generalizes to verified agent actions: policy enforcement, signed action receipts, and a tamper-evident audit trail in front of any MCP server or agent platform.</p>
       <div class="cta-group">
-        <a href="https://github.com/bolyra/gateway-quickstart" class="btn btn-primary">
-          Protect an MCP server
+        <a href="https://github.com/bolyra/bolyra/tree/main/integrations/mpp-payments" class="btn btn-primary">
+          Gate an agent payment
         </a>
         <a href="https://github.com/bolyra/bolyra" class="btn btn-secondary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -770,6 +770,10 @@
         </a>
       </div>
       <p class="install-hint">
+        <code>npx @bolyra/mpp demo</code>
+        <span class="badge" style="background: rgba(34, 211, 238, 0.12); color: var(--cyan);">v0.3.1</span>
+      </p>
+      <p class="install-hint" style="margin-top: 10px;">
         <code>npx @bolyra/gateway --target http://localhost:3000/mcp</code>
       </p>
       <p class="install-hint" style="margin-top: 10px;">
@@ -886,7 +890,7 @@
     <div class="container">
       <p class="section-label">For agent platforms</p>
       <h2 class="section-title">Add verified agent actions to your enterprise offering.</h2>
-      <p class="section-subtitle">If you sell agent infrastructure — an MCP gateway, an agent framework, a tool registry, a hosted runtime — your enterprise customers are about to ask who authorized each agent action, and for proof. Bolyra plugs in as an external verifier, without you rebuilding auth. Start on <strong>Bolyra Core</strong> — classical crypto: policy, replay protection, signed receipts. Upgrade to <strong>Bolyra ZK</strong> when your customers need verification without disclosure — same verifier contract, same gateway integration path.</p>
+      <p class="section-subtitle">If you sell agent infrastructure — a payment rail or agent wallet, an MCP gateway, an agent framework, a hosted runtime — your enterprise customers are about to ask who authorized each agent action (and each agent payment), and for proof. Bolyra plugs in as an external verifier, without you rebuilding auth. Start on <strong>Bolyra Core</strong> — classical crypto: policy, replay protection, signed receipts. Upgrade to <strong>Bolyra ZK</strong> when your customers need verification without disclosure — same verifier contract, same gateway integration path.</p>
       <div class="checks-grid">
         <div class="check-card">
           <h3>Policy control plane</h3>
@@ -905,10 +909,15 @@
           <p>Self-hosted gateway today — deploy inside your customer's VPC. A hosted verifier preview is live for design partners: <code>POST /v1/verify</code>, same External Verifier Contract, HTTP instead of local spawn — evaluate with a partner token before installing the gateway. Open-core protocol, Apache-2.0.</p>
         </div>
       </div>
+      <div style="margin-top: 32px; background: var(--bg-code); border: 1px solid var(--accent); border-radius: 16px; padding: 28px 32px;">
+        <h3 style="font-size: 1.35rem; letter-spacing: 0; margin-bottom: 12px;">Open verifier boundary, no lock-in</h3>
+        <p style="color: var(--text-muted); margin: 0;">The <strong style="color: var(--text);">External Verifier Contract</strong> is Bolyra's open host-to-verifier boundary: a host sends one verification request and gets a fail-closed allow/deny verdict from a classical, ZK, or external verifier. Pilot against Bolyra's hosted verifier preview today, then keep the same boundary if you self-host or swap verifier implementations later. Bolyra maintains the spec, conformance vectors, reference hosts, and managed verifier path.</p>
+        <p style="color: var(--cyan); margin: 14px 0 0; font-weight: 600;">Open contract. Managed operations when you need them.</p>
+      </div>
       <div class="cta-group" style="margin-top: 32px;">
         <a href="mailto:kondojuviswanadha@gmail.com?subject=Bolyra%20design-partner%20pilot" class="btn btn-primary">Book a 20-min technical fit call</a>
       </div>
-      <p class="section-subtitle" style="margin-top: 16px;">Design-partner pilots: 90 days, fixed fee, integrated into your platform in ~2 weeks.</p>
+      <p class="section-subtitle" style="margin-top: 16px;">Agent spend authorization pilots: 90 days, fixed fee, integrated into your payment or platform workflow in ~2 weeks.</p>
     </div>
   </section>
 
@@ -1073,7 +1082,7 @@
         <div class="feature-card">
           <div class="feature-icon mutual">SH</div>
           <h3>MCP Shield</h3>
-          <p><strong style="color: var(--green);">v0.1.0:</strong> Stdio MCP auth proxy. Wrap any stdio MCP server with per-tool permission enforcement, replay protection, and audit receipts. No code changes to the server. <code>npx @bolyra/shield --server "npx some-mcp-server" --dev</code>. Shield covers stdio; Gateway covers HTTP. Both use the same <code>verifyBundle()</code> and <code>checkToolPolicy()</code>. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <code>npm install @bolyra/shield</code>.</p>
+          <p><strong style="color: var(--green);">v0.2.0:</strong> Stdio MCP auth proxy. Wrap any stdio MCP server with per-tool permission enforcement, replay protection, and audit receipts. No code changes to the server. <code>npx @bolyra/shield --server "npx some-mcp-server" --dev</code>. Learn mode (<code>--learn</code>) spawns the server, discovers its tools, and writes a default-deny <code>shield.yaml</code> you can tighten. Shield covers stdio; Gateway covers HTTP. Both use the same <code>verifyBundle()</code> and <code>checkToolPolicy()</code>. Listed on the <a href="https://registry.modelcontextprotocol.io/">official MCP Registry</a>. <code>npm install @bolyra/shield</code>.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon delegation">R</div>
