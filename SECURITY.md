@@ -106,8 +106,10 @@ auditors can independently confirm our reasoning.
   `elliptic` is pulled in transitively via `circomlibjs` (and its nested
   `ethers@5` subtree) in every package that depends on `@bolyra/sdk` —
   including `@bolyra/mcp`, `@bolyra/gateway`, `@bolyra/cli`,
-  `@bolyra/shield`, `@bolyra/ai`, and `@bolyra/hosted-verify` — plus the
-  contracts Hardhat toolchain. At the time of writing there is no published
+  `@bolyra/shield`, `@bolyra/ai`, `@bolyra/hosted-verify`, and
+  `@bolyra/mpp` (`integrations/mpp-payments/` and its
+  `examples/mandate-demo/` lockfile) — plus the contracts Hardhat
+  toolchain. At the time of writing there is no published
   `elliptic` release that addresses the open advisories (latest on npm is
   still 6.6.1). The affected code is not invoked by the Bolyra packages at
   runtime — signing in the shipped paths uses `@noble/*` and the
@@ -153,8 +155,14 @@ auditors can independently confirm our reasoning.
 ### CI gate
 
 A `dependency-audit` job in `.github/workflows/ci.yml` runs
-`npm audit --omit=dev --audit-level=high` against each published package
-(`sdk`, `integrations/mcp`, `integrations/openclaw`,
-`integrations/payment-protocols`) on every push and pull request to `main`.
-A new high or critical runtime advisory will fail CI. The job intentionally
-excludes dev dependencies — runtime-reachable risk is the gate.
+`npm audit --omit=dev --audit-level=high` against all 13 packages (the 12
+published packages — `sdk`, `integrations/receipts`, `delegation`,
+`circuits-package`, `integrations/mcp`, `integrations/openclaw`,
+`integrations/payment-protocols`, `integrations/cli`,
+`integrations/gateway`, `integrations/ai`, `integrations/shield`,
+`integrations/mpp-payments` — plus the operated `integrations/hosted-verify`)
+on every push and pull request to `main`, resolving local `@bolyra/*`
+siblings via `file:` rewrites so the audited tree matches what a consumer
+would install from that commit. A new high or critical runtime advisory
+will fail CI. The job intentionally excludes dev dependencies —
+runtime-reachable risk is the gate.

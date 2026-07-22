@@ -31,6 +31,16 @@ jobs:
             [ -z "$sha" ] && continue
             author_name=$(git log -1 --format='%an' "$sha")
             author_email=$(git log -1 --format='%ae' "$sha")
+            # DCO is a legal attestation for human contributions; automated
+            # dependency bots (Dependabot etc.) cannot sign off. Skip commits
+            # authored by GitHub Apps; human commits in the same PR are still
+            # checked.
+            case "$author_email" in
+              *"[bot]@users.noreply.github.com")
+                echo "Skipping DCO check for bot commit $sha (${author_name} <${author_email}>)"
+                continue
+                ;;
+            esac
             expected="Signed-off-by: ${author_name} <${author_email}>"
             body=$(git log -1 --format='%B' "$sha")
             if ! printf '%s\n' "$body" | grep -Fxq "$expected"; then
