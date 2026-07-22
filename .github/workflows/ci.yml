@@ -254,7 +254,11 @@ jobs:
                 fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
               '
               rm -f package-lock.json
-              npm install --package-lock-only
+              # --ignore-scripts: file:-linked siblings (and the package itself)
+              # may declare prepare/build hooks (e.g. receipts' `prepare: tsc`)
+              # that cannot run without node_modules — the audit only needs
+              # dependency resolution, never lifecycle scripts.
+              npm install --package-lock-only --ignore-scripts
               npm audit --omit=dev --audit-level=high
             )
             echo "::endgroup::"
