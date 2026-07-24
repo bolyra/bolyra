@@ -152,6 +152,12 @@ auditors can independently confirm our reasoning.
   ships an advisory fix. We will publish a new `@bolyra/mcp` minor whenever
   the peer range needs to widen.
 
+- **`next` + `sharp` advisories in `apps/wallet/`.** The wallet app is an
+  unpublished placeholder outside the audit gate. Its `next` advisories
+  require a framework major upgrade, and its `sharp` (0.34.x, patched in
+  0.35.0) rides the same Next toolchain; both are deferred to a dedicated
+  upgrade/test pass rather than a lockfile triage (tracked 2026-07-23).
+
 ### CI gate
 
 A `dependency-audit` job in `.github/workflows/ci.yml` runs
