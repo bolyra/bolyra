@@ -161,6 +161,12 @@ jobs:
           npm install --no-save --no-audit --no-fund @bolyra/circuits@0.1.0
           node scripts/circuits-build-from-package.js "$RUNNER_TEMP/circuits-build"
 
+      # The 24-case e2e matrix spawns the BUILT CLI (`node dist/main.js`), and
+      # `typecheck` is --noEmit, so dist/ must be produced explicitly.
+      - name: Build
+        working-directory: integrations/cli
+        run: npm run build
+
       - name: Test
         working-directory: integrations/cli
         env:
