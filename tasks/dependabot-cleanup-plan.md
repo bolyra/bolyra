@@ -212,3 +212,9 @@ One commit per phase if any phase requires iteration; otherwise single squashed 
 - Phase D: 20 min (CI YAML + SECURITY.md edit)
 
 **Total: ~1.5-2 hours.** Single PR if Phase A doesn't require multiple fallback iterations.
+
+---
+
+## Triage log 2026-07-22/23 (rev 3)
+
+74 open at peak (68 fired post-group-merge on stale checked-in lockfiles). Closed via #83 (946ef14: mpp overrides + DCO bot exemption + audit --ignore-scripts), #86 (true-clean 21-lockfile refresh + ai/shield underscore), #87 (stale override bumps: fast-uri 3.1.3, @hono/node-server 2.0.5 forced-major ×9, sharp 0.35.0, cli engines >=20), #88 (@hono/node-server 2.0.10, second advisory), #89 (fast-uri 3.1.4, second advisory). Residuals: 176/180/184 dismissed tolerable_risk, 185/186/189 auto-fixed. Remaining 10 = apps/wallet (next ×9 + sharp), deferred to a dedicated Next upgrade pass (SECURITY.md). New rules: stale exact-pin overrides re-checked every triage; committed lockfiles must come from full installs (npm ci parity); never regen lockfiles with node_modules present; expect multi-advisory waves (fast-uri and @hono/node-server were each hit twice in 48h).
