@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project
 
-**Bolyra** — unified ZKP identity protocol for humans and AI agents. Phase 1 (Proof of Enrollment) is the current scope: humans prove uniqueness via Semaphore v4-style enrollment, agents prove EdDSA-signed credentials with cumulative-bit permissions, and a delegation circuit narrows scope one-way.
+**Bolyra** — unified ZKP identity protocol for humans and AI agents. The ZKP core (Phase 1, Proof of Enrollment): humans prove uniqueness via Semaphore v4-style enrollment, agents prove EdDSA-signed credentials with cumulative-bit permissions, and a delegation circuit narrows scope one-way. The shipped **product surface** is authorization for AI agent actions — see "Verified Agent Actions (EVC + MPP)" below.
 
 - **Domain:** bolyra.ai
 - **Company:** ZKProva Inc.
@@ -38,19 +38,32 @@ bolyra/
 │   ├── scripts/      # compile.js + 9 benchmarks (groth16/plonk/rapidsnark)
 │   └── build/        # .r1cs, .zkey, .vkey, pot16.ptau, rapidsnark_prover
 ├── contracts/        # Hardhat — Solidity verifiers + on-chain registry
-├── sdk/              # @bolyra/sdk v0.2.0 (TypeScript, public API)
+├── sdk/              # @bolyra/sdk v0.6.1 (TypeScript, public API)
 ├── sdk-python/       # bolyra (Python — pure types + subprocess bridge to JS)
-├── integrations/     # langchain/, crewai/, mcp/, openclaw/, payment-protocols/
-├── spec/             # DID method, IETF draft, conformance runner, test vectors
-├── examples/         # mcp-demo (bolyra-proxy.js — used by .mcp.json)
-├── docs/             # quickstart, owasp-agentic-mapping, superpowers/
+├── integrations/     # langchain/, crewai/, openai-agents/ (bolyra-agents on PyPI), mcp/, openclaw/, payment-protocols/, gateway/, shield/, ai/, cli/,
+│                     #   receipts/ (@bolyra/receipts), mpp-payments/ (@bolyra/mpp), hosted-verify/ (Cloudflare Worker preview)
+├── spec/             # DID method, IETF drafts, External Verifier Contract v1, conformance runner + fixtures, reference-host-rs (Rust host)
+├── delegation/ registry/ circuits-package/   # delegation pkg · on-chain registry service · @bolyra/circuits artifacts
+├── pilot/            # pilot harness — thin ops layer (runbook, partner scripts, receipt export) over hosted-verify
+├── actions/ apps/    # GitHub actions (replay-check) · apps (wallet)
+├── examples/         # mcp-demo (bolyra-proxy.js — used by .mcp.json), mandate/stripe/receipt-scoring demos
+├── docs/             # quickstart, owasp-agentic-mapping, superpowers/, pilot/, mpp-authorization-companion
 ├── strategy/         # competitive analysis (codex challenge, zk-vs-rfc7662)
 ├── patents/          # provisional + non-provisional drafts
 ├── landing/          # bolyra.ai landing page
-└── *-autoresearch/   # 4 separate Karpathy-style loops (see below)
+└── *-autoresearch/   # 6 separate Karpathy-style loops (see below)
 ```
 
 **Public API (TS SDK):** `createHumanIdentity(secret)`, `createAgentCredential(modelHash, operatorPrivKey, permissions, expiry)`, `proveHandshake(human, agent)`, `verifyHandshake(humanProof, agentProof, nonce)`. Delegation API is v0.3 stub.
+
+## Verified Agent Actions (EVC + MPP) — the current product surface
+
+Beyond the ZKP core, the shipped wedge is **authorization for AI agent actions** — proving who authorized an action, at what limit, for which payee, before it runs.
+
+- **External Verifier Contract v1** (`spec/external-verifier-contract-v1.md`) — the open host↔verifier contract: one JSON request on stdin, one fail-closed allow/deny verdict on stdout. Verifiers self-describe `kind: classical | zk | external`. Reference hosts: `spec/reference-host-rs` (Rust) + the JS runner (`spec/conformance-runner.js`); hostile-fixture conformance suite in `spec/fixtures/host-conformance/`.
+- **@bolyra/mpp** (`integrations/mpp-payments/`) — authorization middleware for the Machine Payments Protocol: `bolyraGate()` verifies an operator-signed spend mandate before a payment proceeds. Mint mandates with `bolyra mandate issue` (`integrations/cli/src/commands/mandate-issue.ts`) — issuance only, not a wallet. Try it: `npx @bolyra/mpp demo`.
+- **@bolyra/receipts** (`integrations/receipts/`, v0.9.0) — ES256K-signed, hash-chained decision receipts; verify with `bolyra receipt verify` / `verify-chain`.
+- **hosted-verify** (`integrations/hosted-verify/`) — a Cloudflare Worker classical-verify **design-partner preview** (no SLA, not production). `pilot/` is the thin readiness harness over it.
 
 ## Circuits
 
@@ -62,7 +75,7 @@ bolyra/
 
 Powers of Tau: `pot16.ptau` (2^16 constraints) is the universal SRS for the project-specific Groth16 keys.
 
-## Autoresearch Loops (4 — keep them separate)
+## Autoresearch Loops (6 — keep them separate)
 
 | Loop | Directory | Purpose |
 |---|---|---|
@@ -70,6 +83,8 @@ Powers of Tau: `pot16.ptau` (2^16 constraints) is the universal SRS for the proj
 | Differentiation | `differentiation-autoresearch/` | Competitive moat exploration |
 | Patent | `patent-autoresearch/` | Patentable invention disclosures |
 | Protocol | `protocol-autoresearch/` | Wire format + cryptographic primitive tuning |
+| Standards | `standards-autoresearch/` | IETF / EVC standardization + draft tracking |
+| Theseus | `theseus-autoresearch/` | Theseus Network integration exploration |
 
 Do not mix winners between loops.
 
@@ -106,8 +121,12 @@ Do not mix winners between loops.
 - **DCO required** — every commit needs `Signed-off-by:`. Use `git commit -s`. To fix: `git commit --amend -s --no-edit`.
 - **Apache 2.0 patent grant** — contributors implicitly grant a patent license. Be deliberate about external code.
 - **License is uniformly Apache-2.0** — SDK READMEs, `package.json` (root + `sdk/`), `sdk-python/pyproject.toml`, and `LICENSE` all match. CONTRIBUTING.md DCO + Apache patent grant remain canonical.
-- **Dependency `overrides` policy** — transitive vulnerabilities are pinned via per-manifest `overrides` blocks. Two patterns matter when adding new ones: (1) **never use a flat `overrides` key that collides with a direct dependency** — npm returns `EOVERRIDE` at install time. The repo's `snarkjs` is the canonical case: several manifests list `snarkjs ^0.7.x` as a direct dep, so the override that pins `snarkjs` inside the dev-only `circom_tester` subtree uses the nested form `"circom_tester": { "snarkjs": "0.7.6" }`, not a flat `"snarkjs": "0.7.6"`. (2) **Overrides are repo-local; they do NOT propagate to downstream consumers.** `@bolyra/mcp` lists `@modelcontextprotocol/sdk` as a peer dep — our overrides clean our lockfile, but consumers must upgrade themselves. Document any such residual in `SECURITY.md` under "Known accepted residual Dependabot alerts" and rely on the `dependency-audit` CI job (`npm audit --omit=dev --audit-level=high` per published package) to gate new runtime advisories. Full triage log: `tasks/dependabot-cleanup-plan.md`.
-- **Landing page deploys self-verify** — `landing/deploy.sh` runs `landing/verify.sh` after the CloudFront invalidation completes. `verify.sh` does both string-match (grep the rendered HTML for advertised symbols) AND runtime resolution (`npm install` the published tarball and `require()` each advertised function). The runtime check is non-negotiable: the 2026-05-30 X402 outage stayed live for 14 hours because the old verify.sh only grepped strings. To bypass for emergency redeploys: `BOLYRA_SKIP_VERIFY=1 ./landing/deploy.sh`.
+- **Dependency `overrides` policy** — transitive vulnerabilities are pinned via per-manifest `overrides` blocks. Two patterns matter when adding new ones: (1) **never use a flat `overrides` key that collides with a direct dependency** — npm returns `EOVERRIDE` at install time. The repo's `snarkjs` is the canonical case: several manifests list `snarkjs ^0.7.x` as a direct dep, so the override that pins `snarkjs` inside the dev-only `circom_tester` subtree uses the nested form `"circom_tester": { "snarkjs": "0.7.6" }`, not a flat `"snarkjs": "0.7.6"`. (2) **Overrides are repo-local; they do NOT propagate to downstream consumers.** `@bolyra/mcp` lists `@modelcontextprotocol/sdk` as a peer dep — our overrides clean our lockfile, but consumers must upgrade themselves. Document any such residual in `SECURITY.md` under "Known accepted residual Dependabot alerts" and rely on the `dependency-audit` CI job (`npm audit --omit=dev --audit-level=high` per published package) to gate new runtime advisories.  (3) **Exact override pins go stale** — a pinned version can itself become advisoried later; re-check and bump/drop every override pin during each alert triage. Full triage log: `tasks/dependabot-cleanup-plan.md`.
+- **Landing page deploys self-verify** — `landing/deploy.sh` runs `landing/verify.sh` after the CloudFront invalidation completes. `verify.sh` does both string-match (grep the rendered HTML for advertised symbols) AND runtime resolution (`npm install` the published tarball and `require()` each advertised function). The runtime check is non-negotiable: the 2026-05-30 X402 outage stayed live for 14 hours because the old verify.sh only grepped strings. To bypass for emergency redeploys: `BOLYRA_SKIP_VERIFY=1 ./landing/deploy.sh`. (Note: verify.sh's runtime-check version pins `SDK_VERSION`/`PP_VERSION` are hand-maintained and can lag the advertised versions — a known gap, not a blocker.)
+- **Binding v2 signs `expiry`** — canonical EVC binding signs exactly `{agent_name, project_key, program, model, capabilities, expiry}` under DST `bolyra.external-verifier.binding.v2`; `@bolyra/mpp` maps CLI/API `agentName`/`audience` to `agent_name`/`project_key`. A five-field v1 binding is denied `unsupported_version` (fail-closed, no compat mode). The MPP gate, `bolyra verify`, and hosted-verify pin the same byte-compatible binding digest/vector — change them together and regenerate conformance goldens. ZK mode binds expiry in-circuit and was never exposed to the v1 re-anchoring gap.
+- **Receipt `commerce.intentHash` is BARE 64-hex** (no `0x`) — the `@bolyra/receipts` verify CLI enforces `/^[0-9a-fA-F]{64}$/`; `signature.payloadHash` is separately `0x`-prefixed by design. An emitter that 0x-prefixes `intentHash` fails `receipt verify` even though it verifies programmatically (this bit `@bolyra/mpp` → fixed in 0.3.1).
+- **CODEOWNERS gates the crypto/verifier/supply-chain paths** (`.github/CODEOWNERS`) — circuits, verifiers, receipts, delegation, mandate issuance, CI/release, and dependency manifests all require maintainer review. No drive-by merges there; docs/examples/tests are reviewable normally.
+- **Pilot = harness, not platform** — `pilot/` makes a first pilot runnable in an afternoon over the hosted-verify *preview*. Do NOT build the hosted control plane / policy engine / audit portal until there's a signed pilot or a named-workflow design-partner commitment. See `pilot/RUNBOOK.md`.
 
 ## Environment
 
