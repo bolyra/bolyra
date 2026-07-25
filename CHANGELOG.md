@@ -17,6 +17,36 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/cli 0.8.0 (2026-07-24)
+
+### Fixed
+
+- **The bundled `@bolyra/circuits` vkey fallback never worked.** `resolveVkeyPath`
+  looked for `@bolyra/circuits/build/<vkey>`, but the package ships
+  `artifacts/<Circuit>/<Circuit>_groth16_vkey.json` — a different directory, an
+  extra level of nesting, and (for `HumanUniqueness`) a different filename than
+  the flat `circuits/build` layout uses. Installing `@bolyra/cli` alongside
+  `@bolyra/circuits` without setting `BOLYRA_CIRCUITS_DIR` therefore produced
+  `internal_error` instead of the documented fallback. The fallback now resolves
+  the package root and applies that package's own layout.
+
+### Changed
+
+- **`--circuits-dir` is now authoritative.** When the operator names a circuits
+  directory and the verification key is not there, `bolyra verify` fails with
+  `internal_error` instead of falling back to `BOLYRA_CIRCUITS_DIR` or the
+  bundled package. Silently verifying against a key the operator did not choose
+  is a trust surprise in a verifier. `BOLYRA_CIRCUITS_DIR` is ambient config and
+  still falls through to the bundled package.
+
+### Added
+
+- CI now typechecks and runs the full CLI suite (299 tests, including real
+  Groth16 proof generation) on every push. Artifacts come from the published
+  `@bolyra/circuits` via `scripts/circuits-build-from-package.js`, so no Circom
+  toolchain is needed. Previously the CLI was the only published package with no
+  CI test job.
+
 ## @bolyra/mpp 0.3.1 (2026-07-18)
 
 - Fix: gate decision receipts now emit a bare 64-hex commerce.intentHash

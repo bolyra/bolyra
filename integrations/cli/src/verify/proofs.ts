@@ -83,12 +83,30 @@ export function computeVkeyHash(vkey: object): string {
 }
 
 /**
+ * Path to a circuit's Groth16 vkey inside an installed `@bolyra/circuits`.
+ *
+ * The package layout is NOT the flat `circuits/build` layout `VKEY_FILENAME`
+ * describes: it ships per-circuit subdirectories under `artifacts/` and always
+ * suffixes the proving system, so HumanUniqueness is
+ * `HumanUniqueness_groth16_vkey.json` here but `HumanUniqueness_vkey.json`
+ * in `circuits/build`.
+ */
+export function bundledVkeyPath(circuit: CircuitName, packageRoot: string): string {
+  return path.join(packageRoot, 'artifacts', circuit, `${circuit}_groth16_vkey.json`);
+}
+
+/**
  * Resolve the on-disk path to a circuit's Groth16 verification key.
  *
- * Precedence: `opts.circuitsDir` (`--circuits-dir`) → `BOLYRA_CIRCUITS_DIR`
- * → the bundled `@bolyra/circuits` package (best-effort). If none yield an
- * existing file the key cannot be resolved, which is an operator/config fault:
- * `internal_error` (core exits non-zero), NOT a proof denial.
+ * `opts.circuitsDir` (`--circuits-dir`) is AUTHORITATIVE: when the operator
+ * names a directory, the key must be there. Falling back to a different vkey
+ * would mean verifying against a key the operator did not choose, which is a
+ * trust surprise in a verifier, so a bad explicit path fails loud instead.
+ *
+ * Otherwise: `BOLYRA_CIRCUITS_DIR` (ambient config, may fall through) → the
+ * bundled `@bolyra/circuits` package. If none yield an existing file the key
+ * cannot be resolved, which is an operator/config fault: `internal_error`
+ * (core exits non-zero), NOT a proof denial.
  */
 export function resolveVkeyPath(
   circuit: CircuitName,
@@ -97,17 +115,36 @@ export function resolveVkeyPath(
   const filename = VKEY_FILENAME[circuit];
   const env = opts.env ?? process.env;
 
-  const candidates: string[] = [];
-  if (opts.circuitsDir) candidates.push(path.join(opts.circuitsDir, filename));
-  if (env.BOLYRA_CIRCUITS_DIR) candidates.push(path.join(env.BOLYRA_CIRCUITS_DIR, filename));
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
+  // Explicit flag: resolve here or fail. No fallback. Keyed on `!== undefined`
+  // so `--circuits-dir=` is a stated (empty) choice rather than an absent one;
+  // an empty value would otherwise `path.join` to a bare filename and resolve
+  // against the process cwd.
+  if (opts.circuitsDir !== undefined) {
+    if (opts.circuitsDir.trim() === '') {
+      throw new VerifyDenial('internal_error', 'circuit vkey not resolvable', {
+        circuit,
+        reason: 'empty --circuits-dir',
+      });
+    }
+    const explicit = path.join(opts.circuitsDir, filename);
+    if (fs.existsSync(explicit)) return explicit;
+    throw new VerifyDenial('internal_error', 'circuit vkey not resolvable', {
+      circuit,
+      circuitsDir: opts.circuitsDir,
+    });
   }
 
-  // Best-effort: fall back to the bundled @bolyra/circuits package.
+  if (env.BOLYRA_CIRCUITS_DIR) {
+    const ambient = path.join(env.BOLYRA_CIRCUITS_DIR, filename);
+    if (fs.existsSync(ambient)) return ambient;
+  }
+
+  // Best-effort: fall back to the bundled @bolyra/circuits package. Resolve
+  // its package.json (always resolvable — the package declares no `exports`
+  // map) to find the install root, then apply that package's own layout.
   try {
-    const bundled = require.resolve(`@bolyra/circuits/build/${filename}`);
+    const pkgRoot = path.dirname(require.resolve('@bolyra/circuits/package.json'));
+    const bundled = bundledVkeyPath(circuit, pkgRoot);
     if (fs.existsSync(bundled)) return bundled;
   } catch {
     // package not installed / entry not exported — fall through to denial.
