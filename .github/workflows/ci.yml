@@ -124,6 +124,55 @@ jobs:
       - run: npm test
         working-directory: integrations/payment-protocols
 
+  cli-tests:
+    name: CLI — typecheck & test (external verifier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Build local @bolyra/sdk
+        run: cd sdk && npm ci && npm run build
+
+      - name: Install CLI with file:// SDK
+        working-directory: integrations/cli
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+          rm -f package-lock.json
+          npm install
+
+      # `typecheck` is deliberate over a bare `tsc --noEmit`: its pretypecheck
+      # hook builds the @bolyra/receipts and @bolyra/mpp dists that this
+      # package's tsconfig `paths` resolve against.
+      - name: Typecheck
+        working-directory: integrations/cli
+        run: npm run typecheck
+
+      # The real-proof tests generate genuine Groth16 proofs, which needs
+      # circuit artifacts. CI has no Circom toolchain and circuits/build is
+      # gitignored, so pull the prebuilt artifacts from @bolyra/circuits and
+      # reshape them into the circuits/build layout the SDK + CLI expect.
+      - name: Materialize circuit artifacts from @bolyra/circuits
+        working-directory: integrations/cli
+        run: |
+          npm install --no-save --no-audit --no-fund @bolyra/circuits@0.1.0
+          node scripts/circuits-build-from-package.js "$RUNNER_TEMP/circuits-build"
+
+      # The 24-case e2e matrix spawns the BUILT CLI (`node dist/main.js`), and
+      # `typecheck` is --noEmit, so dist/ must be produced explicitly.
+      - name: Build
+        working-directory: integrations/cli
+        run: npm run build
+
+      - name: Test
+        working-directory: integrations/cli
+        env:
+          BOLYRA_CIRCUITS_DIR: ${{ runner.temp }}/circuits-build
+        run: npm test
+
   conformance:
     name: Conformance test vectors
     runs-on: ubuntu-latest

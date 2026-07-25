@@ -78,6 +78,14 @@ function signals(opts: {
 describe('verifyDelegationChain', () => {
   let dir: string;
   let nonceStore: FileNonceStore;
+
+  // circomlibjs builds its Poseidon WASM on first use. On a cold CI runner
+  // that one-time cost alone exceeds jest's 5s default, and because the field
+  // object is a lazily-populated singleton, the timeout cascades: every later
+  // test then throws on a null `_F`. Warm it once, off the per-test budget.
+  beforeAll(async () => {
+    await poseidon3(1n, 2n, 3n);
+  }, 120_000);
   let rootSource: RootSource;
 
   beforeEach(async () => {

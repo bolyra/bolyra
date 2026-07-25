@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   createHumanIdentity,
@@ -21,6 +22,7 @@ import {
   type CircuitName,
 } from '@bolyra/sdk';
 import {
+  bundledVkeyPath,
   computeVkeyHash,
   resolveVkeyPath,
   verifyEnvelopeProof,
@@ -105,6 +107,82 @@ describe('resolveVkeyPath', () => {
       resolveVkeyPath('AgentPolicy', { circuitsDir: '/nonexistent-bolyra-dir', env: {} }),
     );
     expect(code).toBe('internal_error');
+  });
+});
+
+describe('bundledVkeyPath — @bolyra/circuits fallback layout', () => {
+  // The published @bolyra/circuits package does NOT use the flat `build/`
+  // layout of the in-repo `circuits/build`. It ships per-circuit
+  // subdirectories under `artifacts/`, and always suffixes the proving
+  // system, so HumanUniqueness is `HumanUniqueness_groth16_vkey.json` there
+  // but `HumanUniqueness_vkey.json` in `circuits/build`. Mapping the flat
+  // names onto the package is what made this fallback unreachable.
+  let pkgRoot: string;
+
+  beforeAll(() => {
+    pkgRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-circuits-'));
+    for (const [circuit, file] of [
+      ['AgentPolicy', 'AgentPolicy_groth16_vkey.json'],
+      ['Delegation', 'Delegation_groth16_vkey.json'],
+      ['HumanUniqueness', 'HumanUniqueness_groth16_vkey.json'],
+    ] as const) {
+      const dir = path.join(pkgRoot, 'artifacts', circuit);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, file), '{}');
+    }
+  });
+
+  afterAll(() => {
+    fs.rmSync(pkgRoot, { recursive: true, force: true });
+  });
+
+  it('points at a file that exists in the real package layout', () => {
+    for (const circuit of ['AgentPolicy', 'Delegation', 'HumanUniqueness'] as const) {
+      expect(fs.existsSync(bundledVkeyPath(circuit, pkgRoot))).toBe(true);
+    }
+  });
+
+  it('does not use the flat build/ layout', () => {
+    expect(bundledVkeyPath('AgentPolicy', pkgRoot)).not.toContain(`${path.sep}build${path.sep}`);
+  });
+
+  it('suffixes the proving system for HumanUniqueness', () => {
+    // The circuits/build name (HumanUniqueness_vkey.json) does not exist in
+    // the package; resolving it there was the second half of the defect.
+    expect(bundledVkeyPath('HumanUniqueness', pkgRoot)).toContain(
+      'HumanUniqueness_groth16_vkey.json',
+    );
+  });
+
+  it('is not consulted when an explicit circuitsDir was given', async () => {
+    // An explicit --circuits-dir is authoritative: even with the bundled
+    // package installed and resolvable, a bad explicit path must fail loud
+    // rather than silently verify against a vkey the operator did not name.
+    const code = await denialCode(() =>
+      resolveVkeyPath('AgentPolicy', { circuitsDir: '/nonexistent-bolyra-dir', env: {} }),
+    );
+    expect(code).toBe('internal_error');
+  });
+
+  it('is not consulted for an empty explicit circuitsDir', async () => {
+    // `--circuits-dir=` is a stated choice, not an absent one. Without this
+    // path.join('', file) would yield a bare filename resolved against cwd.
+    const code = await denialCode(() => resolveVkeyPath('AgentPolicy', { circuitsDir: '', env: {} }));
+    expect(code).toBe('internal_error');
+  });
+
+  it('is consulted when no explicit circuitsDir was given', () => {
+    // Only meaningful where @bolyra/circuits is actually installed.
+    let installed = true;
+    try {
+      require.resolve('@bolyra/circuits/package.json');
+    } catch {
+      installed = false;
+    }
+    if (!installed) return;
+    expect(resolveVkeyPath('AgentPolicy', { env: {} })).toContain(
+      path.join('artifacts', 'AgentPolicy'),
+    );
   });
 });
 
