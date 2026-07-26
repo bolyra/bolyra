@@ -173,6 +173,23 @@ jobs:
           BOLYRA_CIRCUITS_DIR: ${{ runner.temp }}/circuits-build
         run: npm test
 
+  lockfiles:
+    name: Lockfiles — clean npm ci per manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      # Every other job installs with `npm install` (often after rewriting
+      # @bolyra/sdk to a file: path), which tolerates an incomplete lockfile.
+      # This job is the only one that proves a consumer could reproducibly
+      # install what we committed. See issue #93.
+      - name: Verify every committed lockfile installs with npm ci
+        run: bash scripts/verify-lockfiles.sh
+
   conformance:
     name: Conformance test vectors
     runs-on: ubuntu-latest
