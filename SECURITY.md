@@ -172,3 +172,37 @@ siblings via `file:` rewrites so the audited tree matches what a consumer
 would install from that commit. A new high or critical runtime advisory
 will fail CI. The job intentionally excludes dev dependencies —
 runtime-reachable risk is the gate.
+
+A separate `lockfiles` job runs `scripts/verify-lockfiles.sh`, which
+installs every committed lockfile with a clean `npm ci`. The audit job
+above resolves siblings via `file:` rewrites, which tolerates an
+incomplete lockfile; this job is what proves a consumer could reproducibly
+install what we published. Six `file:`-dependent example manifests are
+excluded, with the reason recorded in the script.
+
+## Credential rotation posture
+
+Known credential rotation exceptions are tracked privately, outside this
+repository. They are deliberately parked, not forgotten: the control is an
+explicit trigger, not calendar rotation.
+
+Trusted Publisher (OIDC) is configured for the npm packages and releases
+publish with provenance attestations, but that does not revoke or disable
+classic registry tokens. Any unrotated token must still be treated as a
+live credential to the extent its scope permits publishing or API access.
+
+Rotate affected credentials when any of the following becomes true:
+
+- Any credible exposure of a secret, including a shared channel or issue,
+  a commit, or a log or transcript that leaves the machine.
+- Any access concern around the publishing surface, including a new
+  contributor, a new CI runner, a new machine, or a lost or compromised
+  device.
+- Any publishing anomaly, including a release you did not initiate, an
+  unexpected version on a registry, or a provenance or attestation check
+  that fails.
+- Before onboarding the first external pilot or design partner, since that
+  is the point at which someone else's data starts depending on this.
+
+If none of these hold, rotation stays parked. The private record holds the
+affected credentials and the reason each exception remains open.
