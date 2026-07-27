@@ -3,12 +3,23 @@
   "start_date": "2026-06-30",
   "cadence": "weekly",
   "current_week": 4,
-  "status": "active",
+  "status": "paused",
+  "paused_date": "2026-07-27",
+  "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
+  "unpause_requirements": [
+    "Query live PR state per PR (`gh pr view <n> --repo <r> --json state,mergedAt,comments,reviews`) instead of inferring from opening dates.",
+    "Treat MERGED and CLOSED as terminal: never draft a follow-up, bump, or closing comment for a PR in either state.",
+    "Read review bodies as well as issue comments; a maintainer approval often lives in .reviews[], not .comments[].",
+    "Distinguish OUR comments from maintainer comments before claiming 'zero contact'. Bot comments (CLA, stale-bot, coderabbitai) are not engagement.",
+    "Reconcile the scorecard against live state at the start of every scan rather than accumulating it."
+  ],
+  "strategy_ruling_2026_07_27": "Codex: stop the example/listing PR motion. It produced one low-bar merge (an awesome-list entry) and nine dead threads, while targeted bug-fix PRs tied to a maintainer-visible problem have actually landed (robinhood #20/#25, AlpacaTradingAgent #44, wevm/mppx #632, openai-agents-js #1495). Keep external PRs only when they are real bug fixes. Do NOT open more list/example PRs, do NOT resume cold DMs, do NOT post closing threats.",
   "scorecard": {
     "prs_opened": 10,
-    "prs_merged": 0,
+    "prs_merged": 1,
+    "prs_merged_detail": "xpaysh/awesome-x402 #649, merged 2026-07-17 by sriakula1. Previously recorded as 0 — the scan never checked live state.",
     "prs_closed": 0,
-    "prs_stale": 10,
+    "prs_stale": 9,
     "review_comments_responded": 0,
     "new_repos_identified": 20
   },
