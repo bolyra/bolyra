@@ -2,7 +2,7 @@
   "loop": "bolyra-pr-outreach",
   "start_date": "2026-06-30",
   "cadence": "weekly",
-  "current_week": 3,
+  "current_week": 4,
   "status": "active",
   "scorecard": {
     "prs_opened": 10,
@@ -10,11 +10,12 @@
     "prs_closed": 0,
     "prs_stale": 10,
     "review_comments_responded": 0,
-    "new_repos_identified": 15
+    "new_repos_identified": 20
   },
   "kill_criteria": {
     "week_4": "0 PRs merged out of 10+ open → switch strategy",
-    "week_4_caveat": "IMPORTANT: kill criteria should only fire if actual outreach was attempted. As of week 3, zero follow-ups have been sent. If week 4 is reached with 0 merges AND 0 follow-ups sent, the loop did not fail — it was never started. Founder must send follow-ups this week to get a valid week-4 signal."
+    "week_4_caveat": "IMPORTANT: kill criteria should only fire if actual outreach was attempted. As of week 4, zero follow-ups have been sent. The kill criteria technically fires but is invalid as a signal — the loop was scanner-only for 4 weeks. Week 5 decision gate: if follow-ups are sent this week (Path A: emergency activation) evaluate results at week 5. If no follow-ups are sent and the founder chooses not to execute, trigger Path B pivot (standalone example repos + targeted DMs). DO NOT run another zombie week.",
+    "week_5_gate": "If follow-ups were sent in week 4: evaluate actual response rate at week 5. If 0 responses from 10 contacts, pivot to Path B. If any response, continue. If NO follow-ups were sent in week 4: trigger Path B immediately on week 5 scan."
   },
   "weekly_scores": [
     {
@@ -49,6 +50,17 @@
       "follow_ups_drafted": 4,
       "review_comments_responded": 0,
       "notes": "ZERO follow-ups sent after 3 weeks. PRs 7, 9, 10 hit close deadline today (2026-07-20) — 27 days open with zero contact. Final close-comments drafted for all three; close by 2026-07-23. PR 8 (stripe/ai) extended to 2026-07-27. PRs 1-6 are 22 days open with zero contact. 5 new targets identified: solana-foundation/pay (1738★), internet-court/internet-court-skill (1066★), alsk1992/CloddsBot (506★), prowlfi/ProwlFi (486★), qntx/x402-openai-python (260★). Total repos identified across 3 weeks: 15. RISK: week 4 kill criteria fires next scan — but outreach has not started. Founder must send drafted comments this week."
+    },
+    {
+      "week": 4,
+      "date": "2026-07-27",
+      "prs_merged": 0,
+      "prs_closed": 0,
+      "new_stale": 0,
+      "new_repos_identified": 5,
+      "follow_ups_drafted": 6,
+      "review_comments_responded": 0,
+      "notes": "KILL CRITERIA FIRES (week 4, 0 merges) — caveat applies, zero outreach attempted in 4 weeks. PRs 7, 9, 10 are 7 days past close deadline (overdue close). PR 8 (stripe/ai) close deadline TODAY. PRs 1-6 are 29 days open, last-chance comments drafted. 5 new targets identified: coinbase/agentkit, openai/openai-agents-python, microsoft/autogen, pydantic/pydantic-ai, langchain-ai/langgraph. Total repos identified: 20. DECISION REQUIRED: founder must choose Path A (emergency activation this week) or Path B (strategy pivot). Week 5 scan will report on whichever path was chosen — or trigger immediate pivot if still no action."
     }
   ]
 }
