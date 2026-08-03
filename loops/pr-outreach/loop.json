@@ -2,7 +2,7 @@
   "loop": "bolyra-pr-outreach",
   "start_date": "2026-06-30",
   "cadence": "weekly",
-  "current_week": 4,
+  "current_week": 5,
   "status": "paused",
   "paused_date": "2026-07-27",
   "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
@@ -22,7 +22,7 @@
     "prs_closed": 0,
     "prs_stale": 9,
     "review_comments_responded": 0,
-    "new_repos_identified": 20
+    "new_repos_identified": 25
   },
   "kill_criteria": {
     "week_4": "0 PRs merged out of 10+ open → switch strategy",
@@ -73,6 +73,17 @@
       "follow_ups_drafted": 6,
       "review_comments_responded": 0,
       "notes": "KILL CRITERIA FIRES (week 4, 0 merges) — caveat applies, zero outreach attempted in 4 weeks. PRs 7, 9, 10 are 7 days past close deadline (overdue close). PR 8 (stripe/ai) close deadline TODAY. PRs 1-6 are 29 days open, last-chance comments drafted. 5 new targets identified: coinbase/agentkit, openai/openai-agents-python, microsoft/autogen, pydantic/pydantic-ai, langchain-ai/langgraph. Total repos identified: 20. DECISION REQUIRED: founder must choose Path A (emergency activation this week) or Path B (strategy pivot). Week 5 scan will report on whichever path was chosen — or trigger immediate pivot if still no action."
+    },
+    {
+      "week": 5,
+      "date": "2026-08-03",
+      "prs_merged": 0,
+      "prs_closed": 0,
+      "new_stale": 0,
+      "new_repos_identified": 5,
+      "follow_ups_drafted": 0,
+      "review_comments_responded": 0,
+      "notes": "PATH B TRIGGERED. No follow-ups sent in week 4 → week_5_gate fires Path B immediately. Loop remains paused: GitHub MCP is scoped to bolyra/bolyra, so external PR live-state re-verification is still impossible — writing false state would repeat the week-4 error. The 9 stale PRs are left untouched per standing founder decision (2026-07-27). 5 new Path B targets identified — all anchored to real open issues or confirmed code gaps, no listing/example PRs: (1) google-agentic-commerce/a2a-x402 549★ issue #121 settlement gating race, (2) internet-court/internet-court-skill 1522★ issue #3 off-chain verifier gap, (3) BlockRunAI/Franklin 631★ no spending-cap enforcement, (4) BlockRunAI/blockrun-mcp 479★ no per-tool agent identity, (5) solana-foundation/pay 1743★ issue #371 risk/collateral design proposal. Total repos identified across 5 weeks: 25. Action: founder to pick target 1 or 2 and open a builder session."
     }
   ]
 }

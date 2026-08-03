@@ -1,0 +1,192 @@
+{
+  "week": 5,
+  "date": "2026-08-03",
+  "loop_status": "paused",
+  "path_b_triggered": true,
+  "path_b_rationale": "Zero follow-ups were sent in week 4 (loop was paused before any outreach). week_5_gate in loop.json: 'If NO follow-ups were sent in week 4: trigger Path B immediately on week 5 scan.' Path B = no more list/example PRs, targeted bug-fix PRs only tied to maintainer-visible open issues.",
+
+  "tooling_constraint": "GitHub MCP is scoped to bolyra/bolyra. External PR state CANNOT be queried live. This is the same root cause that triggered the pause. External PR statuses below reflect last live verification on 2026-07-27. No state changes have been written to prs.json this cycle to avoid producing another false-data record.",
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision: leave all 9 open PRs alone. No bumps, no closes."
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "google-agentic-commerce/a2a-x402",
+      "stars": 549,
+      "language": "Python",
+      "last_updated": "2026-07-28",
+      "open_issues": 58,
+      "why": "Active A2A x402 protocol implementation with a confirmed settlement-gating race condition (issue #121, 7 comments, last activity 2026-07-28). Maintainers are engaged: issue #60 on spending limits has 9 comments over 5 months. This is the closest thing to a real bug Bolyra can fix rather than add as an example.",
+      "gap": "Agent delegate execution runs BEFORE payment settlement is confirmed (issue #121). No agent identity/credential layer — any caller can invoke a delegate action. Bolyra's @bolyra/mpp mandate check gate + bounded permission model (FINANCIAL_SMALL/MEDIUM bits) is the precise fix.",
+      "anchor_issue": "https://github.com/google-agentic-commerce/a2a-x402/issues/121",
+      "supporting_issue": "https://github.com/google-agentic-commerce/a2a-x402/issues/60",
+      "pr_type": "bug-fix — add a pre-execution mandate-check middleware that gates delegate invocation. Reference Bolyra EVC as the verifier interface (spec/external-verifier-contract-v1.md). No Bolyra dependency required in the target repo.",
+      "priority": 1
+    },
+    {
+      "repo": "internet-court/internet-court-skill",
+      "stars": 1522,
+      "language": "TypeScript",
+      "last_updated": "2026-08-03",
+      "open_issues": 12,
+      "why": "Trust layer for agent commerce with ERC-7710 delegated permissions and x402. Issue #3 explicitly asks for an off-chain reasoning-level verifier — Bolyra's External Verifier Contract (EVC) is exactly that interface. Maintainer is actively building (created 2026-06-16, updated today). High star count signals fast-growing project.",
+      "gap": "Issue #3: 'Layer 6 coverage gap: no off-chain reasoning-level verifier.' The repo has on-chain escrow + ERC-7710 delegation but no classical or ZK verifier for pre-action credential checks. Bolyra's EVC v1 (stdin/stdout JSON contract) is a drop-in.",
+      "anchor_issue": "https://github.com/internet-court/internet-court-skill/issues/3",
+      "pr_type": "bug-fix/feature — implement a bolyra-evc adapter plugin that satisfies issue #3. The EVC interface is already open-spec (spec/external-verifier-contract-v1.md) so the PR can reference it without depending on Bolyra packages.",
+      "priority": 2
+    },
+    {
+      "repo": "BlockRunAI/Franklin",
+      "stars": 631,
+      "language": "TypeScript",
+      "last_updated": "2026-08-01",
+      "open_issues": 3,
+      "why": "AI agent that spends USDC autonomously via x402. No spending-cap enforcement at the authorization layer — any action can drain the wallet. Active repo (BlockRunAI also maintains ClawRouter 6683★). Low issue count means PRs get attention.",
+      "gap": "Franklin has no pre-spend limit check before executing tool calls that trigger x402 payments. Bolyra's FINANCIAL_SMALL (<$100) and FINANCIAL_MEDIUM (<$10K) permission bits map directly to a per-action budget guard. A targeted fix in the payment-dispatch path prevents runaway spend.",
+      "anchor_issue": null,
+      "pr_type": "targeted fix — add a budget-guard middleware in Franklin's payment dispatch. Implement the check using the Bolyra permission-bit semantics without requiring a Bolyra dependency (the guard logic is simple enough to inline with a comment pointing to the spec).",
+      "priority": 3
+    },
+    {
+      "repo": "BlockRunAI/blockrun-mcp",
+      "stars": 479,
+      "language": "TypeScript",
+      "last_updated": "2026-08-03",
+      "open_issues": 8,
+      "why": "MCP server with pay-per-call x402 micropayments for live data tools. Updated today. No per-tool authorization check — any MCP client can call any tool, bypassing the payment gate if the x402 middleware is misconfigured. Same BlockRunAI team as Franklin/ClawRouter = high chance they'd accept a consistent authorization story across their stack.",
+      "gap": "x402 payment is checked at the HTTP layer but there is no agent-identity binding — a client can forge or replay a payment token for a different tool. Bolyra @bolyra/mpp's `bolyraGate()` adds mandate-verified dispatch; the fix is a thin wrapper on the MCP tool handler.",
+      "anchor_issue": null,
+      "pr_type": "targeted fix — wrap the MCP tool dispatch with a mandate-check gate. Can reference the bolyra mandate issuance CLI as a companion without adding a runtime dependency.",
+      "priority": 4
+    },
+    {
+      "repo": "solana-foundation/pay",
+      "stars": 1743,
+      "language": "Rust",
+      "last_updated": "2026-08-02",
+      "open_issues": 37,
+      "why": "CLI for agentic payments (x402, MPP, AP2). Issue #371 is an open design proposal for a risk/collateral layer (5 comments, 2026-07-26 activity). Solana Foundation ownership means a merged PR here is very high-credibility. Rust implementation may limit easy integration, but the design proposal issue opens a documentation/spec PR path.",
+      "gap": "Issue #371: no risk/collateral layer for x402-paid agents — agents can initiate payments without identity-bound spending limits. Bolyra's mandate issuance model (operator-signed spend mandates with cumulative-bit permissions) is a concrete answer to the design proposal.",
+      "anchor_issue": "https://github.com/solana-foundation/pay/issues/371",
+      "pr_type": "design/spec PR — add a AGENTS.md that maps Bolyra's mandate model to the `pay` CLI's x402 flow, responding to issue #371 with a concrete proposal. Not code, but a well-reasoned design doc is the correct PR type for a Rust CLI where a Bolyra integration would live upstream.",
+      "priority": 5
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted for existing PRs. Founder decision (2026-07-27) overrides all: the 9 open PRs are left alone with no action of any kind.",
+
+  "path_b_action_plan": {
+    "description": "Path B: targeted bug-fix PRs only. No list/example PRs. Each PR must be anchored to a real open issue or a confirmed code-level gap.",
+    "execution_order": [
+      "1. Start with google-agentic-commerce/a2a-x402 #121 — clearest bug, active maintainers, Python (matches Bolyra SDK). Founder opens PR.",
+      "2. internet-court/internet-court-skill #3 — issue is explicitly asking for what Bolyra does. TypeScript. High growth.",
+      "3. BlockRunAI stack (Franklin + blockrun-mcp) — same team, one conversation can unlock two repos.",
+      "4. solana-foundation/pay #371 — design doc PR, lower risk of CI failure, high credibility if accepted."
+    ],
+    "builder_session_needed": true,
+    "builder_session_note": "Each PR requires a /build session with Codex review before push. This scan is prep only."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 25,
+    "path": "B",
+    "path_b_targets_identified": 5
+  }
+}
