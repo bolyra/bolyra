@@ -1,0 +1,195 @@
+{
+  "week": 6,
+  "date": "2026-08-10",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried. External PR statuses below carry forward from the last live verification (2026-07-27). No state writes to prs.json this cycle to avoid false-data records — same discipline as weeks 5 and 4.",
+
+  "path_b_progress_check": {
+    "note": "Week 5 scan (2026-08-03) identified 5 Path B targets and asked the founder to open a builder session. This scan cannot verify whether any builders were started — no builder activity is visible in prs.json (no new PRs added since the original 10). If a builder session ran, the founder should manually add any new PRs to prs.json before the next scan.",
+    "week5_targets_status": "unknown — cannot verify without live GitHub access"
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 14,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "coinbase/x402",
+      "approx_stars": 2800,
+      "language": "TypeScript / Go",
+      "why": "Reference implementation of the x402 HTTP payment protocol — the protocol Bolyra's MPP gate sits on top of. The x402 facilitator accepts payments from any agent but does not verify agent identity or bind payments to a signed mandate. A gap in the root protocol is the highest-leverage fix in the entire ecosystem — any x402 implementer inherits the problem.",
+      "gap": "x402 payment facilitator has no agent identity layer. Any caller can pay for a resource; there is no check that the paying agent holds a valid credential, that the spend falls within a signed mandate's limits, or that the call is within the agent's permitted scope. Bolyra's @bolyra/mpp bolyraGate() and mandate issuance are the precise fit.",
+      "anchor_issue": "No single filed issue, but the x402 spec itself acknowledges 'agent authorization is out of scope' — that scope gap is the PR anchor.",
+      "pr_type": "targeted feature — add a SECURITY.md + optional middleware hook in the facilitator that calls a Bolyra EVC endpoint before accepting payment. The facilitator already has a pluggable handler architecture, so the hook is non-breaking. PR references EVC v1 spec without requiring Bolyra as a dependency.",
+      "priority": 1,
+      "builder_notes": "Check coinbase/x402 for existing CONTRIBUTING.md and facilitator handler interface before opening builder session."
+    },
+    {
+      "repo": "modelcontextprotocol/python-sdk",
+      "approx_stars": 4200,
+      "language": "Python",
+      "why": "Official Anthropic MCP Python SDK — used by every Python MCP server in the ecosystem. No per-tool authorization layer exists. Any MCP client can call any tool registered on a server, with no identity check on the calling agent. A targeted fix here propagates instantly to every downstream MCP Python server.",
+      "gap": "MCP tool dispatch in the Python SDK has no pre-call authorization hook. A malicious or misconfigured agent can call any registered tool (including ones with FINANCIAL or PII access) with no credential check. Adding an optional authorization_hook parameter to the @mcp.tool() decorator would let operators plug in Bolyra EVC verification.",
+      "anchor_issue": "Check MCP Python SDK issues for 'authorization', 'auth', or 'identity' — this gap is known in the MCP community since it's inherited from the protocol spec's auth gap in early versions.",
+      "pr_type": "targeted feature — add an optional authorization_hook callback to the MCP server's tool-dispatch path. The hook signature matches the EVC v1 stdin/stdout contract, making Bolyra a natural plug-in without requiring it as a dependency.",
+      "priority": 2,
+      "builder_notes": "Look at modelcontextprotocol/python-sdk server.py / tool dispatch implementation first to find the right injection point."
+    },
+    {
+      "repo": "BerriAI/litellm",
+      "approx_stars": 16000,
+      "language": "Python",
+      "why": "Most widely used LLM proxy/gateway with budget controls and virtual keys. Very active (daily commits). Has spend-limit tracking but no identity-bound mandate checking — a virtual key holder can issue unlimited sub-keys to agents with no credential binding. This is the highest-star repo Bolyra can realistically target.",
+      "gap": "LiteLLM's budget guard (max_budget per key) tracks spend against a key, not against an agent identity. An operator can cap a key's total spend but cannot express 'this agent (verified by ZK credential) may spend FINANCIAL_MEDIUM ($10K) while that agent (unverified) may only spend FINANCIAL_SMALL ($100)'. Bolyra's permission-bit mandate model is the precise upgrade.",
+      "anchor_issue": "Search litellm issues for 'agent identity', 'per-agent budget', or 'credential'. High-traffic repo — an issue likely exists.",
+      "pr_type": "targeted feature — add a Bolyra mandate-check callback hook to LiteLLM's proxy router before a virtual-key request is dispatched. Documented in an optional BOLYRA_VERIFY_URL env var. No Bolyra runtime dependency; the hook is a plain HTTP call to a self-hosted verifier.",
+      "priority": 3,
+      "builder_notes": "LiteLLM has MANY open PRs. Need to find the right file (proxy/_types.py, proxy/proxy_server.py) and open a small, focused PR — not a big integration. Wide PR = ignored."
+    },
+    {
+      "repo": "huggingface/smolagents",
+      "approx_stars": 5500,
+      "language": "Python",
+      "why": "HuggingFace's official lightweight agent framework (CodeAgent + ToolCallingAgent). Very fast growth — gaining ground on LangChain in the agent space. No tool-call authorization. All tool calls by a CodeAgent run with full host OS access — no sandboxing, no identity binding. HF has a large community and active issue triage.",
+      "gap": "smolagents tool execution has no pre-call authorization check. A CodeAgent can call any registered tool — including ones that make payments or access PII — without any identity or permission verification. Adding an optional authorize() hook to the ToolCallingAgent.run() dispatch path would gate on Bolyra credentials.",
+      "anchor_issue": "Check smolagents issues for 'security', 'authorization', or 'sandboxing'. The missing authorization layer is a known concern in the HF community.",
+      "pr_type": "targeted feature — add an optional authorization callback to ToolCallingAgent and CodeAgent's tool dispatch. Callback receives (agent_id, tool_name, args) and returns allow/deny. Bolyra EVC is the reference implementation; callback is framework-agnostic.",
+      "priority": 4,
+      "builder_notes": "Check smolagents/agents.py for the tool-call dispatch loop. The inject point is likely _step() or _execute_tool_call(). Small, clean hook — not a Bolyra-specific integration."
+    },
+    {
+      "repo": "pipecat-ai/pipecat",
+      "approx_stars": 4700,
+      "language": "Python",
+      "why": "Real-time voice/multimodal AI agent pipeline framework (Daily.co-backed). Has payment and action dispatch integrations but no agent identity layer. Active maintainers, responsive to issues. Bolyra's mission around 'who authorized this agent action' is directly relevant to voice agents that can call APIs and initiate payments mid-conversation.",
+      "gap": "pipecat's pipeline can dispatch function calls (tool calls in LLM mode) with no pre-call identity or authorization check. A voice agent can execute an action — including payment triggers or data access — based solely on LLM output, with no mandate binding to an authorized human. Adding a Bolyra authorization transport to pipecat's function-call pipeline is the fix.",
+      "anchor_issue": "Check pipecat issues for 'authorization', 'identity', or 'security'. The gap is architectural — pipecat's design assumes trust in the LLM output for actions.",
+      "pr_type": "targeted feature — add an optional BolyraAuthTransport to pipecat's function-call dispatch chain. The transport wraps function calls with an EVC mandate check before execution. Self-contained, no pipecat internals changes required.",
+      "priority": 5,
+      "builder_notes": "pipecat has a transport/processor model. A BolyraAuthProcessor would slot naturally into the pipeline before function execution. Check pipecat/processors/ for the injection point."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "week5_targets": "Identified but no builder session confirmed in prs.json. Founder to act on week 5 targets before week 7 scan.",
+    "week6_targets": "5 new ecosystem-wide targets above. Priority 1 (coinbase/x402) and 2 (modelcontextprotocol/python-sdk) are the highest-signal because a fix in the reference implementation propagates to every downstream user.",
+    "recommended_next_action": "Open a builder session for coinbase/x402 or modelcontextprotocol/python-sdk. Both are Python/TypeScript (Bolyra's native SDKs), both have pluggable architectures for an auth hook, and both have the widest downstream reach in the target ecosystem."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 30,
+    "path": "B",
+    "path_b_targets_identified": 10,
+    "weeks_since_last_outreach_action": "6+"
+  }
+}
