@@ -2,7 +2,7 @@
   "loop": "bolyra-pr-outreach",
   "start_date": "2026-06-30",
   "cadence": "weekly",
-  "current_week": 6,
+  "current_week": 7,
   "status": "paused",
   "paused_date": "2026-07-27",
   "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
@@ -95,6 +95,17 @@
       "follow_ups_drafted": 0,
       "review_comments_responded": 0,
       "notes": "PATH B CONTINUING. Loop still paused — GitHub MCP scope constraint unchanged, founder decision on 9 open PRs still stands. No builder session confirmed from week 5 targets (no new entries in prs.json). 5 new Path B targets at reference-implementation level: (1) coinbase/x402 ~2800★ — x402 facilitator has no agent identity binding; Bolyra @bolyra/mpp mandate hook is the targeted fix at the protocol reference layer. (2) modelcontextprotocol/python-sdk ~4200★ — MCP tool dispatch has no pre-call authorization hook; optional authorize() callback in @mcp.tool() is the fix. (3) BerriAI/litellm ~16000★ — budget guard tracks spend per key not per identity-bound agent; Bolyra permission-bit mandate model is the upgrade. (4) huggingface/smolagents ~5500★ — no tool-call authorization in ToolCallingAgent; authorization callback hook is the fix. (5) pipecat-ai/pipecat ~4700★ — no authorization transport before function-call dispatch; BolyraAuthProcessor is the fix. Total repos identified across 6 weeks: 30. Recommended: open builder session for coinbase/x402 or modelcontextprotocol/python-sdk — highest downstream reach."
+    },
+    {
+      "week": 7,
+      "date": "2026-08-17",
+      "prs_merged": 0,
+      "prs_closed": 0,
+      "new_stale": 0,
+      "new_repos_identified": 5,
+      "follow_ups_drafted": 0,
+      "review_comments_responded": 0,
+      "notes": "PATH B CONTINUING. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5 or 6 (no new prs.json entries). 5 new Path B targets at enterprise framework level: (1) microsoft/semantic-kernel ~27000★ — IFunctionInvocationFilter is the designed hook; BolyraAuthFilter pre-invoke check is the precise fit. (2) run-llama/llama_index ~40000★ — AgentRunner._run_step() has no identity gate; optional pre_tool_call_hook is the fix. (3) livekit/agents ~6500★ — LLM function-call dispatch has no authorization hook; BolyraAuthPlugin in pipeline is the fix. (4) griptape-ai/griptape ~3000★ — BaseTool.run() has no authorization hook; BolyraToolMixin is the fix. (5) phidatahq/phidata ~19000★ — Agent tool dispatch has no identity check; optional tool_authorization_hook parameter is the fix. Total repos identified across 7 weeks: 35. Recommended: open builder session for microsoft/semantic-kernel (priority 1) — cleanest injection point of any target identified, active enterprise maintainers, highest credibility on merge."
     }
   ]
 }

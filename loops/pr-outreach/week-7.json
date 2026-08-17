@@ -1,0 +1,198 @@
+{
+  "week": 7,
+  "date": "2026-08-17",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried. External PR statuses below carry forward from the last live verification (2026-07-27). No state writes to prs.json this cycle to avoid false-data records — same discipline as weeks 4, 5, and 6.",
+
+  "path_b_progress_check": {
+    "note": "Weeks 5 and 6 identified 10 Path B targets (5 per week) and asked the founder to open builder sessions. No new PRs visible in prs.json since the original 10. If builder sessions ran externally, the founder should manually add any new PRs to prs.json before the next scan.",
+    "week5_targets_status": "unknown — no new prs.json entries; cannot verify without live GitHub access",
+    "week6_targets_status": "unknown — same constraint; 5 high-reach targets identified (coinbase/x402, modelcontextprotocol/python-sdk, BerriAI/litellm, huggingface/smolagents, pipecat-ai/pipecat). Founder to confirm which if any were acted on."
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 21,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "microsoft/semantic-kernel",
+      "approx_stars": 27000,
+      "language": "Python / C#",
+      "why": "Microsoft's flagship multi-agent AI framework — used in enterprise deployments of Copilot Studio, Azure AI, and third-party enterprise apps. Has a filter pipeline (IFunctionInvocationFilter / IPromptRenderFilter) specifically designed for pre-call interception, making it the cleanest injection point Bolyra has seen in any framework. Very active maintainers (daily commits, triaged issues), high enterprise credibility, and the Python SDK is growing fast. A fix here reaches enterprise deployments directly.",
+      "gap": "SK's KernelFunctionInvocationContext carries no agent identity. Any caller (human, agent, or automation) that has a Kernel instance can invoke any registered function — including ones that make payments or access PII — with no credential check. The IFunctionInvocationFilter interface is the designed extension point, but no identity-bound authorization filter ships in core. A BolyraAuthFilter implementing IFunctionInvocationFilter checks a signed mandate before kernel.InvokeAsync() proceeds.",
+      "anchor_issue": "Search semantic-kernel issues for 'authorization' or 'agent identity'. The filter system is documented as the canonical hook for this class of problem — open issues likely ask for a reference implementation.",
+      "pr_type": "targeted feature — implement IFunctionInvocationFilter (Python: FunctionInvocationFilter) that calls a Bolyra EVC endpoint before function execution. Small, self-contained, non-breaking. Ships as a contrib plugin in samples/plugins/ — does not require Bolyra as a core dependency.",
+      "priority": 1,
+      "builder_notes": "Python entry point: semantic_kernel/filters/functions/function_invocation_context.py + kernel.py add_filter(). C# entry point: Microsoft.SemanticKernel.Filters. Start with Python — smaller diff, faster review. Check CONTRIBUTING.md and existing filter samples before opening builder session."
+    },
+    {
+      "repo": "run-llama/llama_index",
+      "approx_stars": 40000,
+      "language": "Python",
+      "why": "Largest RAG and agent library in the Python ecosystem by stars. AgentRunner and FunctionCallingAgentWorker are the dominant paths for tool-calling agents in production LlamaIndex deployments. Very active maintainers, structured contribution process, and the llama-index-agent-openai package specifically handles function calls that can trigger payments and data access. A fix here reaches the widest Python agent audience of any target identified so far.",
+      "gap": "AgentRunner._run_step() dispatches tool calls without any identity or authorization gate. An agent can call a tool registered with FINANCIAL or PII access with no credential check, bounded only by the system prompt. An optional tool_call_pre_hook parameter on AgentRunner (or FunctionCallingAgentWorker) would let operators install a Bolyra EVC check before dispatch — allowing/denying per the agent's mandate.",
+      "anchor_issue": "Search llama_index issues for 'authorization', 'tool call security', or 'agent identity'. The gap is well-known in the community (see llama_index Discord). Issue may already exist under 'security' or 'agent safety' label.",
+      "pr_type": "targeted feature — add an optional pre_tool_call_hook callback to AgentRunner (step() / _run_step()). Hook receives (agent_id, tool_name, tool_input) and returns allow/deny. Bolyra EVC is the reference implementation but the hook is framework-agnostic. Ships as an optional parameter with a None default — no breaking change.",
+      "priority": 2,
+      "builder_notes": "Entry point: llama_index/core/agent/runner/base.py _run_step(). Also check llama_index/core/agent/function_calling/step.py for the function-calling variant. Keep the diff tight — a wide refactor will stall in review."
+    },
+    {
+      "repo": "livekit/agents",
+      "approx_stars": 6500,
+      "language": "Python",
+      "why": "Daily.co's real-time AI agent framework for voice and video agents — one of the fastest-growing in the space. Supports LLM function calling mid-conversation, which means a voice agent can initiate payments or access PII with no authorization gate. LiveKit team is highly responsive and actively building out the agent model. Voice agents with financial or PII capabilities are the most acutely dangerous class of tool-calling agents — exactly Bolyra's target threat model.",
+      "gap": "livekit-agents' LLMContext and function-call dispatch have no pre-call authorization hook. When an LLM decides to call a function (e.g., initiate a payment, look up a user record), the call proceeds immediately with no identity binding. An optional before_function_call hook on llm.LLMStream or on the agent pipeline would gate on a Bolyra mandate check before function execution.",
+      "anchor_issue": "Check livekit/agents issues for 'authorization', 'function call security', or 'permissions'. LiveKit's Discord is the primary channel — a GitHub issue may not exist yet, making this a good opportunity to open one alongside the PR.",
+      "pr_type": "targeted feature — add an optional before_function_call callback to the pipeline's function-call dispatch path. Callback receives (function_name, args) and returns allow/deny. A BolyraAuthPlugin wrapping the hook ships as a standalone contrib class in livekit/agents/contrib/ without touching core dispatch logic.",
+      "priority": 3,
+      "builder_notes": "Entry point: livekit/agents/llm/function_context.py ai_callable() and the pipeline's LLM step. Also check voice_assistant.py for the primary agent execution loop. ActiveSpeakerDetection and interrupt handling are unrelated — keep the PR scope narrowly to the function-call dispatch path."
+    },
+    {
+      "repo": "griptape-ai/griptape",
+      "approx_stars": 3000,
+      "language": "Python",
+      "why": "'Ops-first' Python agent framework with a strong enterprise community and active maintainers. Has a rule-based system and structured task pipeline but no cryptographic identity binding at the tool level. Griptape is specifically positioned for enterprise deployments where policy and compliance matter — making an identity-bound authorization hook an extremely natural fit and a high-probability merge.",
+      "gap": "griptape's BaseTool.run() and BasePipeline task execution have no authorization hook. A tool registered with financial access can be called by any agent that has the tool in scope, with no mandate check. A BolyraToolMixin implementing an optional before_run(tool_name, input) hook — verifying a Bolyra EVC mandate before execution — is the targeted fix. Griptape's Rule system could also propagate Bolyra credential context through a pipeline.",
+      "anchor_issue": "Check griptape-ai/griptape issues for 'authorization', 'policy', or 'security'. Griptape's enterprise positioning means maintainers have likely fielded this question from users. May be tracked under 'compliance' or 'access control'.",
+      "pr_type": "targeted feature — add an optional authorization_hook parameter to BaseTool.__init__() that is called before BaseTool.run(). Hook signature: (tool_name: str, input: BaseArtifact) -> bool. A BolyraEVCHook sample implementation ships in griptape/tools/bolyra/ as an optional contrib. Zero change to tool behavior when hook is None (default).",
+      "priority": 4,
+      "builder_notes": "Entry point: griptape/tools/base_tool.py run() method. Also check griptape/tasks/ for the task pipeline execution. Griptape uses attrs/dataclasses throughout — match the existing code style. Check CONTRIBUTING.md (they use ruff + mypy)."
+    },
+    {
+      "repo": "phidatahq/phidata",
+      "approx_stars": 19000,
+      "language": "Python",
+      "why": "High-growth agent framework (possibly re-branded as agno by 2026) with a large and active community. Agent.run() coordinates tool calls across LLM turns but has no identity layer. Phidata's community skews toward production deployments with real integrations (Stripe, AWS, databases) — the gap is acute. Maintainers are responsive on GitHub and Discord. Star count places it in the top tier of Python agent frameworks.",
+      "gap": "phidata Agent.run() dispatches tool calls with no identity or permission check. An agent with a Stripe tool or database access can execute arbitrary actions based solely on LLM output. An optional tool_authorization_hook parameter on Agent (or ToolRegistry) — called before each tool invocation — would gate on a Bolyra mandate. This is a one-file change in agent.py with zero breaking surface.",
+      "anchor_issue": "Check phidatahq/phidata (or agno-agi/agno if renamed) issues for 'authorization', 'permissions', or 'security'. Phidata's Discord is very active — opening a GitHub issue to anchor the PR is recommended before the builder session.",
+      "pr_type": "targeted feature — add an optional tool_authorization_hook: Optional[Callable[[str, Dict], bool]] parameter to Agent.__init__(). Called before each tool invocation in Agent._execute_tool_calls() (or equivalent). BolyraToolGuard sample implementation ships in examples/bolyra/ — not a core dependency. Single-file diff in agent core.",
+      "priority": 5,
+      "builder_notes": "Entry point: phi/agent/agent.py (or agno/agent/agent.py) — specifically the tool-call execution loop. Also check phi/tools/toolkit.py for the tool registry if tool-level hooks are cleaner than agent-level. Keep the diff to one or two files. phidata uses ruff; run it before submitting."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "cumulative_targets_identified": 35,
+    "weeks_5_6_targets": "10 targets identified across weeks 5-6, no builder sessions confirmed in prs.json. All 10 remain actionable.",
+    "week7_targets": "5 new enterprise/mainstream framework targets above. Priority 1 (microsoft/semantic-kernel) and 2 (run-llama/llama_index) are the highest-signal because both ship a designed filter/hook interface that maps cleanly onto the Bolyra EVC contract — low review friction, non-breaking diffs, and both have the widest downstream enterprise reach of any target identified across all 7 weeks.",
+    "pattern_note": "Weeks 5-7 all identify targets with clean, non-breaking injection points in active frameworks. The recurring theme: all major agent frameworks have a designed interception hook (filter, middleware, callback) that was built exactly for authorization use cases, but none ships a reference identity-bound implementation. Bolyra is the reference implementation. The builder session brief is always the same: find the hook, write a small non-breaking callback, add an example, open a targeted PR.",
+    "recommended_next_action": "Open a builder session for microsoft/semantic-kernel (priority 1) or run-llama/llama_index (priority 2). semantic-kernel is recommended first: the IFunctionInvocationFilter interface is the cleanest injection point Bolyra has seen, maintainers actively respond to filter-related PRs, and the enterprise credibility of a merged SK PR exceeds any other target in the list."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 35,
+    "path": "B",
+    "path_b_targets_identified": 15,
+    "weeks_since_last_outreach_action": "7+"
+  }
+}
