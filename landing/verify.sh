@@ -30,7 +30,48 @@ pass "/ returns 200"
 
 TMP=$(mktemp /tmp/bolyra-402.XXXXXX.html)
 trap 'rm -f "$TMP"' EXIT
+ROOT_TMP=$(mktemp /tmp/bolyra-root.XXXXXX.html)
+trap 'rm -f "$TMP" "$ROOT_TMP"' EXIT
 curl -fsSL "$URL_402" -o "$TMP"
+curl -fsSL "$URL_ROOT" -o "$ROOT_TMP"
+
+# Resolve the version to test for a package.
+#
+# These versions are deliberately NOT hardcoded. Hand-maintained pins go stale
+# silently: the check keeps passing against an old published build while the
+# page advertises a newer one, so it stops proving anything about what users
+# actually install (exactly the blind spot the X402 outage created). Prefer the
+# version the live page advertises, since "what the page claims works" is the
+# invariant under test; fall back to the latest published version for packages
+# the page mentions without pinning.
+advertised_version() {
+  local pkg="$1" vers count ver
+  # The package must actually appear on the page. "No evidence found" is a
+  # failure, not a reason to silently fall back to whatever npm calls latest.
+  grep -Fqh -- "$pkg" "$ROOT_TMP" "$TMP" \
+    || fail "$pkg is not mentioned on the live page — refusing to guess a version"
+
+  # Collect every DISTINCT pinned version. Taking the first match would
+  # reintroduce the stale-pin blind spot: a page carrying both an old and a new
+  # reference would quietly test whichever appeared first.
+  vers=$(grep -ohE "${pkg}@[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?" "$ROOT_TMP" "$TMP" 2>/dev/null \
+         | sed "s|^${pkg}@||" | sort -u || true)
+  count=$(printf '%s' "$vers" | grep -c . || true)
+
+  if [ "$count" -gt 1 ]; then
+    fail "$pkg is advertised at conflicting versions on the page: $(echo "$vers" | tr '\n' ' ')"
+  elif [ "$count" -eq 1 ]; then
+    printf '%s' "$vers"
+    return
+  fi
+
+  # Mentioned but not pinned: test the latest published build, which is what a
+  # reader following an unpinned install instruction would get.
+  ver=$(npm view "$pkg" version 2>/dev/null | tr -d '[:space:]' || true)
+  [ -n "$ver" ] || fail "could not resolve a version for $pkg (page pins none and npm view failed)"
+  echo "      $pkg: mentioned but not pinned on the page, testing latest published ($ver)" >&2
+  printf '%s' "$ver"
+}
 BYTES=$(wc -c < "$TMP" | tr -d ' ')
 [ "$BYTES" -gt 10000 ] || fail "/402 body suspiciously small ($BYTES bytes)"
 pass "downloaded /402 ($BYTES bytes)"
@@ -69,11 +110,12 @@ for needle in "${FORBIDDEN[@]}"; do
   fi
 done
 
-# npm registry sanity — @bolyra/payment-protocols must resolve.
-echo "→ GET registry.npmjs.org/@bolyra/payment-protocols/0.3.1"
-NPM_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@bolyra/payment-protocols/0.3.1")
-[ "$NPM_STATUS" = "200" ] || fail "@bolyra/payment-protocols@0.3.1 returned HTTP $NPM_STATUS"
-pass "@bolyra/payment-protocols@0.3.1 resolves on npm"
+# npm registry sanity — the advertised @bolyra/payment-protocols must resolve.
+PP_VERSION=$(advertised_version "@bolyra/payment-protocols")
+echo "→ GET registry.npmjs.org/@bolyra/payment-protocols/$PP_VERSION"
+NPM_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@bolyra/payment-protocols/$PP_VERSION")
+[ "$NPM_STATUS" = "200" ] || fail "@bolyra/payment-protocols@$PP_VERSION returned HTTP $NPM_STATUS"
+pass "@bolyra/payment-protocols@$PP_VERSION resolves on npm"
 
 # Runtime symbol resolution — the page advertises specific exports from the
 # published npm packages. Grep proves "the symbol is mentioned on the page";
@@ -82,10 +124,10 @@ pass "@bolyra/payment-protocols@0.3.1 resolves on npm"
 # preceding 14h X402 outage is what motivated this check (verify.sh saw the
 # string in HTML, but createX402Authorization was missing from 0.3.0).
 echo "→ runtime symbol resolution against published packages"
-SDK_VERSION="0.4.0"
-PP_VERSION="0.3.1"
+SDK_VERSION=$(advertised_version "@bolyra/sdk")
+echo "      testing @bolyra/sdk@$SDK_VERSION, @bolyra/payment-protocols@$PP_VERSION"
 WORKDIR=$(mktemp -d /tmp/bolyra-verify.XXXXXX)
-trap 'rm -rf "$WORKDIR" "$TMP"' EXIT
+trap 'rm -rf "$WORKDIR" "$TMP" "$ROOT_TMP"' EXIT
 (
   cd "$WORKDIR"
   npm init -y >/dev/null 2>&1
