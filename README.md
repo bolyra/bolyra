@@ -61,7 +61,7 @@ npm run conformance:report   # generate spec/CONFORMANCE.md
 run against any host in any language, with no install:
 
 ```bash
-HOST_CMD="/path/to/your-host --flags" node spec/conformance-runner.js --type host_behavior
+npx @bolyra/evc-conformance --host "/path/to/your-host --flags"
 ```
 
 See [`spec/IMPLEMENTER.md`](spec/IMPLEMENTER.md) for the full pass path — the

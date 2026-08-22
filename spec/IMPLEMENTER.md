@@ -8,15 +8,23 @@ to run the harness, and a host of your own.
 The normative contract is [`external-verifier-contract-v1.md`](./external-verifier-contract-v1.md).
 This file is the short operational path to a green run.
 
-## 1. Run the suite (no install required)
+## 1. Run the suite (one command, no clone)
+
+```sh
+npx @bolyra/evc-conformance
+```
+
+Or from a clone of this repo (identical vectors — the npm package is a
+checksummed snapshot of this directory):
 
 ```sh
 git clone https://github.com/bolyra/bolyra && cd bolyra
 node spec/conformance-runner.js --type host_behavior
 ```
 
-That runs **27 host-behavior vectors** against the in-repo reference host, with
-**no `npm install`** — the host suite uses only Node builtins. Expect:
+Either way that runs **27 host-behavior vectors** against the bundled
+reference host, with **no `npm install`** — the host suite uses only Node
+builtins. Expect:
 
 ```
 27 passed, 0 failed, 0 skipped
@@ -31,11 +39,16 @@ Set `HOST_CMD` to whatever command starts your host. Any language, as long as it
 honors the convention in §3:
 
 ```sh
-HOST_CMD="/path/to/your-host --flags" node spec/conformance-runner.js --type host_behavior
+npx @bolyra/evc-conformance --host "/path/to/your-host --flags"
 ```
 
-Use an absolute path: you are running from inside this clone, so a relative path
-would resolve against our tree, not yours.
+Add `--json` for a machine-readable result (vector-set version, count, and
+SHA-256 included, so CI states exactly what it passed). From a clone, the
+equivalent is `HOST_CMD="/path/to/your-host --flags" node
+spec/conformance-runner.js --type host_behavior`.
+
+Use an absolute path for your host: a relative path would resolve against the
+runner's tree, not yours.
 
 The runner spawns your host once per vector, writes one §2.1 request to its
 stdin, and reads one decision from its stdout.
