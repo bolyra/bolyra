@@ -33,6 +33,7 @@ EXCLUDED="
 ./examples/stripe-acp-demo
 ./examples/stripe-ai-mandate-demo
 ./examples/verified-actions-demo
+./examples/x402-evc-profile
 ./integrations/mpp-payments/examples/mandate-demo
 "
 
