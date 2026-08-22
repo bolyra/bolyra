@@ -4,6 +4,7 @@ module.exports = {
   testMatch: ['**/test/**/*.test.ts'],
   moduleNameMapper: {
     '^@bolyra/sdk$': '<rootDir>/../../sdk/src',
+    '^@bolyra/mpp$': '<rootDir>/../mpp-payments/src',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(@noble|@bolyra/receipts)/)',

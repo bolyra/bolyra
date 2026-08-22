@@ -57,6 +57,25 @@ export type {
   X402Config,
 } from './x402';
 
+// x402 EVC authorization-evidence profile (spec/x402-evc-profile-v0.md)
+export {
+  X402_EVC_PROFILE,
+  X402_EVC_AUTHORIZATION_HEADER,
+  X402_EVC_NONCE_HEADER,
+  X402_EVC_EXPIRES_HEADER,
+  buildX402EvcRequest,
+  verifyX402EvcAuthorization,
+} from './x402-evc';
+export type {
+  X402EvcRequirements,
+  X402EvcContext,
+  X402EvcExtension,
+  X402EvcVerifierRequest,
+  X402EvcOptions,
+  X402EvcVerifyOptions,
+  X402EvcDecision,
+} from './x402-evc';
+
 // Commerce Authorization Layer
 export { authorizeCommerceIntent } from './commerce-intent';
 export type {

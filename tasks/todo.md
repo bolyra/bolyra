@@ -1,39 +1,58 @@
-# GTM: next bug-fix PR cycle (Codex PICK A, 2026-08-04)
+# x402 EVC authorization-evidence profile — reference integration (90-day plan, Days 0–30 deliverable)
 
-(previous task — Dependabot triage 2026-07-22 — complete: peak 74 → 10 via PRs #83/#86/#87/#88/#89; full log in tasks/dependabot-cleanup-plan.md + checkpoint_2026_07_22_contribution_day)
+Plan of record: ~/.claude/plans/how-do-i-get-keen-parnas.md (approved 2026-08-22; Codex-agreed).
+Goal: the single next action — a narrow, working "optional authorization-evidence profile for x402
+payments" that binds EVC evidence to resource/amount/nonce/expires_at/verifier identity, then ONE
+question to warm maintainer `phdargen` (extension profile vs app-layer example vs ecosystem package).
 
-Context: primary 30-day motion (2026-07-27 ruling) had zero new PRs in 8 days.
-Codex ruled today: start the next bug-fix PR cycle. Scout → pick → fix → test → PR.
+Scout findings (2026-08-22): existing `integrations/payment-protocols/src/x402.ts` speaks the raw ZK
+handshake, NOT the EVC wire — the profile is net-new and rides the `additionalProperties: true` seam
+in EVC §2.2. Reuse: @bolyra/mpp types/evc/classical/nonces + gate/deny/receipts/issue/tiers;
+example scaffold from examples/x402-agent-wallet/; two-gates prose in drafts/revettr-two-gates-note.md.
 
 ## Tasks
 
-- [x] 1. Refresh live status of watched threads (x402-rs #101, mcp #2216, cf/agents #1872, mcp-use #1835 — all quiet, nothing owed)
-- [x] 2. Codex prioritization ruling (PICK A: new bug-fix PR cycle)
-- [x] 3. Scout: 2 parallel research agents — DONE. NOTE: one scout fabricated intermediate findings + one gave a wrong Python vector claim; lesson recorded 2026-08-04.
-- [x] 4. Compile candidate list; independently verify top picks AT HEAD myself (SIWX trust-boundary confirmed real; Python dotAll bug confirmed real but NARROWER than scout claimed — mid-segment %0A only)
-- [x] 5. Codex ruled the target: PICK A (x402 SIWX) private-disclosure-first + PICK B (x402 Python dotAll) as the public PR today; sequence A private then B public in same repo; do NOT touch Go (core-contributor collision), do NOT public-file A or C
-- [x] 6. Founder approved building both deliverables (2026-08-04)
-- [x] 7. B: test-first fix (red: 3 LF cases failed pre-fix / 2 guards passed; green: 5/5 + full suite 1855 passed). One-line fix: re.DOTALL on the route regex. Verified in a real clone via `uv run pytest` (CI-exact), ruff check + format clean, towncrier fragment renders.
-- [x] 8. B: Codex code review → APPROVE-WITH-NITS → applied (LF-specific wording, dropped #3036 from changelog) → clean APPROVE on re-pass. Claude+Codex AGREE.
-- [x] 9. B: single commit off upstream HEAD, 3 deliverable files only, author+committer = Viswa, DCO signed-off, NO Claude trailer. Exported as git patch.
-- [x] 10a. B: PR title + description drafted (maintainer-first: bug/risk/fix/test proof, parity with #3036). At `bolyra/drafts/x402-gtm-2026-08-04/B-PR-description.md`.
-- [x] 10b. A: HackerOne disclosure drafted + Codex APPROVE-WITH-NITS → clean APPROVE on re-pass. At `bolyra/drafts/x402-gtm-2026-08-04/A-hackerone-siwx-disclosure.md`.
-- [x] 11b. **B SHIPPED 2026-08-05 → PR #3055** — forked, pushed, opened, signed with the registered SSH key (`verified: true`), `check-verified-commits` + `labeler` PASS, integrity re-verified (1 commit `ae96cc4a` / 3 files). Vercel-fail benign. Python CI awaits maintainer workflow-approval.
-- [ ] 11a. **A — FOUNDER SEND, still pending:** submit privately to hackerone.com/coinbase (draft `bolyra/drafts/x402-gtm-2026-08-04/A-hackerone-siwx-disclosure.md`, sendable body fenced BEGIN/END). Never a public PR/issue.
-- [x] 12. Engagement graph node + MEMORY.md updated (x402-foundation/x402 now a live thread).
-
-## Queued for later today (2026-08-05)
-
-- [ ] Rotate the exposed + spent Anthropic API key; check what the $180.77 promo credit actually covers (it exhausted at ~$32)
-- [ ] x402-rs #101 — nudge eligible since 8/5 (14d silence); one gentle nudge to ukstv, not yet drafted
-- [ ] qm ADR — founder hand-writes ~250-350w informal, first-person (corrected house style in the engagement-graph node; Codex's 600-900w formal-proposal guidance is STALE and trips their anti-AI-expansion rule)
-- [ ] Optional: NVIDIA Retail-Agentic-Commerce webhook idempotency finding (real, minor, unclaimed) — only survivor of the batch sweep
-
-## Parallel / deferred (Codex ALSO rulings, 2026-08-04)
-
-- [ ] x402-rs #101 ukstv nudge: HOLD until 14 full days silent → eligible 2026-08-05; one gentle nudge only
-- [ ] Surface to founder (async, non-blocking): qm ADR hand-written draft, switchboard follow-up send confirmation (was due 7/25; 90-day clock → 2026-10-16), Jeet/Malkolm framing conversation
+- [x] 1. Profile doc first (small, normative): `spec/x402-evc-profile-v0.md` — how an x402
+      PAYMENT-REQUIRED flow carries EVC authorization evidence; new request-extension fields
+      `x402: { resource, amount, nonce, expires_at, verifier }` layered via §2.2
+      additionalProperties; verdict semantics unchanged (fail-closed, RFC 9457 on deny);
+      receipt = gate-1→gate-2 handoff (mirrors revettr two-gates note).
+- [x] 2. Bridge module: `integrations/payment-protocols/src/x402-evc.ts` — map
+      `X402PaymentRequirements` + request context → EVC `VerifierRequest` (profile fields);
+      dispatch via @bolyra/mpp verifier transports (classical | command | url); return
+      allow/deny + RFC 9457 body; ES256K decision receipt via @bolyra/receipts. Export from
+      `index.ts` barrel. NO changes to existing x402.ts (keep both paths; profile is additive).
+- [x] 3. Tests: `integrations/payment-protocols/test/x402-evc.test.ts` — allow within mandate,
+      deny over-amount (request_mismatch), deny expired, deny bad binding, nonce replay denied
+      (reserve-before-act), verdict-schema fail-closed (hostile fixtures from spec/fixtures/).
+      Red-green: write failing tests FIRST (workspace TDD rule).
+- [x] 4. Runnable example: `examples/x402-evc-profile/` (scaffold copied from x402-agent-wallet)
+      — $25 allow / $500 deny / replay deny, two-gates receipt handoff printed; README with
+      scenario table + flow diagram per repo convention.
+- [x] 5. Repo hygiene: `cd sdk && npm run typecheck` equivalent for touched packages
+      (`tsc --noEmit`), full `npm test` in payment-protocols + mpp-payments; DCO sign-off
+      (`git commit -s`); no CODEOWNERS crypto paths touched (verify before commit).
+- [x] 6. Codex loop #1 (code): review bridge + tests + example; fix; re-pass until clean APPROVE.
+- [x] 7. Codex loop #2 (words): the design-note + the upstream issue text for x402-foundation/x402
+      asking phdargen the ONE question ("extension profile, app-layer example, or ecosystem
+      package?"). Boundary rule: the WHY/spec, never the hosted-system build plan.
+- [ ] 8. FOUNDER ACTIONS (never automated): push branch + open the upstream issue + ping phdargen.
+      Then: update bolyra-engagement-graph.md (new node state) + re-publish artifact; add
+      MEMORY.md checkpoint line.
 
 ## Review / results
 
-(to fill when the cycle completes)
+(fill in as tasks complete)
+
+## Review / results (2026-08-22)
+
+- Built: spec/x402-evc-profile-v0.md · src/x402-evc.ts (payment-protocols) · 15 profile tests
+  (132/132 package total) · examples/x402-evc-profile (demo PASS) · barrel + deps + jest mapping.
+- Codex code loop: REVISE (4 findings: default-store replay bug, payee/audience gap, x402 v2
+  vocabulary, resource-binding overclaim) -> all fixed -> REVISE (nonce-store throw escaped
+  fail-closed) -> fixed + 2 tests -> APPROVE.
+- Codex words loop: issue draft APPROVE first pass (drafts/x402-evc-profile-issue.md).
+  Non-blocker noted: demo uses 'base-sepolia'; v2 spec prefers CAIP-2 (eip155:84532) - fine to
+  address if a maintainer asks.
+- Remaining = task 8, FOUNDER: commit -s, push, open the issue (drop the draft's preamble),
+  ping phdargen; then engagement-graph update + artifact re-publish.
