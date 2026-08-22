@@ -36,7 +36,7 @@ example scaffold from examples/x402-agent-wallet/; two-gates prose in drafts/rev
 - [x] 7. Codex loop #2 (words): the design-note + the upstream issue text for x402-foundation/x402
       asking phdargen the ONE question ("extension profile, app-layer example, or ecosystem
       package?"). Boundary rule: the WHY/spec, never the hosted-system build plan.
-- [ ] 8. FOUNDER ACTIONS (never automated): push branch + open the upstream issue + ping phdargen.
+- [x] 8. FOUNDER ACTIONS (never automated): push branch + open the upstream issue + ping phdargen.
       Then: update bolyra-engagement-graph.md (new node state) + re-publish artifact; add
       MEMORY.md checkpoint line.
 
@@ -56,3 +56,7 @@ example scaffold from examples/x402-agent-wallet/; two-gates prose in drafts/rev
   address if a maintainer asks.
 - Remaining = task 8, FOUNDER: commit -s, push, open the issue (drop the draft's preamble),
   ping phdargen; then engagement-graph update + artifact re-publish.
+- SENT 2026-08-22 (founder-delegated): commit 905b6ad pushed to main (DCO, canonical author,
+  docker-regenerated lockfile), links verified live, issue OPENED:
+  https://github.com/x402-foundation/x402/issues/3230 · engagement graph updated · artifact
+  re-publish PENDING (visual one update behind).
