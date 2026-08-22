@@ -1,0 +1,41 @@
+{
+  "name": "@bolyra/evc-conformance",
+  "version": "0.1.0",
+  "description": "Bolyra-maintained EVC v1 host conformance vectors - prove any host implementation conforms with one command, no install",
+  "bin": {
+    "evc-conformance": "bin.js"
+  },
+  "scripts": {
+    "sync": "node scripts/sync.js",
+    "presync:check": "true",
+    "sync:check": "node scripts/sync.js --check",
+    "test": "node bin.js && node scripts/sync.js --check"
+  },
+  "files": [
+    "bin.js",
+    "vendor/",
+    "MANIFEST.json",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bolyra/bolyra",
+    "directory": "integrations/evc-conformance"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "evc",
+    "external-verifier-contract",
+    "conformance",
+    "agent-authorization",
+    "bolyra"
+  ],
+  "license": "Apache-2.0"
+}
