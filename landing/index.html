@@ -952,6 +952,9 @@ payloadHash=0x7358&hellip;7635
         <h3 style="font-size: 1.35rem; letter-spacing: 0; margin-bottom: 12px;">Open verifier boundary, no lock-in</h3>
         <p style="color: var(--text-muted); margin: 0;">The <strong style="color: var(--text);">External Verifier Contract</strong> is Bolyra's open host-to-verifier boundary: a host sends one verification request and gets a fail-closed allow/deny verdict from a classical, ZK, or external verifier. Pilot against Bolyra's hosted verifier preview today, then keep the same boundary if you self-host or swap verifier implementations later. Bolyra maintains the spec, conformance vectors, reference hosts, and managed verifier path.</p>
         <p style="color: var(--cyan); margin: 14px 0 0; font-weight: 600;">Open contract. Managed operations when you need them.</p>
+        <p style="color: var(--text-muted); margin: 18px 0 0;">Prove it yourself. <a href="https://www.npmjs.com/package/@bolyra/evc-conformance"><code>@bolyra/evc-conformance</code></a> runs 27 host-behavior vectors against any HUT-compatible host process, regardless of implementation language, with no project install step and no Bolyra runtime:</p>
+        <pre style="margin: 12px 0 0;"><code>npx @bolyra/evc-conformance --host "/path/to/your-host --flags"</code></pre>
+        <p style="color: var(--text-muted); margin: 12px 0 0;">Exit 1 on failure, <code>--json</code> emits the vector-set SHA-256 for CI. Full pass path: <a href="https://github.com/bolyra/bolyra/blob/main/spec/IMPLEMENTER.md">spec/IMPLEMENTER.md</a>.</p>
       </div>
       <div class="cta-group" style="margin-top: 32px;">
         <a href="mailto:kondojuviswanadha@gmail.com?subject=Bolyra%20design-partner%20pilot" class="btn btn-primary">Book a 20-min technical fit call</a>
@@ -1020,11 +1023,11 @@ payloadHash=0x7358&hellip;7635
       <div class="package-rows">
         <div class="package-row">
           <h3 style="font-size: 1.05rem; margin: 0;">Spend authorization</h3>
-          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/mpp"><code>@bolyra/mpp@0.3.1</code></a>: operator-signed spend mandates verified before MPP payments execute. <a href="https://www.npmjs.com/package/@bolyra/payment-protocols"><code>@bolyra/payment-protocols@0.7.0</code></a>: x402 authorization and Stripe ACP spend gating against delegated scope. Try: <code>npx @bolyra/mpp demo</code>.</p>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/mpp"><code>@bolyra/mpp@0.3.1</code></a>: operator-signed spend mandates verified before MPP payments execute. <a href="https://www.npmjs.com/package/@bolyra/payment-protocols"><code>@bolyra/payment-protocols@0.7.0</code></a>: x402 authorization and Stripe ACP spend gating against delegated scope, plus the <a href="https://github.com/bolyra/bolyra/blob/main/spec/x402-evc-profile-v0.md">x402 EVC authorization-evidence profile</a>: the x402 retry carries authorization evidence alongside the payment credential; the resource server checks it fail-closed before payment logic proceeds. Try: <code>npx @bolyra/mpp demo</code>.</p>
         </div>
         <div class="package-row">
           <h3 style="font-size: 1.05rem; margin: 0;">Verifier and gateway</h3>
-          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/gateway"><code>@bolyra/gateway@0.6.0</code></a>: reverse proxy in front of any MCP server, per-tool policy, replay protection, signed receipts, Docker or npx. <a href="https://www.npmjs.com/package/@bolyra/cli"><code>@bolyra/cli@0.7.0</code></a>: <code>bolyra verify</code>, a spawnable external verifier any host can call. Hosted <code>POST /v1/verify</code> preview for design partners, same External Verifier Contract.</p>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/gateway"><code>@bolyra/gateway@0.6.0</code></a>: reverse proxy in front of any MCP server, per-tool policy, replay protection, signed receipts, Docker or npx. <a href="https://www.npmjs.com/package/@bolyra/cli"><code>@bolyra/cli@0.7.0</code></a>: <code>bolyra verify</code>, a spawnable external verifier any host can call. <a href="https://www.npmjs.com/package/@bolyra/evc-conformance"><code>@bolyra/evc-conformance@0.1.0</code></a>: <code>npx @bolyra/evc-conformance --host "&lt;cmd&gt;"</code>, 27 host-behavior vectors against any HUT-compatible host, zero runtime dependencies. Hosted <code>POST /v1/verify</code> preview for design partners, same External Verifier Contract.</p>
         </div>
         <div class="package-row">
           <h3 style="font-size: 1.05rem; margin: 0;">Receipts and audit</h3>
