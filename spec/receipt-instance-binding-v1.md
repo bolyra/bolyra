@@ -174,10 +174,30 @@ its correctness.
 - Not an on-chain anchor format; `ref` is anchor-friendly but anchoring is
   out of scope here.
 
-## 6. Open questions for review
+## 6. Open questions — resolved in external review (2026-08-24)
 
-1. Is carrying the full preimage in the payload acceptable weight, or
-   should `ref` alone be allowed with preimage distribution out of band?
-   (Draft says: carry it — self-contained beats small.)
-2. Is the ASCII-only domain too restrictive for `audience` values in
-   practice (internationalized merchant identifiers)?
+Both questions were reviewed by the argentum `action_ref` author on
+[x402#3230](https://github.com/x402-foundation/x402/issues/3230); the
+resolutions below are adopted.
+
+1. **Full preimage inline, settled.** A ref a relying party cannot
+   recompute without an out-of-band fetch is only
+   third-party-verifiable-if-the-issuer-cooperates. Self-contained is the
+   default; ref-alone would only be revisited if payload size becomes a
+   demonstrated constraint. (argentum reached the same conclusion for
+   `action_ref`; see their
+   [RFC 002](https://github.com/giskard09/argentum-core/blob/c284f599eb84835446a272d0c8ebb5d95b4d9ff6/docs/rfcs/002-action-ref-v2-domain-separation.md).)
+2. **ASCII domain stays; `audience` is pinned, not widened.**
+   `audience` MUST be a stable ASCII machine identifier — an address, DID,
+   or project key — never a display name. Internationalized merchant
+   display names live outside the signed preimage entirely, at the display
+   layer that already handles them. Widening `canonicalize()` to Unicode
+   would reopen the general-JCS-compliance claim §3.1 explicitly declines
+   to make.
+   **Honest pipeline note:** today `@bolyra/mpp` documents `audience` as
+   the payee/project key and compares it byte-literally, but enforces only
+   non-empty (`issue.ts` / `gate.ts`) — a raw merchant string is not
+   rejected at issuance. The implementation of this spec MUST therefore
+   enforce the ASCII-identifier constraint at mandate issuance and at
+   receipt emission (where an out-of-domain preimage already makes
+   `computeInstanceRef` throw), not only at verification.
