@@ -27,6 +27,13 @@ export const INSTANCE_REF_PREFIX = 'birv1:';
 
 const REF_PATTERN = /^birv1:[0-9a-f]{64}$/;
 const DECISION_AT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+/**
+ * §3.1.1: audience is a stable machine identifier, pinned tighter than the
+ * general ASCII domain — printable ASCII excluding space, 1..256 chars. A
+ * syntactic floor, not semantic proof: it rejects the display-name shape
+ * ("Acme Corp") without inventing a versioned identifier grammar.
+ */
+const AUDIENCE_PATTERN = /^[\x21-\x7e]{1,256}$/;
 // eslint-disable-next-line no-control-regex
 const ASCII_ONLY = /^[\x00-\x7f]*$/;
 
@@ -121,6 +128,13 @@ export function validateInstancePreimage(value: unknown): PreimageValidation {
     if (!ASCII_ONLY.test(cap)) {
       return { ok: false, detail: 'every capability must contain only ASCII (0x00..0x7F)' };
     }
+  }
+  if (!AUDIENCE_PATTERN.test(obj.audience as string)) {
+    return {
+      ok: false,
+      detail:
+        'audience must be a stable machine identifier: printable ASCII excluding space (0x21..0x7E), 1..256 characters',
+    };
   }
   if (!DECISION_AT_PATTERN.test(obj.decisionAt as string)) {
     return {
