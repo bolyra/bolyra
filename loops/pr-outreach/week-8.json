@@ -1,0 +1,198 @@
+{
+  "week": 8,
+  "date": "2026-08-24",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried. All external PR statuses carry forward from last live verification (2026-07-27, 28 days ago). No state writes to prs.json this cycle — same discipline as weeks 4-7.",
+
+  "path_b_progress_check": {
+    "note": "Weeks 5-7 identified 15 Path B targets, all with clean injection points in active frameworks. No new prs.json entries recorded — no builder sessions confirmed. Cumulative total: 35 targets identified across 7 weeks, 0 Path B PRs opened. The pipeline is fully stocked; execution is the only remaining gap.",
+    "week7_priority_targets_status": "unknown — microsoft/semantic-kernel (priority 1) and run-llama/llama_index (priority 2) remain the top recommendations. No action confirmed in prs.json.",
+    "action_gap": "8 weeks of scan output, 0 Path B PRs opened. The bottleneck is builder-session activation, not target identification."
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 28,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "openai/openai-agents-python",
+      "approx_stars": 5000,
+      "language": "Python",
+      "why": "OpenAI's own Python agents SDK — the reference implementation that shapes how the entire ecosystem thinks about agent tool-calling. Guardrails exist (InputGuardrail, OutputGuardrail) but are text-based filters on LLM output, not identity-bound pre-dispatch checks. Any caller with a valid API key can run any registered FunctionTool with no mandate verification. A Bolyra EVC check here means the most-read reference implementation ships an identity gate — enormous downstream influence on how adopters build authorization into their own agents. Maintainers are OpenAI engineers who actively merge well-scoped contributions from the community.",
+      "gap": "FunctionTool execution (agents/run.py, handle_function_call_item) dispatches tool calls immediately after LLM output parsing with no authorization hook. The guardrail system runs after output, not before tool invocation. An optional tool_authorization_callback on Agent (or Runner) that receives (agent_name, tool_name, tool_args) and returns allow/deny would gate pre-dispatch. Bolyra EVC is the reference implementation but the hook is framework-agnostic.",
+      "anchor_issue": "Search openai/openai-agents-python issues for 'authorization', 'guardrail', 'pre-tool', or 'mandate'. The repo is young (early 2026) — if no issue exists, opening one before the PR is the right move to establish context.",
+      "pr_type": "targeted feature — add an optional tool_authorization_callback parameter to Agent.__init__(). Called in Runner before every tool dispatch. Ships as a None-default optional parameter — zero breaking change. A BolyraEVCGuard sample in examples/bolyra/ demonstrates the Bolyra EVC integration without making it a core dependency.",
+      "priority": 1,
+      "builder_notes": "Entry point: agents/run.py (look for handle_function_call_item or equivalent tool dispatch). Also check agents/agent.py for the Agent class constructor. The repo is under active development — rebase against main immediately before opening. OpenAI engineers review PRs with a high bar for clean diffs; keep it to 2-3 files max."
+    },
+    {
+      "repo": "langchain-ai/langchain",
+      "approx_stars": 98000,
+      "language": "Python",
+      "why": "The largest agent/LLM framework in the Python ecosystem. BaseTool and AgentExecutor are still the dominant tool-dispatch path in production LangChain deployments. LangChain has callbacks (on_tool_start, on_tool_end) for observability but no authorization gate — callbacks are notification hooks, not allow/deny gates. A merged PR here touches the most production agent deployments of any target identified across all 8 weeks, and the callback pattern already exists as a design precedent that makes the change immediately legible to maintainers.",
+      "gap": "BaseTool.run() and BaseTool.arun() invoke the tool after calling _run_manager.on_tool_start(), but there is no hook that can cancel execution based on identity. An optional authorization_callback: Optional[Callable[[str, dict], bool]] on BaseTool.__init__() — evaluated in run() before _run — would close the gap. If None (default), behavior is identical to today. A BolyraAuthorizer class demonstrates the EVC integration in langchain/tools/bolyra.py as a contrib without touching core behavior.",
+      "anchor_issue": "Search langchain-ai/langchain issues for 'authorization', 'tool guard', 'pre-tool', or 'access control'. This is a well-known gap — a GitHub issue or discussion almost certainly exists. Reference it in the PR description.",
+      "pr_type": "targeted feature — single parameter addition to BaseTool.__init__() and a two-line guard in BaseTool.run() / BaseTool.arun(). No breaking change. Contrib example in docs/docs/integrations/tools/bolyra_auth.ipynb demonstrates real usage. Smallest possible diff for the widest reach of any target in the list.",
+      "priority": 2,
+      "builder_notes": "Entry point: langchain/tools/base.py BaseTool class, run() and arun() methods. Keep the diff to base.py + one example file. LangChain uses ruff + mypy; run both before submitting. The contribution guide requires a CHANGELOG entry. Avoid touching AgentExecutor — BaseTool is the correct layer."
+    },
+    {
+      "repo": "deepset-ai/haystack",
+      "approx_stars": 22000,
+      "language": "Python",
+      "why": "Production RAG and agent pipeline framework used in enterprise search, document QA, and agentic workflows. Haystack's component system (@component) and Pipeline.run() are the dispatch backbone for tool-calling agents in Haystack. The framework is enterprise-positioned (deepset Cloud) and maintainers actively engage with security and compliance contributions. Haystack Agents can call tools that access databases, call APIs, and initiate payments — all without an identity gate at the pipeline level.",
+      "gap": "Pipeline.run() dispatches components sequentially or in a graph without any authorization hook between component invocations. An agent-type component (e.g., a custom tool) executes with no mandate check. An optional component_authorization_callback on Pipeline.__init__() — called with (component_name, input_dict) before each component.run() in the dispatch loop — would gate sensitive components. An alternatively cleaner fit is an authorization_policy parameter on the @component decorator itself, allowing per-component policy attachment.",
+      "anchor_issue": "Search deepset-ai/haystack issues for 'authorization', 'policy', or 'access control'. Haystack has a Security section in CONTRIBUTING.md — reference it when opening the issue. Maintainers are responsive on GitHub Discussions.",
+      "pr_type": "targeted feature — add an optional authorization_callback to Pipeline.__init__() evaluated in Pipeline.run() before each component dispatch. Ships with a BolyraComponentGuard example in haystack/components/auth/ that demonstrates EVC integration. Zero change to behavior when callback is None (default).",
+      "priority": 3,
+      "builder_notes": "Entry point: haystack/core/pipeline/pipeline.py run() method. Check haystack/core/component/component.py for the @component decorator if per-component policy is the cleaner approach. Haystack uses ruff + mypy; run pre-commit hooks before submitting. They require type annotations on all new parameters."
+    },
+    {
+      "repo": "e2b-dev/e2b",
+      "approx_stars": 9000,
+      "language": "Python / TypeScript",
+      "why": "The dominant cloud sandbox for AI agent code execution — used as the runtime layer when agents write and run code. Sandbox.run_code() is the highest-risk agent capability: arbitrary code execution with no identity gate means any agent with an API key can run any code in any sandbox. E2B is explicitly positioned for AI agents and is integrated with major agent frameworks (LangChain, LlamaIndex, Phidata, AutoGPT). A Bolyra mandate check before run_code() would be the first identity-bound authorization gate on the most dangerous agent action category. Maintainers are active and the repo is growing fast.",
+      "gap": "e2b.Sandbox.run_code() (Python and TS SDKs) executes code with no pre-call identity check. The caller is identified only by API key — no per-agent identity, no capability binding, no spending or scope mandate. An optional authorization_hook on Sandbox (or on the run_code() call) that verifies a Bolyra EVC mandate before execution would gate unauthorized code runs. The hook receives (agent_id, code_snippet, language) and returns allow/deny; Bolyra EVC is the reference verifier.",
+      "anchor_issue": "Search e2b-dev/e2b issues for 'authorization', 'agent identity', 'access control', or 'sandbox policy'. The gap is acute — e2b's Discord and GitHub discussions likely have requests for per-agent execution policies.",
+      "pr_type": "targeted feature — add an optional authorization_hook parameter to Sandbox.__init__() (Python) and SandboxOpts (TypeScript). Called in run_code() / runCode() before execution. A BolyraCodeGuard example in examples/bolyra/ demonstrates EVC integration for both SDKs. Non-breaking: None/undefined default preserves today's behavior.",
+      "priority": 4,
+      "builder_notes": "Python entry point: packages/python-sdk/e2b/sandbox/sandbox.py run_code() method. TS entry point: packages/js-sdk/src/sandbox/index.ts runCode() method. Open builder sessions for both SDKs if possible — they are kept in sync. E2B maintainers respond quickly on Discord before GitHub PRs — worth a quick message there first."
+    },
+    {
+      "repo": "botpress/botpress",
+      "approx_stars": 13000,
+      "language": "TypeScript",
+      "why": "Production bot and AI agent platform with a large enterprise install base and active developer community. Botpress actions (integrations, tool calls from LLM) are the dispatch backbone for production bots with payment, CRM, and PII capabilities. The action execution middleware is a designed extension point — Botpress explicitly documents hooks for action pre-processing — making it one of the cleanest framework fits in the TypeScript ecosystem. Enterprise positioning means maintainers understand compliance and access control; a Bolyra integration PR would be legible and credible on first read.",
+      "gap": "Botpress action execution (packages/bp/src/core/actions/) dispatches tool-like integrations without per-agent identity binding. Any bot with access to an integration can trigger payment or PII actions with no mandate check. An optional ActionAuthorizationHook in the action middleware chain — checking a Bolyra EVC mandate before the action handler runs — closes the gap. Botpress's middleware pattern (similar to Express) is the designed extension point; the hook is not an anti-pattern.",
+      "anchor_issue": "Search botpress/botpress issues for 'authorization', 'action security', or 'per-agent permissions'. Botpress's community forum (Discord + GitHub Discussions) is very active. May have enterprise customers already asking for per-bot action policies.",
+      "pr_type": "targeted feature — add an optional authorization middleware to the action execution chain in packages/bp/src/core/actions/ or equivalent in the v12/cloud architecture. A BolyraActionGuard middleware class demonstrates EVC integration in examples/bolyra/ without touching core dispatch. Ships as a contrib — not a core dependency.",
+      "priority": 5,
+      "builder_notes": "Botpress has two architectures: v12 (open-source, self-hosted) and Botpress Cloud (SaaS). Target the v12 OSS codebase first — lower barrier to merge and wider community reach. Entry point: search for 'action' in packages/bp/src/core/. Botpress uses ESLint + prettier; match the existing code style. Check CONTRIBUTING.md for the required issue-first policy before opening a PR."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "cumulative_targets_identified": 40,
+    "weeks_5_7_targets": "15 high-quality Path B targets identified across weeks 5-7. None confirmed acted on in prs.json.",
+    "week8_targets": "5 new targets above. Priority 1 (openai/openai-agents-python) is the highest-signal this week: it is OpenAI's reference implementation and a merge there shapes the entire ecosystem's approach to authorization. Priority 2 (langchain-ai/langchain) is the widest-reach diff of any target identified in 8 weeks — a 2-file change touches ~98k-star downstream.",
+    "critical_observation": "8 consecutive weeks of target identification with 0 Path B PRs opened. The scan output is comprehensive; the bottleneck is builder-session activation. This week's recommendation is narrowed: pick exactly ONE target from the full 40-target backlog, open a builder session in an interactive Claude session, and run the /review-pr skill before pushing. Do not wait for the next scan.",
+    "recommended_next_action": "Option A (highest reach): langchain-ai/langchain — BaseTool.run() change is the smallest diff for the widest ecosystem reach of any target in the full backlog. Option B (highest signal): openai/openai-agents-python — the reference implementation shapes ecosystem norms; a merge is the most visible proof point possible. Either is the right call. Pick one today."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 40,
+    "path": "B",
+    "path_b_targets_identified": 20,
+    "weeks_since_last_outreach_action": "8+"
+  }
+}
