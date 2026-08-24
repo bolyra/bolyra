@@ -1,0 +1,65 @@
+{
+  "description": "Golden and negative vectors for receipt instance binding (spec/receipt-instance-binding-v1.md). ref = 'birv1:' + sha256hex(utf8('bolyra.receipt.instance/1') || 0x00 || utf8(canonicalize(preimage))). Portable: any implementation must reproduce these refs byte-for-byte.",
+  "dst": "bolyra.receipt.instance/1",
+  "refPrefix": "birv1:",
+  "golden": [
+    {
+      "name": "with requestNonce (x402 EVC profile shape)",
+      "preimage": {
+        "audience": "merchant.example",
+        "program": "x402",
+        "capabilities": ["payments:send"],
+        "amountUsd": "12.50",
+        "decisionAt": "2026-08-24T10:00:00.123Z",
+        "requestNonce": "nonce-abc123"
+      },
+      "canonical": "{\"amountUsd\":\"12.50\",\"audience\":\"merchant.example\",\"capabilities\":[\"payments:send\"],\"decisionAt\":\"2026-08-24T10:00:00.123Z\",\"program\":\"x402\",\"requestNonce\":\"nonce-abc123\"}",
+      "ref": "birv1:e7a84dcc6ab62430d6f230ee03396cd250772f99990457a999cc255d1b579c12"
+    },
+    {
+      "name": "timestamp-only discriminator (no in-protocol nonce)",
+      "preimage": {
+        "audience": "acme.example",
+        "program": "mpp",
+        "capabilities": ["payments:send", "data:read"],
+        "amountUsd": "250.00",
+        "decisionAt": "2026-08-24T11:30:45.001Z"
+      },
+      "ref": "birv1:f48593733421dff29a077504377813f123bd0cba792fd847eaac548a291f72ef"
+    },
+    {
+      "name": "with external actionRef carried verbatim (argentum v2 form)",
+      "preimage": {
+        "audience": "merchant.example",
+        "program": "x402",
+        "capabilities": ["payments:send"],
+        "amountUsd": "12.50",
+        "decisionAt": "2026-08-24T10:00:00.123Z",
+        "requestNonce": "nonce-abc123",
+        "actionRef": "v2:abababababababababababababababababababababababababababababababab"
+      },
+      "ref": "birv1:859ddd5ef7fb29d34754323a4344a476682f4e0f3ddbd2f61e12b0390e975ef5"
+    }
+  ],
+  "outOfDomain": [
+    { "name": "missing audience", "preimage": { "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "missing program", "preimage": { "audience": "a", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "missing capabilities", "preimage": { "audience": "a", "program": "x402", "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "missing amountUsd", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "missing decisionAt", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00" } },
+    { "name": "unknown member", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z", "extra": "x" } },
+    { "name": "null value", "preimage": { "audience": null, "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "number amountUsd", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": 1.0, "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "nested object", "preimage": { "audience": { "id": "a" }, "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "non-string capability element", "preimage": { "audience": "a", "program": "x402", "capabilities": [7], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "capabilities not an array", "preimage": { "audience": "a", "program": "x402", "capabilities": "payments:send", "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "non-ASCII audience", "preimage": { "audience": "café.example", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "non-ASCII capability", "preimage": { "audience": "a", "program": "x402", "capabilities": ["données:read"], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "decisionAt without milliseconds", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00Z" } },
+    { "name": "decisionAt 2-digit milliseconds", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.12Z" } },
+    { "name": "decisionAt 6-digit milliseconds", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123456Z" } },
+    { "name": "decisionAt offset instead of Z", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123+00:00" } },
+    { "name": "preimage is an array", "preimage": ["a"] },
+    { "name": "preimage is a string", "preimage": "a" }
+  ]
+}

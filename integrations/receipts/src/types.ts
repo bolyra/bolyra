@@ -1,3 +1,5 @@
+import type { ReceiptInstanceFields } from './instance';
+
 /**
  * Optional hash-chain fields linking a receipt to its predecessor in a log.
  * Additive and backward-compatible: chain-less receipts remain valid, and
@@ -59,6 +61,15 @@ export interface ReceiptPayload {
 
   /** Present only when kind === 'bolyra.commerce'. */
   commerce?: CommerceFields;
+
+  /**
+   * Optional instance binding (spec/receipt-instance-binding-v1.md).
+   * v1 scope: bolyra.commerce receipts only. Lives inside the signed payload
+   * so it cannot be rewritten without breaking the ES256K signature; its
+   * SEMANTIC validity (ref recomputes from preimage) is a separate claim
+   * checked by verifyInstanceBinding(), not by verifyReceipt().
+   */
+  instance?: ReceiptInstanceFields;
 
   /** Present only on hash-chained receipts (written via ReceiptChain). */
   chain?: ReceiptChainFields;
