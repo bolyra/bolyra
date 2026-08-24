@@ -60,6 +60,10 @@
     { "name": "decisionAt 6-digit milliseconds", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123456Z" } },
     { "name": "decisionAt offset instead of Z", "preimage": { "audience": "a", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123+00:00" } },
     { "name": "preimage is an array", "preimage": ["a"] },
-    { "name": "preimage is a string", "preimage": "a" }
+    { "name": "preimage is a string", "preimage": "a" },
+    { "name": "empty audience", "preimage": { "audience": "", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "audience with a space (display-name shape)", "preimage": { "audience": "Acme Corp", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "audience with a control character", "preimage": { "audience": "a\tb", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } },
+    { "name": "audience exceeding 256 characters", "preimage": { "audience": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "program": "x402", "capabilities": [], "amountUsd": "1.00", "decisionAt": "2026-08-24T10:00:00.123Z" } }
   ]
 }

@@ -105,6 +105,27 @@ constrains theirs, instead of pretending general JCS compliance:
   a distinct error (mirroring `OUT_OF_PROFILE_DOMAIN`) and MUST NOT
   attempt best-effort canonicalization. One pinned behavior, no fallback.
 
+### 3.1.1 Audience identifier syntax
+
+Per the §6 resolution, `audience` is a stable machine identifier, never a
+display name. Within the preimage domain it is pinned tighter than the
+general ASCII rule:
+
+- `audience` MUST match `^[\x21-\x7E]{1,256}$` — printable ASCII excluding
+  space and control characters, 1 to 256 characters.
+
+Rationale: the identifier shapes in actual use (0x addresses, DIDs,
+project keys, URLs) contain no spaces; display names essentially always
+do. The regex is a **syntactic floor, not semantic proof** — it cannot
+prove a value is not a display name, but it rejects the common failure
+shape without inventing a grammar that would itself need versioning.
+
+This syntax is part of the §3.1 preimage domain: a verifier MUST reject an
+`audience` outside it (`out_of_domain`), and issuance/emission MUST
+enforce the same rule earlier in the pipeline (spec §4). One pinned
+behavior at every layer; a signed receipt whose audience is
+`"Acme Corp"` is not verifier-valid.
+
 ### 3.2 Instance discrimination: `decisionAt` + `requestNonce`
 
 Millisecond timestamps alone leave a residual: two identical decisions in
@@ -193,7 +214,9 @@ resolutions below are adopted.
    display names live outside the signed preimage entirely, at the display
    layer that already handles them. Widening `canonicalize()` to Unicode
    would reopen the general-JCS-compliance claim §3.1 explicitly declines
-   to make.
+   to make. The concrete syntax is pinned in §3.1.1 and joins the verifier
+   domain (an implementation-time tightening beyond this resolution as
+   first written; disclosed on the review thread).
    **Honest pipeline note:** today `@bolyra/mpp` documents `audience` as
    the payee/project key and compares it byte-literally, but enforces only
    non-empty (`issue.ts` / `gate.ts`) — a raw merchant string is not

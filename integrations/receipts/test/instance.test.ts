@@ -92,20 +92,46 @@ describe('validateInstancePreimage', () => {
     }
   });
 
-  it('accepts the full printable-ASCII range including 0x7F', () => {
+  it('general fields keep the full 0x00..0x7F domain (tab and DEL in requestNonce)', () => {
     const result = validateInstancePreimage({
       ...GOLDEN_PREIMAGE,
-      audience: 'a\tb\x7f',
+      requestNonce: 'a\tb\x7f',
     });
     expect(result.ok).toBe(true);
   });
 
-  it('rejects a character just past the ASCII boundary (0x80)', () => {
+  it('rejects a character just past the ASCII boundary (0x80) in any field', () => {
     const result = validateInstancePreimage({
       ...GOLDEN_PREIMAGE,
-      audience: 'a\x80',
+      requestNonce: 'a\x80',
     });
     expect(result.ok).toBe(false);
+  });
+
+  describe('audience identifier syntax (§3.1.1, ^[\\x21-\\x7E]{1,256}$)', () => {
+    it('accepts identifier shapes: 0x address, DID, project key, URL', () => {
+      for (const audience of [
+        '0x' + 'ab'.repeat(20),
+        'did:bolyra:merchant123',
+        'proj_live_8f3k2',
+        'https://merchant.example/pay',
+      ]) {
+        expect({ audience, ok: validateInstancePreimage({ ...GOLDEN_PREIMAGE, audience }).ok })
+          .toEqual({ audience, ok: true });
+      }
+    });
+
+    it('accepts exactly 256 characters and rejects 257', () => {
+      expect(validateInstancePreimage({ ...GOLDEN_PREIMAGE, audience: 'a'.repeat(256) }).ok).toBe(true);
+      expect(validateInstancePreimage({ ...GOLDEN_PREIMAGE, audience: 'a'.repeat(257) }).ok).toBe(false);
+    });
+
+    it('rejects space, tab, DEL, and empty (identifier floor, tighter than the general domain)', () => {
+      for (const audience of ['Acme Corp', 'a\tb', 'a\x7f', '']) {
+        expect({ audience, ok: validateInstancePreimage({ ...GOLDEN_PREIMAGE, audience }).ok })
+          .toEqual({ audience, ok: false });
+      }
+    });
   });
 });
 
