@@ -23,6 +23,20 @@ export type {
   CommerceFields,
 } from './types';
 export {
+  INSTANCE_BINDING_DST,
+  INSTANCE_REF_PREFIX,
+  computeInstanceRef,
+  validateInstancePreimage,
+  verifyInstanceBinding,
+} from './instance';
+export type {
+  InstancePreimage,
+  ReceiptInstanceFields,
+  InstanceBindingCode,
+  InstanceBindingResult,
+  PreimageValidation,
+} from './instance';
+export {
   parseSignerDiscovery,
   acceptedSigners,
   SignerDiscoveryError,
