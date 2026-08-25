@@ -3,6 +3,7 @@
 import * as fs from 'fs';
 import * as process from 'process';
 import { verifyReceipt, hashPayload } from './sign';
+import { verifyInstanceBinding } from './instance';
 import type { SignedReceipt } from './types';
 
 // --- Helpers ---
@@ -233,6 +234,21 @@ function validateSignature(): void {
   pass(`Signature valid (signer: ${truncate(receipt.signature.signer)})`);
 }
 
+// 6. Instance binding (spec/receipt-instance-binding-v1.md §4): signature
+// validity and instance-binding validity are different claims — a
+// signer-issued receipt with a forged instance.ref passes verifyReceipt()
+// in check 5 and MUST still fail here.
+function validateInstance(): void {
+  const result = verifyInstanceBinding(receipt);
+  if (!result.ok) {
+    failCheck(`Instance binding invalid [${result.code}] ${result.detail}`);
+    return;
+  }
+  if (result.present) {
+    pass(`Instance binding valid (${receipt.payload.instance!.ref})`);
+  }
+}
+
 // --- Run checks ---
 
 if (validateSchema()) {
@@ -240,6 +256,7 @@ if (validateSchema()) {
   if (validateHash()) {
     validateId();
     validateSignature();
+    validateInstance();
   }
 }
 

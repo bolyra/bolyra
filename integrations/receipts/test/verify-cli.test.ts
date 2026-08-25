@@ -153,3 +153,81 @@ describe('verify-cli', () => {
     expect(stdout).toContain('--max-age');
   });
 });
+
+// --- Instance binding (spec/receipt-instance-binding-v1.md §4) ---
+// The golden-corpus verifier is the package's own bin: a signer-issued
+// receipt with a forged instance.ref passes the signature check and MUST
+// still fail here.
+import { createCommerceReceipt } from '../src/receipt';
+import { computeInstanceRef, type InstancePreimage } from '../src/instance';
+import type { CommerceReceiptInput, ReceiptPayload } from '../src/types';
+
+const INSTANCE_PREIMAGE: InstancePreimage = {
+  audience: 'api.merchant.example',
+  program: 'mpp',
+  capabilities: ['mpp:financial:small'],
+  amountUsd: '25',
+  decisionAt: '2026-08-25T03:00:00.123Z',
+};
+
+function makeCommercePayload(instance?: ReceiptPayload['instance']): ReceiptPayload {
+  const input: CommerceReceiptInput = {
+    ...makeInput(),
+    commerce: {
+      rail: 'mpp',
+      amount: 25,
+      currency: 'USD',
+      merchant: 'api.merchant.example',
+      intentHash: 'ab'.repeat(32),
+    },
+  };
+  const payload = createCommerceReceipt(input, {
+    issuer: TEST_CONFIG.issuer,
+    keyId: TEST_CONFIG.keyId,
+  });
+  const fresh = { ...payload, issuedAt: Math.floor(Date.now() / 1000) };
+  return instance !== undefined ? { ...fresh, instance } : fresh;
+}
+
+describe('verify-cli instance binding', () => {
+  it('PASSes a receipt with a valid instance block and reports the check', () => {
+    const receipt = signReceipt(
+      makeCommercePayload({ ref: computeInstanceRef(INSTANCE_PREIMAGE), preimage: INSTANCE_PREIMAGE }),
+      TEST_CONFIG,
+    );
+    const { stdout, exitCode } = runCli(writeTempReceipt(receipt));
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatch(/Instance binding valid/);
+  });
+
+  it('FAILs a signer-issued receipt whose instance.ref is forged', () => {
+    const forged = computeInstanceRef({ ...INSTANCE_PREIMAGE, amountUsd: '9999.99' });
+    const receipt = signReceipt(
+      makeCommercePayload({ ref: forged, preimage: INSTANCE_PREIMAGE }),
+      TEST_CONFIG,
+    );
+    const { stdout, exitCode } = runCli(writeTempReceipt(receipt));
+    expect(exitCode).toBe(1);
+    expect(stdout).toMatch(/Instance binding invalid \[ref_mismatch\]/);
+  });
+
+  it('FAILs an out-of-domain preimage with the domain code', () => {
+    const receipt = signReceipt(
+      makeCommercePayload({
+        ref: 'birv1:' + 'ab'.repeat(32),
+        preimage: { ...INSTANCE_PREIMAGE, audience: 'Acme Corp' },
+      }),
+      TEST_CONFIG,
+    );
+    const { stdout, exitCode } = runCli(writeTempReceipt(receipt));
+    expect(exitCode).toBe(1);
+    expect(stdout).toMatch(/Instance binding invalid \[out_of_domain\]/);
+  });
+
+  it('a receipt without an instance block passes with no instance line', () => {
+    const receipt = signReceipt(makeCommercePayload(), TEST_CONFIG);
+    const { stdout, exitCode } = runCli(writeTempReceipt(receipt));
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toMatch(/Instance binding/);
+  });
+});

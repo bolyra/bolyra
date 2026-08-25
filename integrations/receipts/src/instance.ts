@@ -48,7 +48,11 @@ export interface InstancePreimage {
   audience: string;
   /** Binding program discriminator (e.g. "x402", "mpp"). */
   program: string;
-  /** Granted capability tokens, order as granted (order is significant). */
+  /**
+   * Capability tokens the decision was evaluated over, order as presented
+   * (order is significant): the granted set on allow; on deny, the tokens
+   * the request was evaluated against.
+   */
   capabilities: string[];
   /** Decimal string, exactly as decided. */
   amountUsd: string;

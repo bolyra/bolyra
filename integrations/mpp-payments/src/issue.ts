@@ -258,6 +258,13 @@ export async function issueMandate(input: IssueMandateInput): Promise<IssuedMand
   }
   const model = requireNonEmpty(input.model, 'model');
   const program = input.program === undefined ? 'mpp' : requireNonEmpty(input.program, 'program');
+  // eslint-disable-next-line no-control-regex
+  if (!/^[\x00-\x7f]+$/.test(program)) {
+    throw new MandateIssueError(
+      'program must be non-empty ASCII (it enters the receipt instance preimage domain, ' +
+        'spec/receipt-instance-binding-v1.md §3.1)',
+    );
+  }
 
   if (
     input.operatorPrivateKey === undefined ||

@@ -195,10 +195,27 @@ describe('fail-closed emission (instance construction must never throw out of th
     for (const r of receipts) expect(r.payload.instance).toBeUndefined();
   });
 
-  test('a non-ASCII program is rejected at gate construction', async () => {
+  test.each([
+    ['non-ASCII', 'paiements—x402'],
+    ['empty', ''],
+  ])('a %s program is rejected at gate construction', async (_n, program) => {
     const { method } = mockMethod();
-    const options = await gateOptions({ program: 'paiements—x402' });
+    const options = await gateOptions({ program });
     expect(() => bolyraGate(method, options)).toThrow(/ASCII/);
+  });
+
+  test('issueMandate rejects a non-ASCII program (agreement with the gate)', async () => {
+    await expect(
+      issueMandate({
+        operatorPrivateKey: OPERATOR_PRIV,
+        agentName: 'shopper-bot',
+        audience: AUDIENCE,
+        model: 'demo-model',
+        program: 'paiements—x402',
+        tier: 'small',
+        expiry: EXPIRY,
+      }),
+    ).rejects.toThrow(/ASCII/);
   });
 });
 

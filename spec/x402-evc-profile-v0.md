@@ -118,10 +118,14 @@ the challenge nonce is issued in the 402 response *before* the retry, so
 BOTH sides hold it pre-decision. That makes the instance reference
 recomputable by the counterparty (unlike the issuer-generated
 `proof.nonce`) and closes the same-millisecond residual that
-timestamp-only discrimination leaves open. The host already holds the
-value — it is `context.nonce` in `verifyX402EvcAuthorization`'s options —
-so populating `requestNonce` at receipt emission requires no new
-plumbing, only the emission-side wiring of the instance block itself.
+timestamp-only discrimination leaves open. The concrete emission path: the
+host already holds the value as `context.nonce` in
+`verifyX402EvcAuthorization`'s options, and `@bolyra/mpp` exposes
+`DecisionFacts.requestNonce` + `buildDecisionInstance()` — a profile host
+recording receipts sets `requestNonce: context.nonce` in the facts it
+builds the instance block from. (`bolyraGate` itself is the MPP-transport
+gate and has no challenge nonce; this requirement binds profile hosts,
+who own their receipt emission.)
 
 A profile-aware relying party MAY additionally join
 `instance.preimage.requestNonce` against its own record of the challenge

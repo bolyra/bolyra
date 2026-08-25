@@ -59,7 +59,9 @@ instance?: {
   preimage: {
     audience: string;        // payee / project_key the decision bound to
     program: string;         // binding program discriminator (e.g. "x402", "mpp")
-    capabilities: string[];  // granted capability tokens, order as granted
+    capabilities: string[];  // capability tokens the decision was evaluated
+                             // over, order as presented (the granted set on
+                             // allow; on deny, the tokens evaluated against)
     amountUsd: string;       // decimal string, exactly as decided
     decisionAt: string;      // RFC 3339 UTC, 3-digit ms: "2026-08-24T10:00:00.123Z"
     requestNonce?: string;   // in-protocol challenge nonce when one exists (see 3.2)
