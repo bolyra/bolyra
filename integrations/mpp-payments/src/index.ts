@@ -38,12 +38,17 @@ export type {
 export { denyProblem, denyResponse, DENY_STATUS, type DenyProblem } from './deny';
 export { runCommandVerifier, callUrlVerifier, validateVerdict } from './evc';
 export { NonceStore } from './nonces';
-export { createGateReceiptSigner, buildDecisionReceiptInput } from './receipts';
+export {
+  createGateReceiptSigner,
+  buildDecisionReceiptInput,
+  buildDecisionInstance,
+} from './receipts';
 export type { GateReceiptSigner, DecisionFacts } from './receipts';
 
 export {
   allow,
   deny,
+  AUDIENCE_IDENTIFIER_PATTERN,
   VerifyDenial,
   isVerifyDenial,
   type AllowVerdict,

@@ -232,9 +232,30 @@ export interface BolyraGateOptions {
   receipts?: GateReceiptConfig;
   /** Sink for every signed decision receipt (allow AND deny). */
   onReceipt?: (receipt: SignedReceipt) => void;
-  /** Clock override (unix seconds). Tests only. */
+  /**
+   * Clock override (unix seconds). Tests only. Mutually exclusive with
+   * `nowMs` — pass exactly one clock; receipts built from this clock carry
+   * `.000Z` decision timestamps.
+   */
   now?: () => number;
+  /**
+   * Millisecond clock override (epoch ms, i.e. `Date.now` shape). Mutually
+   * exclusive with `now`. Drives both the second-resolution verifier clock
+   * and the ms-precision `decisionAt` in receipt instance binding
+   * (spec/receipt-instance-binding-v1.md §3.2).
+   */
+  nowMs?: () => number;
 }
+
+/**
+ * §3.1.1 of spec/receipt-instance-binding-v1.md: an audience is a stable
+ * machine identifier — printable ASCII excluding space, 1..256 chars. A
+ * syntactic floor, not semantic proof; enforced at gate construction and
+ * mandate issuance so a display-name audience never reaches a signed
+ * binding or receipt. (Mirrors @bolyra/receipts' verifier-domain rule —
+ * kept byte-identical; the verifier is the source of truth.)
+ */
+export const AUDIENCE_IDENTIFIER_PATTERN = /^[\x21-\x7e]{1,256}$/;
 
 /** Cumulative financial tiers from @bolyra/sdk's Permission model. */
 export type FinancialTier = 'small' | 'medium' | 'unlimited';

@@ -51,7 +51,7 @@ import { randomBytes } from 'node:crypto';
 import { bindingDigest, hashModel } from './classical';
 import type { BindingClaim } from './bundle';
 import { MPP_CAPABILITY_MAP, requiredTierForUsdAmount, tierCapability } from './tiers';
-import type { FinancialTier } from './types';
+import { AUDIENCE_IDENTIFIER_PATTERN, type FinancialTier } from './types';
 
 /** Thrown on any invalid issuance input. Fail closed: no mandate is emitted. */
 export class MandateIssueError extends Error {
@@ -249,6 +249,13 @@ export async function mintPresentation(params: {
 export async function issueMandate(input: IssueMandateInput): Promise<IssuedMandate> {
   const agentName = requireNonEmpty(input.agentName, 'agentName');
   const audience = requireNonEmpty(input.audience, 'audience');
+  if (!AUDIENCE_IDENTIFIER_PATTERN.test(audience)) {
+    throw new MandateIssueError(
+      'audience must be a stable machine identifier (printable ASCII excluding space, ' +
+        '1..256 chars — spec/receipt-instance-binding-v1.md §3.1.1); display names belong ' +
+        'outside the signed binding',
+    );
+  }
   const model = requireNonEmpty(input.model, 'model');
   const program = input.program === undefined ? 'mpp' : requireNonEmpty(input.program, 'program');
 
