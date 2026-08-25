@@ -13,7 +13,7 @@ import {
   buildDecisionInstance,
   issueMandate,
   type BolyraGateOptions,
-  type DecisionFacts,
+  type DecisionInstanceFacts,
 } from '../src/index';
 import { AUDIENCE, EXPIRY, NOW_UNIX, OPERATOR_PRIV, makeBundle, operatorKey } from './helpers';
 
@@ -219,24 +219,19 @@ describe('fail-closed emission (instance construction must never throw out of th
   });
 });
 
-describe('buildDecisionInstance', () => {
-  const facts: DecisionFacts = {
-    request: {
-      agent_name: 'shopper-bot',
-      project_key: AUDIENCE,
-      program: 'mpp',
-      model: 'demo-model',
-      granted_capabilities: ['mpp:financial:small'],
-    } as DecisionFacts['request'],
-    tier: 'small',
+describe('buildDecisionInstance (pure instance facts — no request object, no tier)', () => {
+  const facts: DecisionInstanceFacts = {
+    audience: AUDIENCE,
+    program: 'mpp',
+    capabilities: ['mpp:financial:small'],
     amountUsd: '25',
     decisionAt: '2026-08-25T03:00:00.123Z',
   };
 
-  test('ref recomputes from the preimage', () => {
+  test('ref recomputes from the preimage and mirrors the facts', () => {
     const instance = buildDecisionInstance(facts);
     expect(instance.ref).toBe(computeInstanceRef(instance.preimage));
-    expect(instance.preimage.decisionAt).toBe('2026-08-25T03:00:00.123Z');
+    expect(instance.preimage).toEqual(facts);
   });
 
   test('requestNonce is included exactly when the facts carry one', () => {

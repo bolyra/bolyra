@@ -184,7 +184,7 @@ another currency. Unresolvable amounts fail closed.
 | `now` | `() => number` | `Date.now`-derived | Clock override (unix **seconds**). Tests only. Mutually exclusive with `nowMs`; receipts built from it carry `.000Z` decision timestamps |
 | `nowMs` | `() => number` | `Date.now` | Clock override (epoch **milliseconds**). Tests only. Mutually exclusive with `now`; drives both the verifier clock and the ms-precision `decisionAt` in the receipt instance block |
 
-Related exports: `buildDecisionInstance(facts)` builds the signed instance block from `DecisionFacts` (hosts emitting their own receipts — e.g. x402 EVC profile hosts — set `facts.requestNonce` to their pre-decision challenge nonce); `AUDIENCE_IDENTIFIER_PATTERN` is the §3.1.1 audience syntax.
+Related exports: `buildDecisionInstance(facts)` builds the signed instance block from `DecisionInstanceFacts` — the pure spec-§3 preimage facts (`audience`/`program`/`capabilities`/`amountUsd`/`decisionAt`/`requestNonce?`); derive them from resolved receipt facts with `instanceFactsFrom(receiptFacts)`. Hosts emitting their own receipts — e.g. x402 EVC profile hosts — set `requestNonce` to their pre-decision challenge nonce. `AUDIENCE_IDENTIFIER_PATTERN` is the §3.1.1 audience syntax.
 
 Verifier backends:
 

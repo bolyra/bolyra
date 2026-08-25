@@ -39,7 +39,8 @@ import {
   buildDecisionInstance,
   buildDecisionReceiptInput,
   createGateReceiptSigner,
-  type DecisionFacts,
+  instanceFactsFrom,
+  type DecisionReceiptFacts,
 } from './receipts';
 import { requiredTierForUsdAmount, tierCapability } from './tiers';
 import {
@@ -233,9 +234,11 @@ export function bolyraGate<method extends MppxServerMethodLike>(
     // Instance construction must never throw out of the gate: computeInstanceRef
     // rejects out-of-domain preimages by design, and a receipt is emitted on
     // EVERY path — so a failed build degrades to an instance-less receipt.
-    const tryInstance = (facts: DecisionFacts): ReturnType<typeof buildDecisionInstance> | undefined => {
+    const tryInstance = (
+      facts: DecisionReceiptFacts,
+    ): ReturnType<typeof buildDecisionInstance> | undefined => {
       try {
-        return buildDecisionInstance(facts);
+        return buildDecisionInstance(instanceFactsFrom(facts));
       } catch {
         return undefined;
       }
@@ -245,7 +248,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       outcome: 'deny';
       response: Response;
     } => {
-      const facts: DecisionFacts = {
+      const facts: DecisionReceiptFacts = {
         request: requestContext,
         tier: tier ?? ('small' as const),
         amountUsd,
@@ -334,7 +337,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       //    if construction fails (host fault, internal_error), the
       //    presentation must remain replayable for the retry — denying after
       //    reservation would turn the retry into a bogus nonce_replayed.
-      const allowFacts: DecisionFacts = {
+      const allowFacts: DecisionReceiptFacts = {
         request: requestContext,
         tier,
         amountUsd,

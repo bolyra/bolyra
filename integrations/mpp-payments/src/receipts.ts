@@ -92,28 +92,51 @@ export function createGateReceiptSigner(config: GateReceiptConfig = {}): GateRec
 }
 
 /** Facts a decision receipt is built from. */
-export interface DecisionFacts {
+export interface DecisionReceiptFacts {
   request: VerifierRequestContext;
   tier: FinancialTier;
   amountUsd: string;
   /**
    * RFC 3339 UTC with 3-digit milliseconds ("2026-08-25T03:00:00.123Z") —
-   * computed ONCE at the decision boundary from the gate's clock and carried
-   * into the receipt's instance preimage (spec §3.2). `new
-   * Date(ms).toISOString()` produces exactly this shape.
+   * computed ONCE at the decision boundary from the gate's clock. Recorded
+   * only through the instance block today (buildDecisionReceiptInput does
+   * not read it); kept here so one facts object serves both builders.
    */
   decisionAt: string;
   /**
    * In-protocol pre-decision challenge nonce, when the transport has one
    * (e.g. the x402 EVC profile's 402 challenge nonce — REQUIRED there, spec
-   * x402-evc-profile-v0 §4.1). The plain MPP gate has no such value and
-   * omits it; `decisionAt` is then the instance discriminator.
+   * x402-evc-profile-v0 §4.1). The plain MPP gate has no such value.
    */
   requestNonce?: string;
   /** Present when the in-process classical path parsed the bundle. */
   bundle?: ParsedBundle;
   /** Present on deny. */
   denial?: Pick<DenyVerdict, 'code' | 'message'>;
+}
+
+/** @deprecated Renamed to {@link DecisionReceiptFacts} in 0.4.0. */
+export type DecisionFacts = DecisionReceiptFacts;
+
+/**
+ * The pure instance facts of spec §3 — exactly the preimage fields, nothing
+ * from the transport. A caller with no resolved tier or clock simply never
+ * constructs this (no placeholder values), which is what keeps early-deny
+ * receipts honestly instance-less.
+ */
+export interface DecisionInstanceFacts {
+  /** Payee / project_key the decision bound to (§3.1.1 identifier syntax). */
+  audience: string;
+  /** Binding program discriminator (e.g. "mpp", "x402"). */
+  program: string;
+  /** Capability tokens the decision was evaluated over, order as presented. */
+  capabilities: string[];
+  /** Decimal USD string, exactly as decided. */
+  amountUsd: string;
+  /** RFC 3339 UTC, 3-digit ms. */
+  decisionAt: string;
+  /** Pre-decision challenge nonce, when the transport has one. */
+  requestNonce?: string;
 }
 
 /**
@@ -123,8 +146,21 @@ export interface DecisionFacts {
  * decided on. Throws if any preimage field is outside the §3.1 domain —
  * emission MUST NOT produce a receipt a conformant verifier rejects.
  */
-export function buildDecisionInstance(facts: DecisionFacts): ReceiptInstanceFields {
+export function buildDecisionInstance(facts: DecisionInstanceFacts): ReceiptInstanceFields {
   const preimage: InstancePreimage = {
+    audience: facts.audience,
+    program: facts.program,
+    capabilities: facts.capabilities,
+    amountUsd: facts.amountUsd,
+    decisionAt: facts.decisionAt,
+    ...(facts.requestNonce !== undefined && { requestNonce: facts.requestNonce }),
+  };
+  return { ref: computeInstanceRef(preimage), preimage };
+}
+
+/** Derive the instance facts from resolved receipt facts (gate internal). */
+export function instanceFactsFrom(facts: DecisionReceiptFacts): DecisionInstanceFacts {
+  return {
     audience: facts.request.project_key,
     program: facts.request.program,
     capabilities: facts.request.granted_capabilities,
@@ -132,7 +168,6 @@ export function buildDecisionInstance(facts: DecisionFacts): ReceiptInstanceFiel
     decisionAt: facts.decisionAt,
     ...(facts.requestNonce !== undefined && { requestNonce: facts.requestNonce }),
   };
-  return { ref: computeInstanceRef(preimage), preimage };
 }
 
 function sha256Hex(text: string): string {
@@ -153,7 +188,7 @@ function decToHex(dec: string): string {
  * follow the gateway's decision receipts; commerce fields carry the MPP
  * context (rail/amount/merchant/intentHash).
  */
-export function buildDecisionReceiptInput(facts: DecisionFacts): CommerceReceiptInput {
+export function buildDecisionReceiptInput(facts: DecisionReceiptFacts): CommerceReceiptInput {
   const { request, bundle, denial } = facts;
   const operator = bundle?.agent.credential.operator_pubkey;
   const envelope = bundle?.agent.envelope;

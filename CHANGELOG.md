@@ -17,6 +17,65 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/receipts 0.11.0 (2026-08-25)
+
+### Changed
+
+- `verifyInstanceBinding()` no longer throws on non-receipt input (missing or
+  invalid `payload`): new `malformed_receipt` result code. This widens the
+  published `InstanceBindingCode`/`InstanceBindingResult` union — a minor
+  bump, not a patch.
+- The `bolyra-receipt-verify` bin (the golden-corpus verifier) now runs the
+  instance-binding check after the signature check — a signer-issued receipt
+  with a forged `instance.ref` passes the signature check and must still
+  fail.
+- `tsx` is now a declared devDependency (the verify-cli tests shell out to it;
+  previously resolved from cache/network only).
+
+## @bolyra/receipts 0.10.0 (2026-08-25)
+
+### Added
+
+- **Receipt instance binding** (`spec/receipt-instance-binding-v1.md`): optional
+  signed `instance` block on commerce receipts — a `birv1:`-prefixed,
+  domain-separated ref plus its full preimage, third-party-recomputable from
+  the action's own facts. New public API: `verifyInstanceBinding()`,
+  `computeInstanceRef()`, `validateInstancePreimage()`,
+  `INSTANCE_BINDING_DST`, `INSTANCE_REF_PREFIX`. Signature validity and
+  instance-binding validity are different claims. Externally design-reviewed
+  on x402-foundation/x402#3230.
+- §3.1.1 audience identifier syntax is part of the verifier domain:
+  `audience` MUST match `^[\x21-\x7E]{1,256}$`; a display-name audience is
+  `out_of_domain`.
+
+## @bolyra/mpp 0.4.0 (2026-08-25)
+
+### Changed (BREAKING)
+
+- `DecisionFacts` renamed to `DecisionReceiptFacts` (deprecated alias kept)
+  and gains a required `decisionAt` (RFC 3339 UTC, 3-digit ms) plus optional
+  `requestNonce`. New `DecisionInstanceFacts` carries the pure spec-§3
+  preimage facts; `buildDecisionInstance()` takes it (helper:
+  `instanceFactsFrom()`).
+- `bolyraGate` validates `audience` against the §3.1.1 identifier syntax and
+  `program` as non-empty ASCII at construction (as does `issueMandate`) —
+  display-name audiences and empty discriminators are rejected before
+  anything signs.
+
+### Added
+
+- Every gate decision receipt carries a signed `instance` block whenever the
+  spend facts are resolved and the clock is valid; early denials
+  (`missing_authorization`) are honestly instance-less. Emission is
+  fail-closed: a failed instance build denies `internal_error` and can never
+  throw out of the gate or burn a nonce.
+- `nowMs` gate option (epoch-ms clock; exactly one of `now`/`nowMs`). The
+  sample is validated (finite, Date-representable, derived unix seconds ≥ 1);
+  `now_unix` and nonce-reservation timestamps derive from the same sampled
+  instant.
+- `GateReceiptSigner.sign(input, instance?)` attaches the block before
+  signing, so the ES256K signature covers it.
+
 ## @bolyra/cli 0.8.0 (2026-07-24)
 
 ### Fixed

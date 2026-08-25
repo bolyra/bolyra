@@ -42,8 +42,14 @@ export {
   createGateReceiptSigner,
   buildDecisionReceiptInput,
   buildDecisionInstance,
+  instanceFactsFrom,
 } from './receipts';
-export type { GateReceiptSigner, DecisionFacts } from './receipts';
+export type {
+  DecisionFacts,
+  DecisionReceiptFacts,
+  DecisionInstanceFacts,
+} from './receipts';
+export type { GateReceiptSigner } from './receipts';
 
 export {
   allow,
