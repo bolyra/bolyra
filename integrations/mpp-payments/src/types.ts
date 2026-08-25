@@ -239,10 +239,10 @@ export interface BolyraGateOptions {
    */
   now?: () => number;
   /**
-   * Millisecond clock override (epoch ms, i.e. `Date.now` shape). Mutually
-   * exclusive with `now`. Drives both the second-resolution verifier clock
-   * and the ms-precision `decisionAt` in receipt instance binding
-   * (spec/receipt-instance-binding-v1.md §3.2).
+   * Millisecond clock override (epoch ms, i.e. `Date.now` shape). Tests
+   * only. Mutually exclusive with `now`. Drives both the second-resolution
+   * verifier clock and the ms-precision `decisionAt` in receipt instance
+   * binding (spec/receipt-instance-binding-v1.md §3.2).
    */
   nowMs?: () => number;
 }

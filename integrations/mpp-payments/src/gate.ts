@@ -133,11 +133,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
   }
 
   const program = options.program ?? 'mpp';
+  // Non-empty ASCII, agreeing with issueMandate: an empty program would put
+  // a signed, verifier-valid instance ref over an empty discriminator.
   // eslint-disable-next-line no-control-regex
-  if (!/^[\x00-\x7f]*$/.test(program)) {
+  if (!/^[\x00-\x7f]+$/.test(program)) {
     throw new TypeError(
-      'bolyraGate: `program` must be ASCII — it enters the receipt instance ' +
-        'preimage domain (spec/receipt-instance-binding-v1.md §3.1)',
+      'bolyraGate: `program` must be non-empty ASCII — it enters the receipt ' +
+        'instance preimage domain (spec/receipt-instance-binding-v1.md §3.1)',
     );
   }
   const headerName = (options.header ?? BOLYRA_AUTHORIZATION_HEADER).toLowerCase();
@@ -328,19 +330,10 @@ export function bolyraGate<method extends MppxServerMethodLike>(
         return denyWith(outcome.verdict);
       }
 
-      // 5. Host nonce mode (spec §7.3): reserve-before-act every consumed
-      //    nonce; a reservation conflict means the presentation was replayed.
-      const consumeNonces = outcome.verdict.consume_nonces;
-      if (consumeNonces !== undefined && consumeNonces.length > 0) {
-        if (!(await nonceStore.reserve(consumeNonces, now()))) {
-          return denyWith(deny('nonce_replayed', 'authorization presentation was already used'));
-        }
-      }
-
-      // 6. Allow: sign the decision receipt and stash for the verify hook.
-      // An allow receipt without a truthful instance claim is a host fault —
-      // fail closed rather than allow with a weaker audit record. (denyWith
-      // then emits its receipt without the block; nothing throws.)
+      // 5. Build the allow receipt's instance block BEFORE burning any nonce:
+      //    if construction fails (host fault, internal_error), the
+      //    presentation must remain replayable for the retry — denying after
+      //    reservation would turn the retry into a bogus nonce_replayed.
       const allowFacts: DecisionFacts = {
         request: requestContext,
         tier,
@@ -355,6 +348,19 @@ export function bolyraGate<method extends MppxServerMethodLike>(
           deny('internal_error', 'receipt instance binding could not be constructed'),
         );
       }
+
+      // 6. Host nonce mode (spec §7.3): reserve-before-act every consumed
+      //    nonce; a reservation conflict means the presentation was replayed.
+      //    The reservation timestamp is the SAME sampled decision instant —
+      //    one clock read per decision, no drift under injected clocks.
+      const consumeNonces = outcome.verdict.consume_nonces;
+      if (consumeNonces !== undefined && consumeNonces.length > 0) {
+        if (!(await nonceStore.reserve(consumeNonces, Math.floor(decisionMs / 1000)))) {
+          return denyWith(deny('nonce_replayed', 'authorization presentation was already used'));
+        }
+      }
+
+      // 7. Allow: sign the decision receipt and stash for the verify hook.
       const signed = receiptSigner.sign(buildDecisionReceiptInput(allowFacts), allowInstance);
       options.onReceipt?.(signed);
 

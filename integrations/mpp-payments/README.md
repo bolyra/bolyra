@@ -170,7 +170,7 @@ another currency. Unresolvable amounts fail closed.
 
 | Option | Type | Default | Notes |
 |---|---|---|---|
-| `audience` | `string` | required | Byte-literal match against the mandate's signed `project_key` (payee binding) |
+| `audience` | `string` | required | Byte-literal match against the mandate's signed `project_key` (payee binding). Must be a stable machine identifier — printable ASCII excluding space, 1..256 chars (receipt instance binding §3.1.1); display names are rejected at construction |
 | `verifier` | `VerifierConfig` | required | `classical` (in-process), `command` (EVC v1 spawn), or `url` (hosted verifier) |
 | `verifier.trustedOperators` | `{x, y}[]` | required for `classical` | Decimal-string operator pubkeys; empty set fails closed |
 | `program` | `string` | `"mpp"` | Binding `program` discriminator |
@@ -180,7 +180,11 @@ another currency. Unresolvable amounts fail closed.
 | `header` | `string` | `x-bolyra-authorization` | Request header carrying the presentation; `Authorization` is rejected (MPP's payment credential rides it) |
 | `nonceStore` | `NonceStoreLike` | in-memory | Reserve-before-act store for host-nonce-mode verifiers; **inject a shared, durable store for multi-instance deployments** |
 | `receipts` | `{issuer?, keyId?, privateKey?}` | ephemeral key | ES256K decision receipts; pin a key in production |
-| `onReceipt` | `(receipt) => void` | — | Sink for every signed decision receipt (allow and deny) |
+| `onReceipt` | `(receipt) => void` | — | Sink for every signed decision receipt (allow and deny). Receipts carry a signed `instance` block (receipt instance binding v1) whenever the spend facts are resolved; verify with `verifyInstanceBinding` from `@bolyra/receipts` in addition to `verifyReceipt` |
+| `now` | `() => number` | `Date.now`-derived | Clock override (unix **seconds**). Tests only. Mutually exclusive with `nowMs`; receipts built from it carry `.000Z` decision timestamps |
+| `nowMs` | `() => number` | `Date.now` | Clock override (epoch **milliseconds**). Tests only. Mutually exclusive with `now`; drives both the verifier clock and the ms-precision `decisionAt` in the receipt instance block |
+
+Related exports: `buildDecisionInstance(facts)` builds the signed instance block from `DecisionFacts` (hosts emitting their own receipts — e.g. x402 EVC profile hosts — set `facts.requestNonce` to their pre-decision challenge nonce); `AUDIENCE_IDENTIFIER_PATTERN` is the §3.1.1 audience syntax.
 
 Verifier backends:
 
