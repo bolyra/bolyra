@@ -1,5 +1,5 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -21,7 +21,7 @@
     },
     {
       "id": "expired-credential",
-      "description": "Agent credential has expired — currentTimestamp >= expiryTimestamp fails LessThan(64)",
+      "description": "Agent credential has expired \u2014 currentTimestamp >= expiryTimestamp fails LessThan(64)",
       "type": "handshake",
       "inputs": {
         "agentPermissions": "0x07",
@@ -38,7 +38,7 @@
     },
     {
       "id": "expired-credential-exact-boundary",
-      "description": "Agent credential expiry equals currentTimestamp exactly — edge case: current == expiry is expired",
+      "description": "Agent credential expiry equals currentTimestamp exactly \u2014 edge case: current == expiry is expired",
       "type": "handshake",
       "inputs": {
         "agentPermissions": "0x07",
@@ -74,7 +74,7 @@
     },
     {
       "id": "insufficient-permissions",
-      "description": "Agent permissions don't satisfy required scope — bit 1 required but not set",
+      "description": "Agent permissions don't satisfy required scope \u2014 bit 1 required but not set",
       "type": "handshake",
       "inputs": {
         "agentPermissions": "0x01",
@@ -91,7 +91,7 @@
     },
     {
       "id": "scope-escalation-all-bits",
-      "description": "Required scope exceeds permissions on all bits — 0x00 perms vs 0xFF required",
+      "description": "Required scope exceeds permissions on all bits \u2014 0x00 perms vs 0xFF required",
       "type": "handshake",
       "inputs": {
         "agentPermissions": "0x00",
@@ -108,7 +108,7 @@
     },
     {
       "id": "zero-permission-bitmask-zero-scope",
-      "description": "Zero permission bitmask with zero required scope — vacuously valid (no permissions needed)",
+      "description": "Zero permission bitmask with zero required scope \u2014 vacuously valid (no permissions needed)",
       "type": "handshake",
       "inputs": {
         "humanSecret": "111222333",
@@ -127,7 +127,7 @@
     },
     {
       "id": "invalid-eddsa-signature",
-      "description": "EdDSA signature does not verify against claimed public key — tampered R component",
+      "description": "EdDSA signature does not verify against claimed public key \u2014 tampered R component",
       "type": "signature_verification",
       "inputs": {
         "message": "1234567890",
@@ -144,7 +144,7 @@
     },
     {
       "id": "invalid-eddsa-signature-wrong-message",
-      "description": "EdDSA signature valid but over wrong message — message hash mismatch",
+      "description": "EdDSA signature valid but over wrong message \u2014 message hash mismatch",
       "type": "signature_verification",
       "inputs": {
         "message": "1234567890",
@@ -161,7 +161,7 @@
     },
     {
       "id": "stale-merkle-root-handshake",
-      "description": "Agent Merkle proof verifies against a root no longer in agentRootExists — root rotated",
+      "description": "Agent Merkle proof verifies against a root no longer in agentRootExists \u2014 root rotated",
       "type": "merkle_inclusion",
       "inputs": {
         "agentLeaf": "0xABCDEF",
@@ -229,7 +229,7 @@
     },
     {
       "id": "merkle-proof-wrong-sibling",
-      "description": "Merkle proof with incorrect sibling at level 5 — computed root mismatches",
+      "description": "Merkle proof with incorrect sibling at level 5 \u2014 computed root mismatches",
       "type": "merkle_inclusion",
       "inputs": {
         "agentLeaf": "0xABCDEF",
@@ -294,7 +294,7 @@
     },
     {
       "id": "scope-escalation-attack",
-      "description": "Delegatee attempts to gain permissions delegator doesn't have — bit 1 escalation",
+      "description": "Delegatee attempts to gain permissions delegator doesn't have \u2014 bit 1 escalation",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x01",
@@ -308,7 +308,7 @@
     },
     {
       "id": "expiry-escalation-attack",
-      "description": "Delegatee attempts to extend expiry beyond delegator — LessEqThan(64) fails",
+      "description": "Delegatee attempts to extend expiry beyond delegator \u2014 LessEqThan(64) fails",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x07",
@@ -324,7 +324,7 @@
     },
     {
       "id": "delegation-expiry-equal",
-      "description": "Delegatee expiry equals delegator expiry exactly — valid (LessEqThan allows equality)",
+      "description": "Delegatee expiry equals delegator expiry exactly \u2014 valid (LessEqThan allows equality)",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x07",
@@ -341,7 +341,7 @@
     },
     {
       "id": "cumulative-bit-violation",
-      "description": "Permission bit 4 set without bit 3 — 0x15 = 0b10101 has bit 4 and bit 2 but not bit 3",
+      "description": "Permission bit 4 set without bit 3 \u2014 0x15 = 0b10101 has bit 4 and bit 2 but not bit 3",
       "type": "enrollment",
       "inputs": {
         "permissionBitmask": "0x15"
@@ -354,7 +354,7 @@
     },
     {
       "id": "cumulative-bit-violation-bit3-without-bit2",
-      "description": "Permission bit 3 set without bit 2 — 0x09 = 0b01001 has bit 3 and bit 0 but not bit 2",
+      "description": "Permission bit 3 set without bit 2 \u2014 0x09 = 0b01001 has bit 3 and bit 0 but not bit 2",
       "type": "enrollment",
       "inputs": {
         "permissionBitmask": "0x09"
@@ -367,7 +367,7 @@
     },
     {
       "id": "cumulative-bit-valid-full-chain",
-      "description": "All cumulative bits properly chained — 0x1F = 0b11111 (bits 0-4 all set)",
+      "description": "All cumulative bits properly chained \u2014 0x1F = 0b11111 (bits 0-4 all set)",
       "type": "enrollment",
       "inputs": {
         "permissionBitmask": "0x1F"
@@ -378,7 +378,7 @@
     },
     {
       "id": "zero-permission-bitmask-enrollment",
-      "description": "Zero bitmask is valid — no cumulative constraints apply (vacuously true)",
+      "description": "Zero bitmask is valid \u2014 no cumulative constraints apply (vacuously true)",
       "type": "enrollment",
       "inputs": {
         "permissionBitmask": "0x00"
@@ -393,9 +393,21 @@
       "type": "delegation_chain",
       "inputs": {
         "hops": [
-          {"delegatorScope": "0xFF", "delegateeScope": "0x0F", "delegateeExpiry": "1780000000"},
-          {"delegatorScope": "0x0F", "delegateeScope": "0x03", "delegateeExpiry": "1760000000"},
-          {"delegatorScope": "0x03", "delegateeScope": "0x01", "delegateeExpiry": "1740000000"}
+          {
+            "delegatorScope": "0xFF",
+            "delegateeScope": "0x0F",
+            "delegateeExpiry": "1780000000"
+          },
+          {
+            "delegatorScope": "0x0F",
+            "delegateeScope": "0x03",
+            "delegateeExpiry": "1760000000"
+          },
+          {
+            "delegatorScope": "0x03",
+            "delegateeScope": "0x01",
+            "delegateeExpiry": "1740000000"
+          }
         ]
       },
       "expected": {
@@ -412,10 +424,22 @@
       "type": "delegation_chain",
       "inputs": {
         "hops": [
-          {"delegatorScope": "0xFF", "delegateeScope": "0x7F"},
-          {"delegatorScope": "0x7F", "delegateeScope": "0x3F"},
-          {"delegatorScope": "0x3F", "delegateeScope": "0x1F"},
-          {"delegatorScope": "0x1F", "delegateeScope": "0x0F"}
+          {
+            "delegatorScope": "0xFF",
+            "delegateeScope": "0x7F"
+          },
+          {
+            "delegatorScope": "0x7F",
+            "delegateeScope": "0x3F"
+          },
+          {
+            "delegatorScope": "0x3F",
+            "delegateeScope": "0x1F"
+          },
+          {
+            "delegatorScope": "0x1F",
+            "delegateeScope": "0x0F"
+          }
         ]
       },
       "expected": {
@@ -431,9 +455,18 @@
       "type": "delegation_chain",
       "inputs": {
         "hops": [
-          {"delegatorScope": "0xFF", "delegateeScope": "0x0F"},
-          {"delegatorScope": "0x0F", "delegateeScope": "0xFF"},
-          {"delegatorScope": "0xFF", "delegateeScope": "0x01"}
+          {
+            "delegatorScope": "0xFF",
+            "delegateeScope": "0x0F"
+          },
+          {
+            "delegatorScope": "0x0F",
+            "delegateeScope": "0xFF"
+          },
+          {
+            "delegatorScope": "0xFF",
+            "delegateeScope": "0x01"
+          }
         ]
       },
       "expected": {
@@ -458,7 +491,7 @@
     },
     {
       "id": "nonce-reuse-different-agent",
-      "description": "Same nonce used by different agent — still rejected (nonces are global, not per-agent)",
+      "description": "Same nonce used by different agent \u2014 still rejected (nonces are global, not per-agent)",
       "type": "handshake",
       "inputs": {
         "sessionNonce": "42",
@@ -520,7 +553,7 @@
     },
     {
       "id": "phantom-delegatee-attack",
-      "description": "Delegation to non-enrolled agent — delegateeMerkleRoot not in agentRootExists",
+      "description": "Delegation to non-enrolled agent \u2014 delegateeMerkleRoot not in agentRootExists",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0xFF",
@@ -536,7 +569,7 @@
     },
     {
       "id": "max-field-element-permission",
-      "description": "Permission bitmask equals BN254 field modulus p — exceeds field, rejected before bit decomposition",
+      "description": "Permission bitmask equals BN254 field modulus p \u2014 exceeds field, rejected before bit decomposition",
       "type": "enrollment",
       "inputs": {
         "permissionBitmask": "21888242871839275222246405745257275088548364400416034343698204186575808495617"
@@ -550,7 +583,7 @@
     },
     {
       "id": "timestamp-zero",
-      "description": "Agent expiry timestamp of zero — always expired regardless of current time",
+      "description": "Agent expiry timestamp of zero \u2014 always expired regardless of current time",
       "type": "handshake",
       "inputs": {
         "agentPermissions": "0x07",
@@ -567,7 +600,7 @@
     },
     {
       "id": "timestamp-max-uint64",
-      "description": "Agent expiry at max uint64 — never expires within LessThan(64) domain",
+      "description": "Agent expiry at max uint64 \u2014 never expires within LessThan(64) domain",
       "type": "handshake",
       "inputs": {
         "humanSecret": "555666777",
@@ -586,7 +619,7 @@
     },
     {
       "id": "nullifier-collision-resistance",
-      "description": "Two different secrets produce different nullifiers — collision resistance of Poseidon",
+      "description": "Two different secrets produce different nullifiers \u2014 collision resistance of Poseidon",
       "type": "handshake",
       "inputs": {
         "humanSecret": "111111111",
@@ -606,12 +639,18 @@
     },
     {
       "id": "delegation-valid-two-hop",
-      "description": "v0.3 — Two-hop delegation chain narrowing 0xFF -> 0x0F -> 0x03; each hop is a proper subset",
+      "description": "v0.3 \u2014 Two-hop delegation chain narrowing 0xFF -> 0x0F -> 0x03; each hop is a proper subset",
       "type": "delegation_chain",
       "inputs": {
         "hops": [
-          { "delegatorScope": "0xFF", "delegateeScope": "0x0F" },
-          { "delegatorScope": "0x0F", "delegateeScope": "0x03" }
+          {
+            "delegatorScope": "0xFF",
+            "delegateeScope": "0x0F"
+          },
+          {
+            "delegatorScope": "0x0F",
+            "delegateeScope": "0x03"
+          }
         ]
       },
       "expected": {
@@ -621,7 +660,7 @@
     },
     {
       "id": "delegation-forged-token-signature",
-      "description": "v0.3 — Delegation token signed by attacker key but verified against delegator's pubkey must fail (Delegation.circom EdDSA sig check)",
+      "description": "v0.3 \u2014 Delegation token signed by attacker key but verified against delegator's pubkey must fail (Delegation.circom EdDSA sig check)",
       "type": "signature_verification",
       "inputs": {
         "signerSecret": "99999",
@@ -637,7 +676,7 @@
     },
     {
       "id": "delegation-nullifier-distinct-per-nonce",
-      "description": "v0.3 — Same delegator/delegatee with different sessionNonce must produce different delegationNullifier (replay protection)",
+      "description": "v0.3 \u2014 Same delegator/delegatee with different sessionNonce must produce different delegationNullifier (replay protection)",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x0F",
@@ -655,7 +694,7 @@
     },
     {
       "id": "delegation-prev-scope-commitment-formula",
-      "description": "v0.3 — previousScopeCommitment binds to delegator identity: Poseidon3(delegatorScope, delegatorCredCommitment, delegatorExpiry) must be deterministic",
+      "description": "v0.3 \u2014 previousScopeCommitment binds to delegator identity: Poseidon3(delegatorScope, delegatorCredCommitment, delegatorExpiry) must be deterministic",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x07",
@@ -672,7 +711,7 @@
     },
     {
       "id": "delegation-token-poseidon4-formula",
-      "description": "v0.3 — delegationToken = Poseidon4(previousScopeCommitment, delegateeCommitment, delegateeScope, delegateeExpiry) — deterministic and binds all 4 fields",
+      "description": "v0.3 \u2014 delegationToken = Poseidon4(previousScopeCommitment, delegateeCommitment, delegateeScope, delegateeExpiry) \u2014 deterministic and binds all 4 fields",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x07",
@@ -689,7 +728,7 @@
     },
     {
       "id": "delegation-new-scope-commitment-formula",
-      "description": "v0.3 — newScopeCommitment = Poseidon3(delegateeScope, delegateeCredCommitment, delegateeExpiry) — chain seed for next hop, identity-bound",
+      "description": "v0.3 \u2014 newScopeCommitment = Poseidon3(delegateeScope, delegateeCredCommitment, delegateeExpiry) \u2014 chain seed for next hop, identity-bound",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x07",
@@ -705,7 +744,7 @@
     },
     {
       "id": "delegation-merkle-root-single-leaf",
-      "description": "v0.3 — LeanIMT edge case: single-leaf agentTree root equals the leaf itself (length=0 path, all-zero siblings)",
+      "description": "v0.3 \u2014 LeanIMT edge case: single-leaf agentTree root equals the leaf itself (length=0 path, all-zero siblings)",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x0F",
@@ -720,7 +759,7 @@
     },
     {
       "id": "delegation-merkle-root-two-leaf",
-      "description": "v0.3 — LeanIMT two-leaf agentTree root equals Poseidon2(leaf0, leaf1) when delegatee is leaf at index=1",
+      "description": "v0.3 \u2014 LeanIMT two-leaf agentTree root equals Poseidon2(leaf0, leaf1) when delegatee is leaf at index=1",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x0F",
@@ -736,7 +775,7 @@
     },
     {
       "id": "delegation-public-signals-layout",
-      "description": "v0.3 — Delegation Groth16 proof exposes exactly 6 public signals in canonical order: [newScopeCommitment, delegationNullifier, delegateeMerkleRoot, previousScopeCommitment, sessionNonce, currentTimestamp]",
+      "description": "v0.3 \u2014 Delegation Groth16 proof exposes exactly 6 public signals in canonical order: [newScopeCommitment, delegationNullifier, delegateeMerkleRoot, previousScopeCommitment, sessionNonce, currentTimestamp]",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x0F",
@@ -765,7 +804,7 @@
     },
     {
       "id": "delegation-narrow-financial-scope",
-      "description": "v0.3 — Drop FINANCIAL_UNLIMITED (bit 4) while keeping FINANCIAL_MEDIUM+SMALL (bits 2+3): delegator 0x1C -> delegatee 0x0C — valid subset and cumulative-encoding still holds",
+      "description": "v0.3 \u2014 Drop FINANCIAL_UNLIMITED (bit 4) while keeping FINANCIAL_MEDIUM+SMALL (bits 2+3): delegator 0x1C -> delegatee 0x0C \u2014 valid subset and cumulative-encoding still holds",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x1C",
@@ -782,7 +821,7 @@
     },
     {
       "id": "delegation-narrow-keep-cumulative-invariant",
-      "description": "v0.3 — Even though delegator scope 0x1C (bits 2+3+4) is cumulative-valid, narrowing to 0x14 (bits 2+4 — missing bit 3) violates cumulative invariant on delegatee and the Delegation circuit must reject",
+      "description": "v0.3 \u2014 Even though delegator scope 0x1C (bits 2+3+4) is cumulative-valid, narrowing to 0x14 (bits 2+4 \u2014 missing bit 3) violates cumulative invariant on delegatee and the Delegation circuit must reject",
       "type": "delegation",
       "inputs": {
         "delegatorScope": "0x1C",
@@ -799,7 +838,7 @@
     },
     {
       "id": "sd-jwt-valid-issuance",
-      "description": "Valid SD-JWT allow() + present() round-trip — issuer signs, holder presents, verifier accepts",
+      "description": "Valid SD-JWT allow() + present() round-trip \u2014 issuer signs, holder presents, verifier accepts",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -820,7 +859,7 @@
     },
     {
       "id": "sd-jwt-expired-receipt",
-      "description": "SD-JWT receipt past exp timestamp — verifier must reject with token_expired",
+      "description": "SD-JWT receipt past exp timestamp \u2014 verifier must reject with token_expired",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -842,7 +881,7 @@
     },
     {
       "id": "sd-jwt-wrong-audience",
-      "description": "SD-JWT presented to wrong audience — aud claim mismatch must cause rejection",
+      "description": "SD-JWT presented to wrong audience \u2014 aud claim mismatch must cause rejection",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -862,7 +901,7 @@
     },
     {
       "id": "sd-jwt-missing-nonce-production",
-      "description": "SD-JWT issued without nonce in production mode — must fail; nonce is required to prevent replay",
+      "description": "SD-JWT issued without nonce in production mode \u2014 must fail; nonce is required to prevent replay",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -882,7 +921,7 @@
     },
     {
       "id": "sd-jwt-nonce-replay",
-      "description": "SD-JWT presented with a nonce that was already consumed — replay must be rejected",
+      "description": "SD-JWT presented with a nonce that was already consumed \u2014 replay must be rejected",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -902,7 +941,7 @@
     },
     {
       "id": "sd-jwt-max-amount-exceeded",
-      "description": "SD-JWT payment receipt with amount exceeding the permission cap — must fail FINANCIAL_SMALL limit",
+      "description": "SD-JWT payment receipt with amount exceeding the permission cap \u2014 must fail FINANCIAL_SMALL limit",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -923,7 +962,7 @@
     },
     {
       "id": "sd-jwt-selective-disclosure",
-      "description": "SD-JWT selective disclosure — action claim revealed, amount claim hidden from verifier",
+      "description": "SD-JWT selective disclosure \u2014 action claim revealed, amount claim hidden from verifier",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -934,8 +973,12 @@
         "ttl_seconds": 300,
         "nonce": "nonce-fff-006",
         "amount": 50,
-        "disclosed_claims": ["action"],
-        "hidden_claims": ["amount"]
+        "disclosed_claims": [
+          "action"
+        ],
+        "hidden_claims": [
+          "amount"
+        ]
       },
       "expected": {
         "result": "PASS",
@@ -946,7 +989,7 @@
     },
     {
       "id": "sd-jwt-jti-uniqueness",
-      "description": "Two separately issued SD-JWT receipts must have distinct jti values — JTI uniqueness invariant",
+      "description": "Two separately issued SD-JWT receipts must have distinct jti values \u2014 JTI uniqueness invariant",
       "type": "sd_jwt",
       "inputs": {
         "issuer_id": "did:bolyra:issuer:abc123",
@@ -966,7 +1009,7 @@
     },
     {
       "id": "envelope-valid-handshake",
-      "description": "Valid proof envelope for a handshake — content-type set, proof bytes well-formed, all required fields present",
+      "description": "Valid proof envelope for a handshake \u2014 content-type set, proof bytes well-formed, all required fields present",
       "type": "proof_envelope",
       "inputs": {
         "proof_type": "groth16",
@@ -987,7 +1030,7 @@
     },
     {
       "id": "envelope-missing-required-field",
-      "description": "Proof envelope without proof_type field — structural validation must reject it",
+      "description": "Proof envelope without proof_type field \u2014 structural validation must reject it",
       "type": "proof_envelope",
       "inputs": {
         "circuit": "AgentPolicy",
@@ -1005,7 +1048,7 @@
     },
     {
       "id": "envelope-malformed-proof-bytes",
-      "description": "Proof envelope with invalid base64 in proof_bytes_b64 — decoder must reject before ZK verification",
+      "description": "Proof envelope with invalid base64 in proof_bytes_b64 \u2014 decoder must reject before ZK verification",
       "type": "proof_envelope",
       "inputs": {
         "proof_type": "groth16",
@@ -1024,7 +1067,7 @@
     },
     {
       "id": "envelope-unknown-fields-forward-compat",
-      "description": "Proof envelope with extra unknown fields — forward-compat: unknown fields preserved, envelope not rejected",
+      "description": "Proof envelope with extra unknown fields \u2014 forward-compat: unknown fields preserved, envelope not rejected",
       "type": "proof_envelope",
       "inputs": {
         "proof_type": "groth16",
@@ -1045,7 +1088,7 @@
     },
     {
       "id": "envelope-cross-circuit",
-      "description": "Proof envelope containing both handshake and delegation proofs in one payload — cross-circuit aggregation accepted",
+      "description": "Proof envelope containing both handshake and delegation proofs in one payload \u2014 cross-circuit aggregation accepted",
       "type": "proof_envelope",
       "inputs": {
         "proof_type": "groth16",
@@ -1058,7 +1101,10 @@
         ],
         "proof_bytes_b64": "eyJoYW5kc2hha2UiOiJwcm9vZi1hIiwiZGVsZWdhdGlvbiI6InByb29mLWIifQ==",
         "content_type": "application/vnd.bolyra.proof+json",
-        "circuits_included": ["HumanUniqueness", "Delegation"]
+        "circuits_included": [
+          "HumanUniqueness",
+          "Delegation"
+        ]
       },
       "expected": {
         "result": "PASS",
@@ -1068,7 +1114,7 @@
     },
     {
       "id": "envelope-empty-public-signals",
-      "description": "Proof envelope with empty public_signals array — at least one public signal required, must fail",
+      "description": "Proof envelope with empty public_signals array \u2014 at least one public signal required, must fail",
       "type": "proof_envelope",
       "inputs": {
         "proof_type": "plonk",
@@ -1085,7 +1131,7 @@
     },
     {
       "id": "session-valid-jwt",
-      "description": "Valid session token issued after a successful handshake — JWT well-formed, nullifier claim present, not expired",
+      "description": "Valid session token issued after a successful handshake \u2014 JWT well-formed, nullifier claim present, not expired",
       "type": "session_token",
       "status": "experimental",
       "inputs": {
@@ -1107,7 +1153,7 @@
     },
     {
       "id": "session-expired",
-      "description": "Session token past exp timestamp — verifier must reject with session_expired",
+      "description": "Session token past exp timestamp \u2014 verifier must reject with session_expired",
       "type": "session_token",
       "status": "experimental",
       "inputs": {
@@ -1128,7 +1174,7 @@
     },
     {
       "id": "session-scope-narrowing",
-      "description": "Delegation narrows scope from 0x0F to 0x03 and session token reflects the narrowed scope — valid",
+      "description": "Delegation narrows scope from 0x0F to 0x03 and session token reflects the narrowed scope \u2014 valid",
       "type": "session_token",
       "status": "experimental",
       "inputs": {
@@ -1152,7 +1198,7 @@
     },
     {
       "id": "session-missing-nullifier-binding",
-      "description": "Session token without nullifier claim — identity binding absent, must be rejected",
+      "description": "Session token without nullifier claim \u2014 identity binding absent, must be rejected",
       "type": "session_token",
       "status": "experimental",
       "inputs": {
@@ -1173,7 +1219,7 @@
     },
     {
       "id": "session-nonce-replay",
-      "description": "Stale session nonce reused in a second token request — replay must be rejected",
+      "description": "Stale session nonce reused in a second token request \u2014 replay must be rejected",
       "type": "session_token",
       "status": "experimental",
       "inputs": {
@@ -1195,7 +1241,7 @@
     },
     {
       "id": "external-verifier-allow-agent",
-      "description": "IO-contract: valid agent-only bundle, request covered by the signed binding, fresh nonce — the spawned verifier returns allow",
+      "description": "IO-contract: valid agent-only bundle, request covered by the signed binding, fresh nonce \u2014 the spawned verifier returns allow",
       "type": "external_verifier",
       "inputs": {
         "request_fixture": "allow-agent-only",
@@ -1210,7 +1256,7 @@
     },
     {
       "id": "external-verifier-allow-host-nonce",
-      "description": "IO-contract: same valid bundle under --nonce-mode host — the verifier returns allow and defers nonce burning to the host via consume_nonces",
+      "description": "IO-contract: same valid bundle under --nonce-mode host \u2014 the verifier returns allow and defers nonce burning to the host via consume_nonces",
       "type": "external_verifier",
       "inputs": {
         "request_fixture": "allow-agent-only",
@@ -1225,7 +1271,7 @@
     },
     {
       "id": "external-verifier-deny-malformed-input",
-      "description": "IO-contract: truncated JSON on stdin — the verifier fails closed with deny malformed_input at exit 0",
+      "description": "IO-contract: truncated JSON on stdin \u2014 the verifier fails closed with deny malformed_input at exit 0",
       "type": "external_verifier",
       "inputs": {
         "request_raw": "{\"version\":1,\"bun",
@@ -1240,7 +1286,7 @@
     },
     {
       "id": "external-verifier-deny-scope-exceeded",
-      "description": "IO-contract: capability requires WRITE_DATA but the proof-anchored scope is only READ_DATA — deny scope_exceeded",
+      "description": "IO-contract: capability requires WRITE_DATA but the proof-anchored scope is only READ_DATA \u2014 deny scope_exceeded",
       "type": "external_verifier",
       "inputs": {
         "request_fixture": "deny-scope-exceeded",
@@ -1256,7 +1302,7 @@
     },
     {
       "id": "external-verifier-deny-model-mismatch",
-      "description": "IO-contract: request.model does not match the model the proof commits to — deny model_mismatch",
+      "description": "IO-contract: request.model does not match the model the proof commits to \u2014 deny model_mismatch",
       "type": "external_verifier",
       "inputs": {
         "request_fixture": "deny-model-mismatch",
@@ -1272,10 +1318,12 @@
     },
     {
       "id": "external-verifier-kind-zk-default",
-      "description": "Contract §3.3/§3.5: a verdict with no `kind` field is interpreted as the `zk` class for backward compatibility with wire-version-1 verifiers that predate the field (e.g. the reference `bolyra verify`). Validated against the §3.4 verdict schema, no CLI spawn.",
+      "description": "Contract \u00a73.3/\u00a73.5: a verdict with no `kind` field is interpreted as the `zk` class for backward compatibility with wire-version-1 verifiers that predate the field (e.g. the reference `bolyra verify`). Validated against the \u00a73.4 verdict schema, no CLI spawn.",
       "type": "external_verifier",
       "inputs": {
-        "static_verdict": { "verdict": "allow" }
+        "static_verdict": {
+          "verdict": "allow"
+        }
       },
       "expected": {
         "result": "PASS",
@@ -1285,10 +1333,13 @@
     },
     {
       "id": "external-verifier-kind-zk-explicit",
-      "description": "Contract §3.5: a `zk`-class verifier MAY set `kind` explicitly; `\"kind\":\"zk\"` is equivalent to omitting it for a revision-aware host (a strict pre-revision host rejects any kind-bearing verdict per §11). The §3.4 schema accepts the field on an allow verdict.",
+      "description": "Contract \u00a73.5: a `zk`-class verifier MAY set `kind` explicitly; `\"kind\":\"zk\"` is equivalent to omitting it for a revision-aware host (a strict pre-revision host rejects any kind-bearing verdict per \u00a711). The \u00a73.4 schema accepts the field on an allow verdict.",
       "type": "external_verifier",
       "inputs": {
-        "static_verdict": { "verdict": "allow", "kind": "zk" }
+        "static_verdict": {
+          "verdict": "allow",
+          "kind": "zk"
+        }
       },
       "expected": {
         "result": "PASS",
@@ -1298,10 +1349,13 @@
     },
     {
       "id": "external-verifier-kind-classical-allow",
-      "description": "Contract §3.5: a `classical`-class verifier (Bolyra Core — ES256K receipts, JWT delegation, policy/nonce checks) returns the same allow envelope tagged with `kind: classical`. Exercises the classical class at the §3.4 schema level.",
+      "description": "Contract \u00a73.5: a `classical`-class verifier (Bolyra Core \u2014 ES256K receipts, JWT delegation, policy/nonce checks) returns the same allow envelope tagged with `kind: classical`. Exercises the classical class at the \u00a73.4 schema level.",
       "type": "external_verifier",
       "inputs": {
-        "static_verdict": { "verdict": "allow", "kind": "classical" }
+        "static_verdict": {
+          "verdict": "allow",
+          "kind": "classical"
+        }
       },
       "expected": {
         "result": "PASS",
@@ -1311,10 +1365,15 @@
     },
     {
       "id": "external-verifier-kind-external-deny",
-      "description": "Contract §3.5/§9: a third-party (`external`-class) verifier denies using the shared denial-code registry and tags the verdict `kind: external`. Exercises the external class plus a deny verdict carrying `kind`.",
+      "description": "Contract \u00a73.5/\u00a79: a third-party (`external`-class) verifier denies using the shared denial-code registry and tags the verdict `kind: external`. Exercises the external class plus a deny verdict carrying `kind`.",
       "type": "external_verifier",
       "inputs": {
-        "static_verdict": { "verdict": "deny", "kind": "external", "code": "expired", "message": "credential expired" }
+        "static_verdict": {
+          "verdict": "deny",
+          "kind": "external",
+          "code": "expired",
+          "message": "credential expired"
+        }
       },
       "expected": {
         "result": "PASS",
@@ -1325,204 +1384,520 @@
     },
     {
       "id": "external-verifier-kind-invalid-rejected",
-      "description": "Contract §3.5: `kind` MUST be one of classical|zk|external. A verdict carrying an out-of-enum `kind` MUST be rejected by the §3.4 verdict schema (the host fails closed on the malformed verdict, §7.2). Conformance = schema rejection.",
+      "description": "Contract \u00a73.5: `kind` MUST be one of classical|zk|external. A verdict carrying an out-of-enum `kind` MUST be rejected by the \u00a73.4 verdict schema (the host fails closed on the malformed verdict, \u00a77.2). Conformance = schema rejection.",
       "type": "external_verifier",
       "inputs": {
-        "static_verdict": { "verdict": "allow", "kind": "quantum" }
+        "static_verdict": {
+          "verdict": "allow",
+          "kind": "quantum"
+        }
       },
       "expected": {
         "result": "FAIL",
-        "reason": "kind value outside the classical|zk|external enum must be rejected by the §3.4 verdict schema"
+        "reason": "kind value outside the classical|zk|external enum must be rejected by the \u00a73.4 verdict schema"
       }
     },
     {
       "id": "host-allow-well-behaved",
-      "description": "Host conformance positive control (§16.3): a well-behaved verifier returns a bare `allow` at exit 0 and the host-under-test MUST relay `allow`. Proves the host-conformance suite is not vacuously always-deny.",
+      "description": "Host conformance positive control (\u00a716.3): a well-behaved verifier returns a bare `allow` at exit 0 and the host-under-test MUST relay `allow`. Proves the host-conformance suite is not vacuously always-deny.",
       "type": "host_behavior",
-      "inputs": { "fixture": "well-behaved-allow.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "allow" }
+      "inputs": {
+        "fixture": "well-behaved-allow.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "allow"
+      }
     },
     {
       "id": "host-relay-well-behaved-deny",
-      "description": "Host conformance positive control (§16.3): a well-behaved verifier returns a schema-valid `deny code=expired` at exit 0. The host MUST relay the deny with the verifier's code and MUST NOT attach a host failure_class — this is the verifier's decision, not a fail-closed override.",
+      "description": "Host conformance positive control (\u00a716.3): a well-behaved verifier returns a schema-valid `deny code=expired` at exit 0. The host MUST relay the deny with the verifier's code and MUST NOT attach a host failure_class \u2014 this is the verifier's decision, not a fail-closed override.",
       "type": "host_behavior",
-      "inputs": { "fixture": "well-behaved-deny.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "verifier_code": "expired" }
+      "inputs": {
+        "fixture": "well-behaved-deny.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "verifier_code": "expired"
+      }
     },
     {
       "id": "host-deny-non-json-stdout",
-      "description": "Offered case (1) malformed stdout (§5.2/§7.2): the verifier writes non-JSON to stdout at exit 0. The host MUST fail closed.",
+      "description": "Offered case (1) malformed stdout (\u00a75.2/\u00a77.2): the verifier writes non-JSON to stdout at exit 0. The host MUST fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "non-json-stdout.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+      "inputs": {
+        "fixture": "non-json-stdout.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "unparseable_stdout"
+      }
     },
     {
       "id": "host-deny-multiple-objects",
-      "description": "Offered case (1) malformed stdout, single-object framing (§5.2/§7.2): the verifier writes TWO concatenated JSON verdicts. A lenient parser that reads only the first object is forbidden; the host MUST fail closed.",
+      "description": "Offered case (1) malformed stdout, single-object framing (\u00a75.2/\u00a77.2): the verifier writes TWO concatenated JSON verdicts. A lenient parser that reads only the first object is forbidden; the host MUST fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "multiple-objects.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": ["multiple_objects", "unparseable_stdout"] }
+      "inputs": {
+        "fixture": "multiple-objects.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": [
+          "multiple_objects",
+          "unparseable_stdout"
+        ]
+      }
     },
     {
       "id": "host-deny-schema-invalid-verdict",
-      "description": "Offered case (1) malformed stdout, verdict schema (§3.4/§7.2): the verifier writes valid JSON whose `verdict` is neither allow nor deny. The host MUST fail closed.",
+      "description": "Offered case (1) malformed stdout, verdict schema (\u00a73.4/\u00a77.2): the verifier writes valid JSON whose `verdict` is neither allow nor deny. The host MUST fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "schema-invalid-verdict.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "schema-invalid-verdict.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-deny-missing-fields",
-      "description": "Offered case (1) malformed stdout, verdict schema (§3.3/§3.4/§7.2): a `deny` verdict missing the REQUIRED `code`/`message`. The host MUST fail closed.",
+      "description": "Offered case (1) malformed stdout, verdict schema (\u00a73.3/\u00a73.4/\u00a77.2): a `deny` verdict missing the REQUIRED `code`/`message`. The host MUST fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "deny-missing-fields.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "deny-missing-fields.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-allow-trailing-garbage",
-      "description": "Offered case (1) malformed stdout, single-object parse (§5.2/§7.2): a valid `allow` verdict followed by trailing non-JSON bytes. Trailing bytes after the one object are a fail-closed condition; the host MUST NOT act on the leading allow.",
+      "description": "Offered case (1) malformed stdout, single-object parse (\u00a75.2/\u00a77.2): a valid `allow` verdict followed by trailing non-JSON bytes. Trailing bytes after the one object are a fail-closed condition; the host MUST NOT act on the leading allow.",
       "type": "host_behavior",
-      "inputs": { "fixture": "allow-trailing-garbage.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+      "inputs": {
+        "fixture": "allow-trailing-garbage.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "unparseable_stdout"
+      }
     },
     {
       "id": "host-deny-no-output-timeout",
-      "description": "Offered case (2) timeout / no output (§6/§7.2): the verifier reads stdin, writes nothing, and never exits. The host owns the timeout; it MUST kill the process and deny.",
+      "description": "Offered case (2) timeout / no output (\u00a76/\u00a77.2): the verifier reads stdin, writes nothing, and never exits. The host owns the timeout; it MUST kill the process and deny.",
       "type": "host_behavior",
-      "inputs": { "fixture": "no-output-hang.js", "timeout_ms": 1000, "assert_verifier_killed": true },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "timeout" }
+      "inputs": {
+        "fixture": "no-output-hang.js",
+        "timeout_ms": 1000,
+        "assert_verifier_killed": true
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "timeout"
+      }
     },
     {
       "id": "host-deny-partial-json-timeout",
-      "description": "Offered case (2) timeout / no output (§6/§7.2): the verifier writes a partial JSON verdict then hangs forever. No complete object arrives and the process never exits; the host timeout MUST fire.",
+      "description": "Offered case (2) timeout / no output (\u00a76/\u00a77.2): the verifier writes a partial JSON verdict then hangs forever. No complete object arrives and the process never exits; the host timeout MUST fire.",
       "type": "host_behavior",
-      "inputs": { "fixture": "partial-json-hang.js", "timeout_ms": 1000, "assert_verifier_killed": true },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "timeout" }
+      "inputs": {
+        "fixture": "partial-json-hang.js",
+        "timeout_ms": 1000,
+        "assert_verifier_killed": true
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "timeout"
+      }
     },
     {
       "id": "host-deny-nonzero-exit-after-allow",
-      "description": "Offered case (3) nonzero exit (§7.1/§7.2/§16.4): the verifier prints a syntactically valid `allow` and then exits NON-ZERO. Exit status is part of the contract; the host MUST treat this as deny and MUST NOT act on the stdout allow.",
+      "description": "Offered case (3) nonzero exit (\u00a77.1/\u00a77.2/\u00a716.4): the verifier prints a syntactically valid `allow` and then exits NON-ZERO. Exit status is part of the contract; the host MUST treat this as deny and MUST NOT act on the stdout allow.",
       "type": "host_behavior",
-      "inputs": { "fixture": "nonzero-exit-after-allow.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "nonzero_exit" }
+      "inputs": {
+        "fixture": "nonzero-exit-after-allow.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "nonzero_exit"
+      }
     },
     {
       "id": "host-deny-killed-by-signal",
-      "description": "Offered case (3) killed-by-signal (§7.2): the verifier terminates via an unsolicited fatal signal before producing a verdict. The host MUST treat this as deny. The process both dies by signal AND leaves stdout empty — both are §7.2 fail-closed conditions — so a conforming host may report either `signal_death` (checks termination first, like the reference host) or `unparseable_stdout` (checks the empty stdout first).",
+      "description": "Offered case (3) killed-by-signal (\u00a77.2): the verifier terminates via an unsolicited fatal signal before producing a verdict. The host MUST treat this as deny. The process both dies by signal AND leaves stdout empty \u2014 both are \u00a77.2 fail-closed conditions \u2014 so a conforming host may report either `signal_death` (checks termination first, like the reference host) or `unparseable_stdout` (checks the empty stdout first).",
       "type": "host_behavior",
-      "inputs": { "fixture": "killed-by-signal.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": ["signal_death", "unparseable_stdout"] }
+      "inputs": {
+        "fixture": "killed-by-signal.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": [
+          "signal_death",
+          "unparseable_stdout"
+        ]
+      }
     },
     {
       "id": "host-deny-oversize-stdout",
-      "description": "Offered case (4) oversize output (§6/§7.2): the verifier floods stdout past the host's output bound. The host MUST bound the read, kill the process, and deny — it MUST NOT buffer unboundedly.",
+      "description": "Offered case (4) oversize output (\u00a76/\u00a77.2): the verifier floods stdout past the host's output bound. The host MUST bound the read, kill the process, and deny \u2014 it MUST NOT buffer unboundedly.",
       "type": "host_behavior",
-      "inputs": { "fixture": "oversize-flood.js", "timeout_ms": 5000, "max_stdout_bytes": 65536, "assert_verifier_killed": true },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "oversize_stdout" }
+      "inputs": {
+        "fixture": "oversize-flood.js",
+        "timeout_ms": 5000,
+        "max_stdout_bytes": 65536,
+        "assert_verifier_killed": true
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "oversize_stdout"
+      }
     },
     {
       "id": "host-nonce-reserve-novel-allow",
-      "description": "Offered case (5) reserve-before-act (§7.3/§16.5): in host nonce mode the verifier returns `allow` with `consume_nonces`. With an empty durable store the host MUST reserve every nonce THEN allow. Observable: decision=allow AND the nonce is durably present in the store afterwards.",
+      "description": "Offered case (5) reserve-before-act (\u00a77.3/\u00a716.5): in host nonce mode the verifier returns `allow` with `consume_nonces`. With an empty durable store the host MUST reserve every nonce THEN allow. Observable: decision=allow AND the nonce is durably present in the store afterwards.",
       "type": "host_behavior",
-      "inputs": { "fixture": "allow-consume-nonces.js", "nonce_mode": "host", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "allow", "nonce_reserved": ["1000000000000000000000000000000000000001"], "action_taken": true }
+      "inputs": {
+        "fixture": "allow-consume-nonces.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "allow",
+        "nonce_reserved": [
+          "1000000000000000000000000000000000000001"
+        ],
+        "action_taken": true
+      }
     },
     {
       "id": "host-nonce-reserve-replay-deny",
-      "description": "Offered case (5) reserve-before-act, replay (§7.3/§16.5): the same allow+consume_nonces verdict, but the nonce is ALREADY in the durable store. The host MUST reject as replay even though the verifier returned allow — proving reservation happens before the host acts on the verdict.",
+      "description": "Offered case (5) reserve-before-act, replay (\u00a77.3/\u00a716.5): the same allow+consume_nonces verdict, but the nonce is ALREADY in the durable store. The host MUST reject as replay even though the verifier returned allow \u2014 proving reservation happens before the host acts on the verdict.",
       "type": "host_behavior",
-      "inputs": { "fixture": "allow-consume-nonces.js", "nonce_mode": "host", "timeout_ms": 5000, "seed_nonces": ["1000000000000000000000000000000000000001"] },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "replay", "action_taken": false }
+      "inputs": {
+        "fixture": "allow-consume-nonces.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000,
+        "seed_nonces": [
+          "1000000000000000000000000000000000000001"
+        ]
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "replay",
+        "action_taken": false
+      }
     },
     {
       "id": "host-nonce-reserve-all-any-conflict-deny",
-      "description": "Offered case (5) reserve EVERY entry (§7.3/§16.5): an allow carrying TWO nonces where only the second is already reserved. Because ANY conflict is a replay, the host MUST deny — proving it reserves the whole list, not just the first entry.",
+      "description": "Offered case (5) reserve EVERY entry (\u00a77.3/\u00a716.5): an allow carrying TWO nonces where only the second is already reserved. Because ANY conflict is a replay, the host MUST deny \u2014 proving it reserves the whole list, not just the first entry.",
       "type": "host_behavior",
-      "inputs": { "fixture": "allow-consume-nonces-multi.js", "nonce_mode": "host", "timeout_ms": 5000, "seed_nonces": ["2000000000000000000000000000000000000002"] },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "replay", "action_taken": false }
+      "inputs": {
+        "fixture": "allow-consume-nonces-multi.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000,
+        "seed_nonces": [
+          "2000000000000000000000000000000000000002"
+        ]
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "replay",
+        "action_taken": false
+      }
     },
     {
       "id": "host-deny-allow-extra-property",
-      "description": "Offered case (1) malformed stdout, closed verdict schema (§3.4/§7.2): an `allow` carrying a disallowed additional property. The §3.4 schema is closed (additionalProperties:false); the host MUST fail closed rather than ignore the unknown field.",
+      "description": "Offered case (1) malformed stdout, closed verdict schema (\u00a73.4/\u00a77.2): an `allow` carrying a disallowed additional property. The \u00a73.4 schema is closed (additionalProperties:false); the host MUST fail closed rather than ignore the unknown field.",
       "type": "host_behavior",
-      "inputs": { "fixture": "allow-extra-property.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "allow-extra-property.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-bad-kind",
-      "description": "Offered case (1) malformed stdout, verdict `kind` enum (§3.5/§7.2): an `allow` with a `kind` outside classical|zk|external. §7.2 requires the host to treat an unrecognized `kind` as a malformed verdict and fail closed.",
+      "description": "Offered case (1) malformed stdout, verdict `kind` enum (\u00a73.5/\u00a77.2): an `allow` with a `kind` outside classical|zk|external. \u00a77.2 requires the host to treat an unrecognized `kind` as a malformed verdict and fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "bad-kind.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "bad-kind.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-empty-consume-nonces",
-      "description": "Offered cases (1)+(5), verdict schema (§3.2/§3.4/§7.2): an `allow` with an EMPTY `consume_nonces` array. The schema requires minItems:1 (the key is omitted when there is nothing to burn); the host MUST fail closed.",
+      "description": "Offered cases (1)+(5), verdict schema (\u00a73.2/\u00a73.4/\u00a77.2): an `allow` with an EMPTY `consume_nonces` array. The schema requires minItems:1 (the key is omitted when there is nothing to burn); the host MUST fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "empty-consume-nonces.js", "nonce_mode": "host", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "empty-consume-nonces.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-malformed-consume-nonce",
-      "description": "Offered cases (1)+(5), verdict schema (§3.2/§3.4/§7.2): an `allow` whose `consume_nonces` entry omits the REQUIRED `issuer_key` and `retain_until`. The host MUST validate the full closed schema and fail closed — it MUST NOT reserve a partial nonce entry.",
+      "description": "Offered cases (1)+(5), verdict schema (\u00a73.2/\u00a73.4/\u00a77.2): an `allow` whose `consume_nonces` entry omits the REQUIRED `issuer_key` and `retain_until`. The host MUST validate the full closed schema and fail closed \u2014 it MUST NOT reserve a partial nonce entry.",
       "type": "host_behavior",
-      "inputs": { "fixture": "malformed-consume-nonce.js", "nonce_mode": "host", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "malformed-consume-nonce.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-deny-extra-property",
-      "description": "Offered case (1) malformed stdout, closed deny schema (§3.4/§7.2): a `deny` verdict carrying a disallowed additional property. The deny shape is closed; the host MUST fail closed rather than relay an unrecognized field.",
+      "description": "Offered case (1) malformed stdout, closed deny schema (\u00a73.4/\u00a77.2): a `deny` verdict carrying a disallowed additional property. The deny shape is closed; the host MUST fail closed rather than relay an unrecognized field.",
       "type": "host_behavior",
-      "inputs": { "fixture": "deny-extra-property.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "deny-extra-property.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-nonce-entry-extra-property",
-      "description": "Offered cases (1)+(5), closed consume_nonces entry schema (§3.2/§3.4/§7.2): an `allow` whose nonce entry carries a disallowed additional property. The host MUST validate each entry as a closed object and fail closed — it MUST NOT reserve an entry with unrecognized fields.",
+      "description": "Offered cases (1)+(5), closed consume_nonces entry schema (\u00a73.2/\u00a73.4/\u00a77.2): an `allow` whose nonce entry carries a disallowed additional property. The host MUST validate each entry as a closed object and fail closed \u2014 it MUST NOT reserve an entry with unrecognized fields.",
       "type": "host_behavior",
-      "inputs": { "fixture": "nonce-entry-extra-property.js", "nonce_mode": "host", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "nonce-entry-extra-property.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-nonce-entry-wrong-type",
-      "description": "Offered cases (1)+(5), consume_nonces entry field types (§3.2/§3.4/§7.2): an `allow` whose nonce entry has a string `retain_until` instead of an integer. The host MUST validate entry field types and fail closed.",
+      "description": "Offered cases (1)+(5), consume_nonces entry field types (\u00a73.2/\u00a73.4/\u00a77.2): an `allow` whose nonce entry has a string `retain_until` instead of an integer. The host MUST validate entry field types and fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "nonce-entry-wrong-type.js", "nonce_mode": "host", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "schema_invalid" }
+      "inputs": {
+        "fixture": "nonce-entry-wrong-type.js",
+        "nonce_mode": "host",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
     },
     {
       "id": "host-deny-binary-garbage-stdout",
-      "description": "Offered case (1) malformed stdout, the literal `garbage bytes` variant (§5.2/§7.2): the verifier writes raw, non-UTF-8 bytes (not valid-UTF-8 text) to stdout at exit 0. A conforming host MUST decode/parse defensively and fail closed rather than crash or mis-handle the invalid bytes. Distinct from non-json-stdout.js, which writes valid UTF-8 text.",
+      "description": "Offered case (1) malformed stdout, the literal `garbage bytes` variant (\u00a75.2/\u00a77.2): the verifier writes raw, non-UTF-8 bytes (not valid-UTF-8 text) to stdout at exit 0. A conforming host MUST decode/parse defensively and fail closed rather than crash or mis-handle the invalid bytes. Distinct from non-json-stdout.js, which writes valid UTF-8 text.",
       "type": "host_behavior",
-      "inputs": { "fixture": "binary-garbage-stdout.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+      "inputs": {
+        "fixture": "binary-garbage-stdout.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "unparseable_stdout"
+      }
     },
     {
       "id": "host-deny-leading-garbage",
-      "description": "Offered cases (1)/(2) malformed stdout, single-object parse (§5.2/§7.2): a non-JSON PREFIX before an otherwise-valid `allow`. §5.2 forbids a leading/trailing prefix around the object; allow-trailing-garbage.js covers the suffix, this covers the LEADING prefix. The host MUST NOT extract the embedded allow — it MUST fail closed.",
+      "description": "Offered cases (1)/(2) malformed stdout, single-object parse (\u00a75.2/\u00a77.2): a non-JSON PREFIX before an otherwise-valid `allow`. \u00a75.2 forbids a leading/trailing prefix around the object; allow-trailing-garbage.js covers the suffix, this covers the LEADING prefix. The host MUST NOT extract the embedded allow \u2014 it MUST fail closed.",
       "type": "host_behavior",
-      "inputs": { "fixture": "leading-garbage.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "unparseable_stdout" }
+      "inputs": {
+        "fixture": "leading-garbage.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "unparseable_stdout"
+      }
     },
     {
       "id": "host-deny-slow-allow-past-deadline",
-      "description": "Offered cases (2)/(5) wall-clock timeout, hard-deadline variant (§6/§7.2/§16.3): the verifier WOULD emit a valid `allow` at exit 0, but only after sleeping far past the host deadline. The host timeout is a hard wall-clock deadline, not just a hang detector: the host MUST kill at the deadline and deny `timeout`, never observing the late allow. Sharper than no-output-hang.js (which never produces output).",
+      "description": "Offered cases (2)/(5) wall-clock timeout, hard-deadline variant (\u00a76/\u00a77.2/\u00a716.3): the verifier WOULD emit a valid `allow` at exit 0, but only after sleeping far past the host deadline. The host timeout is a hard wall-clock deadline, not just a hang detector: the host MUST kill at the deadline and deny `timeout`, never observing the late allow. Sharper than no-output-hang.js (which never produces output).",
       "type": "host_behavior",
-      "inputs": { "fixture": "slow-allow-past-deadline.js", "timeout_ms": 1000, "assert_verifier_killed": true },
-      "expected": { "result": "PASS", "host_decision": "deny", "failure_class": "timeout" }
+      "inputs": {
+        "fixture": "slow-allow-past-deadline.js",
+        "timeout_ms": 1000,
+        "assert_verifier_killed": true
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "timeout"
+      }
     },
     {
       "id": "host-allow-well-behaved-kind-classical",
-      "description": "Offered case (6) verify `kind` (§3.5), acceptance side: a well-behaved `allow` self-describing as `kind=classical`. `kind` is OPTIONAL and, when present, MUST be one of classical|zk|external. The host MUST accept every valid kind and relay `allow`, not just the default `zk`. Acceptance counterpart to host-deny-bad-kind; proves the host validates the closed enum without hard-coding one value.",
+      "description": "Offered case (6) verify `kind` (\u00a73.5), acceptance side: a well-behaved `allow` self-describing as `kind=classical`. `kind` is OPTIONAL and, when present, MUST be one of classical|zk|external. The host MUST accept every valid kind and relay `allow`, not just the default `zk`. Acceptance counterpart to host-deny-bad-kind; proves the host validates the closed enum without hard-coding one value.",
       "type": "host_behavior",
-      "inputs": { "fixture": "well-behaved-allow-kind-classical.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "allow" }
+      "inputs": {
+        "fixture": "well-behaved-allow-kind-classical.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "allow"
+      }
     },
     {
       "id": "host-allow-well-behaved-kind-external",
-      "description": "Offered case (6) verify `kind` (§3.5), acceptance side: a well-behaved `allow` self-describing as `kind=external` — the class a third-party (non-Bolyra) verifier declares. The host MUST accept it and relay `allow`, catching a host that hard-codes acceptance of only zk/classical and would wrongly reject a valid external verdict.",
+      "description": "Offered case (6) verify `kind` (\u00a73.5), acceptance side: a well-behaved `allow` self-describing as `kind=external` \u2014 the class a third-party (non-Bolyra) verifier declares. The host MUST accept it and relay `allow`, catching a host that hard-codes acceptance of only zk/classical and would wrongly reject a valid external verdict.",
       "type": "host_behavior",
-      "inputs": { "fixture": "well-behaved-allow-kind-external.js", "timeout_ms": 5000 },
-      "expected": { "result": "PASS", "host_decision": "allow" }
+      "inputs": {
+        "fixture": "well-behaved-allow-kind-external.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "allow"
+      }
+    },
+    {
+      "id": "receipt-binding-valid",
+      "description": "Golden positive control: a commerce receipt whose instance.ref recomputes from its carried preimage MUST verify as ok/present. Proves the corpus is not vacuously always-fail.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "valid-instance.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "signature_valid": true,
+        "binding_ok": true,
+        "binding_code": "ok"
+      }
+    },
+    {
+      "id": "receipt-binding-absent",
+      "description": "A receipt without an instance block is valid with code absent \u2014 the block is optional (spec \u00a73); absence is not a failure.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "no-instance.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "signature_valid": true,
+        "binding_ok": true,
+        "binding_code": "absent"
+      }
+    },
+    {
+      "id": "receipt-binding-forged-ref",
+      "description": "THE motivating case (spec \u00a74): a signer-issued receipt whose instance.ref was computed over different facts. The ES256K signature is VALID; the semantic check MUST fail ref_mismatch. Signature validity and instance-binding validity are different claims.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "forged-ref.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "signature_valid": true,
+        "binding_ok": false,
+        "binding_code": "ref_mismatch"
+      }
+    },
+    {
+      "id": "receipt-binding-out-of-domain",
+      "description": "A display-name audience ('Acme Corp') violates the \u00a73.1.1 identifier syntax, which is part of the \u00a73.1 verifier domain: out_of_domain, no best-effort canonicalization.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "out-of-domain-audience.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "signature_valid": true,
+        "binding_ok": false,
+        "binding_code": "out_of_domain"
+      }
+    },
+    {
+      "id": "receipt-binding-wrong-kind",
+      "description": "Instance binding v1 is scoped to bolyra.commerce (spec \u00a73); an auth-kind receipt carrying the block fails wrong_kind.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "auth-kind-instance.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "signature_valid": true,
+        "binding_ok": false,
+        "binding_code": "wrong_kind"
+      }
+    },
+    {
+      "id": "receipt-binding-malformed-block",
+      "description": "A signed payload with instance: null (hostile parsed JSON) fails deterministically as malformed_ref \u2014 never a throw.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "malformed-block.json"
+      },
+      "expected": {
+        "result": "PASS",
+        "signature_valid": true,
+        "binding_ok": false,
+        "binding_code": "malformed_ref"
+      }
+    },
+    {
+      "id": "receipt-binding-chained-one-forged",
+      "description": "A 3-receipt hash chain with intact chain integrity and valid signatures, where ONLY the middle receipt's instance ref is forged: chain verification passes, and exactly index 1 fails ref_mismatch \u2014 chain integrity does not imply instance validity.",
+      "type": "receipt_binding",
+      "inputs": {
+        "fixture": "chained-one-forged.jsonl"
+      },
+      "expected": {
+        "result": "PASS",
+        "chain_ok": true,
+        "failing_index": 1,
+        "binding_code": "ref_mismatch"
+      }
     }
   ]
 }

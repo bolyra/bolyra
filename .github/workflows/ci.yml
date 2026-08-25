@@ -206,6 +206,11 @@ jobs:
       - name: Install circuit dependencies (no compile)
         run: cd circuits && npm ci
 
+      # receipt_binding vectors use the reference @bolyra/receipts build
+      # (npm ci runs its prepare/tsc). Without this they SKIP instead of RUN.
+      - name: Build reference receipts (receipt_binding vectors)
+        run: cd integrations/receipts && npm ci
+
       - run: node spec/conformance-runner.js
 
   typecheck-all:
