@@ -89,7 +89,13 @@ export interface X402EvcContext {
   resource: string;
   /** The x402 payment requirements advertised in the 402. */
   requirements: X402EvcRequirements;
-  /** Single-use challenge nonce (opaque string). */
+  /**
+   * Single-use challenge nonce (opaque string). Known to BOTH sides before
+   * the decision, so it doubles as the receipt instance discriminator:
+   * profile decision receipts MUST carry it as
+   * `instance.preimage.requestNonce` (spec/x402-evc-profile-v0.md §4.1,
+   * spec/receipt-instance-binding-v1.md §3.2).
+   */
   nonce: string;
   /** Unix seconds after which this challenge context is stale. */
   expiresAt: number;

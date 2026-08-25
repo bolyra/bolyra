@@ -35,3 +35,7 @@ in-process. The mandate's EdDSA-Poseidon binding signature over
 `{agent_name, project_key, program, model, capabilities, expiry}` is the
 load-bearing fact; the profile binds the x402 context
 (`resource`/`amount`/`nonce`/`expires_at`/verifier identity) alongside it.
+When decisions are recorded as receipts, the challenge nonce also becomes
+the instance discriminator (`instance.preimage.requestNonce` — profile
+spec §4.1): both sides hold it pre-decision, so a third party can
+recompute exactly which action instance a decision governed.

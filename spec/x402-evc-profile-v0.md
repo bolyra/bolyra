@@ -105,6 +105,29 @@ RFC 9457 problem+json with the stable `code` member; HTTP status per
 `@bolyra/mpp`'s `DENY_STATUS` (401 authorization-never-established / 403
 mandate-does-not-cover-this / 500 fail-closed).
 
+### 4.1 Decision receipts: instance binding is REQUIRED for this profile
+
+When a host records profile decisions as decision receipts
+(`@bolyra/receipts`), each receipt MUST carry the `instance` block of
+[receipt-instance-binding-v1](./receipt-instance-binding-v1.md) with
+`preimage.requestNonce` set to this profile's 402 challenge nonce — the
+`x402-evc-nonce` value, byte-for-byte.
+
+Why this profile can and must do better than a timestamp discriminator:
+the challenge nonce is issued in the 402 response *before* the retry, so
+BOTH sides hold it pre-decision. That makes the instance reference
+recomputable by the counterparty (unlike the issuer-generated
+`proof.nonce`) and closes the same-millisecond residual that
+timestamp-only discrimination leaves open. The host already holds the
+value — it is `context.nonce` in `verifyX402EvcAuthorization`'s options —
+so populating `requestNonce` at receipt emission requires no new
+plumbing, only the emission-side wiring of the instance block itself.
+
+A profile-aware relying party MAY additionally join
+`instance.preimage.requestNonce` against its own record of the challenge
+it issued: a receipt claiming an instance under a nonce the payee never
+issued is evidence of fabrication even when the signature verifies.
+
 ## 5. Open question (the reason this draft exists)
 
 Where should this live: an x402 extension profile, an app-layer example in
