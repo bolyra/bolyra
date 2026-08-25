@@ -16,8 +16,20 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { canonicalize, createCommerceReceipt, signReceipt, ReceiptChain } from '@bolyra/receipts';
-import type { CommerceReceiptInput, ReceiptSignerConfig, SignedReceipt } from '@bolyra/receipts';
+import {
+  canonicalize,
+  computeInstanceRef,
+  createCommerceReceipt,
+  signReceipt,
+  ReceiptChain,
+} from '@bolyra/receipts';
+import type {
+  CommerceReceiptInput,
+  InstancePreimage,
+  ReceiptInstanceFields,
+  ReceiptSignerConfig,
+  SignedReceipt,
+} from '@bolyra/receipts';
 import type { ParsedBundle } from './bundle';
 import type {
   DenyVerdict,
@@ -38,7 +50,12 @@ export interface GateReceiptSigner {
   signer: string;
   /** True when the key was generated at gate creation rather than configured. */
   ephemeral: boolean;
-  sign(input: CommerceReceiptInput): SignedReceipt;
+  /**
+   * Sign one decision receipt. The optional `instance` block is attached to
+   * the payload BEFORE signing, so the ES256K signature covers it
+   * (spec/receipt-instance-binding-v1.md §3).
+   */
+  sign(input: CommerceReceiptInput, instance?: ReceiptInstanceFields): SignedReceipt;
 }
 
 /**
@@ -64,8 +81,12 @@ export function createGateReceiptSigner(config: GateReceiptConfig = {}): GateRec
     alg: 'ES256K',
     signer: probe.signature.signer,
     ephemeral,
-    sign(input: CommerceReceiptInput): SignedReceipt {
-      return chain.sign(createCommerceReceipt(input, signerConfig), signerConfig);
+    sign(input: CommerceReceiptInput, instance?: ReceiptInstanceFields): SignedReceipt {
+      const payload = createCommerceReceipt(input, signerConfig);
+      return chain.sign(
+        instance !== undefined ? { ...payload, instance } : payload,
+        signerConfig,
+      );
     },
   };
 }
@@ -75,10 +96,43 @@ export interface DecisionFacts {
   request: VerifierRequestContext;
   tier: FinancialTier;
   amountUsd: string;
+  /**
+   * RFC 3339 UTC with 3-digit milliseconds ("2026-08-25T03:00:00.123Z") —
+   * computed ONCE at the decision boundary from the gate's clock and carried
+   * into the receipt's instance preimage (spec §3.2). `new
+   * Date(ms).toISOString()` produces exactly this shape.
+   */
+  decisionAt: string;
+  /**
+   * In-protocol pre-decision challenge nonce, when the transport has one
+   * (e.g. the x402 EVC profile's 402 challenge nonce — REQUIRED there, spec
+   * x402-evc-profile-v0 §4.1). The plain MPP gate has no such value and
+   * omits it; `decisionAt` is then the instance discriminator.
+   */
+  requestNonce?: string;
   /** Present when the in-process classical path parsed the bundle. */
   bundle?: ParsedBundle;
   /** Present on deny. */
   denial?: Pick<DenyVerdict, 'code' | 'message'>;
+}
+
+/**
+ * Build the signed `instance` block for one gate decision
+ * (spec/receipt-instance-binding-v1.md §3): the instance-shaped,
+ * third-party-recomputable reference over the facts the verifier actually
+ * decided on. Throws if any preimage field is outside the §3.1 domain —
+ * emission MUST NOT produce a receipt a conformant verifier rejects.
+ */
+export function buildDecisionInstance(facts: DecisionFacts): ReceiptInstanceFields {
+  const preimage: InstancePreimage = {
+    audience: facts.request.project_key,
+    program: facts.request.program,
+    capabilities: facts.request.granted_capabilities,
+    amountUsd: facts.amountUsd,
+    decisionAt: facts.decisionAt,
+    ...(facts.requestNonce !== undefined && { requestNonce: facts.requestNonce }),
+  };
+  return { ref: computeInstanceRef(preimage), preimage };
 }
 
 function sha256Hex(text: string): string {

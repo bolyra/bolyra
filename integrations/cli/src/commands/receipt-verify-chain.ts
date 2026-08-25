@@ -14,7 +14,7 @@
 
 import { parseArgs } from 'node:util';
 import * as fs from 'node:fs';
-import { verifyReceiptChain } from '@bolyra/receipts';
+import { verifyReceiptChain, verifyInstanceBinding } from '@bolyra/receipts';
 import type { ChainVerifyOptions, SignedReceipt } from '@bolyra/receipts';
 import { fetchAcceptedSigners } from './signer-discovery-fetch';
 
@@ -168,6 +168,25 @@ export async function run(args: string[]): Promise<void> {
     });
   }
 
+  // Instance binding (spec/receipt-instance-binding-v1.md §4): the semantic
+  // check runs per receipt whenever the block is present — chain integrity
+  // and signature validity do not imply the instance claim is true.
+  const instanceFailures: string[] = [];
+  receipts.forEach((r, i) => {
+    // Rows without a payload object are non-receipt lines (e.g. gateway
+    // unsigned fallback records) — verifyReceiptChain already reports them
+    // as malformed-receipt on the right line; don't double-report here.
+    if (typeof r !== 'object' || r === null) return;
+    const payload = (r as { payload?: unknown }).payload;
+    if (typeof payload !== 'object' || payload === null) return;
+    const instance = verifyInstanceBinding(r);
+    if (!instance.ok) {
+      instanceFailures.push(
+        `  FAIL line ${lineNoByReceiptIndex[i]}: [instance-${instance.code}] ${instance.detail}`,
+      );
+    }
+  });
+
   console.log(
     `Checked ${result.total} receipts (${result.chained} chained, ${result.unchained} unchained)` +
       (values.signer ? ` against signer ${values.signer}` : '') +
@@ -181,8 +200,11 @@ export async function run(args: string[]): Promise<void> {
   for (const failure of discoveryFailures) {
     console.error(failure);
   }
+  for (const failure of instanceFailures) {
+    console.error(failure);
+  }
 
-  if (discoveryFailures.length > 0) {
+  if (discoveryFailures.length > 0 || instanceFailures.length > 0) {
     console.error('FAIL: receipt chain verification failed');
     process.exitCode = 1;
     return;

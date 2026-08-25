@@ -69,6 +69,7 @@ export interface ReceiptInstanceFields {
 export type InstanceBindingCode =
   | 'absent'
   | 'ok'
+  | 'malformed_receipt'
   | 'wrong_kind'
   | 'malformed_ref'
   | 'out_of_domain'
@@ -77,7 +78,13 @@ export type InstanceBindingCode =
 export type InstanceBindingResult =
   | { ok: true; present: false; code: 'absent' }
   | { ok: true; present: true; code: 'ok' }
-  | { ok: false; present: true; code: Exclude<InstanceBindingCode, 'absent' | 'ok'>; detail: string };
+  | { ok: false; present: false; code: 'malformed_receipt'; detail: string }
+  | {
+      ok: false;
+      present: true;
+      code: Exclude<InstanceBindingCode, 'absent' | 'ok' | 'malformed_receipt'>;
+      detail: string;
+    };
 
 export type PreimageValidation = { ok: true } | { ok: false; detail: string };
 
@@ -175,6 +182,17 @@ export function computeInstanceRef(preimage: InstancePreimage): string {
  * receipt carries no instance block (the block is optional).
  */
 export function verifyInstanceBinding(receipt: SignedReceipt): InstanceBindingResult {
+  // Parsed JSON can hand this function anything — a log line that is not a
+  // receipt at all must fail deterministically, never throw.
+  const payload = (receipt as { payload?: unknown } | null | undefined)?.payload;
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    return {
+      ok: false,
+      present: false,
+      code: 'malformed_receipt',
+      detail: 'input has no receipt payload object',
+    };
+  }
   const instance = receipt.payload.instance;
   if (instance === undefined) {
     return { ok: true, present: false, code: 'absent' };

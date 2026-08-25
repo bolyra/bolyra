@@ -17,6 +17,7 @@ const facts: DecisionFacts = {
   } as DecisionFacts['request'],
   tier: 'small',
   amountUsd: '25',
+  decisionAt: '2026-08-25T03:00:00.123Z',
 };
 
 describe('buildDecisionReceiptInput commerce.intentHash', () => {

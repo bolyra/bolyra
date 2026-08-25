@@ -35,9 +35,15 @@ import { verifyClassical } from './classical';
 import { denyResponse } from './deny';
 import { callUrlVerifier, runCommandVerifier } from './evc';
 import { NonceStore } from './nonces';
-import { buildDecisionReceiptInput, createGateReceiptSigner } from './receipts';
+import {
+  buildDecisionInstance,
+  buildDecisionReceiptInput,
+  createGateReceiptSigner,
+  type DecisionFacts,
+} from './receipts';
 import { requiredTierForUsdAmount, tierCapability } from './tiers';
 import {
+  AUDIENCE_IDENTIFIER_PATTERN,
   deny,
   isVerifyDenial,
   type BolyraGateOptions,
@@ -107,6 +113,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
   if (typeof options?.audience !== 'string' || options.audience.length === 0) {
     throw new TypeError('bolyraGate: `audience` is required');
   }
+  if (!AUDIENCE_IDENTIFIER_PATTERN.test(options.audience)) {
+    throw new TypeError(
+      'bolyraGate: `audience` must be a stable machine identifier (printable ASCII ' +
+        'excluding space, 1..256 chars — spec/receipt-instance-binding-v1.md §3.1.1); ' +
+        'display names belong outside the signed surface',
+    );
+  }
   const verifier = options.verifier;
   if (
     verifier === undefined ||
@@ -120,6 +133,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
   }
 
   const program = options.program ?? 'mpp';
+  // eslint-disable-next-line no-control-regex
+  if (!/^[\x00-\x7f]*$/.test(program)) {
+    throw new TypeError(
+      'bolyraGate: `program` must be ASCII — it enters the receipt instance ' +
+        'preimage domain (spec/receipt-instance-binding-v1.md §3.1)',
+    );
+  }
   const headerName = (options.header ?? BOLYRA_AUTHORIZATION_HEADER).toLowerCase();
   if (headerName === 'authorization') {
     throw new TypeError(
@@ -129,7 +149,17 @@ export function bolyraGate<method extends MppxServerMethodLike>(
   }
   const enforce = options.enforce ?? 'always';
   const amountToUsd = options.amountToUsd ?? defaultAmountToUsd;
-  const now = options.now ?? (() => Math.floor(Date.now() / 1000));
+  // Exactly one clock: `now` (seconds) or `nowMs` (milliseconds). Each
+  // derives from the other so there is a single time source; `nowMs` also
+  // drives the ms-precision `decisionAt` in receipt instance binding.
+  if (options.now !== undefined && options.nowMs !== undefined) {
+    throw new TypeError(
+      'bolyraGate: pass exactly one clock — `now` (seconds) or `nowMs` (milliseconds), not both',
+    );
+  }
+  const secondsClock = options.now;
+  const nowMs = options.nowMs ?? (secondsClock !== undefined ? () => secondsClock() * 1000 : Date.now);
+  const now = secondsClock ?? (() => Math.floor(nowMs() / 1000));
   // Fail fast on malformed key material, per the gateway receipt-signer.
   const receiptSigner = createGateReceiptSigner(options.receipts);
   // EVC §7.3 reserve-before-act storage. The default is in-memory and
@@ -179,25 +209,66 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       granted_capabilities: [],
     };
     let parsedBundle: ParsedBundle | undefined;
+    // One timestamp per decision (spec §3.2), sampled fail-closed: a throwing
+    // injected clock becomes an internal_error denial below, never an escape.
+    let decisionMs: number | undefined;
+    try {
+      const sampled = nowMs();
+      // Valid = finite, within Date's representable range, AND the derived
+      // unix seconds are a positive integer — the EVC schema's now_unix has
+      // exclusiveMinimum: 0, so sub-second epoch values (floor → 0) are as
+      // invalid as negatives. Else new Date(...).toISOString() throws or the
+      // verifier sees a bogus clock.
+      decisionMs =
+        Number.isFinite(sampled) && Math.floor(sampled / 1000) >= 1 && sampled <= 8.64e15
+          ? sampled
+          : undefined;
+    } catch {
+      decisionMs = undefined;
+    }
+    const decisionAt = decisionMs !== undefined ? new Date(decisionMs).toISOString() : undefined;
+
+    // Instance construction must never throw out of the gate: computeInstanceRef
+    // rejects out-of-domain preimages by design, and a receipt is emitted on
+    // EVERY path — so a failed build degrades to an instance-less receipt.
+    const tryInstance = (facts: DecisionFacts): ReturnType<typeof buildDecisionInstance> | undefined => {
+      try {
+        return buildDecisionInstance(facts);
+      } catch {
+        return undefined;
+      }
+    };
 
     const denyWith = (verdict: Pick<DenyVerdict, 'code' | 'message'>): {
       outcome: 'deny';
       response: Response;
     } => {
-      const signed = receiptSigner.sign(
-        buildDecisionReceiptInput({
-          request: requestContext,
-          tier: tier ?? 'small',
-          amountUsd,
-          bundle: parsedBundle,
-          denial: verdict,
-        }),
-      );
+      const facts: DecisionFacts = {
+        request: requestContext,
+        tier: tier ?? ('small' as const),
+        amountUsd,
+        decisionAt: decisionAt ?? '',
+        bundle: parsedBundle,
+        denial: verdict,
+      };
+      // The instance claim is attached only when it would be TRUE: the spend
+      // facts are real (route amount resolved to a tier) and the clock
+      // produced a decision timestamp. Early denials (e.g.
+      // missing_authorization) predate the action facts — binding an
+      // instance over placeholders would claim more than the gate knows.
+      const instance =
+        tier !== undefined && decisionAt !== undefined ? tryInstance(facts) : undefined;
+      const signed = receiptSigner.sign(buildDecisionReceiptInput(facts), instance);
       options.onReceipt?.(signed);
       return { outcome: 'deny', response: denyResponse(verdict) };
     };
 
     try {
+      // 0. A dead clock is a host fault: fail closed before any decision.
+      if (decisionMs === undefined) {
+        return denyWith(deny('internal_error', 'gate clock failed'));
+      }
+
       // 1. The presentation header, before anything else.
       const bundleString = input.headers.get(headerName);
       if (bundleString === null || bundleString.trim().length === 0) {
@@ -243,11 +314,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       };
 
       // 4. Delegate the decision to the configured verifier.
+      // now_unix derives from the SAME sampled instant as decisionAt, so the
+      // verifier's clock and the receipt's instance timestamp agree in audit.
       const verifierRequest: VerifierRequest = {
         version: 1,
         bundle: bundleString,
         request: requestContext,
-        now_unix: now(),
+        now_unix: Math.floor(decisionMs / 1000),
       };
       const outcome = await dispatch(verifierRequest);
       parsedBundle = outcome.parsedBundle;
@@ -265,14 +338,24 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       }
 
       // 6. Allow: sign the decision receipt and stash for the verify hook.
-      const signed = receiptSigner.sign(
-        buildDecisionReceiptInput({
-          request: requestContext,
-          tier,
-          amountUsd,
-          bundle: parsedBundle,
-        }),
-      );
+      // An allow receipt without a truthful instance claim is a host fault —
+      // fail closed rather than allow with a weaker audit record. (denyWith
+      // then emits its receipt without the block; nothing throws.)
+      const allowFacts: DecisionFacts = {
+        request: requestContext,
+        tier,
+        amountUsd,
+        // Defined here: step 0 already denied the request if the clock failed.
+        decisionAt: decisionAt as string,
+        bundle: parsedBundle,
+      };
+      const allowInstance = tryInstance(allowFacts);
+      if (allowInstance === undefined) {
+        return denyWith(
+          deny('internal_error', 'receipt instance binding could not be constructed'),
+        );
+      }
+      const signed = receiptSigner.sign(buildDecisionReceiptInput(allowFacts), allowInstance);
       options.onReceipt?.(signed);
 
       return {

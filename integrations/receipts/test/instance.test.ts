@@ -204,6 +204,21 @@ describe('verifyInstanceBinding', () => {
   });
 
   it.each([
+    ['no payload member', { signature: {} }],
+    ['null payload', { payload: null }],
+    ['string payload', { payload: 'x' }],
+    ['null receipt', null],
+    ['undefined receipt', undefined],
+  ])(
+    'non-receipt input (%s) fails deterministically with malformed_receipt',
+    (_name, garbage) => {
+      const result = verifyInstanceBinding(garbage as unknown as SignedReceipt);
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe('malformed_receipt');
+    },
+  );
+
+  it.each([
     ['null', null],
     ['array', []],
     ['string', 'x'],

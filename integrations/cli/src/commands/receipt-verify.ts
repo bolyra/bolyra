@@ -4,7 +4,7 @@
 
 import { parseArgs } from 'node:util';
 import * as fs from 'node:fs';
-import { verifyReceipt, hashPayload } from '@bolyra/receipts';
+import { verifyReceipt, verifyInstanceBinding, hashPayload } from '@bolyra/receipts';
 import type { SignedReceipt } from '@bolyra/receipts';
 import { fetchAcceptedSigners } from './signer-discovery-fetch';
 
@@ -86,6 +86,17 @@ export async function run(args: string[]): Promise<void> {
       return;
     }
 
+    // Instance binding (spec/receipt-instance-binding-v1.md §4): signature
+    // validity and instance-binding validity are different claims. A
+    // signer-issued receipt with a wrong instance.ref passes verifyReceipt()
+    // above — the semantic check must run whenever the block is present.
+    const instance = verifyInstanceBinding(receipt);
+    if (!instance.ok) {
+      console.error(`FAIL: instance binding invalid [${instance.code}] ${instance.detail}`);
+      process.exitCode = 1;
+      return;
+    }
+
     // Check signer if specified. SignedReceipt carries the recovered signer
     // address at signature.signer (addresses are lowercase hex; compare
     // case-insensitively so checksummed input still matches).
@@ -141,6 +152,7 @@ export async function run(args: string[]): Promise<void> {
 
     console.log('PASS: receipt signature valid');
     if (receiptSigner) console.log(`  Signer: ${receiptSigner}`);
+    if (instance.present) console.log(`  Instance: ${receipt.payload.instance!.ref}`);
   } catch (err) {
     console.error(`FAIL: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;
