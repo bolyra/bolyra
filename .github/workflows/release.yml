@@ -126,8 +126,31 @@ jobs:
             echo "(no build script — skipping)"
           fi
 
+      # Several packages' jest configs map @bolyra/* siblings to SOURCE
+      # (cli: sdk/src + mpp/src + receipts/dist; payment-protocols: sdk/src),
+      # so their tests need the siblings' deps installed — exactly as the
+      # main CI jobs do. Without this, `Cannot find module 'ethers' from
+      # '../../sdk/src/offchain.ts'` fails the gate (this silently killed the
+      # @bolyra/cli@0.8.0 release — tagged, never published).
+      - name: Prepare sibling packages for source-mapped tests
+        run: |
+          (cd sdk && npm ci --no-audit --no-fund)
+          (cd integrations/receipts && npm ci --no-audit --no-fund && npm run build)
+          (cd integrations/mpp-payments && npm ci --no-audit --no-fund)
+
+      # The cli real-proof tests need circuit artifacts (no Circom toolchain
+      # on runners) — mirror the main CI materialization.
+      - name: Materialize circuit artifacts (cli only)
+        if: steps.tag.outputs.pkg == 'cli'
+        working-directory: integrations/cli
+        run: |
+          npm install --no-save --no-audit --no-fund @bolyra/circuits@0.1.0
+          node scripts/circuits-build-from-package.js "$RUNNER_TEMP/circuits-build"
+
       - name: Test (if test script exists)
         working-directory: ${{ steps.tag.outputs.dir }}
+        env:
+          BOLYRA_CIRCUITS_DIR: ${{ runner.temp }}/circuits-build
         run: |
           if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
             # Skip e2e, receipt-integration, proxy, and integration tests that need

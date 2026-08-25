@@ -99,7 +99,12 @@ under `contracts/deployments/` and `circuits/build/`.
 - `GateReceiptSigner.sign(input, instance?)` attaches the block before
   signing, so the ES256K signature covers it.
 
-## @bolyra/cli 0.8.0 (2026-07-24)
+## @bolyra/cli 0.8.0 (tagged 2026-07-24 — never published to npm)
+
+> The 0.8.0 release workflow failed at its test gate (sibling-source jest
+> mappers unresolvable on the release runner) and the failure went
+> unnoticed; the registry stayed at 0.7.0. The changes below first reached
+> npm in 0.9.0.
 
 ### Fixed
 
