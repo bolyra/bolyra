@@ -123,7 +123,14 @@ for (const candidate of [...CANDIDATE_MODULE_PATHS].reverse()) {
 // with Node builtins only, and `session_token` is experimental (skipped). Crypto
 // (circomlibjs) is loaded lazily so a host maintainer can run
 // `node spec/conformance-runner.js --type host_behavior` with zero npm deps.
-const NON_CRYPTO_TYPES = new Set(['external_verifier', 'host_behavior', 'session_token']);
+// `receipt_binding` uses the reference @bolyra/receipts build (ES256K, not
+// circuit crypto) — resolved lazily inside its runner, SKIP when unbuilt.
+const NON_CRYPTO_TYPES = new Set([
+    'external_verifier',
+    'host_behavior',
+    'session_token',
+    'receipt_binding',
+]);
 
 const VECTORS_PATH = path.join(__dirname, 'test-vectors.json');
 const CIRCUITS_DIR = path.join(__dirname, '../circuits');
@@ -301,6 +308,8 @@ async function runVector(vector, crypto) {
             return runExternalVerifierVector(vector);
         case 'host_behavior':
             return runHostBehaviorVector(vector);
+        case 'receipt_binding':
+            return runReceiptBindingVector(vector);
         default:
             return { skipped: true, reason: `unknown vector type: ${vector.type}` };
     }
@@ -490,6 +499,94 @@ function validateHostDecisionEnvelope(d) {
         return null;
     }
     return `decision must be "allow" or "deny", got ${JSON.stringify(d.decision)}`;
+}
+
+/**
+ * Receipt instance-binding class runner
+ * (spec/receipt-instance-binding-v1.md §4, golden corpus).
+ *
+ * Loads a signed fixture from spec/fixtures/receipt-conformance/ and diffs
+ * the reference verifier's behavior against `expected`. The load-bearing
+ * property under test: signature validity and instance-binding validity are
+ * DIFFERENT claims — `forged-ref.json` passes verifyReceipt() and MUST fail
+ * verifyInstanceBinding().
+ *
+ * inputs:
+ *   fixture          string — file under fixtures/receipt-conformance/
+ *                             (.json = one SignedReceipt; .jsonl = chain log)
+ * expected (single receipt):
+ *   signature_valid  boolean — verifyReceipt() outcome (optional)
+ *   binding_ok       boolean — verifyInstanceBinding().ok
+ *   binding_code     string  — verifyInstanceBinding().code (optional)
+ * expected (.jsonl):
+ *   chain_ok         boolean — verifyReceiptChain().ok
+ *   failing_index    number  — the ONLY row whose binding check fails
+ *   binding_code     string  — that row's failure code
+ *
+ * Uses the reference @bolyra/receipts build; SKIPs when it is not built so
+ * dependency-free runs (--type host_behavior) stay dependency-free.
+ */
+function runReceiptBindingVector(vector) {
+    let lib;
+    try {
+        lib = require(path.join(__dirname, '../integrations/receipts/dist/index.js'));
+    } catch {
+        return {
+            skipped: true,
+            reason: 'reference build missing — cd integrations/receipts && npm ci',
+        };
+    }
+    if (typeof vector.inputs?.fixture !== 'string') {
+        return { pass: false, reason: 'receipt_binding vector needs inputs.fixture' };
+    }
+    const fixturePath = path.join(__dirname, 'fixtures/receipt-conformance', vector.inputs.fixture);
+    const raw = fs.readFileSync(fixturePath, 'utf8');
+    const e = vector.expected;
+
+    if (vector.inputs.fixture.endsWith('.jsonl')) {
+        const rows = raw.trim().split('\n').map((line) => JSON.parse(line));
+        const chain = lib.verifyReceiptChain(rows, {});
+        if (chain.ok !== e.chain_ok) {
+            return { pass: false, reason: `chain.ok ${chain.ok} !== expected ${e.chain_ok}` };
+        }
+        const failures = rows
+            .map((row, index) => ({ index, result: lib.verifyInstanceBinding(row) }))
+            .filter((entry) => !entry.result.ok);
+        if (
+            failures.length !== 1 ||
+            failures[0].index !== e.failing_index ||
+            failures[0].result.code !== e.binding_code
+        ) {
+            const got = failures.map((f) => `${f.index}:${f.result.code}`).join(',') || 'none';
+            return {
+                pass: false,
+                reason: `binding failures [${got}] !== expected [${e.failing_index}:${e.binding_code}]`,
+            };
+        }
+        return { pass: true };
+    }
+
+    const receipt = JSON.parse(raw);
+    if (e.signature_valid !== undefined) {
+        const signatureValid = lib.verifyReceipt(receipt);
+        if (signatureValid !== e.signature_valid) {
+            return {
+                pass: false,
+                reason: `verifyReceipt ${signatureValid} !== expected ${e.signature_valid}`,
+            };
+        }
+    }
+    const binding = lib.verifyInstanceBinding(receipt);
+    if (binding.ok !== e.binding_ok) {
+        return {
+            pass: false,
+            reason: `binding.ok ${binding.ok} (${binding.code}) !== expected ${e.binding_ok}`,
+        };
+    }
+    if (e.binding_code !== undefined && binding.code !== e.binding_code) {
+        return { pass: false, reason: `binding.code ${binding.code} !== expected ${e.binding_code}` };
+    }
+    return { pass: true };
 }
 
 function runHostBehaviorVector(vector) {
