@@ -17,6 +17,29 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/cli 0.9.0 (2026-08-25)
+
+### Added
+
+- `bolyra receipt verify` / `verify-chain` run `verifyInstanceBinding`
+  whenever a receipt carries an `instance` block — a new failure mode
+  (`FAIL: instance binding invalid [code]`); `receipt verify`'s PASS output
+  additionally reports the ref.
+
+### Changed
+
+- Dependencies: `@bolyra/receipts@~0.11.0`, `@bolyra/mpp@^0.4.0`.
+
+## @bolyra/payment-protocols 0.8.0 (2026-08-25)
+
+### Changed
+
+- x402 EVC profile: the 402 challenge nonce is documented as the receipt
+  instance discriminator (profile spec §4.1; `X402EvcContext.nonce` jsdoc) —
+  profile hosts recording receipts set `requestNonce` to it when building
+  the instance block.
+- Dependencies: `@bolyra/mpp@^0.4.0`, `@bolyra/receipts@^0.11.0`.
+
 ## @bolyra/receipts 0.11.0 (2026-08-25)
 
 ### Changed
