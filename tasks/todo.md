@@ -1,3 +1,100 @@
+# Golden-corpus instance vectors — SCOPED, not started (Codex secondary, 2026-08-25)
+
+Spec §4's last row ("golden corpus / conformance: new golden receipts with instance;
+negative vectors") is partially satisfied: portable KATs live in
+`integrations/receipts/test/fixtures/instance-vectors.json` (3 golden + 23 negative
+PREIMAGE vectors) and the verify-cli/CLI paths have executable tests. What's MISSING is
+whole-receipt golden fixtures: signed SignedReceipt JSON files (fixed test key) carrying
+valid/forged instance blocks, usable by ANY implementation as a conformance corpus —
+i.e. the receipts analog of spec/fixtures/host-conformance/. Outline:
+- fixtures: valid-instance receipt · forged-ref (signer-issued, signature VALID) ·
+  out-of-domain preimage · auth-kind-with-instance · chained log w/ one bad instance
+- home: spec/fixtures/receipt-conformance/ + a MANIFEST.json (sha256s), synced pattern
+  from evc-conformance's scripts/sync.js
+- runner hook: extend conformance-runner.js with --type receipt_binding OR a tiny
+  standalone checker; decide when picked up
+- effort: ~half-day attended; no release required (test-side only)
+
+# Receipt instance-binding — CORE implementation (Codex-ruled START PARTIAL, 2026-08-24)
+
+Spec of record: `spec/receipt-instance-binding-v1.md` (double-Codex-APPROVED, `229a623`).
+Scope ruling: design-proving core in `@bolyra/receipts` ONLY; defer @bolyra/mpp DecisionFacts,
+x402 EVC profile wiring, and CLI verify behavior until the core passes its vectors or giskard09's
+design read lands. Branch stays draft/internal until then.
+
+## Tasks
+
+- [x] 1. Branch `instance-binding-core` off main
+- [x] 2. TESTS FIRST: `test/instance.test.ts` — red run confirmed (module missing), then green
+- [x] 3. `src/instance.ts`: types, validateInstancePreimage, computeInstanceRef, verifyInstanceBinding
+- [x] 4. `types.ts`: optional `instance?: ReceiptInstanceFields` (commerce-only v1, type-only import cycle)
+- [x] 5. Golden + negative vectors: `test/fixtures/instance-vectors.json` (3 golden KATs pinned via
+      independent node-crypto computation; 19 out-of-domain vectors)
+- [x] 6. Exports; full suite 102→107 green (28 instance tests), tsc --noEmit clean
+- [x] 7. Codex loop: round 1 BLOCK (non-object instance block → throw instead of malformed_ref; real
+      parsed-JSON hole) → guard + 5 shape tests → round 2 CLEAN (Codex independently recomputed all
+      3 golden refs + ran build/tests)
+- [x] 8. Committed `493f9e9` on `instance-binding-core` (local draft, NOT pushed)
+
+## Review
+
+Core complete and Codex-clean in one blocking round. The one real finding was the classic
+TS-types-vs-parsed-JSON gap: verifyInstanceBinding trusted the ReceiptInstanceFields type and
+dereferenced `.ref` on a block that hostile JSON could make null. Fix = object-shape guard before
+any dereference, after wrong_kind (order preserved). KATs were computed with node builtin crypto
+BEFORE implementation existed, so tests assert against pinned hex, not a mirror of the code.
+UNATTENDED BLOCK 2026-08-24 (Codex-directed, founder away): branch rebased onto b488771 and
+PUSHED; **DRAFT PR #105 OPEN, 13/13 checks green**. §3.1.1 audience syntax pinned
+(^[\x21-\x7E]{1,256}$, IN the verifier domain per Codex ruling) — spec + core + 4 negative
+vectors in commit 2b89e19, suite 110/110. PR body Codex-approved after 2 blocking fixes
+(tsx reproducibility caveat; vector count 19→23). Disclosure note for #3230 drafted +
+Codex-APPROVED, HELD for founder approval (scratchpad/giskard09-disclosure-note-draft.md).
+Dependabot sweep DEFERRED (Codex: lower leverage, runtime gate green).
+
+## Wiring phase — state as of 2026-08-25 (Codex Option-C ruling)
+
+**HOLD WINDOW on #105: until 2026-08-26 00:19Z (24h from the disclosure note) or giskard09
+responds, whichever first. Then: merge #105 → release @bolyra/receipts 0.10.0 (tag push, TP)
+→ bump consumer deps → gated wiring.** Rationale: mpp/cli/payment-protocols consume receipts
+from the REGISTRY; 0.9.0 lacks instance.ts, and file:-shortcuts are banned (2026-08-22 lesson).
+Branch `instance-binding-wiring` (stacked on core) is pushed with tonight's non-gated work.
+
+- [x] Post the disclosure note to #3230 — POSTED 8/25 00:19Z (5403245411, links #105 per
+      Codex Option-B)
+- [x] Clock design DECIDED (Codex): optional `nowMs`, exactly-one-clock rule (reject now+nowMs
+      both), derive each from the other; existing now injectors → .000Z timestamps
+- [x] Wiring lands as a STACKED second PR off instance-binding-core (Codex; #105's public
+      core-only contract stays truthful)
+- [x] x402 profile requestNonce DOCS (non-gated): profile spec §4.1 + jsdoc + example README —
+      `3cb877f`. No code needed profile-side: host already holds context.nonce
+- [x] tsx devDep declared in @bolyra/receipts, lockfile regen'd in docker node:20, cold npm ci
+      + 110/110 verified — `424443f`
+- [x] GATED wiring COMPLETE + **PR #107 MERGED 2026-08-25 06:52Z** (main `a5d9cd2`+`060d765`,
+      CI green). Review chain: 4 Codex rounds + bolyra-sdk-guardian BLOCK→fixed (blocking:
+      receipts' own verify-cli bin lacked the instance check; also: instance-before-nonce
+      ordering, single-sample clock for reservations, program non-empty-ASCII agreement,
+      capabilities wording, §4.1 concrete path, README docs)
+
+## Release cohort — SHIPPED 2026-08-25 (Codex-ruled plan, all 4 with provenance)
+- [x] Reshape first (Codex ruling): DecisionReceiptFacts + DecisionInstanceFacts +
+      instanceFactsFrom; deprecated DecisionFacts alias kept
+- [x] `@bolyra/receipts@0.11.0` · `@bolyra/mpp@0.4.0` · `@bolyra/cli@0.9.0` ·
+      `@bolyra/payment-protocols@0.8.0` — all published via TP tag-push, attestations
+      verified (`npm audit signatures`: 23 verified), CHANGELOG entries incl. retroactive
+      receipts 0.10.0
+- [x] Post-publish battery: cold install, malformed_receipt smoke, forged-ref CLI smoke
+      (nonzero + [ref_mismatch]), `npx bolyra --version` = 0.9.0, TS surface smoke — ALL PASS
+- [x] **RELEASE-GATE BUG FOUND+FIXED (`57b4c67`)**: release.yml never installed the
+      jest-source-mapped siblings (sdk/mpp src, receipts dist) → test gate failed with
+      'Cannot find module ethers'. **This silently killed @bolyra/cli@0.8.0 on 7/24 —
+      tagged, never published, registry sat at 0.7.0 unnoticed for a month.** CHANGELOG
+      annotates 0.8.0 as never-published. Fix mirrors main-CI sibling prep + cli
+      circuit-artifact materialization. Note: the registry-propagation check (30s) can
+      false-fail — cli 0.9.0's run "failed" AFTER a successful publish; consider longer
+      backoff (follow-up).
+
+---
+
 # x402 EVC authorization-evidence profile — reference integration (90-day plan, Days 0–30 deliverable)
 
 Plan of record: ~/.claude/plans/how-do-i-get-keen-parnas.md (approved 2026-08-22; Codex-agreed).
