@@ -19,10 +19,15 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ## @bolyra/evc-conformance 0.2.0 (UNRELEASED)
 
-**Release gate:** held until `khandrew1/mcp-use-evc-example` (the first
+**Release gate:** held until `khandrew1/mcp-use-evc-example` (an independent
 external host implementation) is harness-green on vector set 0.5.0 — do not
 tag before then. Moving the conformance target while an external implementer
 is one fix away from green would invalidate their in-flight run.
+
+**Gate satisfied 2026-08-26:** fix merged upstream and verified at clean
+merged-main commit `17642a5` — 27/27 `host_behavior` on vector set 0.5.0
+(sha256 `879d1cf9647f4f42e0815e34eeb5587633dff28e8fa8ceab25c139f470bb629c`).
+Clear to tag.
 
 ### Added
 

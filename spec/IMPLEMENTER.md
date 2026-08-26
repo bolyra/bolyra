@@ -166,3 +166,21 @@ If your host goes green we would like to know, and we will list it. Open an issu
 on this repo. If something in this path is wrong, unclear, or assumes context you
 do not have, that is a bug in this document and worth an issue on its own — a
 contract only one implementer can pass is not a contract.
+
+## 9. Independent implementations
+
+Implementations of the EVC host boundary written outside this repo, from the
+normative text, listed with maintainer permission after a harness-green run at a
+pinned public commit. This table records pinned conformance evidence, not every
+project that has discussed or partially mapped to EVC.
+
+Permission basis: mcp-use#1835, "Feel free to use the example repo however you
+want."
+
+| Implementation | Language / host stack | Verified | Result |
+|---|---|---|---|
+| [`khandrew1/mcp-use-evc-example`](https://github.com/khandrew1/mcp-use-evc-example) | TypeScript, behind mcp-use's `mcp:tools/call` middleware | commit `17642a5`, 2026-08-26 | 27/27 `host_behavior`, vector set 0.5.0 |
+
+Per that repo's own framing: EVC is an independent third-party contract and is
+not part of MCP or mcp-use. Listing here records conformance of the example's
+host boundary; it does not imply endorsement of EVC by mcp-use or vice versa.
