@@ -1,5 +1,5 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -1461,6 +1461,20 @@
       "type": "host_behavior",
       "inputs": {
         "fixture": "schema-invalid-verdict.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
+    },
+    {
+      "id": "host-deny-unknown-denial-code",
+      "description": "Registry closure (\u00a73.4/\u00a79/\u00a77.2): the verifier returns an otherwise well-formed `deny` whose `code` is not in the \u00a79 registry. The \u00a73.4 deny schema closes `code` over the registry enum, so the verdict fails the schema and the host MUST fail closed with `schema_invalid`. The host MUST NOT relay the unknown code as a verifier decision — a broken or hostile verifier must not be able to mint denial semantics the contract never defined.",
+      "type": "host_behavior",
+      "inputs": {
+        "fixture": "unknown-denial-code.js",
         "timeout_ms": 5000
       },
       "expected": {

@@ -1,7 +1,7 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "note": "host_behavior subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
-  "source_sha256": "879d1cf9647f4f42e0815e34eeb5587633dff28e8fa8ceab25c139f470bb629c",
+  "source_sha256": "bec817efc4fc3a54f426014e41b756251b48f2784234c50c2e14f48182b9fa2b",
   "vectors": [
     {
       "id": "host-allow-well-behaved",
@@ -67,6 +67,20 @@
       "type": "host_behavior",
       "inputs": {
         "fixture": "schema-invalid-verdict.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "schema_invalid"
+      }
+    },
+    {
+      "id": "host-deny-unknown-denial-code",
+      "description": "Registry closure (§3.4/§9/§7.2): the verifier returns an otherwise well-formed `deny` whose `code` is not in the §9 registry. The §3.4 deny schema closes `code` over the registry enum, so the verdict fails the schema and the host MUST fail closed with `schema_invalid`. The host MUST NOT relay the unknown code as a verifier decision — a broken or hostile verifier must not be able to mint denial semantics the contract never defined.",
+      "type": "host_behavior",
+      "inputs": {
+        "fixture": "unknown-denial-code.js",
         "timeout_ms": 5000
       },
       "expected": {

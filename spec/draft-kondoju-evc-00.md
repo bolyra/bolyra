@@ -1,3 +1,15 @@
+<!-- ARCHIVAL SNAPSHOT — DO NOT EDIT NORMATIVE CONTENT.
+This file mirrors draft-kondoju-evc-00 exactly as submitted to the IETF
+datatracker on 2026-07-21. Later contract clarifications intentionally do NOT
+retro-edit this file; they land in -01 (working outline:
+ietf-draft-evc-outline.md). Known deltas superseded by
+external-verifier-contract-v1.md rev 2026-08-26: the §9 registry is closed
+within wire v1 (an unrecognized `code` fails the verdict schema and the host
+fails closed with `schema_invalid`; the old "treat an unrecognized future
+`code` as deny" wording here is the ambiguity that was closed), §7.2 gained an
+explicit fail-closed classification precedence, and the conformance vector set
+is now 0.6.0 (27 fixtures / 28 host-behavior vectors; the counts below reflect
+the 0.5.0-era set). -->
 ---
 title: "An External Verifier Contract for Agent Authorization Decisions"
 abbrev: "External Verifier Contract"

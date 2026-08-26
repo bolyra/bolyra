@@ -9,7 +9,7 @@
  *
  * v0 scope (deliberate): ONLY the host_behavior surface — the runner, the
  * reference host, the host-conformance fixtures, and a vectors file trimmed
- * to host_behavior. The full 104-vector suite stays in the monorepo.
+ * to host_behavior. The full 112-vector suite stays in the monorepo.
  */
 
 const fs = require('fs');

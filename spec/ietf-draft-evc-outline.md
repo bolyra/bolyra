@@ -144,6 +144,20 @@ informative:
   verdict JSON Schema (`additionalProperties:false`) (EVC v1 §3.4) as appendix §A.
 - **Denial-code registry** (EVC v1 §9) — reproduce the 15-code table. Flag that this
   table is the candidate IANA registry (see §13).
+- **[-01 CHANGE from -00, contract rev 2026-08-26]** State registry closure
+  explicitly: within wire version 1 the registry is closed — the verdict schema
+  enumerates exactly these codes, so an unrecognized `code` fails schema
+  validation and the host fails closed under its own classification
+  (`schema_invalid`), never relaying the unknown code. Replace -00's "MUST
+  treat an unrecognized future `code` as deny" sentence, which reads as
+  relay-tolerance and was misread exactly that way by the first independent
+  host implementation (khandrew1/mcp-use-evc-example — relayed out-of-registry
+  codes; caught by conformance vector `host-deny-unknown-denial-code`, vector
+  set 0.6.0). Also carry the §7.2 fail-closed classification precedence (own
+  kills → signal death → nonzero exit → parse/schema; `signal_death` vs
+  `nonzero_exit` never collapsed) into the host obligations section — the same
+  implementation collapsed those two, so both -00 prose gaps have real-world
+  confirmation for the -01 "implementation status" section (RFC 7942).
 
 ### 4.3 stdout/stderr fd-level isolation (load-bearing)
 - Summarize EVC v1 §5: stdout carries exactly one verdict; native library writes

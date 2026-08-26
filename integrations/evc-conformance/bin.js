@@ -9,7 +9,7 @@
  * This is a thin launcher over the vendored spec runner (see MANIFEST.json
  * for the checksummed provenance of every vendored file). It always runs the
  * host_behavior vector class - the class that tests YOUR host, in any
- * language, with no npm install. The full 104-vector suite lives in the
+ * language, with no npm install. The full 112-vector suite lives in the
  * bolyra monorepo; the normative contract is
  * spec/external-verifier-contract-v1.md there.
  *

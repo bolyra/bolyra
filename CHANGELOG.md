@@ -17,6 +17,41 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/evc-conformance 0.2.0 (UNRELEASED)
+
+**Release gate:** held until `khandrew1/mcp-use-evc-example` (an independent
+external host implementation) is harness-green on vector set 0.5.0 — do not
+tag before then. Moving the conformance target while an external implementer
+is one fix away from green would invalidate their in-flight run.
+
+**Gate satisfied 2026-08-26:** fix merged upstream and verified at clean
+merged-main commit `17642a5` — 27/27 `host_behavior` on vector set 0.5.0
+(sha256 `879d1cf9647f4f42e0815e34eeb5587633dff28e8fa8ceab25c139f470bb629c`).
+Clear to tag.
+
+### Added
+
+- New host-behavior vector `host-deny-unknown-denial-code` (vector set
+  **0.5.0 → 0.6.0**, 111 → 112 vectors, host_behavior 27 → 28): a verifier
+  returns an otherwise well-formed `deny` whose `code` is outside the §9
+  registry. The §3.4 deny schema closes `code` over the registry enum, so a
+  conforming host MUST fail closed with `schema_invalid` and MUST NOT relay
+  the unknown code. Previously no vector exercised this, so a host that
+  relays arbitrary denial codes could pass the suite. Both reference hosts
+  (JS and Rust) already enforce the registry and pass unchanged, 28/28.
+
+### Changed
+
+- Spec (`external-verifier-contract-v1.md`): §7.2 now states the fail-closed
+  classification precedence explicitly (own kills → signal death → non-zero
+  exit → parse/schema) and that `signal_death` vs `nonzero_exit` are distinct
+  classes a host must not collapse; §9 now states the registry is closed
+  within wire version 1 and reconciles the old "treat an unrecognized future
+  `code` as deny" sentence — the deny is the host's `schema_invalid`
+  fail-closed override, never a relayed verdict. Both edits tighten prose
+  around behavior the reference hosts and §3.4 schema already had; the wire
+  contract is unchanged.
+
 ## @bolyra/cli 0.9.0 (2026-08-25)
 
 ### Added
