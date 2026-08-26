@@ -22,12 +22,12 @@ git clone https://github.com/bolyra/bolyra && cd bolyra
 node spec/conformance-runner.js --type host_behavior
 ```
 
-Either way that runs **27 host-behavior vectors** against the bundled
+Either way that runs **28 host-behavior vectors** against the bundled
 reference host, with **no `npm install`** — the host suite uses only Node
 builtins. Expect:
 
 ```
-27 passed, 0 failed, 0 skipped
+28 passed, 0 failed, 0 skipped
 ```
 
 Exit code is `0` when everything passes and `1` on any failure, so it drops
@@ -155,7 +155,7 @@ No install step for the suite itself, and a non-zero exit fails the job.
 ## 7. The rest of the suite
 
 `--type host_behavior` is the part that matters for a host implementer and the
-part that runs dependency-free. The full run (`npm run conformance`, 104 vectors)
+part that runs dependency-free. The full run (`npm run conformance`, 112 vectors)
 also covers handshake, signature, Merkle, and delegation vectors against this
 repo's circuits — those need `npm install` and are about *our* implementation,
 not yours.

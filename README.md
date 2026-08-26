@@ -48,16 +48,16 @@ FULL_PROOF=1 npm run test:circuits:slow  # full Groth16/PLONK proving (~2 min)
 
 ## Protocol Conformance
 
-104 executable test vectors verify the implementation matches the protocol specification.
+112 executable test vectors verify the implementation matches the protocol specification.
 CI runs them on every PR. See [`spec/CONFORMANCE.md`](spec/CONFORMANCE.md) for the
 current generated report.
 
 ```bash
-npm run conformance          # run all 104 vectors
+npm run conformance          # run all 112 vectors
 npm run conformance:report   # generate spec/CONFORMANCE.md
 ```
 
-**Implementing your own EVC host?** 27 of those vectors test *host* behavior and
+**Implementing your own EVC host?** 28 of those vectors test *host* behavior and
 run against any host in any language, with no install:
 
 ```bash

@@ -1,15 +1,15 @@
 # Bolyra Protocol Conformance Report
 
-**Generated:** 2026-07-18T14:47:37.230Z
-**Spec version:** 0.4.0
+**Generated:** 2026-08-26T17:37:03.110Z
+**Spec version:** 0.6.0
 **Runner:** spec/conformance-runner.js
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| Total vectors | 104 |
-| Passed | 99 |
+| Total vectors | 112 |
+| Passed | 107 |
 | Failed | 0 |
 | Skipped | 5 |
 
@@ -142,7 +142,7 @@
 | 9 | external-verifier-kind-external-deny | PASS | ✓ PASS |
 | 10 | external-verifier-kind-invalid-rejected | FAIL | ✓ PASS |
 
-### Host Behavior (27 vectors)
+### Host Behavior (28 vectors)
 
 | # | Vector ID | Expected | Status |
 |---|-----------|----------|--------|
@@ -151,28 +151,41 @@
 | 3 | host-deny-non-json-stdout | PASS | ✓ PASS |
 | 4 | host-deny-multiple-objects | PASS | ✓ PASS |
 | 5 | host-deny-schema-invalid-verdict | PASS | ✓ PASS |
-| 6 | host-deny-deny-missing-fields | PASS | ✓ PASS |
-| 7 | host-deny-allow-trailing-garbage | PASS | ✓ PASS |
-| 8 | host-deny-no-output-timeout | PASS | ✓ PASS |
-| 9 | host-deny-partial-json-timeout | PASS | ✓ PASS |
-| 10 | host-deny-nonzero-exit-after-allow | PASS | ✓ PASS |
-| 11 | host-deny-killed-by-signal | PASS | ✓ PASS |
-| 12 | host-deny-oversize-stdout | PASS | ✓ PASS |
-| 13 | host-nonce-reserve-novel-allow | PASS | ✓ PASS |
-| 14 | host-nonce-reserve-replay-deny | PASS | ✓ PASS |
-| 15 | host-nonce-reserve-all-any-conflict-deny | PASS | ✓ PASS |
-| 16 | host-deny-allow-extra-property | PASS | ✓ PASS |
-| 17 | host-deny-bad-kind | PASS | ✓ PASS |
-| 18 | host-deny-empty-consume-nonces | PASS | ✓ PASS |
-| 19 | host-deny-malformed-consume-nonce | PASS | ✓ PASS |
-| 20 | host-deny-deny-extra-property | PASS | ✓ PASS |
-| 21 | host-deny-nonce-entry-extra-property | PASS | ✓ PASS |
-| 22 | host-deny-nonce-entry-wrong-type | PASS | ✓ PASS |
-| 23 | host-deny-binary-garbage-stdout | PASS | ✓ PASS |
-| 24 | host-deny-leading-garbage | PASS | ✓ PASS |
-| 25 | host-deny-slow-allow-past-deadline | PASS | ✓ PASS |
-| 26 | host-allow-well-behaved-kind-classical | PASS | ✓ PASS |
-| 27 | host-allow-well-behaved-kind-external | PASS | ✓ PASS |
+| 6 | host-deny-unknown-denial-code | PASS | ✓ PASS |
+| 7 | host-deny-deny-missing-fields | PASS | ✓ PASS |
+| 8 | host-deny-allow-trailing-garbage | PASS | ✓ PASS |
+| 9 | host-deny-no-output-timeout | PASS | ✓ PASS |
+| 10 | host-deny-partial-json-timeout | PASS | ✓ PASS |
+| 11 | host-deny-nonzero-exit-after-allow | PASS | ✓ PASS |
+| 12 | host-deny-killed-by-signal | PASS | ✓ PASS |
+| 13 | host-deny-oversize-stdout | PASS | ✓ PASS |
+| 14 | host-nonce-reserve-novel-allow | PASS | ✓ PASS |
+| 15 | host-nonce-reserve-replay-deny | PASS | ✓ PASS |
+| 16 | host-nonce-reserve-all-any-conflict-deny | PASS | ✓ PASS |
+| 17 | host-deny-allow-extra-property | PASS | ✓ PASS |
+| 18 | host-deny-bad-kind | PASS | ✓ PASS |
+| 19 | host-deny-empty-consume-nonces | PASS | ✓ PASS |
+| 20 | host-deny-malformed-consume-nonce | PASS | ✓ PASS |
+| 21 | host-deny-deny-extra-property | PASS | ✓ PASS |
+| 22 | host-deny-nonce-entry-extra-property | PASS | ✓ PASS |
+| 23 | host-deny-nonce-entry-wrong-type | PASS | ✓ PASS |
+| 24 | host-deny-binary-garbage-stdout | PASS | ✓ PASS |
+| 25 | host-deny-leading-garbage | PASS | ✓ PASS |
+| 26 | host-deny-slow-allow-past-deadline | PASS | ✓ PASS |
+| 27 | host-allow-well-behaved-kind-classical | PASS | ✓ PASS |
+| 28 | host-allow-well-behaved-kind-external | PASS | ✓ PASS |
+
+### Receipt Binding (7 vectors)
+
+| # | Vector ID | Expected | Status |
+|---|-----------|----------|--------|
+| 1 | receipt-binding-valid | PASS | ✓ PASS |
+| 2 | receipt-binding-absent | PASS | ✓ PASS |
+| 3 | receipt-binding-forged-ref | PASS | ✓ PASS |
+| 4 | receipt-binding-out-of-domain | PASS | ✓ PASS |
+| 5 | receipt-binding-wrong-kind | PASS | ✓ PASS |
+| 6 | receipt-binding-malformed-block | PASS | ✓ PASS |
+| 7 | receipt-binding-chained-one-forged | PASS | ✓ PASS |
 
 ## References
 

@@ -2,10 +2,12 @@
 
 - **Status:** Stable (v1)
 - **Wire version:** `1` (integer-major; see §11)
-- **Document revision:** 2026-07-17 (binding format **v2** — expiry is now
-  signature-bound; see the changelog in §15). Previous: 2026-07-11 (§16 Host
-  conformance). The wire request/verdict envelope major is unchanged; the
-  **binding** sub-structure is versioned separately (v1 → v2, §4).
+- **Document revision:** 2026-08-26 (registry closure and fail-closed
+  classification precedence made explicit — prose only, wire contract unchanged;
+  see the changelog in §15). Previous: 2026-07-17 (binding format **v2** —
+  expiry is now signature-bound), 2026-07-11 (§16 Host conformance). The wire
+  request/verdict envelope major is unchanged; the **binding** sub-structure is
+  versioned separately (v1 → v2, §4).
 - **Reference implementation:** `bolyra verify` in `@bolyra/cli`
   (`integrations/cli`) — a `zk`-class verifier (§3.5)
 - **Companion documents:** `spec/CONFORMANCE.md` (conformance vectors), design spec
@@ -497,8 +499,18 @@ The host **MUST** treat **all** of the following as **deny**, regardless of what
 - unparseable, empty, oversized, or multi-object stdout (§5.2);
 - an unknown `verdict` value or a `deny` missing required fields;
 - a verdict that otherwise fails the §3.4 verdict schema — including an
-  unrecognized `kind` value (outside `classical` | `zk` | `external`, §3.5) or any
-  disallowed additional property.
+  unrecognized `kind` value (outside `classical` | `zk` | `external`, §3.5), a
+  `code` outside the §9 registry, or any disallowed additional property.
+
+Several of these conditions can co-occur for one verifier run (a killed process
+both dies by signal *and* leaves stdout unparseable). The decision is a deny on
+every branch, but a host that reports *why* it failed closed (§16.3) **SHOULD**
+classify the cause it acted on in this precedence: its own kills first (output
+bound, then timeout), then an unsolicited signal death, then a non-zero exit,
+and only then the stdout parse and schema checks. In particular, death by an
+unsolicited signal and a non-zero exit are **distinct** conditions
+(`signal_death` vs `nonzero_exit`, §16.3) — a host **MUST NOT** collapse them
+into one classification. The reference hosts implement this precedence.
 
 The verifier is designed so these are the *only* ways it fails ambiguously; every
 outcome it can reason about is an explicit `deny` with a `code` (§9).
@@ -547,8 +559,18 @@ for host-side bookkeeping only.
 ## 9. Denial-code registry
 
 The stable, lowercase `snake_case` vocabulary for the verdict `code` field. This
-table is the single normative source; hosts **MAY** branch on these tokens and
-**MUST** treat an unrecognized future `code` as deny. Verifiers **MUST NOT** add,
+table is the single normative source; hosts **MAY** branch on these tokens.
+
+Within wire version 1 the registry is **closed**: the §3.4 deny schema
+enumerates exactly these codes, so a verdict carrying any other `code` fails the
+verdict schema and the host **MUST** fail closed (§7.2) under its own
+classification (`schema_invalid`, §16.3). The host **MUST NOT** relay an
+unrecognized `code` as if it were a valid verifier decision — an out-of-registry
+code is a malfunctioning (or hostile) verifier, not a forward-compatible denial,
+and relaying it would let such a verifier mint denial semantics this contract
+never defined. The net effect is unchanged from the host's perspective — an
+unrecognized `code` always ends in deny — but the deny is the host's fail-closed
+override, never a relayed verdict. Verifiers **MUST NOT** add,
 remove, or rename a code without a version bump (§11). The registry is
 **proof-system-agnostic** (§3.5): a `classical`- or `external`-`kind` verifier
 reuses the same codes — e.g. `invalid_proof` covers a failed classical signature
@@ -604,6 +626,10 @@ if status != 0 and status != INTERNAL_ALLOWED: reject("non-zero exit")   // §7.
 if timed_out(child):                          reject("timeout")          // §6
 verdict = parse_single_json_object(out)        // §5.2; on any failure → reject
 if verdict is null:                            reject("unparseable stdout")
+if not valid_verdict_schema(verdict):          reject("schema invalid")  // §3.4 —
+                                               // closed shapes, closed §9 code
+                                               // registry; NEVER relay a code
+                                               // from a schema-invalid verdict
 
 switch verdict.verdict:
   case "allow":
@@ -611,9 +637,10 @@ switch verdict.verdict:
       if not reserve_nonce_atomically(entry): reject("replay")           // §7.3 (reserve ALL)
     proceed()
   case "deny":
-    reject(verdict.code)                        // branch on §9 registry if desired
+    reject(verdict.code)                        // schema-valid → relay; branch on §9 if desired
   default:
-    reject("unknown verdict")                   // §7.2
+    reject("unknown verdict")                   // §7.2 (unreachable after the
+                                                // schema check; keep it anyway)
 ```
 
 Because the bundle is opaque, only Bolyra (or another verifier vendor) needs to
@@ -811,6 +838,18 @@ wire `version`. A wire-`1` verifier that predates an entry below — necessarily
 are read as `zk` (§3.3); a verifier that implements a revision as a non-`zk` class
 adopts that revision's obligations (e.g. it **MUST** set `kind`, §3.5).
 
+- **2026-08-26 (wire version `1`, prose + conformance only).** Made two
+  behaviors the §3.4 schema and reference hosts already had explicit in prose,
+  after the first independent external host implementation missed both: §7.2 now
+  states the fail-closed classification precedence (own kills → signal death →
+  non-zero exit → parse/schema) and that `signal_death` vs `nonzero_exit` are
+  distinct classes a host must not collapse; §9 now states the registry is
+  closed within wire version `1` — an out-of-registry `code` fails the §3.4
+  schema and the host fails closed with `schema_invalid` rather than relaying
+  it. §10's pseudocode gained the explicit §3.4 schema-validation step before
+  any relay. Conformance: added the `host-deny-unknown-denial-code` vector and
+  `unknown-denial-code.js` fixture (vector set 0.5.0 → 0.6.0). The wire
+  contract is unchanged; no conforming verifier or host is affected.
 - **2026-07-10 (wire version `1`, additive).** Made proof-system-agnosticism
   explicit. Added the **OPTIONAL** verdict field `kind` (`classical` | `zk` |
   `external`) as a verifier self-description (§3.3, §3.5) and to the §3.4 verdict
@@ -894,6 +933,7 @@ outcome` column is the normative behavior a conforming host **MUST** produce; th
 | `empty-consume-nonces.js` | §3.2/§3.4 `consume_nonces` violates `minItems:1` | **deny** | `schema_invalid` |
 | `malformed-consume-nonce.js` | §3.2/§3.4 nonce entry missing `issuer_key`/`retain_until` | **deny** | `schema_invalid` |
 | `deny-extra-property.js` | §3.4 closed `deny` — disallowed additional property | **deny** | `schema_invalid` |
+| `unknown-denial-code.js` | §3.4/§9 well-formed `deny` with an out-of-registry `code` | **deny** (never relayed) | `schema_invalid` |
 | `nonce-entry-extra-property.js` | §3.2/§3.4 nonce entry has an extra property | **deny** | `schema_invalid` |
 | `nonce-entry-wrong-type.js` | §3.2/§3.4 nonce entry `retain_until` is not an integer | **deny** | `schema_invalid` |
 | `no-output-hang.js` | §6 no output, never exits | **deny** (kill on timeout) | `timeout` |
