@@ -1,39 +1,44 @@
-# 0.6.0 conformance/spec pre-build (Codex-picked 2026-08-26)
+# IETF draft-kondoju-evc-01 revision (Codex queue item 1, started 2026-08-27)
 
-Branch: `conformance-0.6.0-registry-closure` — BUILT, held unreleased until
-khandrew1/mcp-use-evc-example is harness-green on 0.5.0 (Codex T3 ruling).
+Goal: -01 source ready to submit to datatracker, Codex-reviewed. Founder does
+the actual datatracker upload (account-bound).
 
-- [x] 1. Map harness structure (fixtures/host-conformance, test-vectors.json,
-      runner expectation checks, evc-conformance vendor sync via scripts/sync.js)
-- [x] 2. Both reference hosts enforce the §9 registry (JS KNOWN_CODES;
-      reference-host-rs lib.rs:445) — both pass the new vector
-- [x] 3. Test-first: `host-deny-unknown-denial-code` fixture + vector.
-      Reference JS host 28/28 · Rust host 28/28 · khandrew1's patched adapter
-      FAILS exactly this vector (relays `quantum_flux_error`) — gap proven real
-- [x] 4. Spec prose: §7.2 classification precedence (own kills → signal →
-      nonzero exit → parse/schema; signal_death vs nonzero_exit must not
-      collapse) · §9 closed-registry reconciliation (unknown code = host
-      schema_invalid fail-closed, never a relayed verdict)
-- [x] 5. Vector set 0.5.0 → 0.6.0 (111→112 vectors) · evc-conformance package
-      0.1.0 → 0.2.0 · vendor sync + MANIFEST regenerated (sync:check OK) ·
-      CHANGELOG entry marked UNRELEASED with the hold condition
-- [x] 6. Full suite delta check: main baseline 89/10 FAIL/12 SKIP (pre-existing
-      env: cli + receipts builds missing locally) · branch 90/10/12 — exactly
-      +1 pass, no regressions. No hardcoded 111/0.5.0 references anywhere.
+- [ ] 1. Map -00: section structure, Implementation Status (RFC 7942), registry
+      language, host fail-closed obligations, conformance counts, klrc/APS
+      related-work citations
+- [ ] 2. Create spec/draft-kondoju-evc-01.md from -00 (no archival comment),
+      docname/date bump
+- [ ] 3. Apply contract rev 2026-08-26 changes: §9 registry closure (replace
+      "treat unrecognized future code as deny"), §7.2 classification precedence
+- [ ] 4. Implementation Status: add khandrew1/mcp-use-evc-example (independent,
+      27/27 pinned @ 17642a5 on 0.5.0, maintainer permission); update suite to
+      vector set 0.6.0 / 28 host vectors / @bolyra/evc-conformance@0.2.0 npm w/
+      provenance; JS+Rust reference hosts 28/28
+- [ ] 5. Counts sweep (26 fixtures/27 vectors → 27/28) + "Changes since -00"
+      appendix per IETF convention
+- [ ] 6. Outline TODOs in scope? (klrc -03 section pinning, APS -02 quote) —
+      research + pin or explicitly defer to -02
+- [ ] 7. Build/validate (kramdown-rfc/xml2rfc if available; else manual lint)
+- [ ] 8. Codex review loop to clean verdict; commit on branch; update memory
 
 ## Review
+(fill when done)
 
-Codex verdict: APPROVE (after 2 REVISE rounds — doc currency: spec header/§15/
-§16.1/§10 pseudocode, stale 27/104 counts in 6 files, CHANGELOG heading,
-draft-00 handling). Full suite regenerated green from a fully-built env
-(receipts + cli): CONFORMANCE.md now 0.6.0, 112 vectors, 107/0/5.
+## Review (2026-08-27)
 
-Design finding worth remembering: §9's old sentence ("MUST treat an
-unrecognized future code as deny") was the exact text that licensed
-khandrew1's relay behavior — the fix reconciles prose with §3.4's enum
-closure; wire contract unchanged. draft-kondoju-evc-00.md is frozen archival
-(datatracker mirror, comment blocks accidental rebuilds); the -01 outline
-carries both changes with RFC 7942 implementation-status evidence.
+Codex APPROVE after 4 revise rounds. Substantive finds along the way:
+1. -00 shipped with a SYSTEMATIC cross-ref defect (26 wrong numeric refs from
+   two late section insertions) — all now anchor-based, machine-audited.
+2. -00 also shipped 4 internal "RESOLVED (founder)" blockquotes rendering in
+   the public txt — deleted.
+3. APS published draft-pidlisnyi-aps-03 on 2026-07-18 (we were citing -02;
+   competitor watch trigger caught late). All our claims re-verified against
+   -03: no-ZK-class still true; quote verbatim (their §9 now); "three-record"
+   chain wording; their new Related Work §8 does NOT cite EVC.
+4. Implementer-callout language neutralized everywhere per RFC 7942 norms.
+5. Bracket-syntax hazards escaped (RFC-editor notes, consume_nonces[]).
 
-Release is a single tag-push once khandrew1/mcp-use-evc-example is green on
-0.5.0; do NOT tag before.
+Branch ietf-evc-01 (single commit) kept LOCAL deliberately: repo is public and
+the -01 text should hit the datatracker before (or with) the repo. Founder
+submits spec/draft-kondoju-evc-01.txt (or .xml) at
+https://datatracker.ietf.org/submit/ — then push branch + PR + merge.
