@@ -2,7 +2,7 @@
   "loop": "bolyra-pr-outreach",
   "start_date": "2026-06-30",
   "cadence": "weekly",
-  "current_week": 8,
+  "current_week": 9,
   "status": "paused",
   "paused_date": "2026-07-27",
   "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
@@ -22,7 +22,7 @@
     "prs_closed": 0,
     "prs_stale": 9,
     "review_comments_responded": 0,
-    "new_repos_identified": 40
+    "new_repos_identified": 45
   },
   "kill_criteria": {
     "week_4": "0 PRs merged out of 10+ open → switch strategy",
@@ -117,6 +117,17 @@
       "follow_ups_drafted": 0,
       "review_comments_responded": 0,
       "notes": "PATH B CONTINUING. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed across weeks 5-7 (no new prs.json entries). Critical observation: 8 consecutive scan weeks, 0 Path B PRs opened. 5 new targets identified — all with clean non-breaking injection points: (1) openai/openai-agents-python ~5000★ — FunctionTool dispatch has no pre-call mandate check; authorization_callback on Agent/Runner is the fix and would shape ecosystem norms as the OpenAI reference implementation. (2) langchain-ai/langchain ~98000★ — BaseTool.run() has callbacks but no allow/deny gate; 2-file diff for the widest downstream reach of any target identified in 8 weeks. (3) deepset-ai/haystack ~22000★ — Pipeline.run() has no authorization hook between component invocations; component_authorization_callback on Pipeline is the fix. (4) e2b-dev/e2b ~9000★ — Sandbox.run_code() (highest-risk agent action) has no identity gate; authorization_hook on Sandbox is the fix. (5) botpress/botpress ~13000★ — action execution middleware has no mandate check; BolyraActionGuard middleware contrib is the fix. Total repos identified across 8 weeks: 40, Path B targets: 20. Recommended next action: pick ONE target today (langchain for reach, openai-agents for signal) and open a builder session — do not wait for the next scan."
+    },
+    {
+      "week": 9,
+      "date": "2026-08-31",
+      "prs_merged": 0,
+      "prs_closed": 0,
+      "new_stale": 0,
+      "new_repos_identified": 5,
+      "follow_ups_drafted": 0,
+      "review_comments_responded": 0,
+      "notes": "PATH B CONTINUING. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5-8. 5 new Path B targets identified across the TypeScript/gateway tier: (1) vercel/ai ~26500★ — generateText/streamText tool dispatch has no authorization hook; toolAuthorizationHandler option is the fix and reaches the widest TypeScript agent audience of any target identified. (2) camel-ai/camel ~17700★ — FunctionCallingConfig tool dispatch in ChatAgent has no mandate check; BolyraAuthToolkit contrib wrapper is a zero-core-change path. (3) Portkey-AI/gateway ~12900★ — guardrail plugin system is the designed extension point; BolyraEVCGuardrail plugin is a single-file contrib; first identity-bound authorization gate in a production AI gateway. (4) ag2ai/ag2 ~4900★ — ConversableAgent execute_function() has no pre-dispatch gate; tool_authorization_callback on ConversableAgent is the fix; AG2's enterprise/MCP positioning makes it credible. (5) maximhq/bifrost ~7700★ — Go AI gateway, newest entrant, plugin architecture being shaped now; strategic first Go implementation for Bolyra. Total repos identified across 9 weeks: 45, Path B targets: 25. ESCALATION: 9 weeks of scan output with 0 execution. If no Path B PR is opened by week 10, consider suspending the loop."
     }
   ]
 }

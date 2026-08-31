@@ -1,0 +1,199 @@
+{
+  "week": 9,
+  "date": "2026-08-31",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried. All external PR statuses carry forward from last live verification (2026-07-27, 35 days ago). No state writes to prs.json this cycle — same discipline as weeks 4-8.",
+
+  "path_b_progress_check": {
+    "note": "Weeks 5-8 identified 20 Path B targets, all with clean injection points in active frameworks. No new prs.json entries recorded — 0 builder sessions confirmed across 4 Path B weeks. Cumulative total: 40 targets identified across 8 weeks, 0 Path B PRs opened. The target pipeline is fully stocked; execution is the only remaining gap.",
+    "week8_priority_status": "unknown — langchain-ai/langchain (option A, highest reach) and openai/openai-agents-python (option B, highest signal) remain the top week-8 recommendations. No action confirmed in prs.json.",
+    "action_gap": "9 consecutive scan weeks, 0 Path B PRs opened. The bottleneck is builder-session activation, not target identification."
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 35,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "vercel/ai",
+      "approx_stars": 26500,
+      "language": "TypeScript",
+      "why": "Vercel AI SDK is the dominant TypeScript/Next.js toolkit for building AI-powered applications and agents — 26,500★, actively maintained by Vercel engineers. generateText() and streamText() accept a tools object and dispatch tool calls after LLM output is parsed, with no pre-call identity or authorization hook. Because Next.js is the default deployment target and Vercel positions the SDK as production-ready for agent actions (payments, API calls, file writes), the absence of an identity gate at tool dispatch is acutely felt by enterprise adopters. A merged PR here reaches the widest TypeScript agent audience of any target identified across all 9 weeks.",
+      "gap": "In vercel/ai's tool dispatch (packages/ai/core/generate-text/generate-text.ts, tool execution section), registered tools are called after LLM output parsing with no authorization gate. The SDK has no concept of per-agent mandate or spend limit at dispatch time. An optional toolAuthorizationHandler: ((toolName: string, toolArgs: unknown) => Promise<boolean>) parameter on generateText() / streamText() options — evaluated before every tool invocation — closes the gap. A BolyraToolGuard helper in a contrib package demonstrates EVC integration without making Bolyra a core dependency.",
+      "anchor_issue": "Search vercel/ai issues for 'authorization', 'tool guard', 'pre-tool', or 'access control'. The framework's rapid growth means enterprise requests are likely already filed. Check GitHub Discussions as well.",
+      "pr_type": "targeted feature — optional toolAuthorizationHandler parameter in tool dispatch for generateText/streamText (TypeScript). Non-breaking: undefined default preserves today's behavior. A contrib example in examples/bolyra-auth/ demonstrates EVC integration. Keep the diff to the core generate-text file plus one example.",
+      "priority": 1,
+      "builder_notes": "Entry points: packages/ai/core/generate-text/generate-text.ts (and stream-text equivalent). The SDK uses pnpm workspaces; run pnpm test from the package root before submitting. Vercel uses changeset for changelog — a changeset entry is required. TypeScript strict mode enforced; type the handler correctly. Check if a similar parameter exists in useChat() / useCompletion() hooks — may need symmetric treatment."
+    },
+    {
+      "repo": "camel-ai/camel",
+      "approx_stars": 17700,
+      "language": "Python",
+      "why": "CAMEL is one of the first and most-cited multi-agent frameworks (17,700★, actively maintained). It drives agent societies, role-playing agents, and tool-using agents across a large research and production user base. The FunctionCallingConfig and ChatAgent tool-dispatch path execute registered tools after LLM response parsing with no authorization gate. CAMEL has a dedicated Toolkits system (camel/toolkits/) which makes it a clean, structured place to add an optional BolyraAuthToolkit or an authorization_callback on ChatAgent — the framework's modular design means the fit is non-invasive and legible to maintainers.",
+      "gap": "camel/agents/chat_agent.py dispatches tool calls (registered via FunctionCallingConfig) immediately after parsing the LLM output. There is no hook between 'LLM said to call tool X' and 'tool X executes'. An optional authorization_callback: Optional[Callable[[str, Dict], bool]] parameter on ChatAgent.__init__() — evaluated in _step() before tool execution — closes the gap. Alternatively, a BolyraAuthToolkit wrapper in camel/toolkits/ that wraps any existing toolkit and pre-screens calls is a zero-core-change contrib path.",
+      "anchor_issue": "Search camel-ai/camel issues for 'authorization', 'tool guard', or 'access control'. CAMEL has an active Discord and responds to well-scoped contributions; maintainers have merged external auth-related PRs in the past.",
+      "pr_type": "targeted feature — optional authorization_callback on ChatAgent plus a BolyraAuthToolkit wrapper in camel/toolkits/bolyra_auth_toolkit.py. The wrapper approach is zero-core-change and may be preferred by maintainers as a contrib toolkit rather than a core parameter.",
+      "priority": 2,
+      "builder_notes": "Entry point: camel/agents/chat_agent.py _step() method, near tool call dispatch. Also check camel/toolkits/base.py for the toolkit interface used by all toolkits. CAMEL uses pyright + ruff; match the existing code style. Tests live in tests/agents/; add a test_bolyra_auth_toolkit.py. The repo has an CONTRIBUTING.md with a PR checklist."
+    },
+    {
+      "repo": "Portkey-AI/gateway",
+      "approx_stars": 12900,
+      "language": "TypeScript",
+      "why": "Portkey Gateway is a production AI gateway routing to 1,600+ LLMs with integrated guardrails (12,900★, active enterprise user base). It already has a guardrail plugin system (guardrails/) — making it architecturally the cleanest extension point of any gateway target identified. Current guardrails are content-based filters on LLM input/output; the gateway identifies callers by API key but has no per-agent identity binding at the request level. A Bolyra EVC plugin in the guardrails system would be the first identity-bound authorization gate in an AI gateway — a high-visibility proof point at the infrastructure layer where enterprise buyers make procurement decisions.",
+      "gap": "Portkey's guardrail plugins (src/providers/guardrails/) operate on request/response content. The gateway has no concept of 'which agent authorized this call' — callers are identified by Portkey API key only. A BolyraEVCGuardrail plugin that reads a bolyra-mandate header from the incoming request and verifies it against the Bolyra EVC before proxying the LLM call would close the gap. The plugin interface (GuardrailPlugin) is the designed extension point; the fix is a new file implementing that interface.",
+      "anchor_issue": "Search Portkey-AI/gateway issues for 'agent identity', 'authorization', 'mandate', or 'per-agent'. Portkey's enterprise customers likely already ask for per-agent spend and scope gates; the feature request may already be filed.",
+      "pr_type": "targeted feature — new guardrail plugin at src/providers/guardrails/bolyra-evc.ts implementing GuardrailPlugin. Reads a bolyra-mandate header, verifies via Bolyra EVC (subprocess or HTTP), and returns allow/deny. Ships as a contrib plugin — zero change to gateway core behavior. Plugin docs in docs/integrations/guardrails/bolyra.md.",
+      "priority": 3,
+      "builder_notes": "Entry point: src/providers/guardrails/ — study how an existing guardrail plugin (e.g., content-filter) implements GuardrailPlugin. The gateway uses bun; run bun test before submitting. Portkey uses eslint + prettier; match the existing style. Check if there is a plugin registry file that needs updating. Portkey is enterprise-focused — a one-line 'why this matters for regulated industries' in the PR description pays dividends."
+    },
+    {
+      "repo": "ag2ai/ag2",
+      "approx_stars": 4900,
+      "language": "Python",
+      "why": "AG2 (formerly AutoGen, 4,900★) is the Open-Source AgentOS — the framework many enterprise teams use for multi-agent conversations, task decomposition, and function-calling agents. It has strong MCP integration and an active contributor community. ConversableAgent.execute_function() is the tool dispatch path: it receives the function name and arguments from the LLM, resolves the registered callable, and executes it with no authorization gate. AG2's explicit enterprise positioning (teams, governance, audit) makes an identity-bound authorization hook both credible and mergeworthy to its maintainers.",
+      "gap": "autogen/agentchat/conversable_agent.py execute_function() dispatches registered tool callables immediately after LLM function-call output is parsed. There is no hook between resolution and execution. An optional tool_authorization_callback: Optional[Callable[[str, Dict], bool]] parameter on ConversableAgent.__init__() — evaluated in execute_function() before the callable is invoked — closes the gap. An example in notebook/agentchat_bolyra_auth.ipynb demonstrates EVC integration without making Bolyra a core dependency.",
+      "anchor_issue": "Search ag2ai/ag2 issues for 'authorization', 'tool guard', 'access control', or 'mandate'. AG2 has a very active Discord; maintainers are responsive. MCP integration was a major recent addition — authorization at MCP tool dispatch is a natural follow-on.",
+      "pr_type": "targeted feature — optional tool_authorization_callback on ConversableAgent with a guard in execute_function(). Non-breaking: None default preserves today's behavior. Example notebook demonstrates Bolyra EVC integration. Keep the diff to conversable_agent.py + one notebook.",
+      "priority": 4,
+      "builder_notes": "Entry point: autogen/agentchat/conversable_agent.py execute_function() method. Also check if AssistantAgent or UserProxyAgent override it. AG2 uses black + isort + flake8; run pre-commit hooks before submitting. Tests in test/agentchat/; add test_tool_authorization.py. The repo has an 'enhancement' issue label — open one before the PR to get maintainer buy-in."
+    },
+    {
+      "repo": "maximhq/bifrost",
+      "approx_stars": 7700,
+      "language": "Go",
+      "why": "Bifrost is the fastest-growing AI gateway in the space (7,700★, created March 2025, already claiming 50x faster than LiteLLM). It routes 1,000+ models with guardrails, load balancing, and MCP gateway capabilities — enterprise positioning, Go implementation, sub-100µs overhead. As the newest entrant in the AI gateway category, its plugin/guardrail architecture is actively being shaped — a Bolyra integration PR now, while the contributor norms are being set, has a higher merge probability than the same PR on a mature codebase. The Go implementation is also a strategic first for Bolyra: all other gateway targets so far (Portkey) are TypeScript.",
+      "gap": "Bifrost's guardrail system handles content-based safety checks but has no per-agent identity gate at the request level. Callers are identified by key, not by delegated agent identity. A BolyraEVCPlugin implementing Bifrost's Plugin interface — verifying a bolyra-mandate header before proxying the LLM call — closes the gap. Go's interface-based plugin model is clean; the implementation is a single file.",
+      "anchor_issue": "Search maximhq/bifrost issues for 'authorization', 'agent identity', 'per-agent', or 'mandate'. The repo is young (17 months old) with high growth — issues are likely sparse but maintainers are highly responsive.",
+      "pr_type": "targeted feature — new guardrail/plugin at plugins/bolyra/bolyra.go implementing Bifrost's Plugin interface. Reads a bolyra-mandate header, verifies via Bolyra EVC (HTTP call), returns allow/deny. Plugin registration in plugins/registry.go. Example config in examples/bolyra-evc.yaml. Zero change to gateway core.",
+      "priority": 5,
+      "builder_notes": "Study how an existing Bifrost plugin/guardrail is implemented to learn the interface. The repo uses Go modules; run go test ./... before submitting. Follow existing code patterns for error handling and logging. Bifrost is on a fast release cadence — rebase against main immediately before opening the PR. A brief README.md in plugins/bolyra/ explaining the use case will help maintainers evaluate quickly."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "cumulative_targets_identified": 45,
+    "path_b_targets_total": 25,
+    "weeks_since_last_outreach_action": "9+",
+    "critical_observation": "9 consecutive weeks of target identification with 0 Path B PRs opened. 25 high-quality Path B targets now identified with builder notes, anchor issues, and precise injection points for every major agent framework and gateway in the ecosystem. The scan output is comprehensive and actionable; the bottleneck is exclusively builder-session activation.",
+    "recommended_next_action": "Pick exactly ONE target from the full 45-target backlog and open an interactive builder session today. Top three by probability of quick merge: (1) vercel/ai — TypeScript, clean diff, Vercel engineers actively merge quality contribs; (2) langchain-ai/langchain (week 8) — 2-file diff, widest reach; (3) camel-ai/camel — modular toolkits design makes the BolyraAuthToolkit a contrib-path PR, lower bar than a core change. Run /review-pr before pushing to any of them.",
+    "escalation_note": "The scan loop has fully served its intended function of building a target pipeline. Continuing to scan without any execution will not produce signal. If no Path B PR is opened by the next scan (week 10), consider suspending the loop rather than accumulating more unused targets."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 45,
+    "path": "B",
+    "path_b_targets_identified": 25,
+    "weeks_since_last_outreach_action": "9+"
+  }
+}
