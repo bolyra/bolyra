@@ -84,7 +84,7 @@ Powers of Tau: `pot16.ptau` (2^16 constraints) is the universal SRS for the proj
 | Differentiation | `differentiation-autoresearch/` | Competitive moat exploration |
 | Patent | `patent-autoresearch/` | Patentable invention disclosures |
 | Protocol | `protocol-autoresearch/` | Wire format + cryptographic primitive tuning |
-| Standards | `standards-autoresearch/` | IETF / EVC standardization + draft tracking |
+| Standards | `standards-autoresearch/` | IETF / EVC standardization + draft tracking — ACTIVE loop (Fable 5.1 generates, Codex judges; board-only v1); see `standards-autoresearch/README.md` |
 | Theseus | `theseus-autoresearch/` | Theseus Network integration exploration |
 
 Do not mix winners between loops.
