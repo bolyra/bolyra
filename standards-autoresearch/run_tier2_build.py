@@ -23,6 +23,7 @@ import re
 
 from _shared import call_claude_cli, extract_json_object
 from _codex import call_codex_json, GENERATOR_MODEL
+from _render import render
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -73,7 +74,7 @@ def _build_spec_finding(candidate: dict, exp_dir: Path, *, timeout: int) -> dict
     template = (HERE / "templates" / "tier2_spec_diff.md").read_text()
     target_rel = "spec/external-verifier-contract-v1.md"
     spec_files = f"### {target_rel}\n\n{(REPO / target_rel).read_text()[:30000]}"
-    prompt = template.format(program=(HERE / "program.md").read_text(),
+    prompt = render(template, program=(HERE / "program.md").read_text(),
                              candidate=json.dumps(candidate, indent=2),
                              spec_commit=_spec_commit(), spec_files=spec_files)
     artifact = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)
@@ -85,7 +86,7 @@ def _build_spec_finding(candidate: dict, exp_dir: Path, *, timeout: int) -> dict
 def _build_vector_gap(candidate: dict, exp_dir: Path, *, timeout: int) -> dict:
     template = (HERE / "templates" / "tier2_vector.md").read_text()
     schema, fixture_example = _vector_context()
-    prompt = template.format(program=(HERE / "program.md").read_text(),
+    prompt = render(template, program=(HERE / "program.md").read_text(),
                              candidate=json.dumps(candidate, indent=2),
                              vector_set="0.6.0", vector_schema=schema,
                              fixture_example=fixture_example)
@@ -99,7 +100,7 @@ def _build_evidence(candidate: dict, exp_dir: Path, *, timeout: int) -> dict:
     template = (HERE / "templates" / "tier2_evidence.md").read_text()
     ledger = HERE / "output" / "evidence_ledger.jsonl"
     tail = "\n".join(ledger.read_text().splitlines()[-5:]) if ledger.exists() else "(empty)"
-    prompt = template.format(program=(HERE / "program.md").read_text(),
+    prompt = render(template, program=(HERE / "program.md").read_text(),
                              candidate=json.dumps(candidate, indent=2),
                              ledger_tail=tail)
     artifact = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from _codex import call_codex_json
+from _render import render
 from run_tier2_build import SAFE_ID
 
 HERE = Path(__file__).resolve().parent
@@ -84,7 +85,8 @@ def review_one(entry: dict, iter_dir: Path, *, timeout: int) -> dict[str, Any]:
                 "action": "rejected"}
 
     template = (HERE / "templates" / "tier3_review.md").read_text()
-    prompt = template.format(
+    prompt = render(
+        template,
         program=(HERE / "program.md").read_text(),
         rubric=(HERE / "rubrics" / "tier3_adversarial_rubric.md").read_text(),
         artifact_type=ctype,

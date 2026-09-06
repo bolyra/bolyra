@@ -80,5 +80,37 @@ class DatatrackerClassificationTests(unittest.TestCase):
         self.assertEqual(out["state"], "terminal")
         self.assertEqual(out["detail"], "replaced_or_published")
 
+
+class RenderTests(unittest.TestCase):
+    def test_json_braces_survive(self):
+        from _render import render
+        tpl = 'Persona: {persona_prompt}\nContract: [{"id": "x", "dims": {"a": 1}}]'
+        out = render(tpl, persona_prompt="scout")
+        self.assertIn("Persona: scout", out)
+        self.assertIn('[{"id": "x", "dims": {"a": 1}}]', out)
+
+    def test_all_templates_render_without_error(self):
+        from pathlib import Path as _P
+        from _render import render
+        keys = dict(program="P", persona_prompt="X", spec_commit="abc", spec_excerpt="S",
+                    vector_set="0.6.0", vector_index="V", reconcile_ts="T",
+                    boards_summary="B", signals="[]", reject_findings="[]",
+                    max_candidates=4, rubric="R", held_entities="[]", candidates="[]",
+                    spec_files="F", candidate="{}", vector_schema="{}",
+                    fixture_example="//", ledger_tail="", artifact="A",
+                    artifact_type="t", candidate_id="c", checks="{}")
+        tdir = _P(__file__).resolve().parent / "templates"
+        templates = list(tdir.glob("*.md"))
+        self.assertEqual(len(templates), 6)
+        for tpl in templates:
+            out = render(tpl.read_text(), **keys)
+            for k in keys:
+                self.assertNotIn("{" + k + "}", out, tpl.name)
+
+    def test_single_pass_no_resubstitution(self):
+        from _render import render
+        out = render("{a} {b}", a="{b}", b="X")
+        self.assertEqual(out, "{b} X")
+
 if __name__ == "__main__":
     unittest.main()
