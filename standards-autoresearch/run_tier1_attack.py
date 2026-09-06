@@ -17,6 +17,7 @@ from typing import Any
 
 from _shared import call_claude_cli, extract_json_array
 from _codex import call_codex_json, GENERATOR_MODEL
+from _render import render
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -99,7 +100,7 @@ def run_personas(iter_dir: Path, *, timeout: int, signals: str,
     all_candidates: list[dict[str, Any]] = []
     for group in ("attack", "scout"):
         for persona in personas[group]:
-            prompt = template.format(persona_prompt=persona["prompt"], **common)
+            prompt = render(template, persona_prompt=persona["prompt"], **common)
             try:
                 raw = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)
                 cands = extract_json_array(raw)
@@ -122,7 +123,8 @@ def judge(candidates: list[dict], iter_dir: Path, *, timeout: int) -> list[dict]
         (iter_dir / "tier1_winners.json").write_text("[]\n")
         return []
     template = (HERE / "templates" / "tier1_judge.md").read_text()
-    prompt = template.format(
+    prompt = render(
+        template,
         program=(HERE / "program.md").read_text(),
         rubric=(HERE / "rubrics" / "tier1_rubric.md").read_text(),
         held_entities=json.dumps(held_entities()),
