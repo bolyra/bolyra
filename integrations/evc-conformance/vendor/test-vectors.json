@@ -1,7 +1,7 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "note": "host_behavior subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
-  "source_sha256": "bec817efc4fc3a54f426014e41b756251b48f2784234c50c2e14f48182b9fa2b",
+  "source_sha256": "1db4731cf2452ccdb8aa1fd1e26321683cfc536040d9c84e1f7a7a16827911df",
   "vectors": [
     {
       "id": "host-allow-well-behaved",
@@ -419,6 +419,20 @@
       "expected": {
         "result": "PASS",
         "host_decision": "allow"
+      }
+    },
+    {
+      "id": "host-deny-signal-death-after-allow",
+      "description": "Host conformance (§7.2, §16.3): the verifier writes a complete, schema-valid, newline-terminated `allow`, flushes it to fd 1, and is then terminated by an unsolicited fatal signal (SIGABRT raised from its own teardown, the native-library crash path §5.1 anticipates) before ever calling exit. §7.2 requires the host to treat death by signal as deny 'regardless of what (if anything) reached stdout', and to classify it as `signal_death`, distinct from `nonzero_exit`. Catches the stdout-first fail-open host: it parses the perfect verdict, then guards the exit status with `code > 0` (or equivalent), which a signal death bypasses because Node's close event reports `code === null` and Python's returncode is negative. Signal sibling of `host-deny-nonzero-exit-after-allow`; unlike `host-deny-killed-by-signal`, the verdict here is fully delivered before death.",
+      "type": "host_behavior",
+      "inputs": {
+        "fixture": "signal-death-after-allow.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "signal_death"
       }
     }
   ]
