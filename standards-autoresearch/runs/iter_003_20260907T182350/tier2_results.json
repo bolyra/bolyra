@@ -1,0 +1,258 @@
+[
+  {
+    "candidate": {
+      "id": "security-researcher-signal-death-after-complete-allow",
+      "type": "vector_gap",
+      "title": "No vector for a verifier that writes a complete, schema-valid `allow` and is then killed by an unsolicited signal",
+      "claim": "\u00a77.2 lists 'death by signal / crash' as an unconditional deny and \u00a77.2 precedence text requires `signal_death` to be classified distinctly from `nonzero_exit`, but the only signal vector in set 0.6.0 (`host-deny-killed-by-signal`) kills the verifier BEFORE any output. The exit-code sibling (`host-deny-nonzero-exit-after-allow`) exists, the signal sibling does not. That is exactly the ordering a lazy host gets wrong: it parses stdout first, sees a perfect `{\"verdict\":\"allow\"}\\n`, then checks the exit status with a comparison that treats a signal death as success. In Node the `close` event delivers `code === null` when the child died by signal, so `if (code > 0) deny()` is skipped; in Python `returncode` is negative (`-11` for SIGSEGV), so the same `> 0` guard also passes. Both are fail-open on a verdict the spec says MUST be denied. The attack is a verifier whose native proof library segfaults or is OOM-killed in teardown after the verdict flush (\u00a75.1 explicitly anticipates native libraries misbehaving on fd 1; nothing says they finish exiting cleanly), or a presenter who can influence verifier teardown timing. Observable a vector can assert: verifier writes `{\"verdict\":\"allow\"}\\n`, flushes, then raises SIGSEGV on itself; host MUST deny and, if it reports a class, MUST report `signal_death`, not `allow` and not `nonzero_exit`.",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a77.2: 'The host MUST treat all of the following as deny, regardless of what (if anything) reached stdout: ... death by signal / crash;'",
+        "spec/external-verifier-contract-v1.md \u00a77.2: 'death by an unsolicited signal and a non-zero exit are distinct conditions (`signal_death` vs `nonzero_exit`, \u00a716.3) \u2014 a host MUST NOT collapse them into one classification.'",
+        "Conformance vector index (set 0.6.0): 'host-deny-killed-by-signal: ... the verifier terminates via an unsolicited fatal signal before produ[cing output]' and 'host-deny-nonzero-exit-after-allow: the verifier prints a syntactically valid `allow` and then ex[its non-zero]' \u2014 no vector combines a complete allow with a subsequent signal death.",
+        "Node.js child_process docs, 'close' event: 'code <number> The exit code if the child exited on its own... null if the process was killed by a signal' \u2014 https://nodejs.org/api/child_process.html#event-close",
+        "Python subprocess docs: 'A negative value -N indicates that the child was terminated by signal N (POSIX only)' \u2014 https://docs.python.org/3/library/subprocess.html#subprocess.Popen.returncode",
+        "Reproduce the fail-open host pattern in an isolated scratch dir: `node -e \"const {spawn}=require('child_process');const c=spawn('sh',['-c','printf \\\\'{\\\"verdict\\\":\\\"allow\\\"}\\\\n\\\\'; kill -SEGV $$']);let o='';c.stdout.on('data',d=>o+=d);c.on('close',(code,sig)=>{console.log('code',code,'signal',sig,'naive-verdict',(code>0)?'deny':JSON.parse(o).verdict)})\"` \u2014 prints `code null signal SIGSEGV naive-verdict allow`."
+      ],
+      "proposed_artifact": "A new host_behavior conformance vector `host-deny-signal-death-after-allow` (verifier stub emits a complete newline-terminated `allow`, flushes, then self-delivers SIGSEGV; expected decision deny, expected failure class `signal_death`) staged as a fixture diff pinned to a4f546f, plus the matching one-line addition to the \u00a716.3 offered-case list.",
+      "entity": null,
+      "persona": "security-researcher",
+      "score": {
+        "id": "security-researcher-signal-death-after-complete-allow",
+        "dims": {
+          "severity": 23,
+          "evidence": 23,
+          "fixability": 25,
+          "standard_impact": 20
+        },
+        "total": 91,
+        "verdict": "PROMOTE",
+        "reason": "Pinned \u00a77.2 unconditionally rejects signal death, while the existing signal fixture emits no verdict, confirming a bounded additive vector that catches stdout-first fail-open handling."
+      }
+    },
+    "id": "security-researcher-signal-death-after-complete-allow",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/security-researcher-signal-death-after-complete-allow",
+    "checks": {
+      "ok": true,
+      "stage": "run",
+      "exit": 0,
+      "stdout_tail": "  host-deny-allow-extra-property: PASS\n  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n\n29 passed, 0 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "acceptance": {
+      "verdict": "APPROVE",
+      "reason": "The additive fixture covers complete allow output followed by fatal signal death, asserts deny with signal_death classification, and passes the supplied conformance checks without an evident program-rule violation."
+    },
+    "action": "advance"
+  },
+  {
+    "candidate": {
+      "id": "ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence",
+      "type": "spec_finding",
+      "title": "Architecture pseudocode is not marked informative and contradicts the \u00a77.2 failure-classification precedence and the closed verdict schema",
+      "claim": "Refinement of the iteration-1 candidate that was dropped on artifact shape, not merit. The draft's Section 3 pseudocode is introduced only as 'Language-neutral pseudocode for the host side' with no RFC-style '(non-normative)' marker, so a reader may treat it as the implementation of the MUSTs. It diverges from the normative text in three checkable ways: (1) it tests `status != 0` before `timed_out(child)`, whereas the contract's \u00a77.2 precedence for reported classification is output-bound kill, then timeout, then signal death, then non-zero exit, then parse/schema \u2014 and \u00a77.2 says a host MUST NOT collapse signal death and non-zero exit, yet the pseudocode has no signal-death branch at all; (2) `for entry in (verdict.consume_nonces or [])` silently accepts an empty `consume_nonces` array that the closed \u00a73.4 schema (`minItems: 1`) requires the host to reject (vector host-deny-empty-consume-nonces); (3) no schema-validation step appears between parse and the switch, so an unrecognized `kind`, an extra property, or an out-of-registry `code` would be relayed \u2014 the exact relay behavior \u00a7denial-codes now forbids. The fix is textual: label the block '(informative)', add a `validate_schema(verdict) or reject(\"schema_invalid\")` step, add a `signaled(child)` branch, and reorder branches to match \u00a77.2 or add a sentence that ordering in the sketch is illustrative and \u00a77.2 governs.",
+      "evidence": [
+        "draft-kondoju-evc-01 \u00a7Architecture: \"Language-neutral pseudocode for the host side:\" followed by `if status != 0: reject(\"non-zero exit\")` then `if timed_out(child): reject(\"timeout\")` then `verdict = parse_single_json_object(out)` then `for entry in (verdict.consume_nonces or []):` \u2014 no signal-death branch, no schema check.",
+        "spec/external-verifier-contract-v1.md \u00a77.2: \"classify the cause it acted on in this precedence: its own kills first (output bound, then timeout), then an unsolicited signal death, then a non-zero exit, and only then the stdout parse and schema checks ... a host **MUST NOT** collapse them into one classification.\"",
+        "spec/external-verifier-contract-v1.md \u00a73.4 allow schema: `\"consume_nonces\": {\"type\":\"array\",\"minItems\":1, ...}` with `\"additionalProperties\": false`",
+        "Conformance vector index (set 0.6.0): host-deny-empty-consume-nonces, host-deny-killed-by-signal, host-deny-bad-kind, host-deny-unknown-denial-code, host-deny-allow-extra-property \u2014 each requires a deny the pseudocode path does not produce.",
+        "Prior iteration record: experiment ietf-reviewer-pseudocode-contradicts-failure-precedence dropped at objective 'shape' stage (missing Base-Commit/Target-File/Finding headers, no diff block), not on substance."
+      ],
+      "proposed_artifact": "A correctly shaped staged diff (Base-Commit a4f546f3279706a2b28a0c15569c0040425e84c7, Target-File spec/draft-kondoju-evc-01.md) that labels the Section 3 pseudocode informative, inserts a schema-validation step and a signal-death branch, and reorders the failure branches to match the \u00a77.2 precedence, with a cross-reference sentence stating \u00a77.2 and the schemas govern on any divergence.",
+      "entity": {
+        "name": "draft-kondoju-evc",
+        "repo": "https://datatracker.ietf.org/doc/draft-kondoju-evc/",
+        "tracked_id": null
+      },
+      "persona": "ietf-reviewer",
+      "score": {
+        "id": "ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence",
+        "dims": {
+          "severity": 20,
+          "evidence": 24,
+          "fixability": 25,
+          "standard_impact": 20
+        },
+        "total": 89,
+        "verdict": "PROMOTE",
+        "reason": "The pinned draft pseudocode omits schema validation and signal/output-bound handling and checks nonzero exit before timeout, supporting a bounded rewrite aligned with the normative obligations."
+      }
+    },
+    "id": "ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence",
+    "type": "spec_finding",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence",
+    "checks": {
+      "ok": false,
+      "stage": "shape",
+      "errors": [
+        "missing Base-Commit header",
+        "missing Target-File header",
+        "missing Finding header",
+        "no ```diff block"
+      ]
+    },
+    "action": "dropped_objective_check"
+  },
+  {
+    "candidate": {
+      "id": "ecosystem-scout-microsoft-agt-mcp-control-plane",
+      "type": "threat_update",
+      "title": "Microsoft Agent Governance Toolkit (AGT) ships a pre-execution decision layer for MCP tool calls that competes with the EVC boundary at the enforcement point",
+      "claim": "Microsoft's open-source Agent Governance Toolkit evaluates an MCP tool action before execution, attaches identity and policy context, records the decision, and can route to human approval. That is the same enforcement point EVC standardizes, backed by a first-party MCP-host vendor with distribution, and its recorded-decision model overlaps @bolyra/receipts. Momentum is high (announced 2026-04-22 on the Microsoft developer blog with red-team numbers). Falsification: if the AGT repo exposes a pluggable pre-execution 'evaluator' or policy-engine slot that accepts an external command or HTTP verifier, the counter is an EVC adapter (AGT as host, spawning a kind=external verifier) rather than a head-on competitor; if the evaluator is closed to Microsoft-internal policy only, the threat's adoption_risk should score >= 18. The reconcile step must confirm the GitHub repo via gh api before this card leaves stale.",
+      "evidence": [
+        "https://developer.microsoft.com/blog/securing-mcp-a-control-plane-for-agent-tool-execution/ \u2014 'AGT evaluates an action before execution, adds identity and policy context, records the decision, and can route risky work for approval'",
+        "Same blog: 'Prompt-only safety instructions showed a 26.67% policy violation rate in red-team evaluation' \u2014 Microsoft is arguing for deterministic pre-execution gating, the exact thesis of EVC \u00a71 and draft-kondoju-evc-01 \u00a71.1",
+        "Reconcile command: gh api repos/microsoft/agent-governance-toolkit (pushed_at, archived) \u2014 if 404, search the org for the AGT repo named in the blog and update entity.repo",
+        "Overlap surface in our spec: external-verifier-contract-v1.md \u00a73.5 'external | A third-party verifier implementing this contract with its own proof system' \u2014 AGT could be either the host (spawns an EVC verifier) or the verifier (its policy engine wrapped behind stdin/stdout)"
+      ],
+      "proposed_artifact": "Tier 2 builds a threat card with a counter_available assessment: a one-page gap matrix mapping AGT's pre-execution decision (allow / deny / route-for-approval) onto the closed EVC verdict schema, noting that 'route-for-approval' is a third outcome EVC cannot express (same class as the AuthZEN 'prerequisite pending' card already on the board, link via related_cards), plus a staged interop-evidence plan describing how an AGT host would satisfy \u00a716 host conformance.",
+      "entity": {
+        "name": "Microsoft Agent Governance Toolkit (AGT)",
+        "repo": "microsoft/agent-governance-toolkit",
+        "tracked_id": null
+      },
+      "persona": "ecosystem-scout",
+      "score": {
+        "id": "ecosystem-scout-microsoft-agt-mcp-control-plane",
+        "dims": {
+          "momentum": 22,
+          "overlap": 22,
+          "adoption_risk": 19,
+          "counter_available": 15
+        },
+        "total": 78,
+        "verdict": "PROMOTE",
+        "reason": "Microsoft's [AGT documentation](https://developer.microsoft.com/blog/securing-mcp-a-control-plane-for-agent-tool-execution/) confirms substantial enforcement overlap and multiple policy backends, but EVC interoperability remains untested and the card must remain stale until required GitHub API reconciliation succeeds."
+      }
+    },
+    "id": "ecosystem-scout-microsoft-agt-mcp-control-plane",
+    "type": "threat_update",
+    "action": "board_update"
+  },
+  {
+    "candidate": {
+      "id": "evidence-curator-published-suite-vs-vendored-fixtures-hash-record",
+      "type": "evidence_opportunity",
+      "title": "Registry-closure freshness record: sha256 of the vendored 0.6.0 fixture set at the pinned commit, so a third party can prove the published @bolyra/evc-conformance@0.2.0 tarball carries byte-identical vectors",
+      "claim": "REGISTRY CLOSURE is scored on 'published suite freshness, sync:check green, vector-set/spec version alignment', yet the evidence ledger holds no registry_event that a third party can verify without trusting CI. A hash manifest of spec/fixtures/host-conformance/ plus a local sync:check run at the pinned commit gives an outside reviewer a one-command way to confirm that what npm serves as vector set 0.6.0 is exactly what the spec tree at a4f546f defines \u2014 and it would immediately expose the failure mode CLAUDE.md warns about, where a hand-maintained pin goes stale while the gate still passes green.",
+      "evidence": [
+        "CLAUDE.md: '@bolyra/evc-conformance ... Vendored snapshot of spec/ \u2014 edit in spec/, then node scripts/sync.js; CI enforces sync:check'",
+        "program.md \u00a73: 'REGISTRY CLOSURE | 15 | Published suite freshness, sync:check green, vector-set/spec version alignment, -02 material completeness | objective'",
+        "external-verifier-contract-v1.md header: 'Document revision: 2026-08-26 (registry closure and fail-closed classification precedence made explicit \u2014 prose only, wire contract unchanged)'; the vector index states 'vector set 0.6.0, 28 host_behavior vectors' \u2014 the record should pin the (spec revision, vector set, package version) triple: (2026-08-26, 0.6.0, 0.2.0)",
+        "Reproduce (local, pinned a4f546f3279706a2b28a0c15569c0040425e84c7): cd integrations/evc-conformance && npm run sync:check; expected exit 0. Then: find spec/fixtures/host-conformance -type f | sort | xargs shasum -a 256 > /tmp/vectors-0.6.0.sha256; expected: 28 vector file rows plus any index/manifest rows",
+        "Third-party comparison (their execution, not the loop's): npm pack @bolyra/evc-conformance@0.2.0 in a scratch dir, extract, run the same shasum over the vendored fixtures directory, diff against /tmp/vectors-0.6.0.sha256; expected: no differences"
+      ],
+      "proposed_artifact": "A registry_event ledger entry carrying the sha256 manifest of the 28-vector fixture set at the pinned commit, the sync:check result, and the (spec revision, vector set, npm version) alignment triple, with the third-party comparison command spelled out.",
+      "entity": null,
+      "persona": "evidence-curator",
+      "score": {
+        "id": "evidence-curator-published-suite-vs-vendored-fixtures-hash-record",
+        "dims": {
+          "verifiability": 17,
+          "demand": 18,
+          "cost": 23,
+          "standard_impact": 19
+        },
+        "total": 77,
+        "verdict": "PROMOTE",
+        "reason": "Read-only sync:check confirms 31 vendored files plus MANIFEST, supporting a registry record that includes vendor/test-vectors.json and normalized tarball comparisons instead of treating fixture scripts as vector definitions."
+      }
+    },
+    "id": "evidence-curator-published-suite-vs-vendored-fixtures-hash-record",
+    "type": "evidence_opportunity",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/evidence-curator-published-suite-vs-vendored-fixtures-hash-record",
+    "checks": {
+      "ok": true,
+      "stage": "shape",
+      "errors": []
+    },
+    "acceptance": {
+      "verdict": "DROP",
+      "reason": "Rule 2(k) is violated: pinned-source inspection contradicts the claimed expected outputs\u2014A3 compares incompatible paths and its fallback can pass with zero shared files, while A4 searches for version metadata absent from the fixture directory."
+    },
+    "action": "dropped_acceptance"
+  },
+  {
+    "candidate": {
+      "id": "hostile-implementer-stdin-write-failure-unlisted-fail-closed-condition",
+      "type": "vector_gap",
+      "title": "Request-write failure (EPIPE) when the verifier exits before consuming stdin is not a listed \u00a77.2 condition; hosts crash, deny, or relay",
+      "claim": "\u00a72 obligates the host to write the whole request then close stdin, and \u00a76 obligates the verifier to stop reading at its bound and emit `malformed_input` \u2014 which means a conforming verifier will routinely exit while the host is still writing a large request, closing the pipe under the host's write. \u00a77.2's enumerated fail-closed conditions cover exit status, timeout, signal death, and stdout shape, but not failure of the host's own request delivery. Three reasonable hosts diverge: (1) a Node host with no `error` listener on `child.stdin` gets an unhandled EPIPE and crashes the host process \u2014 no decision at all, a trivial denial-of-service against the host by any verifier that exits early; (2) a host that aborts on the write error denies before ever reading a schema-valid verdict; (3) a host that swallows the error reads stdout and relays whatever is there, including an `allow` from a verifier that demonstrably never read the request. The spec's own bound guarantees case (1)/(2)/(3) is reachable with a legitimate oversize request, and the lazy-verifier variant (emit allow, never read stdin) is the interesting hostile case: EPIPE is the one signal the host has that the request was not consumed, and the spec neither requires nor forbids acting on it. No vector exercises a verifier that exits before draining stdin; every current fixture has the verifier read stdin first.",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a72: \"The host **MUST** write exactly one JSON object, UTF-8 encoded, to the verifier's stdin and then **MUST** close (EOF) stdin.\"",
+        "spec/external-verifier-contract-v1.md \u00a76: \"A request over the bound **MUST** yield `deny code=malformed_input`; the verifier **MUST NOT** buffer an unbounded request.\" \u2014 a conforming verifier therefore stops reading and exits mid-write",
+        "spec/external-verifier-contract-v1.md \u00a77.2 enumerates: non-zero exit; timeout; death by signal / crash; unparseable, empty, oversized, or multi-object stdout; unknown verdict / missing deny fields; schema failure \u2014 a failed request write is absent",
+        "spec/draft-kondoju-evc-01.md \u00a7architecture pseudocode: \"write(child.stdin, json(request)); close(child.stdin)\" with no failure branch, unlike every downstream step which has an explicit reject()",
+        "Conformance vector index (set 0.6.0): `host-deny-no-output-timeout` \u2014 \"the verifier reads stdin, writes nothing\u2026\"; `host-deny-partial-json-timeout`, `host-deny-oversize-stdout` \u2014 all fixtures consume stdin before misbehaving; none exits before stdin is drained",
+        "Runnable: `npx @bolyra/evc-conformance --host \"<cmd>\"` with a proposed fixture verifier `exec 0<&-; printf '{\"verdict\":\"deny\",\"code\":\"malformed_input\",\"message\":\"unread\"}'; exit 0` driven with a request whose bundle exceeds the OS pipe buffer (\u2265 256 KiB) so the host's write cannot complete before the close"
+      ],
+      "proposed_artifact": "Two new host_behavior conformance vectors \u2014 `host-relay-deny-verifier-exits-before-stdin-drained` (oversize request, verifier closes stdin unread and emits a schema-valid `malformed_input` deny at exit 0; the host MUST reach a deny and MUST NOT crash or hang) and `host-deny-allow-with-stdin-unread` (same early close but the verifier emits `allow`; pins the expected outcome) \u2014 plus a spec-hardening diff pinned to a4f546f adding request-write failure to the \u00a77.2 list and the draft pseudocode, and stating that a host MUST survive EPIPE on stdin and treat a write failure as fail-closed under its own classification.",
+      "entity": null,
+      "persona": "hostile-implementer",
+      "score": {
+        "id": "hostile-implementer-stdin-write-failure-unlisted-fail-closed-condition",
+        "dims": {
+          "severity": 20,
+          "evidence": 17,
+          "fixability": 20,
+          "standard_impact": 18
+        },
+        "total": 75,
+        "verdict": "PROMOTE",
+        "reason": "Section 7.2 omits request-delivery failures and the pinned reference host swallows stdin errors, supporting an early-close allow vector despite the incorrect claim that bounded reading necessarily requires early exit."
+      }
+    },
+    "id": "hostile-implementer-stdin-write-failure-unlisted-fail-closed-condition",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/hostile-implementer-stdin-write-failure-unlisted-fail-closed-condition",
+    "checks": {
+      "ok": false,
+      "stage": "shape",
+      "errors": [
+        "fixture must read stdin (host writes one request)"
+      ]
+    },
+    "action": "dropped_objective_check"
+  },
+  {
+    "candidate": {
+      "id": "competing-spec-author-request-side-host-muts-untested",
+      "type": "vector_gap",
+      "title": "All 28 conformance vectors test the host's handling of verifier stdout; none tests the host's own \u00a72 request obligations (single object, stdin EOF, required fields, positive integer now_unix), which AuthZEN-style PEP/PDP interop tests on both sides",
+      "claim": "The AuthZEN family (COAZ/AARP, already a threat card) publishes interop testing where the PEP's request is validated against the request schema, not just the PDP's response. EVC's host-conformance suite is asymmetric: every vector in set 0.6.0 is a verdict-side stimulus (malformed stdout, timeout, signal, nonce reserve). A host that never closes stdin, writes two request objects, omits `granted_capabilities`, or sends `now_unix` as a float or string can still pass 28/28, because the fixture verifiers never assert anything about the bytes they received. Since SPEC HARDNESS is scored on the fraction of normative MUSTs covered by a vector, the \u00a72 host MUSTs are an uncovered block. The gap is closable without a wire change: a request-validating fixture verifier reads stdin to EOF, parses exactly one object, checks the \u00a72.2 schema, and returns `allow` only if the host's request was conformant, otherwise `deny code=malformed_input`. The expected host outcome flips: a non-conforming host observes a deny and the runner records a FAIL on a vector whose expected decision is allow.",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a72: 'The host MUST write exactly one JSON object, UTF-8 encoded, to the verifier's stdin and then MUST close (EOF) stdin. The host MUST NOT write more than one object, trailing bytes, or a stream of objects.'",
+        "spec/external-verifier-contract-v1.md \u00a72.1: '`now_unix` (integer, REQUIRED, positive)' and '`granted_capabilities` (array of strings, REQUIRED) ... An empty array is permitted.'",
+        "Conformance vector index, set 0.6.0: 28 vectors, all named host-allow-* / host-deny-* / host-nonce-*, each described as a verifier stdout/exit/nonce stimulus; no vector description mentions the request the host wrote.",
+        "Runnable: `npx @bolyra/evc-conformance --host \"<cmd>\"` (vector set 0.6.0) \u2014 the HUT environment convention in \u00a716 already lets a fixture verifier be any executable, so a request-validating fixture needs no runner change.",
+        "Threat board card ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope: AuthZEN defines a request/decision envelope where both sides are schema-bound."
+      ],
+      "proposed_artifact": "Four new host_behavior vectors in the conformance fixture format (`host-allow-request-single-object-eof`, `host-allow-request-required-fields`, `host-allow-request-now-unix-integer`, `host-deny-request-eof-never-closed` where the fixture hangs until EOF so a non-closing host times out) with a shared request-validating fixture verifier, a coverage-map update marking \u00a72 MUSTs, and the sync.js regeneration note.",
+      "entity": null,
+      "persona": "competing-spec-author",
+      "score": {
+        "id": "competing-spec-author-request-side-host-muts-untested",
+        "dims": {
+          "severity": 17,
+          "evidence": 17,
+          "fixability": 23,
+          "standard_impact": 18
+        },
+        "total": 75,
+        "verdict": "PROMOTE",
+        "reason": "Fixtures do not validate forwarded request schemas, but positive controls already require stdin EOF, so Tier 2 should add schema-validating positive controls and discard the proposed expected-deny EOF case."
+      }
+    },
+    "id": "competing-spec-author-request-side-host-muts-untested",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/competing-spec-author-request-side-host-muts-untested",
+    "checks": {
+      "ok": false,
+      "stage": "run",
+      "exit": 1,
+      "stdout_tail": "  host-deny-allow-extra-property: PASS\n  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-allow-request-schema-valid: FAIL -- host decision mismatch: got 'deny', want 'allow'\n\n28 passed, 1 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "action": "dropped_objective_check"
+  }
+]

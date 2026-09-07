@@ -1,0 +1,31 @@
+[
+  {
+    "id": "security-researcher-signal-death-after-complete-allow",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/security-researcher-signal-death-after-complete-allow",
+    "checks": {
+      "ok": true,
+      "stage": "run",
+      "exit": 0,
+      "stdout_tail": "  host-deny-allow-extra-property: PASS\n  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n\n29 passed, 0 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "acceptance": {
+      "verdict": "APPROVE",
+      "reason": "The additive fixture covers complete allow output followed by fatal signal death, asserts deny with signal_death classification, and passes the supplied conformance checks without an evident program-rule violation."
+    },
+    "action": "staged",
+    "tier3": {
+      "verdict": "APPROVE",
+      "findings": [],
+      "notes": [
+        "Verified against spec pin a4f546f3279706a2b28a0c15569c0040425e84c7: \u00a7\u00a73.4, 5.1, 7.2 and 16.3 support the complete verdict and deny/signal_death expectation. Both JavaScript and Rust reference hosts distinguish signal death before parsing stdout.",
+        "The 28 source and vendored host vectors and their fixtures match unchanged; the new ID does not collide. checks.json reports 29 passes. The merged execution was not independently rerun in this read-only review; integration requires an additive minor version bump.",
+        "Editorial nits: \u00a75.1 discusses native stdout writes; \u00a77.2 supplies the crash obligation. The stderr comment should say it must not be parsed for a verdict. Qualify Python's negative returncode example as POSIX-specific, as documented in [Python subprocess](https://docs.python.org/3/library/subprocess.html#subprocess.Popen.returncode).",
+        "Optional strengthening: expected.action_taken=false would also detect a host that authorizes prematurely but subsequently reports deny; the runner checks that side channel only when explicitly requested."
+      ],
+      "summary": "The additive vector covers a real signal-after-allow gap with an expectation derived from the pinned contract and consistent with both reference hosts."
+    },
+    "staged_to": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/output/staged/2026-09-07/security-researcher-signal-death-after-complete-allow"
+  }
+]
