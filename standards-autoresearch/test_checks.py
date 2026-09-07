@@ -136,7 +136,7 @@ class ContainmentTests(unittest.TestCase):
 
     def test_safe_experiment_dir(self):
         import run_tier2_build as t2
-        for bad in ("../../spec", "/tmp/x", "UPPER", "a", "x" * 80):
+        for bad in ("../../spec", "/tmp/x", "UPPER", "a", "x" * 120):
             with self.assertRaises(ValueError):
                 t2.safe_experiment_dir(bad)
         self.assertTrue(str(t2.safe_experiment_dir("hostile-implementer-edge-1"))

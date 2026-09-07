@@ -26,7 +26,11 @@ Requirements:
 - Follow with an **Impact** section: effect on the 28 published vectors
   (must be none, or name the vector artifact that must accompany this diff),
   wire-compat statement, -02 relevance.
-- You are writing a STAGED artifact. The loop never applies it; the founder
-  does, via APPLY.md. Do not reference applying it yourself.
+- You are writing a STAGED artifact. Include ONLY the header block, the
+  ```diff block, Rationale, and Impact. Do NOT include apply, installation,
+  git, or workflow instructions of ANY kind (no `git apply`, no worktrees,
+  no command sequences) — the staging pipeline generates APPLY.md with the
+  founder's apply steps separately, and an artifact containing them is
+  dropped at acceptance.
 
 Return ONLY the artifact markdown (it will be saved verbatim as spec-diff.md).

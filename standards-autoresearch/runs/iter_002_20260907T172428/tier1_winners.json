@@ -1,0 +1,201 @@
+[
+  {
+    "id": "evidence-curator-empty-stdout-exit-zero-vector-gap",
+    "type": "vector_gap",
+    "title": "No host-conformance vector for empty stdout at exit 0 (verdict written to stderr only)",
+    "claim": "\u00a75.2 lists 'stdout that is empty' as a MUST-reject condition and \u00a75.3 says hosts MUST NOT parse stderr for the verdict, but every existing malformed-stdout vector in set 0.6.0 puts bytes on stdout or never exits. A host that lazily falls back to reading stderr when stdout is empty would pass all 28 vectors. This refines the iteration-1 'verdict-on-stderr' candidate, which was dropped only because the artifact invented a failure_class; the new vector MUST reuse the exact failure_class already expected by the host-deny-non-json-stdout fixture (same \u00a75.2 parse-failure branch, same precedence position below nonzero_exit) rather than a new name.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.2 (pinned a4f546f): 'The host MUST parse the verifier's stdout as exactly one JSON object with no trailing bytes, and MUST reject (treat as deny, \u00a77) any of: stdout that is empty, not valid JSON, ...'",
+      "spec/external-verifier-contract-v1.md \u00a75.3: 'Hosts MUST NOT parse stderr for the verdict.'",
+      "Vector index set 0.6.0: the only no-stdout cases are host-deny-no-output-timeout ('writes nothing, and never exits') and host-deny-partial-json-timeout; no vector has the verifier exit 0 with empty stdout.",
+      "iteration-1 rejection of evidence-curator-verdict-on-stderr-vector-gap: '{\"ok\": false, \"stage\": \"shape\", \"errors\": [\"unknown failure_class: unparseable_stdout\"]}' \u2014 the gap itself was not disputed, only the class token.",
+      "Runnable check: `node -e \"const v=require('./spec/fixtures/host-conformance/host-deny-non-json-stdout.json');console.log(JSON.stringify(v))\"` (path per spec/CONFORMANCE.md) to read the canonical failure_class token to reuse."
+    ],
+    "proposed_artifact": "A staged fixture `host-deny-empty-stdout-verdict-on-stderr` (verifier script writes a schema-valid `{\"verdict\":\"allow\"}` to fd 2 only, exits 0; expected decision deny, failure_class copied verbatim from host-deny-non-json-stdout) plus a 0.6.0\u21920.6.1 vector-set diff and an APPLY.md that includes the `node integrations/evc-conformance/scripts/sync.js` step.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-empty-stdout-exit-zero-vector-gap",
+      "dims": {
+        "severity": 22,
+        "evidence": 24,
+        "fixability": 19,
+        "standard_impact": 20
+      },
+      "total": 85,
+      "verdict": "PROMOTE",
+      "reason": "Pinned \u00a7\u00a75.2\u20135.3 and the vector inventory confirm the gap, but Tier 2 must correct its checker allowlist because unparseable_stdout is already a valid spec token incorrectly rejected by that checker."
+    }
+  },
+  {
+    "id": "security-researcher-retain-until-unbounded-replay-window",
+    "type": "spec_finding",
+    "title": "`retain_until` has no lower bound: a nonce entry with `retain_until` in the past is schema-valid and lets a compliant host evict the reservation immediately, reopening the replay window",
+    "claim": "\u00a73.2 says the host MUST retain a consumed nonce 'until' `retain_until`, and the schema types it as a bare `integer` with no minimum, unlike `now_unix` which carries `exclusiveMinimum: 0`. A verdict whose entry has `retain_until: 0`, a negative value, or any value <= the host's `now_unix` therefore passes schema validation, and a host that faithfully implements 'retain until' may garbage-collect the reservation as soon as it is recorded. The same proof bundle can then be presented again and the reserve-before-act insert succeeds. This is reachable by a buggy or misconfigured verifier (clock skew, seconds/milliseconds confusion when computing `retain_until` from `expiry`) without any malicious host, and it is exactly the class of 'verifier said allow, host did the bookkeeping, replay still worked' failure the host-mode design exists to prevent. The spec is silent on whether a past `retain_until` is an error, a no-op, or a floor-clamped value, so two conforming hosts diverge on a security-relevant edge. No vector in set 0.6.0 feeds a host a nonce entry with a non-future `retain_until`; `host-deny-nonce-entry-wrong-type` only checks type, not range.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: '`retain_until` (integer, **REQUIRED**) \u2014 Unix seconds until which the host **MUST** retain the consumed nonce.' \u2014 obligation is bounded by the verifier-supplied value with no floor.",
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: `\"retain_until\": { \"type\": \"integer\" }` \u2014 contrast \u00a72.2 request schema `\"now_unix\": { \"type\": \"integer\", \"exclusiveMinimum\": 0 }`; the verdict side never imported the positivity constraint.",
+      "spec/external-verifier-contract-v1.md \u00a77.3 heading: 'Reserve-before-act (host nonce mode) ... the host **MUST** reserve **every** entry in the list **before** performing the privileged action' \u2014 reservation is specified, retention duration semantics on a stale value are not.",
+      "Conformance vector index (set 0.6.0): `host-deny-nonce-entry-wrong-type` ('an `allow` whose nonce entry has a s[tring where an integer is required]') is the only entry-value vector; there is no range vector for `retain_until`.",
+      "Observable a vector can assert: HUT in host nonce mode receives `allow` with `consume_nonces:[{issuer_key, nonce, retain_until: 0}]` (and a variant with `retain_until: now_unix - 1`) at exit 0 \u2192 under the proposed rule the HUT MUST deny with the spec's schema-invalid classification; under the alternative floor rule the HUT MUST still hold the reservation for the duration of the action so a second identical presentation within the same run is denied as replay."
+    ],
+    "proposed_artifact": "A staged spec diff pinned to a4f546f3 that adds `exclusiveMinimum: 0` to the `retain_until` schema entry, adds a \u00a77.3 sentence requiring a host to fail closed on `retain_until <= now_unix`, and a host_behavior vector `host-deny-nonce-retain-until-not-future` with expected failure_class copied from the fixture enum, plus APPLY.md with sync.js and golden regeneration commands.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-retain-until-unbounded-replay-window",
+      "dims": {
+        "severity": 20,
+        "evidence": 22,
+        "fixability": 23,
+        "standard_impact": 19
+      },
+      "total": 84,
+      "verdict": "PROMOTE",
+      "reason": "Pinned \u00a7\u00a73.2\u20133.4 impose no retention floor and existing vectors omit stale timestamps, supporting a bounded defensive clarification without establishing an exploit against the correct reference verifier."
+    }
+  },
+  {
+    "id": "ietf-reviewer-pseudocode-contradicts-failure-precedence",
+    "type": "spec_finding",
+    "title": "Section 3 host pseudocode orders and omits failure checks in a way that contradicts the normative failure-class precedence",
+    "claim": "The language-neutral pseudocode in the Architecture section is the first thing an implementer copies, yet it (1) checks `status != 0` before `timed_out(child)`, which inverts the normative classification precedence (host kills first: output bound then timeout; then signal death; then non-zero exit; then parse/schema), (2) has no branch at all for death by unsolicited signal or for the output bound, both of which the contract says a host MUST NOT collapse into `nonzero_exit`, and (3) reads `verdict.consume_nonces or []`, silently accepting an empty array that the closed schema rejects (`minItems: 1`, and vector host-deny-empty-consume-nonces requires a deny). The prose is normative and the pseudocode is illustrative, but the two disagree on observable host behaviour that the 0.6.0 suite tests, which is exactly the class of ambiguity an IESG reviewer returns. Separately, the sentence 'No other code path may write to the host-facing stdout' uses lowercase `may` inside a normative list; under RFC 8174 that sentence carries no requirement, so the strongest verifier obligation in the fd-isolation section is currently non-normative. Resolution: rewrite the pseudocode to apply the \u00a77.2 precedence (output bound, timeout, signal, non-zero exit, single-object parse, schema validation including `consume_nonces` non-empty and `kind` enum) and change `may write` to `MUST NOT write`.",
+    "evidence": [
+      "draft-kondoju-evc-01 Architecture pseudocode: 'if status != 0: reject(\"non-zero exit\") // Sec 6' precedes 'if timed_out(child): reject(\"timeout\") // Sec 6', and 'for entry in (verdict.consume_nonces or []):' tolerates an empty array.",
+      "spec/external-verifier-contract-v1.md \u00a77.2: 'a host that reports why it failed closed (\u00a716.3) SHOULD classify the cause it acted on in this precedence: its own kills first (output bound, then timeout), then an unsolicited signal death, then a non-zero exit, and only then the stdout parse and schema checks ... a host MUST NOT collapse them into one classification.'",
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: `\"consume_nonces\": { \"type\": \"array\", \"minItems\": 1, ... }`; conformance vector host-deny-empty-consume-nonces: 'an `allow` with an EMPTY `consume_nonces` array' must be denied.",
+      "draft-kondoju-evc-01 {{fd-isolation}} and spec \u00a75.1: 'No other code path may write to the host-facing stdout.' (lowercase `may`, non-normative under RFC 8174 despite the surrounding MUSTs).",
+      "Runnable (read-only): git -C ~/Projects/bolyra grep -n -e 'No other code path may write' -e 'consume_nonces or \\[\\]' -e 'reject(\"non-zero exit\")' a4f546f3279706a2b28a0c15569c0040425e84c7 -- spec/draft-kondoju-evc-01.md spec/external-verifier-contract-v1.md"
+    ],
+    "proposed_artifact": "A base-pinned staged diff (a4f546f) to draft-kondoju-evc-01 (and the mirrored \u00a75.1 sentence in external-verifier-contract-v1.md) replacing the Section 3 pseudocode with a version that applies the normative precedence and schema checks, and changing 'may write' to 'MUST NOT write', with APPLY.md noting that no vectors change and sync.js is not required.",
+    "entity": null,
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-pseudocode-contradicts-failure-precedence",
+      "dims": {
+        "severity": 18,
+        "evidence": 22,
+        "fixability": 25,
+        "standard_impact": 19
+      },
+      "total": 84,
+      "verdict": "PROMOTE",
+      "reason": "Pinned architecture pseudocode checks exit before timeout and omits explicit schema, signal, and output-bound checks, making a bounded rewrite worthwhile despite the overstated lowercase-keyword argument."
+    }
+  },
+  {
+    "id": "hostile-implementer-verdict-duplicate-member-names",
+    "type": "vector_gap",
+    "title": "Duplicate member names in the verdict object: JSON.parse hosts read `allow`, struct-deserializing hosts read an error",
+    "claim": "\u00a75.2 enumerates the stdout shapes a host MUST reject (empty, non-JSON, prefix/suffix, multiple concatenated values, bad `verdict`, deny missing fields) but is silent on a single object that repeats a member name. RFC 8259 \u00a74 says duplicate names make receiver behavior unpredictable, and real parsers diverge: last-wins (JS `JSON.parse`, Python `json`, Go `encoding/json`, `serde_json::Value`) versus hard error (serde derive structs report `duplicate field`; some strict Java/.NET parsers). So the stdout bytes `{\"verdict\":\"deny\",\"verdict\":\"allow\"}` are a schema-valid bare `allow` on a last-wins host and a fail-closed deny on a strict host; `{\"verdict\":\"allow\",\"verdict\":\"deny\"}` inverts it. A lazy host passes all 28 vectors either way, and the two reference hosts can legitimately disagree on the same verifier output. The spec pseudocode `parse_single_json_object(out)` never defines this case. The fix is one added \u00a75.2 rejection bullet (an object with a repeated member name at any nesting depth, including inside `consume_nonces` entries) and two host_behavior vectors that pin the deny.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.2: \"The host **MUST** parse the verifier's stdout as **exactly one** JSON object with **no trailing bytes**, and **MUST** reject (treat as deny, \u00a77) any of: stdout that is empty, not valid JSON, or contains a leading/trailing prefix or suffix around the object; **multiple** concatenated JSON values (...); a verdict whose `verdict` field is neither \"allow\" nor \"deny\", or a `deny` missing `code`/`message`.\" \u2014 duplicate member names are not listed.",
+      "spec/draft-kondoju-evc-01.md \u00a73 pseudocode: \"verdict = parse_single_json_object(out)        // Sec 4; on any failure -> reject\" \u2014 the function's duplicate-name semantics are undefined.",
+      "RFC 8259 \u00a74: \"The names within an object SHOULD be unique. ... When the names within an object are not unique, the behavior of software that receives such an object is unpredictable. Many implementations report the last name/value pair only.\" https://www.rfc-editor.org/rfc/rfc8259#section-4",
+      "Runnable (last-wins): node -e 'console.log(JSON.parse(process.argv[1]))' '{\"verdict\":\"deny\",\"verdict\":\"allow\"}'  \u2192 { verdict: 'allow' }",
+      "Runnable (last-wins): python3 -c 'import json,sys;print(json.loads(sys.argv[1]))' '{\"verdict\":\"deny\",\"verdict\":\"allow\"}'  \u2192 {'verdict': 'allow'}",
+      "serde derive struct deserialization rejects repeated fields via Error::duplicate_field: https://docs.rs/serde/latest/serde/de/trait.Error.html#method.duplicate_field \u2014 a Rust host deserializing into a typed verdict struct fails closed where a JS host allows.",
+      "Vector index (set 0.6.0) has host-deny-multiple-objects, host-deny-allow-trailing-garbage, host-deny-allow-extra-property but no duplicate-member-name case."
+    ],
+    "proposed_artifact": "A staged diff pinned to a4f546f adding a \u00a75.2 bullet ('an object that contains a repeated member name at any depth') mirrored in draft -01 \u00a74.4, plus two host_behavior vectors (`host-deny-verdict-duplicate-member-deny-then-allow` and `host-deny-nonce-entry-duplicate-member`) whose fixtures emit the raw duplicate-key bytes and expect a host fail-closed deny classified `schema_invalid`, with the APPLY.md sync/golden steps.",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-verdict-duplicate-member-names",
+      "dims": {
+        "severity": 22,
+        "evidence": 21,
+        "fixability": 20,
+        "standard_impact": 20
+      },
+      "total": 83,
+      "verdict": "PROMOTE",
+      "reason": "Pinned \u00a75.2 leaves duplicate names unspecified and the raw counterexample parses as allow, although both current reference hosts use last-wins parsing and rejection requires a parser-level rule."
+    }
+  },
+  {
+    "id": "evidence-curator-registry-closure-published-suite-fixture-hash-parity",
+    "type": "evidence_opportunity",
+    "title": "Registry-closure ledger entry: byte-level parity between the vendored @bolyra/evc-conformance fixtures and spec/fixtures/host-conformance at a pinned commit",
+    "claim": "REGISTRY CLOSURE (wt 15) is scored on 'published suite freshness, sync:check green, vector-set/spec version alignment', yet the ledger has no registry_event recording that the vendored suite's fixtures are byte-identical to the spec source and that both declare vector set 0.6.0. A third party checking the published package cannot tell whether 'sync:check' is a CI assertion or a reproducible fact. Locally reproducible with no network: run the repo's sync check, pack the vendored package with npm pack, and diff the packed fixture directory against spec/fixtures/host-conformance/ via sha256 manifest.",
+    "evidence": [
+      "CLAUDE.md: '@bolyra/evc-conformance (integrations/evc-conformance/, v0.2.0) \u2014 the published conformance suite (vector set 0.6.0, 28 host-behavior vectors, zero runtime deps) ... Vendored snapshot of spec/ \u2014 edit in spec/, then node scripts/sync.js; CI enforces sync:check.'",
+      "program.md \u00a73 REGISTRY CLOSURE row: 'Published suite freshness, sync:check green, vector-set/spec version alignment, -02 material completeness | objective'.",
+      "program.md \u00a74: ledger kinds include registry_event; entries carry pinned_commit and reproduce_cmd.",
+      "Reproduce (local only): `node integrations/evc-conformance/scripts/sync.js --check && (cd integrations/evc-conformance && npm pack --pack-destination /dev/null --dry-run --json | node -e 'process.stdin.on(\"data\",d=>console.log(JSON.parse(d)[0].files.map(f=>f.path).filter(p=>p.includes(\"host-conformance\")).length))') && find spec/fixtures/host-conformance -type f -name '*.json' | sort | xargs shasum -a 256` \u2014 expected: sync check exits 0, packed fixture count equals 28-vector fixture count, and the sha256 manifest of spec/ fixtures equals that of integrations/evc-conformance/ fixtures (exact flag names to be verified by Tier 2 against sync.js at a4f546f)."
+    ],
+    "proposed_artifact": "A `registry_event` ledger entry pinned to a4f546f with the reproduce_cmd, the sha256 manifest of both fixture trees embedded in RECORD.md, and a version-alignment table (spec doc revision 2026-08-26, vector set 0.6.0, package 0.2.0, draft -01) so the REGISTRY CLOSURE dim is computed from a verifiable record rather than a CI badge.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-registry-closure-published-suite-fixture-hash-parity",
+      "dims": {
+        "verifiability": 22,
+        "demand": 18,
+        "cost": 24,
+        "standard_impact": 17
+      },
+      "total": 81,
+      "verdict": "PROMOTE",
+      "reason": "Pinned sync:check and independent hashes confirm local parity, but reproduction must hash JavaScript fixtures and distinguish vendored-source evidence from published-tarball verification."
+    }
+  },
+  {
+    "id": "hostile-implementer-consume-nonces-retain-until-and-duplicate-entries",
+    "type": "vector_gap",
+    "title": "`retain_until` has no lower bound and `consume_nonces` may repeat a nonce: a lazy host reserves-then-evicts or dedupes-then-allows",
+    "claim": "\u00a73.2 makes `retain_until` a bare integer and the \u00a73.4 schema puts no minimum on it, so `{\"retain_until\":0}` and `{\"retain_until\":-1}` are schema-valid. \u00a77.3 says the host MUST retain the consumed nonce 'until' that value; a lazy host implementing retention as 'evict when retain_until < now' therefore reserves and immediately evicts, and the same proof is accepted again on the next call \u2014 a verifier bug or clock skew turns host nonce mode into no replay protection while every vector still passes (host-nonce-reserve-* fixtures use a far-future 4102444800). Separately, nothing forbids two entries with the same `(issuer_key, nonce)` in one list. Under sequential unique-insert (the literal \u00a77.3 reading, and what host-nonce-reserve-all-any-conflict-deny rewards) the second entry conflicts with the first and the host denies its own allow; a host that dedupes first allows. Two reasonable hosts diverge on the same verdict. Both edges are fixable with schema/prose tightening and are directly testable by the existing host runner because they are pure verdict-side behaviors.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"`retain_until` (integer, **REQUIRED**) \u2014 Unix seconds until which the host **MUST** retain the consumed nonce.\" \u2014 no relation to `now_unix` is stated.",
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: \"\\\"retain_until\\\": { \\\"type\\\": \\\"integer\\\" }\" \u2014 no `minimum`/`exclusiveMinimum`, unlike the request schema's `now_unix` which has `exclusiveMinimum: 0`.",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"The host **MUST** reserve-before-act **EACH** entry (\u00a77.3).\" and \u00a77.3: \"the host **MUST** reserve **every** entry in the list **before** performing the privileged a[ction]\" \u2014 duplicate entries are neither forbidden nor given dedupe semantics.",
+      "draft-kondoju-evc-01 \u00a73 pseudocode: \"for entry in (verdict.consume_nonces or []): if not reserve_nonce_atomically(entry): reject(\\\"replay\\\")\" \u2014 a literal implementation denies on a duplicated entry; a set-based one allows.",
+      "Vector index (set 0.6.0): host-nonce-reserve-novel-allow / -replay-deny / -all-any-conflict-deny cover cross-call replay and mixed-conflict lists only; no vector exercises retain_until <= now_unix, retain_until <= 0, or a list with a repeated nonce.",
+      "Numeric lexical edge on the same field: JSON Schema 2020-12 treats 4102444800.0 as `integer` (https://json-schema.org/draft/2020-12/json-schema-validation#section-6.1.1 zero-fractional-part rule), so a JS host accepts `\"retain_until\": 4102444800.0` while a Rust host deserializing into u64 rejects it \u2014 another silent host-to-host divergence."
+    ],
+    "proposed_artifact": "A staged diff pinned to a4f546f adding `\"exclusiveMinimum\": 0` to `retain_until`, a \u00a77.3 sentence that a host MUST treat `retain_until <= request.now_unix` as a schema-invalid verdict and MUST treat repeated `(issuer_key, nonce)` pairs in one list as schema-invalid (fail-closed, not dedupe), plus three host_behavior vectors: `host-deny-nonce-retain-until-nonpositive`, `host-deny-nonce-retain-until-past`, `host-deny-nonce-duplicate-entries`, with sync.js and golden regeneration steps in APPLY.md.",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-consume-nonces-retain-until-and-duplicate-entries",
+      "dims": {
+        "severity": 21,
+        "evidence": 19,
+        "fixability": 20,
+        "standard_impact": 18
+      },
+      "total": 78,
+      "verdict": "PROMOTE",
+      "reason": "Stale retention and duplicate-list coverage gaps are confirmed, but uniqueness must follow \u00a78's nonce-only identity and the retention work should be consolidated with the dedicated candidate."
+    }
+  },
+  {
+    "id": "hostile-implementer-stdout-whitespace-framing-crlf-bom",
+    "type": "spec_finding",
+    "title": "\u00a75.1 'single trailing newline is OPTIONAL' vs \u00a75.2 'no trailing bytes': CRLF, leading whitespace, multiple newlines and BOM are undefined",
+    "claim": "Two conforming hosts diverge on a well-behaved verifier. \u00a75.1 permits 'a single trailing newline'; \u00a75.2 demands 'no trailing bytes' and rejects any 'leading/trailing prefix or suffix around the object'. The spec never says which bytes count as framing whitespace. A Windows-hosted verifier (Rust `println!`, Python text-mode stdout, PowerShell wrapper) emits `\\r\\n`; a host that accepts exactly one `\\n` denies it, a host that `trim()`s accepts it, and a lazy `trim()` host also accepts unbounded trailing whitespace and leading whitespace that a strict host rejects. A UTF-8 BOM (U+FEFF) prefix \u2014 RFC 8259 \u00a78.1 says implementations MUST NOT add one but MAY ignore one \u2014 is silently accepted by some parsers and is 'not valid JSON' to others. None of this is exploitable for fail-open, but it produces spurious denies between conforming hosts and verifiers, which is exactly the interop the contract claims to fix, and no vector pins either direction (host-deny-leading-garbage uses non-whitespace bytes; there is no positive control with `\\r\\n`).",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.1: \"The verifier **MUST** write exactly one `JSON.stringify(verdict)` to the host-facing stdout, at the very end. A single trailing newline is **OPTIONAL**.\"",
+      "spec/external-verifier-contract-v1.md \u00a75.2: \"The host **MUST** parse the verifier's stdout as **exactly one** JSON object with **no trailing bytes**, and **MUST** reject (treat as deny, \u00a77) any of: stdout that is empty, not valid JSON, or contains a leading/trailing prefix or suffix around the object\" \u2014 '\\n' is a trailing byte under a literal reading, and '\\r\\n' is two.",
+      "RFC 8259 \u00a72: JSON-text = ws value ws; ws = *( %x20 / %x09 / %x0A / %x0D ) \u2014 leading/trailing whitespace of these four bytes is part of a valid JSON text. https://www.rfc-editor.org/rfc/rfc8259#section-2",
+      "RFC 8259 \u00a78.1: \"Implementations MUST NOT add a byte order mark (U+FEFF) to the beginning of a networked-transmitted JSON text. In the interests of interoperability, implementations that parse JSON texts MAY ignore the presence of a byte order mark rather than treating it as an error.\" https://www.rfc-editor.org/rfc/rfc8259#section-8.1",
+      "Runnable: node -e 'JSON.parse(\"\\ufeff{}\")' \u2192 SyntaxError, versus python3 -c 'import json;json.loads(\"\\ufeff{}\")' \u2192 JSONDecodeError \"Unexpected UTF-8 BOM\" while json.loads(b\"\\xef\\xbb\\xbf{}\") decodes bytes and accepts \u2014 same verifier bytes, parser-dependent outcome.",
+      "Vector index (set 0.6.0): host-deny-leading-garbage and host-deny-allow-trailing-garbage use non-whitespace bytes; host-allow-well-behaved has no CRLF/BOM variants."
+    ],
+    "proposed_artifact": "A staged diff pinned to a4f546f that defines stdout framing normatively (exactly one JSON value surrounded only by RFC 8259 `ws` bytes %x20/%x09/%x0A/%x0D, verifier SHOULD emit at most one LF or CRLF, a BOM is a prefix and MUST be rejected), mirrored in draft -01 \u00a74.4, with three host_behavior vectors: positive controls `host-allow-trailing-crlf` and `host-allow-leading-whitespace`, and `host-deny-utf8-bom-prefix`.",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-stdout-whitespace-framing-crlf-bom",
+      "dims": {
+        "severity": 16,
+        "evidence": 23,
+        "fixability": 20,
+        "standard_impact": 18
+      },
+      "total": 77,
+      "verdict": "PROMOTE",
+      "reason": "The framing ambiguity is confirmed at a4f546f, and the reference hosts' trim-based parsers make an explicit whitespace and BOM policy materially useful."
+    }
+  }
+]
