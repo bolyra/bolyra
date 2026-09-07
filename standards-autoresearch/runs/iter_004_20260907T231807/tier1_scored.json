@@ -1,0 +1,290 @@
+[
+  {
+    "id": "hostile-implementer-integer-lexical-form-divergence",
+    "dims": {
+      "severity": 19,
+      "evidence": 20,
+      "fixability": 14,
+      "standard_impact": 18
+    },
+    "total": 71,
+    "verdict": "PROMOTE",
+    "reason": "Pinned JS/Rust validators disagree on 1.0, but [JSON Schema](https://json-schema.org/draft/2020-12/json-schema-validation#section-6.1.1) already defines integer mathematically, so the repair must reconcile existing schema semantics rather than silently replace them with lexical restrictions."
+  },
+  {
+    "id": "hostile-implementer-stdout-framing-whitespace-newline-contradiction",
+    "dims": {
+      "severity": 19,
+      "evidence": 22,
+      "fixability": 20,
+      "standard_impact": 18
+    },
+    "total": 79,
+    "verdict": "PROMOTE",
+    "reason": "The pinned newline exception and no-trailing-bytes requirement leave framing unclear, while both reference parsers trim whitespace; bounded framing vectors should use the existing unparseable_stdout classification rather than stdout_malformed."
+  },
+  {
+    "id": "hostile-implementer-nonce-uniqueness-key-issuer-key-tuple-vs-nonce",
+    "dims": {
+      "severity": 22,
+      "evidence": 11,
+      "fixability": 15,
+      "standard_impact": 17
+    },
+    "total": 65,
+    "verdict": "CONSIDER",
+    "reason": "Sections 7.3 and 8 already specify insertion of entry.nonce without operator namespacing, leaving narrower coverage gaps while duplicate-as-schema-invalid and nonce_replayed expectations introduce unsupported schema and harness semantics."
+  },
+  {
+    "id": "hostile-implementer-timeout-does-not-cover-stdin-write",
+    "dims": {
+      "severity": 19,
+      "evidence": 15,
+      "fixability": 20,
+      "standard_impact": 17
+    },
+    "total": 71,
+    "verdict": "PROMOTE",
+    "reason": "Deadline scope and request-write failure handling merit clarification, although both pinned reference hosts already avoid blocking on stdin delivery and the runner supports request_raw for a large-request fixture."
+  },
+  {
+    "id": "security-researcher-human-nullifier-cross-issuer-tuple-key-replay",
+    "dims": {
+      "severity": 22,
+      "evidence": 16,
+      "fixability": 11,
+      "standard_impact": 18
+    },
+    "total": 67,
+    "verdict": "CONSIDER",
+    "reason": "Cross-issuer replay coverage is absent, but nonce-only reservation is already specified and both reference stores implement that key, while the proposed shared-store two-run test requires runner support beyond a fixture pair."
+  },
+  {
+    "id": "security-researcher-retain-until-elapsed-immediate-eviction-replay",
+    "dims": {
+      "severity": 20,
+      "evidence": 18,
+      "fixability": 19,
+      "standard_impact": 17
+    },
+    "total": 74,
+    "verdict": "PROMOTE",
+    "reason": "The pinned schema and prose permit already-elapsed retention timestamps without a host check, supporting bounded defensive validation and vectors, although neither reference store demonstrates immediate eviction and a compromised verifier remains trusted to decide authorization."
+  },
+  {
+    "id": "security-researcher-consume-nonces-in-local-mode-ignored",
+    "dims": {
+      "severity": 22,
+      "evidence": 21,
+      "fixability": 21,
+      "standard_impact": 20
+    },
+    "total": 84,
+    "verdict": "PROMOTE",
+    "reason": "Both pinned hosts condition reservation on host mode, and Rust explicitly tests ignoring consume_nonces locally, confirming a concrete configuration-mismatch hazard addressable by requiring reservation or explicit denial."
+  },
+  {
+    "id": "security-researcher-nonce-reservation-concurrent-race",
+    "dims": {
+      "severity": 24,
+      "evidence": 19,
+      "fixability": 10,
+      "standard_impact": 22
+    },
+    "total": 75,
+    "verdict": "CONSIDER",
+    "reason": "Atomic insertion is already required by \u00a77.3, but the sequential runner and reference read-modify-write stores leave concurrency untested; adding parallel alone cannot implement or reliably expose the race."
+  },
+  {
+    "id": "competing-spec-author-no-revocation-code-despite-introspection-lane",
+    "dims": {
+      "severity": 12,
+      "evidence": 10,
+      "fixability": 19,
+      "standard_impact": 13
+    },
+    "total": 54,
+    "verdict": "CONSIDER",
+    "reason": "Section 9 already permits invalid_proof for failed token checks and \u00a73.3 provides detail for precise internal reasons, supporting at most a revocation-mapping clarification rather than a missing representable denial outcome."
+  },
+  {
+    "id": "competing-spec-author-detail-object-unbounded-and-secret-unconstrained",
+    "dims": {
+      "severity": 18,
+      "evidence": 19,
+      "fixability": 24,
+      "standard_impact": 16
+    },
+    "total": 77,
+    "verdict": "PROMOTE",
+    "reason": "The pinned secrecy prohibition covers message but omits detail despite its designated logging role, making a matching prohibition and non-authorization clarification useful without changing the verdict schema."
+  },
+  {
+    "id": "competing-spec-author-agent-name-class-vs-instance-undefined",
+    "dims": {
+      "severity": 10,
+      "evidence": 7,
+      "fixability": 12,
+      "standard_impact": 10
+    },
+    "total": 39,
+    "verdict": "DROP",
+    "reason": "An agent_name string can already identify an instance, so the six-field binding does not imply necessarily shared bindings, and prescribing class identity would introduce an unsupported semantic restriction."
+  },
+  {
+    "id": "competing-spec-author-verdict-to-durable-receipt-run-record",
+    "dims": {
+      "verifiability": 12,
+      "demand": 18,
+      "cost": 14,
+      "standard_impact": 13
+    },
+    "total": 57,
+    "verdict": "CONSIDER",
+    "reason": "Receipt chaining exists in the pinned source, but AuthReceiptInput requires substantial identity and proof context absent from an EVC verdict, and the proposal lacks a concrete mapping, complete package pins, and executable receipt-generation commands."
+  },
+  {
+    "id": "ietf-reviewer-appendix-b-normative-dependency-on-package-and-undefined-primitives",
+    "dims": {
+      "severity": 3,
+      "evidence": 0,
+      "fixability": 22,
+      "standard_impact": 3
+    },
+    "total": 28,
+    "verdict": "DROP",
+    "reason": "At 9bf7544 Appendix B is already explicitly informative, excludes EVC conformance obligations, uses lowercase must, and defines serialization without the alleged npm dependency."
+  },
+  {
+    "id": "ietf-reviewer-iana-registry-closure-contradicts-candidate-registry-and-schema-enum",
+    "dims": {
+      "severity": 3,
+      "evidence": 0,
+      "fixability": 22,
+      "standard_impact": 4
+    },
+    "total": 29,
+    "verdict": "DROP",
+    "reason": "The pinned IANA section already specifies Specification Required, version-qualified registration and initial contents, explicitly reconciles the closed enum, and separately explains why kind receives no registry."
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-status-stale-vector-count-and-unresolvable-repo-relative-references",
+    "dims": {
+      "verifiability": 18,
+      "demand": 24,
+      "cost": 16,
+      "standard_impact": 23
+    },
+    "total": 81,
+    "verdict": "PROMOTE",
+    "reason": "The pinned historical 27/27 listing and current 29-vector suite establish a useful rerun opportunity for [RFC 7942 coverage reporting](https://datatracker.ietf.org/doc/html/rfc7942#section-2), with actual results and a resolved host command required and no contact with the held maintainer."
+  },
+  {
+    "id": "ietf-reviewer-pseudocode-classification-order-contradicts-fail-closed-precedence",
+    "dims": {
+      "severity": 16,
+      "evidence": 25,
+      "fixability": 24,
+      "standard_impact": 21
+    },
+    "total": 86,
+    "verdict": "PROMOTE",
+    "reason": "The pinned draft still checks nonzero exit before timeout and omits overflow and signal branches, and the previous rejection record confirms only artifact-shape failures, supporting the bounded illustrative-pseudocode correction."
+  },
+  {
+    "id": "ecosystem-scout-draft-mcguinness-oauth-ai-agent-instance-profile",
+    "dims": {
+      "momentum": 9,
+      "overlap": 12,
+      "adoption_risk": 9,
+      "counter_available": 21
+    },
+    "total": 51,
+    "verdict": "CONSIDER",
+    "reason": "The [datatracker entry](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-ai-agent-instance/) confirms an active individual -00 dated July 4, supporting complementary positioning but providing no demonstrated working-group adoption or substantial competitive momentum."
+  },
+  {
+    "id": "ecosystem-scout-agentgateway-pre-forward-tool-authz-external-verifier-slot",
+    "dims": {
+      "incentive_fit": 17,
+      "technical_fit": 16,
+      "channel_state": 7,
+      "effort": 12
+    },
+    "total": 52,
+    "verdict": "CONSIDER",
+    "reason": "Official [ExtMCP documentation](https://agentgateway.dev/docs/kubernetes/1.3.x/documentation/mcp/guardrails/about/) confirms pre-forward external decisions through an existing gRPC protocol, supporting possible composition while leaving subprocess integration and maintainer interest unverified."
+  },
+  {
+    "id": "ecosystem-scout-diagrid-dapr-agents-proof-of-authorization-hooks",
+    "dims": {
+      "incentive_fit": 16,
+      "technical_fit": 8,
+      "channel_state": 7,
+      "effort": 10
+    },
+    "total": 41,
+    "verdict": "DROP",
+    "reason": "The cited [Diagrid article](https://www.diagrid.io/blog/why-mcp-gateways-are-not-enough) attributes its implemented middleware hooks to hosted Catalyst, which does not establish the claimed blocking extension point in the targeted open-source dapr-agents runtime."
+  },
+  {
+    "id": "ecosystem-scout-cva-arxiv-formal-properties-competing-citation-anchor",
+    "dims": {
+      "momentum": 8,
+      "overlap": 18,
+      "adoption_risk": 10,
+      "counter_available": 14
+    },
+    "total": 50,
+    "verdict": "CONSIDER",
+    "reason": "The [CVA paper](https://arxiv.org/html/2607.21325) supplies relevant candidate properties but contains no identified Bolyra/EVC citation, while peer-review status and the claimed satisfaction of those properties by EVC remain unverified."
+  },
+  {
+    "id": "evidence-curator-dual-reference-host-0.7.0-pinned-run-record",
+    "dims": {
+      "verifiability": 15,
+      "demand": 22,
+      "cost": 17,
+      "standard_impact": 20
+    },
+    "total": 74,
+    "verdict": "PROMOTE",
+    "reason": "Both pinned hosts and the empty ledger support fresh run records, but reproduction needs --type host_behavior, the exact Rust binary, preserved runner exit status, isolated scratch execution, and observed results rather than presumed 29/29 passes."
+  },
+  {
+    "id": "evidence-curator-published-suite-vector-id-parity-via-runner-stdout",
+    "dims": {
+      "verifiability": 13,
+      "demand": 17,
+      "cost": 19,
+      "standard_impact": 16
+    },
+    "total": 65,
+    "verdict": "CONSIDER",
+    "reason": "Local sync:check passes, but matching PASS-line IDs cannot establish published fixture or expectation parity, and the repository command omits host-only filtering while its pipeline discards the runner exit status."
+  },
+  {
+    "id": "evidence-curator-external-host-khandrew1-rerun-against-0.7.0",
+    "dims": {
+      "verifiability": 17,
+      "demand": 23,
+      "cost": 16,
+      "standard_impact": 22
+    },
+    "total": 78,
+    "verdict": "PROMOTE",
+    "reason": "The external commit and historical coverage are verified in the pinned draft, supporting a current rerun consolidated with the overlapping RFC7942 candidate, while failures must remain run evidence rather than automatically count as passing implementations or specification regressions."
+  },
+  {
+    "id": "evidence-curator-host-must-to-vector-coverage-map-0.7.0",
+    "dims": {
+      "verifiability": 10,
+      "demand": 24,
+      "cost": 17,
+      "standard_impact": 23
+    },
+    "total": 74,
+    "verdict": "CONSIDER",
+    "reason": "An explicit map would improve the existing scoring heuristic, but section-citation joins do not demonstrate clause coverage, fixture descriptions reside in test-vectors.json, and existing positive controls and PID assertions already test EOF and killing."
+  }
+]

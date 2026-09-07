@@ -139,6 +139,9 @@ class ContainmentTests(unittest.TestCase):
         for bad in ("../../spec", "/tmp/x", "UPPER", "a", "x" * 120):
             with self.assertRaises(ValueError):
                 t2.safe_experiment_dir(bad)
+        # version numbers in ids are legitimate (iter-4: 0.7.0 was rejected)
+        ok = t2.safe_experiment_dir("evidence-rerun-against-0.7.0")
+        self.assertTrue(str(ok).endswith("evidence-rerun-against-0.7.0"))
         self.assertTrue(str(t2.safe_experiment_dir("hostile-implementer-edge-1"))
                         .endswith("experiments/hostile-implementer-edge-1"))
 

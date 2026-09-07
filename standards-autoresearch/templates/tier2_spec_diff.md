@@ -10,6 +10,14 @@
 
 {spec_files}
 
+## Claim discipline (rule 2k)
+
+You have NO tool access: you cannot read repository files beyond the excerpts
+in this prompt. Make claims ONLY about text quoted in this prompt. If the
+candidate's argument depends on code you cannot see, write "requires
+maintainer verification against <file>" instead of asserting it — an
+unverified assertion fails review.
+
 ## Task
 
 Write `spec-diff.md`: a staged change proposal that closes the finding.
@@ -32,5 +40,14 @@ Requirements:
   no command sequences) — the staging pipeline generates APPLY.md with the
   founder's apply steps separately, and an artifact containing them is
   dropped at acceptance.
+
+Your output MUST begin with exactly these three lines, filled in, before
+anything else (artifacts without them fail the objective check unread):
+
+```
+Base-Commit: {spec_commit}
+Target-File: <repo-relative path of the file the diff targets>
+Finding: <the candidate id>
+```
 
 Return ONLY the artifact markdown (it will be saved verbatim as spec-diff.md).
