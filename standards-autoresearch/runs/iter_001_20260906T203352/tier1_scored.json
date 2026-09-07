@@ -1,0 +1,290 @@
+[
+  {
+    "id": "hostile-implementer-trailing-bytes-vs-optional-newline",
+    "dims": {
+      "severity": 20,
+      "evidence": 24,
+      "fixability": 22,
+      "standard_impact": 20
+    },
+    "total": 86,
+    "verdict": "PROMOTE",
+    "reason": "Pinned spec and host code verify the newline/no-trailing-bytes tension and trim-based divergence, and additive framing vectors would close a real interop gap."
+  },
+  {
+    "id": "hostile-implementer-json-integer-semantics",
+    "dims": {
+      "severity": 22,
+      "evidence": 24,
+      "fixability": 20,
+      "standard_impact": 21
+    },
+    "total": 87,
+    "verdict": "PROMOTE",
+    "reason": "The JSON Schema integer wording and JS/Rust validator behavior are verified and can produce opposite decisions from the same bytes."
+  },
+  {
+    "id": "hostile-implementer-kill-scope-descendants",
+    "dims": {
+      "severity": 23,
+      "evidence": 22,
+      "fixability": 17,
+      "standard_impact": 20
+    },
+    "total": 82,
+    "verdict": "PROMOTE",
+    "reason": "The spec says kill the process while the reference architecture is multiprocess, and the JS/Rust host divergence is concrete though process-tree fixes are somewhat platform-sensitive."
+  },
+  {
+    "id": "hostile-implementer-stdin-write-blocks-when-unread",
+    "dims": {
+      "severity": 21,
+      "evidence": 21,
+      "fixability": 20,
+      "standard_impact": 19
+    },
+    "total": 81,
+    "verdict": "PROMOTE",
+    "reason": "The cited write-before-wait pattern and lack of stdin-write timeout coverage expose a plausible host hang that a bounded vector can test."
+  },
+  {
+    "id": "security-researcher-host-mode-bare-allow-fail-open",
+    "dims": {
+      "severity": 24,
+      "evidence": 24,
+      "fixability": 23,
+      "standard_impact": 23
+    },
+    "total": 94,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a78 text and both reference hosts confirm host nonce mode can authorize a bare allow without any durable nonce reservation."
+  },
+  {
+    "id": "security-researcher-retain-until-unbounded-eviction-window",
+    "dims": {
+      "severity": 20,
+      "evidence": 22,
+      "fixability": 21,
+      "standard_impact": 20
+    },
+    "total": 83,
+    "verdict": "PROMOTE",
+    "reason": "The schema leaves retain_until unconstrained while host retention depends on it, making a past-retention replay window plausible in production stores."
+  },
+  {
+    "id": "security-researcher-stdin-write-hang-outside-timeout",
+    "dims": {
+      "severity": 21,
+      "evidence": 22,
+      "fixability": 22,
+      "standard_impact": 19
+    },
+    "total": 84,
+    "verdict": "PROMOTE",
+    "reason": "This is a well-evidenced vector gap showing the timeout budget is not proven to cover a blocking stdin write."
+  },
+  {
+    "id": "security-researcher-binding-v2-io-vectors-missing",
+    "dims": {
+      "severity": 23,
+      "evidence": 25,
+      "fixability": 18,
+      "standard_impact": 23
+    },
+    "total": 89,
+    "verdict": "PROMOTE",
+    "reason": "The Binding v2 MUSTs are verified in the spec and reference verifier, but the external_verifier vector set has no corresponding IO-boundary coverage."
+  },
+  {
+    "id": "competing-spec-author-intent-binding-absent-from-request",
+    "dims": {
+      "severity": 17,
+      "evidence": 18,
+      "fixability": 14,
+      "standard_impact": 18
+    },
+    "total": 67,
+    "verdict": "CONSIDER",
+    "reason": "The request envelope lacks concrete action binding, but the proposed intent_hash semantics need tighter canonicalization and verifier-support design."
+  },
+  {
+    "id": "competing-spec-author-tri-state-hold-vs-binary-verdict",
+    "dims": {
+      "severity": 11,
+      "evidence": 21,
+      "fixability": 22,
+      "standard_impact": 16
+    },
+    "total": 70,
+    "verdict": "CONSIDER",
+    "reason": "The no-third-verdict facts are verified, but safety severity is limited because unknown verdicts already fail closed."
+  },
+  {
+    "id": "competing-spec-author-durable-decision-record-unlinked",
+    "dims": {
+      "severity": 9,
+      "evidence": 19,
+      "fixability": 18,
+      "standard_impact": 15
+    },
+    "total": 61,
+    "verdict": "CONSIDER",
+    "reason": "The closed verdict schema supports the claim, but durable receipt linkage is mostly informative positioning rather than a direct interop failure."
+  },
+  {
+    "id": "competing-spec-author-delegation-verdict-opacity",
+    "dims": {
+      "verifiability": 17,
+      "demand": 15,
+      "cost": 16,
+      "standard_impact": 16
+    },
+    "total": 64,
+    "verdict": "CONSIDER",
+    "reason": "The detail.sdk_code pathway exists, but the proposed four-cause public run record is not yet shown by one pinned command."
+  },
+  {
+    "id": "ietf-reviewer-stdout-bound-unspecified",
+    "dims": {
+      "severity": 18,
+      "evidence": 24,
+      "fixability": 25,
+      "standard_impact": 23
+    },
+    "total": 90,
+    "verdict": "PROMOTE",
+    "reason": "The draft and v1 spec depend on a stdout bound without defining its value, and a prose-only clarification is bounded and high impact."
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-listing-stale-and-incomplete",
+    "dims": {
+      "verifiability": 22,
+      "demand": 24,
+      "cost": 16,
+      "standard_impact": 24
+    },
+    "total": 86,
+    "verdict": "PROMOTE",
+    "reason": "The stale 0.5.0 independent-implementation listing is verified and directly affects RFC 7942 readiness for the current 0.6.0 suite."
+  },
+  {
+    "id": "ietf-reviewer-bcp14-forbidden-and-unreferenced-rsd-musts",
+    "dims": {
+      "severity": 14,
+      "evidence": 24,
+      "fixability": 24,
+      "standard_impact": 22
+    },
+    "total": 84,
+    "verdict": "PROMOTE",
+    "reason": "The uppercase non-BCP14 FORBIDDEN usage and unresolved RSD requirements are verified draft hygiene issues with an easy -02 prose fix."
+  },
+  {
+    "id": "ietf-reviewer-repo-relative-paths-not-citable",
+    "dims": {
+      "severity": 11,
+      "evidence": 23,
+      "fixability": 24,
+      "standard_impact": 19
+    },
+    "total": 77,
+    "verdict": "CONSIDER",
+    "reason": "The repo-relative citations and pseudocode precedence mismatch are real, but the direct interop/safety severity is below promotion threshold."
+  },
+  {
+    "id": "ecosystem-scout-obsigna-mcp-proxy-policy-hook-host",
+    "dims": {
+      "incentive_fit": 19,
+      "technical_fit": 20,
+      "channel_state": 10,
+      "effort": 15
+    },
+    "total": 64,
+    "verdict": "CONSIDER",
+    "reason": "The MCP proxy and policy-hook fit is plausible, but the repo-specific auth-gap claim was not reconciled locally and there is no warm channel."
+  },
+  {
+    "id": "ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope",
+    "dims": {
+      "momentum": 22,
+      "overlap": 21,
+      "adoption_risk": 20,
+      "counter_available": 18
+    },
+    "total": 81,
+    "verdict": "PROMOTE",
+    "reason": "AuthZEN COAZ/AARP has strong standards momentum at the MCP authorization boundary, while EVC has a credible adapter counter-position."
+  },
+  {
+    "id": "ecosystem-scout-aip-draft-proxy-allow-deny-hold",
+    "dims": {
+      "momentum": 8,
+      "overlap": 19,
+      "adoption_risk": 12,
+      "counter_available": 18
+    },
+    "total": 57,
+    "verdict": "CONSIDER",
+    "reason": "AIP overlaps the decision boundary, but its near-expiry -00 status keeps momentum and adoption risk modest."
+  },
+  {
+    "id": "ecosystem-scout-daniel-architecture-requirements-mapping",
+    "dims": {
+      "verifiability": 20,
+      "demand": 18,
+      "cost": 17,
+      "standard_impact": 20
+    },
+    "total": 75,
+    "verdict": "PROMOTE",
+    "reason": "A pinned requirement-to-vector mapping is feasible and would create useful reviewer-facing evidence for an active architecture draft."
+  },
+  {
+    "id": "evidence-curator-external-impl-rerun-0-6-0",
+    "dims": {
+      "verifiability": 23,
+      "demand": 24,
+      "cost": 16,
+      "standard_impact": 23
+    },
+    "total": 86,
+    "verdict": "PROMOTE",
+    "reason": "Re-running the only independent host against vector set 0.6.0 is highly demanded evidence despite external clone/npm setup cost."
+  },
+  {
+    "id": "evidence-curator-js-vs-rust-failure-class-diff",
+    "dims": {
+      "verifiability": 22,
+      "demand": 18,
+      "cost": 17,
+      "standard_impact": 20
+    },
+    "total": 77,
+    "verdict": "PROMOTE",
+    "reason": "The runner can emit per-host reports and a failure_class diff would strengthen the two-reference-host implementation-status claim."
+  },
+  {
+    "id": "evidence-curator-published-suite-provenance-cold-verify",
+    "dims": {
+      "verifiability": 23,
+      "demand": 22,
+      "cost": 17,
+      "standard_impact": 24
+    },
+    "total": 86,
+    "verdict": "PROMOTE",
+    "reason": "Cold-verifying the npm tarball, manifest hashes, attestation, and empty-dir run directly supports registry-closure scoring."
+  },
+  {
+    "id": "evidence-curator-verdict-on-stderr-vector-gap",
+    "dims": {
+      "severity": 18,
+      "evidence": 24,
+      "fixability": 24,
+      "standard_impact": 20
+    },
+    "total": 86,
+    "verdict": "PROMOTE",
+    "reason": "The spec has a clear stderr MUST NOT parse rule and the fixture set contains no stderr writer, making this an easy high-coverage vector."
+  }
+]

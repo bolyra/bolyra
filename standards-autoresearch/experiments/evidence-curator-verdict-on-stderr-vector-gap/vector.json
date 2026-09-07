@@ -1,0 +1,18 @@
+{
+  "vector": {
+    "id": "host-deny-verdict-on-stderr",
+    "description": "Offered case (1) malformed stdout, stderr-fallback variant (\u00a75.2/\u00a75.3/\u00a77.2): the verifier writes a schema-valid `allow` verdict to STDERR and nothing to stdout, exiting 0. \u00a75.3 says hosts MUST NOT parse stderr for the verdict and \u00a75.2 says empty stdout is a fail-closed condition, so the host MUST deny with failure_class unparseable_stdout. Catches a 'helpful' host that falls back to stderr when stdout is empty \u2014 such a host passes every other vector because no existing fixture writes to stderr. Only stdout is the verdict channel.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "verdict-on-stderr.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "deny",
+      "failure_class": "unparseable_stdout"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture: verifier writes a schema-valid `allow` verdict to\n// STDERR and nothing at all to stdout, then exits 0. \u00a75.3 says hosts MUST NOT\n// parse stderr for the verdict; \u00a75.2 says empty stdout is a fail-closed\n// condition. A conforming host MUST deny with failure_class\n// unparseable_stdout rather than 'helpfully' falling back to stderr. Offered\n// case (1): malformed (empty) stdout.\nprocess.stdin.resume();\nprocess.stdin.on('end', () => {\n  process.stderr.write(JSON.stringify({ verdict: 'allow' }), () => process.exit(0));\n});\n",
+  "fixture_name": "verdict-on-stderr.js"
+}

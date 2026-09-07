@@ -24,10 +24,20 @@ The loop NEVER sends, posts, publishes, or applies. It researches and stages.
 a. **ADDITIVE ONLY.** The loop writes exclusively inside `standards-autoresearch/`.
    It never modifies `spec/`, `integrations/`, `sdk/`, or any published package.
    Spec changes are expressed as staged diffs pinned to a base commit.
+   Artifacts use STAGING language exclusively: they never describe applying
+   diffs, checking out worktrees, or running against a modified spec tree.
+   Calibration (iteration 1): an evidence artifact's REPRODUCE PROCEDURE may
+   use an isolated scratch workspace (a fresh temp dir or a network-isolated
+   container) to clone and re-run pinned external code — that is the
+   founder's or a third party's execution, not the loop's. The loop's own
+   persistent writes still never leave `standards-autoresearch/`.
 b. **Claude MAX CLI only.** No API keys, no SDKs, no pip installs.
-   Generator model: `claude-fable-5-1` (Fable 5.1). Judge: Codex
-   (`codex exec`, from the repo root, stdin closed). If either is unavailable,
-   FAIL LOUDLY — no silent model fallback.
+   Generator model: `claude-fable-5-1` (Fable 5.1), invoked with ALL TOOLS
+   DENIED (`_fable.call_fable`) — the generator emits text; only the loop's
+   sandboxed objective checks execute anything (iteration-1 lesson: an
+   unsandboxed generator ran the commands it was asked to describe). Judge:
+   Codex (`codex exec --sandbox read-only`, from the repo root, stdin
+   closed). If either is unavailable, FAIL LOUDLY — no silent fallback.
 c. **NO OUTBOUND, EVER.** No GitHub comments, no PRs to external repos, no
    emails, no DMs, nothing in `drafts/`. v1 has no outreach arm by design.
 d. **Engagement-graph holds are load-bearing.** The loop reads

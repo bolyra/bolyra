@@ -20,6 +20,10 @@ Requirements:
 - Runs must be executable locally with zero outbound contact (rule 2c);
   if the candidate requires contacting anyone, output exactly the line
   `BLOCKED: requires outbound` and nothing else.
+- The procedure MAY create and use ONE isolated scratch workspace (a fresh
+  temp dir or a network-isolated container) for clones and re-runs of pinned
+  code; say so explicitly. It must not touch `spec/` or any repo tree, and
+  you are DESCRIBING the procedure — never state that you ran it.
 - End with a fenced JSON ledger entry:
   `{"id": "...", "kind": "interop_run|implementation|citation|registry_event",
     "subject": "...", "pinned_commit": "...", "reproduce_cmd": "...",

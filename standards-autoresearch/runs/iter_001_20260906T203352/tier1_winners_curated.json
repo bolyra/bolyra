@@ -1,0 +1,214 @@
+[
+  {
+    "id": "security-researcher-host-mode-bare-allow-fail-open",
+    "type": "spec_finding",
+    "title": "Host nonce mode silently accepts a bare `allow` with no `consume_nonces` \u2014 replay protection vanishes with no signal",
+    "claim": "In host nonce mode the verifier does NOT persist nonces (\u00a78) and the host only reserves when `consume_nonces` is present. A verifier that ignores/does not implement `--nonce-mode host` (a misconfigured local-mode spawn, or an `external`-class verifier without nonce support) returns a bare `{\"verdict\":\"allow\"}`; both reference hosts then call recordAction() and authorize with NOBODY recording the nullifier, so the same bundle replays indefinitely until expiry. \u00a73.2 legitimizes the omission ('the key is omitted entirely when there is nothing to burn') while \u00a79 already defines `nonce_missing` as a deny for 'the proof lacks a usable nullifier' \u2014 the two are contradictory in host mode: a presentation with nothing to burn should have been `deny code=nonce_missing`, so a bare allow reaching a host-mode host is a protocol violation the host must fail closed on. No vector exercises HUT_NONCE_MODE=host with a bare allow.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2 (pinned a4f546f): 'consume_nonces (array of objects, OPTIONAL, allow-only). When present it is a non-empty list (the key is omitted entirely when there is nothing to burn).'",
+      "spec/external-verifier-contract-v1.md \u00a78: 'host. The verifier does not persist nonces. On an otherwise-allow it returns consume_nonces \u2026 and the host owns durable storage under the reserve-before-act rule (\u00a77.3).'",
+      "spec/external-verifier-contract-v1.md \u00a79: 'nonce_missing | the proof lacks a usable nullifier / session-nonce signal.'",
+      "spec/reference-host.js:117-124 \u2014 `if (nonceMode === 'host' && Array.isArray(v.consume_nonces)) { if (!reserveAll(...)) return deny replay } recordAction(); return finish({decision:'allow'})` \u2014 a bare allow in host mode skips reservation and authorizes.",
+      "spec/reference-host-rs/src/lib.rs:542-550 \u2014 identical shape: `if cfg.host_nonce_mode { if let Some(entries) = verdict.get(\"consume_nonces\") \u2026 }` then `record_action`; `Decision::Allow`.",
+      "Runnable: `HUT_NONCE_MODE=host HUT_NONCE_STORE=/tmp/ns HUT_ACTION_LOG=/tmp/al HUT_VERIFIER_CMD='[\"node\",\"spec/fixtures/host-conformance/well-behaved-allow.js\"]' HUT_TIMEOUT_MS=5000 HUT_MAX_STDOUT_BYTES=65536 node spec/reference-host.js < <(node -e 'process.stdout.write(JSON.stringify({version:1,bundle:\"x\",request:{agent_name:\"a\",project_key:\"p\",program:\"c\",model:\"m\",granted_capabilities:[]},now_unix:1751990400}))')` \u2192 `{\"decision\":\"allow\"}` with an empty nonce store and an action marker written.",
+      "Vector index 0.6.0: all three `host-nonce-*` vectors drive `allow-consume-nonces*.js`; no host_behavior vector pairs HUT_NONCE_MODE=host with `well-behaved-allow.js`."
+    ],
+    "proposed_artifact": "Staged spec diff adding to \u00a77.3/\u00a78 a normative rule that in host nonce mode an `allow` without `consume_nonces` MUST be treated by the host as fail-closed (new \u00a716.3 class `nonce_unconsumed`), plus a new host_behavior vector `host-deny-host-mode-bare-allow` (HUT_NONCE_MODE=host + well-behaved-allow.js \u2192 deny, action_taken:false) and the two-line fix to both reference hosts.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-host-mode-bare-allow-fail-open",
+      "dims": {
+        "severity": 24,
+        "evidence": 24,
+        "fixability": 23,
+        "standard_impact": 23
+      },
+      "total": 94,
+      "verdict": "PROMOTE",
+      "reason": "Pinned \u00a78 text and both reference hosts confirm host nonce mode can authorize a bare allow without any durable nonce reservation."
+    }
+  },
+  {
+    "id": "security-researcher-binding-v2-io-vectors-missing",
+    "type": "vector_gap",
+    "title": "Binding v2 rules (five-field v1 \u2192 unsupported_version, binding.expiry \u2260 credential.expiry \u2192 invalid_bundle, now_unix == expiry \u2192 expired) have no external_verifier IO-contract vectors",
+    "claim": "\u00a74.1 introduces three MUSTs that exist only because of the classical/external re-anchoring attack (a presenter re-signing a later expiry onto an issued mandate), yet the `external_verifier` class in vector set 0.6.0 contains ten vectors and none of them presents a bundle at the stdin/stdout boundary that (a) carries an obsolete five-field binding, (b) carries a binding.expiry that differs from the credential expiry, or (c) sets now_unix exactly equal to the effective expiry. The equality boundary is covered only in the `handshake` and `delegation` classes (SDK-level, not the EVC boundary), and the binding-v1 / expiry-mismatch cases are covered nowhere. An independent verifier vendor (e.g. the mcp-use-evc-example implementer, or any `classical`-kind verifier) can pass the published `@bolyra/evc-conformance` suite while accepting a re-anchored expiry \u2014 exactly the gap v2 was shipped to close. Spec-hardness coverage (% of normative MUSTs backed by a vector) is measurably lower for \u00a74.1 than for any other section.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a74.1 (pinned a4f546f): 'A verifier MUST reject a binding that omits expiry with deny code=unsupported_version \u2014 it is an obsolete binding v1 (five fields, expiry not signature-bound) and, in a classical- or external-class verifier where the proof does not independently bind expiry, would let a presenter re-anchor a later expiry on an issued mandate.'",
+      "spec/external-verifier-contract-v1.md \u00a74.1: 'After the binding signature verifies, a verifier MUST additionally require binding.expiry == credential.expiry \u2026 rejecting a mismatch deny code=invalid_bundle'.",
+      "spec/external-verifier-contract-v1.md \u00a79: 'expired | proof-anchored now_unix >= effective_expiry \u2014 a strict comparison; the equality boundary is rejected.'",
+      "spec/test-vectors.json (set 0.6.0) `external_verifier` ids: external-verifier-allow-agent, external-verifier-allow-host-nonce, external-verifier-deny-malformed-input, external-verifier-deny-scope-exceeded, external-verifier-deny-model-mismatch, external-verifier-kind-zk-default, external-verifier-kind-zk-explicit, external-verifier-kind-classical-allow, external-verifier-kind-external-deny, external-verifier-kind-invalid-rejected \u2014 no expiry, binding-v1, or expiry-mismatch case.",
+      "Equality boundary exists only outside the EVC boundary: `expired-credential-exact-boundary` (handshake class) and `delegation-expiry-equal` (delegation class) in spec/test-vectors.json.",
+      "integrations/cli/src/verify/core.ts:249-256 implements the binding.expiry == cred.expiry check and :312-313 the strict expiry check \u2014 implemented in the reference verifier but not pinned by any IO-contract vector a third-party verifier must pass.",
+      "Runnable coverage check: `node -e 'const v=require(\"./spec/test-vectors.json\");console.log((v.vectors||v).filter(x=>x.type===\"external_verifier\"&&/expir|binding/.test(x.id+x.description)).length)'` \u2192 0."
+    ],
+    "proposed_artifact": "Three new `external_verifier` vectors with pinned golden bundles \u2014 `external-verifier-deny-binding-v1-five-field` (unsupported_version), `external-verifier-deny-binding-expiry-mismatch` (invalid_bundle), `external-verifier-deny-expiry-equal-boundary` (expired, now_unix == expiry) \u2014 plus the golden regeneration and `node integrations/evc-conformance/scripts/sync.js` steps in APPLY.md.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-binding-v2-io-vectors-missing",
+      "dims": {
+        "severity": 23,
+        "evidence": 25,
+        "fixability": 18,
+        "standard_impact": 23
+      },
+      "total": 89,
+      "verdict": "PROMOTE",
+      "reason": "The Binding v2 MUSTs are verified in the spec and reference verifier, but the external_verifier vector set has no corresponding IO-boundary coverage."
+    }
+  },
+  {
+    "id": "ietf-reviewer-stdout-bound-unspecified",
+    "type": "spec_finding",
+    "title": "Draft \u00a76.3 never defines the stdout output bound that \u00a79 Security Considerations and the oversize_stdout failure class depend on",
+    "claim": "The draft's Timeout and Input Bounds section specifies only the stdin bound (1 MiB) and the timeout (10 s). The Security Considerations section then says 'The stdout output bound and the stdin bound (Section 6.3) bound a hostile verifier ... the host MUST enforce both', and the failure-class table defines oversize_stdout as 'stdout exceeded the host output bound' \u2014 but no section states what that bound is, whether it is host-chosen, or a RECOMMENDED value. A host implementer reading the draft alone cannot know whether a 4 KiB or 100 MiB bound is conformant; the only numeric value lives outside the draft (reference hosts default to 1048576 via HUT_MAX_STDOUT_BYTES). A MUST that references an undefined quantity is an IESG DISCUSS-class gap.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a76.3 (Timeout and Input Bounds), full text: 'The verifier MUST bound the request read from stdin; the reference limit is 1 MiB (1 048 576 bytes)...' \u2014 no stdout bound appears.",
+      "draft-kondoju-evc-01 \u00a79 'Output-Bound Truncation and Resource Exhaustion': 'The stdout output bound and the stdin bound (Section 6.3) bound a hostile verifier that floods or hangs; the host MUST enforce both and kill on breach.'",
+      "draft-kondoju-evc-01 \u00a78.3 failure_class table row: '| oversize_stdout | stdout exceeded the host output bound |'",
+      "spec/reference-host.js:42 `const maxBytes = Number(process.env.HUT_MAX_STDOUT_BYTES || 1048576);` and spec/conformance-runner.js:630 `HUT_MAX_STDOUT_BYTES: String(inputs.max_stdout_bytes || 1048576)` \u2014 the 1 MiB default exists only in code, at a4f546f3279706a2b28a0c15569c0040425e84c7.",
+      "spec/external-verifier-contract-v1.md \u00a716.2: 'HUT_MAX_STDOUT_BYTES \u2014 the stdout output bound the host MUST enforce (\u00a76)' \u2014 \u00a76 of the v1 spec likewise contains no stdout bound value."
+    ],
+    "proposed_artifact": "Staged diff to draft-kondoju-evc-01 \u00a76.3 (and v1 spec \u00a76) adding: 'The host MUST bound the bytes it accepts from the verifier's stdout and MUST kill the process and deny on breach; the RECOMMENDED bound is 1 MiB (1 048 576 bytes), matching the reference hosts. A conforming verdict is never larger than a few kilobytes.' plus a cross-reference from \u00a79 and the failure-class table, and an APPLY.md noting no wire change and no golden regeneration.",
+    "entity": null,
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-stdout-bound-unspecified",
+      "dims": {
+        "severity": 18,
+        "evidence": 24,
+        "fixability": 25,
+        "standard_impact": 23
+      },
+      "total": 90,
+      "verdict": "PROMOTE",
+      "reason": "The draft and v1 spec depend on a stdout bound without defining its value, and a prose-only clarification is bounded and high impact."
+    }
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-listing-stale-and-incomplete",
+    "type": "evidence_opportunity",
+    "title": "RFC 7942 Implementation Status lists the only independent host at vector set 0.5.0 (27/27) while the draft claims a 28-vector 0.6.0 suite, and omits the RFC 7942 licensing/contact/coverage fields",
+    "claim": "Two readiness defects. (1) Staleness: \u00a711.3 records khandrew1/mcp-use-evc-example passing '27 of 27 host_behavior vectors of vector set 0.5.0' at commit 17642a5, but \u00a711.2 says the published suite is 0.2.0 / vector set 0.6.0 with 28 vectors. The 28th vector (host-deny-unknown-denial-code) is precisely the one the draft says was added because of that implementer's feedback, yet no run record shows the independent implementation passing it. A skeptical reviewer will read this as 'the independent implementation has not been shown to pass the current suite'. (2) Template gaps: RFC 7942 \u00a72 asks each entry for organization, name, description, maturity, coverage, licensing, implementation experience, contact, and URL. None of the five entries states licensing or contact; \u00a711.4 (hosted verifier) and \u00a711.5 (mcp_agent_mail_rust) give no URL and no coverage statement. The cure for (1) is a third-party-reproducible run, not prose.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a711.3: 'At pinned commit \"17642a5efd5e1c42991ab8aa399cd6138f64f635\" (https://github.com/khandrew1/mcp-use-evc-example) it passes 27 of 27 \"host_behavior\" vectors of vector set 0.5.0.'",
+      "draft-kondoju-evc-01 \u00a711.2: 'Both pass the host-conformance suite ({{conformance}}): 27 misbehaving- and well-behaved-verifier fixtures driving 28 \"host_behavior\" vectors. The suite itself is published as the \"@bolyra/evc-conformance\" npm package (version 0.2.0, vector set 0.6.0 ...)'",
+      "spec/IMPLEMENTER.md:182 at a4f546f: '| khandrew1/mcp-use-evc-example | ... | commit 17642a5, 2026-08-26 | 27/27 host_behavior, vector set 0.5.0 |'",
+      "Conformance vector index (set 0.6.0) in this iteration's inputs lists 28 vectors including host-deny-unknown-denial-code, which \u00a711.3 itself attributes to that implementer's feedback.",
+      "RFC 7942 \u00a72 (https://www.rfc-editor.org/rfc/rfc7942#section-2) enumerates the per-implementation fields: Organization, Implementation Name and Details, Level of Maturity, Coverage, Licensing, Implementation Experience, Contact Information, URL \u2014 grep of \u00a711 for 'licens' and 'contact' returns nothing.",
+      "Runnable reproduce command (no repo dependency): `git clone https://github.com/khandrew1/mcp-use-evc-example && cd mcp-use-evc-example && git checkout 17642a5efd5e1c42991ab8aa399cd6138f64f635 && npm ci && npx @bolyra/evc-conformance@0.2.0 --host \"<host cmd from that repo's README>\"`"
+    ],
+    "proposed_artifact": "Tier 2 runs the pinned mcp-use-evc-example commit against @bolyra/evc-conformance@0.2.0 (vector set 0.6.0), appends an evidence_ledger.jsonl interop_run entry with pinned_commit + reproduce_cmd + rfc7942_ready, and stages a diff to draft \u00a711 that updates the 0.6.0 result (28/28, or an explicit 27/28 with the failing vector named) and adds Licensing / Contact / Coverage / URL lines to every \u00a711 entry per the RFC 7942 template.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-rfc7942-listing-stale-and-incomplete",
+      "dims": {
+        "verifiability": 22,
+        "demand": 24,
+        "cost": 16,
+        "standard_impact": 24
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "The stale 0.5.0 independent-implementation listing is verified and directly affects RFC 7942 readiness for the current 0.6.0 suite."
+    }
+  },
+  {
+    "id": "ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope",
+    "type": "threat_update",
+    "title": "OpenID AuthZEN WG drafts (COAZ, AARP) define a competing decision envelope for MCP tool authorization with a third 'prerequisite pending' outcome",
+    "claim": "The OpenID Foundation AuthZEN Working Group approved two WG drafts: the AuthZEN Profile for Model Context Protocol Tool Authorization (COAZ) and the Access Request and Approval Profile (AARP). AuthZEN is an HTTP PEP\u2194PDP evaluation API (subject/action/resource/context \u2192 decision), so COAZ places a standards-body decision envelope at precisely the point EVC occupies \u2014 the gate in front of an MCP tool call \u2014 with existing vendor interop behind it. AARP additionally models the case where policy cannot yet authorize because approval, consent, delegated authority, attestation, or risk assessment must first be satisfied; EVC's verdict is strictly allow/deny with a closed 15-code registry and no pending state. Counter available: EVC is proof-system-agnostic and offline; a PDP can spawn an EVC verifier (kind=classical|zk|external) as the evidence check that produces the AuthZEN decision, and denial codes map into AuthZEN response context. Falsification: read the COAZ draft text; if it already specifies a pluggable local verifier or an offline proof-bundle check, the overlap is larger than modeled and the card's counter_available dimension drops.",
+    "evidence": [
+      "https://openid.net/openid-foundation-advances-authorization-for-the-agent-era-with-new-authzen-working-group-drafts/ (HTTP 200 on 2026-09-06): 'The AuthZEN Working Group approved the AuthZEN Access Request and Approval Profile (AARP) and the AuthZEN Profile for Model Context Protocol Tool Authorization (COAZ) as official Working Group Drafts. AARP addresses what happens when policy cannot yet authorize an action because a prerequisite (approval, consent, delegated authority, attestation, risk assessment) must first be satisfied.'",
+      "EVC spec \u00a73.3 pinned a4f546f: '`verdict` (string, REQUIRED) \u2014 `\"allow\"` or `\"deny\"`'; \u00a79 registry is closed within a wire major \u2014 no pending/hold outcome exists",
+      "EVC spec \u00a71: 'a host **MAY** route to, or branch on, verifiers of a given class' and \u00a73.5 `kind: external` \u2014 the adapter lane for an AuthZEN PDP that spawns an EVC verifier",
+      "https://openid.net/wg/authzen/ (AuthZEN WG home; evaluation API is the PEP\u2194PDP contract COAZ profiles)"
+    ],
+    "proposed_artifact": "A threat card with all four dims scored, plus a staged positioning note 'EVC beneath an AuthZEN PDP' containing a COAZ request \u2192 EVC request field mapping and an EVC denial-code \u2192 AuthZEN decision/context mapping, and an explicit statement of why EVC excludes a pending state (fail-closed boundary) for -02 consideration.",
+    "entity": {
+      "name": "OpenID AuthZEN WG \u2014 COAZ (MCP Tool Authorization) + AARP",
+      "repo": null,
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout",
+    "score": {
+      "id": "ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope",
+      "dims": {
+        "momentum": 22,
+        "overlap": 21,
+        "adoption_risk": 20,
+        "counter_available": 18
+      },
+      "total": 81,
+      "verdict": "PROMOTE",
+      "reason": "AuthZEN COAZ/AARP has strong standards momentum at the MCP authorization boundary, while EVC has a credible adapter counter-position."
+    }
+  },
+  {
+    "id": "evidence-curator-external-impl-rerun-0-6-0",
+    "type": "evidence_opportunity",
+    "title": "Re-run the only independent host (khandrew1/mcp-use-evc-example @17642a5) against vector set 0.6.0 locally and pin the result",
+    "claim": "The sole external implementation is listed at 27/27 on vector set 0.5.0, but the published suite is now 0.2.0 / vector set 0.6.0 with 28 vectors, and the added vector (host-deny-unknown-denial-code) tests exactly the registry-closure behavior that implementation's feedback motivated. A skeptical third party will ask whether the RFC 7942 entry still holds under the current set; no run record at 0.6.0 exists anywhere in the repo or the ledger (evidence_ledger.jsonl is empty at 0 lines).",
+    "evidence": [
+      "spec/IMPLEMENTER.md \u00a79 table (pinned a4f546f): `khandrew1/mcp-use-evc-example | commit 17642a5, 2026-08-26 | 27/27 host_behavior, vector set 0.5.0`",
+      "spec/draft-kondoju-evc-01.md {#impl-status}: 'At pinned commit 17642a5efd5e1c42991ab8aa399cd6138f64f635 ... it passes 27 of 27 host_behavior vectors of vector set 0.5.0' vs. the same section: '@bolyra/evc-conformance npm package (version 0.2.0, vector set 0.6.0 ...) ... 28 host_behavior vectors'",
+      "spec/CONFORMANCE.md line 4: `**Spec version:** 0.6.0`; vector index lists 28 vectors including host-deny-unknown-denial-code",
+      "Runnable (read-only clone, no outbound writes): `git clone https://github.com/khandrew1/mcp-use-evc-example /tmp/evc-ext && git -C /tmp/evc-ext checkout 17642a5efd5e1c42991ab8aa399cd6138f64f635 && (cd /tmp/evc-ext && npm ci) && cd /tmp/empty && npx @bolyra/evc-conformance@0.2.0 --host \"<host argv from /tmp/evc-ext/README>\"` \u2014 expected: 28/28 PASS, or 27/28 with host-deny-unknown-denial-code failing (either outcome is a ledger fact; the latter is also a spec_finding: the IMPLEMENTER.md/-01 listing needs a '0.5.0 only' qualifier)",
+      "https://github.com/khandrew1/mcp-use-evc-example"
+    ],
+    "proposed_artifact": "An interop_run ledger entry plus experiments/<id>/RUN.md recording the exact clone/checkout/npx commands, node and npm versions, the 0.2.0 tarball integrity hash, and the per-vector pass table, with an APPLY.md that stages a one-row IMPLEMENTER.md \u00a79 update (vector set 0.6.0, N/28) pinned to a4f546f.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-external-impl-rerun-0-6-0",
+      "dims": {
+        "verifiability": 23,
+        "demand": 24,
+        "cost": 16,
+        "standard_impact": 23
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "Re-running the only independent host against vector set 0.6.0 is highly demanded evidence despite external clone/npm setup cost."
+    }
+  },
+  {
+    "id": "evidence-curator-verdict-on-stderr-vector-gap",
+    "type": "vector_gap",
+    "title": "No host_behavior vector exercises \u00a75.3 'Hosts MUST NOT parse stderr for the verdict'",
+    "claim": "None of the 27 fixtures writes anything to stderr; every vector proves fail-closed on stdout shapes only. A host that falls back to stderr when stdout is empty (a plausible 'helpful' implementation, since the reference verifier forwards captured fd-1 spew to stderr) passes all 28 vectors today yet violates a normative MUST. The missing fixture is one line: write a valid allow to stderr, nothing to stdout, exit 0; expected host decision is deny with failure_class unparseable_stdout. Running it against both reference hosts produces the coverage evidence for a SPEC HARDNESS MUST-coverage claim.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.3: 'Hosts **MUST NOT** parse stderr for the verdict.' and \u00a75.2: the host MUST reject 'stdout that is empty'",
+      "`grep -ln stderr spec/fixtures/host-conformance/*.js` at a4f546f returns no files (27 fixtures, none touch stderr); `grep -l stdin` returns 27",
+      "spec/fixtures/host-conformance/well-behaved-allow.js is the only allow-emitting positive control and writes solely to process.stdout",
+      "spec/draft-kondoju-evc-01.md {#failure-classes}: `unparseable_stdout | stdout empty, not JSON, or with trailing bytes`",
+      "Runnable after adding the fixture: `node spec/conformance-runner.js --type host_behavior --vector host-deny-verdict-on-stderr` and the same with `HOST_CMD=spec/reference-host-rs/target/debug/evc-reference-host` \u2014 expected: both hosts PASS with failure_class unparseable_stdout; then `node integrations/evc-conformance/scripts/sync.js` and `sync:check` green"
+    ],
+    "proposed_artifact": "A staged diff adding spec/fixtures/host-conformance/verdict-on-stderr.js plus a host-deny-verdict-on-stderr entry in spec/test-vectors.json (vector set bump to 0.6.1), with run outputs from both reference hosts and an APPLY.md covering the sync.js step, CONFORMANCE.md regeneration, DCO, and CODEOWNERS.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-verdict-on-stderr-vector-gap",
+      "dims": {
+        "severity": 18,
+        "evidence": 24,
+        "fixability": 24,
+        "standard_impact": 20
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "The spec has a clear stderr MUST NOT parse rule and the fixture set contains no stderr writer, making this an easy high-coverage vector."
+    }
+  }
+]

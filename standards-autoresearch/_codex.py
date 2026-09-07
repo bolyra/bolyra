@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -21,41 +22,46 @@ from _shared import extract_json_object
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-GENERATOR_MODEL = "claude-fable-5-1"  # Fable 5.1 — resolved + probed 2026-09-06
+from _fable import GENERATOR_MODEL  # noqa: F401  (moved; kept for imports)
 
 
 class CodexUnavailableError(RuntimeError):
     """Raised when the codex CLI is missing — the loop must halt, not fall back."""
 
 
-def call_codex(prompt: str, *, timeout: int = 600) -> str:
+def call_codex(prompt: str, *, timeout: int = 600, retries: int = 1) -> str:
     """Run `codex exec` with the prompt, stdin closed, from the repo root.
 
-    Returns raw stdout. Raises on timeout/non-zero exit/missing binary.
+    Returns raw stdout. Retries once (default) on transient provider errors
+    (found live in iteration 1: OpenAI stream disconnections). Raises on
+    timeout/non-zero exit/missing binary.
     """
     if shutil.which("codex") is None:
         raise CodexUnavailableError(
             "codex CLI not found on PATH; program.md rule 2b forbids fallback"
         )
-    try:
-        result = subprocess.run(
-            # --sandbox read-only: judge calls consume untrusted content
-            # (web signals, model artifacts); containment is enforced at the
-            # process level, not just by prompt text.
-            ["codex", "exec", "--sandbox", "read-only", prompt],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            stdin=subprocess.DEVNULL,
-            cwd=REPO_ROOT,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"codex exec timed out after {timeout}s") from e
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"codex exec failed (exit {result.returncode}): {result.stderr[:500]}"
-        )
-    return result.stdout
+    last_error = ""
+    for attempt in range(retries + 1):
+        try:
+            result = subprocess.run(
+                # --sandbox read-only: judge calls consume untrusted content
+                # (web signals, model artifacts); containment is enforced at
+                # the process level, not just by prompt text.
+                ["codex", "exec", "--sandbox", "read-only", prompt],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                stdin=subprocess.DEVNULL,
+                cwd=REPO_ROOT,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"codex exec timed out after {timeout}s") from e
+        if result.returncode == 0:
+            return result.stdout
+        last_error = (result.stderr or result.stdout)[-2000:]
+        if attempt < retries:
+            time.sleep(30)
+    raise RuntimeError(f"codex exec failed after {retries + 1} attempts: {last_error}")
 
 
 def call_codex_json(prompt: str, *, timeout: int = 600) -> dict[str, Any]:

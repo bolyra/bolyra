@@ -1,0 +1,347 @@
+{
+  "vectors": [
+    {
+      "id": "external-verifier-deny-binding-v1-five-field",
+      "description": "IO-contract for Binding v2 (\u00a74.1, \u00a79, \u00a711): the golden `allow-agent-only` bundle pinned at a4f546f (real Groth16 AgentPolicy proof, credential, scope anchor all valid) re-issued with an obsolete five-field binding v1 \u2014 `agent_name`, `project_key`, `program`, `model`, `capabilities`, no `expiry` \u2014 genuinely signed by the golden operator key (OPERATOR_PRIV=42n) under the pre-revision domain tag `bolyra.external-verifier.binding.v1`, i.e. exactly what a pre-v2 issuer emitted. The spawned verifier MUST deny `unsupported_version` at exit 0 with no compat mode: the missing `expiry` is detected at binding parse, before the signature is checked, so a historically valid v1 signature earns no credit. Catches a verifier that still accepts v1 bindings (the classical re-anchoring gap), one that reports the exact five-field shape as `invalid_bundle` (\u00a74.1 reserves that for ill-typed/extra-field bindings; only the well-formed five-field shape is the re-issue signal), and one that treats the code as a negotiation hook (\u00a711).",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "deny-binding-v1-five-field",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "local"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "unsupported_version"
+      }
+    },
+    {
+      "id": "external-verifier-deny-binding-expiry-mismatch",
+      "description": "IO-contract for the \u00a74.1 equality rule: the golden `allow-agent-only` bundle pinned at a4f546f whose six-field binding v2 carries `expiry: 4133980800` and is VALIDLY re-signed under `bolyra.external-verifier.binding.v2` by the golden operator key, while the revealed credential (and the proof's scope anchor, publicSignals[2]) commit to `expiry: 4102444800`. Signature verification succeeds; the verifier MUST then deny `invalid_bundle` because `binding.expiry != credential.expiry`. Isolates the equality check from signature failure: a verifier that only checks the signature allows (expiry re-anchored by a cooperating or compromised issuer key), one that returns `invalid_signature` never reached the equality check, and one that returns `expired` skipped \u00a74.1 and fell through to the strict clock check (`now_unix` 1751990400 is below both expiries, so `expired` cannot be the honest answer).",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "deny-binding-expiry-mismatch",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "local"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "invalid_bundle"
+      }
+    },
+    {
+      "id": "external-verifier-deny-expiry-equal-boundary",
+      "description": "IO-contract for the \u00a79 `expired` row (strict comparison): the golden `allow-agent-only` bundle pinned at a4f546f byte-for-byte \u2014 identical bundle string, signature and request \u2014 with only the host clock moved to `now_unix: 4102444800`, equal to `credential.expiry`, `binding.expiry` and therefore `effective_expiry`. \u00a79 defines expiry as `now_unix >= effective_expiry`, so the equality boundary MUST deny `expired` at exit 0. Pairs with `external-verifier-allow-agent` (same bundle, `now_unix` 1751990400 \u2192 allow) so the clock is the only variable; catches an off-by-one verifier that compares with `>` and allows at the boundary, the classic one-second re-use window.",
+      "type": "external_verifier",
+      "inputs": {
+        "request_fixture": "deny-expiry-equal-boundary",
+        "roots_file": "roots.json",
+        "capability_map": "capability-map.json",
+        "nonce_mode": "local"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "expired"
+      }
+    }
+  ],
+  "fixtures": {
+    "deny-binding-v1-five-field": {
+      "bundle.json": {
+        "bvp": 1,
+        "agent": {
+          "envelope": {
+            "version": "1.0.0",
+            "circuit": {
+              "name": "AgentPolicy",
+              "version": "0.4.0",
+              "vkeyHash": "sha256:e6836269c7d849bc96fb6946711dbe429f87163117fa5550f2ede5637636a1b1"
+            },
+            "proofType": "groth16",
+            "publicSignals": [
+              "18320371612677943971623074242238461500910720206465255065323445886458846517670",
+              "12616665119450508255185458876855962314592339945640375882344193391684757282246",
+              "8932977639793992028458002407794574817150854433731675949521046858111082871658",
+              "0",
+              "1783643823",
+              "32902421125136896958964731459"
+            ],
+            "proof": {
+              "pi_a": [
+                "20336225470666745909323173155847826396284833302640390230149653461116325240161",
+                "14480392030676522431554794584946422394911657978676986436999793312331565465644"
+              ],
+              "pi_b": [
+                [
+                  "17644599991740681429853808836092479020710693667270802983773269746704654936050",
+                  "2978255426664252086825124372607940829748199617975616500358251576950188438479"
+                ],
+                [
+                  "19747642873652770544494091147966739347909998572350237505915820738225451263009",
+                  "3331044775245911821807123315246212949275634515149228584282532961947063685283"
+                ]
+              ],
+              "pi_c": [
+                "8434590760610231113480334810462511248412046971902611732973905336544720241199",
+                "14097498007898132676182456108726208161008076703662210751781770538688106927062"
+              ]
+            },
+            "metadata": {
+              "prover": "@bolyra/sdk@0.5.1",
+              "timestamp": "2026-07-10T00:37:05.987Z"
+            }
+          },
+          "credential": {
+            "model_hash": "5874883894919307591302829510068105954689076787990553564956417091792130043158",
+            "operator_pubkey": {
+              "x": "15617329766995256858590222302430068383949745072531974464084158078905448850943",
+              "y": "20201653676552407165606319978171745645181779505176156736762229713293662347780"
+            },
+            "permission_bitmask": "3",
+            "expiry": 4102444800
+          }
+        },
+        "binding": {
+          "agent_name": "research-bot",
+          "project_key": "/work/acme/research",
+          "program": "crewai",
+          "model": "opus-4.1",
+          "capabilities": [
+            "fetch_inbox",
+            "send_message"
+          ]
+        },
+        "sig": {
+          "R8": {
+            "x": "7478195769272881867197809362961930392791159881350561161631875667975314446957",
+            "y": "21029682139675805411286615714469928287626288207385478539833358619991617154151"
+          },
+          "S": "457838058715878368841563820586701742683560759596860737673115522953409708580"
+        }
+      },
+      "request.json": {
+        "version": 1,
+        "bundle": "{\"bvp\":1,\"agent\":{\"envelope\":{\"version\":\"1.0.0\",\"circuit\":{\"name\":\"AgentPolicy\",\"version\":\"0.4.0\",\"vkeyHash\":\"sha256:e6836269c7d849bc96fb6946711dbe429f87163117fa5550f2ede5637636a1b1\"},\"proofType\":\"groth16\",\"publicSignals\":[\"18320371612677943971623074242238461500910720206465255065323445886458846517670\",\"12616665119450508255185458876855962314592339945640375882344193391684757282246\",\"8932977639793992028458002407794574817150854433731675949521046858111082871658\",\"0\",\"1783643823\",\"32902421125136896958964731459\"],\"proof\":{\"pi_a\":[\"20336225470666745909323173155847826396284833302640390230149653461116325240161\",\"14480392030676522431554794584946422394911657978676986436999793312331565465644\"],\"pi_b\":[[\"17644599991740681429853808836092479020710693667270802983773269746704654936050\",\"2978255426664252086825124372607940829748199617975616500358251576950188438479\"],[\"19747642873652770544494091147966739347909998572350237505915820738225451263009\",\"3331044775245911821807123315246212949275634515149228584282532961947063685283\"]],\"pi_c\":[\"8434590760610231113480334810462511248412046971902611732973905336544720241199\",\"14097498007898132676182456108726208161008076703662210751781770538688106927062\"]},\"metadata\":{\"prover\":\"@bolyra/sdk@0.5.1\",\"timestamp\":\"2026-07-10T00:37:05.987Z\"}},\"credential\":{\"model_hash\":\"5874883894919307591302829510068105954689076787990553564956417091792130043158\",\"operator_pubkey\":{\"x\":\"15617329766995256858590222302430068383949745072531974464084158078905448850943\",\"y\":\"20201653676552407165606319978171745645181779505176156736762229713293662347780\"},\"permission_bitmask\":\"3\",\"expiry\":4102444800}},\"binding\":{\"agent_name\":\"research-bot\",\"project_key\":\"/work/acme/research\",\"program\":\"crewai\",\"model\":\"opus-4.1\",\"capabilities\":[\"fetch_inbox\",\"send_message\"]},\"sig\":{\"R8\":{\"x\":\"7478195769272881867197809362961930392791159881350561161631875667975314446957\",\"y\":\"21029682139675805411286615714469928287626288207385478539833358619991617154151\"},\"S\":\"457838058715878368841563820586701742683560759596860737673115522953409708580\"}}",
+        "request": {
+          "agent_name": "research-bot",
+          "project_key": "/work/acme/research",
+          "program": "crewai",
+          "model": "opus-4.1",
+          "granted_capabilities": [
+            "fetch_inbox",
+            "send_message"
+          ]
+        },
+        "now_unix": 1751990400
+      }
+    },
+    "deny-binding-expiry-mismatch": {
+      "bundle.json": {
+        "bvp": 1,
+        "agent": {
+          "envelope": {
+            "version": "1.0.0",
+            "circuit": {
+              "name": "AgentPolicy",
+              "version": "0.4.0",
+              "vkeyHash": "sha256:e6836269c7d849bc96fb6946711dbe429f87163117fa5550f2ede5637636a1b1"
+            },
+            "proofType": "groth16",
+            "publicSignals": [
+              "18320371612677943971623074242238461500910720206465255065323445886458846517670",
+              "12616665119450508255185458876855962314592339945640375882344193391684757282246",
+              "8932977639793992028458002407794574817150854433731675949521046858111082871658",
+              "0",
+              "1783643823",
+              "32902421125136896958964731459"
+            ],
+            "proof": {
+              "pi_a": [
+                "20336225470666745909323173155847826396284833302640390230149653461116325240161",
+                "14480392030676522431554794584946422394911657978676986436999793312331565465644"
+              ],
+              "pi_b": [
+                [
+                  "17644599991740681429853808836092479020710693667270802983773269746704654936050",
+                  "2978255426664252086825124372607940829748199617975616500358251576950188438479"
+                ],
+                [
+                  "19747642873652770544494091147966739347909998572350237505915820738225451263009",
+                  "3331044775245911821807123315246212949275634515149228584282532961947063685283"
+                ]
+              ],
+              "pi_c": [
+                "8434590760610231113480334810462511248412046971902611732973905336544720241199",
+                "14097498007898132676182456108726208161008076703662210751781770538688106927062"
+              ]
+            },
+            "metadata": {
+              "prover": "@bolyra/sdk@0.5.1",
+              "timestamp": "2026-07-10T00:37:05.987Z"
+            }
+          },
+          "credential": {
+            "model_hash": "5874883894919307591302829510068105954689076787990553564956417091792130043158",
+            "operator_pubkey": {
+              "x": "15617329766995256858590222302430068383949745072531974464084158078905448850943",
+              "y": "20201653676552407165606319978171745645181779505176156736762229713293662347780"
+            },
+            "permission_bitmask": "3",
+            "expiry": 4102444800
+          }
+        },
+        "binding": {
+          "agent_name": "research-bot",
+          "project_key": "/work/acme/research",
+          "program": "crewai",
+          "model": "opus-4.1",
+          "capabilities": [
+            "fetch_inbox",
+            "send_message"
+          ],
+          "expiry": 4133980800
+        },
+        "sig": {
+          "R8": {
+            "x": "3467396908144175866750162177730482990912704600777866141512775204367769390943",
+            "y": "20843116628198978300441585126636500343340401094057429370970056639416129860808"
+          },
+          "S": "1990585686583980798916371598460874739539498929454482346117760362710833462532"
+        }
+      },
+      "request.json": {
+        "version": 1,
+        "bundle": "{\"bvp\":1,\"agent\":{\"envelope\":{\"version\":\"1.0.0\",\"circuit\":{\"name\":\"AgentPolicy\",\"version\":\"0.4.0\",\"vkeyHash\":\"sha256:e6836269c7d849bc96fb6946711dbe429f87163117fa5550f2ede5637636a1b1\"},\"proofType\":\"groth16\",\"publicSignals\":[\"18320371612677943971623074242238461500910720206465255065323445886458846517670\",\"12616665119450508255185458876855962314592339945640375882344193391684757282246\",\"8932977639793992028458002407794574817150854433731675949521046858111082871658\",\"0\",\"1783643823\",\"32902421125136896958964731459\"],\"proof\":{\"pi_a\":[\"20336225470666745909323173155847826396284833302640390230149653461116325240161\",\"14480392030676522431554794584946422394911657978676986436999793312331565465644\"],\"pi_b\":[[\"17644599991740681429853808836092479020710693667270802983773269746704654936050\",\"2978255426664252086825124372607940829748199617975616500358251576950188438479\"],[\"19747642873652770544494091147966739347909998572350237505915820738225451263009\",\"3331044775245911821807123315246212949275634515149228584282532961947063685283\"]],\"pi_c\":[\"8434590760610231113480334810462511248412046971902611732973905336544720241199\",\"14097498007898132676182456108726208161008076703662210751781770538688106927062\"]},\"metadata\":{\"prover\":\"@bolyra/sdk@0.5.1\",\"timestamp\":\"2026-07-10T00:37:05.987Z\"}},\"credential\":{\"model_hash\":\"5874883894919307591302829510068105954689076787990553564956417091792130043158\",\"operator_pubkey\":{\"x\":\"15617329766995256858590222302430068383949745072531974464084158078905448850943\",\"y\":\"20201653676552407165606319978171745645181779505176156736762229713293662347780\"},\"permission_bitmask\":\"3\",\"expiry\":4102444800}},\"binding\":{\"agent_name\":\"research-bot\",\"project_key\":\"/work/acme/research\",\"program\":\"crewai\",\"model\":\"opus-4.1\",\"capabilities\":[\"fetch_inbox\",\"send_message\"],\"expiry\":4133980800},\"sig\":{\"R8\":{\"x\":\"3467396908144175866750162177730482990912704600777866141512775204367769390943\",\"y\":\"20843116628198978300441585126636500343340401094057429370970056639416129860808\"},\"S\":\"1990585686583980798916371598460874739539498929454482346117760362710833462532\"}}",
+        "request": {
+          "agent_name": "research-bot",
+          "project_key": "/work/acme/research",
+          "program": "crewai",
+          "model": "opus-4.1",
+          "granted_capabilities": [
+            "fetch_inbox",
+            "send_message"
+          ]
+        },
+        "now_unix": 1751990400
+      }
+    },
+    "deny-expiry-equal-boundary": {
+      "bundle.json": {
+        "bvp": 1,
+        "agent": {
+          "envelope": {
+            "version": "1.0.0",
+            "circuit": {
+              "name": "AgentPolicy",
+              "version": "0.4.0",
+              "vkeyHash": "sha256:e6836269c7d849bc96fb6946711dbe429f87163117fa5550f2ede5637636a1b1"
+            },
+            "proofType": "groth16",
+            "publicSignals": [
+              "18320371612677943971623074242238461500910720206465255065323445886458846517670",
+              "12616665119450508255185458876855962314592339945640375882344193391684757282246",
+              "8932977639793992028458002407794574817150854433731675949521046858111082871658",
+              "0",
+              "1783643823",
+              "32902421125136896958964731459"
+            ],
+            "proof": {
+              "pi_a": [
+                "20336225470666745909323173155847826396284833302640390230149653461116325240161",
+                "14480392030676522431554794584946422394911657978676986436999793312331565465644"
+              ],
+              "pi_b": [
+                [
+                  "17644599991740681429853808836092479020710693667270802983773269746704654936050",
+                  "2978255426664252086825124372607940829748199617975616500358251576950188438479"
+                ],
+                [
+                  "19747642873652770544494091147966739347909998572350237505915820738225451263009",
+                  "3331044775245911821807123315246212949275634515149228584282532961947063685283"
+                ]
+              ],
+              "pi_c": [
+                "8434590760610231113480334810462511248412046971902611732973905336544720241199",
+                "14097498007898132676182456108726208161008076703662210751781770538688106927062"
+              ]
+            },
+            "metadata": {
+              "prover": "@bolyra/sdk@0.5.1",
+              "timestamp": "2026-07-10T00:37:05.987Z"
+            }
+          },
+          "credential": {
+            "model_hash": "5874883894919307591302829510068105954689076787990553564956417091792130043158",
+            "operator_pubkey": {
+              "x": "15617329766995256858590222302430068383949745072531974464084158078905448850943",
+              "y": "20201653676552407165606319978171745645181779505176156736762229713293662347780"
+            },
+            "permission_bitmask": "3",
+            "expiry": 4102444800
+          }
+        },
+        "binding": {
+          "agent_name": "research-bot",
+          "project_key": "/work/acme/research",
+          "program": "crewai",
+          "model": "opus-4.1",
+          "capabilities": [
+            "fetch_inbox",
+            "send_message"
+          ],
+          "expiry": 4102444800
+        },
+        "sig": {
+          "R8": {
+            "x": "9775586317890023046587075729227787211196861556653662645814607507211043315209",
+            "y": "5152188484414237503514283834920405275127971192102784311765361612231487371250"
+          },
+          "S": "2659815599395321733399330442479895854176363682649995866602374641589910511536"
+        }
+      },
+      "request.json": {
+        "version": 1,
+        "bundle": "{\"bvp\":1,\"agent\":{\"envelope\":{\"version\":\"1.0.0\",\"circuit\":{\"name\":\"AgentPolicy\",\"version\":\"0.4.0\",\"vkeyHash\":\"sha256:e6836269c7d849bc96fb6946711dbe429f87163117fa5550f2ede5637636a1b1\"},\"proofType\":\"groth16\",\"publicSignals\":[\"18320371612677943971623074242238461500910720206465255065323445886458846517670\",\"12616665119450508255185458876855962314592339945640375882344193391684757282246\",\"8932977639793992028458002407794574817150854433731675949521046858111082871658\",\"0\",\"1783643823\",\"32902421125136896958964731459\"],\"proof\":{\"pi_a\":[\"20336225470666745909323173155847826396284833302640390230149653461116325240161\",\"14480392030676522431554794584946422394911657978676986436999793312331565465644\"],\"pi_b\":[[\"17644599991740681429853808836092479020710693667270802983773269746704654936050\",\"2978255426664252086825124372607940829748199617975616500358251576950188438479\"],[\"19747642873652770544494091147966739347909998572350237505915820738225451263009\",\"3331044775245911821807123315246212949275634515149228584282532961947063685283\"]],\"pi_c\":[\"8434590760610231113480334810462511248412046971902611732973905336544720241199\",\"14097498007898132676182456108726208161008076703662210751781770538688106927062\"]},\"metadata\":{\"prover\":\"@bolyra/sdk@0.5.1\",\"timestamp\":\"2026-07-10T00:37:05.987Z\"}},\"credential\":{\"model_hash\":\"5874883894919307591302829510068105954689076787990553564956417091792130043158\",\"operator_pubkey\":{\"x\":\"15617329766995256858590222302430068383949745072531974464084158078905448850943\",\"y\":\"20201653676552407165606319978171745645181779505176156736762229713293662347780\"},\"permission_bitmask\":\"3\",\"expiry\":4102444800}},\"binding\":{\"agent_name\":\"research-bot\",\"project_key\":\"/work/acme/research\",\"program\":\"crewai\",\"model\":\"opus-4.1\",\"capabilities\":[\"fetch_inbox\",\"send_message\"],\"expiry\":4102444800},\"sig\":{\"R8\":{\"x\":\"9775586317890023046587075729227787211196861556653662645814607507211043315209\",\"y\":\"5152188484414237503514283834920405275127971192102784311765361612231487371250\"},\"S\":\"2659815599395321733399330442479895854176363682649995866602374641589910511536\"}}",
+        "request": {
+          "agent_name": "research-bot",
+          "project_key": "/work/acme/research",
+          "program": "crewai",
+          "model": "opus-4.1",
+          "granted_capabilities": [
+            "fetch_inbox",
+            "send_message"
+          ]
+        },
+        "now_unix": 4102444800
+      }
+    }
+  },
+  "fixture_root": "integrations/cli/test/fixtures/verify/",
+  "golden_pin": {
+    "commit": "a4f546f",
+    "source_fixture": "allow-agent-only",
+    "verifier_src_diff_a4f546f_to_HEAD": "empty (integrations/cli/src/verify, spec/conformance-runner.js, spec/test-vectors.json unchanged)",
+    "operator_priv": "42n (generate.ts / deny-mutations.ts golden key)"
+  },
+  "validation": {
+    "runner": "spec/conformance-runner.js --type external_verifier against built integrations/cli/dist (verify-only, committed vkeys, fresh $HOME per spawn)",
+    "results": {
+      "external-verifier-deny-binding-v1-five-field": "PASS \u2014 stdout {\"verdict\":\"deny\",\"code\":\"unsupported_version\",\"message\":\"binding v1 (expiry not signature-bound) is not accepted; re-issue with a v2 binding\"} exit 0",
+      "external-verifier-deny-binding-expiry-mismatch": "PASS \u2014 stdout {\"verdict\":\"deny\",\"code\":\"invalid_bundle\",\"message\":\"binding expiry does not match the credential expiry\",\"detail\":{\"binding_expiry\":4133980800,\"credential_expiry\":4102444800}} exit 0",
+      "external-verifier-deny-expiry-equal-boundary": "PASS \u2014 stdout {\"verdict\":\"deny\",\"code\":\"expired\",\"message\":\"credential is expired at the current timestamp\",\"detail\":{\"now_unix\":\"4102444800\",\"expiry\":\"4102444800\"}} exit 0"
+    },
+    "controls": {
+      "allow-agent-only (same bundle, now_unix 1751990400)": "allow, exit 0",
+      "negative control (expiry-mismatch fixture with expected.code=expired)": "FAIL \u2014 deny code mismatch: got 'invalid_bundle', want 'expired' (runner discriminates)"
+    },
+    "signatures": {
+      "deny-binding-v1-five-field": "EdDSA verifies against proven operator pubkey under DST bolyra.external-verifier.binding.v1 over the five-field canonical payload; does NOT verify under the v2 DST (as intended: authentic v1 issuance)",
+      "deny-binding-expiry-mismatch": "EdDSA verifies under DST bolyra.external-verifier.binding.v2 over the six-field binding with expiry 4133980800; agent slot byte-identical to golden",
+      "deny-expiry-equal-boundary": "bundle.json and request.bundle byte-identical to allow-agent-only; only now_unix differs"
+    }
+  }
+}
