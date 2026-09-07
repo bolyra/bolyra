@@ -1,0 +1,503 @@
+[
+  {
+    "id": "hostile-implementer-trailing-bytes-vs-optional-newline",
+    "type": "spec_finding",
+    "title": "\u00a75.1 'single trailing newline OPTIONAL' contradicts \u00a75.2 'no trailing bytes'; both reference hosts silently widen to arbitrary Unicode trim, and they disagree on a UTF-8 BOM",
+    "claim": "The spec gives the verifier permission to emit one trailing newline but obligates the host to reject 'no trailing bytes' and any 'leading/trailing prefix or suffix around the object'. A literal host rejects a conforming verifier's `{...}\\n`; a lenient host accepts anything its language's trim() strips. The two reference hosts both call trim(), so they accept `\\r\\n`, multiple blank lines, tabs, and even U+00A0/U+3000 padding that no spec sentence permits \u2014 and they DIVERGE on the same bytes: JavaScript String.prototype.trim strips U+FEFF, so spec/reference-host.js accepts a BOM-prefixed allow verdict, while Rust str::trim (Unicode White_Space, which excludes U+FEFF) makes spec/reference-host-rs reject it as unparseable_stdout. The suite cannot detect this because no vector emits the verdict with a newline, CRLF, BOM, or non-ASCII whitespace: well-behaved-allow.js writes the bare object with no newline, and leading-garbage.js uses ASCII prose as its prefix.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.1 (line 417): \"The verifier MUST write exactly one `JSON.stringify(verdict)` to the host-facing stdout, at the very end. A single trailing newline is OPTIONAL.\"",
+      "spec/external-verifier-contract-v1.md \u00a75.2 (line 449): \"The host MUST parse the verifier's stdout as exactly one JSON object with no trailing bytes, and MUST reject (treat as deny, \u00a77) any of: stdout that is empty, not valid JSON, or contains a leading/trailing prefix or suffix around the object\"",
+      "spec/reference-host.js:211 `const s = str.trim();` and spec/reference-host-rs/src/lib.rs:330 `let s = s.trim();` \u2014 both hosts widen 'no trailing bytes' to language-defined whitespace trimming",
+      "Runnable divergence check: `node -e 'console.log(JSON.stringify(\"\\uFEFF{\\\"verdict\\\":\\\"allow\\\"}\\n\".trim()))'` prints `{\"verdict\":\"allow\"}` (BOM stripped \u2192 JS host allows); Rust `\"\\u{FEFF}{...}\".trim()` leaves the BOM in place \u2192 serde_json parse fails \u2192 Rust host denies",
+      "spec/fixtures/host-conformance/well-behaved-allow.js writes `JSON.stringify({ verdict: 'allow' })` with no trailing newline \u2014 the OPTIONAL newline path that \u00a75.1 explicitly permits is never exercised by any positive control"
+    ],
+    "proposed_artifact": "A staged \u00a75.2 diff defining the exact tolerated framing (at most one trailing LF or CRLF, no leading bytes, no BOM, no other Unicode whitespace) plus three vectors: host-allow-trailing-newline (positive control), host-deny-bom-prefixed-allow, and host-deny-unicode-whitespace-padded-allow, with reference-host.js and reference-host-rs patched to byte-level framing instead of trim().",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-trailing-bytes-vs-optional-newline",
+      "dims": {
+        "severity": 20,
+        "evidence": 24,
+        "fixability": 22,
+        "standard_impact": 20
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "Pinned spec and host code verify the newline/no-trailing-bytes tension and trim-based divergence, and additive framing vectors would close a real interop gap."
+    }
+  },
+  {
+    "id": "hostile-implementer-json-integer-semantics",
+    "type": "spec_finding",
+    "title": "'integer' is undefined at the JSON level: JSON Schema 2020-12 accepts 4102444800.0 and 1e10 as integers, the JS reference host agrees, the Rust reference host rejects them \u2014 same verdict bytes, opposite decisions",
+    "claim": "The spec types `now_unix`, `version`, and `retain_until` as `integer` and points to a JSON Schema where `\"type\": \"integer\"` under draft 2020-12 matches ANY number with a zero fractional part, so `4102444800.0`, `4.1024448e9`, and `1e10` are all schema-valid integers. A hostile verifier that emits `\"retain_until\": 4102444800.0` is accepted by spec/reference-host.js (Number.isInteger(4102444800.0) === true) and rejected as schema_invalid by spec/reference-host-rs (requires serde is_i64()||is_u64(), and its own test asserts 1.5 is rejected but never tests 1.0 or 1e10). The same ambiguity applies on the request side: a host emitting `\"now_unix\": 1751990400.0` or `\"version\": 1.0` gets `malformed_input` from a Go/Rust verifier using int64 and `allow` from a JS or schema-validating verifier; nothing in \u00a72.1 says which is conforming. Range is also unspecified: a JS host stores retain_until as a double, so `9007199254740993` silently rounds and two hosts durably record different retention deadlines for the same nonce. The conformance suite has no vector with a fractional-form, exponent-form, or >2^53 integer.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a72.1: \"`now_unix` (integer, REQUIRED, positive) \u2014 the host's current wall-clock time in seconds since the Unix epoch.\" and \"A request that is not a JSON object, is missing a REQUIRED field, or has a field of the wrong type MUST yield `deny code=malformed_input`\"",
+      "spec/external-verifier-contract-v1.md \u00a72.2/\u00a73.4 schema lines 119, 142, 239: `\"version\": { \"type\": \"integer\", \"const\": 1 }`, `\"now_unix\": { \"type\": \"integer\", \"exclusiveMinimum\": 0 }`, `\"retain_until\": { \"type\": \"integer\" }` with `\"$schema\": \"https://json-schema.org/draft/2020-12/schema\"` \u2014 JSON Schema Validation 2020-12 \u00a76.1.1 defines integer as any number with a zero fractional part, so 1.0 and 1e10 validate",
+      "spec/reference-host.js:149 `if (!Number.isInteger(e.retain_until)) return false;` \u2014 accepts 4102444800.0 and 1e10; runnable: `node -e 'console.log(Number.isInteger(4102444800.0), Number.isInteger(1e10))'` prints `true true`",
+      "spec/reference-host-rs/src/lib.rs:430 `.is_some_and(|r| r.is_i64() || r.is_u64())` and lib.rs:734 test `e[\"retain_until\"] = json!(1.5); // fraction` \u2014 serde_json parses `4102444800.0` and `1e10` as f64, so is_i64/is_u64 are false and the Rust host fails closed on a verdict the JS host accepts",
+      "Vector index (set 0.6.0): host-deny-nonce-entry-wrong-type covers a STRING retain_until only; no vector covers fractional-form, exponent-form, negative, or >2^53 integers"
+    ],
+    "proposed_artifact": "A staged diff adding a normative 'integer' definition to \u00a72.1/\u00a73.3 (RFC 8259 number with no fraction/exponent characters, range 0 < n < 2^53, verifier and host MUST reject others) plus vectors host-deny-retain-until-fractional-form, host-deny-retain-until-exponent-form, host-deny-retain-until-over-2p53, and a verifier-side malformed_input vector for `now_unix: 1751990400.0`, with the Rust and JS hosts aligned.",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-json-integer-semantics",
+      "dims": {
+        "severity": 22,
+        "evidence": 24,
+        "fixability": 20,
+        "standard_impact": 21
+      },
+      "total": 87,
+      "verdict": "PROMOTE",
+      "reason": "The JSON Schema integer wording and JS/Rust validator behavior are verified and can produce opposite decisions from the same bytes."
+    }
+  },
+  {
+    "id": "hostile-implementer-kill-scope-descendants",
+    "type": "vector_gap",
+    "title": "\u00a77.2 'kill the process' does not say process tree: a verifier whose worker (the spec's OWN reference architecture) outlives the direct child holds the stdout pipe open, and the JS reference host hangs forever after its timeout kill",
+    "claim": "\u00a75.1 tells verifiers to spawn a worker process; \u00a77.2 tells hosts to 'kill the process' on timeout. Nothing says the host must kill descendants. A lazy verifier that spawns its worker detached (or simply is killed before it can reap the worker) leaves a grandchild holding an inherited fd 1. spec/reference-host.js calls child.kill('SIGKILL') on the direct child only and then waits for the 'close' event, which Node fires only after every stdio stream reaches EOF \u2014 so with a grandchild holding stdout open, the host has already 'timed out' but never emits a decision: the timeout is not a deadline, it is a hang. spec/reference-host-rs explicitly diverges: it puts the verifier in its own process group and kill_process_group()s it with a 100 ms drain grace, citing \u00a716.3 'nothing outlives the decision' \u2014 a rule that appears only in a Rust comment, not in normative text. Every kill-proof fixture (no-output-hang, partial-json-hang, slow-allow-past-deadline, oversize-flood) is single-process and records only its own PID, so the suite cannot distinguish the two reference hosts, and the runner's orphan check would miss a grandchild anyway because _pidfile.js records one PID.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a77.2 (line 497): \"timeout (\u00a76) \u2014 the host MUST kill the process and deny;\" \u2014 singular 'the process', no mention of descendants or process group",
+      "spec/external-verifier-contract-v1.md \u00a75.1: \"the command spawns a worker process that performs the entire verification; the worker's stdio binds fd 0 = request in, fd 1 = captured ... fd 2 = inherited parent stderr\" \u2014 the reference verifier architecture is multi-process by mandate",
+      "spec/reference-host.js:70 `const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);` kills only the direct child; the decision is emitted only inside `child.on('close', ...)` (line 85), and Node's 'close' fires only after all stdio streams close",
+      "spec/reference-host-rs/src/lib.rs:182-185 comment + `command.process_group(0);` and lib.rs:269-281 \"If something still holds the pipe open past the budget, kill the whole process group: nothing outlives the decision (\u00a716.3).\" \u2014 the Rust host implements a stronger obligation than the spec states, i.e. the two reference hosts diverge on the same fixture class",
+      "spec/fixtures/host-conformance/_pidfile.js records `String(process.pid)` only; no fixture in spec/fixtures/host-conformance/ spawns a child process, so no vector exercises a grandchild holding fd 1",
+      "Runnable reproduction: fixture `require('child_process').spawn(process.execPath, ['-e','setInterval(()=>{},1<<30)'], {stdio:['ignore','inherit','inherit'], detached:true}); setInterval(()=>{},1<<30)` fed to `HOST_CMD='node spec/reference-host.js'` with HUT_TIMEOUT_MS=2000 never returns a decision"
+    ],
+    "proposed_artifact": "A new vector host-deny-orphaned-worker-holds-stdout (verifier spawns a detached grandchild inheriting fd 1 and hangs; expected deny/timeout within HUT_TIMEOUT_MS plus grace, and runner asserts the grandchild PID is dead) plus a staged \u00a76/\u00a77.2 diff making 'kill' mean the whole process tree / group and making the deadline hard even when the pipe stays open, with a reference-host.js fix (detached spawn + process-group kill + decide-on-timer instead of on 'close').",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-kill-scope-descendants",
+      "dims": {
+        "severity": 23,
+        "evidence": 22,
+        "fixability": 17,
+        "standard_impact": 20
+      },
+      "total": 82,
+      "verdict": "PROMOTE",
+      "reason": "The spec says kill the process while the reference architecture is multiprocess, and the JS/Rust host divergence is concrete though process-tree fixes are somewhat platform-sensitive."
+    }
+  },
+  {
+    "id": "hostile-implementer-stdin-write-blocks-when-unread",
+    "type": "vector_gap",
+    "title": "\u00a72 obligates the host to write the whole request then close stdin, but never says what happens when the verifier does not read it; the \u00a710/draft pseudocode deadlocks on any request larger than the OS pipe buffer",
+    "claim": "The host-side pseudocode the spec and the I-D both present is `write(child.stdin, json(request)); close(child.stdin)` followed by `wait(child)` with the timeout as a spawn parameter. A verifier that never reads stdin (or stops reading at its \u00a76 bound and keeps running) leaves a synchronous host blocked in write() once the request exceeds the pipe buffer (64 KiB on Linux, 16\u201364 KiB on macOS) \u2014 and a host that arms its timer after the write, as the pseudocode's ordering invites, never reaches the timeout at all. A verifier that closes stdin early instead produces EPIPE/SIGPIPE, which the spec never mentions; a naive host is killed by SIGPIPE (default disposition) with no decision, a fail-open-by-crash for any caller that treats 'no decision' as 'not denied'. Both reference hosts quietly handle this (JS: `child.stdin.on('error', () => {})`, Rust: a dedicated writer thread swallowing write errors), so the obligation exists in code but not in normative text. Every hang fixture drains stdin (`process.stdin.resume()`), and the runner's canned request is ~200 bytes, so the suite never sends a request large enough to fill a pipe and never spawns a verifier that refuses to read \u2014 a host that deadlocks here passes 28/28.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a72: \"The host MUST write exactly one JSON object, UTF-8 encoded, to the verifier's stdin and then MUST close (EOF) stdin.\" \u2014 an unconditional MUST with no failure branch for a verifier that does not consume stdin",
+      "spec/external-verifier-contract-v1.md \u00a76: \"The verifier MUST bound the request read from stdin. The reference limit is 1 MiB (1 048 576 bytes). A request over the bound MUST yield `deny code=malformed_input`; the verifier MUST NOT buffer an unbounded request.\" \u2014 a verifier is thus permitted to stop reading mid-request, which is exactly the condition that blocks a synchronous writer",
+      "spec/external-verifier-contract-v1.md \u00a710 (line 622) and spec/draft-kondoju-evc-01.md \u00a73 pseudocode: `write(child.stdin, json(request)); close(child.stdin)` then `status, out, err = wait(child)` \u2014 the normative-looking host recipe writes synchronously before waiting",
+      "spec/reference-host.js:96-99 comment \"Swallow EPIPE from a verifier that never reads stdin.\" and spec/reference-host-rs/src/lib.rs:193-203 \"Errors (e.g. EPIPE from a verifier that dies without reading stdin) are deliberately\" ignored via a writer thread \u2014 both hosts implement an unstated obligation",
+      "spec/fixtures/host-conformance/no-output-hang.js `process.stdin.resume();` (drains stdin) and spec/conformance-runner.js:42 canned request `bundle: 'host-conformance-placeholder-bundle'` (tiny) \u2014 no vector combines a non-reading verifier with a request larger than a pipe buffer",
+      "Runnable reproduction: fixture `setInterval(()=>{},1<<30)` (no stdin read) with a vector request whose bundle is a 512 KiB string, run against a host that does `child.stdin.write(req); await wait` synchronously \u2014 blocks indefinitely; the same fixture against `node spec/reference-host.js` returns timeout"
+    ],
+    "proposed_artifact": "A new vector host-deny-verifier-never-reads-stdin-large-request (verifier ignores stdin and hangs; request carries a ~512 KiB in-bound bundle; expected deny with failure_class timeout within HUT_TIMEOUT_MS) plus a staged \u00a72/\u00a76 diff stating the host MUST write stdin asynchronously or under the same wall-clock deadline, MUST treat EPIPE/SIGPIPE on the stdin write as a non-fatal condition that still ends in a decision, and MUST arm the timeout at spawn time, with a \u00a710 pseudocode correction.",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-stdin-write-blocks-when-unread",
+      "dims": {
+        "severity": 21,
+        "evidence": 21,
+        "fixability": 20,
+        "standard_impact": 19
+      },
+      "total": 81,
+      "verdict": "PROMOTE",
+      "reason": "The cited write-before-wait pattern and lack of stdin-write timeout coverage expose a plausible host hang that a bounded vector can test."
+    }
+  },
+  {
+    "id": "security-researcher-host-mode-bare-allow-fail-open",
+    "type": "spec_finding",
+    "title": "Host nonce mode silently accepts a bare `allow` with no `consume_nonces` \u2014 replay protection vanishes with no signal",
+    "claim": "In host nonce mode the verifier does NOT persist nonces (\u00a78) and the host only reserves when `consume_nonces` is present. A verifier that ignores/does not implement `--nonce-mode host` (a misconfigured local-mode spawn, or an `external`-class verifier without nonce support) returns a bare `{\"verdict\":\"allow\"}`; both reference hosts then call recordAction() and authorize with NOBODY recording the nullifier, so the same bundle replays indefinitely until expiry. \u00a73.2 legitimizes the omission ('the key is omitted entirely when there is nothing to burn') while \u00a79 already defines `nonce_missing` as a deny for 'the proof lacks a usable nullifier' \u2014 the two are contradictory in host mode: a presentation with nothing to burn should have been `deny code=nonce_missing`, so a bare allow reaching a host-mode host is a protocol violation the host must fail closed on. No vector exercises HUT_NONCE_MODE=host with a bare allow.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2 (pinned a4f546f): 'consume_nonces (array of objects, OPTIONAL, allow-only). When present it is a non-empty list (the key is omitted entirely when there is nothing to burn).'",
+      "spec/external-verifier-contract-v1.md \u00a78: 'host. The verifier does not persist nonces. On an otherwise-allow it returns consume_nonces \u2026 and the host owns durable storage under the reserve-before-act rule (\u00a77.3).'",
+      "spec/external-verifier-contract-v1.md \u00a79: 'nonce_missing | the proof lacks a usable nullifier / session-nonce signal.'",
+      "spec/reference-host.js:117-124 \u2014 `if (nonceMode === 'host' && Array.isArray(v.consume_nonces)) { if (!reserveAll(...)) return deny replay } recordAction(); return finish({decision:'allow'})` \u2014 a bare allow in host mode skips reservation and authorizes.",
+      "spec/reference-host-rs/src/lib.rs:542-550 \u2014 identical shape: `if cfg.host_nonce_mode { if let Some(entries) = verdict.get(\"consume_nonces\") \u2026 }` then `record_action`; `Decision::Allow`.",
+      "Runnable: `HUT_NONCE_MODE=host HUT_NONCE_STORE=/tmp/ns HUT_ACTION_LOG=/tmp/al HUT_VERIFIER_CMD='[\"node\",\"spec/fixtures/host-conformance/well-behaved-allow.js\"]' HUT_TIMEOUT_MS=5000 HUT_MAX_STDOUT_BYTES=65536 node spec/reference-host.js < <(node -e 'process.stdout.write(JSON.stringify({version:1,bundle:\"x\",request:{agent_name:\"a\",project_key:\"p\",program:\"c\",model:\"m\",granted_capabilities:[]},now_unix:1751990400}))')` \u2192 `{\"decision\":\"allow\"}` with an empty nonce store and an action marker written.",
+      "Vector index 0.6.0: all three `host-nonce-*` vectors drive `allow-consume-nonces*.js`; no host_behavior vector pairs HUT_NONCE_MODE=host with `well-behaved-allow.js`."
+    ],
+    "proposed_artifact": "Staged spec diff adding to \u00a77.3/\u00a78 a normative rule that in host nonce mode an `allow` without `consume_nonces` MUST be treated by the host as fail-closed (new \u00a716.3 class `nonce_unconsumed`), plus a new host_behavior vector `host-deny-host-mode-bare-allow` (HUT_NONCE_MODE=host + well-behaved-allow.js \u2192 deny, action_taken:false) and the two-line fix to both reference hosts.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-host-mode-bare-allow-fail-open",
+      "dims": {
+        "severity": 24,
+        "evidence": 24,
+        "fixability": 23,
+        "standard_impact": 23
+      },
+      "total": 94,
+      "verdict": "PROMOTE",
+      "reason": "Pinned \u00a78 text and both reference hosts confirm host nonce mode can authorize a bare allow without any durable nonce reservation."
+    }
+  },
+  {
+    "id": "security-researcher-retain-until-unbounded-eviction-window",
+    "type": "spec_finding",
+    "title": "`retain_until` is unconstrained: no MUST ties it to effective expiry and a past/zero value lets a production host evict the nonce while the credential is still valid",
+    "claim": "\u00a77.3 obligates the host to retain a reserved nonce 'until entry.retain_until', but the verdict schema types it as a bare `integer` (no minimum) and the spec never states the invariant the reference verifier actually implements (retain_until == effectiveExpiry). A production host with expiry-based eviction (which \u00a716.2 explicitly anticipates: 'expiry columns') that receives `retain_until: 0`, a negative value, or any value below the credential's effective expiry will garbage-collect the reservation and accept a replay of the same bundle before `now_unix >= expiry` fires. The harness cannot see this because both reference stores ignore retain_until entirely. The spec should (a) require the verifier to set retain_until >= the effective expiry it evaluated, (b) require the host to fail closed on retain_until <= now_unix (a zero-length reservation is meaningless), and (c) tighten the schema to `minimum: 1`.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema (pinned a4f546f): `\"retain_until\": { \"type\": \"integer\" }` \u2014 no minimum, no relation to expiry.",
+      "spec/external-verifier-contract-v1.md \u00a77.3 step 1: 'atomically insert entry.nonce into durable storage with a unique-insert / \"on conflict reject\" semantic, retaining it until entry.retain_until.' \u2014 the only normative use of the field.",
+      "spec/external-verifier-contract-v1.md \u00a716.2: 'A production host with a different store (SQLite, a KV, issuer-scoped keys, expiry columns) tests against this suite by pointing a thin test adapter at this file format' \u2014 expiry-based eviction is an anticipated production shape.",
+      "integrations/cli/src/verify/core.ts:331 \u2014 `const retainUntil = Number(effectiveExpiry);` \u2014 the reference verifier's invariant (retain_until equals effective expiry) is implemented but nowhere stated normatively.",
+      "spec/reference-host.js:181-202 reserveAll() and spec/reference-host-rs/src/lib.rs reserve_all(): store only `e.nonce`; retain_until is read for type-checking only and never persisted, so the suite is blind to eviction behaviour.",
+      "spec/reference-host-rs/src/lib.rs:392 doc comment: '`retain_until` must parse as a JSON integer (i64/u64)' \u2014 negative values are accepted as valid.",
+      "Existing vector `host-deny-nonce-entry-wrong-type` covers only a string-typed retain_until; no vector covers retain_until <= now_unix or retain_until < expiry."
+    ],
+    "proposed_artifact": "Staged spec diff (\u00a73.2/\u00a73.4/\u00a77.3/\u00a78) adding `minimum: 1` to retain_until, a verifier MUST that retain_until >= effective_expiry, and a host MUST fail-closed (`schema_invalid`) when retain_until <= request.now_unix, plus new fixture `nonce-entry-retain-until-past.js` and vector `host-deny-nonce-retain-until-past` and updates to both reference hosts' validators.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-retain-until-unbounded-eviction-window",
+      "dims": {
+        "severity": 20,
+        "evidence": 22,
+        "fixability": 21,
+        "standard_impact": 20
+      },
+      "total": 83,
+      "verdict": "PROMOTE",
+      "reason": "The schema leaves retain_until unconstrained while host retention depends on it, making a past-retention replay window plausible in production stores."
+    }
+  },
+  {
+    "id": "security-researcher-stdin-write-hang-outside-timeout",
+    "type": "vector_gap",
+    "title": "No vector proves the host's timeout covers the stdin WRITE phase \u2014 a verifier that never reads stdin plus a request larger than the pipe buffer wedges a naive host forever",
+    "claim": "\u00a76 says the host must enforce a wall-clock timeout 'on the spawned process', and every hang fixture drains stdin first (`process.stdin.resume()`), so a host that writes the request synchronously and only then arms/awaits its timeout passes the whole suite. Against a verifier that blocks before reading stdin (crash-looping loader, stuck WASM init, or a hostile external verifier) and a request larger than the OS pipe buffer (64 KiB on Linux/macOS; the contract permits requests up to 1 MiB and the bundle is attacker-influenced), such a host blocks in write() indefinitely \u2014 a fail-closed-by-hang that never produces a decision and, in a thread-per-request host, is a denial-of-service lever. Both reference hosts happen to be safe (async end() / detached writer thread) but that is unproven by the suite, and the Python idiom `p.stdin.write(req); p.stdin.close(); p.wait(timeout)` is the obvious way a third-party host gets it wrong.",
+    "evidence": [
+      "spec/fixtures/host-conformance/no-output-hang.js (pinned a4f546f): 'verifier reads stdin, writes NOTHING, and never exits' \u2014 `process.stdin.resume();` drains the pipe so the host's write always completes.",
+      "spec/external-verifier-contract-v1.md \u00a76: 'The host MUST enforce a wall-clock timeout on the spawned process and treat expiry as deny (\u00a77). The RECOMMENDED timeout is 10 000 ms' \u2014 silent on whether the request-write phase is inside the budget.",
+      "spec/external-verifier-contract-v1.md \u00a76: 'The reference limit is 1 MiB (1 048 576 bytes)' \u2014 legitimate requests can exceed the 64 KiB pipe capacity by 16x.",
+      "spec/reference-host.js:96-99 \u2014 comment 'Swallow EPIPE from a verifier that never reads stdin' + non-blocking `child.stdin.end(request)` after the timer at line 70; spec/reference-host-rs/src/lib.rs:193-204 \u2014 'The handle is dropped (detached): the host never blocks on the writer'. Both hosts reason about this hazard in comments, yet no vector asserts it.",
+      "Runnable reproduction of the hazard in a third-party host shape: `python3 -c \"import subprocess,json,sys; p=subprocess.Popen(['node','-e','setInterval(()=>{},1e9)'],stdin=subprocess.PIPE,stdout=subprocess.PIPE); req=json.dumps({'version':1,'bundle':'A'*200000,'request':{'agent_name':'a','project_key':'p','program':'c','model':'m','granted_capabilities':[]},'now_unix':1}).encode(); p.stdin.write(req); p.stdin.close(); print(p.wait(timeout=5))\"` \u2014 blocks in write() forever and never reaches the timeout.",
+      "\u00a716.1 lists four 'kill-proof' fixtures; none combines an unread stdin with a request > 64 KiB."
+    ],
+    "proposed_artifact": "New host_behavior vector `host-deny-stdin-unread-hang` with fixture `stdin-unread-hang.js` (records PID, never reads fd 0, never exits) and a runner-supplied request padded past 256 KiB, asserting `failure_class: timeout` within HUT_TIMEOUT_MS + slack and a killed pidfile PID, plus a one-sentence \u00a76 clarification that the timeout budget MUST include the request write.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-stdin-write-hang-outside-timeout",
+      "dims": {
+        "severity": 21,
+        "evidence": 22,
+        "fixability": 22,
+        "standard_impact": 19
+      },
+      "total": 84,
+      "verdict": "PROMOTE",
+      "reason": "This is a well-evidenced vector gap showing the timeout budget is not proven to cover a blocking stdin write."
+    }
+  },
+  {
+    "id": "security-researcher-binding-v2-io-vectors-missing",
+    "type": "vector_gap",
+    "title": "Binding v2 rules (five-field v1 \u2192 unsupported_version, binding.expiry \u2260 credential.expiry \u2192 invalid_bundle, now_unix == expiry \u2192 expired) have no external_verifier IO-contract vectors",
+    "claim": "\u00a74.1 introduces three MUSTs that exist only because of the classical/external re-anchoring attack (a presenter re-signing a later expiry onto an issued mandate), yet the `external_verifier` class in vector set 0.6.0 contains ten vectors and none of them presents a bundle at the stdin/stdout boundary that (a) carries an obsolete five-field binding, (b) carries a binding.expiry that differs from the credential expiry, or (c) sets now_unix exactly equal to the effective expiry. The equality boundary is covered only in the `handshake` and `delegation` classes (SDK-level, not the EVC boundary), and the binding-v1 / expiry-mismatch cases are covered nowhere. An independent verifier vendor (e.g. the mcp-use-evc-example implementer, or any `classical`-kind verifier) can pass the published `@bolyra/evc-conformance` suite while accepting a re-anchored expiry \u2014 exactly the gap v2 was shipped to close. Spec-hardness coverage (% of normative MUSTs backed by a vector) is measurably lower for \u00a74.1 than for any other section.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a74.1 (pinned a4f546f): 'A verifier MUST reject a binding that omits expiry with deny code=unsupported_version \u2014 it is an obsolete binding v1 (five fields, expiry not signature-bound) and, in a classical- or external-class verifier where the proof does not independently bind expiry, would let a presenter re-anchor a later expiry on an issued mandate.'",
+      "spec/external-verifier-contract-v1.md \u00a74.1: 'After the binding signature verifies, a verifier MUST additionally require binding.expiry == credential.expiry \u2026 rejecting a mismatch deny code=invalid_bundle'.",
+      "spec/external-verifier-contract-v1.md \u00a79: 'expired | proof-anchored now_unix >= effective_expiry \u2014 a strict comparison; the equality boundary is rejected.'",
+      "spec/test-vectors.json (set 0.6.0) `external_verifier` ids: external-verifier-allow-agent, external-verifier-allow-host-nonce, external-verifier-deny-malformed-input, external-verifier-deny-scope-exceeded, external-verifier-deny-model-mismatch, external-verifier-kind-zk-default, external-verifier-kind-zk-explicit, external-verifier-kind-classical-allow, external-verifier-kind-external-deny, external-verifier-kind-invalid-rejected \u2014 no expiry, binding-v1, or expiry-mismatch case.",
+      "Equality boundary exists only outside the EVC boundary: `expired-credential-exact-boundary` (handshake class) and `delegation-expiry-equal` (delegation class) in spec/test-vectors.json.",
+      "integrations/cli/src/verify/core.ts:249-256 implements the binding.expiry == cred.expiry check and :312-313 the strict expiry check \u2014 implemented in the reference verifier but not pinned by any IO-contract vector a third-party verifier must pass.",
+      "Runnable coverage check: `node -e 'const v=require(\"./spec/test-vectors.json\");console.log((v.vectors||v).filter(x=>x.type===\"external_verifier\"&&/expir|binding/.test(x.id+x.description)).length)'` \u2192 0."
+    ],
+    "proposed_artifact": "Three new `external_verifier` vectors with pinned golden bundles \u2014 `external-verifier-deny-binding-v1-five-field` (unsupported_version), `external-verifier-deny-binding-expiry-mismatch` (invalid_bundle), `external-verifier-deny-expiry-equal-boundary` (expired, now_unix == expiry) \u2014 plus the golden regeneration and `node integrations/evc-conformance/scripts/sync.js` steps in APPLY.md.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-binding-v2-io-vectors-missing",
+      "dims": {
+        "severity": 23,
+        "evidence": 25,
+        "fixability": 18,
+        "standard_impact": 23
+      },
+      "total": 89,
+      "verdict": "PROMOTE",
+      "reason": "The Binding v2 MUSTs are verified in the spec and reference verifier, but the external_verifier vector set has no corresponding IO-boundary coverage."
+    }
+  },
+  {
+    "id": "ietf-reviewer-stdout-bound-unspecified",
+    "type": "spec_finding",
+    "title": "Draft \u00a76.3 never defines the stdout output bound that \u00a79 Security Considerations and the oversize_stdout failure class depend on",
+    "claim": "The draft's Timeout and Input Bounds section specifies only the stdin bound (1 MiB) and the timeout (10 s). The Security Considerations section then says 'The stdout output bound and the stdin bound (Section 6.3) bound a hostile verifier ... the host MUST enforce both', and the failure-class table defines oversize_stdout as 'stdout exceeded the host output bound' \u2014 but no section states what that bound is, whether it is host-chosen, or a RECOMMENDED value. A host implementer reading the draft alone cannot know whether a 4 KiB or 100 MiB bound is conformant; the only numeric value lives outside the draft (reference hosts default to 1048576 via HUT_MAX_STDOUT_BYTES). A MUST that references an undefined quantity is an IESG DISCUSS-class gap.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a76.3 (Timeout and Input Bounds), full text: 'The verifier MUST bound the request read from stdin; the reference limit is 1 MiB (1 048 576 bytes)...' \u2014 no stdout bound appears.",
+      "draft-kondoju-evc-01 \u00a79 'Output-Bound Truncation and Resource Exhaustion': 'The stdout output bound and the stdin bound (Section 6.3) bound a hostile verifier that floods or hangs; the host MUST enforce both and kill on breach.'",
+      "draft-kondoju-evc-01 \u00a78.3 failure_class table row: '| oversize_stdout | stdout exceeded the host output bound |'",
+      "spec/reference-host.js:42 `const maxBytes = Number(process.env.HUT_MAX_STDOUT_BYTES || 1048576);` and spec/conformance-runner.js:630 `HUT_MAX_STDOUT_BYTES: String(inputs.max_stdout_bytes || 1048576)` \u2014 the 1 MiB default exists only in code, at a4f546f3279706a2b28a0c15569c0040425e84c7.",
+      "spec/external-verifier-contract-v1.md \u00a716.2: 'HUT_MAX_STDOUT_BYTES \u2014 the stdout output bound the host MUST enforce (\u00a76)' \u2014 \u00a76 of the v1 spec likewise contains no stdout bound value."
+    ],
+    "proposed_artifact": "Staged diff to draft-kondoju-evc-01 \u00a76.3 (and v1 spec \u00a76) adding: 'The host MUST bound the bytes it accepts from the verifier's stdout and MUST kill the process and deny on breach; the RECOMMENDED bound is 1 MiB (1 048 576 bytes), matching the reference hosts. A conforming verdict is never larger than a few kilobytes.' plus a cross-reference from \u00a79 and the failure-class table, and an APPLY.md noting no wire change and no golden regeneration.",
+    "entity": null,
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-stdout-bound-unspecified",
+      "dims": {
+        "severity": 18,
+        "evidence": 24,
+        "fixability": 25,
+        "standard_impact": 23
+      },
+      "total": 90,
+      "verdict": "PROMOTE",
+      "reason": "The draft and v1 spec depend on a stdout bound without defining its value, and a prose-only clarification is bounded and high impact."
+    }
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-listing-stale-and-incomplete",
+    "type": "evidence_opportunity",
+    "title": "RFC 7942 Implementation Status lists the only independent host at vector set 0.5.0 (27/27) while the draft claims a 28-vector 0.6.0 suite, and omits the RFC 7942 licensing/contact/coverage fields",
+    "claim": "Two readiness defects. (1) Staleness: \u00a711.3 records khandrew1/mcp-use-evc-example passing '27 of 27 host_behavior vectors of vector set 0.5.0' at commit 17642a5, but \u00a711.2 says the published suite is 0.2.0 / vector set 0.6.0 with 28 vectors. The 28th vector (host-deny-unknown-denial-code) is precisely the one the draft says was added because of that implementer's feedback, yet no run record shows the independent implementation passing it. A skeptical reviewer will read this as 'the independent implementation has not been shown to pass the current suite'. (2) Template gaps: RFC 7942 \u00a72 asks each entry for organization, name, description, maturity, coverage, licensing, implementation experience, contact, and URL. None of the five entries states licensing or contact; \u00a711.4 (hosted verifier) and \u00a711.5 (mcp_agent_mail_rust) give no URL and no coverage statement. The cure for (1) is a third-party-reproducible run, not prose.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a711.3: 'At pinned commit \"17642a5efd5e1c42991ab8aa399cd6138f64f635\" (https://github.com/khandrew1/mcp-use-evc-example) it passes 27 of 27 \"host_behavior\" vectors of vector set 0.5.0.'",
+      "draft-kondoju-evc-01 \u00a711.2: 'Both pass the host-conformance suite ({{conformance}}): 27 misbehaving- and well-behaved-verifier fixtures driving 28 \"host_behavior\" vectors. The suite itself is published as the \"@bolyra/evc-conformance\" npm package (version 0.2.0, vector set 0.6.0 ...)'",
+      "spec/IMPLEMENTER.md:182 at a4f546f: '| khandrew1/mcp-use-evc-example | ... | commit 17642a5, 2026-08-26 | 27/27 host_behavior, vector set 0.5.0 |'",
+      "Conformance vector index (set 0.6.0) in this iteration's inputs lists 28 vectors including host-deny-unknown-denial-code, which \u00a711.3 itself attributes to that implementer's feedback.",
+      "RFC 7942 \u00a72 (https://www.rfc-editor.org/rfc/rfc7942#section-2) enumerates the per-implementation fields: Organization, Implementation Name and Details, Level of Maturity, Coverage, Licensing, Implementation Experience, Contact Information, URL \u2014 grep of \u00a711 for 'licens' and 'contact' returns nothing.",
+      "Runnable reproduce command (no repo dependency): `git clone https://github.com/khandrew1/mcp-use-evc-example && cd mcp-use-evc-example && git checkout 17642a5efd5e1c42991ab8aa399cd6138f64f635 && npm ci && npx @bolyra/evc-conformance@0.2.0 --host \"<host cmd from that repo's README>\"`"
+    ],
+    "proposed_artifact": "Tier 2 runs the pinned mcp-use-evc-example commit against @bolyra/evc-conformance@0.2.0 (vector set 0.6.0), appends an evidence_ledger.jsonl interop_run entry with pinned_commit + reproduce_cmd + rfc7942_ready, and stages a diff to draft \u00a711 that updates the 0.6.0 result (28/28, or an explicit 27/28 with the failing vector named) and adds Licensing / Contact / Coverage / URL lines to every \u00a711 entry per the RFC 7942 template.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-rfc7942-listing-stale-and-incomplete",
+      "dims": {
+        "verifiability": 22,
+        "demand": 24,
+        "cost": 16,
+        "standard_impact": 24
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "The stale 0.5.0 independent-implementation listing is verified and directly affects RFC 7942 readiness for the current 0.6.0 suite."
+    }
+  },
+  {
+    "id": "ietf-reviewer-bcp14-forbidden-and-unreferenced-rsd-musts",
+    "type": "spec_finding",
+    "title": "Non-BCP-14 capitalized keyword FORBIDDEN (twice) and normative MUSTs imposed on consumers of an unreferenced sibling document (RSD)",
+    "claim": "Two RFC 2119/8174 hygiene defects an idnits/area review will flag. (a) The draft uses 'FORBIDDEN' in all capitals as if it were a requirement keyword in \u00a77.2 and again in \u00a79 ('\"Record after proceeding\" is a replay window and is FORBIDDEN'). FORBIDDEN is not in the BCP 14 list the draft itself enumerates in \u00a72, so the sentence carries no defined normative force \u2014 the single most important replay obligation is stated with an undefined keyword. (b) \u00a710 (Relationship to Receipt Signer Discovery) and \u00a79 (Redirect and Downgrade in Signer Discovery) place four MUSTs on 'a consumer' of a document called RSD ('a consumer MUST fetch over HTTPS ... MUST NOT follow redirects ... MUST treat any transport, status, or schema failure as a verification failure ... MUST require the two to agree'), yet RSD appears in neither the normative nor the informative reference list, has no URL, and \u00a712.3 says its Internet-Draft is 'deferred past this document'. A reviewer cannot resolve what a 'consumer' is or verify the imported rules; per RFC 2119 \u00a76 keywords are for interoperation requirements of this specification, and imported requirements on an unreferenced spec are unimplementable-as-written. The same section also contains a lowercase 'must' at \u00a75.3/\u00a713 that reads as normative ('a \"zk\"-class verifier that must remain interoperable').",
+    "evidence": [
+      "draft-kondoju-evc-01 line 625 (\u00a77.2): '\"Record after proceeding\" is a replay window and is FORBIDDEN. The verifier's \"allow\" in host mode is conditional on every host insert being novel.'",
+      "draft-kondoju-evc-01 line 978 (\u00a79 Nonce Reservation and Replay): 'proceeding\" is a replay window and is FORBIDDEN.'",
+      "draft-kondoju-evc-01 \u00a72 keyword list: 'The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"NOT RECOMMENDED\", \"MAY\", and \"OPTIONAL\" ...' \u2014 FORBIDDEN absent.",
+      "draft-kondoju-evc-01 front matter lines 24-36: normative refs are RFC2119, RFC8174, RFC8259; informative refs are RFC6749, RFC7519, RFC7662, RFC7942, RFC8126, RFC8615, I-D.klrc-aiagent-auth, I-D.pidlisnyi-aps \u2014 no RSD entry.",
+      "draft-kondoju-evc-01 \u00a710: 'A sibling specification, Receipt Signer Discovery (RSD), defines a \".well-known/bolyra-signers.json\" document ... a consumer MUST fetch over HTTPS, and plain \"http://\" MUST be rejected except for loopback addresses (development); a consumer MUST NOT follow redirects; and a consumer MUST treat any transport or schema failure as a verification failure'",
+      "draft-kondoju-evc-01 \u00a712.3: 'A separate RSD Internet-Draft ... is deferred past this document'"
+    ],
+    "proposed_artifact": "Staged diff to draft-kondoju-evc-01: replace both FORBIDDEN sentences with 'A host MUST NOT record a nonce after proceeding with the action; doing so opens a replay window', rewrite the RSD rules in \u00a79/\u00a710 as either (i) conditional requirements scoped to this document ('A classical-class verifier that consumes a signer-discovery document MUST ...') or (ii) an informative paraphrase with a new informative reference [RSD] carrying a URL to the RSD spec text in the repo, and lowercase-fix the two 'must remain interoperable' sentences; APPLY.md notes prose-only, no wire change.",
+    "entity": null,
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-bcp14-forbidden-and-unreferenced-rsd-musts",
+      "dims": {
+        "severity": 14,
+        "evidence": 24,
+        "fixability": 24,
+        "standard_impact": 22
+      },
+      "total": 84,
+      "verdict": "PROMOTE",
+      "reason": "The uppercase non-BCP14 FORBIDDEN usage and unresolved RSD requirements are verified draft hygiene issues with an easy -02 prose fix."
+    }
+  },
+  {
+    "id": "ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope",
+    "type": "threat_update",
+    "title": "OpenID AuthZEN WG drafts (COAZ, AARP) define a competing decision envelope for MCP tool authorization with a third 'prerequisite pending' outcome",
+    "claim": "The OpenID Foundation AuthZEN Working Group approved two WG drafts: the AuthZEN Profile for Model Context Protocol Tool Authorization (COAZ) and the Access Request and Approval Profile (AARP). AuthZEN is an HTTP PEP\u2194PDP evaluation API (subject/action/resource/context \u2192 decision), so COAZ places a standards-body decision envelope at precisely the point EVC occupies \u2014 the gate in front of an MCP tool call \u2014 with existing vendor interop behind it. AARP additionally models the case where policy cannot yet authorize because approval, consent, delegated authority, attestation, or risk assessment must first be satisfied; EVC's verdict is strictly allow/deny with a closed 15-code registry and no pending state. Counter available: EVC is proof-system-agnostic and offline; a PDP can spawn an EVC verifier (kind=classical|zk|external) as the evidence check that produces the AuthZEN decision, and denial codes map into AuthZEN response context. Falsification: read the COAZ draft text; if it already specifies a pluggable local verifier or an offline proof-bundle check, the overlap is larger than modeled and the card's counter_available dimension drops.",
+    "evidence": [
+      "https://openid.net/openid-foundation-advances-authorization-for-the-agent-era-with-new-authzen-working-group-drafts/ (HTTP 200 on 2026-09-06): 'The AuthZEN Working Group approved the AuthZEN Access Request and Approval Profile (AARP) and the AuthZEN Profile for Model Context Protocol Tool Authorization (COAZ) as official Working Group Drafts. AARP addresses what happens when policy cannot yet authorize an action because a prerequisite (approval, consent, delegated authority, attestation, risk assessment) must first be satisfied.'",
+      "EVC spec \u00a73.3 pinned a4f546f: '`verdict` (string, REQUIRED) \u2014 `\"allow\"` or `\"deny\"`'; \u00a79 registry is closed within a wire major \u2014 no pending/hold outcome exists",
+      "EVC spec \u00a71: 'a host **MAY** route to, or branch on, verifiers of a given class' and \u00a73.5 `kind: external` \u2014 the adapter lane for an AuthZEN PDP that spawns an EVC verifier",
+      "https://openid.net/wg/authzen/ (AuthZEN WG home; evaluation API is the PEP\u2194PDP contract COAZ profiles)"
+    ],
+    "proposed_artifact": "A threat card with all four dims scored, plus a staged positioning note 'EVC beneath an AuthZEN PDP' containing a COAZ request \u2192 EVC request field mapping and an EVC denial-code \u2192 AuthZEN decision/context mapping, and an explicit statement of why EVC excludes a pending state (fail-closed boundary) for -02 consideration.",
+    "entity": {
+      "name": "OpenID AuthZEN WG \u2014 COAZ (MCP Tool Authorization) + AARP",
+      "repo": null,
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout",
+    "score": {
+      "id": "ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope",
+      "dims": {
+        "momentum": 22,
+        "overlap": 21,
+        "adoption_risk": 20,
+        "counter_available": 18
+      },
+      "total": 81,
+      "verdict": "PROMOTE",
+      "reason": "AuthZEN COAZ/AARP has strong standards momentum at the MCP authorization boundary, while EVC has a credible adapter counter-position."
+    }
+  },
+  {
+    "id": "ecosystem-scout-daniel-architecture-requirements-mapping",
+    "type": "evidence_opportunity",
+    "title": "draft-daniel-ai-agent-internet-architecture-03 is an active requirements document whose authorization/auditability/revocation requirements EVC can be mapped against with pinned vectors",
+    "claim": "This individual draft reached -03 on 2026-08-29 and is not expiring until 2027-03-02, so it is a live venue. It enumerates architectural requirements for AI agents across authentication, authorization and delegation, workload identity, payments, provenance, auditability, and revocation, and explicitly favors profiling existing protocols over new monolithic ones. A requirement-by-requirement mapping showing which of its authorization/enforcement requirements EVC already satisfies (each pointed at a spec section and a conformance vector ID at pinned commit) is exactly the third-party-checkable material a skeptical reviewer would demand, and it is -02 companion material for draft-kondoju-evc. The loop stages the mapping only; no outreach, no datatracker submission. Falsification: if -03's authorization section is purely about online OAuth/WIMSE flows with no enforcement-point requirement, the mapping is thin and the candidate should be dropped.",
+    "evidence": [
+      "curl https://datatracker.ietf.org/api/v1/doc/document/draft-daniel-ai-agent-internet-architecture/ \u2192 rev '03', time 2026-08-29T00:01:14Z, expires 2027-03-02T00:01:14Z",
+      "Datatracker abstract: 'architectural requirements for supporting AI agents on the Internet across naming and discovery, HTTP, authentication, authorization and delegation, TLS and workload identity, transport and connection continuity, asynchronous messaging, capability and intent-based resolution, payments, provenance, auditability, rev[ocation]'",
+      "https://datatracker.ietf.org/doc/draft-daniel-ai-agent-internet-architecture/",
+      "Conformance vector set 0.6.0 (28 host_behavior vectors, e.g. host-deny-unknown-denial-code, host-nonce-reserve-all-any-conflict-deny) \u2014 the pinned artifacts each mapped requirement would cite; reproduce: npx @bolyra/evc-conformance --host \"<cmd>\""
+    ],
+    "proposed_artifact": "A staged requirements-mapping table (draft-daniel -03 requirement \u2192 EVC section \u2192 vector ID @ a4f546f, or 'out of scope by design') with an APPLY.md proposing it as -02 informative material for draft-kondoju-evc.",
+    "entity": {
+      "name": "draft-daniel-ai-agent-internet-architecture",
+      "repo": null,
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout",
+    "score": {
+      "id": "ecosystem-scout-daniel-architecture-requirements-mapping",
+      "dims": {
+        "verifiability": 20,
+        "demand": 18,
+        "cost": 17,
+        "standard_impact": 20
+      },
+      "total": 75,
+      "verdict": "PROMOTE",
+      "reason": "A pinned requirement-to-vector mapping is feasible and would create useful reviewer-facing evidence for an active architecture draft."
+    }
+  },
+  {
+    "id": "evidence-curator-external-impl-rerun-0-6-0",
+    "type": "evidence_opportunity",
+    "title": "Re-run the only independent host (khandrew1/mcp-use-evc-example @17642a5) against vector set 0.6.0 locally and pin the result",
+    "claim": "The sole external implementation is listed at 27/27 on vector set 0.5.0, but the published suite is now 0.2.0 / vector set 0.6.0 with 28 vectors, and the added vector (host-deny-unknown-denial-code) tests exactly the registry-closure behavior that implementation's feedback motivated. A skeptical third party will ask whether the RFC 7942 entry still holds under the current set; no run record at 0.6.0 exists anywhere in the repo or the ledger (evidence_ledger.jsonl is empty at 0 lines).",
+    "evidence": [
+      "spec/IMPLEMENTER.md \u00a79 table (pinned a4f546f): `khandrew1/mcp-use-evc-example | commit 17642a5, 2026-08-26 | 27/27 host_behavior, vector set 0.5.0`",
+      "spec/draft-kondoju-evc-01.md {#impl-status}: 'At pinned commit 17642a5efd5e1c42991ab8aa399cd6138f64f635 ... it passes 27 of 27 host_behavior vectors of vector set 0.5.0' vs. the same section: '@bolyra/evc-conformance npm package (version 0.2.0, vector set 0.6.0 ...) ... 28 host_behavior vectors'",
+      "spec/CONFORMANCE.md line 4: `**Spec version:** 0.6.0`; vector index lists 28 vectors including host-deny-unknown-denial-code",
+      "Runnable (read-only clone, no outbound writes): `git clone https://github.com/khandrew1/mcp-use-evc-example /tmp/evc-ext && git -C /tmp/evc-ext checkout 17642a5efd5e1c42991ab8aa399cd6138f64f635 && (cd /tmp/evc-ext && npm ci) && cd /tmp/empty && npx @bolyra/evc-conformance@0.2.0 --host \"<host argv from /tmp/evc-ext/README>\"` \u2014 expected: 28/28 PASS, or 27/28 with host-deny-unknown-denial-code failing (either outcome is a ledger fact; the latter is also a spec_finding: the IMPLEMENTER.md/-01 listing needs a '0.5.0 only' qualifier)",
+      "https://github.com/khandrew1/mcp-use-evc-example"
+    ],
+    "proposed_artifact": "An interop_run ledger entry plus experiments/<id>/RUN.md recording the exact clone/checkout/npx commands, node and npm versions, the 0.2.0 tarball integrity hash, and the per-vector pass table, with an APPLY.md that stages a one-row IMPLEMENTER.md \u00a79 update (vector set 0.6.0, N/28) pinned to a4f546f.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-external-impl-rerun-0-6-0",
+      "dims": {
+        "verifiability": 23,
+        "demand": 24,
+        "cost": 16,
+        "standard_impact": 23
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "Re-running the only independent host against vector set 0.6.0 is highly demanded evidence despite external clone/npm setup cost."
+    }
+  },
+  {
+    "id": "evidence-curator-js-vs-rust-failure-class-diff",
+    "type": "evidence_opportunity",
+    "title": "Side-by-side JS vs Rust reference-host run with per-vector failure_class diff at a pinned commit",
+    "claim": "The -01 draft asserts both reference hosts pass 28/28, but no artifact shows that the two independent implementations agree on the \u00a77.2 classification precedence (signal_death vs nonzero_exit, oversize_stdout vs unparseable_stdout) vector by vector. That agreement is the RFC 7942 'two independent interoperable implementations' claim in checkable form; the runner already emits `decision.failure_class` and a `--report` markdown, so the record costs one command per host.",
+    "evidence": [
+      "spec/draft-kondoju-evc-01.md {#impl-status}: 'Two reference hosts implement the host obligations independently ... Both pass the host-conformance suite: 27 misbehaving- and well-behaved-verifier fixtures driving 28 host_behavior vectors.'",
+      "spec/draft-kondoju-evc-01.md {#failure-classes}: 'a host that denies but misclassifies it (for example calling an unbounded flood \"unparseable_stdout\" instead of enforcing the \"oversize_stdout\" bound) is flagged, because the misclassification reveals a real gap.'",
+      "spec/conformance-runner.js lines 452-498: fail-closed denies are asserted as `{decision:\"deny\", failure_class:<\u00a716.3 class>}`; line 12: `--report [path]` writes a markdown report",
+      "spec/reference-host-rs/README.md lines 64-71: `cargo build --manifest-path spec/reference-host-rs/Cargo.toml` then `HOST_CMD=\"spec/reference-host-rs/target/debug/evc-reference-host\" node spec/conformance-runner.js --type host_behavior`",
+      "Runnable at a4f546f: `git checkout a4f546f3279706a2b28a0c15569c0040425e84c7 && node spec/conformance-runner.js --type host_behavior --report /tmp/js.md && cargo build --manifest-path spec/reference-host-rs/Cargo.toml && HOST_CMD=spec/reference-host-rs/target/debug/evc-reference-host node spec/conformance-runner.js --type host_behavior --report /tmp/rs.md && diff <(grep -o 'host-[a-z-]*.*' /tmp/js.md) <(grep -o 'host-[a-z-]*.*' /tmp/rs.md)` \u2014 expected: 28/28 for each and an empty diff on the per-vector class column; plus `cargo test --manifest-path spec/reference-host-rs/Cargo.toml` green"
+    ],
+    "proposed_artifact": "An rfc7942_ready interop_run ledger entry and experiments/<id>/ containing both --report outputs, the diff, toolchain versions (node, cargo, rustc), and a draft -02 Implementation Status paragraph stating the two hosts agree on failure_class for all 28 vectors at commit a4f546f.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-js-vs-rust-failure-class-diff",
+      "dims": {
+        "verifiability": 22,
+        "demand": 18,
+        "cost": 17,
+        "standard_impact": 20
+      },
+      "total": 77,
+      "verdict": "PROMOTE",
+      "reason": "The runner can emit per-host reports and a failure_class diff would strengthen the two-reference-host implementation-status claim."
+    }
+  },
+  {
+    "id": "evidence-curator-published-suite-provenance-cold-verify",
+    "type": "evidence_opportunity",
+    "title": "Cold-verify that the published @bolyra/evc-conformance@0.2.0 tarball byte-matches spec/ at the pinned commit and carries provenance",
+    "claim": "REGISTRY CLOSURE is scored on published-suite freshness and sync:check, but the only evidence today is a CI job run inside the repo. A third party wants the outside-in record: the npm tarball's vendored files hash to the MANIFEST.json values, MANIFEST matches spec/ at a4f546f, the package has a SLSA attestation URL, and the suite runs from an empty directory against the reference host with zero installs. All four are local read-only checks.",
+    "evidence": [
+      "integrations/evc-conformance/MANIFEST.json: `\"generated_from\": \"spec/\"` with sha256 per vendored file (e.g. `vendor/conformance-runner.js: d5204ba2...`)",
+      "integrations/evc-conformance/package.json: version `0.2.0`; scripts `sync:check` = `node scripts/sync.js --check`; `test` = `node bin.js && node scripts/sync.js --check`",
+      "CLAUDE.md release gotcha: 'cold-verify after with `npm view <pkg> dist.attestations.url` + an `npx` run from an empty dir'",
+      "spec/draft-kondoju-evc-01.md {#impl-status}: 'published as the @bolyra/evc-conformance npm package (version 0.2.0, vector set 0.6.0 ...) with a build-provenance attestation, runnable against any host with no dependency on the authors' implementations'",
+      "Runnable: `npm view @bolyra/evc-conformance@0.2.0 version dist.integrity dist.attestations.url && mkdir -p /tmp/cold && cd /tmp/cold && npm pack @bolyra/evc-conformance@0.2.0 && tar xzf bolyra-evc-conformance-0.2.0.tgz && (cd package && for f in $(jq -r '.files|keys[]' MANIFEST.json); do echo \"$(shasum -a 256 $f | cut -d' ' -f1) $f\"; done) | diff - <(jq -r '.files|to_entries[]|\"\\(.value) \\(.key)\"' <REPO>/integrations/evc-conformance/MANIFEST.json) && cd /tmp/cold && npx @bolyra/evc-conformance@0.2.0 --host \"node <REPO>/spec/reference-host.js\"` \u2014 expected: attestation URL present, empty hash diff, `node integrations/evc-conformance/scripts/sync.js --check` exit 0 at a4f546f, 28/28 PASS"
+    ],
+    "proposed_artifact": "A registry_event ledger entry with the tarball integrity hash, attestation URL, MANIFEST diff result, and the empty-dir run transcript, plus a reusable checks/cold_verify_suite.sh the loop can rerun each iteration to feed the REGISTRY CLOSURE dimension objectively.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-published-suite-provenance-cold-verify",
+      "dims": {
+        "verifiability": 23,
+        "demand": 22,
+        "cost": 17,
+        "standard_impact": 24
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "Cold-verifying the npm tarball, manifest hashes, attestation, and empty-dir run directly supports registry-closure scoring."
+    }
+  },
+  {
+    "id": "evidence-curator-verdict-on-stderr-vector-gap",
+    "type": "vector_gap",
+    "title": "No host_behavior vector exercises \u00a75.3 'Hosts MUST NOT parse stderr for the verdict'",
+    "claim": "None of the 27 fixtures writes anything to stderr; every vector proves fail-closed on stdout shapes only. A host that falls back to stderr when stdout is empty (a plausible 'helpful' implementation, since the reference verifier forwards captured fd-1 spew to stderr) passes all 28 vectors today yet violates a normative MUST. The missing fixture is one line: write a valid allow to stderr, nothing to stdout, exit 0; expected host decision is deny with failure_class unparseable_stdout. Running it against both reference hosts produces the coverage evidence for a SPEC HARDNESS MUST-coverage claim.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.3: 'Hosts **MUST NOT** parse stderr for the verdict.' and \u00a75.2: the host MUST reject 'stdout that is empty'",
+      "`grep -ln stderr spec/fixtures/host-conformance/*.js` at a4f546f returns no files (27 fixtures, none touch stderr); `grep -l stdin` returns 27",
+      "spec/fixtures/host-conformance/well-behaved-allow.js is the only allow-emitting positive control and writes solely to process.stdout",
+      "spec/draft-kondoju-evc-01.md {#failure-classes}: `unparseable_stdout | stdout empty, not JSON, or with trailing bytes`",
+      "Runnable after adding the fixture: `node spec/conformance-runner.js --type host_behavior --vector host-deny-verdict-on-stderr` and the same with `HOST_CMD=spec/reference-host-rs/target/debug/evc-reference-host` \u2014 expected: both hosts PASS with failure_class unparseable_stdout; then `node integrations/evc-conformance/scripts/sync.js` and `sync:check` green"
+    ],
+    "proposed_artifact": "A staged diff adding spec/fixtures/host-conformance/verdict-on-stderr.js plus a host-deny-verdict-on-stderr entry in spec/test-vectors.json (vector set bump to 0.6.1), with run outputs from both reference hosts and an APPLY.md covering the sync.js step, CONFORMANCE.md regeneration, DCO, and CODEOWNERS.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-verdict-on-stderr-vector-gap",
+      "dims": {
+        "severity": 18,
+        "evidence": 24,
+        "fixability": 24,
+        "standard_impact": 20
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "The spec has a clear stderr MUST NOT parse rule and the fixture set contains no stderr writer, making this an easy high-coverage vector."
+    }
+  }
+]

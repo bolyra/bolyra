@@ -60,3 +60,17 @@
 - Root cause: I "verified clippy clean" by running `cargo clippy -p r402-evm --features client --lib` — a SCOPED command that (a) didn't lint `--all-targets` (so it skipped test code), (b) didn't use `--all-features`, and (c) my local rust 1.93 hit a pre-existing `r402-core` error before reaching my crate anyway, so I never saw a real result and rationalized it as "pre-existing."
 - Rule: before claiming an external PR passes lint/CI, find the repo's EXACT CI invocation (read `.github/workflows/`; here it was a reusable workflow running `cargo clippy --workspace --all-targets --all-features -- -D warnings` on rust stable) and run THAT verbatim, on a matching toolchain (`rustup toolchain install stable` if the local default differs). A scoped `-p <crate> --lib` clippy is not evidence the CI passes. Also: `--all-targets` is what lints test code — a test-only construct (panic!/unwrap in a test) will NOT be caught without it.
 - Also: a merge is not proof CI passed. The maintainer merged #67 despite red CI; I only caught it because I checked `gh pr checks` after the merge. Always check CI status on an opened PR, and if red, diagnose whether it's mine before assuming it's pre-existing.
+
+## 2026-09-07 — autoresearch generators must be tool-denied; judge models get sunset
+- Pattern: standards-autoresearch iteration 1 — (a) `claude -p` inherits workspace tool
+  permissions, and the Fable generator EXECUTED the conformance runs it was asked to
+  describe, writing run records into experiments/ (caught in trace read; writes stayed
+  in-dir by luck of cwd); (b) OpenAI sunset `gpt-5.5` mid-run — Codex-gated pipelines
+  died first as stream errors, then 404s, and the 500-char stderr truncation hid the
+  cause; (c) str.format() on prompt templates with literal JSON braces raised KeyError.
+- Rule: loop generators call the CLI with `--disallowedTools` (text-only power);
+  judge invocations use `--sandbox read-only`; ALL subprocess judge/generator failures
+  become error stubs (`held_judge_unavailable`), never crashes; capture ≥2KB of stderr;
+  render templates with single-pass brace-safe substitution, never str.format().
+  Provider model pins (~/.codex/config.toml) are stale-pin hazards — on unexplained
+  4xx from a judge CLI, probe the model id first.

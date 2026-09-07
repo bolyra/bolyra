@@ -15,8 +15,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _shared import call_claude_cli, extract_json_array
-from _codex import call_codex_json, GENERATOR_MODEL
+from _shared import extract_json_array
+from _codex import call_codex_json
+from _fable import call_fable
 from _render import render
 
 HERE = Path(__file__).resolve().parent
@@ -102,7 +103,7 @@ def run_personas(iter_dir: Path, *, timeout: int, signals: str,
         for persona in personas[group]:
             prompt = render(template, persona_prompt=persona["prompt"], **common)
             try:
-                raw = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)
+                raw = call_fable(prompt, timeout=timeout)
                 cands = extract_json_array(raw)
             except (RuntimeError, ValueError) as e:
                 # error stub, never an exception (program.md 9)

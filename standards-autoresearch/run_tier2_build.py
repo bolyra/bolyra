@@ -21,8 +21,9 @@ from typing import Any
 
 import re
 
-from _shared import call_claude_cli, extract_json_object
-from _codex import call_codex_json, GENERATOR_MODEL
+from _shared import extract_json_object
+from _codex import call_codex_json
+from _fable import call_fable
 from _render import render
 
 HERE = Path(__file__).resolve().parent
@@ -77,7 +78,7 @@ def _build_spec_finding(candidate: dict, exp_dir: Path, *, timeout: int) -> dict
     prompt = render(template, program=(HERE / "program.md").read_text(),
                              candidate=json.dumps(candidate, indent=2),
                              spec_commit=_spec_commit(), spec_files=spec_files)
-    artifact = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)
+    artifact = call_fable(prompt, timeout=timeout)
     path = exp_dir / "spec-diff.md"
     path.write_text(artifact)
     return check_spec_diff.check(path)
@@ -90,7 +91,7 @@ def _build_vector_gap(candidate: dict, exp_dir: Path, *, timeout: int) -> dict:
                              candidate=json.dumps(candidate, indent=2),
                              vector_set="0.6.0", vector_schema=schema,
                              fixture_example=fixture_example)
-    raw = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)
+    raw = call_fable(prompt, timeout=timeout)
     artifact = extract_json_object(raw)
     (exp_dir / "vector.json").write_text(json.dumps(artifact, indent=2))
     return check_vectors.check(artifact)
@@ -103,7 +104,7 @@ def _build_evidence(candidate: dict, exp_dir: Path, *, timeout: int) -> dict:
     prompt = render(template, program=(HERE / "program.md").read_text(),
                              candidate=json.dumps(candidate, indent=2),
                              ledger_tail=tail)
-    artifact = call_claude_cli(prompt, model=GENERATOR_MODEL, timeout=timeout)
+    artifact = call_fable(prompt, timeout=timeout)
     (exp_dir / "evidence.md").write_text(artifact)
     if artifact.strip().startswith("BLOCKED"):
         return {"ok": False, "stage": "shape", "errors": ["builder reported outbound required"]}
@@ -144,6 +145,20 @@ def _codex_acceptance(candidate: dict, exp_dir: Path, checks: dict,
     return call_codex_json(prompt, timeout=timeout)
 
 
+def _safe_acceptance(candidate: dict, exp_dir: Path, checks: dict,
+                     *, timeout: int) -> tuple[dict, bool]:
+    """Codex acceptance with outage containment: on any failure, persist the
+    FULL exception to acceptance_error.txt and hold the artifact (never crash,
+    never lose the diagnostic — applies to initial AND post-revision calls)."""
+    try:
+        return _codex_acceptance(candidate, exp_dir, checks, timeout=timeout), False
+    except Exception as e:
+        (exp_dir / "acceptance_error.txt").write_text(f"{type(e).__name__}: {e}")
+        return {"verdict": "ERROR",
+                "reason": f"{type(e).__name__}: {str(e)[:280]}",
+                "full_error": str(exp_dir / "acceptance_error.txt")}, True
+
+
 def build_one(candidate: dict, iter_dir: Path, *, timeout: int) -> dict[str, Any]:
     cid = candidate["id"]
     ctype = candidate.get("type", "")
@@ -178,7 +193,11 @@ def build_one(candidate: dict, iter_dir: Path, *, timeout: int) -> dict[str, Any
         entry["action"] = "dropped_objective_check"
         return entry
 
-    verdict = _codex_acceptance(candidate, exp_dir, checks, timeout=timeout + 180)
+    verdict, held = _safe_acceptance(candidate, exp_dir, checks, timeout=timeout + 180)
+    if held:
+        entry["acceptance"] = verdict
+        entry["action"] = "held_judge_unavailable"
+        return entry
     entry["acceptance"] = verdict
 
     if verdict.get("verdict") == "REVISE" and verdict.get("instruction"):
@@ -190,7 +209,7 @@ def build_one(candidate: dict, iter_dir: Path, *, timeout: int) -> dict[str, Any
             + (exp_dir / ARTIFACT_FILE[ctype]).read_text()
         )
         try:
-            revised = call_claude_cli(revise_prompt, model=GENERATOR_MODEL, timeout=timeout)
+            revised = call_fable(revise_prompt, timeout=timeout)
             if ctype == "vector_gap":
                 artifact = extract_json_object(revised)
                 (exp_dir / "vector.json").write_text(json.dumps(artifact, indent=2))
@@ -202,8 +221,12 @@ def build_one(candidate: dict, iter_dir: Path, *, timeout: int) -> dict[str, Any
             (exp_dir / "checks.json").write_text(json.dumps(checks, indent=2))
             entry["checks"] = checks
             if checks.get("ok"):
-                verdict = _codex_acceptance(candidate, exp_dir, checks, timeout=timeout + 180)
+                verdict, held = _safe_acceptance(candidate, exp_dir, checks,
+                                                 timeout=timeout + 180)
                 entry["acceptance"] = verdict
+                if held:
+                    entry["action"] = "held_judge_unavailable"
+                    return entry
         except (RuntimeError, ValueError) as e:
             entry["revision_error"] = str(e)[:300]
 

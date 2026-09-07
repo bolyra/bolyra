@@ -112,5 +112,42 @@ class RenderTests(unittest.TestCase):
         out = render("{a} {b}", a="{b}", b="X")
         self.assertEqual(out, "{b} X")
 
+class FableSandboxTests(unittest.TestCase):
+    def test_generator_denies_all_tools(self):
+        from unittest import mock
+        import _fable
+        captured = {}
+
+        def fake_run(argv, **kw):
+            captured["argv"] = argv
+            class R: returncode, stdout, stderr = 0, "ok", ""
+            return R()
+
+        with mock.patch.object(_fable.subprocess, "run", side_effect=fake_run):
+            out = _fable.call_fable("hi")
+        self.assertEqual(out, "ok")
+        argv = captured["argv"]
+        self.assertEqual(argv[argv.index("--tools") + 1], "")
+        self.assertIn("--strict-mcp-config", argv)
+        self.assertEqual(argv[argv.index("--mcp-config") + 1], '{"mcpServers":{}}')
+        self.assertEqual(argv[argv.index("--model") + 1], _fable.GENERATOR_MODEL)
+
+    def test_revision_acceptance_outage_is_held_with_full_diagnostic(self):
+        import tempfile as _tf
+        from unittest import mock
+        import run_tier2_build as t2
+        td = _tf.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        exp = Path(td.name)
+        with mock.patch.object(t2, "_codex_acceptance",
+                               side_effect=RuntimeError("stream disconnected " + "x" * 500)):
+            verdict, held = t2._safe_acceptance({"id": "c", "type": "spec_finding"},
+                                                exp, {"ok": True}, timeout=1)
+        self.assertTrue(held)
+        self.assertEqual(verdict["verdict"], "ERROR")
+        full = (exp / "acceptance_error.txt").read_text()
+        self.assertGreater(len(full), 400)
+
+
 if __name__ == "__main__":
     unittest.main()

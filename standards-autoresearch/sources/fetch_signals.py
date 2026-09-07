@@ -40,6 +40,8 @@ def _call_claude_with_web_search(
                 "claude", "-p", prompt,
                 "--model", model,
                 "--allowedTools", "WebSearch",
+                "--tools", "WebSearch",
+                "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             ],
             capture_output=True,
             text=True,
