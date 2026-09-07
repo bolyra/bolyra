@@ -2,7 +2,7 @@
   "loop": "bolyra-pr-outreach",
   "start_date": "2026-06-30",
   "cadence": "weekly",
-  "current_week": 9,
+  "current_week": 10,
   "status": "paused",
   "paused_date": "2026-07-27",
   "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
@@ -22,7 +22,7 @@
     "prs_closed": 0,
     "prs_stale": 9,
     "review_comments_responded": 0,
-    "new_repos_identified": 45
+    "new_repos_identified": 50
   },
   "kill_criteria": {
     "week_4": "0 PRs merged out of 10+ open → switch strategy",
@@ -128,6 +128,17 @@
       "follow_ups_drafted": 0,
       "review_comments_responded": 0,
       "notes": "PATH B CONTINUING. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5-8. 5 new Path B targets identified across the TypeScript/gateway tier: (1) vercel/ai ~26500★ — generateText/streamText tool dispatch has no authorization hook; toolAuthorizationHandler option is the fix and reaches the widest TypeScript agent audience of any target identified. (2) camel-ai/camel ~17700★ — FunctionCallingConfig tool dispatch in ChatAgent has no mandate check; BolyraAuthToolkit contrib wrapper is a zero-core-change path. (3) Portkey-AI/gateway ~12900★ — guardrail plugin system is the designed extension point; BolyraEVCGuardrail plugin is a single-file contrib; first identity-bound authorization gate in a production AI gateway. (4) ag2ai/ag2 ~4900★ — ConversableAgent execute_function() has no pre-dispatch gate; tool_authorization_callback on ConversableAgent is the fix; AG2's enterprise/MCP positioning makes it credible. (5) maximhq/bifrost ~7700★ — Go AI gateway, newest entrant, plugin architecture being shaped now; strategic first Go implementation for Bolyra. Total repos identified across 9 weeks: 45, Path B targets: 25. ESCALATION: 9 weeks of scan output with 0 execution. If no Path B PR is opened by week 10, consider suspending the loop."
+    },
+    {
+      "week": 10,
+      "date": "2026-09-07",
+      "prs_merged": 0,
+      "prs_closed": 0,
+      "new_stale": 0,
+      "new_repos_identified": 5,
+      "follow_ups_drafted": 0,
+      "review_comments_responded": 0,
+      "notes": "SUSPENSION RECOMMENDATION FIRES. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5-9. 5 new Path B targets identified: (1) n8n-io/n8n ~203618★ — highest-star target in 10 weeks of scanning; AI Agent node tool dispatch has no per-agent identity gate; Bolyra EVC credential type is the fix. (2) x402-foundation/x402 ~6582★ — the canonical x402 foundation protocol reference (distinct from coinbase/x402 in week 6); facilitator verifyPayment() has no agent identity binding; optional bolyra_mandate field closes the gap at the protocol reference layer. (3) ruvnet/ruflo ~71179★ — agent meta-harness, MCP-server, multi-agent swarms; no identity gate in tool dispatch across swarm agents; BolyraAuthSkill contrib in the skills system. (4) HKUDS/nanobot ~47834★ — self-hosted Python AI agent, MCP, tools; tool execution pipeline has no authorization hook; BolyraAuthPlugin contrib. (5) zhayujie/CowAgent ~46802★ — multi-channel agent harness, MCP, openclaw topic; plugin tool dispatch has no identity gate; BolyraToolPlugin contrib. Total repos identified across 10 weeks: 50, Path B targets: 30. RECOMMENDATION: suspend the weekly scan loop. The target pipeline is fully built. Invest the next session budget in a builder session, not another scan. Restart the scan only after a Path B PR is opened and reaches active review."
     }
   ]
 }
