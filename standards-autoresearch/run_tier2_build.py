@@ -32,7 +32,7 @@ EXPERIMENTS = HERE / "experiments"
 
 # Model-produced candidate IDs become directory names; constrain them hard
 # (Codex review finding: path traversal via crafted IDs).
-SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{2,64}$")
+SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{2,100}$")  # 64 rejected real 70-char ids (iter 2)
 
 
 def safe_experiment_dir(cid: str) -> Path:

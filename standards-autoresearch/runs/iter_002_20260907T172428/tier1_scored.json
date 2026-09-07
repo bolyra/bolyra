@@ -1,0 +1,290 @@
+[
+  {
+    "id": "hostile-implementer-verdict-duplicate-member-names",
+    "dims": {
+      "severity": 22,
+      "evidence": 21,
+      "fixability": 20,
+      "standard_impact": 20
+    },
+    "total": 83,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a75.2 leaves duplicate names unspecified and the raw counterexample parses as allow, although both current reference hosts use last-wins parsing and rejection requires a parser-level rule."
+  },
+  {
+    "id": "hostile-implementer-stdout-whitespace-framing-crlf-bom",
+    "dims": {
+      "severity": 16,
+      "evidence": 23,
+      "fixability": 20,
+      "standard_impact": 18
+    },
+    "total": 77,
+    "verdict": "PROMOTE",
+    "reason": "The framing ambiguity is confirmed at a4f546f, and the reference hosts' trim-based parsers make an explicit whitespace and BOM policy materially useful."
+  },
+  {
+    "id": "hostile-implementer-consume-nonces-retain-until-and-duplicate-entries",
+    "dims": {
+      "severity": 21,
+      "evidence": 19,
+      "fixability": 20,
+      "standard_impact": 18
+    },
+    "total": 78,
+    "verdict": "PROMOTE",
+    "reason": "Stale retention and duplicate-list coverage gaps are confirmed, but uniqueness must follow \u00a78's nonce-only identity and the retention work should be consolidated with the dedicated candidate."
+  },
+  {
+    "id": "hostile-implementer-project-key-byte-for-byte-unicode-normalization",
+    "dims": {
+      "severity": 16,
+      "evidence": 13,
+      "fixability": 19,
+      "standard_impact": 15
+    },
+    "total": 63,
+    "verdict": "CONSIDER",
+    "reason": "Byte-for-byte comparison already excludes normalization, leaving malformed-Unicode handling and missing conformance cases as the defensible narrower finding."
+  },
+  {
+    "id": "security-researcher-nonce-mode-mismatch-fail-open",
+    "dims": {
+      "severity": 22,
+      "evidence": 19,
+      "fixability": 11,
+      "standard_impact": 19
+    },
+    "total": 71,
+    "verdict": "CONSIDER",
+    "reason": "The pinned hosts ignore consume_nonces in local mode, but a genuinely local verifier burns nonces and \u00a73.2 permits omission when nothing needs burning, so blanket bare-allow rejection needs redesign."
+  },
+  {
+    "id": "security-researcher-retain-until-unbounded-replay-window",
+    "dims": {
+      "severity": 20,
+      "evidence": 22,
+      "fixability": 23,
+      "standard_impact": 19
+    },
+    "total": 84,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a7\u00a73.2\u20133.4 impose no retention floor and existing vectors omit stale timestamps, supporting a bounded defensive clarification without establishing an exploit against the correct reference verifier."
+  },
+  {
+    "id": "security-researcher-oversize-stdout-valid-allow-prefix",
+    "dims": {
+      "severity": 16,
+      "evidence": 5,
+      "fixability": 24,
+      "standard_impact": 11
+    },
+    "total": 56,
+    "verdict": "DROP",
+    "reason": "The existing oversize vector requires oversize_stdout and independently proves process termination, so the claimed truncate-and-parse host would already fail rather than pass all 28 vectors."
+  },
+  {
+    "id": "security-researcher-binding-v2-expiry-anchor-ambiguity",
+    "dims": {
+      "severity": 15,
+      "evidence": 8,
+      "fixability": 5,
+      "standard_impact": 12
+    },
+    "total": 40,
+    "verdict": "DROP",
+    "reason": "Section 9 already requires effective-expiry rejection and the pinned verifier enforces it after delegation validation, while replacing credential expiry with leaf expiry changes signed semantics without a demonstrated conforming exploit."
+  },
+  {
+    "id": "competing-spec-author-verdict-envelope-no-extension-point",
+    "dims": {
+      "severity": 13,
+      "evidence": 13,
+      "fixability": 20,
+      "standard_impact": 15
+    },
+    "total": 61,
+    "verdict": "CONSIDER",
+    "reason": "Pinned \u00a711 already defines optional-field evolution and its compatibility limitation, so the useful work is tightening that policy rather than asserting that no extension policy exists."
+  },
+  {
+    "id": "competing-spec-author-verifier-mandates-untested-by-published-suite",
+    "dims": {
+      "severity": 20,
+      "evidence": 11,
+      "fixability": 13,
+      "standard_impact": 21
+    },
+    "total": 65,
+    "verdict": "CONSIDER",
+    "reason": "The published package is host-only, but the pinned repository already contains ten external_verifier vectors and a CLI runner at dist/main.js, so remaining cases should extend that machinery rather than invent an unsupported class."
+  },
+  {
+    "id": "competing-spec-author-draft-chen-decoupled-a2a-authz",
+    "dims": {
+      "momentum": 0,
+      "overlap": 8,
+      "adoption_risk": 3,
+      "counter_available": 16
+    },
+    "total": 27,
+    "verdict": "DROP",
+    "reason": "Live [Datatracker status](https://datatracker.ietf.org/doc/draft-chen-agent-decoupled-authorization-model/) identifies this draft as expired and archived, requiring terminal treatment under rule 2g rather than an active threat."
+  },
+  {
+    "id": "competing-spec-author-mcp-2026-07-28-gateway-routing-slot",
+    "dims": {
+      "incentive_fit": 18,
+      "technical_fit": 18,
+      "channel_state": 10,
+      "effort": 18
+    },
+    "total": 64,
+    "verdict": "CONSIDER",
+    "reason": "The [official changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog) confirms the headers, but gateway demand, bundle provenance, and the proposed request-field mapping remain unproven."
+  },
+  {
+    "id": "ietf-reviewer-iana-registry-vs-closed-enum-contradiction",
+    "dims": {
+      "severity": 4,
+      "evidence": 3,
+      "fixability": 22,
+      "standard_impact": 6
+    },
+    "total": 35,
+    "verdict": "DROP",
+    "reason": "The pinned IANA section already restricts registrations to versioned specification changes and explicitly declines a kind registry, directly contradicting the candidate's central allegations."
+  },
+  {
+    "id": "ietf-reviewer-appendix-b-normative-downref-to-npm-package",
+    "dims": {
+      "severity": 8,
+      "evidence": 5,
+      "fixability": 9,
+      "standard_impact": 8
+    },
+    "total": 30,
+    "verdict": "DROP",
+    "reason": "Pinned Appendix B explicitly disclaims normative wire obligations, and the receipts serializer cannot safely be relabeled JCS on the strength of one golden comparison."
+  },
+  {
+    "id": "ietf-reviewer-pseudocode-contradicts-failure-precedence",
+    "dims": {
+      "severity": 18,
+      "evidence": 22,
+      "fixability": 25,
+      "standard_impact": 19
+    },
+    "total": 84,
+    "verdict": "PROMOTE",
+    "reason": "Pinned architecture pseudocode checks exit before timeout and omits explicit schema, signal, and output-bound checks, making a bounded rewrite worthwhile despite the overstated lowercase-keyword argument."
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-section-omits-independent-implementation",
+    "dims": {
+      "severity": 4,
+      "evidence": 2,
+      "fixability": 20,
+      "standard_impact": 5
+    },
+    "total": 31,
+    "verdict": "DROP",
+    "reason": "The pinned draft already lists khandrew1 with its full commit, coverage, maturity, and implementation experience, while [RFC 7942](https://datatracker.ietf.org/doc/html/rfc7942#section-2) recommends some or all fields rather than requiring the asserted structure."
+  },
+  {
+    "id": "ecosystem-scout-claude-agent-sdk-pretooluse-hook-host-slot",
+    "dims": {
+      "incentive_fit": 18,
+      "technical_fit": 10,
+      "channel_state": 8,
+      "effort": 15
+    },
+    "total": 51,
+    "verdict": "CONSIDER",
+    "reason": "The hook seam exists, but [official timeout semantics](https://code.claude.com/docs/en/hooks#timeouts) distinguish fail-open command hooks from blocking SDK callbacks, undermining the proposed shell hook's claimed enforcement guarantee."
+  },
+  {
+    "id": "ecosystem-scout-mcp-2026-07-28-gateway-method-routing-seam",
+    "dims": {
+      "incentive_fit": 18,
+      "technical_fit": 19,
+      "channel_state": 10,
+      "effort": 20
+    },
+    "total": 67,
+    "verdict": "CONSIDER",
+    "reason": "The [official transport specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports) supports header-based routing with body-authoritative validation, but adoption demand remains inferred and the existing mcp-use implementation is already server-side."
+  },
+  {
+    "id": "ecosystem-scout-draft-chen-a2a-decoupled-authorization",
+    "dims": {
+      "momentum": 0,
+      "overlap": 8,
+      "adoption_risk": 3,
+      "counter_available": 16
+    },
+    "total": 27,
+    "verdict": "DROP",
+    "reason": "The [verified draft](https://datatracker.ietf.org/doc/html/draft-chen-agent-decoupled-authorization-model-00) expired on August 18, 2026 and leaves its input contract undefined, requiring terminal status rather than the proposed active watch card."
+  },
+  {
+    "id": "ecosystem-scout-glama-listing-independent-evc-citation",
+    "dims": {
+      "verifiability": 3,
+      "demand": 9,
+      "cost": 15,
+      "standard_impact": 4
+    },
+    "total": 31,
+    "verdict": "DROP",
+    "reason": "The cited page could not be verified, independent authorship is unproven, and the actual ledger is empty rather than already containing implementation runs."
+  },
+  {
+    "id": "evidence-curator-empty-stdout-exit-zero-vector-gap",
+    "dims": {
+      "severity": 22,
+      "evidence": 24,
+      "fixability": 19,
+      "standard_impact": 20
+    },
+    "total": 85,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a7\u00a75.2\u20135.3 and the vector inventory confirm the gap, but Tier 2 must correct its checker allowlist because unparseable_stdout is already a valid spec token incorrectly rejected by that checker."
+  },
+  {
+    "id": "evidence-curator-dual-reference-host-parity-ledger-run",
+    "dims": {
+      "verifiability": 12,
+      "demand": 20,
+      "cost": 0,
+      "standard_impact": 18
+    },
+    "total": 50,
+    "verdict": "DROP",
+    "reason": "The proposed loop-run Cargo build writes under spec/reference-host-rs/target outside standards-autoresearch/, violating rule 2a, and its commands omit the host_behavior filter while the runner does not expose successful per-vector classifications."
+  },
+  {
+    "id": "evidence-curator-external-impl-rerun-0-6-0-scratch-isolated",
+    "dims": {
+      "verifiability": 15,
+      "demand": 23,
+      "cost": 8,
+      "standard_impact": 22
+    },
+    "total": 68,
+    "verdict": "CONSIDER",
+    "reason": "The pinned 0.5.0 result and newer vector are verified, but the HUT command remains a placeholder and the template must remain staged until an actual successful run supports a ledger entry."
+  },
+  {
+    "id": "evidence-curator-registry-closure-published-suite-fixture-hash-parity",
+    "dims": {
+      "verifiability": 22,
+      "demand": 18,
+      "cost": 24,
+      "standard_impact": 17
+    },
+    "total": 81,
+    "verdict": "PROMOTE",
+    "reason": "Pinned sync:check and independent hashes confirm local parity, but reproduction must hash JavaScript fixtures and distinguish vendored-source evidence from published-tarball verification."
+  }
+]

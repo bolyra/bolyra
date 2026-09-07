@@ -24,8 +24,11 @@ The loop NEVER sends, posts, publishes, or applies. It researches and stages.
 a. **ADDITIVE ONLY.** The loop writes exclusively inside `standards-autoresearch/`.
    It never modifies `spec/`, `integrations/`, `sdk/`, or any published package.
    Spec changes are expressed as staged diffs pinned to a base commit.
-   Artifacts use STAGING language exclusively: they never describe applying
-   diffs, checking out worktrees, or running against a modified spec tree.
+   Artifacts use STAGING language exclusively: they never describe actions
+   the loop or generator TOOK (applying diffs, checking out worktrees,
+   running against a modified spec tree). Founder-facing apply steps are NOT
+   part of any artifact — the pipeline generates APPLY.md for that; an
+   artifact containing apply/git/workflow instructions fails acceptance.
    Calibration (iteration 1): an evidence artifact's REPRODUCE PROCEDURE may
    use an isolated scratch workspace (a fresh temp dir or a network-isolated
    container) to clone and re-run pinned external code — that is the

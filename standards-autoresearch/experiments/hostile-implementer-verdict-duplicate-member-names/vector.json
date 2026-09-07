@@ -1,0 +1,18 @@
+{
+  "vector": {
+    "id": "host-deny-verdict-duplicate-member-name",
+    "description": "Host conformance (\u00a75.2, duplicate-member-name bullet in the staged diff pinned to a4f546f; RFC 8259 \u00a74): the verifier writes the raw bytes `{\"verdict\":\"deny\",\"verdict\":\"allow\"}` at exit 0. The object is syntactically valid JSON but has no single well-defined value \u2014 last-wins parsers (JS JSON.parse, Python json, Go encoding/json, serde_json::Value) see a schema-valid bare `allow`; first-wins or strict parsers (serde derive structs, strict Java/.NET) see a `deny` or a parse error. \u00a75.2 requires stdout to be **exactly one** JSON object and requires a fail-closed deny on anything malformed; an object with a repeated member name at any depth is not a single unambiguous object and MUST be rejected as `schema_invalid`. Catches a host whose JSON layer silently collapses duplicates and relays `allow`.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "duplicate-member-verdict.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "deny",
+      "failure_class": "schema_invalid"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture: verifier emits a single JSON object whose `verdict`\n// member is REPEATED (`{\"verdict\":\"deny\",\"verdict\":\"allow\"}`) at exit 0.\n// RFC 8259 \u00a74 makes receiver behavior for duplicate names unpredictable:\n// last-wins parsers read a bare `allow`, first-wins/strict parsers read a\n// `deny` or an error. \u00a75.2 requires exactly one well-formed JSON object and\n// a fail-closed deny on anything malformed, so the host MUST deny and classify\n// the failure as schema_invalid regardless of its JSON library's tie-break.\n// The bytes are written as a raw string on purpose: JSON.stringify cannot\n// produce duplicate member names. Offered case (1): malformed stdout.\nprocess.stdin.resume();\nprocess.stdin.on('end', () => {\n  process.stdout.write('{\"verdict\":\"deny\",\"verdict\":\"allow\"}', () => process.exit(0));\n});\n",
+  "fixture_name": "duplicate-member-verdict.js"
+}
