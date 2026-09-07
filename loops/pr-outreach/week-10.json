@@ -1,0 +1,206 @@
+{
+  "week": 10,
+  "date": "2026-09-07",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried. All external PR statuses carry forward from last live verification (2026-07-27, 41 days ago). No state writes to prs.json this cycle — same discipline as weeks 4-9.",
+
+  "path_b_progress_check": {
+    "note": "Weeks 5-9 identified 25 Path B targets, all with clean injection points in active frameworks. No new prs.json entries recorded — 0 builder sessions confirmed across 5 Path B weeks. Cumulative total: 45 targets identified across 9 weeks, 0 Path B PRs opened. The target pipeline is fully stocked across every major agent framework, AI gateway, and x402 ecosystem repo. Execution is the only remaining gap.",
+    "week9_priority_status": "unknown — vercel/ai (priority 1, TypeScript, widest TS agent reach), langchain-ai/langchain (week 8, option A, highest reach), and camel-ai/camel (week 9, option B, contrib-path merge) remain the top recommendations. No action confirmed in prs.json.",
+    "action_gap": "10 consecutive scan weeks, 0 Path B PRs opened. The bottleneck is builder-session activation, not target identification.",
+    "suspension_recommendation": "FIRES. Week 9 escalation note: 'If no Path B PR is opened by week 10, consider suspending the loop.' That condition is met. This loop has fully served its intended function of building a target pipeline — 50 total targets identified with builder notes and injection points for every major framework in the ecosystem. Further scanning will not produce new signal. RECOMMENDATION: suspend the weekly scan. Preserve the target backlog. Restart the scan only after a builder session opens and merges at least one Path B PR — to resume as a monitor rather than a pure scanner."
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 41,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "n8n-io/n8n",
+      "approx_stars": 203618,
+      "language": "TypeScript",
+      "why": "n8n is the dominant self-hosted workflow automation platform (203,618★, 400+ integrations, active enterprise user base). Its AI Agent nodes — introduced in late 2024 — dispatch tool calls (HTTP request, code execution, external API calls) after LLM output parsing with no per-agent identity gate. Because n8n positions its AI Agents as production-ready for financial and regulated workflows, the absence of an identity binding at tool dispatch is felt directly by enterprise teams. A Bolyra EVC verifier as an n8n credential-type or a pre-tool hook in the AI Agent node reaches every tool call in every AI workflow across the platform. This is the highest-star target identified in 10 weeks of scanning.",
+      "gap": "n8n's AI Agent node (packages/nodes-base/nodes/Agent/) dispatches LLM-selected tools directly after parsing the tool-call output. There is no pre-invocation hook to verify caller identity or mandate. An optional 'Bolyra Authorization' credential type that triggers an EVC check before each tool invocation closes the gap — implemented as a new credential type plus a short pre-execution hook in the AI Agent node. Non-breaking: workflows without the credential run exactly as today.",
+      "anchor_issue": "Search n8n-io/n8n issues for 'agent authorization', 'tool guard', 'access control', or 'identity'. n8n community.n8n.io may also surface demand. The repo has a CONTRIBUTING.md and active maintainers.",
+      "pr_type": "targeted feature — new Bolyra credential type + optional pre-tool EVC check in AI Agent node. Keep the diff to the agent node package and one credential file. A companion example workflow JSON in examples/ demonstrates the integration.",
+      "priority": 1,
+      "builder_notes": "Entry points: packages/nodes-base/nodes/Agent/ for the AI Agent node; packages/nodes-base/credentials/ for credential types. n8n uses pnpm workspaces and strict TypeScript. Run pnpm build:nodes before submitting. Tests in packages/nodes-base/test/. n8n has an external contributors guide; a linked community post asking for demand feedback before the PR reduces merge risk."
+    },
+    {
+      "repo": "x402-foundation/x402",
+      "approx_stars": 6582,
+      "language": "TypeScript",
+      "why": "This is the x402-foundation canonical protocol repo (6,582★, 508 open issues, active) — distinct from coinbase/x402 identified in week 6, which is Coinbase's implementation. The foundation repo defines the facilitator verification reference and is used as the spec-level implementation. The facilitator currently verifies settlement validity (correct token, amount, recipient) but has no concept of agent identity — any valid payment claim passes regardless of which agent submitted it. A Bolyra mandate hook in the facilitator's verification path would close the gap at the protocol reference layer, shaping all downstream x402 implementations.",
+      "gap": "The facilitator's verifyPayment() function (packages/typescript/src/facilitators/) checks settlement correctness but makes no claim about caller identity. An optional bolyra_mandate field in the x402 payment payload, verified by the facilitator before accepting the payment, binds each payment to a specific agent mandate. The fix is additive: facilitators that don't enable the Bolyra check are unaffected; those that do can enforce per-agent spend limits and delegation.",
+      "anchor_issue": "x402-foundation/x402 has 508 open issues — search for 'agent identity', 'authorization', 'mandate', 'who sent this', or 'caller'. Agent-to-agent payment traceability is a live discussion in the x402 community.",
+      "pr_type": "targeted feature — optional bolyra_mandate field in the PaymentPayload type plus a reference verifier hook in the facilitator. Ships as an optional extension — existing facilitators unaffected. TypeScript strict, reference implementation only.",
+      "priority": 2,
+      "builder_notes": "Entry point: packages/typescript/src/facilitators/ — study existing verifyPayment() implementation. The repo uses pnpm + TypeScript strict. Check CONTRIBUTING.md for DCO requirements. The foundation repo has very active maintainers (508 issues, updated yesterday) — a well-scoped PR with a clear 'why' will be reviewed quickly."
+    },
+    {
+      "repo": "ruvnet/ruflo",
+      "approx_stars": 71179,
+      "language": "TypeScript",
+      "why": "ruflo (71,179★) is 'the original agent meta-harness' — deploying multi-agent swarms, coordinating autonomous workflows, and integrating MCP servers. Agents in a swarm share the operator-level identity with no scope narrowing; a spawned sub-agent inherits full tool access with no delegation gate. ruflo's skills system (the designed extension point) makes a BolyraAuthSkill the cleanest non-core injection path. The claude-code and codex topics signal alignment with the developer-tool tier Bolyra targets; the harness's MCP integration means Bolyra's EVC verifier can gate MCP tool calls across the swarm.",
+      "gap": "ruflo's swarm tool dispatch (the harness loop that dispatches MCP tool calls to agents) has no identity gate between the swarm orchestrator and individual agents. An agent requesting a high-permission tool call (financial, PII) gets through on the operator key alone. A BolyraAuthSkill in the skills system — evaluated before any tool call dispatched by the harness — closes the gap and can enforce the delegation scope narrows-only invariant across agent hierarchies.",
+      "anchor_issue": "Search ruvnet/ruflo issues for 'authorization', 'permission', 'scope', or 'identity'. The repo is actively developed; ruvnet is a single-maintainer project with fast response times on focused PRs.",
+      "pr_type": "contrib skill — BolyraAuthSkill in a new skills/bolyra/ directory, implementing the harness skill interface. Verifies a Bolyra mandate before tool dispatch. Zero change to harness core. Companion example in examples/bolyra-auth-swarm/ showing a delegation hierarchy across agents.",
+      "priority": 3,
+      "builder_notes": "Study the harness skill interface (from skills/ directory) before writing BolyraAuthSkill. ruflo uses pnpm, TypeScript. Run existing skill tests before adding a new one. The maintainer merges skill contributions quickly — keep the PR scoped to the skill + example + README.md in the skill directory."
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "approx_stars": 47834,
+      "language": "Python",
+      "why": "nanobot (47,834★) is an ultra-lightweight self-hosted personal AI agent framework from Hong Kong University of Science — MCP, tools, multi-agent workflows, WebUI, Discord/Telegram bots. Tool dispatch runs with operator identity and no per-agent gate. The openclaw topic (also used by bolyra's integrations/openclaw/) is a strong signal that maintainers value protocol integrations. Academic provenance means maintainers are receptive to well-reasoned security/identity contributions. At 47k★ it reaches a large self-hosted community — enterprise and privacy-focused users who are exactly the audience that cares about per-agent authorization.",
+      "gap": "nanobot's tool execution pipeline (the bot plugin/tool dispatch loop) runs registered tools with operator-level identity. There is no authorization hook between 'LLM requested tool X' and 'tool X executes'. An optional bolyra_auth_callback parameter on the nanobot Agent (or a BolyraAuthPlugin in the plugin system) — evaluated before each tool invocation — closes the gap without touching core behavior.",
+      "anchor_issue": "Search HKUDS/nanobot issues for 'authorization', 'tool guard', 'access control', or 'permission'. At 771 open issues, demand signals are likely already present.",
+      "pr_type": "targeted feature — optional bolyra_auth_callback on Agent plus a BolyraAuthPlugin contrib in a plugins/bolyra/ directory. Non-breaking: absent callback runs exactly as today. Python strict typing, follows existing plugin patterns.",
+      "priority": 4,
+      "builder_notes": "Study the existing plugin architecture (plugins/ directory) before writing BolyraAuthPlugin. Python 3.10+, uses ruff + mypy. Add a test in tests/test_bolyra_auth_plugin.py. The CONTRIBUTING.md (if it exists) will have style requirements. The MCP integration in nanobot makes this doubly relevant — Bolyra can gate MCP tool calls specifically."
+    },
+    {
+      "repo": "zhayujie/CowAgent",
+      "approx_stars": 46802,
+      "language": "Python",
+      "why": "CowAgent (46,802★, formerly chatgpt-on-wechat, 10k+ forks) is a high-adoption multi-channel AI agent and harness deployed across WeChat, Slack, DingTalk, Telegram, email. It has a plugin tool dispatch system, MCP integration, and — crucially — the openclaw topic in a 46k★ repo, signaling deliberate alignment with the openclaw ecosystem that Bolyra integrates with (integrations/openclaw/). The multi-channel deployment model means tool calls may originate from any connected channel; binding each call to an agent identity is precisely the trust problem Bolyra solves.",
+      "gap": "CowAgent's tool/skill plugin dispatch (the plugin manager executing tool requests from the LLM) runs with operator identity and no caller gate. A BolyraToolPlugin that wraps the plugin dispatch loop — verifying a Bolyra mandate before executing any tool call — closes the gap. The plugin interface is the designed extension point; this is a contrib plugin, not a core change.",
+      "anchor_issue": "Search zhayujie/CowAgent issues for 'authorization', 'tool guard', 'permission', or 'identity'. The repo has 24 open issues — small and focused, meaning maintainer attention per issue is high.",
+      "pr_type": "contrib plugin — BolyraToolPlugin in plugins/bolyra/ implementing the CowAgent plugin interface. Intercepts tool dispatch, verifies Bolyra mandate, allows/denies. Zero change to agent core. README.md in the plugin directory explains the use case.",
+      "priority": 5,
+      "builder_notes": "Study an existing CowAgent plugin (plugins/ directory) to learn the plugin interface before writing BolyraToolPlugin. Python, follows existing plugin conventions. The openclaw integration is a shared vocabulary — reference it in the PR description to signal ecosystem awareness. The maintainer (zhayujie) is active; scoped contrib PRs merge within days based on the commit history."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "cumulative_targets_identified": 50,
+    "path_b_targets_total": 30,
+    "weeks_since_last_outreach_action": "10+",
+    "suspension_recommendation_fires": true,
+    "suspension_rationale": "Week 9 explicitly noted: 'If no Path B PR is opened by week 10, consider suspending the loop.' That condition is met: 10 consecutive weeks, 0 Path B PRs opened, 30 Path B targets fully specified with builder notes, injection points, and anchor issues. Additional scans will not produce actionable new signal — the bottleneck is execution, not intelligence. Recommend suspending the weekly scan and investing that session budget in a single builder session instead.",
+    "recommended_restart_condition": "Resume the weekly scan when: (1) at least one Path B PR has been opened, AND (2) that PR has either been merged or is in active review. At that point the scan resumes as a monitor role — checking CI, review comments, and follow-up timing — which is where it delivers value.",
+    "if_founder_continues_scanning": "If the founder chooses to continue scanning rather than suspend, the next natural tier to cover is: browser/computer-use agent frameworks (not yet in the backlog), Rust AI frameworks beyond bifrost, and multi-agent communication protocols (A2A, FIPA-aligned). But this should not happen before at least one builder session activates.",
+    "top_three_by_merge_probability": [
+      "vercel/ai (week 9 #1) — TypeScript, optional toolAuthorizationHandler, non-breaking, Vercel engineers responsive to quality contribs",
+      "langchain-ai/langchain (week 8 #2) — 2-file diff, non-breaking BaseTool.run() guard, widest downstream reach",
+      "camel-ai/camel (week 9 #2) — BolyraAuthToolkit contrib path requires zero core change, modular toolkits design, active maintainers"
+    ]
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 50,
+    "path": "B",
+    "path_b_targets_identified": 30,
+    "weeks_since_last_outreach_action": "10+"
+  }
+}
