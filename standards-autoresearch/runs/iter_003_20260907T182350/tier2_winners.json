@@ -1,0 +1,48 @@
+[
+  {
+    "candidate": {
+      "id": "security-researcher-signal-death-after-complete-allow",
+      "type": "vector_gap",
+      "title": "No vector for a verifier that writes a complete, schema-valid `allow` and is then killed by an unsolicited signal",
+      "claim": "\u00a77.2 lists 'death by signal / crash' as an unconditional deny and \u00a77.2 precedence text requires `signal_death` to be classified distinctly from `nonzero_exit`, but the only signal vector in set 0.6.0 (`host-deny-killed-by-signal`) kills the verifier BEFORE any output. The exit-code sibling (`host-deny-nonzero-exit-after-allow`) exists, the signal sibling does not. That is exactly the ordering a lazy host gets wrong: it parses stdout first, sees a perfect `{\"verdict\":\"allow\"}\\n`, then checks the exit status with a comparison that treats a signal death as success. In Node the `close` event delivers `code === null` when the child died by signal, so `if (code > 0) deny()` is skipped; in Python `returncode` is negative (`-11` for SIGSEGV), so the same `> 0` guard also passes. Both are fail-open on a verdict the spec says MUST be denied. The attack is a verifier whose native proof library segfaults or is OOM-killed in teardown after the verdict flush (\u00a75.1 explicitly anticipates native libraries misbehaving on fd 1; nothing says they finish exiting cleanly), or a presenter who can influence verifier teardown timing. Observable a vector can assert: verifier writes `{\"verdict\":\"allow\"}\\n`, flushes, then raises SIGSEGV on itself; host MUST deny and, if it reports a class, MUST report `signal_death`, not `allow` and not `nonzero_exit`.",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a77.2: 'The host MUST treat all of the following as deny, regardless of what (if anything) reached stdout: ... death by signal / crash;'",
+        "spec/external-verifier-contract-v1.md \u00a77.2: 'death by an unsolicited signal and a non-zero exit are distinct conditions (`signal_death` vs `nonzero_exit`, \u00a716.3) \u2014 a host MUST NOT collapse them into one classification.'",
+        "Conformance vector index (set 0.6.0): 'host-deny-killed-by-signal: ... the verifier terminates via an unsolicited fatal signal before produ[cing output]' and 'host-deny-nonzero-exit-after-allow: the verifier prints a syntactically valid `allow` and then ex[its non-zero]' \u2014 no vector combines a complete allow with a subsequent signal death.",
+        "Node.js child_process docs, 'close' event: 'code <number> The exit code if the child exited on its own... null if the process was killed by a signal' \u2014 https://nodejs.org/api/child_process.html#event-close",
+        "Python subprocess docs: 'A negative value -N indicates that the child was terminated by signal N (POSIX only)' \u2014 https://docs.python.org/3/library/subprocess.html#subprocess.Popen.returncode",
+        "Reproduce the fail-open host pattern in an isolated scratch dir: `node -e \"const {spawn}=require('child_process');const c=spawn('sh',['-c','printf \\\\'{\\\"verdict\\\":\\\"allow\\\"}\\\\n\\\\'; kill -SEGV $$']);let o='';c.stdout.on('data',d=>o+=d);c.on('close',(code,sig)=>{console.log('code',code,'signal',sig,'naive-verdict',(code>0)?'deny':JSON.parse(o).verdict)})\"` \u2014 prints `code null signal SIGSEGV naive-verdict allow`."
+      ],
+      "proposed_artifact": "A new host_behavior conformance vector `host-deny-signal-death-after-allow` (verifier stub emits a complete newline-terminated `allow`, flushes, then self-delivers SIGSEGV; expected decision deny, expected failure class `signal_death`) staged as a fixture diff pinned to a4f546f, plus the matching one-line addition to the \u00a716.3 offered-case list.",
+      "entity": null,
+      "persona": "security-researcher",
+      "score": {
+        "id": "security-researcher-signal-death-after-complete-allow",
+        "dims": {
+          "severity": 23,
+          "evidence": 23,
+          "fixability": 25,
+          "standard_impact": 20
+        },
+        "total": 91,
+        "verdict": "PROMOTE",
+        "reason": "Pinned \u00a77.2 unconditionally rejects signal death, while the existing signal fixture emits no verdict, confirming a bounded additive vector that catches stdout-first fail-open handling."
+      }
+    },
+    "id": "security-researcher-signal-death-after-complete-allow",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/security-researcher-signal-death-after-complete-allow",
+    "checks": {
+      "ok": true,
+      "stage": "run",
+      "exit": 0,
+      "stdout_tail": "  host-deny-allow-extra-property: PASS\n  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n\n29 passed, 0 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "acceptance": {
+      "verdict": "APPROVE",
+      "reason": "The additive fixture covers complete allow output followed by fatal signal death, asserts deny with signal_death classification, and passes the supplied conformance checks without an evident program-rule violation."
+    },
+    "action": "advance"
+  }
+]

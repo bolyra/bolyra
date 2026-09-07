@@ -76,7 +76,11 @@ def score_spec_hardness() -> dict[str, Any]:
     staged = HERE / "output" / "staged"
     if staged.exists():
         for apply_md in staged.rglob("APPLY.md"):
-            if "spec_finding" in apply_md.read_text()[:200]:
+            # type is authoritative in the title line: "# APPLY — <id> (<type>)"
+            # (a substring grep miscounted: the boilerplate itself mentions
+            # "spec_finding only" — Codex review, iteration 3)
+            first = apply_md.read_text().splitlines()[0] if apply_md.read_text() else ""
+            if first.rstrip().endswith("(spec_finding)"):
                 open_findings += 1
     base = max(0, 20 - 3 * open_findings)
     coverage = _must_coverage()

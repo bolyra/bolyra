@@ -1,0 +1,18 @@
+{
+  "vector": {
+    "id": "host-deny-signal-death-after-allow",
+    "description": "Host conformance (\u00a77.2, \u00a716.3): the verifier writes a complete, schema-valid, newline-terminated `allow`, flushes it to fd 1, and is then terminated by an unsolicited fatal signal (SIGABRT raised from its own teardown, the native-library crash path \u00a75.1 anticipates) before ever calling exit. \u00a77.2 requires the host to treat death by signal as deny 'regardless of what (if anything) reached stdout', and to classify it as `signal_death`, distinct from `nonzero_exit`. Catches the stdout-first fail-open host: it parses the perfect verdict, then guards the exit status with `code > 0` (or equivalent), which a signal death bypasses because Node's close event reports `code === null` and Python's returncode is negative. Signal sibling of `host-deny-nonzero-exit-after-allow`; unlike `host-deny-killed-by-signal`, the verdict here is fully delivered before death.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "signal-death-after-allow.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "deny",
+      "failure_class": "signal_death"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture: verifier emits a complete, schema-valid,\n// newline-terminated `allow`, waits for the write to flush to fd 1, and is\n// then killed by an unsolicited fatal signal from its own teardown. \u00a77.2:\n// death by signal is deny 'regardless of what (if anything) reached stdout'\n// and MUST be classified `signal_death`, not `nonzero_exit` (\u00a716.3). Models\n// a native proof library aborting after the verdict flush (\u00a75.1). We use\n// process.abort() (SIGABRT) rather than a self-sent SIGSEGV because the V8\n// wasm trap handler may intercept a kill()-delivered SIGSEGV on some\n// platforms; SIGABRT is delivered unconditionally and reports code === null\n// with signal 'SIGABRT' to a Node host and returncode -6 to a Python host.\n// The native stack trace goes to stderr, which the host MUST ignore.\nprocess.stdin.resume();\nprocess.stdin.on('end', () => {\n  process.stdout.write(JSON.stringify({ verdict: 'allow' }) + '\\n', () => {\n    process.abort();\n  });\n});\n",
+  "fixture_name": "signal-death-after-allow.js"
+}

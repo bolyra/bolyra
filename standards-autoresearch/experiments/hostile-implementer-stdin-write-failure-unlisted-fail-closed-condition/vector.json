@@ -1,0 +1,17 @@
+{
+  "vector": {
+    "id": "host-relay-deny-verifier-closes-stdin-unread",
+    "description": "Host conformance (\u00a716.3): the verifier closes its stdin WITHOUT reading the request, then writes a schema-valid `deny code=malformed_input` at exit 0 \u2014 the shape \u00a76 prescribes for a verifier that hits its request bound and stops reading. \u00a72 obligates the host to write the entire request and then EOF stdin, so the read end can close under the host's write and surface as EPIPE/SIGPIPE \u2014 a request-delivery failure \u00a77.2 does not enumerate among its fail-closed conditions. The host MUST reach a deny: either relay the verifier's deny or fail closed under its own classification of the write failure. Both are accepted (no verifier_code / failure_class pinned); what is caught is the host that crashes on the unhandled stdin write error, hangs waiting for a drain that never comes, or emits no decision at all. The assertion holds on both branches of the write/close race, so the vector is deterministic in verdict regardless of request size.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "stdin-unread-deny.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "deny"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture: verifier closes its stdin WITHOUT reading the\n// request, then writes a schema-valid `deny code=malformed_input` at exit 0.\n// This is the \u00a76 bound-exceeded shape (stop reading, emit malformed_input).\n// Because \u00a72 obligates the host to write the whole request and then EOF, the\n// read end closing under the host's write surfaces as EPIPE/SIGPIPE on the\n// host side \u2014 a request-delivery failure \u00a77.2 does not enumerate. The host\n// MUST still produce a deny (relay this deny, or fail closed on its own write\n// failure) and MUST NOT crash or hang. Offered case: verdict is well-formed;\n// the only misbehavior is that the request was never consumed.\nrequire('fs').closeSync(0);\nprocess.stdout.write(\n  JSON.stringify({ verdict: 'deny', code: 'malformed_input', message: 'request not consumed' }),\n  () => process.exit(0)\n);\n",
+  "fixture_name": "stdin-unread-deny.js"
+}

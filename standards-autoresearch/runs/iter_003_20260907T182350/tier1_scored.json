@@ -1,0 +1,290 @@
+[
+  {
+    "id": "hostile-implementer-literal-match-only-project-key",
+    "dims": {
+      "severity": 16,
+      "evidence": 14,
+      "fixability": 22,
+      "standard_impact": 16
+    },
+    "total": 68,
+    "verdict": "CONSIDER",
+    "reason": "Pinned \u00a72.1 supports clarifying string equality, but \u00a79 already defines model hashing and the repository contains verifier-side vectors, weakening the broader claims."
+  },
+  {
+    "id": "hostile-implementer-retain-until-no-lower-bound-skip-reserve",
+    "dims": {
+      "severity": 20,
+      "evidence": 15,
+      "fixability": 10,
+      "standard_impact": 18
+    },
+    "total": 63,
+    "verdict": "CONSIDER",
+    "reason": "The missing retention floor is real, but \u00a77.3 already requires insertion and retention only through the first action cannot guarantee the proposed second-run replay denial."
+  },
+  {
+    "id": "hostile-implementer-nonce-uniqueness-keyed-by-issuer-tuple",
+    "dims": {
+      "severity": 17,
+      "evidence": 8,
+      "fixability": 21,
+      "standard_impact": 14
+    },
+    "total": 60,
+    "verdict": "CONSIDER",
+    "reason": "Sections 7.3 and 8 already establish nonce-only identity, leaving useful issuer-variation and duplicate-list coverage gaps rather than the claimed undefined uniqueness rule."
+  },
+  {
+    "id": "hostile-implementer-stdin-write-failure-unlisted-fail-closed-condition",
+    "dims": {
+      "severity": 20,
+      "evidence": 17,
+      "fixability": 20,
+      "standard_impact": 18
+    },
+    "total": 75,
+    "verdict": "PROMOTE",
+    "reason": "Section 7.2 omits request-delivery failures and the pinned reference host swallows stdin errors, supporting an early-close allow vector despite the incorrect claim that bounded reading necessarily requires early exit."
+  },
+  {
+    "id": "security-researcher-signal-death-after-complete-allow",
+    "dims": {
+      "severity": 23,
+      "evidence": 23,
+      "fixability": 25,
+      "standard_impact": 20
+    },
+    "total": 91,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a77.2 unconditionally rejects signal death, while the existing signal fixture emits no verdict, confirming a bounded additive vector that catches stdout-first fail-open handling."
+  },
+  {
+    "id": "security-researcher-local-mode-host-receives-consume-nonces",
+    "dims": {
+      "severity": 21,
+      "evidence": 11,
+      "fixability": 21,
+      "standard_impact": 18
+    },
+    "total": 71,
+    "verdict": "CONSIDER",
+    "reason": "Section 3.2 already requires reserving every present entry, while both pinned reference hosts ignore the list in local mode, supporting a conformance gap and conflicting-prose clarification."
+  },
+  {
+    "id": "security-researcher-retain-until-not-after-now-unix",
+    "dims": {
+      "severity": 20,
+      "evidence": 20,
+      "fixability": 10,
+      "standard_impact": 19
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "The absent retention floor is confirmed, but rejecting currently valid verdicts requires a compatibility decision, relational validation beyond exclusiveMinimum, and controlled timing for the one-second replay case."
+  },
+  {
+    "id": "security-researcher-empty-nonce-string-falsy-skip",
+    "dims": {
+      "severity": 21,
+      "evidence": 20,
+      "fixability": 10,
+      "standard_impact": 18
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "Empty strings are schema-valid and the reference store discards blank lines on reload, but skipping entries already violates \u00a73.2 and adding minLength requires a compatibility decision."
+  },
+  {
+    "id": "competing-spec-author-allow-verdict-cannot-carry-provenance",
+    "dims": {
+      "severity": 9,
+      "evidence": 17,
+      "fixability": 18,
+      "standard_impact": 11
+    },
+    "total": 55,
+    "verdict": "CONSIDER",
+    "reason": "The closed allow shape is verified and \u00a711 permits optional-field evolution, but provenance logging remains an extension proposal without a demonstrated authorization or interoperability defect."
+  },
+  {
+    "id": "competing-spec-author-request-side-host-muts-untested",
+    "dims": {
+      "severity": 17,
+      "evidence": 17,
+      "fixability": 23,
+      "standard_impact": 18
+    },
+    "total": 75,
+    "verdict": "PROMOTE",
+    "reason": "Fixtures do not validate forwarded request schemas, but positive controls already require stdin EOF, so Tier 2 should add schema-validating positive controls and discard the proposed expected-deny EOF case."
+  },
+  {
+    "id": "competing-spec-author-mcp-use-router-policy-slot",
+    "dims": {
+      "incentive_fit": 10,
+      "technical_fit": 22,
+      "channel_state": 5,
+      "effort": 17
+    },
+    "total": 54,
+    "verdict": "DROP",
+    "reason": "Live [issue #1835](https://github.com/mcp-use/mcp-use/issues/1835) is closed and khandrew1 is held, requiring terminal treatment for this issue-based opportunity and the channel cap."
+  },
+  {
+    "id": "competing-spec-author-aerf-evidence-receipt-format-entrant",
+    "dims": {
+      "momentum": 9,
+      "overlap": 17,
+      "adoption_risk": 9,
+      "counter_available": 19
+    },
+    "total": 54,
+    "verdict": "CONSIDER",
+    "reason": "The [repository](https://github.com/aerf-spec/agentmint-python) confirms signed receipts and AERF v0.1 but describes stability as intended before 1.0, with limited adoption evidence and overlap primarily in receipts."
+  },
+  {
+    "id": "ietf-reviewer-iana-closed-registry-policy-contradiction",
+    "dims": {
+      "severity": 4,
+      "evidence": 2,
+      "fixability": 21,
+      "standard_impact": 5
+    },
+    "total": 32,
+    "verdict": "DROP",
+    "reason": "The pinned IANA section already specifies Specification Required, registry fields, initial contents, and wire-major reconciliation while explicitly declining a kind registry."
+  },
+  {
+    "id": "ietf-reviewer-canonicalization-normative-dependency-on-vendor-package",
+    "dims": {
+      "severity": 10,
+      "evidence": 5,
+      "fixability": 9,
+      "standard_impact": 8
+    },
+    "total": 32,
+    "verdict": "DROP",
+    "reason": "Pinned Appendix B explicitly disclaims normative wire obligations and binding v2 permits only six ASCII-named fields, invalidating the claimed draft blocker and proposed non-ASCII-key counterexample."
+  },
+  {
+    "id": "ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence",
+    "dims": {
+      "severity": 20,
+      "evidence": 24,
+      "fixability": 25,
+      "standard_impact": 20
+    },
+    "total": 89,
+    "verdict": "PROMOTE",
+    "reason": "The pinned draft pseudocode omits schema validation and signal/output-bound handling and checks nonzero exit before timeout, supporting a bounded rewrite aligned with the normative obligations."
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-entry-stale-vector-count-rerun",
+    "dims": {
+      "verifiability": 12,
+      "demand": 19,
+      "cost": 11,
+      "standard_impact": 18
+    },
+    "total": 60,
+    "verdict": "CONSIDER",
+    "reason": "The historical listing accurately identifies set 0.5.0 and [RFC 7942](https://datatracker.ietf.org/doc/html/rfc7942#section-2) makes fields advisory, while prior files already record 27/28 and this proposal lacks a runnable HUT command."
+  },
+  {
+    "id": "ecosystem-scout-microsoft-agt-mcp-control-plane",
+    "dims": {
+      "momentum": 22,
+      "overlap": 22,
+      "adoption_risk": 19,
+      "counter_available": 15
+    },
+    "total": 78,
+    "verdict": "PROMOTE",
+    "reason": "Microsoft's [AGT documentation](https://developer.microsoft.com/blog/securing-mcp-a-control-plane-for-agent-tool-execution/) confirms substantial enforcement overlap and multiple policy backends, but EVC interoperability remains untested and the card must remain stale until required GitHub API reconciliation succeeds."
+  },
+  {
+    "id": "ecosystem-scout-draft-daniel-agent-internet-architecture",
+    "dims": {
+      "momentum": 13,
+      "overlap": 15,
+      "adoption_risk": 9,
+      "counter_available": 17
+    },
+    "total": 54,
+    "verdict": "CONSIDER",
+    "reason": "[Datatracker](https://datatracker.ietf.org/doc/draft-daniel-ai-agent-internet-architecture/) now lists revision -03, making the -00 framing stale, while this individual architecture draft offers positioning value without demonstrated competing enforcement or WG adoption."
+  },
+  {
+    "id": "ecosystem-scout-voltagent-before-tool-call-hook",
+    "dims": {
+      "incentive_fit": 15,
+      "technical_fit": 19,
+      "channel_state": 8,
+      "effort": 18
+    },
+    "total": 60,
+    "verdict": "CONSIDER",
+    "reason": "[Issue #1166](https://github.com/VoltAgent/voltagent/issues/1166) remains open and describes a compatible pre-action seam, but it is an APort/OAP proposal without verified maintainer commitment to EVC."
+  },
+  {
+    "id": "ecosystem-scout-mcp-use-router-policy-middleware",
+    "dims": {
+      "incentive_fit": 10,
+      "technical_fit": 22,
+      "channel_state": 5,
+      "effort": 17
+    },
+    "total": 54,
+    "verdict": "DROP",
+    "reason": "Live [issue #1835](https://github.com/mcp-use/mcp-use/issues/1835) is closed, the engagement graph records the middleware seam as already merged, and the held maintainer requires channel_state capped at 5."
+  },
+  {
+    "id": "evidence-curator-js-rust-host-parity-run-at-pinned-commit",
+    "dims": {
+      "verifiability": 10,
+      "demand": 18,
+      "cost": 0,
+      "standard_impact": 17
+    },
+    "total": 45,
+    "verdict": "DROP",
+    "reason": "The proposed local Cargo build writes outside standards-autoresearch, violating rule 2a, while commands omit the host_behavior filter and ordinary runner output lacks successful per-vector failure_class values."
+  },
+  {
+    "id": "evidence-curator-external-impl-rerun-against-28-vector-set",
+    "dims": {
+      "verifiability": 15,
+      "demand": 21,
+      "cost": 12,
+      "standard_impact": 21
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "The empty ledger warrants curating this evidence, but prior experiment outputs already record 27/28 at 17642a5 and reproduction requires a pinned HUT adapter rather than the nonexistent README command."
+  },
+  {
+    "id": "evidence-curator-host-must-to-vector-coverage-map",
+    "dims": {
+      "verifiability": 9,
+      "demand": 22,
+      "cost": 17,
+      "standard_impact": 21
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "A coverage map is valuable, but the proposed grep and fixture glob miss obligations and actual vector definitions, while EOF and classification assertions already exist and \u00a716.5 documents the ordering limitation."
+  },
+  {
+    "id": "evidence-curator-published-suite-vs-vendored-fixtures-hash-record",
+    "dims": {
+      "verifiability": 17,
+      "demand": 18,
+      "cost": 23,
+      "standard_impact": 19
+    },
+    "total": 77,
+    "verdict": "PROMOTE",
+    "reason": "Read-only sync:check confirms 31 vendored files plus MANIFEST, supporting a registry record that includes vendor/test-vectors.json and normalized tarball comparisons instead of treating fixture scripts as vector definitions."
+  }
+]
