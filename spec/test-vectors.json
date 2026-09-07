@@ -1,5 +1,5 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -1471,7 +1471,7 @@
     },
     {
       "id": "host-deny-unknown-denial-code",
-      "description": "Registry closure (\u00a73.4/\u00a79/\u00a77.2): the verifier returns an otherwise well-formed `deny` whose `code` is not in the \u00a79 registry. The \u00a73.4 deny schema closes `code` over the registry enum, so the verdict fails the schema and the host MUST fail closed with `schema_invalid`. The host MUST NOT relay the unknown code as a verifier decision — a broken or hostile verifier must not be able to mint denial semantics the contract never defined.",
+      "description": "Registry closure (\u00a73.4/\u00a79/\u00a77.2): the verifier returns an otherwise well-formed `deny` whose `code` is not in the \u00a79 registry. The \u00a73.4 deny schema closes `code` over the registry enum, so the verdict fails the schema and the host MUST fail closed with `schema_invalid`. The host MUST NOT relay the unknown code as a verifier decision \u2014 a broken or hostile verifier must not be able to mint denial semantics the contract never defined.",
       "type": "host_behavior",
       "inputs": {
         "fixture": "unknown-denial-code.js",
@@ -1911,6 +1911,20 @@
         "chain_ok": true,
         "failing_index": 1,
         "binding_code": "ref_mismatch"
+      }
+    },
+    {
+      "id": "host-deny-signal-death-after-allow",
+      "description": "Host conformance (\u00a77.2, \u00a716.3): the verifier writes a complete, schema-valid, newline-terminated `allow`, flushes it to fd 1, and is then terminated by an unsolicited fatal signal (SIGABRT raised from its own teardown, the native-library crash path \u00a75.1 anticipates) before ever calling exit. \u00a77.2 requires the host to treat death by signal as deny 'regardless of what (if anything) reached stdout', and to classify it as `signal_death`, distinct from `nonzero_exit`. Catches the stdout-first fail-open host: it parses the perfect verdict, then guards the exit status with `code > 0` (or equivalent), which a signal death bypasses because Node's close event reports `code === null` and Python's returncode is negative. Signal sibling of `host-deny-nonzero-exit-after-allow`; unlike `host-deny-killed-by-signal`, the verdict here is fully delivered before death.",
+      "type": "host_behavior",
+      "inputs": {
+        "fixture": "signal-death-after-allow.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "deny",
+        "failure_class": "signal_death"
       }
     }
   ]
