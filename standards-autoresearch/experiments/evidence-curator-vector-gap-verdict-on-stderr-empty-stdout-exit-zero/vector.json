@@ -1,0 +1,18 @@
+{
+  "vector": {
+    "id": "host-deny-empty-stdout-verdict-on-stderr",
+    "description": "Host conformance fail-closed case (\u00a75.2 / \u00a75.3): the verifier reads the request, writes a schema-valid `{\"verdict\":\"allow\"}` to STDERR only, writes nothing to stdout, and exits 0 promptly. \u00a75.2 requires the host to reject (treat as deny, \u00a77) stdout that is empty; \u00a75.3 states hosts MUST NOT parse stderr for the verdict. A host that reads 'whatever the child printed', merges stderr into stdout, or treats exit 0 as success MUST NOT relay `allow`: the host MUST deny with the empty/unparseable-stdout failure_class, reached without a timeout, ignoring the stderr content. Note for maintainers: the failure_class value is the enum name the suite already uses for the empty/non-JSON stdout branch (as in host-deny-non-json-stdout) and requires verification against spec/test-vectors.json before sync.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "verdict-on-stderr-empty-stdout.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "deny",
+      "failure_class": "unparseable_stdout"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture: verifier writes a schema-valid `allow` verdict to\n// STDERR, writes NOTHING to stdout, and exits 0 promptly. \u00a75.2 makes empty\n// stdout a fail-closed condition; \u00a75.3 forbids parsing stderr for the verdict.\n// A host that merges stderr into stdout, reads \"whatever the child printed\",\n// or trusts exit 0 alone would wrongly relay `allow`. Expected host behavior:\n// deny with the empty/unparseable-stdout failure_class, no timeout, stderr\n// content ignored. Deliberately never touches process.stdout.\nprocess.stdin.resume();\nprocess.stdin.on('end', () => {\n  process.stderr.write(JSON.stringify({ verdict: 'allow' }) + '\\n', () => process.exit(0));\n});\n",
+  "fixture_name": "verdict-on-stderr-empty-stdout.js"
+}

@@ -1,0 +1,290 @@
+[
+  {
+    "id": "hostile-implementer-canonicalize-defined-by-package-not-algorithm",
+    "dims": {
+      "severity": 21,
+      "evidence": 22,
+      "fixability": 18,
+      "standard_impact": 18
+    },
+    "total": 79,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a74.1 delegates canonicalization to the package and the Python/Node byte divergence reproduces, but the clarification must preserve existing numeric and Unicode behavior before claiming JCS equivalence."
+  },
+  {
+    "id": "hostile-implementer-literal-compare-stated-for-project-key-only",
+    "dims": {
+      "severity": 18,
+      "evidence": 15,
+      "fixability": 20,
+      "standard_impact": 16
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "Explicit string-comparison rules would improve precision, but \u00a74.1 already specifies capability-set comparison and the proposed empty-capability rejection adds a separate semantic change."
+  },
+  {
+    "id": "hostile-implementer-verifier-stdin-framing-and-nonnormative-1mib",
+    "dims": {
+      "severity": 16,
+      "evidence": 18,
+      "fixability": 15,
+      "standard_impact": 14
+    },
+    "total": 63,
+    "verdict": "CONSIDER",
+    "reason": "The stdin-framing asymmetry is real, but \u00a79 already identifies requests exceeding 1 MiB as malformed and the proposed acceptance and EOF requirements need exceptions for invalid and oversized input."
+  },
+  {
+    "id": "hostile-implementer-deny-code-precedence-unspecified",
+    "dims": {
+      "severity": 9,
+      "evidence": 10,
+      "fixability": 9,
+      "standard_impact": 10
+    },
+    "total": 38,
+    "verdict": "DROP",
+    "reason": "A failed obsolete signature does not establish a disjoint signing key, and imposing one cryptographic evaluation sequence across all verifier classes exceeds the demonstrated denial-classification ambiguity."
+  },
+  {
+    "id": "security-researcher-host-nonce-mode-bare-allow-silently-replay-open",
+    "dims": {
+      "severity": 14,
+      "evidence": 13,
+      "fixability": 11,
+      "standard_impact": 13
+    },
+    "total": 51,
+    "verdict": "CONSIDER",
+    "reason": "\u00a73.2 explicitly permits nonceless allows and \u00a78 specifies returning presentation nullifiers, while a correctly operating local-mode verifier still burns nonces, so mandatory default rejection needs a clearer compatibility justification."
+  },
+  {
+    "id": "security-researcher-retain-until-schema-unbounded-relative-to-now-unix",
+    "dims": {
+      "severity": 20,
+      "evidence": 21,
+      "fixability": 21,
+      "standard_impact": 18
+    },
+    "total": 80,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a73.4 accepts non-positive retention timestamps and no host rule compares them with now_unix, supporting bounded validation hardening with an additional elapsed-positive boundary case."
+  },
+  {
+    "id": "security-researcher-replay-across-issuer-key-namespace",
+    "dims": {
+      "severity": 20,
+      "evidence": 17,
+      "fixability": 22,
+      "standard_impact": 18
+    },
+    "total": 77,
+    "verdict": "PROMOTE",
+    "reason": "\u00a77.3 already specifies inserting entry.nonce and \u00a78 makes issuer_key bookkeeping-only, but an issuer-changing replay fixture would close a verified coverage gap."
+  },
+  {
+    "id": "security-researcher-duplicate-nonce-entries-in-one-allow-undefined",
+    "dims": {
+      "severity": 15,
+      "evidence": 16,
+      "fixability": 15,
+      "standard_impact": 15
+    },
+    "total": 61,
+    "verdict": "CONSIDER",
+    "reason": "Duplicate nonce entries are untested, but the claimed all-or-nothing reservation guarantee is absent and both pinned reference hosts deliberately retain novel nonces on conflicts, making the proposed rollback postcondition new behavior."
+  },
+  {
+    "id": "competing-spec-author-no-verifier-side-conformance-vectors",
+    "dims": {
+      "severity": 17,
+      "evidence": 10,
+      "fixability": 18,
+      "standard_impact": 19
+    },
+    "total": 64,
+    "verdict": "CONSIDER",
+    "reason": "The published package is host-only, but the pinned repository already contains 10 external_verifier vectors including malformed stdin, so the candidate must narrow to uncovered envelope cases and reusable verifier invocation."
+  },
+  {
+    "id": "competing-spec-author-policy-denial-has-no-honest-registry-code",
+    "dims": {
+      "severity": 11,
+      "evidence": 14,
+      "fixability": 15,
+      "standard_impact": 15
+    },
+    "total": 55,
+    "verdict": "CONSIDER",
+    "reason": "Adapter guidance could clarify policy denials, but pinned \u00a79 already makes mechanism-specific meanings illustrative across classes and an informative note cannot silently impose mandatory detail fields."
+  },
+  {
+    "id": "competing-spec-author-hook-runtimes-fail-open-embedding-profile",
+    "dims": {
+      "severity": 20,
+      "evidence": 20,
+      "fixability": 12,
+      "standard_impact": 16
+    },
+    "total": 68,
+    "verdict": "CONSIDER",
+    "reason": "The [Claude Code reference](https://code.claude.com/docs/en/hooks) confirms nonblocking command-hook failures and timeouts, but exit translation cannot repair failure of the wrapper itself, so the profile needs explicit runtime prerequisites."
+  },
+  {
+    "id": "competing-spec-author-allow-carries-no-mandate-reference-for-audit",
+    "dims": {
+      "severity": 8,
+      "evidence": 10,
+      "fixability": 10,
+      "standard_impact": 9
+    },
+    "total": 37,
+    "verdict": "DROP",
+    "reason": "Bundle opacity does not prohibit retaining an opaque bundle reference, \u00a711 permits optional-field revisions under stated compatibility limits, and a profile-specific binding digest is not established as an EVC audit requirement."
+  },
+  {
+    "id": "ietf-reviewer-iana-closed-registry-contradicts-candidate-registry-rfc8126-informative",
+    "dims": {
+      "severity": 5,
+      "evidence": 4,
+      "fixability": 12,
+      "standard_impact": 7
+    },
+    "total": 28,
+    "verdict": "DROP",
+    "reason": "The pinned IANA section already specifies Specification Required, registry columns, initial contents, and explicit wire-major registration restrictions, directly contradicting the alleged missing policy and unreconciled registry."
+  },
+  {
+    "id": "ietf-reviewer-appendix-b-normative-crypto-depends-on-npm-package-and-uncited-primitives",
+    "dims": {
+      "severity": 8,
+      "evidence": 4,
+      "fixability": 12,
+      "standard_impact": 10
+    },
+    "total": 34,
+    "verdict": "DROP",
+    "reason": "Pinned Appendix B is already explicitly informative with lowercase implementation requirements, so its proposed demotion addresses nonexistent normative scope while reference hygiene remains a narrower concern."
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-implementation-claims-in-intro-repo-relative-paths-missing-external-implementer",
+    "dims": {
+      "severity": 7,
+      "evidence": 5,
+      "fixability": 21,
+      "standard_impact": 11
+    },
+    "total": 44,
+    "verdict": "DROP",
+    "reason": "The pinned draft already contains Implementation Status, an RFC Editor removal note, and the external implementation's full commit and 27/27 coverage, leaving narrower URL and freshness corrections."
+  },
+  {
+    "id": "ietf-reviewer-host-pseudocode-omits-output-bound-and-orders-nonzero-exit-before-timeout-contrary-to-7-2-precedence",
+    "dims": {
+      "severity": 16,
+      "evidence": 23,
+      "fixability": 21,
+      "standard_impact": 19
+    },
+    "total": 79,
+    "verdict": "PROMOTE",
+    "reason": "The pinned pseudocode omits schema, signal, and output-bound checks and checks exit status first; the diff should preserve SHOULD-level precedence and classify recorded streaming-bound kills instead of relying solely on post-wait length."
+  },
+  {
+    "id": "ecosystem-scout-microsoft-agent-hooks-framework-neutral-governance-contract",
+    "dims": {
+      "momentum": 23,
+      "overlap": 23,
+      "adoption_risk": 21,
+      "counter_available": 13
+    },
+    "total": 80,
+    "verdict": "PROMOTE",
+    "reason": "The [published specification](https://responsibleai.github.io/agent-hooks/spec/) already defines verdict validation, failure-to-deny mappings, and conformance, establishing substantial direct overlap and weakening the proposed easy adapter counter."
+  },
+  {
+    "id": "ecosystem-scout-claude-code-pretooluse-hook-evc-shaped-host-fails-open",
+    "dims": {
+      "incentive_fit": 18,
+      "technical_fit": 16,
+      "channel_state": 8,
+      "effort": 17
+    },
+    "total": 59,
+    "verdict": "CONSIDER",
+    "reason": "The [hook documentation](https://code.claude.com/docs/en/hooks) confirms the transport fit and failure gap, but no receptive maintainer channel is evidenced and command-hook timeout remains an outer enforcement limitation."
+  },
+  {
+    "id": "ecosystem-scout-draft-schrock-ep-authorization-receipts-12-receipt-space-competitor",
+    "dims": {
+      "momentum": 16,
+      "overlap": 15,
+      "adoption_risk": 12,
+      "counter_available": 15
+    },
+    "total": 58,
+    "verdict": "CONSIDER",
+    "reason": "Datatracker confirms an [active individual -12 draft](https://datatracker.ietf.org/doc/draft-schrock-ep-authorization-receipts/), but its current authorization_binding design does not contain the cited mandate_id/scope_digest fields and adoption remains unverified."
+  },
+  {
+    "id": "ecosystem-scout-draft-nelson-agent-delegation-receipts-10-delegation-space-competitor",
+    "dims": {
+      "momentum": 12,
+      "overlap": 17,
+      "adoption_risk": 11,
+      "counter_available": 18
+    },
+    "total": 58,
+    "verdict": "CONSIDER",
+    "reason": "The [active individual -10 draft](https://datatracker.ietf.org/doc/draft-nelson-agent-delegation-receipts/) specifies narrowing-only delegation, supporting overlap and an adapter hypothesis, but its June update and unverified adoption limit momentum."
+  },
+  {
+    "id": "evidence-curator-dual-host-failure-class-differential-0.7.0",
+    "dims": {
+      "verifiability": 9,
+      "demand": 20,
+      "cost": 12,
+      "standard_impact": 17
+    },
+    "total": 58,
+    "verdict": "CONSIDER",
+    "reason": "The pinned runner emits results without failure_class, the commands omit --type host_behavior and name the wrong Rust binary, and per-vector observation capture is required before this differential record is reproducible."
+  },
+  {
+    "id": "evidence-curator-vector-gap-verdict-on-stderr-empty-stdout-exit-zero",
+    "dims": {
+      "severity": 23,
+      "evidence": 24,
+      "fixability": 25,
+      "standard_impact": 20
+    },
+    "total": 92,
+    "verdict": "PROMOTE",
+    "reason": "Pinned \u00a7\u00a75.2\u20135.3 directly prohibit accepting this concrete stderr-only allow and no existing host fixture isolates it, making an additive vector with failure_class=unparseable_stdout straightforward."
+  },
+  {
+    "id": "evidence-curator-vendored-suite-fixture-equivalence-manifest-0.3.0",
+    "dims": {
+      "verifiability": 21,
+      "demand": 12,
+      "cost": 24,
+      "standard_impact": 12
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "Read-only sync:check confirms 32 vendored files and the existing MANIFEST match the pinned source, but the proposed record duplicates available hashes and does not establish equality with the published npm tarball."
+  },
+  {
+    "id": "evidence-curator-external-impl-27-to-29-delta-record-khandrew1",
+    "dims": {
+      "verifiability": 20,
+      "demand": 22,
+      "cost": 22,
+      "standard_impact": 19
+    },
+    "total": 83,
+    "verdict": "PROMOTE",
+    "reason": "Pinned history confirms exactly host-deny-unknown-denial-code and host-deny-signal-death-after-allow were added with prior inputs and expectations unchanged, supporting a historical coverage record that labels both untested and infers no new passes."
+  }
+]

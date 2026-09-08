@@ -136,7 +136,7 @@ class ContainmentTests(unittest.TestCase):
 
     def test_safe_experiment_dir(self):
         import run_tier2_build as t2
-        for bad in ("../../spec", "/tmp/x", "UPPER", "a", "x" * 120):
+        for bad in ("../../spec", "/tmp/x", "UPPER", "a", "x" * 140):
             with self.assertRaises(ValueError):
                 t2.safe_experiment_dir(bad)
         # version numbers in ids are legitimate (iter-4: 0.7.0 was rejected)
@@ -165,6 +165,42 @@ class MalformedInputsTests(unittest.TestCase):
         art["vector"]["expected"] = "not-a-dict"
         errs = check_vectors.validate_shape(art)  # must not raise
         self.assertTrue(any("expected must be an object" in e for e in errs))
+
+class FailureClassTaxonomyTests(unittest.TestCase):
+    def test_matches_spec_corpus(self):
+        import json
+        tv = json.loads((Path(__file__).resolve().parent.parent / "spec" / "test-vectors.json").read_text())
+        used = set()
+        for v in tv["vectors"]:
+            if v.get("type") == "host_behavior":
+                fc = v["expected"].get("failure_class")
+                if isinstance(fc, list):
+                    used.update(fc)
+                elif fc:
+                    used.add(fc)
+        self.assertTrue(used <= check_vectors.FAILURE_CLASSES,
+                        f"corpus uses classes missing from the check: {used - check_vectors.FAILURE_CLASSES}")
+
+    def test_unparseable_stdout_accepted(self):
+        art = _vector_artifact()
+        art["vector"]["expected"] = {"result": "PASS", "failure_class": "unparseable_stdout"}
+        self.assertEqual(check_vectors.validate_shape(art), [])
+
+    def test_list_form_accepted_and_validated(self):
+        art = _vector_artifact()
+        art["vector"]["expected"] = {"result": "PASS",
+                                     "failure_class": ["signal_death", "unparseable_stdout"]}
+        self.assertEqual(check_vectors.validate_shape(art), [])
+        art["vector"]["expected"]["failure_class"] = ["signal_death", "explodes"]
+        errs = check_vectors.validate_shape(art)
+        self.assertTrue(any("explodes" in e for e in errs))
+        # unhashable members must be a validation error, never a TypeError
+        art["vector"]["expected"]["failure_class"] = ["signal_death", {}]
+        errs = check_vectors.validate_shape(art)
+        self.assertTrue(any("must be a string" in e for e in errs))
+        art["vector"]["expected"]["failure_class"] = [["nested"]]
+        errs = check_vectors.validate_shape(art)
+        self.assertTrue(any("must be a string" in e for e in errs))
 
 if __name__ == "__main__":
     unittest.main()

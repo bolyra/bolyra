@@ -25,9 +25,15 @@ REPO = HERE.parent.parent
 SPEC = REPO / "spec"
 
 REQUIRED_VECTOR_FIELDS = {"id", "description", "type", "inputs", "expected"}
+# §16.3 host failure classes — authoritative list from the contract's table.
+# (A hardcoded guess here killed spec-correct vectors for three iterations:
+# it omitted unparseable_stdout/multiple_objects/spawn_error and invented two
+# nonexistent classes. Kept in sync with the spec table below; the test suite
+# cross-checks it against every class used in test-vectors.json.)
 FAILURE_CLASSES = {
-    "timeout", "signal_death", "nonzero_exit", "oversize_stdout",
-    "schema_invalid", "parse_error", "replay", "trailing_garbage",
+    "nonzero_exit", "timeout", "signal_death", "unparseable_stdout",
+    "multiple_objects", "oversize_stdout", "schema_invalid", "replay",
+    "spawn_error",
 }
 
 
@@ -56,8 +62,16 @@ def validate_shape(artifact: dict[str, Any]) -> list[str]:
     if "host_decision" not in expected and "failure_class" not in expected:
         errors.append("vector.expected needs host_decision or failure_class")
     fc = expected.get("failure_class")
-    if fc is not None and fc not in FAILURE_CLASSES:
-        errors.append(f"unknown failure_class: {fc}")
+    if fc is not None:
+        # §16.3 allows a list when several fail-closed conditions co-occur
+        members = fc if isinstance(fc, list) else [fc]
+        if not members:
+            errors.append("failure_class list must not be empty")
+        for m in members:
+            if not isinstance(m, str):
+                errors.append(f"failure_class member must be a string: {m!r}")
+            elif m not in FAILURE_CLASSES:
+                errors.append(f"unknown failure_class: {m}")
     # inputs.fixture is used as a filename by the runner: bare basename only,
     # validated UNCONDITIONALLY before any existence check (Codex finding).
     fx_ref = str(inputs.get("fixture", "")) if isinstance(inputs, dict) else ""
