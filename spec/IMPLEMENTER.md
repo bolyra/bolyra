@@ -22,7 +22,7 @@ git clone https://github.com/bolyra/bolyra && cd bolyra
 node spec/conformance-runner.js --type host_behavior
 ```
 
-Either way that runs **29 host-behavior vectors** against the bundled
+Either way that runs **30 host-behavior vectors** against the bundled
 reference host, with **no `npm install`** — the host suite uses only Node
 builtins. Expect:
 

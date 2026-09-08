@@ -1,7 +1,7 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "note": "host_behavior subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
-  "source_sha256": "1db4731cf2452ccdb8aa1fd1e26321683cfc536040d9c84e1f7a7a16827911df",
+  "source_sha256": "f987b769fc1f3fb9939c88936ddf25e2c64ea84ac0101dcde0b596b196dfd7a6",
   "vectors": [
     {
       "id": "host-allow-well-behaved",
@@ -433,6 +433,19 @@
         "result": "PASS",
         "host_decision": "deny",
         "failure_class": "signal_death"
+      }
+    },
+    {
+      "id": "host-allow-well-behaved-kind-zk",
+      "description": "Host conformance positive control (§3.3, §3.5): a well-behaved verifier returns a schema-valid `allow` carrying an explicit `\"kind\":\"zk\"` at exit 0. §3.5 states that a `zk`-class verifier MAY omit the field and that \"emitting `\"kind\":\"zk\"` explicitly is equivalent for a revision-aware host\"; §3.3 permits `kind` on either verdict. The host MUST relay `allow` and MUST NOT treat the explicit default class as an unrecognized `kind` (the §7.2 fail-closed path applies only to values outside the {classical, zk, external} enum). Catches a host that whitelists only the two non-default classes, or that accepts `zk` solely by absence of the field.",
+      "type": "host_behavior",
+      "inputs": {
+        "fixture": "well-behaved-allow-kind-zk.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "allow"
       }
     }
   ]

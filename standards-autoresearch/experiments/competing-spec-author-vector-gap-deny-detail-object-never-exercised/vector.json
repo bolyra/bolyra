@@ -1,0 +1,18 @@
+{
+  "vector": {
+    "id": "host-relay-deny-with-detail-object",
+    "description": "Host conformance positive control (\u00a716.3) for the OPTIONAL `detail` object: a well-behaved verifier returns a schema-valid `deny code=expired` at exit 0 whose `detail` (\u00a73.3: object, OPTIONAL, structured context for logs/debugging) carries step-up-style hints (`retry_after`, `step_up_url`) plus adversarial nested keys that mirror top-level verdict fields (`verdict: \"allow\"`, `kind`, `code`, `consume_nonces: []`). \u00a73.4 types `detail` as `{ \"type\": \"object\" }` with no constraint on its contents, so this verdict is schema-valid. The host MUST relay the OUTER deny with the verifier's code and MUST NOT attach a host failure_class (this is the verifier's decision, exactly as in host-relay-well-behaved-deny); it MUST NOT reject the verdict as schema_invalid because `detail` is non-empty, and per \u00a73.5 MUST NOT upgrade the deny to `allow` on the strength of any field found inside `detail`. Catches two divergences a 29/29 host can hide: dropping conforming detail-bearing denies as malformed, or flattening/merging nested keys so a `detail.verdict` reaches the allow path.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "well-behaved-deny-with-detail.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "deny",
+      "verifier_code": "expired"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture: a WELL-BEHAVED verifier returns a schema-valid\n// `deny code=expired` at exit 0 whose OPTIONAL `detail` object (\u00a73.3, \u00a73.4) is\n// populated. `detail` carries the step-up-style hints a verifier would use to\n// say \"obtainable after consent\" (retry_after, step_up_url) AND adversarial\n// nested keys that mirror top-level verdict fields: `verdict: \"allow\"`, `kind`,\n// `code`, `consume_nonces: []`, and a doubly-nested `verdict: \"allow\"`. \u00a73.4\n// types `detail` as an object with unconstrained contents, so this verdict is\n// valid. The host MUST relay the OUTER deny with the verifier's code (as in\n// host-relay-well-behaved-deny), MUST NOT reject it as schema_invalid, and per\n// \u00a73.5 MUST NOT upgrade it to `allow` because of anything inside `detail`.\n// Offered case: conforming deny with diagnostic context. Divergent hosts either\n// treat a non-empty `detail` as malformed or merge nested keys into the verdict.\n//\n// NOTE for maintainers: the top-level shape (presence/absence of `kind` on a\n// deny) must match spec/fixtures/host-conformance/well-behaved-deny.js so that\n// the only difference from the existing positive control is the `detail`\n// object. If the \u00a73.4 deny schema does not admit `kind`, remove that line.\nprocess.stdin.resume();\nprocess.stdin.on('end', () => {\n  const verdict = {\n    verdict: 'deny',\n    kind: 'classical',\n    code: 'expired',\n    detail: {\n      internal_code: 'CRED_EXPIRED_STEP_UP_AVAILABLE',\n      retry_after: 30,\n      step_up_url: 'https://verifier.invalid/step-up',\n      verdict: 'allow',\n      kind: 'classical',\n      code: 'ok',\n      consume_nonces: [],\n      nested: { verdict: 'allow' }\n    }\n  };\n  process.stdout.write(JSON.stringify(verdict), () => process.exit(0));\n});\n",
+  "fixture_name": "well-behaved-deny-with-detail.js"
+}

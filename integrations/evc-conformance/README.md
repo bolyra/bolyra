@@ -7,7 +7,7 @@ language, no install.
 npx @bolyra/evc-conformance --host "/path/to/your-host --flags"
 ```
 
-Runs the 29 `host_behavior` vectors against your host: verifier spawning,
+Runs the 30 `host_behavior` vectors against your host: verifier spawning,
 timeout and output-bound enforcement, fail-closed handling of every
 misbehaving-verifier class, closed decision schema, and reserve-before-act
 nonce semantics. Exit `0` when everything passes, `1` on any failure — drops

@@ -1,0 +1,334 @@
+[
+  {
+    "candidate": {
+      "id": "security-researcher-retain-until-below-expiry-replay-window",
+      "type": "spec_finding",
+      "title": "No rule ties `retain_until` to credential expiry: a reservation evicted before `effective_expiry` reopens replay for the remaining lifetime (refines the iteration-5 retain_until candidate with a single well-formed hunk)",
+      "claim": "Refinement of the iteration-5 candidate that was dropped for invalid diff syntax, not for substance. \u00a73.2 makes `retain_until` REQUIRED and says the host MUST retain the nonce until that time, but nothing constrains its value: it may be less than `now_unix`, or less than the credential's `effective_expiry`. Because \u00a79 defines expiry as strict `now_unix >= effective_expiry`, the proof remains acceptable for every second in (retain_until, effective_expiry). A host that honors the spec literally evicts at `retain_until`, after which the identical bundle re-presents with the identical `consume_nonces` and reserves cleanly \u2014 replay with no deny signal. Binding v2 signs `expiry` so the presenter cannot move expiry, but the verifier chooses `retain_until` unilaterally and the host has no obligation to sanity-check it. The fix needs two obligations: verifier `retain_until` MUST be >= the credential's effective expiry, and the host MUST fail closed on `retain_until <= now_unix` (a retention window that has already ended makes reserve-before-act vacuous).",
+      "evidence": [
+        "\u00a73.2 (pinned 9bf7544): '`retain_until` (integer, **REQUIRED**) \u2014 Unix seconds until which the host **MUST** retain the consumed nonce.' \u2014 no lower bound relative to `now_unix` or expiry.",
+        "\u00a73.4 schema (pinned): `\"retain_until\": { \"type\": \"integer\" }` \u2014 no minimum at all; `0` and negative values are schema-valid.",
+        "\u00a79 registry (pinned): 'expired | proof-anchored `now_unix >= effective_expiry` \u2014 a strict comparison; the equality boundary is rejected.' \u2014 establishes that the proof is live for all `now_unix < effective_expiry`, i.e. after an early eviction.",
+        "\u00a74.1 (pinned): 'a verifier **MUST** additionally require `binding.expiry == credential.expiry`' \u2014 expiry is signature-bound (v2), so the only unbound liveness parameter left in the replay path is `retain_until`.",
+        "Runnable: `git show 9bf754441ab36ab93992ed5936d34c44a4128f92:spec/external-verifier-contract-v1.md | grep -n 'retain_until'` \u2014 every occurrence is a definition; none is a bound.",
+        "Previous iteration record: experiment `security-researcher-retain-until-schema-unbounded-relative-to-now-unix` dropped_acceptance with finding 'section-label hunk headers are invalid unified-diff syntax, and the embedded schema fence prematurely closes the diff block' \u2014 formatting, not substance."
+      ],
+      "proposed_artifact": "Staged spec diff (one prose hunk to \u00a73.2 and one schema hunk to \u00a73.4, both with real `@@ -l,c +l,c @@` headers and no nested fences) adding (a) verifier obligation `retain_until >= effective_expiry` and (b) host obligation to fail closed on `retain_until <= now_unix`, plus a new host_behavior vector `host-deny-retain-until-not-in-future` (allow with a nonce entry whose `retain_until` is 1) expected to deny with classification `schema_invalid`.",
+      "entity": null,
+      "persona": "security-researcher",
+      "score": {
+        "id": "security-researcher-retain-until-below-expiry-replay-window",
+        "dims": {
+          "severity": 23,
+          "evidence": 23,
+          "fixability": 21,
+          "standard_impact": 22
+        },
+        "total": 89,
+        "verdict": "PROMOTE",
+        "reason": "Pinned prose and schema omit retention lower bounds, allowing premature eviction and replay despite the reference verifier already emitting effectiveExpiry."
+      }
+    },
+    "id": "security-researcher-retain-until-below-expiry-replay-window",
+    "type": "spec_finding",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/security-researcher-retain-until-below-expiry-replay-window",
+    "checks": {
+      "ok": true,
+      "stage": "verify",
+      "errors": [],
+      "warnings": [],
+      "base": "9bf754441ab36ab93992ed5936d34c44a4128f92",
+      "target": "spec/external-verifier-contract-v1.md",
+      "spec_head": "9bf754441ab36ab93992ed5936d34c44a4128f92"
+    },
+    "acceptance": {
+      "verdict": "DROP",
+      "reason": "The Impact section instructs that the published conformance suite be re-synced and re-released, violating rule 2a\u2019s prohibition on workflow instructions inside artifacts."
+    },
+    "action": "dropped_acceptance"
+  },
+  {
+    "candidate": {
+      "id": "hostile-implementer-stdout-whitespace-grammar-single-lf-vs-no-trailing-bytes",
+      "type": "spec_finding",
+      "title": "'A single trailing newline is OPTIONAL' vs 'no trailing bytes': the spec never defines which bytes around the verdict object are tolerated, so RFC 8259-lenient parsers and byte-strict hosts diverge",
+      "claim": "\u00a75.1 permits the verifier 'A single trailing newline', but \u00a75.2 requires the host to parse 'exactly one JSON object with no trailing bytes' and to reject any 'leading/trailing prefix or suffix around the object'. A byte-literal host rejects `{\"verdict\":\"allow\"}\\n` (a newline is a trailing byte); a host built on JSON.parse or serde_json::from_str accepts unlimited leading/trailing JSON whitespace (RFC 8259 defines JSON-text = ws value ws), so `\\n\\n\\t{\"verdict\":\"allow\"}\\r\\n\\n` is accepted by the lazy host and rejected by the strict one. Neither `\\r\\n` (is CRLF 'a single newline'?), leading whitespace, nor a doubled LF is addressed, and no vector pins any of them: host-deny-allow-trailing-garbage and host-deny-leading-garbage use non-whitespace bytes, so a host that passes all 29 vectors can be either strict or lenient. Fix: define the stdout grammar normatively \u2014 RECOMMENDED: verdict-text = ws* object ws* where ws is exactly the RFC 8259 whitespace set (SP, HT, LF, CR), any other byte outside the object is a prefix/suffix \u2014 and align \u00a75.1 wording ('trailing JSON whitespace is OPTIONAL').",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a75.1: 'The verifier **MUST** write exactly one `JSON.stringify(verdict)` to the host-facing stdout, at the very end. A single trailing newline is **OPTIONAL**.'",
+        "spec/external-verifier-contract-v1.md \u00a75.2: 'The host **MUST** parse the verifier's stdout as **exactly one** JSON object with **no trailing bytes**, and **MUST** reject ... stdout that is empty, not valid JSON, or contains a leading/trailing prefix or suffix around the object'",
+        "RFC 8259 \u00a72: 'JSON-text = ws value ws' and 'Insignificant whitespace is allowed before or after any of the six structural characters' (https://www.rfc-editor.org/rfc/rfc8259#section-2) \u2014 JSON.parse and serde_json accept surrounding whitespace by default.",
+        "Conformance index (set 0.7.0): host-deny-allow-trailing-garbage ('followed by trailing garbage') and host-deny-leading-garbage ('a non-JSON PREFIX') are the only framing vectors; no vector uses CRLF, leading whitespace, or multiple LFs."
+      ],
+      "proposed_artifact": "A pinned spec diff adding an explicit stdout framing grammar to \u00a75.1/\u00a75.2 (and draft \u00a74.4), plus two vectors \u2014 `host-allow-trailing-crlf-and-leading-whitespace` (positive control for RFC 8259 whitespace) and `host-deny-trailing-nul-after-newline` (non-whitespace suffix) \u2014 so a host cannot pass the suite as either an over-strict or an over-lenient framer.",
+      "entity": null,
+      "persona": "hostile-implementer",
+      "score": {
+        "id": "hostile-implementer-stdout-whitespace-grammar-single-lf-vs-no-trailing-bytes",
+        "dims": {
+          "severity": 17,
+          "evidence": 23,
+          "fixability": 23,
+          "standard_impact": 19
+        },
+        "total": 82,
+        "verdict": "PROMOTE",
+        "reason": "The pinned newline permission conflicts with literal no-trailing-bytes wording, and the fixtures lack whitespace-boundary controls, supporting an explicit framing grammar."
+      }
+    },
+    "id": "hostile-implementer-stdout-whitespace-grammar-single-lf-vs-no-trailing-bytes",
+    "type": "spec_finding",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/hostile-implementer-stdout-whitespace-grammar-single-lf-vs-no-trailing-bytes",
+    "checks": {
+      "ok": true,
+      "stage": "verify",
+      "errors": [],
+      "warnings": [],
+      "base": "9bf754441ab36ab93992ed5936d34c44a4128f92",
+      "target": "spec/external-verifier-contract-v1.md",
+      "spec_head": "9bf754441ab36ab93992ed5936d34c44a4128f92"
+    },
+    "acceptance": {
+      "verdict": "DROP",
+      "reason": "The artifact violates rule 2a by directing that the vendored conformance snapshot \u201cmust be re-synced\u201d under the repository\u2019s sync procedure, a workflow instruction reserved for pipeline-generated APPLY.md."
+    },
+    "action": "dropped_acceptance"
+  },
+  {
+    "candidate": {
+      "id": "competing-spec-author-vector-gap-deny-detail-object-never-exercised",
+      "type": "vector_gap",
+      "title": "No host-conformance vector exercises the deny `detail` object \u2014 EVC's only channel for step-up hints",
+      "claim": "AuthZEN COAZ/AARP (tracked threat card) carry a third 'prerequisite pending' outcome and draft-klrc-aiagent-auth-03 models step-up/consent as first-class flows. EVC's closed two-outcome verdict and closed 15-code registry mean a verifier wanting to say 'obtainable after consent' can only stuff hints (retry_after, step_up_url) into the OPTIONAL `detail` object under an existing code. That makes `detail` the load-bearing extensibility surface for admission semantics, yet across all 29 vectors in set 0.7.0 none sends a deny that carries `detail` at all. Two host behaviours are therefore unproven: (1) positive control \u2014 a schema-valid deny with a nested `detail` object (including adversarial nested keys such as `\"verdict\":\"allow\"` or `\"consume_nonces\":[]` inside detail) MUST be relayed as that deny, neither rejected as schema_invalid nor upgraded; (2) negative \u2014 a deny whose `detail` is a non-object (string/array/null) fails the \u00a73.4 schema and MUST fail closed as schema_invalid. A host that never saw a detail-bearing deny can pass 29/29 while either dropping conforming denies or, worse, letting a nested field reach its allow path.",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a73.3: '`detail` (object, **OPTIONAL**) \u2014 structured context for logs/debugging. A verifier **SHOULD** echo the originating internal error code here'",
+        "spec/external-verifier-contract-v1.md \u00a73.4 deny schema: `\"detail\": { \"type\": \"object\" }` inside an `\"additionalProperties\": false` object \u2014 a non-object `detail` is a schema failure, an object with arbitrary nested content is valid",
+        "spec/external-verifier-contract-v1.md \u00a77.2: the host MUST treat as deny 'a verdict that otherwise fails the \u00a73.4 verdict schema'; \u00a73.5: the host 'MUST NOT upgrade a `deny` to an `allow`' on any advisory field",
+        "Conformance vector index (set 0.7.0, 29 host_behavior vectors): the only deny relay control is host-relay-well-behaved-deny (`deny code=expired`); no listed vector description mentions `detail`",
+        "threat_board.json card ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope: AuthZEN drafts 'define a competing decision envelope for MCP tool authorization with a third prerequisite pending outcome'"
+      ],
+      "proposed_artifact": "Two staged host-conformance vectors in the existing fixture format \u2014 host-relay-deny-with-detail-object (positive control with adversarial nested keys, expected relay of the outer deny code) and host-deny-deny-detail-wrong-type (expected failure_class schema_invalid) \u2014 with APPLY.md covering scripts/sync.js and golden regeneration.",
+      "entity": {
+        "name": "OpenID AuthZEN COAZ/AARP",
+        "repo": null,
+        "tracked_id": "ecosystem-scout-authzen-coaz-aarp-mcp-decision-envelope"
+      },
+      "persona": "competing-spec-author",
+      "score": {
+        "id": "competing-spec-author-vector-gap-deny-detail-object-never-exercised",
+        "dims": {
+          "severity": 15,
+          "evidence": 23,
+          "fixability": 25,
+          "standard_impact": 18
+        },
+        "total": 81,
+        "verdict": "PROMOTE",
+        "reason": "Pinned fixtures lack detail-bearing denies, making positive and wrong-type controls valuable while preserving detail's documented diagnostic role."
+      }
+    },
+    "id": "competing-spec-author-vector-gap-deny-detail-object-never-exercised",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/competing-spec-author-vector-gap-deny-detail-object-never-exercised",
+    "checks": {
+      "ok": false,
+      "stage": "run",
+      "exit": 1,
+      "stdout_tail": "  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n  host-relay-deny-with-detail-object: FAIL -- relayed verifier code mismatch: got 'undefined', want 'expired'\n\n29 passed, 1 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "action": "dropped_objective_check"
+  },
+  {
+    "candidate": {
+      "id": "competing-spec-author-action-instance-unbound-extension-fields-ignored",
+      "type": "spec_finding",
+      "title": "EVC admits a capability class, not an action instance; request extension fields are silently unbound",
+      "claim": "Every competing pre-action layer decides per tool call with its arguments in scope: OAP (arXiv 2603.20953) 'intercepts tool calls synchronously before execution, evaluates them against a declarative policy'; agentgateway evaluates CEL rules 'against method invocations such as list_tools and call_tools'; Pomerium's mcp_tool criterion gates 'per-tool allow/deny on every request'. EVC's request carries only agent_name/project_key/program/model/granted_capabilities, and the binding v2 signs exactly six fields, none of which is a tool name or an argument digest. Worse, both the envelope and the inner request object are declared additionalProperties: true while no verifier obligation exists to reject or even acknowledge unknown request fields. A host that adds e.g. tool_args_sha256 to request and receives allow has no way to know the verifier never looked at it: extension fields create a fail-open belief without a fail-closed rule. EVC should state that (a) the decision is a capability-class admission unless the action instance is folded into a granted_capabilities token so it is covered by the signed binding, and (b) request extension fields are not authorization inputs unless a verifier's documented contract says so, so hosts MUST NOT assume they were verified.",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a72.2 request schema: `\"additionalProperties\": true` on the envelope and again on the inner `request` object; no verifier MUST governs unknown request fields anywhere in \u00a72",
+        "spec/external-verifier-contract-v1.md \u00a72.1: `granted_capabilities` are 'host-defined capability tokens the host intends to grant. They are opaque strings that the verifier maps to its internal permission model' \u2014 no tool name or argument field exists",
+        "spec/external-verifier-contract-v1.md \u00a74.1: 'Let `binding` be the object with exactly the six fields `agent_name`, `project_key`, `program`, `model`, `capabilities` (a string array), and `expiry`' \u2014 the signed surface cannot bind an action instance",
+        "https://arxiv.org/abs/2603.20953 \u2014 OAP 'intercepts tool calls synchronously before execution, evaluates them against a declarative policy, and produces a cryptographically signed audit record'",
+        "https://agentgateway.dev/docs/standalone/main/mcp/mcp-authz/ \u2014 CEL rules evaluated against `call_tools` invocations; hidden-tool calls rejected with an authorization error",
+        "https://www.pomerium.com/blog/top-5-agentic-gateways-for-securing-mcp-tool-calls-in-2026 \u2014 `mcp_tool` criterion for per-tool allow/deny on every request"
+      ],
+      "proposed_artifact": "A staged prose-only diff (wire unchanged) to \u00a72.1/\u00a72.2 and the -02 draft request section adding a normative 'extension fields are not authorization inputs' rule for hosts and verifiers, plus an informative 'action-instance binding' note showing the capability-token fold so the tool/argument instance lands inside the signed binding.",
+      "entity": {
+        "name": "Open Agent Passport (OAP)",
+        "repo": "https://arxiv.org/abs/2603.20953",
+        "tracked_id": null
+      },
+      "persona": "competing-spec-author",
+      "score": {
+        "id": "competing-spec-author-action-instance-unbound-extension-fields-ignored",
+        "dims": {
+          "severity": 17,
+          "evidence": 21,
+          "fixability": 23,
+          "standard_impact": 18
+        },
+        "total": 79,
+        "verdict": "PROMOTE",
+        "reason": "Pinned request schemas accept extension fields without defining their authorization guarantees, supporting a bounded clarification of host assumptions and documented capability-token bindings."
+      }
+    },
+    "id": "competing-spec-author-action-instance-unbound-extension-fields-ignored",
+    "type": "spec_finding",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/competing-spec-author-action-instance-unbound-extension-fields-ignored",
+    "checks": {
+      "ok": true,
+      "stage": "verify",
+      "errors": [],
+      "warnings": [
+        "lowercase 'must' in added line: '> that must authorize \"send a message to *this* recipient\" rather than \"send'",
+        "lowercase 'must' in added line: \"> contract; the verifier's capability map must recognize the folded form, or the\""
+      ],
+      "base": "9bf754441ab36ab93992ed5936d34c44a4128f92",
+      "target": "spec/external-verifier-contract-v1.md",
+      "spec_head": "9bf754441ab36ab93992ed5936d34c44a4128f92"
+    },
+    "acceptance": {
+      "verdict": "DROP",
+      "reason": "The Impact section directs maintainers to update the revision/changelog and mirror changes into -02, violating rule 2a\u2019s prohibition on founder-facing apply or workflow instructions inside artifacts."
+    },
+    "action": "dropped_acceptance"
+  },
+  {
+    "candidate": {
+      "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+      "type": "vector_gap",
+      "title": "No host-conformance vector exercises an explicit `\"kind\":\"zk\"` allow or a `kind`-bearing deny, although both are normatively permitted",
+      "claim": "The kind enum acceptance side is only covered for `classical` and `external` on `allow`. A host that whitelists only the two non-default classes (treating explicit `zk` as unrecognized), or that validates `kind` only on the allow branch (or rejects it on deny), passes all 29 vectors yet violates \u00a73.3/\u00a73.5. Two vectors close the coverage hole: `host-allow-well-behaved-kind-zk` (explicit `kind=zk` allow, exit 0, expected `allow`) and `host-relay-well-behaved-deny-kind-classical` (schema-valid `deny code=expired` carrying `kind=classical`, expected relayed deny with the verifier's code, not a host `schema_invalid` override).",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a73.3 (pinned 9bf754441ab36ab93992ed5936d34c44a4128f92): \"`kind` ... It **MAY** appear on either an `allow` or a `deny` verdict.\"",
+        "spec/external-verifier-contract-v1.md \u00a73.5: \"A `zk`-class verifier **MAY** therefore omit the field; emitting `\"kind\":\"zk\"` explicitly is equivalent for a revision-aware host.\"",
+        "Conformance vector index (set 0.7.0, 29 vectors): the only kind-acceptance vectors are `host-allow-well-behaved-kind-classical` and `host-allow-well-behaved-kind-external`; `host-relay-well-behaved-deny` is a bare deny with no `kind`; `host-deny-bad-kind` covers only the rejection side on `allow`.",
+        "Reproduce: `grep -l '\"kind\"' spec/fixtures/host-conformance/*.json` at the pinned commit returns only the bad-kind, kind-classical and kind-external fixtures \u2014 no fixture contains `\"kind\":\"zk\"` and no deny fixture contains `kind`."
+      ],
+      "proposed_artifact": "Two new host_behavior vectors (`host-allow-well-behaved-kind-zk`, `host-relay-well-behaved-deny-kind-classical`) in spec/fixtures/host-conformance/ with expected outcomes, staged as a diff pinned to 9bf7544 plus the sync.js/golden regeneration note.",
+      "entity": null,
+      "persona": "ietf-reviewer",
+      "score": {
+        "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+        "dims": {
+          "severity": 14,
+          "evidence": 22,
+          "fixability": 25,
+          "standard_impact": 18
+        },
+        "total": 79,
+        "verdict": "PROMOTE",
+        "reason": "Both missing acceptance controls are confirmed in the actual JavaScript fixtures and test-vectors.json, although the candidate's fixture JSON glob is incorrect."
+      }
+    },
+    "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "checks": {
+      "ok": true,
+      "stage": "run",
+      "exit": 0,
+      "stdout_tail": "  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n  host-allow-well-behaved-kind-zk: PASS\n\n30 passed, 0 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "acceptance": {
+      "verdict": "APPROVE",
+      "reason": "The artifact satisfies the single-vector build template, matches the pinned spec, and passes the reported 30-vector run without hard-rule violations; kind-bearing deny coverage remains outstanding."
+    },
+    "action": "advance"
+  },
+  {
+    "candidate": {
+      "id": "ietf-reviewer-json-schema-2020-12-normative-dependency-has-no-reference-entry",
+      "type": "spec_finding",
+      "title": "draft-kondoju-evc-01 makes the JSON Schemas normative but has no reference for JSON Schema draft 2020-12 (-02 blocker: unreferenced normative dependency)",
+      "claim": "Section 4 states the schemas 'appear normatively' in the schemas appendix, and the fail-closed rule (\u00a74.2, \u00a76) is defined in terms of a verdict 'failing the verdict schema'. Both schemas declare `$schema: https://json-schema.org/draft/2020-12/schema` and rely on 2020-12-specific keyword semantics (`exclusiveMinimum` as a number, `const`, `oneOf`, `additionalProperties:false`). The references section lists only RFC2119/RFC8174/RFC8259 as normative and no JSON Schema document at all, so an IETF reviewer cannot resolve the dependency and idnits will flag it. Resolution: add a normative reference `I-D.bhutton-json-schema` (draft-bhutton-json-schema-01, JSON Schema: A Media Type for Describing JSON Documents) plus `I-D.bhutton-json-schema-validation` for `const`/`exclusiveMinimum`/`minItems`, and add one sentence in \u00a74 stating that where the prose field rules and the schema disagree the prose controls, so the downref to an expired I-D does not carry the whole normative weight. Alternatively demote the schemas to informative transcriptions and restate the closed-enum and additionalProperties rules in prose; the loop should stage the reference-addition form because the host-conformance suite already tests schema-derived behavior.",
+      "evidence": [
+        "spec/draft-kondoju-evc-01.md \u00a74 (pinned 9bf754441ab36ab93992ed5936d34c44a4128f92): \"This section transcribes the wire envelopes. The full JSON Schemas appear normatively in {{schemas}}.\"",
+        "spec/draft-kondoju-evc-01.md \u00a74.2: \"the deny schema ({{schemas}}) enumerates exactly these codes, so a verdict carrying any other \"code\" fails the verdict schema and the host MUST fail closed\"",
+        "spec/external-verifier-contract-v1.md \u00a72.2 and \u00a73.4 schemas both open with `\"$schema\": \"https://json-schema.org/draft/2020-12/schema\"` and use `\"exclusiveMinimum\": 0` (2020-12 numeric form; draft-04 used a boolean).",
+        "spec/draft-kondoju-evc-01.md front matter: normative references are exactly `RFC2119`, `RFC8174`, `RFC8259`; informative references are `RFC6749, RFC7519, RFC7662, RFC7942, RFC8126, RFC8615, I-D.klrc-aiagent-auth, I-D.pidlisnyi-aps` \u2014 no JSON Schema entry.",
+        "https://datatracker.ietf.org/doc/draft-bhutton-json-schema/ (JSON Schema core, 2020-12 == draft-bhutton-json-schema-01) and https://datatracker.ietf.org/doc/draft-bhutton-json-schema-validation/"
+      ],
+      "proposed_artifact": "A staged diff to spec/draft-kondoju-evc-01.md adding the two JSON Schema I-D reference entries under `normative:` and a one-sentence prose-controls clause in \u00a74, pinned to 9bf7544.",
+      "entity": null,
+      "persona": "ietf-reviewer",
+      "score": {
+        "id": "ietf-reviewer-json-schema-2020-12-normative-dependency-has-no-reference-entry",
+        "dims": {
+          "severity": 12,
+          "evidence": 21,
+          "fixability": 24,
+          "standard_impact": 22
+        },
+        "total": 79,
+        "verdict": "PROMOTE",
+        "reason": "The pinned draft makes JSON Schema normative without corresponding references, supporting reference additions independently of the unverified idnits prediction and unnecessary prose-precedence clause."
+      }
+    },
+    "id": "ietf-reviewer-json-schema-2020-12-normative-dependency-has-no-reference-entry",
+    "type": "spec_finding",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/ietf-reviewer-json-schema-2020-12-normative-dependency-has-no-reference-entry",
+    "checks": {
+      "ok": false,
+      "stage": "verify",
+      "errors": [
+        "removal line not found in pinned file: 'This section transcribes the wire envelopes. The full JSON Schemas appear normat'"
+      ],
+      "warnings": [],
+      "base": "9bf754441ab36ab93992ed5936d34c44a4128f92",
+      "target": "spec/draft-kondoju-evc-01.md",
+      "spec_head": "9bf754441ab36ab93992ed5936d34c44a4128f92"
+    },
+    "action": "dropped_objective_check"
+  },
+  {
+    "candidate": {
+      "id": "security-researcher-timeout-kill-orphans-verifier-worker",
+      "type": "spec_finding",
+      "title": "Timeout kill of the verifier parent leaves the fd-3 worker (and any grandchild) alive: late nonce burn + lingering verification of a denied request",
+      "claim": "\u00a77.2 obligates the host to 'kill the process and deny' on timeout, but \u00a75.1 makes the reference verifier a two-process design (parent + worker on fd 3). 'The process' is singular and unqualified: a host that sends SIGKILL to the direct child PID only (the naive spawn/kill idiom in Node, Rust std, Python subprocess) leaves the worker running with the full request in memory. Attack/consequence: in local nonce mode the orphaned worker can finish verification and durably burn the presentation's nullifier AFTER the host has already denied, so the legitimate retry of the same presentation is rejected `nonce_replayed`; an attacker who can induce slow verification (large but under-bound bundle, many Groth16 verifies) turns every timeout into a one-shot burn of the victim agent's nonce. Secondarily, orphaned workers accumulate across timeouts (resource exhaustion) and any grandchild holding the inherited stdout write end can keep the host's read-until-EOF loop open. No vector in set 0.7.0 observes process-tree state after the host's timeout kill (host-deny-no-output-timeout and host-deny-partial-json-timeout only assert the deny/classification).",
+      "evidence": [
+        "\u00a77.2 (pinned 9bf7544): 'timeout (\u00a76) \u2014 the host **MUST** kill the process and deny;' \u2014 singular 'the process', no mention of the process group, session, or descendants.",
+        "\u00a75.1 (pinned 9bf7544): 'the command **spawns a worker** process that performs the entire verification; the worker's stdio binds fd 0 = request in, **fd 1 = captured** ... **fd 3 = the private verdict channel**' \u2014 the reference verifier is by construction a parent+worker pair, so a PID-only kill provably leaves the verifier that is actually doing the work running.",
+        "Runnable: `git show 9bf754441ab36ab93992ed5936d34c44a4128f92:spec/external-verifier-contract-v1.md | grep -n -i 'process group\\|descendant\\|orphan\\|setsid\\|killpg'` returns no matches; `git show 9bf754441ab36ab93992ed5936d34c44a4128f92:spec/external-verifier-contract-v1.md | grep -n 'kill the process'` shows the singular obligation.",
+        "Vector index (set 0.7.0, 29 vectors) \u2014 the two timeout vectors 'host-deny-no-output-timeout' and 'host-deny-partial-json-timeout' assert the verdict outcome only; none describes an assertion over the verifier's process tree after the kill.",
+        "Registry \u00a79 (pinned): 'nonce_replayed | the proof's one-time nonce was already seen (local mode)' \u2014 the local-mode burn is durable, so a post-deny burn by an orphan is user-visible on the next honest presentation."
+      ],
+      "proposed_artifact": "Staged spec diff to \u00a76/\u00a77.2 (host MUST terminate the verifier's entire process tree on timeout \u2014 process group/job object \u2014 and MUST NOT act until the tree is reaped) plus a new host_behavior vector `host-deny-timeout-kills-verifier-tree` whose fixture parent spawns a grandchild that sleeps past the deadline and then writes a sentinel file; the runner asserts deny with class timeout AND that the sentinel is absent after the HUT returns.",
+      "entity": null,
+      "persona": "security-researcher",
+      "score": {
+        "id": "security-researcher-timeout-kill-orphans-verifier-worker",
+        "dims": {
+          "severity": 20,
+          "evidence": 21,
+          "fixability": 18,
+          "standard_impact": 19
+        },
+        "total": 78,
+        "verdict": "PROMOTE",
+        "reason": "Pinned JavaScript supervision kills only the child PID while Rust uses process groups, confirming a cleanup gap whose vector needs descendant readiness and bounded post-timeout observation."
+      }
+    },
+    "id": "security-researcher-timeout-kill-orphans-verifier-worker",
+    "type": "spec_finding",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/security-researcher-timeout-kill-orphans-verifier-worker",
+    "checks": {
+      "ok": true,
+      "stage": "verify",
+      "errors": [],
+      "warnings": [
+        "lowercase 'must' in added line: 'worker must stay inside that scope \u2014 prose only, wire contract unchanged;'"
+      ],
+      "base": "9bf754441ab36ab93992ed5936d34c44a4128f92",
+      "target": "spec/external-verifier-contract-v1.md",
+      "spec_head": "9bf754441ab36ab93992ed5936d34c44a4128f92"
+    },
+    "acceptance": {
+      "verdict": "DROP",
+      "reason": "Rule 2k is violated: at pinned commit 9bf7544, both cited timeout vectors set assert_verifier_killed=true and spec/conformance-runner.js checks PID survival, contradicting the artifact\u2019s claim that they assert only deny and classification."
+    },
+    "action": "dropped_acceptance"
+  }
+]
