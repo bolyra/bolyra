@@ -1,0 +1,46 @@
+[
+  {
+    "candidate": {
+      "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+      "type": "vector_gap",
+      "title": "No host-conformance vector exercises an explicit `\"kind\":\"zk\"` allow or a `kind`-bearing deny, although both are normatively permitted",
+      "claim": "The kind enum acceptance side is only covered for `classical` and `external` on `allow`. A host that whitelists only the two non-default classes (treating explicit `zk` as unrecognized), or that validates `kind` only on the allow branch (or rejects it on deny), passes all 29 vectors yet violates \u00a73.3/\u00a73.5. Two vectors close the coverage hole: `host-allow-well-behaved-kind-zk` (explicit `kind=zk` allow, exit 0, expected `allow`) and `host-relay-well-behaved-deny-kind-classical` (schema-valid `deny code=expired` carrying `kind=classical`, expected relayed deny with the verifier's code, not a host `schema_invalid` override).",
+      "evidence": [
+        "spec/external-verifier-contract-v1.md \u00a73.3 (pinned 9bf754441ab36ab93992ed5936d34c44a4128f92): \"`kind` ... It **MAY** appear on either an `allow` or a `deny` verdict.\"",
+        "spec/external-verifier-contract-v1.md \u00a73.5: \"A `zk`-class verifier **MAY** therefore omit the field; emitting `\"kind\":\"zk\"` explicitly is equivalent for a revision-aware host.\"",
+        "Conformance vector index (set 0.7.0, 29 vectors): the only kind-acceptance vectors are `host-allow-well-behaved-kind-classical` and `host-allow-well-behaved-kind-external`; `host-relay-well-behaved-deny` is a bare deny with no `kind`; `host-deny-bad-kind` covers only the rejection side on `allow`.",
+        "Reproduce: `grep -l '\"kind\"' spec/fixtures/host-conformance/*.json` at the pinned commit returns only the bad-kind, kind-classical and kind-external fixtures \u2014 no fixture contains `\"kind\":\"zk\"` and no deny fixture contains `kind`."
+      ],
+      "proposed_artifact": "Two new host_behavior vectors (`host-allow-well-behaved-kind-zk`, `host-relay-well-behaved-deny-kind-classical`) in spec/fixtures/host-conformance/ with expected outcomes, staged as a diff pinned to 9bf7544 plus the sync.js/golden regeneration note.",
+      "entity": null,
+      "persona": "ietf-reviewer",
+      "score": {
+        "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+        "dims": {
+          "severity": 14,
+          "evidence": 22,
+          "fixability": 25,
+          "standard_impact": 18
+        },
+        "total": 79,
+        "verdict": "PROMOTE",
+        "reason": "Both missing acceptance controls are confirmed in the actual JavaScript fixtures and test-vectors.json, although the candidate's fixture JSON glob is incorrect."
+      }
+    },
+    "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "checks": {
+      "ok": true,
+      "stage": "run",
+      "exit": 0,
+      "stdout_tail": "  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n  host-allow-well-behaved-kind-zk: PASS\n\n30 passed, 0 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "acceptance": {
+      "verdict": "APPROVE",
+      "reason": "The artifact satisfies the single-vector build template, matches the pinned spec, and passes the reported 30-vector run without hard-rule violations; kind-bearing deny coverage remains outstanding."
+    },
+    "action": "advance"
+  }
+]

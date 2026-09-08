@@ -1,5 +1,5 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -1925,6 +1925,19 @@
         "result": "PASS",
         "host_decision": "deny",
         "failure_class": "signal_death"
+      }
+    },
+    {
+      "id": "host-allow-well-behaved-kind-zk",
+      "description": "Host conformance positive control (\u00a73.3, \u00a73.5): a well-behaved verifier returns a schema-valid `allow` carrying an explicit `\"kind\":\"zk\"` at exit 0. \u00a73.5 states that a `zk`-class verifier MAY omit the field and that \"emitting `\"kind\":\"zk\"` explicitly is equivalent for a revision-aware host\"; \u00a73.3 permits `kind` on either verdict. The host MUST relay `allow` and MUST NOT treat the explicit default class as an unrecognized `kind` (the \u00a77.2 fail-closed path applies only to values outside the {classical, zk, external} enum). Catches a host that whitelists only the two non-default classes, or that accepts `zk` solely by absence of the field.",
+      "type": "host_behavior",
+      "inputs": {
+        "fixture": "well-behaved-allow-kind-zk.js",
+        "timeout_ms": 5000
+      },
+      "expected": {
+        "result": "PASS",
+        "host_decision": "allow"
       }
     }
   ]

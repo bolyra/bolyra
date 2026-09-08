@@ -1,0 +1,17 @@
+{
+  "vector": {
+    "id": "host-allow-well-behaved-kind-zk",
+    "description": "Host conformance positive control (\u00a73.3, \u00a73.5): a well-behaved verifier returns a schema-valid `allow` carrying an explicit `\"kind\":\"zk\"` at exit 0. \u00a73.5 states that a `zk`-class verifier MAY omit the field and that \"emitting `\"kind\":\"zk\"` explicitly is equivalent for a revision-aware host\"; \u00a73.3 permits `kind` on either verdict. The host MUST relay `allow` and MUST NOT treat the explicit default class as an unrecognized `kind` (the \u00a77.2 fail-closed path applies only to values outside the {classical, zk, external} enum). Catches a host that whitelists only the two non-default classes, or that accepts `zk` solely by absence of the field.",
+    "type": "host_behavior",
+    "inputs": {
+      "fixture": "well-behaved-allow-kind-zk.js",
+      "timeout_ms": 5000
+    },
+    "expected": {
+      "result": "PASS",
+      "host_decision": "allow"
+    }
+  },
+  "fixture_js": "#!/usr/bin/env node\n// Host-conformance fixture (positive control): a well-behaved verifier writes a\n// schema-valid `allow` verdict carrying an explicit `\"kind\":\"zk\"` (\u00a73.3, \u00a73.5).\n// \u00a73.5 makes the explicit `zk` equivalent to omitting the field for a\n// revision-aware host, so the host MUST relay `allow`. A host that only\n// recognizes `classical` and `external` as explicit values (treating `zk` as an\n// unrecognized kind under \u00a77.2) diverges from the contract and fails this vector.\nprocess.stdin.resume();\nprocess.stdin.on('end', () => {\n  process.stdout.write(JSON.stringify({ verdict: 'allow', kind: 'zk' }), () => process.exit(0));\n});\n",
+  "fixture_name": "well-behaved-allow-kind-zk.js"
+}

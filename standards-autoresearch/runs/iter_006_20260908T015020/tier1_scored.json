@@ -1,0 +1,290 @@
+[
+  {
+    "id": "hostile-implementer-consume-nonces-relayed-outside-host-nonce-mode-fail-open",
+    "dims": {
+      "severity": 22,
+      "evidence": 10,
+      "fixability": 23,
+      "standard_impact": 19
+    },
+    "total": 74,
+    "verdict": "CONSIDER",
+    "reason": "Pinned \u00a73.2 already requires reserving each returned entry, while both reference hosts ignore consume_nonces in local mode, supporting a narrower consistency finding."
+  },
+  {
+    "id": "hostile-implementer-stdout-whitespace-grammar-single-lf-vs-no-trailing-bytes",
+    "dims": {
+      "severity": 17,
+      "evidence": 23,
+      "fixability": 23,
+      "standard_impact": 19
+    },
+    "total": 82,
+    "verdict": "PROMOTE",
+    "reason": "The pinned newline permission conflicts with literal no-trailing-bytes wording, and the fixtures lack whitespace-boundary controls, supporting an explicit framing grammar."
+  },
+  {
+    "id": "hostile-implementer-verdict-output-bound-unspecified-large-detail-denied-as-oversize",
+    "dims": {
+      "severity": 16,
+      "evidence": 17,
+      "fixability": 15,
+      "standard_impact": 16
+    },
+    "total": 64,
+    "verdict": "CONSIDER",
+    "reason": "A universal acceptance floor is unspecified, but the existing vector explicitly sets a 65536-byte bound and uses oversize_stdout, weakening the arbitrary-bound premise and proposed classification."
+  },
+  {
+    "id": "hostile-implementer-integer-lexical-form-retain-until-1.0-and-1e9-js-vs-serde",
+    "dims": {
+      "severity": 20,
+      "evidence": 24,
+      "fixability": 8,
+      "standard_impact": 20
+    },
+    "total": 72,
+    "verdict": "CONSIDER",
+    "reason": "Pinned hosts demonstrably disagree, but the proposed denial vectors reject numbers permitted by the normative [JSON Schema semantics](https://json-schema.org/draft/2020-12/json-schema-validation#section-6.1.1), requiring compatibility resolution before staging."
+  },
+  {
+    "id": "security-researcher-timeout-kill-orphans-verifier-worker",
+    "dims": {
+      "severity": 20,
+      "evidence": 21,
+      "fixability": 18,
+      "standard_impact": 19
+    },
+    "total": 78,
+    "verdict": "PROMOTE",
+    "reason": "Pinned JavaScript supervision kills only the child PID while Rust uses process groups, confirming a cleanup gap whose vector needs descendant readiness and bounded post-timeout observation."
+  },
+  {
+    "id": "security-researcher-host-nonce-mode-bare-allow-silent-replay-gap",
+    "dims": {
+      "severity": 12,
+      "evidence": 8,
+      "fixability": 6,
+      "standard_impact": 12
+    },
+    "total": 38,
+    "verdict": "DROP",
+    "reason": "Nonce-less allows are explicitly permitted, and rejecting them universally would change valid behavior without proving that the configured verifier omitted required replay protection."
+  },
+  {
+    "id": "security-researcher-retain-until-below-expiry-replay-window",
+    "dims": {
+      "severity": 23,
+      "evidence": 23,
+      "fixability": 21,
+      "standard_impact": 22
+    },
+    "total": 89,
+    "verdict": "PROMOTE",
+    "reason": "Pinned prose and schema omit retention lower bounds, allowing premature eviction and replay despite the reference verifier already emitting effectiveExpiry."
+  },
+  {
+    "id": "security-researcher-partial-reserve-before-full-verdict-validation",
+    "dims": {
+      "severity": 15,
+      "evidence": 17,
+      "fixability": 20,
+      "standard_impact": 17
+    },
+    "total": 69,
+    "verdict": "CONSIDER",
+    "reason": "Full validation precedes reservation in \u00a710 pseudocode and both hosts, but negative store-mutation coverage is absent and requires extending the runner's assertions."
+  },
+  {
+    "id": "competing-spec-author-action-instance-unbound-extension-fields-ignored",
+    "dims": {
+      "severity": 17,
+      "evidence": 21,
+      "fixability": 23,
+      "standard_impact": 18
+    },
+    "total": 79,
+    "verdict": "PROMOTE",
+    "reason": "Pinned request schemas accept extension fields without defining their authorization guarantees, supporting a bounded clarification of host assumptions and documented capability-token bindings."
+  },
+  {
+    "id": "competing-spec-author-vector-gap-deny-detail-object-never-exercised",
+    "dims": {
+      "severity": 15,
+      "evidence": 23,
+      "fixability": 25,
+      "standard_impact": 18
+    },
+    "total": 81,
+    "verdict": "PROMOTE",
+    "reason": "Pinned fixtures lack detail-bearing denies, making positive and wrong-type controls valuable while preserving detail's documented diagnostic role."
+  },
+  {
+    "id": "competing-spec-author-verdict-has-no-durable-decision-record-binding",
+    "dims": {
+      "severity": 6,
+      "evidence": 10,
+      "fixability": 8,
+      "standard_impact": 11
+    },
+    "total": 35,
+    "verdict": "DROP",
+    "reason": "Request digests cannot reconstruct request bytes, and the proposed tuple omits verifier dependencies and mutable replay state, so its byte-identical rerun guarantee is unsupported."
+  },
+  {
+    "id": "competing-spec-author-continuity-authorization-witness-citation-check",
+    "dims": {
+      "verifiability": 10,
+      "demand": 12,
+      "cost": 20,
+      "standard_impact": 7
+    },
+    "total": 49,
+    "verdict": "DROP",
+    "reason": "Searches of [CONTINUITY v1](https://arxiv.org/html/2609.05269v1) found none of the supplied EVC terms or quoted closure language, and the unversioned procedure cannot substantiate the claimed equivalence."
+  },
+  {
+    "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "dims": {
+      "severity": 14,
+      "evidence": 22,
+      "fixability": 25,
+      "standard_impact": 18
+    },
+    "total": 79,
+    "verdict": "PROMOTE",
+    "reason": "Both missing acceptance controls are confirmed in the actual JavaScript fixtures and test-vectors.json, although the candidate's fixture JSON glob is incorrect."
+  },
+  {
+    "id": "ietf-reviewer-json-schema-2020-12-normative-dependency-has-no-reference-entry",
+    "dims": {
+      "severity": 12,
+      "evidence": 21,
+      "fixability": 24,
+      "standard_impact": 22
+    },
+    "total": 79,
+    "verdict": "PROMOTE",
+    "reason": "The pinned draft makes JSON Schema normative without corresponding references, supporting reference additions independently of the unverified idnits prediction and unnecessary prose-precedence clause."
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-claims-in-introduction-use-repo-relative-paths-not-urls",
+    "dims": {
+      "severity": 10,
+      "evidence": 13,
+      "fixability": 21,
+      "standard_impact": 20
+    },
+    "total": 64,
+    "verdict": "CONSIDER",
+    "reason": "The draft already includes Implementation Status, removal guidance and a pinned external URL, while [RFC 7942](https://datatracker.ietf.org/doc/html/rfc7942#section-2) permits partial field coverage, leaving narrower URL and coverage improvements."
+  },
+  {
+    "id": "ietf-reviewer-iana-registry-closed-within-major-conflicts-with-rfc8126-policy",
+    "dims": {
+      "severity": 2,
+      "evidence": 1,
+      "fixability": 22,
+      "standard_impact": 3
+    },
+    "total": 28,
+    "verdict": "DROP",
+    "reason": "The pinned IANA section already specifies registration policy, wire-version metadata and closure-preserving registrations, and explicitly explains why kind requires no registry."
+  },
+  {
+    "id": "ecosystem-scout-oap-open-agent-passport-signed-audit-preaction-authz",
+    "dims": {
+      "momentum": 15,
+      "overlap": 22,
+      "adoption_risk": 15,
+      "counter_available": 16
+    },
+    "total": 68,
+    "verdict": "CONSIDER",
+    "reason": "A public [implementation](https://github.com/aporthq/aport-agent-guardrails) confirms overlap, but the [paper](https://arxiv.org/html/2603.20953v1) defers its anonymized dataset and neither independent benchmark reproduction nor EVC adapter compatibility is established."
+  },
+  {
+    "id": "ecosystem-scout-agentgateway-cel-mcp-authz-outsourced-verifier-adoption",
+    "dims": {
+      "incentive_fit": 17,
+      "technical_fit": 15,
+      "channel_state": 8,
+      "effort": 13
+    },
+    "total": 53,
+    "verdict": "CONSIDER",
+    "reason": "Documented [HTTP and gRPC external authorization](https://agentgateway.dev/docs/standalone/main/documentation/configuration/security/external-authz/) supports investigating interoperability, but subprocess compatibility, maintainer demand and live repository reconciliation remain unverified."
+  },
+  {
+    "id": "ecosystem-scout-pomerium-mcp-tool-criterion-per-tool-allow-deny-adoption",
+    "dims": {
+      "incentive_fit": 14,
+      "technical_fit": 9,
+      "channel_state": 7,
+      "effort": 10
+    },
+    "total": 40,
+    "verdict": "DROP",
+    "reason": "The [mcp_tool criterion](https://www.pomerium.com/docs/internals/ppl) is documented, but no compatible external-verifier hook or expressed adoption demand supports the proposed fit."
+  },
+  {
+    "id": "ecosystem-scout-continuity-arxiv-authorization-witness-citation-check",
+    "dims": {
+      "verifiability": 15,
+      "demand": 12,
+      "cost": 22,
+      "standard_impact": 9
+    },
+    "total": 58,
+    "verdict": "CONSIDER",
+    "reason": "A version-pinned citation check is feasible, but searches of [v1](https://arxiv.org/html/2609.05269v1) found no supplied EVC terms and its authenticated authorization witness requires substantially more than EVC host conformance."
+  },
+  {
+    "id": "evidence-curator-js-rust-reference-host-parity-run-vector-set-0-7-0",
+    "dims": {
+      "verifiability": 8,
+      "demand": 21,
+      "cost": 12,
+      "standard_impact": 19
+    },
+    "total": 60,
+    "verdict": "CONSIDER",
+    "reason": "The commands omit --type host_behavior and select 113 vectors, while successful runner output exposes no failure classes, requiring corrected selection and actual decision capture."
+  },
+  {
+    "id": "evidence-curator-vendored-suite-fixture-digest-manifest-registry-closure",
+    "dims": {
+      "verifiability": 5,
+      "demand": 11,
+      "cost": 21,
+      "standard_impact": 10
+    },
+    "total": 47,
+    "verdict": "DROP",
+    "reason": "Fixtures are JavaScript files, an existing SHA-256 manifest already passes sync:check, and repository equality cannot establish equality with the published npm tarball."
+  },
+  {
+    "id": "evidence-curator-mandate-issue-binding-v2-independent-verify-record",
+    "dims": {
+      "verifiability": 4,
+      "demand": 20,
+      "cost": 4,
+      "standard_impact": 12
+    },
+    "total": 40,
+    "verdict": "DROP",
+    "reason": "Pinned mandate issuance creates placeholder Groth16 proofs for classical verification, so the promised bolyra verify allow is unsupported and binding-signature verification alone cannot establish full verifier conformance."
+  },
+  {
+    "id": "evidence-curator-negative-control-pre-fix-host-vs-new-vectors",
+    "dims": {
+      "verifiability": 14,
+      "demand": 17,
+      "cost": 16,
+      "standard_impact": 12
+    },
+    "total": 59,
+    "verdict": "CONSIDER",
+    "reason": "Source inspection shows both historical hosts already contain the tested behavior, while the procedure omits pinned vector selection and successful-class capture, limiting its discriminative evidence."
+  }
+]

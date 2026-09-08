@@ -1,0 +1,31 @@
+[
+  {
+    "id": "ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "type": "vector_gap",
+    "experiment_dir": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/experiments/ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny",
+    "checks": {
+      "ok": true,
+      "stage": "run",
+      "exit": 0,
+      "stdout_tail": "  host-deny-bad-kind: PASS\n  host-deny-empty-consume-nonces: PASS\n  host-deny-malformed-consume-nonce: PASS\n  host-deny-deny-extra-property: PASS\n  host-deny-nonce-entry-extra-property: PASS\n  host-deny-nonce-entry-wrong-type: PASS\n  host-deny-binary-garbage-stdout: PASS\n  host-deny-leading-garbage: PASS\n  host-deny-slow-allow-past-deadline: PASS\n  host-allow-well-behaved-kind-classical: PASS\n  host-allow-well-behaved-kind-external: PASS\n  host-deny-signal-death-after-allow: PASS\n  host-allow-well-behaved-kind-zk: PASS\n\n30 passed, 0 failed, 0 skipped",
+      "stderr_tail": ""
+    },
+    "acceptance": {
+      "verdict": "APPROVE",
+      "reason": "The artifact satisfies the single-vector build template, matches the pinned spec, and passes the reported 30-vector run without hard-rule violations; kind-bearing deny coverage remains outstanding."
+    },
+    "action": "staged",
+    "tier3": {
+      "verdict": "APPROVE",
+      "findings": [],
+      "notes": [
+        "Verified against 9bf754441ab36ab93992ed5936d34c44a4128f92: \u00a7\u00a73.3\u20133.5 permit explicit kind=zk; \u00a716.3 requires positive-control verdict relay. Independent execution produced allow through both canonical and vendored JavaScript hosts; Rust source also accepts zk.",
+        "All 28 set-0.6.0 host vectors and their fixtures remain unchanged. The current baseline contains 29 vectors at 0.7.0; this addition requires a minor version increase. The supplied check reports 30 passes; the complete suite was not independently rerun during this read-only review.",
+        "This artifact closes explicit-zk allow coverage only; kind-bearing deny coverage remains outstanding.",
+        "Wording nit: the parenthetical about \u00a77.2 should explicitly refer to its unrecognized-kind condition; \u00a77.2 also requires denial for other failures."
+      ],
+      "summary": "The additive positive control tests host behavior required by the pinned spec and is stageable as-is."
+    },
+    "staged_to": "/private/tmp/claude-501/-Users-lordviswa-Projects/a4925e30-4daa-44a3-8f79-024d007c84f2/scratchpad/bolyra-sar/standards-autoresearch/output/staged/2026-09-08/ietf-reviewer-vector-gap-explicit-kind-zk-allow-and-kind-on-deny"
+  }
+]
