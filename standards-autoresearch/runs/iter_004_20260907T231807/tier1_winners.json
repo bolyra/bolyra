@@ -1,0 +1,238 @@
+[
+  {
+    "id": "ietf-reviewer-pseudocode-classification-order-contradicts-fail-closed-precedence",
+    "type": "spec_finding",
+    "title": "Section 3 host pseudocode checks non-zero exit before timeout and omits the output bound, contradicting the normative classification precedence and the signal_death/nonzero_exit distinction",
+    "claim": "This refines the iteration-3 candidate that was dropped for artifact shape only (missing Base-Commit/Target-File/Finding headers and no diff block); the underlying finding was never judged on merit and the text is unchanged at the pinned commit. The draft's Section 3 pseudocode evaluates `if status != 0: reject(\"non-zero exit\")` BEFORE `if timed_out(child): reject(\"timeout\")`, and contains no output-bound check at all. A host that kills a timed-out child observes a non-zero (signal) status, so a reader implementing the pseudocode literally classifies every timeout as nonzero_exit. The source contract \u00a77.2 normatively orders the reported cause 'its own kills first (output bound, then timeout), then an unsolicited signal death, then a non-zero exit, and only then the stdout parse and schema checks' and says a host 'MUST NOT collapse' signal death and non-zero exit. An IETF reviewer will also note the pseudocode block carries no statement of its normative status, so a lazy implementer cannot tell whether the block or \u00a77.2 wins. The fix is text-only: (1) add one sentence before the block ('This pseudocode is illustrative and non-normative; on any conflict the obligations in Section 6 govern'); (2) reorder the block to output-bound, timed_out, signal death, non-zero exit, then parse; (3) add the `if output_exceeded(child): reject(\"output_bound\")` line so the pseudocode covers all four fail-closed families the conformance suite already tests (host-deny-oversize-stdout, host-deny-no-output-timeout, host-deny-killed-by-signal, host-deny-nonzero-exit-after-allow).",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a73 pseudocode: \"if status != 0:                               reject(\\\"non-zero exit\\\")   // Sec 6\\nif timed_out(child):                          reject(\\\"timeout\\\")         // Sec 6\" \u2014 non-zero exit is tested first and no output-bound line exists.",
+      "spec/external-verifier-contract-v1.md \u00a77.2 (pinned 9bf754441ab36ab93992ed5936d34c44a4128f92): \"a host that reports *why* it failed closed (\u00a716.3) **SHOULD** classify the cause it acted on in this precedence: its own kills first (output bound, then timeout), then an unsolicited signal death, then a non-zero exit, and only then the stdout parse and schema checks.\"",
+      "spec/external-verifier-contract-v1.md \u00a77.2: \"death by an unsolicited signal and a non-zero exit are **distinct** conditions (`signal_death` vs `nonzero_exit`, \u00a716.3) \u2014 a host **MUST NOT** collapse them into one classification.\"",
+      "Previous-iteration rejection record: experiment ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence failed the shape stage only (\"missing Base-Commit header\", \"missing Target-File header\", \"missing Finding header\", \"no ```diff block\"); no merit finding was recorded.",
+      "Conformance vectors host-deny-oversize-stdout, host-deny-no-output-timeout, host-deny-killed-by-signal, host-deny-nonzero-exit-after-allow (set 0.7.0) exercise the four families the corrected pseudocode must name."
+    ],
+    "proposed_artifact": "A shape-conformant staged diff (Base-Commit, Target-File spec/draft-kondoju-evc-01.md, Finding header, single ```diff block) that inserts the non-normative-status sentence and replaces the pseudocode block with the precedence-ordered version including the output-bound branch, touching no normative section.",
+    "entity": {
+      "name": "draft-kondoju-evc",
+      "repo": "github.com/bolyra/bolyra",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-pseudocode-classification-order-contradicts-fail-closed-precedence",
+      "dims": {
+        "severity": 16,
+        "evidence": 25,
+        "fixability": 24,
+        "standard_impact": 21
+      },
+      "total": 86,
+      "verdict": "PROMOTE",
+      "reason": "The pinned draft still checks nonzero exit before timeout and omits overflow and signal branches, and the previous rejection record confirms only artifact-shape failures, supporting the bounded illustrative-pseudocode correction."
+    }
+  },
+  {
+    "id": "security-researcher-consume-nonces-in-local-mode-ignored",
+    "type": "spec_finding",
+    "title": "\u00a77.3 conditions reserve-before-act on host nonce mode, so a local-mode host may drop consume_nonces on the floor",
+    "claim": "\u00a73.2 states unconditionally that the host MUST reserve-before-act EACH consume_nonces entry, but \u00a77.3 opens with 'When the host runs the verifier in host nonce mode \u2026 and receives allow with consume_nonces'. A host that believes it is in local mode (verifier owns the store) can therefore read \u00a77.3 as not applying and ignore the list. Attack: a third-party `external`-kind verifier, or a misconfigured deployment where the verifier was started in host mode while the host thinks local, emits allow+consume_nonces without consuming locally; the host ignores the list; the proof replays indefinitely. Mode is an out-of-band configuration agreement with no in-band signal, so this misalignment is silent. Observable a vector can assert: HUT configured in local mode receives allow+consume_nonces twice; the second run MUST deny (i.e., presence of consume_nonces MUST trigger reservation regardless of configured mode).",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"The host **MUST** reserve-before-act **EACH** entry (\u00a77.3).\" (unconditional)",
+      "spec/external-verifier-contract-v1.md \u00a77.3: \"When the host runs the verifier in **host nonce mode** (\u00a78) and receives `allow` with `consume_nonces`, the host **MUST** reserve **every** entry\" (conditional on mode)",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"Emitted only in host nonce mode (\u00a78).\" \u2014 a descriptive claim about the verifier, not a host obligation for the case where it is violated.",
+      "Vector index (set 0.7.0): all host-nonce-* vectors presuppose host nonce mode; none exercises a local-mode HUT receiving consume_nonces.",
+      "Pinned base: 9bf754441ab36ab93992ed5936d34c44a4128f92."
+    ],
+    "proposed_artifact": "A staged \u00a77.3 diff making reservation mode-independent ('a host that receives consume_nonces MUST reserve every entry regardless of its configured nonce mode; a host unable to reserve MUST deny') plus a vector `host-nonce-local-mode-consume-nonces-replay-deny`.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-consume-nonces-in-local-mode-ignored",
+      "dims": {
+        "severity": 22,
+        "evidence": 21,
+        "fixability": 21,
+        "standard_impact": 20
+      },
+      "total": 84,
+      "verdict": "PROMOTE",
+      "reason": "Both pinned hosts condition reservation on host mode, and Rust explicitly tests ignoring consume_nonces locally, confirming a concrete configuration-mismatch hazard addressable by requiring reservation or explicit denial."
+    }
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-status-stale-vector-count-and-unresolvable-repo-relative-references",
+    "type": "evidence_opportunity",
+    "title": "RFC 7942 implementation-status material cites repo-relative paths with no URL and a 27/27 pass that predates the 29-vector set 0.7.0",
+    "claim": "RFC 7942 \u00a72 asks each implementation entry to carry organization, name, description, maturity, coverage, licensing, contact, and URL; the draft's introduction instead points at 'spec/reference-host.js' and 'spec/reference-host-rs/' (repo-relative paths that an I-D reader cannot resolve without a repository URL) and the only independent external implementation recorded in IMPLEMENTER.md \u00a79, khandrew1/mcp-use-evc-example, is listed as passing 27/27 while the published suite @bolyra/evc-conformance@0.3.0 now ships 29 host-behavior vectors (set 0.7.0, including host-deny-signal-death-after-allow). A skeptical reviewer will treat a coverage claim that is two vectors behind the published suite as unverified. What a third party would demand next is a fresh, pinned run: the khandrew1 repository at a named commit, driven by `npx @bolyra/evc-conformance@0.3.0 --host \"<cmd>\"` in an isolated scratch workspace, with the pass/fail count for all 29 vectors recorded. That single run yields (1) a ledger entry of kind interop_run with rfc7942_ready=true, (2) the coverage line for an RFC 7942 \u00a72 entry, and (3) the URL-form pointers that replace the repo-relative paths. If the run is 27/29 rather than 29/29 that is itself the more valuable fact, because it identifies which of the two newest vectors an outside host misses.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a71 'Why Interoperable, Why Now': \"Two independent reference hosts already exist -- one in JavaScript (\\\"spec/reference-host.js\\\") and one in Rust (\\\"spec/reference-host-rs/\\\")\" \u2014 no URL accompanies either path.",
+      "RFC 7942 \u00a72 (https://www.rfc-editor.org/rfc/rfc7942#section-2) enumerates the per-implementation fields including 'Coverage' and 'Contact' with a URL.",
+      "Conformance vector index provided this iteration: \"vector set 0.7.0, 29 host_behavior vectors\" including host-deny-signal-death-after-allow (commit 9bf7544 'spec: host-deny-signal-death-after-allow vector \u2014 set 0.7.0, evc-conformance 0.3.0 (#126)').",
+      "CLAUDE.md (pinned tree): \"First independent external implementation: `khandrew1/mcp-use-evc-example` (27/27 pinned, listed in IMPLEMENTER.md \u00a79).\"",
+      "https://github.com/khandrew1/mcp-use-evc-example",
+      "Reproduce command shape (published suite, no repo dependency): npx @bolyra/evc-conformance@0.3.0 --host \"<host command>\""
+    ],
+    "proposed_artifact": "An evidence artifact with a REPRODUCE PROCEDURE that clones khandrew1/mcp-use-evc-example at a pinned commit into a fresh temp dir, runs the published 0.3.0 suite against its host command, and records the 29-vector result as an evidence_ledger.jsonl entry (kind interop_run) plus a draft RFC 7942 \u00a72 entry block with URL-form pointers replacing the repo-relative paths in the introduction.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer",
+    "score": {
+      "id": "ietf-reviewer-rfc7942-status-stale-vector-count-and-unresolvable-repo-relative-references",
+      "dims": {
+        "verifiability": 18,
+        "demand": 24,
+        "cost": 16,
+        "standard_impact": 23
+      },
+      "total": 81,
+      "verdict": "PROMOTE",
+      "reason": "The pinned historical 27/27 listing and current 29-vector suite establish a useful rerun opportunity for [RFC 7942 coverage reporting](https://datatracker.ietf.org/doc/html/rfc7942#section-2), with actual results and a resolved host command required and no contact with the held maintainer."
+    }
+  },
+  {
+    "id": "hostile-implementer-stdout-framing-whitespace-newline-contradiction",
+    "type": "spec_finding",
+    "title": "Verifier MAY emit a trailing newline but host MUST reject 'trailing bytes': CRLF, double newline, leading whitespace and BOM are unspecified",
+    "claim": "\u00a75.1 grants the verifier an OPTIONAL single trailing newline while \u00a75.2 orders the host to reject any trailing bytes or leading/trailing prefix around the object. Read literally, a host that rejects `{\"verdict\":\"allow\"}\\n` is conforming (a newline is a trailing byte) and would deny every reference verifier that prints with println-style output; a host that tolerates arbitrary trailing whitespace is also conforming (it is not 'garbage'). Nothing decides `\\r\\n` (Windows verifiers), two newlines, a leading space or newline, or a UTF-8 BOM (0xEF 0xBB 0xBF) which Windows PowerShell and some .NET streams prepend by default. A lazy host implemented as `JSON.parse(stdout.trim())` accepts leading whitespace, BOM-free CRLF and multiple newlines; a strict host rejects all of them; both pass the current 29 vectors because every fixture emits either the bare object, exactly one `\\n`, or clearly non-JSON garbage. This is the 'single most fragile part' of the contract and the framing grammar is not actually written down.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.1: \"The verifier **MUST** write exactly one `JSON.stringify(verdict)` to the host-facing stdout, at the very end. A single trailing newline is **OPTIONAL**.\"",
+      "spec/external-verifier-contract-v1.md \u00a75.2: \"The host **MUST** parse the verifier's stdout as **exactly one** JSON object with **no trailing bytes**, and **MUST** reject (treat as deny, \u00a77) any of: stdout that is empty, not valid JSON, or contains a leading/trailing prefix or suffix around the object\"",
+      "spec/external-verifier-contract-v1.md \u00a75 heading text: \"This is the single most fragile part of the implementation and is normative for both sides.\"",
+      "Conformance vector index (set 0.7.0): host-deny-allow-trailing-garbage and host-deny-leading-garbage use non-whitespace, non-JSON bytes; host-deny-signal-death-after-allow is described as 'newline-terminated'; no vector exercises `\\r\\n`, `\\n\\n`, a leading `\\n`/space, or a BOM before the object, so the whitespace/BOM boundary is untested in both directions.",
+      "RFC 8259 \u00a72: 'Insignificant whitespace is allowed before or after any of the six structural characters' and \u00a78.1: 'Implementations MUST NOT add a byte order mark ... In the interests of interoperability, implementations that parse JSON texts MAY ignore the presence of a byte order mark' \u2014 so BOM tolerance is itself parser-defined, which is exactly where two hosts diverge."
+    ],
+    "proposed_artifact": "A spec diff to \u00a75.1/\u00a75.2 that states the exact framing grammar (the object, optionally followed by exactly one LF or CRLF; no leading bytes including whitespace or BOM; any other surrounding bytes are a fail-closed condition) together with two host_behavior vectors: host-allow-well-behaved-crlf-newline (positive control, expects allow) and host-deny-leading-bom-before-allow (expects deny classified stdout_malformed), each fixture reading stdin before writing.",
+    "entity": null,
+    "persona": "hostile-implementer",
+    "score": {
+      "id": "hostile-implementer-stdout-framing-whitespace-newline-contradiction",
+      "dims": {
+        "severity": 19,
+        "evidence": 22,
+        "fixability": 20,
+        "standard_impact": 18
+      },
+      "total": 79,
+      "verdict": "PROMOTE",
+      "reason": "The pinned newline exception and no-trailing-bytes requirement leave framing unclear, while both reference parsers trim whitespace; bounded framing vectors should use the existing unparseable_stdout classification rather than stdout_malformed."
+    }
+  },
+  {
+    "id": "evidence-curator-external-host-khandrew1-rerun-against-0.7.0",
+    "type": "evidence_opportunity",
+    "title": "Re-run the only independent external implementation (khandrew1/mcp-use-evc-example, listed 27/27) against vector set 0.7.0 to produce a current 27/29-or-29/29 record",
+    "claim": "IMPLEMENTER.md \u00a79 lists khandrew1/mcp-use-evc-example as passing 27/27 at a pinned commit, but the vector set has since grown to 29 (0.7.0 added host-deny-unknown-denial-code, which tests registry closure of the deny `code` enum, and host-deny-signal-death-after-allow, which tests signal-death precedence after a complete allow). The IMPLEMENTATIONS dimension counts implementations 'passing conformance at pinned commits'; a 27/27 claim against a superseded set is not a current pass. A skeptic's next demand is: same pinned external commit, current suite, honest per-vector result. Either outcome is evidence: 29/29 upgrades the RFC 7942 entry; a fail on either new vector is a concrete, falsifiable interop fact (and a candidate spec_finding about whether the two 0.7.0 vectors over-constrain hosts that predate them).",
+    "evidence": [
+      "CLAUDE.md: 'First independent external implementation: khandrew1/mcp-use-evc-example (27/27 pinned, listed in IMPLEMENTER.md \u00a79)'",
+      "Conformance vector index (set 0.7.0): 'host-deny-unknown-denial-code: Registry closure (\u00a73.4/\u00a79/\u00a77.2): the verifier returns an otherwise well-formed deny whose code is not in t\u2026' and 'host-deny-signal-death-after-allow: Host conformance (\u00a77.2, \u00a716.3): the verifier writes a complete, schema-valid, newline-terminated allow, flus\u2026'",
+      "draft-kondoju-evc-01 {{denial-codes}}: 'A host MUST NOT relay an unrecognized \"code\" as if it were a valid verifier decision' \u2014 this paragraph 'replaces the -00 sentence' the external host may have been built against",
+      "https://github.com/khandrew1/mcp-use-evc-example (pinned commit and host command as recorded in spec/IMPLEMENTER.md \u00a79 at 9bf7544)",
+      "Reproduce (founder/third party, isolated scratch workspace, no writes outside it): `mkdir -p /tmp/evc-ext && cd /tmp/evc-ext && git clone https://github.com/khandrew1/mcp-use-evc-example && cd mcp-use-evc-example && git checkout <pinned commit from IMPLEMENTER.md \u00a79>`; build per its README; then `npx --yes @bolyra/evc-conformance@0.3.0 --host \"<host command from IMPLEMENTER.md \u00a79>\" 2>&1 | tee run-ext.txt`; record `grep -c ': PASS$' run-ext.txt` and the exact status lines for host-deny-unknown-denial-code and host-deny-signal-death-after-allow"
+    ],
+    "proposed_artifact": "An evidence_ledger.jsonl entry (kind=implementation, subject=khandrew1/mcp-use-evc-example, pinned_commit=<external pin>, vector_set=0.7.0) with the per-vector result table and a REPRODUCE PROCEDURE; if <29/29, a companion note recording which of the two new vectors failed and why, to seed next iteration's spec_finding on 0.7.0 backward compatibility.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-external-host-khandrew1-rerun-against-0.7.0",
+      "dims": {
+        "verifiability": 17,
+        "demand": 23,
+        "cost": 16,
+        "standard_impact": 22
+      },
+      "total": 78,
+      "verdict": "PROMOTE",
+      "reason": "The external commit and historical coverage are verified in the pinned draft, supporting a current rerun consolidated with the overlapping RFC7942 candidate, while failures must remain run evidence rather than automatically count as passing implementations or specification regressions."
+    }
+  },
+  {
+    "id": "competing-spec-author-detail-object-unbounded-and-secret-unconstrained",
+    "type": "spec_finding",
+    "title": "Verdict `detail` is the sanctioned log channel but carries no secrecy or size constraint, unlike `message`",
+    "claim": "Record-oriented competitors (AERF, authproof-sdk receipts, the CVA paper's request/policy-binding properties) define the decision record as something a third party can read and verify, so they constrain what a decision record may contain. EVC's deny verdict makes `message` MUST-NOT-contain-secrets but leaves `detail` as an unconstrained object that the verifier is told to populate with internal error context and that hosts will persist verbatim in audit logs. A verifier vendor can echo the raw bundle, a binding signature, or an operator key into detail without violating the contract; the only backstop is the host's output bound, which is sized for framing (the fixture floods past it), not for secret containment. EVC should extend the secrecy rule to detail, state that detail is host-log material that a host MAY truncate or drop without affecting the decision, and say hosts MUST NOT feed detail back into any authorization input.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.3: '`message` (string, REQUIRED on deny) \u2014 a one-line, human-actionable reason. It MUST NOT contain secrets.' followed by '`detail` (object, OPTIONAL) \u2014 structured context for logs/debugging. A verifier SHOULD echo the originating internal error code here'",
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: '\"detail\": { \"type\": \"object\" }' with no properties, additionalProperties, or maxProperties constraint",
+      "spec/external-verifier-contract-v1.md \u00a77.2 lists 'oversized ... stdout' as a fail-closed framing condition only; no text ties the output bound to secret containment",
+      "https://arxiv.org/html/2607.21325 (CVA: authorization soundness, principal binding, request binding, policy binding \u2014 decision artifacts are specified as third-party-readable)",
+      "https://github.com/Commonguy25/authproof-sdk ('signed, verifiable, tamper-proof delegation receipts for AI agents')",
+      "https://github.com/topics/agent-verification?o=desc&s=updated (AERF: 'tamper-evident, independently verifiable records of AI agent actions')"
+    ],
+    "proposed_artifact": "A staged prose diff against \u00a73.3/\u00a75.3 of spec/external-verifier-contract-v1.md and the corresponding draft -02 section pinned to 9bf7544, extending the secrets prohibition to `detail`, declaring it non-authorization log material the host MAY truncate, and adding a matching Security Considerations paragraph.",
+    "persona": "competing-spec-author",
+    "score": {
+      "id": "competing-spec-author-detail-object-unbounded-and-secret-unconstrained",
+      "dims": {
+        "severity": 18,
+        "evidence": 19,
+        "fixability": 24,
+        "standard_impact": 16
+      },
+      "total": 77,
+      "verdict": "PROMOTE",
+      "reason": "The pinned secrecy prohibition covers message but omits detail despite its designated logging role, making a matching prohibition and non-authorization clarification useful without changing the verdict schema."
+    }
+  },
+  {
+    "id": "security-researcher-retain-until-elapsed-immediate-eviction-replay",
+    "type": "spec_finding",
+    "title": "retain_until in the past (or \u2264 0) is schema-valid and licenses immediate eviction, so a replay is spec-compliant",
+    "claim": "The verdict schema types retain_until as a bare integer with no minimum, and \u00a73.2 only obliges the host to retain the nonce 'until' that value. A misbehaving classical/external-class verifier (or a compromised one) that emits `retain_until: 1` (or 0 / negative) produces a verdict the host accepts, reserves, and \u2014 per the letter of the contract \u2014 may garbage-collect immediately; the next presentation of the same proof reserves the nonce afresh and the action runs twice. This is a fail-open path reachable without any crypto break, purely through a lax integer. Set 0.7.0 asserts entry shape (host-deny-nonce-entry-wrong-type / extra-property / malformed-consume-nonce) but never asserts a value bound on retain_until. The observable: fixture returns allow with `retain_until` \u2264 the request's `now_unix`; host MUST fail closed (schema_invalid) \u2014 or, at minimum, a second run within the vector MUST deny.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: `\"retain_until\": { \"type\": \"integer\" }` \u2014 no `minimum`/`exclusiveMinimum`, unlike request `now_unix` which carries `\"exclusiveMinimum\": 0`.",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"`retain_until` (integer, REQUIRED) \u2014 Unix seconds until which the host **MUST** retain the consumed nonce.\" \u2014 no obligation past that instant, so an already-elapsed value permits immediate eviction.",
+      "Vector index (set 0.7.0): host-deny-nonce-entry-wrong-type, host-deny-nonce-entry-extra-property, host-deny-malformed-consume-nonce \u2014 all shape checks; no vector bounds the retain_until value.",
+      "Pinned base: 9bf754441ab36ab93992ed5936d34c44a4128f92."
+    ],
+    "proposed_artifact": "A staged \u00a73.2/\u00a73.4 diff adding `exclusiveMinimum: 0` and a host MUST to reject `retain_until <= now_unix` as schema-invalid, plus hostile vectors `host-deny-retain-until-elapsed` and `host-deny-retain-until-nonpositive` with regenerated goldens.",
+    "entity": null,
+    "persona": "security-researcher",
+    "score": {
+      "id": "security-researcher-retain-until-elapsed-immediate-eviction-replay",
+      "dims": {
+        "severity": 20,
+        "evidence": 18,
+        "fixability": 19,
+        "standard_impact": 17
+      },
+      "total": 74,
+      "verdict": "PROMOTE",
+      "reason": "The pinned schema and prose permit already-elapsed retention timestamps without a host check, supporting bounded defensive validation and vectors, although neither reference store demonstrates immediate eviction and a compromised verifier remains trusted to decide authorization."
+    }
+  },
+  {
+    "id": "evidence-curator-dual-reference-host-0.7.0-pinned-run-record",
+    "type": "evidence_opportunity",
+    "title": "Pinned 29/29 run record for BOTH reference hosts (JS + Rust) against vector set 0.7.0 at 9bf7544",
+    "claim": "The draft (\u00a71.4, {{impl-status}}) asserts two independent reference hosts exist, but there is no ledger entry showing both pass the CURRENT 29-vector set (0.7.0, which added host-deny-unknown-denial-code and host-deny-signal-death-after-allow) at a pinned commit. A skeptical third party would demand one run record per host, same commit, same vector set, same runner, with the per-vector PASS lines captured. This is the minimum RFC 7942 'implementation status' fact for -02 and directly feeds INTEROP EVIDENCE (rfc7942_ready) and IMPLEMENTATIONS.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a71.4: 'Two independent reference hosts already exist -- one in JavaScript (\"spec/reference-host.js\") and one in Rust (\"spec/reference-host-rs/\")'",
+      "spec/external-verifier-contract-v1.md \u00a77.2: 'death by an unsolicited signal and a non-zero exit are distinct conditions (signal_death vs nonzero_exit, \u00a716.3) \u2014 a host MUST NOT collapse them into one classification. The reference hosts implement this precedence.'",
+      "Conformance vector index: 'vector set 0.7.0, 29 host_behavior vectors' incl. host-deny-signal-death-after-allow (commit 9bf7544, PR #126)",
+      "Reproduce (from repo root at 9bf754441ab36ab93992ed5936d34c44a4128f92): `git rev-parse HEAD` \u2192 9bf7544\u2026; `node spec/conformance-runner.js --host \"node spec/reference-host.js\" 2>&1 | tee run-js.txt`; `cargo build --release --manifest-path spec/reference-host-rs/Cargo.toml && node spec/conformance-runner.js --host \"<path to built reference-host-rs binary per spec/reference-host-rs/README>\" 2>&1 | tee run-rs.txt`; expected: 29 lines matching `^  host-.*: PASS$` in each file, zero FAIL, exit 0; `grep -c ': PASS$' run-js.txt run-rs.txt` \u2192 29 and 29",
+      "Ledger schema in program.md \u00a74 requires {pinned_commit, reproduce_cmd, urls[], rfc7942_ready} \u2014 this record satisfies every field from local runs only"
+    ],
+    "proposed_artifact": "Two evidence_ledger.jsonl entries (kind=interop_run, subject=reference-host-js / reference-host-rs, pinned_commit=9bf7544, vector_set=0.7.0, rfc7942_ready=true) plus a REPRODUCE PROCEDURE doc with the exact commands, expected 29-PASS outputs, and a draft -02 Implementation Status paragraph listing both hosts with commit and vector-set pins.",
+    "entity": null,
+    "persona": "evidence-curator",
+    "score": {
+      "id": "evidence-curator-dual-reference-host-0.7.0-pinned-run-record",
+      "dims": {
+        "verifiability": 15,
+        "demand": 22,
+        "cost": 17,
+        "standard_impact": 20
+      },
+      "total": 74,
+      "verdict": "PROMOTE",
+      "reason": "Both pinned hosts and the empty ledger support fresh run records, but reproduction needs --type host_behavior, the exact Rust binary, preserved runner exit status, isolated scratch execution, and observed results rather than presumed 29/29 passes."
+    }
+  }
+]

@@ -1,0 +1,420 @@
+[
+  {
+    "id": "hostile-implementer-integer-lexical-form-divergence",
+    "type": "vector_gap",
+    "title": "`integer` is undefined lexically: JSON-Schema hosts accept `retain_until: 4102444800.0` / `version: 1.0` while token-based hosts fail closed",
+    "claim": "The spec says fields are \"integer\" and pins that with JSON Schema `{\"type\":\"integer\"}`, but JSON Schema 2020-12 validates any number with a zero fractional part (1.0, 1e0, 4102444800.0) as an integer, whereas RFC 8259 token parsers used by typed languages (serde u64, Go int64 strict) reject the fraction/exponent form. Two conforming hosts therefore diverge on the SAME verdict bytes: a JS host that checks `Number.isInteger(x)` accepts `\"retain_until\": 4102444800.0` and proceeds to reserve-before-act, a Rust host rejects it as schema_invalid and denies. Symmetrically on the request side a JS verifier accepts `\"version\": 1.0` and `\"now_unix\": 1.7519904e9` while a strict verifier returns malformed_input. A lazy implementer can also emit `retain_until: 4.102444800e9` and pass the current 29 vectors, which never present a non-canonical numeric form. The divergence lives exactly on the fail-closed boundary the host suite exists to pin, and it is not covered by host-deny-nonce-entry-wrong-type (that vector uses a string, not a fractional/exponent number).",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"`retain_until` (integer, **REQUIRED**) \u2014 Unix seconds until which the host **MUST** retain the consumed nonce.\"",
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: \"retain_until\": { \"type\": \"integer\" } \u2014 and \u00a72.2: \"version\": { \"type\": \"integer\", \"const\": 1 }, \"now_unix\": { \"type\": \"integer\", \"exclusiveMinimum\": 0 }",
+      "spec/external-verifier-contract-v1.md \u00a72.1: \"A request that is not a JSON object, is missing a **REQUIRED** field, or has a field of the wrong type **MUST** yield `deny code=malformed_input`\" \u2014 'wrong type' is never defined for numbers with a fractional or exponent part.",
+      "JSON Schema Validation 2020-12 \u00a76.1.1 (type): \"integer\" matches any number with a zero fractional part, so 1.0 and 1e0 validate; RFC 8259 \u00a76 defines the number grammar with optional frac/exp but does not define an integer subtype, so strict decoders (serde_json into u64, Go encoding/json into int64 with UseNumber) reject 4102444800.0.",
+      "Conformance vector index (set 0.7.0): host-deny-nonce-entry-wrong-type uses a string-typed field; no vector presents a numeric-but-non-integral or exponent-form value for `retain_until`, `now_unix`, or `version`.",
+      "Runnable divergence check (founder scratch workspace): feed both reference hosts a fixture verifier that prints {\"verdict\":\"allow\",\"consume_nonces\":[{\"issuer_key\":\"k\",\"nonce\":\"n1\",\"retain_until\":4102444800.0}]} and diff the JS host (spec/conformance-runner.js path) against spec/reference-host-rs; the claim predicts one allows and one denies schema_invalid."
+    ],
+    "proposed_artifact": "A spec diff defining 'integer' as an RFC 8259 number token with no fraction or exponent part (and stating that hosts MUST fail closed on the fractional/exponent form in verdicts, verifiers MUST return malformed_input for it in requests), plus a new host_behavior vector host-deny-nonce-entry-fractional-retain-until whose fixture reads stdin and emits an allow with `retain_until: 4102444800.0`, expecting deny classified schema_invalid.",
+    "entity": null,
+    "persona": "hostile-implementer"
+  },
+  {
+    "id": "hostile-implementer-stdout-framing-whitespace-newline-contradiction",
+    "type": "spec_finding",
+    "title": "Verifier MAY emit a trailing newline but host MUST reject 'trailing bytes': CRLF, double newline, leading whitespace and BOM are unspecified",
+    "claim": "\u00a75.1 grants the verifier an OPTIONAL single trailing newline while \u00a75.2 orders the host to reject any trailing bytes or leading/trailing prefix around the object. Read literally, a host that rejects `{\"verdict\":\"allow\"}\\n` is conforming (a newline is a trailing byte) and would deny every reference verifier that prints with println-style output; a host that tolerates arbitrary trailing whitespace is also conforming (it is not 'garbage'). Nothing decides `\\r\\n` (Windows verifiers), two newlines, a leading space or newline, or a UTF-8 BOM (0xEF 0xBB 0xBF) which Windows PowerShell and some .NET streams prepend by default. A lazy host implemented as `JSON.parse(stdout.trim())` accepts leading whitespace, BOM-free CRLF and multiple newlines; a strict host rejects all of them; both pass the current 29 vectors because every fixture emits either the bare object, exactly one `\\n`, or clearly non-JSON garbage. This is the 'single most fragile part' of the contract and the framing grammar is not actually written down.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a75.1: \"The verifier **MUST** write exactly one `JSON.stringify(verdict)` to the host-facing stdout, at the very end. A single trailing newline is **OPTIONAL**.\"",
+      "spec/external-verifier-contract-v1.md \u00a75.2: \"The host **MUST** parse the verifier's stdout as **exactly one** JSON object with **no trailing bytes**, and **MUST** reject (treat as deny, \u00a77) any of: stdout that is empty, not valid JSON, or contains a leading/trailing prefix or suffix around the object\"",
+      "spec/external-verifier-contract-v1.md \u00a75 heading text: \"This is the single most fragile part of the implementation and is normative for both sides.\"",
+      "Conformance vector index (set 0.7.0): host-deny-allow-trailing-garbage and host-deny-leading-garbage use non-whitespace, non-JSON bytes; host-deny-signal-death-after-allow is described as 'newline-terminated'; no vector exercises `\\r\\n`, `\\n\\n`, a leading `\\n`/space, or a BOM before the object, so the whitespace/BOM boundary is untested in both directions.",
+      "RFC 8259 \u00a72: 'Insignificant whitespace is allowed before or after any of the six structural characters' and \u00a78.1: 'Implementations MUST NOT add a byte order mark ... In the interests of interoperability, implementations that parse JSON texts MAY ignore the presence of a byte order mark' \u2014 so BOM tolerance is itself parser-defined, which is exactly where two hosts diverge."
+    ],
+    "proposed_artifact": "A spec diff to \u00a75.1/\u00a75.2 that states the exact framing grammar (the object, optionally followed by exactly one LF or CRLF; no leading bytes including whitespace or BOM; any other surrounding bytes are a fail-closed condition) together with two host_behavior vectors: host-allow-well-behaved-crlf-newline (positive control, expects allow) and host-deny-leading-bom-before-allow (expects deny classified stdout_malformed), each fixture reading stdin before writing.",
+    "entity": null,
+    "persona": "hostile-implementer"
+  },
+  {
+    "id": "hostile-implementer-nonce-uniqueness-key-issuer-key-tuple-vs-nonce",
+    "type": "vector_gap",
+    "title": "Host nonce store key is unspecified: a host keyed on (issuer_key, nonce) lets the same nonce be reserved twice under a relabelled issuer_key, and in-verdict duplicate entries have no defined outcome",
+    "claim": "\u00a73.2 says `issuer_key` is 'for host bookkeeping only' and the nonce 'is already globally unique', but never states that the host's unique-insert MUST be keyed on `nonce` alone. A reasonable implementer builds a composite primary key `(issuer_key, nonce)` because both fields are REQUIRED and the example shows issuer_key scoping 'the nonce namespace' \u2014 the word 'namespace' invites exactly that schema. That host passes host-nonce-reserve-replay-deny (same issuer_key both times) yet accepts a second presentation whose verdict carries the same `nonce` under a different `issuer_key` string. For a classical- or external-class verifier that derives `issuer_key` from presenter-supplied bundle metadata, this is a presenter-controlled replay bypass without any verifier misbehaviour. A second, related gap: one verdict listing the same nonce twice (e.g. a delegatee and delegator sharing a nullifier under a lazy verifier) has two conforming outcomes \u2014 reserve entry 1, collide on entry 2, deny 'replay' of a fresh proof; or dedupe first and allow \u2014 and the spec's 'reserve EVERY entry' wording plus the pseudocode `reserve_nonce_atomically(entry)` supports both.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"`issuer_key` (string, **REQUIRED**) \u2014 the issuer/operator key that scopes the nonce namespace. For host bookkeeping only; the `nonce` is already globally unique (\u00a78).\"",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"The host **MUST** reserve-before-act **EACH** entry (\u00a77.3).\" and \u00a77.3: \"the host **MUST** reserve **every** entry in the list **before** performing the privileged action\"",
+      "spec/draft-kondoju-evc-01.md \u00a73 pseudocode: \"for entry in (verdict.consume_nonces or []): if not reserve_nonce_atomically(entry): reject(\\\"replay\\\")\" \u2014 the reservation is called with the whole entry, so a composite key is the literal reading.",
+      "spec/draft-kondoju-evc-01.md Terminology, reserve-before-act: \"durably reserve every returned nonce with unique-insert semantics\" \u2014 'unique' is never qualified as unique-by-nonce.",
+      "Conformance vector index (set 0.7.0): host-nonce-reserve-replay-deny replays 'the same allow+consume_nonces verdict' (identical issuer_key); host-nonce-reserve-all-any-conflict-deny uses two distinct nonces; no vector presents the same nonce under a different issuer_key across runs, and none presents a duplicate nonce within one verdict.",
+      "Runnable divergence check (founder scratch workspace): run the JS and Rust reference hosts twice with a fixture that emits nonce \"n-dup\" first as issuer_key \"A\" then as issuer_key \"B\" against a shared nonce store; the claim predicts the second run is allow on any (issuer_key, nonce)-keyed store and deny on a nonce-keyed store."
+    ],
+    "proposed_artifact": "A spec diff to \u00a73.2/\u00a77.3 stating that unique-insert MUST be keyed on the `nonce` string alone (issuer_key MUST NOT participate in the uniqueness key) and that duplicate `nonce` values within one verdict MUST be treated as a schema-invalid verdict (fail closed), plus two host_behavior vectors: host-nonce-reserve-replay-relabelled-issuer-deny (two runs, same nonce, different issuer_key, second expects deny nonce_replayed) and host-deny-duplicate-nonce-in-verdict.",
+    "entity": null,
+    "persona": "hostile-implementer"
+  },
+  {
+    "id": "hostile-implementer-timeout-does-not-cover-stdin-write",
+    "type": "spec_finding",
+    "title": "The wall-clock timeout is not stated to start at spawn or to cover the host's stdin write: a verifier that never drains stdin can hang a conforming host forever",
+    "claim": "\u00a76 says the host MUST enforce a wall-clock timeout 'on the spawned process' and the draft's pseudocode passes the timeout to `spawn` but then performs `write(child.stdin, ...)` synchronously before `wait`. A host that starts its timer when it begins waiting for the child (the common `Command::output()`-with-deadline or `execFileSync` shape) has no timer armed during the write. If the request exceeds the kernel pipe capacity (65 536 bytes on Linux, typically 16\u201364 KiB on macOS, well inside the 1 MiB stdin bound) and the verifier does not read stdin before doing other work, or is a lazy classical verifier that exits without reading, the host's blocking write either hangs indefinitely (no timeout fires, no deny is ever produced) or takes EPIPE/SIGPIPE, a condition \u00a77.2 does not list. Two hosts diverge: one that arms the timer at spawn fails closed after 10 s; one that arms it at wait never fails at all. The timeout is the only fail-closed defence against a hung verifier and its start point is not normative.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a76: \"The **host owns the timeout**. The verifier does not implement its own. The host **MUST** enforce a wall-clock timeout on the spawned process and treat expiry as deny (\u00a77).\" \u2014 no statement of when the clock starts or that it covers the stdin write and close.",
+      "spec/draft-kondoju-evc-01.md \u00a73 pseudocode: \"child   = spawn(verifier_cmd, timeout = 10_000ms)\\nwrite(child.stdin, json(request)); close(child.stdin)\\nstatus, out, err = wait(child)\" \u2014 write and close are unconditional blocking steps between spawn and wait.",
+      "spec/external-verifier-contract-v1.md \u00a76: \"The reference limit is **1 MiB** (1 048 576 bytes).\" \u2014 a request 16\u00d7 larger than a Linux pipe buffer is explicitly in-bound, so a full-pipe blocking write is a legal state of the protocol.",
+      "spec/external-verifier-contract-v1.md \u00a77.2 lists 'non-zero exit code; timeout (\u00a76); death by signal / crash; unparseable, empty, oversized, or multi-object stdout' \u2014 a failed or blocked stdin write (EPIPE, SIGPIPE delivered to the host) appears nowhere on the fail-closed list.",
+      "Conformance vector index (set 0.7.0): host-deny-no-output-timeout and host-deny-partial-json-timeout both have fixtures that read stdin first; no vector or spec sentence pins behaviour when the write itself cannot complete."
+    ],
+    "proposed_artifact": "A spec diff to \u00a76 and \u00a77.2 stating that the wall-clock timeout starts at spawn and covers the stdin write and close, that a host MUST perform the write non-blocking or under the same deadline, and that a stdin write error (EPIPE/SIGPIPE) is a fail-closed condition classified under the host's own kills; this is a prose-only spec_finding with no fixture, because the runner (not the fixture) controls request size.",
+    "entity": null,
+    "persona": "hostile-implementer"
+  },
+  {
+    "id": "security-researcher-human-nullifier-cross-issuer-tuple-key-replay",
+    "type": "vector_gap",
+    "title": "Tuple-keyed nonce store (issuer_key, nonce) lets one human nullifier be spent once per operator",
+    "claim": "\u00a73.2 says issuer_key 'scopes the nonce namespace' and in the same breath that the nonce 'is already globally unique' and issuer_key is 'for host bookkeeping only'. A host that reads the first clause and keys its reservation store on the (issuer_key, nonce) tuple is fail-open for the human-uniqueness lane: the human entry `human:<nullifierHash>` is derived from the human identity, not the operator key, so the same human backing agent credentials from two operators yields the SAME nonce string with DIFFERENT issuer_key values, and the tuple-keyed host reserves both \u2014 one human, two actions. No vector in set 0.7.0 varies issuer_key while holding nonce fixed (host-nonce-reserve-replay-deny replays the identical verdict; host-nonce-reserve-all-any-conflict-deny varies the nonce, not the key). The observable a vector can assert: run 1 allow+consume_nonces {issuer_key:A, nonce:N} \u2192 proceed; run 2 allow+consume_nonces {issuer_key:B, nonce:N} \u2192 host MUST deny (replay).",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"`issuer_key` (string, REQUIRED) \u2014 the issuer/operator key that scopes the nonce namespace. For host bookkeeping only; the `nonce` is already globally unique (\u00a78).\"",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"the human entry's `nonce` is namespaced `human:<nullifierHash>`\" \u2014 a human nullifier is not a function of the agent operator key, so it recurs across operators with distinct issuer_key values.",
+      "Vector index (set 0.7.0): host-nonce-reserve-novel-allow, host-nonce-reserve-replay-deny, host-nonce-reserve-all-any-conflict-deny \u2014 none presents the same nonce under two issuer_key values.",
+      "Pinned base: 9bf754441ab36ab93992ed5936d34c44a4128f92; reproduce: `npx @bolyra/evc-conformance --host \"<cmd>\"` shows no vector exercising issuer_key variation."
+    ],
+    "proposed_artifact": "A hostile host-conformance fixture pair `host-nonce-reserve-cross-issuer-replay-deny` (same nonce, different issuer_key, second run MUST deny) plus a one-line \u00a73.2/\u00a77.3 diff stating the reservation key is the `nonce` string alone and issuer_key MUST NOT participate in uniqueness.",
+    "entity": null,
+    "persona": "security-researcher"
+  },
+  {
+    "id": "security-researcher-retain-until-elapsed-immediate-eviction-replay",
+    "type": "spec_finding",
+    "title": "retain_until in the past (or \u2264 0) is schema-valid and licenses immediate eviction, so a replay is spec-compliant",
+    "claim": "The verdict schema types retain_until as a bare integer with no minimum, and \u00a73.2 only obliges the host to retain the nonce 'until' that value. A misbehaving classical/external-class verifier (or a compromised one) that emits `retain_until: 1` (or 0 / negative) produces a verdict the host accepts, reserves, and \u2014 per the letter of the contract \u2014 may garbage-collect immediately; the next presentation of the same proof reserves the nonce afresh and the action runs twice. This is a fail-open path reachable without any crypto break, purely through a lax integer. Set 0.7.0 asserts entry shape (host-deny-nonce-entry-wrong-type / extra-property / malformed-consume-nonce) but never asserts a value bound on retain_until. The observable: fixture returns allow with `retain_until` \u2264 the request's `now_unix`; host MUST fail closed (schema_invalid) \u2014 or, at minimum, a second run within the vector MUST deny.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: `\"retain_until\": { \"type\": \"integer\" }` \u2014 no `minimum`/`exclusiveMinimum`, unlike request `now_unix` which carries `\"exclusiveMinimum\": 0`.",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"`retain_until` (integer, REQUIRED) \u2014 Unix seconds until which the host **MUST** retain the consumed nonce.\" \u2014 no obligation past that instant, so an already-elapsed value permits immediate eviction.",
+      "Vector index (set 0.7.0): host-deny-nonce-entry-wrong-type, host-deny-nonce-entry-extra-property, host-deny-malformed-consume-nonce \u2014 all shape checks; no vector bounds the retain_until value.",
+      "Pinned base: 9bf754441ab36ab93992ed5936d34c44a4128f92."
+    ],
+    "proposed_artifact": "A staged \u00a73.2/\u00a73.4 diff adding `exclusiveMinimum: 0` and a host MUST to reject `retain_until <= now_unix` as schema-invalid, plus hostile vectors `host-deny-retain-until-elapsed` and `host-deny-retain-until-nonpositive` with regenerated goldens.",
+    "entity": null,
+    "persona": "security-researcher"
+  },
+  {
+    "id": "security-researcher-consume-nonces-in-local-mode-ignored",
+    "type": "spec_finding",
+    "title": "\u00a77.3 conditions reserve-before-act on host nonce mode, so a local-mode host may drop consume_nonces on the floor",
+    "claim": "\u00a73.2 states unconditionally that the host MUST reserve-before-act EACH consume_nonces entry, but \u00a77.3 opens with 'When the host runs the verifier in host nonce mode \u2026 and receives allow with consume_nonces'. A host that believes it is in local mode (verifier owns the store) can therefore read \u00a77.3 as not applying and ignore the list. Attack: a third-party `external`-kind verifier, or a misconfigured deployment where the verifier was started in host mode while the host thinks local, emits allow+consume_nonces without consuming locally; the host ignores the list; the proof replays indefinitely. Mode is an out-of-band configuration agreement with no in-band signal, so this misalignment is silent. Observable a vector can assert: HUT configured in local mode receives allow+consume_nonces twice; the second run MUST deny (i.e., presence of consume_nonces MUST trigger reservation regardless of configured mode).",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"The host **MUST** reserve-before-act **EACH** entry (\u00a77.3).\" (unconditional)",
+      "spec/external-verifier-contract-v1.md \u00a77.3: \"When the host runs the verifier in **host nonce mode** (\u00a78) and receives `allow` with `consume_nonces`, the host **MUST** reserve **every** entry\" (conditional on mode)",
+      "spec/external-verifier-contract-v1.md \u00a73.2: \"Emitted only in host nonce mode (\u00a78).\" \u2014 a descriptive claim about the verifier, not a host obligation for the case where it is violated.",
+      "Vector index (set 0.7.0): all host-nonce-* vectors presuppose host nonce mode; none exercises a local-mode HUT receiving consume_nonces.",
+      "Pinned base: 9bf754441ab36ab93992ed5936d34c44a4128f92."
+    ],
+    "proposed_artifact": "A staged \u00a77.3 diff making reservation mode-independent ('a host that receives consume_nonces MUST reserve every entry regardless of its configured nonce mode; a host unable to reserve MUST deny') plus a vector `host-nonce-local-mode-consume-nonces-replay-deny`.",
+    "entity": null,
+    "persona": "security-researcher"
+  },
+  {
+    "id": "security-researcher-nonce-reservation-concurrent-race",
+    "type": "vector_gap",
+    "title": "No vector exercises concurrent reservation; check-then-insert hosts pass the suite and lose the race",
+    "claim": "The draft terminology defines reserve-before-act with 'unique-insert semantics', but every nonce vector in set 0.7.0 runs the HUT sequentially, so a host implemented as read-then-write (SELECT then INSERT, or a file existence check then create) passes host-nonce-reserve-replay-deny and host-nonce-reserve-all-any-conflict-deny while two simultaneous presentations of the same proof both proceed. This is the classic reservation race and is the highest-value replay window in host nonce mode because it needs no verifier misbehavior at all \u2014 just two parallel host invocations, which an attacker controlling the agent can trivially trigger. Observable: N (e.g. 8) HUT invocations launched in parallel with an identical allow+consume_nonces verdict against a shared nonce store; exactly one MUST report allow and N\u22121 MUST deny with a replay classification.",
+    "evidence": [
+      "spec/draft-kondoju-evc-01.md \u00a7Terminology: \"reserve-before-act: The host obligation, in host nonce mode, to durably reserve every returned nonce with unique-insert semantics before performing the privileged action (Section 7).\"",
+      "spec/draft-kondoju-evc-01.md \u00a7Architecture pseudocode: \"if not reserve_nonce_atomically(entry): reject(\\\"replay\\\")\" \u2014 atomicity is asserted in pseudocode, which the previous iteration's ietf-reviewer finding already flagged as lacking normative status.",
+      "Vector index (set 0.7.0): host-nonce-reserve-novel-allow, host-nonce-reserve-replay-deny, host-nonce-reserve-all-any-conflict-deny \u2014 sequential two-run vectors only; no parallel invocation.",
+      "Pinned base: 9bf754441ab36ab93992ed5936d34c44a4128f92; `npx @bolyra/evc-conformance --host \"<cmd>\"` runs vectors one HUT process at a time."
+    ],
+    "proposed_artifact": "A staged \u00a77.3 diff adding a normative MUST for atomic unique-insert (check-then-insert MUST NOT be used) plus a `host-nonce-reserve-concurrent-race` vector with a `parallel: N` runner field and a reference-host run record showing 1 allow / N\u22121 deny.",
+    "entity": null,
+    "persona": "security-researcher"
+  },
+  {
+    "id": "competing-spec-author-no-revocation-code-despite-introspection-lane",
+    "type": "spec_finding",
+    "title": "EVC contemplates out-of-band introspection but the closed 15-code registry has no way to report a revoked, unexpired credential",
+    "claim": "draft-klrc-aiagent-auth and draft-pidlisnyi-aps both treat revocation/lifecycle status as a first-class verifier outcome (OAuth introspection returns active:false; APS passports carry lifecycle status). EVC's own draft says a classical-class verifier may validate a token 'including an out-of-band introspection call', yet the registry has no code for 'credential revoked / inactive' and forbids adding one within a wire major. A classical or external verifier that learns a credential is revoked must misreport it as untrusted_root (wrong: the root is trusted), invalid_proof (wrong: the signature verifies), or expired (wrong: now_unix < expiry). Hosts branching on code per \u00a73.3 will therefore mis-log and mis-alert on exactly the incident class competitors advertise. EVC should close this with -02 material: either a non-normative mapping paragraph (which code carries revocation, with detail.reason fixed) or a registry-policy note explaining how a wire-major-1 registry keyed by major can admit a revoked code, so IANA registration (RFC 8126) is not vacuous.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a71.5: 'a bundle can carry a token that a classical-class verifier (Section 5) validates by whatever means it chooses, including an out-of-band introspection call'",
+      "draft-kondoju-evc-01 \u00a74.3: 'Verifiers MUST NOT add, remove, or rename a code without a wire-major version bump ({{versioning}})' and 'This 15-code table is the candidate IANA registry ({{iana}})'",
+      "draft-kondoju-evc-01 \u00a71.3: 'EVC does not define credential issuance, the internal proof format, policy authoring, delegation semantics, revocation infrastructure, or any PKI.'",
+      "spec/external-verifier-contract-v1.md \u00a73.4 deny schema enum (15 members) contains no revoked/inactive/suspended token; untrusted_root is defined as 'a proof's trust anchor ... is not in the configured trusted-root source' and expired as 'now_unix >= effective_expiry'",
+      "https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/ (OAuth-based agent auth; introspection semantics per RFC 7662 \u00a72.2 'active' boolean)",
+      "https://datatracker.ietf.org/doc/draft-pidlisnyi-aps/ (Agent Passport System, passport lifecycle status)",
+      "https://github.com/topics/agent-verification?o=desc&s=updated (open root-of-trust with 'public, federated registry of trusted attestation issuers' \u2014 revocation is a registry-level status in that design)"
+    ],
+    "proposed_artifact": "A staged prose diff against spec/external-verifier-contract-v1.md \u00a79 and the -02 IANA/registry section pinned to 9bf7544, adding a normative mapping for revoked-but-unexpired credentials (one designated existing code plus a fixed detail.reason value) and a registry-policy clarification, with a host vector asserting the host relays that code with detail preserved.",
+    "persona": "competing-spec-author"
+  },
+  {
+    "id": "competing-spec-author-detail-object-unbounded-and-secret-unconstrained",
+    "type": "spec_finding",
+    "title": "Verdict `detail` is the sanctioned log channel but carries no secrecy or size constraint, unlike `message`",
+    "claim": "Record-oriented competitors (AERF, authproof-sdk receipts, the CVA paper's request/policy-binding properties) define the decision record as something a third party can read and verify, so they constrain what a decision record may contain. EVC's deny verdict makes `message` MUST-NOT-contain-secrets but leaves `detail` as an unconstrained object that the verifier is told to populate with internal error context and that hosts will persist verbatim in audit logs. A verifier vendor can echo the raw bundle, a binding signature, or an operator key into detail without violating the contract; the only backstop is the host's output bound, which is sized for framing (the fixture floods past it), not for secret containment. EVC should extend the secrecy rule to detail, state that detail is host-log material that a host MAY truncate or drop without affecting the decision, and say hosts MUST NOT feed detail back into any authorization input.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a73.3: '`message` (string, REQUIRED on deny) \u2014 a one-line, human-actionable reason. It MUST NOT contain secrets.' followed by '`detail` (object, OPTIONAL) \u2014 structured context for logs/debugging. A verifier SHOULD echo the originating internal error code here'",
+      "spec/external-verifier-contract-v1.md \u00a73.4 verdict schema: '\"detail\": { \"type\": \"object\" }' with no properties, additionalProperties, or maxProperties constraint",
+      "spec/external-verifier-contract-v1.md \u00a77.2 lists 'oversized ... stdout' as a fail-closed framing condition only; no text ties the output bound to secret containment",
+      "https://arxiv.org/html/2607.21325 (CVA: authorization soundness, principal binding, request binding, policy binding \u2014 decision artifacts are specified as third-party-readable)",
+      "https://github.com/Commonguy25/authproof-sdk ('signed, verifiable, tamper-proof delegation receipts for AI agents')",
+      "https://github.com/topics/agent-verification?o=desc&s=updated (AERF: 'tamper-evident, independently verifiable records of AI agent actions')"
+    ],
+    "proposed_artifact": "A staged prose diff against \u00a73.3/\u00a75.3 of spec/external-verifier-contract-v1.md and the corresponding draft -02 section pinned to 9bf7544, extending the secrets prohibition to `detail`, declaring it non-authorization log material the host MAY truncate, and adding a matching Security Considerations paragraph.",
+    "persona": "competing-spec-author"
+  },
+  {
+    "id": "competing-spec-author-agent-name-class-vs-instance-undefined",
+    "type": "spec_finding",
+    "title": "EVC never says whether `agent_name` identifies an agent class or a runtime instance; the new OAuth AI Agent Instance profile makes that ambiguity a live interop question",
+    "claim": "draft-mcguinness-oauth-ai-agent-instance-00 profiles a single OAuth client identifier representing many concurrent agent instances and gives instances their own assertion. EVC's request field agent_name has no definition beyond 'string, REQUIRED', and binding v2 signs exactly six fields with no instance component, so an operator-signed binding is necessarily shared by every concurrent instance of the same agent. That is defensible (instance discrimination is a bundle/nonce property, and the request object is additionalProperties:true so a host can carry an instance assertion for an external-class verifier), but it is unstated. A competing spec author will read the gap as 'EVC cannot tell two instances apart'; an implementer will read it as 'agent_name is per-process' and mint bindings that fail request_mismatch across restarts. EVC should define agent_name as an operator-assigned identity class, state that instance-level discrimination is provided by nonce consumption or by verifier-specific bundle content, and note the open request object as the extension point.",
+    "evidence": [
+      "spec/external-verifier-contract-v1.md \u00a72.1: '`agent_name` (string, **REQUIRED**)' \u2014 the only definition given; contrast project_key which receives a full byte-literal comparison rule",
+      "spec/external-verifier-contract-v1.md \u00a74.1: 'Let `binding` be the object with exactly the six fields `agent_name`, `project_key`, `program`, `model`, `capabilities` ... and `expiry`' \u2014 no instance identifier is signature-bound",
+      "spec/external-verifier-contract-v1.md \u00a72.2 request schema: '\"additionalProperties\": true' on both the envelope and the `request` object",
+      "https://datatracker.ietf.org/doc/draft-mcguinness-oauth-ai-agent-instance/ ('a single OAuth client identifier represents an agent platform running many concurrent agent instances')",
+      "draft-kondoju-evc-01 \u00a72.1 Terminology defines host, verifier, bundle, verdict, request, decision, proof-system class, nonce modes, reserve-before-act, HUT \u2014 but not agent or agent instance"
+    ],
+    "proposed_artifact": "A staged terminology-and-\u00a72.1 prose diff against spec/external-verifier-contract-v1.md and draft -02 pinned to 9bf7544 defining `agent_name` as an identity class, locating instance discrimination in nonce consumption and bundle content, and citing draft-mcguinness as the OAuth-side instance model EVC composes with rather than duplicates.",
+    "persona": "competing-spec-author"
+  },
+  {
+    "id": "competing-spec-author-verdict-to-durable-receipt-run-record",
+    "type": "evidence_opportunity",
+    "title": "Competitors' pitch is durable, third-party-verifiable decision records; EVC has the pieces but no public run record showing a verdict becoming one",
+    "claim": "AERF, authproof-sdk, and the CVA paper all sell the same thing: a tamper-evident record of who authorized an agent action. EVC deliberately excludes records from the wire contract, and the shipped answer is @bolyra/receipts (ES256K-signed, hash-chained, instance-bound). But no pinned, reproducible evidence exists that a conforming host can take an EVC verdict from the reference runner fixtures and produce a receipt chain a skeptic can verify with only public packages. Until that run record exists, the competing-spec author wins the 'EVC gives you allow/deny and nothing to audit' argument by default. The ledger should contain an interop_run entry with pinned commit and command.",
+    "evidence": [
+      "https://github.com/topics/agent-verification?o=desc&s=updated (AERF: 'tamper-evident, independently verifiable records of AI agent actions')",
+      "https://github.com/Commonguy25/authproof-sdk ('Cryptographically signed delegation receipts for AI agents')",
+      "https://arxiv.org/html/2607.21325 (CVA proof-of-concept publishes falsifiable security properties for its authorization records)",
+      "draft-kondoju-evc-01 \u00a71.3: EVC 'does not define ... revocation infrastructure' and the wire verdict has no record identifier; \u00a72.1 defines 'decision' as the host's enforced outcome with no persistence obligation",
+      "npm view @bolyra/receipts version (expected 0.11.0 per repo README; CLI `bolyra receipt verify` / `verify-chain` enforces bare 64-hex commerce.intentHash)",
+      "npx @bolyra/evc-conformance --host \"<cmd>\" (published suite, vector set 0.7.0, 29 host vectors \u2014 the well-behaved allow/deny fixtures are the natural verdict source for the run)",
+      "output/evidence_ledger.jsonl currently has no interop_run entry whose subject pairs an EVC verdict with a verified receipt chain"
+    ],
+    "proposed_artifact": "An evidence artifact pinned to 9bf7544 with a REPRODUCE PROCEDURE in an isolated scratch workspace: run the published conformance suite against the JS reference host, wrap the well-behaved allow and deny verdicts as @bolyra/receipts entries, verify the chain with the receipts CLI, and record the resulting hashes and commands as an rfc7942_ready ledger entry.",
+    "persona": "competing-spec-author"
+  },
+  {
+    "id": "ietf-reviewer-appendix-b-normative-dependency-on-package-and-undefined-primitives",
+    "type": "spec_finding",
+    "title": "Appendix B binding profile is normative by its own MUSTs but is out of the draft's declared scope and depends on an npm package and unreferenced primitives",
+    "claim": "draft-kondoju-evc-01 declares that EVC 'does not define credential issuance, the internal proof format, policy authoring...' and that the bundle is opaque, yet the denial-code table makes 'invalid_signature' depend on 'the request-binding signature (Appendix B)', and the transcribed source text (spec/external-verifier-contract-v1.md \u00a74) says 'Any implementer that produces or verifies a bundle MUST reproduce these exact bytes' and defines canonicalization as 'the sorted-key, compact ... JSON serialization defined by @bolyra/receipts (canonicalize)'. An IETF reviewer will flag three -02 blockers: (1) a normative requirement whose definition is an npm package rather than a citable specification; (2) SHA-256, BabyJubjub EdDSA-Poseidon, and BN254 appear in normative text with no reference in the normative section (only RFC2119/8174/8259 are normative); (3) the draft's scope statement and Appendix B contradict each other. The resolution consistent with the design thesis is to demote Appendix B to an explicitly non-normative 'Bolyra bvp/1 bundle profile' (all RFC 2119 keywords lowercased there, with a one-line statement that EVC conformance does not depend on it), OR, if the author wants it normative, replace the package reference with an inline canonicalization definition (or RFC 8785 JCS with an explicit compatibility note, since JCS number/escape rules differ from a naive sorted-key compact stringify), and add SHA-256 (RFC 6234) plus a citable EdDSA-on-BabyJubjub reference as normative references. Either path removes an 'implementation-defined normative behavior' objection that would block last call.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a71 'What EVC Deliberately Excludes': \"EVC does not define credential issuance, the internal proof format, policy authoring, delegation semantics, revocation infrastructure, or any PKI.\"",
+      "draft-kondoju-evc-01 denial-code table: \"invalid_signature | the request-binding signature (Appendix B) did not verify against the proven operator key.\"",
+      "spec/external-verifier-contract-v1.md \u00a74 (pinned 9bf754441ab36ab93992ed5936d34c44a4128f92): \"Any implementer that produces or verifies a bundle **MUST** reproduce these exact bytes.\"",
+      "spec/external-verifier-contract-v1.md \u00a74.1: \"where `canonicalize` is the sorted-key, compact (no insignificant whitespace) JSON serialization defined by `@bolyra/receipts` (`canonicalize`).\"",
+      "draft-kondoju-evc-01 front matter: normative references are exactly RFC2119, RFC8174, RFC8259; \u00a74.3/\u00a74.4 of the source text name SHA-256, BN254, and BabyJubjub EdDSA-Poseidon with no reference entry."
+    ],
+    "proposed_artifact": "A staged diff against spec/draft-kondoju-evc-01.md (Base-Commit 9bf754441ab36ab93992ed5936d34c44a4128f92) that marks Appendix B non-normative with lowercased keywords and a scope sentence, adds an informative pointer to the design spec for the bvp/1 profile, and adds a one-paragraph reviewer note recording the alternative (inline canonicalization + RFC 6234 normative) so the founder can pick before -02.",
+    "entity": {
+      "name": "draft-kondoju-evc",
+      "repo": "github.com/bolyra/bolyra",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer"
+  },
+  {
+    "id": "ietf-reviewer-iana-registry-closure-contradicts-candidate-registry-and-schema-enum",
+    "type": "spec_finding",
+    "title": "Denial-code table is called a 'candidate IANA registry' while simultaneously declared closed within a wire major and enum-pinned in the verdict schema; 'kind' has no registry treatment at all",
+    "claim": "The draft says 'This 15-code table is the candidate IANA registry ({{iana}})' but also 'Within a wire major, this registry is closed' and 'Verifiers MUST NOT add, remove, or rename a code without a wire-major version bump', and the normative verdict schema hard-codes the 15 codes in an enum so any newly registered code would be rejected by every conforming host as 'schema_invalid'. Under RFC 8126 an IANA registry needs a stated registration policy and a purpose; a registry whose every addition requires a new wire major and a republished schema has no useful IANA role, and reviewers will ask which it is. The 'kind' field (three values, 'MUST NOT emit a kind value outside the three-member set') has the identical closure property but is not mentioned as a registry candidate, so the two enumerations are treated inconsistently. Concrete resolution for -02: either (a) state 'This document has no IANA actions' and rename the section heading from 'registry' to 'code table', adding a sentence that new codes are introduced only by a new wire-major document that supersedes the enum; or (b) create two IANA registries ('EVC Denial Codes', 'EVC Verifier Kinds') with policy 'Standards Action' (or 'Specification Required' plus the wire-major rule stated as a registry note), an initial contents table with reference column, and promote RFC 8126 from informative to normative. Option (a) is the reviewer's recommendation because it matches the closed-schema semantics already normatively required of hosts and avoids the schema-vs-registry drift that host-deny-unknown-denial-code already tests.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a7denial-codes: \"This 15-code table is the candidate IANA registry ({{iana}}).\"",
+      "draft-kondoju-evc-01 \u00a7denial-codes: \"Within a wire major, this registry is closed: the deny schema ({{schemas}}) enumerates exactly these codes, so a verdict carrying any other \\\"code\\\" fails the verdict schema and the host MUST fail closed\"",
+      "draft-kondoju-evc-01 \u00a7denial-codes: \"Verifiers MUST NOT add, remove, or rename a code without a wire-major version bump ({{versioning}}).\"",
+      "draft-kondoju-evc-01 \u00a7kind normative rules: \"A verifier MUST NOT emit a \\\"kind\\\" value outside the three-member set above; a host MUST treat an unrecognized \\\"kind\\\" as a malformed verdict and fail closed\"",
+      "draft-kondoju-evc-01 front matter lists RFC8126 under informative references only.",
+      "Conformance vector host-deny-unknown-denial-code (set 0.7.0) already requires hosts to reject out-of-enum codes, confirming the closed-schema semantics that an open IANA registry would contradict."
+    ],
+    "proposed_artifact": "A staged diff against spec/draft-kondoju-evc-01.md (Base-Commit 9bf754441ab36ab93992ed5936d34c44a4128f92) rewriting the IANA Considerations section to 'no IANA actions' with the wire-major supersession sentence, retitling the denial-code section from 'registry' to 'code table' throughout, and adding a parallel closure statement for 'kind', plus a recorded option (b) text block for the founder.",
+    "entity": {
+      "name": "draft-kondoju-evc",
+      "repo": "github.com/bolyra/bolyra",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer"
+  },
+  {
+    "id": "ietf-reviewer-rfc7942-status-stale-vector-count-and-unresolvable-repo-relative-references",
+    "type": "evidence_opportunity",
+    "title": "RFC 7942 implementation-status material cites repo-relative paths with no URL and a 27/27 pass that predates the 29-vector set 0.7.0",
+    "claim": "RFC 7942 \u00a72 asks each implementation entry to carry organization, name, description, maturity, coverage, licensing, contact, and URL; the draft's introduction instead points at 'spec/reference-host.js' and 'spec/reference-host-rs/' (repo-relative paths that an I-D reader cannot resolve without a repository URL) and the only independent external implementation recorded in IMPLEMENTER.md \u00a79, khandrew1/mcp-use-evc-example, is listed as passing 27/27 while the published suite @bolyra/evc-conformance@0.3.0 now ships 29 host-behavior vectors (set 0.7.0, including host-deny-signal-death-after-allow). A skeptical reviewer will treat a coverage claim that is two vectors behind the published suite as unverified. What a third party would demand next is a fresh, pinned run: the khandrew1 repository at a named commit, driven by `npx @bolyra/evc-conformance@0.3.0 --host \"<cmd>\"` in an isolated scratch workspace, with the pass/fail count for all 29 vectors recorded. That single run yields (1) a ledger entry of kind interop_run with rfc7942_ready=true, (2) the coverage line for an RFC 7942 \u00a72 entry, and (3) the URL-form pointers that replace the repo-relative paths. If the run is 27/29 rather than 29/29 that is itself the more valuable fact, because it identifies which of the two newest vectors an outside host misses.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a71 'Why Interoperable, Why Now': \"Two independent reference hosts already exist -- one in JavaScript (\\\"spec/reference-host.js\\\") and one in Rust (\\\"spec/reference-host-rs/\\\")\" \u2014 no URL accompanies either path.",
+      "RFC 7942 \u00a72 (https://www.rfc-editor.org/rfc/rfc7942#section-2) enumerates the per-implementation fields including 'Coverage' and 'Contact' with a URL.",
+      "Conformance vector index provided this iteration: \"vector set 0.7.0, 29 host_behavior vectors\" including host-deny-signal-death-after-allow (commit 9bf7544 'spec: host-deny-signal-death-after-allow vector \u2014 set 0.7.0, evc-conformance 0.3.0 (#126)').",
+      "CLAUDE.md (pinned tree): \"First independent external implementation: `khandrew1/mcp-use-evc-example` (27/27 pinned, listed in IMPLEMENTER.md \u00a79).\"",
+      "https://github.com/khandrew1/mcp-use-evc-example",
+      "Reproduce command shape (published suite, no repo dependency): npx @bolyra/evc-conformance@0.3.0 --host \"<host command>\""
+    ],
+    "proposed_artifact": "An evidence artifact with a REPRODUCE PROCEDURE that clones khandrew1/mcp-use-evc-example at a pinned commit into a fresh temp dir, runs the published 0.3.0 suite against its host command, and records the 29-vector result as an evidence_ledger.jsonl entry (kind interop_run) plus a draft RFC 7942 \u00a72 entry block with URL-form pointers replacing the repo-relative paths in the introduction.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer"
+  },
+  {
+    "id": "ietf-reviewer-pseudocode-classification-order-contradicts-fail-closed-precedence",
+    "type": "spec_finding",
+    "title": "Section 3 host pseudocode checks non-zero exit before timeout and omits the output bound, contradicting the normative classification precedence and the signal_death/nonzero_exit distinction",
+    "claim": "This refines the iteration-3 candidate that was dropped for artifact shape only (missing Base-Commit/Target-File/Finding headers and no diff block); the underlying finding was never judged on merit and the text is unchanged at the pinned commit. The draft's Section 3 pseudocode evaluates `if status != 0: reject(\"non-zero exit\")` BEFORE `if timed_out(child): reject(\"timeout\")`, and contains no output-bound check at all. A host that kills a timed-out child observes a non-zero (signal) status, so a reader implementing the pseudocode literally classifies every timeout as nonzero_exit. The source contract \u00a77.2 normatively orders the reported cause 'its own kills first (output bound, then timeout), then an unsolicited signal death, then a non-zero exit, and only then the stdout parse and schema checks' and says a host 'MUST NOT collapse' signal death and non-zero exit. An IETF reviewer will also note the pseudocode block carries no statement of its normative status, so a lazy implementer cannot tell whether the block or \u00a77.2 wins. The fix is text-only: (1) add one sentence before the block ('This pseudocode is illustrative and non-normative; on any conflict the obligations in Section 6 govern'); (2) reorder the block to output-bound, timed_out, signal death, non-zero exit, then parse; (3) add the `if output_exceeded(child): reject(\"output_bound\")` line so the pseudocode covers all four fail-closed families the conformance suite already tests (host-deny-oversize-stdout, host-deny-no-output-timeout, host-deny-killed-by-signal, host-deny-nonzero-exit-after-allow).",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a73 pseudocode: \"if status != 0:                               reject(\\\"non-zero exit\\\")   // Sec 6\\nif timed_out(child):                          reject(\\\"timeout\\\")         // Sec 6\" \u2014 non-zero exit is tested first and no output-bound line exists.",
+      "spec/external-verifier-contract-v1.md \u00a77.2 (pinned 9bf754441ab36ab93992ed5936d34c44a4128f92): \"a host that reports *why* it failed closed (\u00a716.3) **SHOULD** classify the cause it acted on in this precedence: its own kills first (output bound, then timeout), then an unsolicited signal death, then a non-zero exit, and only then the stdout parse and schema checks.\"",
+      "spec/external-verifier-contract-v1.md \u00a77.2: \"death by an unsolicited signal and a non-zero exit are **distinct** conditions (`signal_death` vs `nonzero_exit`, \u00a716.3) \u2014 a host **MUST NOT** collapse them into one classification.\"",
+      "Previous-iteration rejection record: experiment ietf-reviewer-pseudocode-unlabeled-normative-status-and-precedence failed the shape stage only (\"missing Base-Commit header\", \"missing Target-File header\", \"missing Finding header\", \"no ```diff block\"); no merit finding was recorded.",
+      "Conformance vectors host-deny-oversize-stdout, host-deny-no-output-timeout, host-deny-killed-by-signal, host-deny-nonzero-exit-after-allow (set 0.7.0) exercise the four families the corrected pseudocode must name."
+    ],
+    "proposed_artifact": "A shape-conformant staged diff (Base-Commit, Target-File spec/draft-kondoju-evc-01.md, Finding header, single ```diff block) that inserts the non-normative-status sentence and replaces the pseudocode block with the precedence-ordered version including the output-bound branch, touching no normative section.",
+    "entity": {
+      "name": "draft-kondoju-evc",
+      "repo": "github.com/bolyra/bolyra",
+      "tracked_id": null
+    },
+    "persona": "ietf-reviewer"
+  },
+  {
+    "id": "ecosystem-scout-draft-mcguinness-oauth-ai-agent-instance-profile",
+    "type": "threat_update",
+    "title": "draft-mcguinness-oauth-ai-agent-instance-00 stakes out 'which agent instance' identity at the OAuth layer \u2014 adjacent IETF activity EVC -02 must position against or cite",
+    "claim": "A new individual IETF submission profiles the OAuth 2.0 Client Instance Assertion for agent platforms where one client_id fronts many concurrent agent instances. It competes for the same conceptual slot EVC fills with opaque `request.agent_name` / `program` / `model` strings: naming the acting instance at authorization time. It does not define a host-side decision boundary, so overlap is partial and the counter is strong \u2014 a `kind=classical` EVC verifier can consume an instance assertion as the opaque bundle and bind it to the request fields. Risk is positional: if -02 does not cite it alongside draft-klrc-aiagent-auth (already an informative reference in draft-kondoju-evc-01), reviewers will read EVC as unaware of the OAuth WG's instance-identity work.",
+    "evidence": [
+      "https://datatracker.ietf.org/doc/draft-mcguinness-oauth-ai-agent-instance/ \u2014 'Profiles the OAuth 2.0 Client Instance Assertion for AI agent deployments, where a single OAuth client identifier represents an agent platform running many concurrent agent instances.'",
+      "Reconcile method (program.md \u00a79): GET https://datatracker.ietf.org/api/v1/doc/document/draft-mcguinness-oauth-ai-agent-instance/ \u2192 rev, expired, replaced_by; card is falsified as a threat if the draft expires without a -01 or is adopted only as a pure client-authentication profile with no authorization-decision surface.",
+      "EVC spec text the overlap maps to (spec/external-verifier-contract-v1.md \u00a72.1, pinned 9bf7544): '`agent_name` (string, **REQUIRED**)', '`program` (string, **REQUIRED**)', '`model` (string, **REQUIRED**)' \u2014 all opaque, un-authenticated host strings; EVC \u00a71: 'the request (\u00a72) and verdict (\u00a73) envelopes are identical whether the verifier checks Groth16 zero-knowledge proofs, classical signatures (ES256K receipts, JWT delegation, policy/nonce checks), or a third party's own scheme.'",
+      "draft-kondoju-evc-01 informative references already include I-D.klrc-aiagent-auth (draft-klrc-aiagent-auth-03) and I-D.pidlisnyi-aps but not this draft."
+    ],
+    "proposed_artifact": "A threat card (momentum/overlap/adoption_risk/counter_available) with datatracker-pinned evidence, plus a staged -02 informative-reference stub that positions the instance assertion as a classical-class bundle rather than a competing boundary.",
+    "entity": {
+      "name": "draft-mcguinness-oauth-ai-agent-instance",
+      "repo": null,
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout"
+  },
+  {
+    "id": "ecosystem-scout-agentgateway-pre-forward-tool-authz-external-verifier-slot",
+    "type": "adoption_target",
+    "title": "agentgateway evaluates per-tool MCP authorization at the gateway before forwarding \u2014 a natural slot for an external verifier it did not build",
+    "claim": "agentgateway (github.com/agentgateway/agentgateway, an open-source MCP/A2A gateway) already interposes on every MCP tool call and evaluates per-tool authorization policy before the call reaches the backend server. Its incentive is to stay a policy-routing layer, not to own proof formats: any proof-bearing authorization (signed mandates, ZK credentials, third-party attestations) is something it would rather outsource than implement per scheme. EVC's four-step subprocess contract is exactly that outsourcing boundary \u2014 the gateway's existing pre-forward hook can spawn a configured verifier and enforce the verdict fail-closed, and pass the published host-conformance suite as evidence. This is an adoption target for the EVC host role, not a threat: agentgateway defines policy evaluation, not a competing verdict envelope.",
+    "evidence": [
+      "https://deepwiki.com/agentgateway/agentgateway/9.3-mcp-authentication-and-authorization \u2014 'Documents agentgateway's MCP authentication and per-tool authorization policies evaluated at the gateway before a tool call is forwarded to the backend MCP server.'",
+      "https://github.com/agentgateway/agentgateway \u2014 reconcile via `gh api repos/agentgateway/agentgateway` (pushed_at, archived, stargazers_count); falsified as an adoption target if the repo is archived or if its authorization surface has no extension point that accepts an externally computed decision.",
+      "EVC host-side entry point (spec/external-verifier-contract-v1.md \u00a71, pinned 9bf7544): 'A host adopts the contract by learning four steps (\u00a710), not the proof format.' and \u00a77.2: 'The host **MUST** treat **all** of the following as **deny**, regardless of what (if anything) reached stdout'.",
+      "Third-party pass path that a gateway maintainer would follow: `npx @bolyra/evc-conformance --host \"<cmd>\"` against vector set 0.7.0 (29 host-behavior vectors); precedent for an independent host implementation: khandrew1/mcp-use-evc-example (27/27 pinned, listed in spec/IMPLEMENTER.md \u00a79)."
+    ],
+    "proposed_artifact": "An adoption card (incentive_fit/technical_fit/channel_state/effort) plus a boundary-only integration note describing where a gateway's pre-forward authorization hook maps onto EVC host obligations \u00a75.2/\u00a76/\u00a77 \u2014 the WHY and the spec surface, no repo-specific build plan.",
+    "entity": {
+      "name": "agentgateway",
+      "repo": "https://github.com/agentgateway/agentgateway",
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout"
+  },
+  {
+    "id": "ecosystem-scout-diagrid-dapr-agents-proof-of-authorization-hooks",
+    "type": "adoption_target",
+    "title": "Diagrid's 'MCP Gateways Aren't Enough' argues agents need verifiable proof of who authorized each tool call, with per-tool pre/post hooks \u2014 demand-side alignment with the EVC boundary from a runtime vendor",
+    "claim": "Diagrid (the company behind Dapr and Dapr Agents) published a position that MCP gateways cannot secure agent actions by themselves and that agents need identity, per-action authorization, and verifiable proof of who authorized each tool call, delivered via configurable workflow hooks that run before and after every call. That is the EVC pitch stated by a third party in their own words. The runtime's incentive is to expose the hook and let the proof verifier be pluggable; a subprocess-spawnable, language-neutral, fail-closed contract is the lowest-friction way to fill a pre-call hook in a polyglot runtime like Dapr. The open-source surface to target is dapr/dapr-agents (Python), whose pre-tool hook could spawn a `kind=classical` or `kind=zk` verifier; the hosted Catalyst product is out of scope for this loop.",
+    "evidence": [
+      "https://www.diagrid.io/blog/why-mcp-gateways-are-not-enough \u2014 'Argues MCP gateways alone cannot secure agent actions; agents need identity, per-action authorization, and verifiable proof of who authorized each tool call. Describes configurable workflow hooks for per-tool authorization, audit logging, and validation before and after every call.'",
+      "https://github.com/dapr/dapr-agents \u2014 reconcile via `gh api repos/dapr/dapr-agents` (pushed_at, archived); falsified as an adoption target if the runtime exposes no pre-tool-call hook that can block execution on an external decision.",
+      "EVC's positioning text matches the blog's framing (spec/draft-kondoju-evc-01.md \u00a71.1, pinned 9bf7544): 'Agent frameworks -- Model Context Protocol (MCP) hosts, orchestrators, and gateways -- increasingly need to gate a privileged tool call on a single question: is this agent actually authorized to take this action right now?'",
+      "Existing Bolyra framework adapters as analogues for the boundary shape (CLAUDE.md): integrations/langchain/, integrations/crewai/, integrations/openai-agents/ \u2014 a Dapr Agents host would be a new HOST implementation, not a new Bolyra package (roadmap freeze, program.md rule 2f)."
+    ],
+    "proposed_artifact": "An adoption card with the blog's quoted demand statement as incentive evidence and a short boundary mapping from a pre-tool-call hook to EVC host obligations (request \u00a72, single-object parse \u00a75.2, timeout \u00a76, fail-closed \u00a77.2), explicitly excluding any hosted-platform implication.",
+    "entity": {
+      "name": "Diagrid / Dapr Agents",
+      "repo": "https://github.com/dapr/dapr-agents",
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout"
+  },
+  {
+    "id": "ecosystem-scout-cva-arxiv-formal-properties-competing-citation-anchor",
+    "type": "threat_update",
+    "title": "arXiv 2607.21325 'Cryptographically Verifiable Agent Authorization' (also in Frontiers in Computer Science) names four security properties that could become the academic citation anchor for agent authorization \u2014 EVC binding v2 satisfies them but nobody has written the mapping",
+    "claim": "A peer-reviewed paper defines Cryptographically Verifiable Agent Authorization (CVA) with named properties \u2014 authorization soundness, principal binding, request binding, policy binding \u2014 and a proof-of-concept. It surfaced under this loop's Bolyra-citation query, but the snippet does not confirm it cites EVC, so the citation claim is unverified and must be falsified by inspecting the paper's references. The threat is positional: a named, peer-reviewed property set will be what future spec authors cite when they claim their format is 'verifiable', and EVC's \u00a74 binding v2 (six signed fields under a versioned DST, same-key rule) already realizes request binding and principal binding without saying so in those terms. The counter is cheap and evidence-grade: a property-by-property mapping from CVA to pinned EVC clauses, plus an explicit statement of which CVA property (policy binding) EVC deliberately leaves to the verifier vendor.",
+    "evidence": [
+      "https://arxiv.org/html/2607.21325 \u2014 'arXiv paper on Cryptographically Verifiable Agent Authorization (CVA) with security properties including authorization soundness, principal binding, request binding, and policy binding ... Also published in Frontiers in Computer Science.'",
+      "Falsification: fetch the arXiv HTML and grep the bibliography for 'External Verifier Contract', 'kondoju', or 'bolyra'; if absent, the card's citation claim is false and the card stands only as a competing-framing threat, not a citation event (no evidence_ledger `citation` entry may be written).",
+      "EVC request-binding text the mapping targets (spec/external-verifier-contract-v1.md \u00a74.1, pinned 9bf7544): 'Let `binding` be the object with exactly the six fields `agent_name`, `project_key`, `program`, `model`, `capabilities` (a string array), and `expiry`'; \u00a74.4 principal binding: 'The signing key **MUST** be the same operator key the proof binds; a signing key disjoint from the credential **MUST** be rejected (`deny code=invalid_signature`). This closes the cross-signer replay class.'",
+      "EVC's explicit exclusion that maps to CVA 'policy binding' (spec/draft-kondoju-evc-01.md \u00a71.3): 'EVC does not define credential issuance, the internal proof format, policy authoring, delegation semantics, revocation infrastructure, or any PKI.'"
+    ],
+    "proposed_artifact": "A threat card whose counter_available evidence is a staged property-mapping memo (CVA property \u2192 pinned EVC clause or explicit out-of-scope note), reusable as -02 Security Considerations material.",
+    "entity": {
+      "name": "Cryptographically Verifiable Agent Authorization (CVA), arXiv 2607.21325",
+      "repo": null,
+      "tracked_id": null
+    },
+    "persona": "ecosystem-scout"
+  },
+  {
+    "id": "evidence-curator-dual-reference-host-0.7.0-pinned-run-record",
+    "type": "evidence_opportunity",
+    "title": "Pinned 29/29 run record for BOTH reference hosts (JS + Rust) against vector set 0.7.0 at 9bf7544",
+    "claim": "The draft (\u00a71.4, {{impl-status}}) asserts two independent reference hosts exist, but there is no ledger entry showing both pass the CURRENT 29-vector set (0.7.0, which added host-deny-unknown-denial-code and host-deny-signal-death-after-allow) at a pinned commit. A skeptical third party would demand one run record per host, same commit, same vector set, same runner, with the per-vector PASS lines captured. This is the minimum RFC 7942 'implementation status' fact for -02 and directly feeds INTEROP EVIDENCE (rfc7942_ready) and IMPLEMENTATIONS.",
+    "evidence": [
+      "draft-kondoju-evc-01 \u00a71.4: 'Two independent reference hosts already exist -- one in JavaScript (\"spec/reference-host.js\") and one in Rust (\"spec/reference-host-rs/\")'",
+      "spec/external-verifier-contract-v1.md \u00a77.2: 'death by an unsolicited signal and a non-zero exit are distinct conditions (signal_death vs nonzero_exit, \u00a716.3) \u2014 a host MUST NOT collapse them into one classification. The reference hosts implement this precedence.'",
+      "Conformance vector index: 'vector set 0.7.0, 29 host_behavior vectors' incl. host-deny-signal-death-after-allow (commit 9bf7544, PR #126)",
+      "Reproduce (from repo root at 9bf754441ab36ab93992ed5936d34c44a4128f92): `git rev-parse HEAD` \u2192 9bf7544\u2026; `node spec/conformance-runner.js --host \"node spec/reference-host.js\" 2>&1 | tee run-js.txt`; `cargo build --release --manifest-path spec/reference-host-rs/Cargo.toml && node spec/conformance-runner.js --host \"<path to built reference-host-rs binary per spec/reference-host-rs/README>\" 2>&1 | tee run-rs.txt`; expected: 29 lines matching `^  host-.*: PASS$` in each file, zero FAIL, exit 0; `grep -c ': PASS$' run-js.txt run-rs.txt` \u2192 29 and 29",
+      "Ledger schema in program.md \u00a74 requires {pinned_commit, reproduce_cmd, urls[], rfc7942_ready} \u2014 this record satisfies every field from local runs only"
+    ],
+    "proposed_artifact": "Two evidence_ledger.jsonl entries (kind=interop_run, subject=reference-host-js / reference-host-rs, pinned_commit=9bf7544, vector_set=0.7.0, rfc7942_ready=true) plus a REPRODUCE PROCEDURE doc with the exact commands, expected 29-PASS outputs, and a draft -02 Implementation Status paragraph listing both hosts with commit and vector-set pins.",
+    "entity": null,
+    "persona": "evidence-curator"
+  },
+  {
+    "id": "evidence-curator-published-suite-vector-id-parity-via-runner-stdout",
+    "type": "evidence_opportunity",
+    "title": "Registry-closure record: published @bolyra/evc-conformance@0.3.0 emits the same 29 vector IDs as spec/ at 9bf7544 (stdout-derived, no path assumptions)",
+    "claim": "Refines the iteration-3 drop (published-suite-vs-vendored-fixtures-hash-record, rejected for comparing incompatible paths and searching absent version metadata). Instead of comparing file trees, compare the SET OF VECTOR IDS each runner prints on stdout when driven by the same well-behaved host: the runner already prints one `  <vector-id>: PASS` line per vector (visible in the iteration-3 objective-check log). Run the published npm tarball from an empty temp dir and the in-repo runner from 9bf7544; a byte-identical sorted ID list (29 entries, including the two vectors added in 0.7.0) is a third-party-reproducible proof that the published suite is fresh relative to the spec \u2014 exactly what REGISTRY CLOSURE ('published suite freshness, vector-set/spec version alignment') scores.",
+    "evidence": [
+      "CLAUDE.md: '@bolyra/evc-conformance (integrations/evc-conformance/, v0.3.0) \u2014 the published conformance suite (vector set 0.7.0, 29 host-behavior vectors, zero runtime deps): npx @bolyra/evc-conformance --host \"<cmd>\"' and 'Vendored snapshot of spec/ \u2014 edit in spec/, then node scripts/sync.js; CI enforces sync:check'",
+      "Iteration-3 objective-check log shows the runner's stdout format: '  host-deny-allow-extra-property: PASS\\n  host-deny-bad-kind: PASS\\n  host-deny-empty-consume-nonces: PASS' \u2014 vector IDs are recoverable from stdout without touching fixture paths",
+      "Commit 9bf7544 message: 'spec: host-deny-signal-death-after-allow vector \u2014 set 0.7.0, evc-conformance 0.3.0 (#126)'",
+      "Reproduce: `npm view @bolyra/evc-conformance@0.3.0 version dist.integrity dist.attestations.url` (record all three); in repo: `node spec/conformance-runner.js --host \"node spec/reference-host.js\" 2>&1 | sed -n 's/^  \\(host-[a-z0-9-]*\\): PASS$/\\1/p' | sort > ids-spec.txt`; in an EMPTY temp dir: `mkdir -p /tmp/evc-parity && cd /tmp/evc-parity && npx --yes @bolyra/evc-conformance@0.3.0 --host \"node <abs path>/spec/reference-host.js\" 2>&1 | sed -n 's/^  \\(host-[a-z0-9-]*\\): PASS$/\\1/p' | sort > ids-npm.txt`; then `wc -l ids-spec.txt ids-npm.txt` \u2192 29 29 and `diff ids-spec.txt ids-npm.txt` \u2192 empty, exit 0",
+      "Additionally `node integrations/evc-conformance/scripts/sync.js --check` (the sync:check CI gate) \u2192 exit 0 at 9bf7544"
+    ],
+    "proposed_artifact": "One evidence_ledger.jsonl entry (kind=registry_event, subject=@bolyra/evc-conformance@0.3.0, pinned_commit=9bf7544) with the recorded integrity hash, attestation URL, the 29-line sorted vector-ID list, and a REPRODUCE PROCEDURE whose pass condition is `diff` empty + both counts 29 + sync --check exit 0.",
+    "entity": null,
+    "persona": "evidence-curator"
+  },
+  {
+    "id": "evidence-curator-external-host-khandrew1-rerun-against-0.7.0",
+    "type": "evidence_opportunity",
+    "title": "Re-run the only independent external implementation (khandrew1/mcp-use-evc-example, listed 27/27) against vector set 0.7.0 to produce a current 27/29-or-29/29 record",
+    "claim": "IMPLEMENTER.md \u00a79 lists khandrew1/mcp-use-evc-example as passing 27/27 at a pinned commit, but the vector set has since grown to 29 (0.7.0 added host-deny-unknown-denial-code, which tests registry closure of the deny `code` enum, and host-deny-signal-death-after-allow, which tests signal-death precedence after a complete allow). The IMPLEMENTATIONS dimension counts implementations 'passing conformance at pinned commits'; a 27/27 claim against a superseded set is not a current pass. A skeptic's next demand is: same pinned external commit, current suite, honest per-vector result. Either outcome is evidence: 29/29 upgrades the RFC 7942 entry; a fail on either new vector is a concrete, falsifiable interop fact (and a candidate spec_finding about whether the two 0.7.0 vectors over-constrain hosts that predate them).",
+    "evidence": [
+      "CLAUDE.md: 'First independent external implementation: khandrew1/mcp-use-evc-example (27/27 pinned, listed in IMPLEMENTER.md \u00a79)'",
+      "Conformance vector index (set 0.7.0): 'host-deny-unknown-denial-code: Registry closure (\u00a73.4/\u00a79/\u00a77.2): the verifier returns an otherwise well-formed deny whose code is not in t\u2026' and 'host-deny-signal-death-after-allow: Host conformance (\u00a77.2, \u00a716.3): the verifier writes a complete, schema-valid, newline-terminated allow, flus\u2026'",
+      "draft-kondoju-evc-01 {{denial-codes}}: 'A host MUST NOT relay an unrecognized \"code\" as if it were a valid verifier decision' \u2014 this paragraph 'replaces the -00 sentence' the external host may have been built against",
+      "https://github.com/khandrew1/mcp-use-evc-example (pinned commit and host command as recorded in spec/IMPLEMENTER.md \u00a79 at 9bf7544)",
+      "Reproduce (founder/third party, isolated scratch workspace, no writes outside it): `mkdir -p /tmp/evc-ext && cd /tmp/evc-ext && git clone https://github.com/khandrew1/mcp-use-evc-example && cd mcp-use-evc-example && git checkout <pinned commit from IMPLEMENTER.md \u00a79>`; build per its README; then `npx --yes @bolyra/evc-conformance@0.3.0 --host \"<host command from IMPLEMENTER.md \u00a79>\" 2>&1 | tee run-ext.txt`; record `grep -c ': PASS$' run-ext.txt` and the exact status lines for host-deny-unknown-denial-code and host-deny-signal-death-after-allow"
+    ],
+    "proposed_artifact": "An evidence_ledger.jsonl entry (kind=implementation, subject=khandrew1/mcp-use-evc-example, pinned_commit=<external pin>, vector_set=0.7.0) with the per-vector result table and a REPRODUCE PROCEDURE; if <29/29, a companion note recording which of the two new vectors failed and why, to seed next iteration's spec_finding on 0.7.0 backward compatibility.",
+    "entity": {
+      "name": "khandrew1/mcp-use-evc-example",
+      "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+      "tracked_id": null
+    },
+    "persona": "evidence-curator"
+  },
+  {
+    "id": "evidence-curator-host-must-to-vector-coverage-map-0.7.0",
+    "type": "evidence_opportunity",
+    "title": "Machine-checkable host-side MUST \u2192 conformance-vector coverage map for \u00a73.5/\u00a75.2/\u00a76/\u00a77.2/\u00a77.3 against set 0.7.0",
+    "claim": "SPEC HARDNESS is scored partly on '% of normative MUSTs covered by a conformance vector', but no coverage map exists in the repo; the score dimension therefore has no objective input. Every 0.7.0 vector description already cites the sections it exercises (e.g. '\u00a75.2/\u00a77.2', '\u00a77.3/\u00a716.5', '\u00a73.5/\u00a77.2'), so a map can be built locally by enumerating host-side MUST/MUST NOT sentences in the pinned spec and joining them to vector IDs by cited section. The output is a numeric coverage figure plus an explicit uncovered list, which is what a skeptical reviewer (and the -02 conformance section) would ask to see before accepting 'hosts are mechanically testable' as a claim. Expected uncovered items from spec text alone: \u00a72 'host MUST close (EOF) stdin' and 'MUST NOT write more than one object', \u00a76 'host MUST kill the process' on timeout, \u00a73.5 'MUST NOT relax trust ... on the basis of kind' \u2014 request-side and policy MUSTs have no host_behavior vector today.",
+    "evidence": [
+      "program.md \u00a73: 'SPEC HARDNESS | 20 | Open CONFIRMED spec findings against us (fewer = higher); % of normative MUSTs covered by a conformance vector | objective + coverage map'",
+      "spec/external-verifier-contract-v1.md \u00a72: 'The host MUST write exactly one JSON object, UTF-8 encoded, to the verifier's stdin and then MUST close (EOF) stdin. The host MUST NOT write more than one object, trailing bytes, or a stream of objects.' \u2014 no vector in the 0.7.0 index cites \u00a72",
+      "spec/external-verifier-contract-v1.md \u00a76: 'The host MUST enforce a wall-clock timeout on the spawned process and treat expiry as deny' and \u00a77.2 'timeout (\u00a76) \u2014 the host MUST kill the process and deny' \u2014 covered by host-deny-no-output-timeout / host-deny-partial-json-timeout / host-deny-slow-allow-past-deadline (index cites \u00a76/\u00a77.2)",
+      "Vector index lines cite sections per vector, e.g. 'host-nonce-reserve-all-any-conflict-deny: Offered case (5) reserve EVERY entry (\u00a77.3/\u00a716.5)', 'host-deny-bad-kind: \u2026 (\u00a73.5/\u00a77.2)', 'host-deny-unknown-denial-code: Registry closure (\u00a73.4/\u00a79/\u00a77.2)'",
+      "Reproduce at 9bf7544: `grep -nE 'host.*MUST( NOT)?|MUST( NOT)? (treat|reserve|kill|parse|reject|close)' spec/external-verifier-contract-v1.md | sed -n '1,200p'` to enumerate candidate host-side MUSTs; `node -e \"const idx=require('fs').readFileSync(0,'utf8'); /* join by \u00a7-citations */\" < <vector index>` or an equivalent `grep -oE '\u00a7[0-9]+(\\.[0-9]+)?' ` over each fixture's description in spec/fixtures/host-conformance/ to produce a section\u2192vector-ID table; expected output: a table with one row per host-side MUST, vector IDs or 'UNCOVERED', and a computed covered/total percentage"
+    ],
+    "proposed_artifact": "A coverage-map artifact (Markdown table + JSON) pinned to 9bf7544 mapping every host-side MUST/MUST NOT in \u00a72, \u00a73.5, \u00a75.2, \u00a76, \u00a77.2, \u00a77.3 to the 0.7.0 vector IDs that exercise it, with a computed percentage, an explicit UNCOVERED list, and a reproduce script; uncovered rows are handed to next iteration's Tier 1 as vector_gap seeds.",
+    "entity": null,
+    "persona": "evidence-curator"
+  }
+]

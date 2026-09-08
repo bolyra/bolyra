@@ -14,6 +14,14 @@
 
 {fixture_example}
 
+## Claim discipline (rule 2k)
+
+You have NO tool access: you cannot read repository files beyond the excerpts
+in this prompt. Make claims ONLY about text quoted in this prompt. If the
+candidate's argument depends on code you cannot see, write "requires
+maintainer verification against <file>" instead of asserting it — an
+unverified assertion fails review.
+
 ## Task
 
 Produce ONE new host-conformance vector: an entry for `spec/test-vectors.json`
