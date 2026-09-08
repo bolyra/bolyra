@@ -32,7 +32,7 @@ EXPERIMENTS = HERE / "experiments"
 
 # Model-produced candidate IDs become directory names; constrain them hard
 # (Codex review finding: path traversal via crafted IDs).
-SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,100}$")  # iter-2: len 64->100; iter-4: allow dots (ids carry version numbers); resolve() guard backstops traversal
+SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,120}$")  # iter-2: 64->100; iter-4: dots; iter-5: ->120 (a 118-char id was rejected); resolve() guard backstops traversal
 
 
 def safe_experiment_dir(cid: str) -> Path:
@@ -204,7 +204,9 @@ def build_one(candidate: dict, iter_dir: Path, *, timeout: int) -> dict[str, Any
         # one revision pass, then re-check + re-judge once
         revise_prompt = (
             "Revise the artifact below per the single instruction. Return ONLY the "
-            "corrected artifact in the same format.\n\nInstruction: "
+            "corrected artifact in the same format. If the artifact is a spec diff, "
+            "it MUST still begin with the Base-Commit / Target-File / Finding "
+            "header lines and keep one well-formed ```diff block.\n\nInstruction: "
             + verdict["instruction"] + "\n\nArtifact:\n"
             + (exp_dir / ARTIFACT_FILE[ctype]).read_text()
         )

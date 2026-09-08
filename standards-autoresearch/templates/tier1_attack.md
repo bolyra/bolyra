@@ -34,7 +34,7 @@ without evidence are dropped unread (program.md rule 2k).
 Return ONLY one JSON array (no fences, no prose):
 
 ```
-[{"id": "<persona>-<slug>", "type": "spec_finding|vector_gap|evidence_opportunity|threat_update|adoption_target",
+[{"id": "<persona>-<slug (KEEP THE WHOLE ID UNDER 80 CHARACTERS)>", "type": "spec_finding|vector_gap|evidence_opportunity|threat_update|adoption_target",
   "title": "...", "claim": "...", "evidence": ["..."],
   "proposed_artifact": "one sentence: what Tier 2 would build",
   "entity": {"name": "...", "repo": "...", "tracked_id": null}}]
