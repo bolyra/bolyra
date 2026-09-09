@@ -1,5 +1,5 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -1972,6 +1972,19 @@
       "type": "verifier_envelope",
       "inputs": {
         "request_raw": "[1,2,3]"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-json-null-request",
+      "description": "Verifier envelope (\u00a72.1): stdin is the JSON literal null. null is valid JSON but is not a JSON object, so \u00a72.1's 'not a JSON object' trigger applies and the verifier MUST yield deny code=malformed_input in a single closed \u00a73.4 verdict at exit 0. Distinct from verifier-envelope-deny-request-not-object because `typeof null === 'object'` in JavaScript: a guard written as `typeof req !== 'object'` admits null, and the subsequent property read throws. A verifier whose outer handler catches that throw still fails this vector, because the resulting code is internal_error rather than malformed_input. Such a verifier additionally violates \u00a79 if it exits 0, since \u00a79 binds internal_error to a non-zero exit.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "null"
       },
       "expected": {
         "result": "PASS",

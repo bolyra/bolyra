@@ -17,7 +17,31 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
-## @bolyra/evc-conformance 0.5.0 (UNRELEASED)
+## @bolyra/evc-conformance 0.6.0 (UNRELEASED)
+
+### Added
+
+- `verifier-envelope-deny-json-null-request` (vector set **0.9.0 → 0.10.0**,
+  124 → 125 vectors): stdin is the JSON literal `null`. `null` is valid JSON
+  but is not a JSON object, so §2.1's "not a JSON object" trigger binds it to
+  deny `code=malformed_input`.
+
+  It is deliberately distinct from `verifier-envelope-deny-request-not-object`
+  (which sends `[1,2,3]`). In JavaScript `typeof null === 'object'`, so the
+  obvious guard `typeof req !== 'object'` admits `null`, and the next property
+  read throws. A verifier that catches that throw and reports
+  `deny code=internal_error` still fails the vector: the code is wrong. If it
+  also exits 0 it violates §9 as well, which binds `internal_error` to a
+  non-zero exit.
+
+  Found by probing rather than by review, against the first external
+  verifier-side implementation
+  (`stillmarcus24/x402-authority-verifier-kit` @ `35e209d`), and acknowledged
+  to that implementer as a coverage gap on our side. Red-green proved against
+  two real verifiers: the unpatched kit 8/11, the same kit with the check-order
+  fix 11/11, and an always-allow negative control 0/11.
+
+## @bolyra/evc-conformance 0.5.0
 
 ### Added
 
