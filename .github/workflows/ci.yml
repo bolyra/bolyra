@@ -213,6 +213,38 @@ jobs:
 
       - run: node spec/conformance-runner.js
 
+  evc-conformance:
+    name: EVC conformance — package sync & both reference hosts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # The published @bolyra/evc-conformance suite is dependency-free: bin.js
+      # runs the vendored 30 host_behavior vectors against the vendored JS
+      # reference host, and sync.js --check fails if any vendored file drifts
+      # from spec/ (the corpus draft-kondoju-evc cites publicly).
+      - name: Package suite + spec-sync drift check
+        working-directory: integrations/evc-conformance
+        run: npm test
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            spec/reference-host-rs/target
+          key: evc-rs-host-${{ runner.os }}-${{ hashFiles('spec/reference-host-rs/Cargo.lock', 'spec/reference-host-rs/src/**') }}
+
+      - name: Build Rust reference host
+        run: cargo build --release --locked --manifest-path spec/reference-host-rs/Cargo.toml
+
+      - name: host_behavior vectors — Rust reference host
+        run: node spec/conformance-runner.js --type host_behavior --host "spec/reference-host-rs/target/release/evc-reference-host"
+
   typecheck-all:
     name: Typecheck — all TypeScript packages
     runs-on: ubuntu-latest
