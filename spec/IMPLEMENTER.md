@@ -169,18 +169,29 @@ contract only one implementer can pass is not a contract.
 
 ## 9. Independent implementations
 
-Implementations of the EVC host boundary written outside this repo, from the
-normative text, listed with maintainer permission after a harness-green run at a
-pinned public commit. This table records pinned conformance evidence, not every
+Implementations of the EVC boundary written outside this repo, from the
+normative text, listed with author permission after a verified run at a pinned
+public commit. This table records pinned conformance evidence, not every
 project that has discussed or partially mapped to EVC.
 
 Permission basis: mcp-use#1835, "Feel free to use the example repo however you
-want."
+want"; x402#3220 comment 5595422481, "Yes, go ahead and list it."
 
-| Implementation | Language / host stack | Verified | Result |
+| Implementation | Side / stack | Verified | Result |
 |---|---|---|---|
-| [`khandrew1/mcp-use-evc-example`](https://github.com/khandrew1/mcp-use-evc-example) | TypeScript, behind mcp-use's `mcp:tools/call` middleware | commit `17642a5`, 2026-08-26 | 27/27 `host_behavior`, vector set 0.5.0 |
+| [`khandrew1/mcp-use-evc-example`](https://github.com/khandrew1/mcp-use-evc-example) | Host — TypeScript, behind mcp-use's `mcp:tools/call` middleware | commit `17642a5`, 2026-08-26 | 27/27 `host_behavior`, vector set 0.5.0 |
+| [`stillmarcus24/x402-authority-verifier-kit`](https://github.com/stillmarcus24/x402-authority-verifier-kit) | Verifier — Node, zero-dependency, x402 authorization-evidence profile | commit `35e209d`, 2026-09-09 | 39/39 of its own pinned corpus, reproduced by the EVC authors in a network-isolated run; direct probes with non-JSON stdin returned a single deny verdict on stdout and exited 0 |
 
-Per that repo's own framing: EVC is an independent third-party contract and is
-not part of MCP or mcp-use. Listing here records conformance of the example's
-host boundary; it does not imply endorsement of EVC by mcp-use or vice versa.
+Per the first repo's own framing: EVC is an independent third-party contract
+and is not part of MCP or mcp-use. Listing here records conformance of the
+example's host boundary; it does not imply endorsement of EVC by mcp-use or
+vice versa.
+
+The second entry is the first independently authored verifier-side
+implementation listed here. It was built from specification text alone
+against pinned revisions of two open x402 proposals (x402#3220 `72c3704`,
+x402#3376 `2649525`); its result is measured against that kit's own vendored
+corpus, not this repo's `host_behavior` suite, and its documented scope cut
+(authority spec sections 8-11, cumulative multi-payment completeness) is
+recorded in the kit's `SOURCE_PINS.md`. Listing implies no endorsement in
+either direction.
