@@ -22,6 +22,17 @@ clones), verifies the vector digest, installs the implementer's dependencies
 from its own lockfile with `--ignore-scripts`, and drives its host through
 the pinned runner via the committed HUT adapter.
 
+## Claim kinds
+
+- **`bolyra-suite`** (default): our pinned conformance runner drives the
+  implementer's host through a committed HUT adapter. The result is
+  Bolyra-suite conformance.
+- **`external-suite`**: the implementer's OWN test command replayed at its
+  pin inside a digest-pinned container with networking disabled. The result
+  is an **own-corpus reproduction** — it shows the implementer's published
+  numbers reproduce, and says nothing about conformance to this repo's
+  vectors. `claim_text` must carry that distinction.
+
 ## Rules
 
 - **A red replay means investigate, never edit the claim.** Claims are

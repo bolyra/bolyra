@@ -37,7 +37,37 @@
         "skip": 0
       },
       "adapter_sha256": "c85fe3bfcc68b9c3882549523ea75056cf282253a58aeb0517a946f6fa6b1f79",
-      "scope": "Boundary under test: askExternalVerifier (src/evc-host.ts) composed with the harness-provided line-per-nonce file store supplied via its consumeNonces callback. Excludes the example's middleware wiring and any production nonce storage."
+      "scope": "Boundary under test: askExternalVerifier (src/evc-host.ts) composed with the harness-provided line-per-nonce file store supplied via its consumeNonces callback. Excludes the example's middleware wiring and any production nonce storage.",
+      "kind": "bolyra-suite"
+    },
+    {
+      "id": "x402-authority-verifier-kit@35e209d/own-corpus",
+      "kind": "external-suite",
+      "published_in": [
+        "spec/IMPLEMENTER.md \u00a79 (Independent implementations)",
+        "bolyra.ai conformance section"
+      ],
+      "claim_text": "39/39 of the kit's own pinned corpus (StillOS own-corpus reproduction; NOT Bolyra-suite conformance)",
+      "verified_on": "2026-09-09",
+      "implementer": {
+        "repo": "https://github.com/stillmarcus24/x402-authority-verifier-kit",
+        "commit": "35e209d5b994ef817519b1ac0ae1f03f2bdf4d5f"
+      },
+      "run": {
+        "image": "node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5",
+        "command": [
+          "npm",
+          "test",
+          "--silent"
+        ],
+        "network": "none",
+        "requires_zero_dependencies": true,
+        "expect": {
+          "pass": 39,
+          "run": 39,
+          "scoped_out": 9
+        }
+      }
     }
   ]
 }

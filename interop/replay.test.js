@@ -89,3 +89,79 @@ test('shellQuote survives spaces and single quotes', () => {
   assert.strictEqual(shellQuote('/tmp/a b'), "'/tmp/a b'");
   assert.strictEqual(shellQuote("/tmp/o'brien"), "'/tmp/o'\\''brien'");
 });
+
+// ---- external-suite validation ----
+const { validateExternalSuiteOutput, validateClaim } = require('./replay.js');
+
+const EXT_CLAIM = {
+  run: { expect: { pass: 39, run: 39, scoped_out: 9 } },
+};
+const GREEN = '  PASS  a\n  PASS  b\n\n39/39 passed, 9 explicitly scoped out (see SOURCE_PINS.md)\n';
+
+test('external-suite: clean run validates', () => {
+  const got = validateExternalSuiteOutput({ status: 0, signal: null, stdout: GREEN, stderr: '' }, EXT_CLAIM);
+  assert.deepStrictEqual(got, { pass: 39, run: 39, scoped_out: 9 });
+});
+
+test('external-suite: nonzero exit with green summary text must throw', () => {
+  const run = { status: 1, signal: null, stdout: GREEN, stderr: '' };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /suite exited 1/);
+});
+
+test('external-suite: green summary on stderr only must throw', () => {
+  const run = { status: 0, signal: null, stdout: 'noise\n', stderr: GREEN };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /no machine-readable summary/);
+});
+
+test('external-suite: FAIL-marked line despite green summary must throw', () => {
+  const run = {
+    status: 0,
+    signal: null,
+    stdout: '  FAIL  x  -- boom\n\n39/39 passed, 9 explicitly scoped out\n',
+    stderr: '',
+  };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /FAIL-marked/);
+});
+
+test('external-suite: count mismatch must throw', () => {
+  const run = { status: 0, signal: null, stdout: '38/39 passed, 9 explicitly scoped out\n', stderr: '' };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /suite exited|REPLAY MISMATCH/);
+});
+
+test('external-suite: claim schema requires digest-pinned image and network none', () => {
+  const errs = validateClaim({
+    id: 'x',
+    kind: 'external-suite',
+    implementer: { repo: 'r', commit: 'a'.repeat(40) },
+    run: { image: 'node:20', command: [], network: 'bridge', expect: {} },
+  });
+  assert.ok(errs.some((e) => e.includes('digest-pinned')));
+  assert.ok(errs.some((e) => e.includes('non-empty argv')));
+  assert.ok(errs.some((e) => e.includes('network must be "none"')));
+  assert.ok(errs.some((e) => e.includes('numeric pass and run')));
+});
+
+test('external-suite: conflicting duplicate summaries must throw', () => {
+  const run = {
+    status: 0,
+    signal: null,
+    stdout: '39/39 passed, 9 explicitly scoped out\n38/39 passed, 9 explicitly scoped out\n',
+    stderr: '',
+  };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /multiple summary lines/);
+});
+
+test('external-suite: summary not on the final line must throw', () => {
+  const run = {
+    status: 0,
+    signal: null,
+    stdout: '39/39 passed, 9 explicitly scoped out\ntrailing diagnostic noise\n',
+    stderr: '',
+  };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /not the final line/);
+});
+
+test('external-suite: FAIL marker on stderr must throw despite green stdout', () => {
+  const run = { status: 0, signal: null, stdout: GREEN, stderr: '  FAIL  case-x  -- boom\n' };
+  assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /FAIL-marked/);
+});

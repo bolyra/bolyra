@@ -61,11 +61,35 @@ function sha256File(p) {
 
 function validateClaim(c) {
   const errors = [];
-  for (const k of ['id', 'implementer', 'suite', 'adapter', 'adapter_sha256', 'expected']) {
-    if (!c[k]) errors.push(`missing field ${k}`);
-  }
+  const kind = c.kind || 'bolyra-suite';
   if (c.implementer && !/^[0-9a-f]{40}$/.test(c.implementer.commit || '')) {
     errors.push('implementer.commit must be a full 40-hex sha');
+  }
+
+  if (kind === 'external-suite') {
+    // The implementer's OWN suite replayed at pins. Result is an own-corpus
+    // reproduction, never Bolyra-suite conformance — claim_text must say so.
+    for (const k of ['id', 'implementer', 'run']) {
+      if (!c[k]) errors.push(`missing field ${k}`);
+    }
+    const run = c.run || {};
+    if (!/@sha256:[0-9a-f]{64}$/.test(run.image || '')) {
+      errors.push('run.image must be digest-pinned (image@sha256:<64-hex>)');
+    }
+    if (!Array.isArray(run.command) || !run.command.length) {
+      errors.push('run.command must be a non-empty argv array');
+    }
+    if (run.network !== 'none') {
+      errors.push('run.network must be "none" (third-party code executes here)');
+    }
+    if (!run.expect || typeof run.expect.pass !== 'number' || typeof run.expect.run !== 'number') {
+      errors.push('run.expect must carry numeric pass and run counts');
+    }
+    return errors;
+  }
+
+  for (const k of ['id', 'implementer', 'suite', 'adapter', 'adapter_sha256', 'expected']) {
+    if (!c[k]) errors.push(`missing field ${k}`);
   }
   if (c.suite && !/^[0-9a-f]{40}$/.test(c.suite.commit || '')) {
     errors.push('suite.commit must be a full 40-hex sha');
@@ -84,6 +108,92 @@ function validateClaim(c) {
     }
   }
   return errors;
+}
+
+/**
+ * Validate a spawnSync result from an external-suite run (the implementer's
+ * OWN test command inside a network-isolated, digest-pinned container).
+ * Requirements, all fail-loud: no spawn error/signal, exit status 0, a final
+ * machine-readable summary line "<pass>/<run> passed, <n> explicitly scoped
+ * out" whose counts equal the claim's expectation, and no FAIL-marked line
+ * anywhere in the output. Returns {pass, run, scoped_out} on success.
+ */
+function validateExternalSuiteOutput(run, c) {
+  if (run.error) throw new Error(`container spawn failed: ${run.error.message}`);
+  if (run.signal) throw new Error(`suite run killed by signal ${run.signal}`);
+  const out = String(run.stdout || '');
+  const err = String(run.stderr || '');
+  if (run.status !== 0) {
+    throw new Error(`suite exited ${run.status} (expected 0); tail:\n${(out + err).slice(-2000)}`);
+  }
+  // Exactly one full-line summary, and it must be the final non-empty line of
+  // stdout — a summary embedded in diagnostics, or an earlier green summary
+  // followed by a conflicting one, is not a result.
+  const summaryRe = /^(\d+)\/(\d+) passed, (\d+) explicitly scoped out.*$/gm;
+  const matches = Array.from(out.matchAll(summaryRe));
+  if (matches.length === 0) {
+    throw new Error(`no machine-readable summary line in suite stdout; tail:\n${out.slice(-2000)}`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`multiple summary lines in suite stdout (${matches.length}); refusing to pick one`);
+  }
+  const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines[lines.length - 1] !== matches[0][0].trim()) {
+    throw new Error(`summary line is not the final line of suite stdout; tail:\n${out.slice(-2000)}`);
+  }
+  const got = { pass: Number(matches[0][1]), run: Number(matches[0][2]), scoped_out: Number(matches[0][3]) };
+  const exp = c.run.expect;
+  if (got.pass !== exp.pass || got.run !== exp.run || (exp.scoped_out !== undefined && got.scoped_out !== exp.scoped_out)) {
+    throw new Error(
+      `REPLAY MISMATCH: expected ${exp.pass}/${exp.run} passed (${exp.scoped_out} scoped out), ` +
+        `got ${got.pass}/${got.run} (${got.scoped_out})`
+    );
+  }
+  if (/^\s*FAIL\s/m.test(out) || /^\s*FAIL\s/m.test(err)) {
+    throw new Error(`suite output contains FAIL-marked cases despite green summary:\n${(out + err).slice(-2000)}`);
+  }
+  return got;
+}
+
+function replayExternalSuite(c, keep) {
+  console.log(`\n=== ${c.id} ===`);
+  console.log(`claim: ${c.claim_text} (verified ${c.verified_on})`);
+
+  const docker = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], { encoding: 'utf8' });
+  if (docker.status !== 0) throw new Error('docker is required for external-suite claims and is not available');
+
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'evc-replay-ext-'));
+  const implDir = path.join(work, 'implementer');
+  fs.mkdirSync(implDir);
+  try {
+    console.log(`cloning ${c.implementer.repo} @ ${c.implementer.commit.slice(0, 12)}…`);
+    sh('git', ['-C', implDir, 'init', '-q']);
+    sh('git', ['-C', implDir, 'remote', 'add', 'origin', c.implementer.repo]);
+    sh('git', ['-C', implDir, 'fetch', '-q', '--depth', '1', 'origin', c.implementer.commit]);
+    sh('git', ['-C', implDir, 'checkout', '-q', 'FETCH_HEAD']);
+    const head = sh('git', ['-C', implDir, 'rev-parse', 'HEAD']).trim();
+    if (head !== c.implementer.commit) throw new Error(`checked-out HEAD ${head} != pinned commit`);
+
+    if (c.run.requires_zero_dependencies) {
+      const pkg = JSON.parse(fs.readFileSync(path.join(implDir, 'package.json'), 'utf8'));
+      const deps = Object.keys(pkg.dependencies || {}).concat(Object.keys(pkg.devDependencies || {}));
+      if (deps.length) throw new Error(`claim requires zero dependencies but package.json declares: ${deps.join(', ')}`);
+    }
+
+    console.log(`running suite in ${c.run.image.split('@')[0]} (network ${c.run.network})…`);
+    const run = spawnSync(
+      'docker',
+      ['run', '--rm', '--network', c.run.network, '-v', `${implDir}:/kit:ro`, '-w', '/kit', c.run.image, ...c.run.command],
+      { encoding: 'utf8' }
+    );
+    const got = validateExternalSuiteOutput(run, c);
+    console.log(`result: ${got.pass}/${got.run} passed, ${got.scoped_out} scoped out`);
+    console.log(`REPLAY OK: own-corpus claim reproduces (${got.pass}/${c.run.expect.pass})`);
+    return true;
+  } finally {
+    if (keep) console.log(`workdir kept: ${work}`);
+    else fs.rmSync(work, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -256,6 +366,10 @@ function main() {
 
   if (flag('--check')) {
     for (const c of claims) {
+      if ((c.kind || 'bolyra-suite') === 'external-suite') {
+        console.log(`${c.id}: registry OK (external-suite; pins verified at replay time)`);
+        continue;
+      }
       const pinErr = checkSuitePin(c);
       if (pinErr) fail(`${c.id}: ${pinErr}`);
       else console.log(`${c.id}: registry + suite pin OK`);
@@ -266,7 +380,8 @@ function main() {
   let ok = 0;
   for (const c of claims) {
     try {
-      if (replayClaim(c, flag('--keep'))) ok += 1;
+      const replay = (c.kind || 'bolyra-suite') === 'external-suite' ? replayExternalSuite : replayClaim;
+      if (replay(c, flag('--keep'))) ok += 1;
     } catch (e) {
       fail(`${c.id}: ${e.message}`);
     }
@@ -275,6 +390,6 @@ function main() {
   if (ok !== claims.length) process.exitCode = 1;
 }
 
-module.exports = { validateRunnerOutput, validateClaim, shellQuote };
+module.exports = { validateRunnerOutput, validateClaim, validateExternalSuiteOutput, shellQuote };
 
 if (require.main === module) main();
