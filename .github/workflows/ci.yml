@@ -245,6 +245,11 @@ jobs:
       - name: host_behavior vectors — Rust reference host
         run: node spec/conformance-runner.js --type host_behavior --host "spec/reference-host-rs/target/release/evc-reference-host"
 
+      # Offline harness tests only — the live interop replay (network,
+      # third-party code) is the separate interop-replay dispatch workflow.
+      - name: Interop replay harness — offline regression tests
+        run: node --test interop/replay.test.js
+
   typecheck-all:
     name: Typecheck — all TypeScript packages
     runs-on: ubuntu-latest

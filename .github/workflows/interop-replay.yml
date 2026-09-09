@@ -1,0 +1,37 @@
+name: Interop replay
+
+# Mechanically re-verify every published external interop claim at its pins
+# (interop/claims.json). Manual dispatch only: this executes third-party host
+# code (pinned, --ignore-scripts) and needs network access to external repos,
+# so it is not part of per-push CI. Run before citing a claim in a new public
+# document and after any conformance-runner change.
+on:
+  workflow_dispatch:
+
+# Third-party code executes in this job; give it nothing to steal.
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    name: Replay published interop claims
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # git archive at historical suite pins needs full history
+          fetch-depth: 0
+          # do not leave the checkout token on disk where implementer
+          # lifecycle code could read it
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          package-manager-cache: false
+
+      - name: Offline registry + pin check
+        run: node interop/replay.js --check
+
+      - name: Replay all claims
+        run: node interop/replay.js

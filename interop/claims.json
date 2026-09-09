@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "claims": [
+    {
+      "id": "mcp-use-evc-example@17642a5/host_behavior@0.5.0",
+      "published_in": [
+        "spec/IMPLEMENTER.md \u00a79 (Independent implementations)",
+        "draft-kondoju-evc-01 and -02, Implementation Status: mcp-use-evc-example"
+      ],
+      "claim_text": "27/27 host_behavior vectors, vector set 0.5.0, at pinned commit 17642a5",
+      "verified_on": "2026-08-26",
+      "implementer": {
+        "repo": "https://github.com/khandrew1/mcp-use-evc-example",
+        "commit": "17642a5efd5e1c42991ab8aa399cd6138f64f635",
+        "host_module": "src/evc-host.ts",
+        "install": [
+          "npm",
+          "ci",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund"
+        ]
+      },
+      "suite": {
+        "commit": "37b3fa631bcf50c1190474ca938b1846115a282a",
+        "vector_set": "0.5.0",
+        "test_vectors_sha256": "879d1cf9647f4f42e0815e34eeb5587633dff28e8fa8ceab25c139f470bb629c",
+        "runner_args": [
+          "--type",
+          "host_behavior"
+        ]
+      },
+      "adapter": "adapters/mcp-use-evc-example-hut.ts",
+      "expected": {
+        "pass": 27,
+        "fail": 0,
+        "skip": 0
+      },
+      "adapter_sha256": "c85fe3bfcc68b9c3882549523ea75056cf282253a58aeb0517a946f6fa6b1f79",
+      "scope": "Boundary under test: askExternalVerifier (src/evc-host.ts) composed with the harness-provided line-per-nonce file store supplied via its consumeNonces callback. Excludes the example's middleware wiring and any production nonce storage."
+    }
+  ]
+}
