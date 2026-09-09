@@ -173,6 +173,21 @@ jobs:
           BOLYRA_CIRCUITS_DIR: ${{ runner.temp }}/circuits-build
         run: npm test
 
+      # The dist/ built above is exactly the reference-CLI fallback the
+      # verifier_envelope class targets — run the domain-agnostic verifier
+      # wire-envelope vectors against it per push.
+      - name: verifier_envelope vectors — built reference CLI
+        run: node spec/conformance-runner.js --type verifier_envelope
+
+      # Negative control (§7.1 exit/code consistency): a verifier answering
+      # deny code=internal_error at exit 0 must fail EVERY envelope vector.
+      # Guards the runner check that keeps deny-only vectors from passing it.
+      - name: verifier_envelope negative control — internal_error at exit 0
+        run: |
+          if VERIFIER_CMD='printf %s "{\"verdict\":\"deny\",\"code\":\"internal_error\",\"message\":\"x\"}"' node spec/conformance-runner.js --type verifier_envelope; then
+            echo "negative control unexpectedly passed" >&2; exit 1
+          fi
+
   lockfiles:
     name: Lockfiles — clean npm ci per manifest
     runs-on: ubuntu-latest

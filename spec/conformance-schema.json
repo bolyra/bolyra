@@ -69,6 +69,7 @@
             "proof_envelope",
             "session_token",
             "external_verifier",
+            "verifier_envelope",
             "host_behavior",
             "receipt_binding"
           ],
@@ -159,9 +160,23 @@
             "action_taken": {
               "type": "boolean",
               "description": "For 'host_behavior' host-nonce vectors: whether the host must have authorized the action (written the \u00a716.5 action-log marker). true after a novel allow; false on a replay deny \u2014 proving reservations gate the action."
+            },
+            "code_any_of": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              },
+              "description": "For 'verifier_envelope' deny vectors: acceptable denial codes where the contract fixes the deny but permits more than one classification. Mutually exclusive with 'code'."
             }
           },
-          "description": "Expected outcome, including result and any additional behavioral checks"
+          "description": "Expected outcome, including result and any additional behavioral checks",
+          "not": {
+            "required": [
+              "code",
+              "code_any_of"
+            ]
+          }
         }
       },
       "additionalProperties": false

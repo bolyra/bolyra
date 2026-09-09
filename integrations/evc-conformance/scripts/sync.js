@@ -7,9 +7,10 @@
  * `npm run sync:check` verifies vendor/ still matches spec/ byte-for-byte
  * (run in CI so a spec change without a package release is caught).
  *
- * v0 scope (deliberate): ONLY the host_behavior surface — the runner, the
- * reference host, the host-conformance fixtures, and a vectors file trimmed
- * to host_behavior. The full 112-vector suite stays in the monorepo.
+ * Scope (deliberate): the dependency-free wire-contract surface — the runner,
+ * the reference host, the host-conformance fixtures, and a vectors file
+ * trimmed to host_behavior + verifier_envelope. The full crypto suite stays
+ * in the monorepo.
  */
 
 const fs = require('fs');
@@ -35,13 +36,13 @@ function listFiles(dir, base = dir) {
 
 function buildTrimmedVectors() {
   const src = JSON.parse(fs.readFileSync(path.join(SPEC, 'test-vectors.json'), 'utf-8'));
-  const host = src.vectors.filter((v) => v.type === 'host_behavior');
+  const host = src.vectors.filter((v) => v.type === 'host_behavior' || v.type === 'verifier_envelope');
   return Buffer.from(
     JSON.stringify(
       {
         version: src.version,
         note:
-          'host_behavior subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit',
+          'host_behavior + verifier_envelope subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit',
         source_sha256: sha(fs.readFileSync(path.join(SPEC, 'test-vectors.json'))),
         vectors: host,
       },
@@ -71,9 +72,12 @@ function buildManifest(entries) {
   const manifest = { generated_from: 'spec/', files: {} };
   for (const e of entries) manifest.files[`vendor/${e.out}`] = sha(e.data);
   const vectors = JSON.parse(buildTrimmedVectors().toString());
+  const byType = (ty) => vectors.vectors.filter((v) => v.type === ty).length;
   manifest.vector_set = {
     version: vectors.version,
-    host_behavior_count: vectors.vectors.length,
+    host_behavior_count: byType('host_behavior'),
+    verifier_envelope_count: byType('verifier_envelope'),
+    total_count: vectors.vectors.length,
     source_sha256: vectors.source_sha256,
   };
   return JSON.stringify(manifest, null, 2) + '\n';
@@ -129,7 +133,7 @@ function main() {
   fs.writeFileSync(MANIFEST, buildManifest(entries));
   const vectors = JSON.parse(buildTrimmedVectors().toString());
   console.log(
-    `synced ${entries.length} files from spec/ (vector set v${vectors.version}, ${vectors.vectors.length} host_behavior vectors)`,
+    `synced ${entries.length} files from spec/ (vector set v${vectors.version}, ${vectors.vectors.length} host_behavior + verifier_envelope vectors)`,
   );
 }
 
