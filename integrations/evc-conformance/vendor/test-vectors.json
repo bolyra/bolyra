@@ -1,7 +1,7 @@
 {
-  "version": "0.8.0",
-  "note": "host_behavior subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
-  "source_sha256": "f987b769fc1f3fb9939c88936ddf25e2c64ea84ac0101dcde0b596b196dfd7a6",
+  "version": "0.9.0",
+  "note": "host_behavior + verifier_envelope subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
+  "source_sha256": "5cd8965643589173425a18ba27b1935f29058f33079920233cb554e547b0c9ef",
   "vectors": [
     {
       "id": "host-allow-well-behaved",
@@ -446,6 +446,134 @@
       "expected": {
         "result": "PASS",
         "host_decision": "allow"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-non-json-stdin",
+      "description": "Verifier envelope (§2.1): stdin is not JSON at all. Every conforming verifier, regardless of proof domain, MUST yield deny code=malformed_input in a single closed §3.4 verdict at exit 0 (§5.1, §7.1).",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "this is not json {{"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-empty-stdin",
+      "description": "Verifier envelope (§2.1): empty stdin (immediate EOF) is not a JSON object. MUST yield deny malformed_input; the verdict itself must still be a well-formed single object at exit 0.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": ""
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-request-not-object",
+      "description": "Verifier envelope (§2.1): stdin is valid JSON but not an object (an array). 'A request that is not a JSON object ... MUST yield deny code=malformed_input.'",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "[1,2,3]"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-concatenated-requests",
+      "description": "Verifier envelope (§2, §2.1): two concatenated request objects on stdin. The host MUST write exactly one object (§2); the concatenation is not a single JSON object, so the verifier MUST classify it malformed_input rather than parsing leniently.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 1, \"bundle\": \"b64-opaque\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 1751990400}{\"version\": 1, \"bundle\": \"b64-opaque\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 1751990400}"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-trailing-garbage-request",
+      "description": "Verifier envelope (§2.1): a valid request object followed by trailing non-whitespace bytes is not a single JSON object. MUST yield deny malformed_input.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 1, \"bundle\": \"b64-opaque\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 1751990400}garbage"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-missing-bundle",
+      "description": "Verifier envelope (§2.1): request missing the REQUIRED bundle field. 'A request that is ... missing a REQUIRED field ... MUST yield deny code=malformed_input.'",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 1, \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 1751990400}"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-empty-bundle",
+      "description": "Verifier envelope (§2.1, §2.2): bundle present but empty. The normative request schema requires minLength 1 ('bundle (string, REQUIRED, non-empty)'), so the request MUST be denied — but §2.1's malformed_input trigger list ('not a JSON object, missing a REQUIRED field, or a field of the wrong type') does not literally cover present-but-empty, and the contract does not bind this violation to a specific code. The vector therefore asserts only the fixed part: a deny, in the closed §3.4 envelope (which itself restricts code to the §9 registry), at exit 0.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 1, \"bundle\": \"\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 1751990400}"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-wrong-type-capabilities",
+      "description": "Verifier envelope (§2.1): granted_capabilities is a string, not an array of strings. 'A request that ... has a field of the wrong type MUST yield deny code=malformed_input.'",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 1, \"bundle\": \"b64-opaque\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": \"fetch_inbox\"}, \"now_unix\": 1751990400}"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "malformed_input"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-nonpositive-now-unix",
+      "description": "Verifier envelope (§2.1, §2.2): now_unix is 0, violating the normative schema's exclusiveMinimum 0 ('now_unix (integer, REQUIRED, positive)'). The field is present and integer-typed, so §2.1's malformed_input trigger list does not literally apply and the contract fixes the deny but not the code. The vector asserts a deny in the closed §3.4 envelope at exit 0.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 1, \"bundle\": \"b64-opaque\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 0}"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny"
+      }
+    },
+    {
+      "id": "verifier-envelope-deny-unsupported-version",
+      "description": "Verifier envelope (§2.1, §11): a request satisfying every §2.1 structural requirement except that version is 2. 'A well-formed request whose version is not 1 MUST yield deny code=unsupported_version.' Exact-code assertion: a verifier that classifies every bad input malformed_input does not implement version negotiation and fails here.",
+      "type": "verifier_envelope",
+      "inputs": {
+        "request_raw": "{\"version\": 2, \"bundle\": \"b64-opaque\", \"request\": {\"agent_name\": \"research-bot\", \"project_key\": \"/work/acme/research\", \"program\": \"crewai\", \"model\": \"opus-4.1\", \"granted_capabilities\": [\"fetch_inbox\"]}, \"now_unix\": 1751990400}"
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "unsupported_version"
       }
     }
   ]

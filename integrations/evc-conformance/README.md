@@ -16,6 +16,13 @@ straight into CI.
 ```sh
 npx @bolyra/evc-conformance                  # self-test the bundled reference host
 npx @bolyra/evc-conformance --host "..." --json   # machine-readable result on stdout
+npx @bolyra/evc-conformance --verifier "/path/to/your-verifier --flags"
+                                                  # verifier_envelope: domain-agnostic
+                                                  # wire-envelope vectors for the
+                                                  # VERIFIER side (raw request on
+                                                  # stdin, one closed verdict on
+                                                  # stdout; no assumptions about
+                                                  # bundle semantics)
 ```
 
 The `--json` output includes the vector-set version, count, and SHA-256, so a

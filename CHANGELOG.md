@@ -17,6 +17,37 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/evc-conformance 0.5.0 (UNRELEASED)
+
+### Added
+
+- New vector class `verifier_envelope` (vector set **0.8.0 → 0.9.0**, 114 →
+  124 vectors): 10 domain-agnostic wire-envelope vectors for the VERIFIER
+  side of the contract — the universal §2.1/§2.2 negatives (malformed stdin,
+  structural violations, wrong envelope version) plus §3.4/§5.1/§7.1
+  envelope assertions on every response (exactly one closed verdict object
+  on stdout, exit 0). No vector assumes anything about `bundle` semantics,
+  so a verifier for any proof domain can run the class unmodified. Two
+  vectors (empty bundle, non-positive now_unix) assert only the deny — the
+  contract fixes the rejection but not its code there — while the
+  wrong-version vector asserts `unsupported_version` exactly; the envelope
+  check itself closes deny codes over the §9 registry, so an invented code
+  fails every vector.
+- Runner: `--verifier "<cmd>"` flag / `VERIFIER_CMD` env (verifier-under-test
+  convention, mirroring `--host`); falls back to the built reference CLI,
+  else skips with a build hint.
+- `evc-conformance --verifier "<cmd>"` runs the new class from the published
+  package; the vendored vector subset now includes both dependency-free wire
+  classes (host_behavior + verifier_envelope).
+
+### Validation
+
+- Reference CLI (`bolyra verify`): 10/10.
+- First external data point, StillOS `x402-authority-verifier-kit` @
+  `35e209d` (network-isolated): 8/10 — two genuine §2.1 code-classification
+  gaps (non-object stdin classified `unsupported_version`; missing REQUIRED
+  `bundle` classified `invalid_bundle`), queued for an upstream report.
+
 ## @bolyra/evc-conformance 0.2.0 (UNRELEASED)
 
 **Release gate:** held until `khandrew1/mcp-use-evc-example` (an independent

@@ -25,21 +25,35 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`@bolyra/evc-conformance - EVC v1 host conformance (host_behavior vectors)
 
 Usage:
-  evc-conformance --host "/path/to/your-host --flags"   test YOUR host
+  evc-conformance --host "/path/to/your-host --flags"   test YOUR host (host_behavior)
+  evc-conformance --verifier "/path/to/your-verifier"   test YOUR verifier (verifier_envelope)
   evc-conformance --host "..." --json                   machine-readable result on stdout
   evc-conformance                                       self-test the bundled reference host
   evc-conformance --vector <id>                         run a single vector
 
-Your host must honor the Host-Under-Test convention (HUT_* env, one request
-on stdin, one decision object on stdout). Full pass path:
+Hosts honor the Host-Under-Test convention (HUT_* env, one request on stdin,
+one decision object on stdout). Verifiers are spawned per vector with the raw
+request on stdin and must emit one closed verdict object on stdout; the
+verifier_envelope vectors are domain-agnostic (no assumptions about bundle
+semantics). Full pass path:
 https://github.com/bolyra/bolyra/blob/main/spec/IMPLEMENTER.md`);
   process.exit(0);
 }
 
 const runner = path.join(__dirname, 'vendor', 'conformance-runner.js');
+// Mode selection: --host always selects the host_behavior class this package
+// has always run; --verifier or a non-empty VERIFIER_CMD selects the
+// domain-agnostic verifier_envelope class. VERIFIER_CMD set-but-empty is a
+// hard error rather than a silent host self-test.
+if (process.env.VERIFIER_CMD !== undefined && process.env.VERIFIER_CMD === '') {
+  console.error('error: VERIFIER_CMD is set but empty — unset it or provide a command');
+  process.exit(2);
+}
+const verifierMode = !args.includes('--host') && (args.includes('--verifier') || !!process.env.VERIFIER_CMD);
+const type = verifierMode ? 'verifier_envelope' : 'host_behavior';
 const res = spawnSync(
   process.execPath,
-  [runner, '--type', 'host_behavior', ...args],
+  [runner, '--type', type, ...args],
   { stdio: 'inherit' },
 );
 process.exit(res.status === null ? 1 : res.status);

@@ -127,6 +127,7 @@ for (const candidate of [...CANDIDATE_MODULE_PATHS].reverse()) {
 // circuit crypto) — resolved lazily inside its runner, SKIP when unbuilt.
 const NON_CRYPTO_TYPES = new Set([
     'external_verifier',
+    'verifier_envelope',
     'host_behavior',
     'session_token',
     'receipt_binding',
@@ -155,6 +156,20 @@ async function main() {
     // empty or missing value is a hard error - silently falling back to the
     // bundled reference host would produce a false green (e.g. CI passing
     // --host "$HOST_CMD" with the variable unset).
+    // --verifier "<cmd>": convenience alias for the VERIFIER_CMD environment
+    // variable (verifier_envelope vectors, §16.2-style VUT convention for the
+    // VERIFIER side). The flag wins over the environment; empty value is a hard
+    // error for the same false-green reason as --host.
+    const verifierFlag = args.indexOf('--verifier');
+    if (verifierFlag !== -1) {
+        const verifierValue = args[verifierFlag + 1];
+        if (!verifierValue || verifierValue.startsWith('--')) {
+            console.error('error: --verifier requires a non-empty command, e.g. --verifier "npx @bolyra/cli verify --roots-file r.json"');
+            process.exit(2);
+        }
+        process.env.VERIFIER_CMD = verifierValue;
+    }
+
     const hostFlag = args.indexOf('--host');
     if (hostFlag !== -1) {
         const hostValue = args[hostFlag + 1];
@@ -306,6 +321,8 @@ async function runVector(vector, crypto) {
             return { skipped: true, reason: 'experimental — no implementation yet' };
         case 'external_verifier':
             return runExternalVerifierVector(vector);
+        case 'verifier_envelope':
+            return runVerifierEnvelopeVector(vector);
         case 'host_behavior':
             return runHostBehaviorVector(vector);
         case 'receipt_binding':
@@ -429,6 +446,158 @@ function runExternalVerifierVector(vector) {
     }
 
     return { pass: expected.result === 'PASS' };
+}
+
+/**
+ * Verifier-envelope class runner (spec/external-verifier-contract-v1.md
+ * §2.1, §3.4, §5.1, §7.1).
+ *
+ * Domain-agnostic: tests the wire envelope ANY EVC verifier must satisfy
+ * regardless of its proof domain, using only inputs whose required response
+ * the contract fixes universally (malformed stdin, structural §2.1/§2.2
+ * violations, wrong envelope version). It never asserts anything about
+ * `bundle` semantics, so a verifier for any domain — ZK bundles, x402
+ * payment mandates, classical policy — can run it unmodified.
+ *
+ * Verifier-under-test resolution:
+ *   VERIFIER_CMD env (or --verifier "<cmd>") — a shell command spawned per
+ *     vector; the vector's raw request is written to its stdin.
+ *   Otherwise falls back to the built reference CLI (`bolyra verify`) when
+ *   present, else the vector SKIPs with a build hint.
+ *
+ * Assertions on every vector (all normative for the verifier):
+ *   - exit status 0 (§7.1: a produced deny verdict is not an error exit)
+ *   - stdout parses as exactly one JSON object (§5.1; JSON.parse of the whole
+ *     stream rejects concatenated values and non-whitespace noise)
+ *   - the verdict satisfies the closed §3.4 schema
+ *   - `verdict` equals `expected.verdict`; deny `code` equals `expected.code`
+ *     or is a member of `expected.code_any_of` (list form documents the cases
+ *     where two §2.1 obligations can legitimately fire in either order)
+ *
+ * inputs:
+ *   request_raw   string — raw stdin payload, written verbatim then EOF
+ * expected:
+ *   result        'PASS'
+ *   verdict       'allow'|'deny'
+ *   code          string — exact deny code
+ *   code_any_of   array  — acceptable deny codes (mutually exclusive w/ code)
+ */
+const VERDICT_KINDS = new Set(['classical', 'zk', 'external']);
+// §3.4 closes deny.code over the §9 registry — enforced here independently of
+// any vector's expected code, so a deny-only vector still rejects an invented
+// code at the envelope level.
+const REGISTRY_CODES = new Set([
+    'malformed_input', 'unsupported_version', 'invalid_bundle', 'invalid_proof',
+    'untrusted_root', 'delegation_invalid', 'invalid_signature', 'request_mismatch',
+    'model_mismatch', 'unknown_capability', 'scope_exceeded', 'expired',
+    'nonce_missing', 'nonce_replayed', 'internal_error',
+]);
+
+function validClosedVerdict(v) {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return 'not an object';
+    if (v.kind !== undefined && !VERDICT_KINDS.has(v.kind)) return `invalid kind ${JSON.stringify(v.kind)}`;
+    if (v.verdict === 'allow') {
+        for (const k of Object.keys(v)) {
+            if (k !== 'verdict' && k !== 'kind' && k !== 'consume_nonces') return `allow carries extra key ${k}`;
+        }
+        if (v.consume_nonces !== undefined) {
+            if (!Array.isArray(v.consume_nonces) || v.consume_nonces.length < 1) return 'consume_nonces must be a non-empty array';
+            for (const e of v.consume_nonces) {
+                if (!e || typeof e !== 'object' || Array.isArray(e)) return 'consume_nonces entry not an object';
+                const keys = Object.keys(e);
+                if (keys.length !== 3 || typeof e.issuer_key !== 'string' || typeof e.nonce !== 'string' || !Number.isInteger(e.retain_until)) {
+                    return 'malformed consume_nonces entry';
+                }
+            }
+        }
+        return null;
+    }
+    if (v.verdict === 'deny') {
+        for (const k of Object.keys(v)) {
+            if (!['verdict', 'kind', 'code', 'message', 'detail'].includes(k)) return `deny carries extra key ${k}`;
+        }
+        if (typeof v.code !== 'string' || typeof v.message !== 'string') return 'deny must carry string code and message';
+        if (!REGISTRY_CODES.has(v.code)) return `deny code ${JSON.stringify(v.code)} is outside the closed §9 registry`;
+        if (v.detail !== undefined && (typeof v.detail !== 'object' || v.detail === null || Array.isArray(v.detail))) return 'detail must be an object';
+        return null;
+    }
+    return `verdict must be allow or deny, got ${JSON.stringify(v.verdict)}`;
+}
+
+function runVerifierEnvelopeVector(vector) {
+    const inputs = vector.inputs || {};
+    const expected = vector.expected || {};
+    if (typeof inputs.request_raw !== 'string') {
+        return { pass: false, reason: 'verifier_envelope vector needs inputs.request_raw' };
+    }
+
+    let res;
+    if (process.env.VERIFIER_CMD) {
+        res = spawnSync('/bin/sh', ['-c', process.env.VERIFIER_CMD], {
+            input: inputs.request_raw,
+            encoding: 'utf-8',
+            timeout: inputs.timeout_ms || 15000,
+            killSignal: 'SIGKILL',
+            maxBuffer: 8 * 1024 * 1024,
+        });
+    } else if (fs.existsSync(VERIFY_CLI)) {
+        // Reference-CLI fallback: same fixture wiring as external_verifier.
+        const args = ['verify', '--circuits-dir', path.join(VERIFY_FIXTURES, 'vkeys'),
+            '--roots-file', path.join(VERIFY_FIXTURES, 'roots.json'),
+            '--capability-map', path.join(VERIFY_FIXTURES, 'capability-map.json')];
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'bolyra-conf-envelope-'));
+        try {
+            res = spawnSync(process.execPath, [VERIFY_CLI, ...args], {
+                input: inputs.request_raw,
+                env: { ...process.env, HOME: home },
+                encoding: 'utf-8',
+                timeout: inputs.timeout_ms || 15000,
+                killSignal: 'SIGKILL',
+                maxBuffer: 8 * 1024 * 1024,
+            });
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    } else {
+        return {
+            skipped: true,
+            reason: `no VERIFIER_CMD/--verifier and no built CLI at ${VERIFY_CLI} — run: (cd integrations/cli && npm run build), or pass --verifier "<cmd>"`,
+        };
+    }
+
+    if (res.error) return { pass: false, reason: `spawn failed: ${res.error.message}` };
+    if (res.signal) return { pass: false, reason: `verifier killed by signal ${res.signal} (runner-side timeout or crash)` };
+    if (res.status !== 0) {
+        return { pass: false, reason: `exit ${res.status} (§7.1: a produced deny verdict must exit 0); stderr tail: ${JSON.stringify(String(res.stderr || '').slice(-200))}` };
+    }
+
+    let verdict;
+    try {
+        verdict = JSON.parse(res.stdout);
+    } catch (e) {
+        return { pass: false, reason: `stdout is not exactly one JSON object (§5.1): ${JSON.stringify(String(res.stdout || '').slice(0, 160))}` };
+    }
+    const schemaErr = validClosedVerdict(verdict);
+    if (schemaErr) return { pass: false, reason: `verdict fails the closed §3.4 schema: ${schemaErr}` };
+
+    // §7.1 exit/code consistency: internal_error is 'emitted as deny
+    // code=internal_error AND exits non-zero'. This class asserted exit 0
+    // above, so an internal_error verdict here is a §7.1 violation — without
+    // this check it could slip through deny-only vectors.
+    if (verdict.verdict === 'deny' && verdict.code === 'internal_error') {
+        return { pass: false, reason: '§7.1: deny code=internal_error must accompany a non-zero exit, but the verifier exited 0' };
+    }
+
+    if (expected.verdict && verdict.verdict !== expected.verdict) {
+        return { pass: false, reason: `verdict mismatch: got '${verdict.verdict}', want '${expected.verdict}'` };
+    }
+    if (expected.code && verdict.code !== expected.code) {
+        return { pass: false, reason: `deny code mismatch: got '${verdict.code}', want '${expected.code}'` };
+    }
+    if (Array.isArray(expected.code_any_of) && !expected.code_any_of.includes(verdict.code)) {
+        return { pass: false, reason: `deny code '${verdict.code}' not in ${JSON.stringify(expected.code_any_of)}` };
+    }
+    return { pass: true };
 }
 
 /**
