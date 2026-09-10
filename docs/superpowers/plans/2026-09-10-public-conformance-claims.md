@@ -4,7 +4,7 @@
 
 **Goal:** Publish `interop/claims.json` as a public, drift-guarded page at `bolyra.ai/conformance`, document maintainer-operated claim submissions, isolate third-party code in the existing dispatch replay job, and fix the stale/false copy on the landing page.
 
-**Architecture:** A zero-dependency generator (`landing/gen-conformance.js`) renders the registry to a committed static page with a `--check` drift guard in CI. The dispatch job's security-critical logic lives in three small tested scripts — `replay.js --list` (claim listing), `interop/submission-overlay.js` (data-only overlay of one submission from a ref, via git blobs, never a checkout), `interop/harness-integrity.js` (snapshot/verify of the protected tree between claims) — and the workflow only calls them. bolyra-suite replays run inside a read-only-mounted container; external-suite on the VM under `env -i` (its implementer code already confined to `replay.js`'s own `--network none` child). No automatic gating (deferred; spec Appendix A).
+**Architecture:** A zero-dependency generator (`landing/gen-conformance.js`) renders the registry to a committed static page with a `--check` drift guard in CI. The dispatch job's security-critical logic lives in three small tested scripts — `replay.js --list` (claim listing), `interop/submission-overlay.js` (data-only overlay of one submission from a ref, via git blobs, never a checkout), `interop/harness-integrity.js` (pure-filesystem snapshot/verify of the protected tree between claims, executed from a copy OUTSIDE the workspace) — and the workflow only calls them. bolyra-suite replays run inside a read-only-mounted container; external-suite on the VM under `env -i` (its implementer code already confined to `replay.js`'s own `--network none` child). No automatic gating (deferred; spec Appendix A).
 
 **Tech Stack:** Node 20 (no runtime deps), `node:test`, GitHub Actions, Docker on the runner, bash (`deploy.sh`/`verify.sh`), static HTML.
 
@@ -20,6 +20,9 @@
 - `interop/replay.js` has 18 false-green regression tests. Tasks 1 touches it minimally (listing + a test-only registry path override). Never touch its replay logic.
 - `<digest>` in Chunk 2 is the one intentional placeholder; Task 4 resolves it before Task 5 uses it.
 - "Expected:" lines are what you must see. If you see something else, stop and report; do not improvise.
+- **Handoff directory:** every task that produces or consumes cross-task state uses `HANDOFF=/tmp/plan-handoff` (create with `mkdir -p "$HANDOFF"`). Files: `image.env` (REPLAY_IMAGE=…), `dispatch.sh` (the `dispatch_and_wait` helper; `source "$HANDOFF/dispatch.sh"` before use), `proofs.env` (one `NAME=URL` per line), `pr.env` (PR_NUMBER, FINAL_HEAD, MERGE_SHA). A task that needs one of these MUST `source` it explicitly; nothing is inherited between shells.
+- Foreground `sleep` may be blocked in some agent harnesses; where the plan polls GitHub, use the poll loop as written or the harness's monitor facility — never skip the wait.
+- Memory files referenced at the end live under `~/.claude/projects/-Users-lordviswa-Projects/memory/` (absolute: `/Users/lordviswa/.claude/projects/-Users-lordviswa-Projects/memory/`), never inside the repository.
 
 ---
 
@@ -31,8 +34,8 @@ interop/
   replay.test.js              MODIFY: 6 tests for --list
   submission-overlay.js       CREATE: overlay ONE submission's claims.json + adapter from a ref, as git blobs
   submission-overlay.test.js  CREATE: temp-git-repo tests (happy path, symlink, replacement, unknown, kinds, non-commit ref)
-  harness-integrity.js        CREATE: snapshot/verify protected tree (status + content hashes), for between-claims checks
-  harness-integrity.test.js   CREATE: temp-git-repo tests
+  harness-integrity.js        CREATE: pure-fs snapshot/verify of protected tree (+ root files, .git sans objects); run from a copy outside the workspace
+  harness-integrity.test.js   CREATE: temp-repo tests (content, mode bits, ignored files, root file, .git/config, symlink swap, deletion, dir add)
   SUBMITTING.md               CREATE: maintainer-operated submission contract (spec §3.3)
   README.md                   MODIFY: pointer to SUBMITTING.md; verification_run_url reserved
 .github/workflows/
@@ -49,7 +52,7 @@ landing/
 
 ---
 
-## Chunk 1: Tested building blocks for the dispatch job
+## Chunk 1: Claim listing and submission overlay
 
 ### Task 1: `replay.js --list` (hardened) + test-only registry override
 
@@ -133,11 +136,14 @@ test('--list runs before registry validation (a claim whose adapter is missing o
   assert.strictEqual(r.stdout, 'new@1\tbolyra-suite\tadapters/not-on-disk.ts\n');
 });
 
-test('--list refuses ids with tab/CR/LF, duplicate ids, and unknown kinds — with no stdout', () => {
+test('--list refuses ids with control chars or a leading dash, duplicate ids, and unknown kinds — with no stdout', () => {
   const base = { implementer: { repo: 'r', commit: 'a'.repeat(40) }, run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['x'], network: 'none', expect: { pass: 1, run: 1 } }, kind: 'external-suite' };
   for (const [label, claims, re] of [
     ['tab in id', [{ ...base, id: 'a\tb' }], /id contains a control character/],
     ['newline in id', [{ ...base, id: 'a\nb' }], /id contains a control character/],
+    ['CR in id', [{ ...base, id: 'a\rb' }], /id contains a control character/],
+    ['NUL in id', [{ ...base, id: 'a\u0000b' }], /id contains a control character/],
+    ['leading dash (flag collision)', [{ ...base, id: '--check' }], /id must not start with '-'/],
     ['duplicate id', [{ ...base, id: 'dup' }, { ...base, id: 'dup' }], /duplicate id dup/],
     ['unknown kind', [{ ...base, id: 'k', kind: 'mystery' }], /unknown kind mystery/],
     ['empty id', [{ ...base, id: '' }], /missing id/],
@@ -187,13 +193,18 @@ const CLAIMS = JSON.parse(fs.readFileSync(CLAIMS_PATH, 'utf8'));
     for (const c of claims) {
       const id = c.id;
       if (typeof id !== 'string' || !id) return fail('--list: missing id');
-      if (/[\t\r\n]/.test(id)) return fail(`--list: id contains a control character: ${JSON.stringify(id)}`);
+      // Control chars would break the TSV consumer; a leading '-' could collide
+      // with our own presence-based flag parsing (`--claim --check`).
+      if (/[\x00-\x1f\x7f]/.test(id)) return fail(`--list: id contains a control character: ${JSON.stringify(id)}`);
+      if (id.startsWith('-')) return fail(`--list: id must not start with '-': ${JSON.stringify(id)}`);
       if (seen.has(id)) return fail(`--list: duplicate id ${id}`);
       seen.add(id);
+      // Stricter than validateClaim on purpose: a SUPPLIED empty/null kind is an
+      // error here, because the workflow branches on this value.
       const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
       if (!KINDS.has(kind)) return fail(`--list: unknown kind ${kind} (claim ${id})`);
       const adapter = c.adapter === undefined ? '' : String(c.adapter);
-      if (/[\t\r\n]/.test(adapter)) return fail(`--list: adapter contains a control character (claim ${id})`);
+      if (/[\x00-\x1f\x7f]/.test(adapter)) return fail(`--list: adapter contains a control character (claim ${id})`);
       out.push(`${id}\t${kind}\t${adapter}`);
     }
     process.stdout.write(out.join('\n') + '\n');
@@ -205,7 +216,7 @@ const CLAIMS = JSON.parse(fs.readFileSync(CLAIMS_PATH, 'utf8'));
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `node --test interop/replay.test.js`
-Expected: 24 pass, 0 fail.
+Expected: 24 pass, 0 fail. (The 6th test iterates 8 fixtures.)
 
 - [ ] **Step 5: Commit**
 
@@ -265,7 +276,7 @@ function makeRepo(mutate) {
   mutate(repo);
   git(repo, 'add', '-A'); git(repo, 'commit', '-q', '-m', 'submission');
   const subSha = git(repo, 'rev-parse', 'HEAD').trim();
-  git(repo, 'checkout', '-q', 'master'); // back on base; working tree = base
+  git(repo, 'checkout', '-q', '--detach', baseSha); // back on base; independent of init.defaultBranch
   return { repo, baseSha, subSha };
 }
 function writeRegistry(repo, claims) {
@@ -306,7 +317,7 @@ test('a symlink at the adapter path is rejected and nothing is written', () => {
   });
   const r = run(repo, ['--ref', subSha, '--claim', 'new@2']);
   assert.strictEqual(r.status, 1);
-  assert.match(r.stderr, /not a regular file \(mode 120000\)/);
+  assert.match(r.stderr, /not a regular file \(mode 120000/);
   assert.ok(!fs.existsSync(path.join(repo, 'interop', 'adapters', 'new.ts')));
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(repo, 'interop', 'claims.json'), 'utf8')).claims.length, 1, 'registry untouched');
 });
@@ -333,6 +344,26 @@ test('replacing an EXISTING adapter is rejected', () => {
   assert.strictEqual(fs.readFileSync(path.join(repo, 'interop', 'adapters', 'base.ts'), 'utf8'), '// base adapter\n');
 });
 
+test('destination safety: a dangling symlink where the new adapter would land is "already exists"', () => {
+  const NEW = { ...BASE_CLAIM, id: 'new@2', adapter: 'adapters/new.ts' };
+  const { repo, subSha } = makeRepo((r) => {
+    writeRegistry(r, [BASE_CLAIM, NEW]);
+    fs.writeFileSync(path.join(r, 'interop', 'adapters', 'new.ts'), '// new adapter\n');
+  });
+  fs.symlinkSync('/nonexistent/target', path.join(repo, 'interop', 'adapters', 'new.ts')); // planted at the base, dangling
+  const r = run(repo, ['--ref', subSha, '--claim', 'new@2']);
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /adapters\/new\.ts already exists/);
+});
+
+test('ids with control characters or a leading dash are rejected by the overlay too', () => {
+  const { repo, subSha } = makeRepo((r) => writeRegistry(r, [BASE_CLAIM, { ...EXT_CLAIM, id: '--list' }, { ...EXT_CLAIM, id: 'x\ty' }]));
+  let r = run(repo, ['--ref', subSha, '--claim', '--list']);
+  assert.strictEqual(r.status, 1); assert.match(r.stderr, /claim id not allowed/);
+  r = run(repo, ['--ref', subSha, '--claim', 'x\ty']);
+  assert.strictEqual(r.status, 1); assert.match(r.stderr, /claim id not allowed/);
+});
+
 test('rejections: unknown claim, bad adapter pathname, unknown kind, non-commit ref, malformed JSON', () => {
   const { repo, subSha } = makeRepo((r) => writeRegistry(r, [BASE_CLAIM, { ...BASE_CLAIM, id: 'bad@3', adapter: 'adapters/../x.ts' }, { ...EXT_CLAIM, id: 'k@4', kind: 'mystery' }]));
   let r = run(repo, ['--ref', subSha, '--claim', 'nope']);
@@ -354,7 +385,7 @@ test('rejections: unknown claim, bad adapter pathname, unknown kind, non-commit 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `node --test interop/submission-overlay.test.js`
-Expected: all 6 FAIL with `Cannot find module`/status `1` and `MODULE_NOT_FOUND` in stderr.
+Expected: all 8 FAIL with status `1` and `MODULE_NOT_FOUND` in stderr.
 
 - [ ] **Step 3: Implement**
 
@@ -378,8 +409,18 @@ const ROOT = process.cwd();
 const REGISTRY = 'interop/claims.json';
 const KINDS = new Set(['bolyra-suite', 'external-suite']);
 const ADAPTER_RE = /^adapters\/[A-Za-z0-9._-]+\.ts$/;
+const ID_BAD = /[\x00-\x1f\x7f]/;
 
 function die(msg) { process.stderr.write(`submission-overlay: ${msg}\n`); process.exit(1); }
+function lstatOrNull(p) { try { return fs.lstatSync(p); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
+// Every ancestor of a destination must be a real directory (no symlinked dirs).
+function requireRealDirs(rel) {
+  const parts = rel.split('/').slice(0, -1);
+  for (let i = 1; i <= parts.length; i++) {
+    const st = lstatOrNull(path.join(ROOT, ...parts.slice(0, i)));
+    if (!st || !st.isDirectory()) die(`${parts.slice(0, i).join('/')} is not a real directory`);
+  }
+}
 function git(...args) { return execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
 function gitRaw(...args) { return execFileSync('git', ['-C', ROOT, ...args], { stdio: ['ignore', 'pipe', 'pipe'] }); }
 
@@ -403,6 +444,7 @@ const ref = opt('--ref');
 const claimId = opt('--claim');
 if (!ref || !/^[0-9a-f]{40}$/.test(ref)) die('ref must be a full 40-hex commit sha');
 if (!claimId) die('--claim <id> is required');
+if (ID_BAD.test(claimId) || claimId.startsWith('-')) die(`claim id not allowed: ${JSON.stringify(claimId)}`);
 
 let type;
 try { type = git('cat-file', '-t', ref).trim(); } catch { type = ''; }
@@ -428,21 +470,27 @@ if (kind === 'bolyra-suite') {
   adapter = String(c.adapter || '');
   if (!ADAPTER_RE.test(adapter)) die(`adapter pathname not allowed: ${JSON.stringify(adapter)} (claim ${claimId})`);
   const rel = `interop/${adapter}`;
-  if (fs.existsSync(path.join(ROOT, rel))) die(`${adapter} already exists at the base; submissions may only ADD an adapter`);
+  requireRealDirs(rel);
+  if (lstatOrNull(path.join(ROOT, rel))) die(`${adapter} already exists at the base; submissions may only ADD an adapter`);
   requireRegularBlob(ref, rel);
   adapterBytes = gitRaw('cat-file', '-p', `${ref}:${rel}`);
 }
 
-// 3. Materialize as regular files (mode 0644), registry last.
-if (adapterBytes) fs.writeFileSync(path.join(ROOT, 'interop', adapter), adapterBytes, { mode: 0o644 });
-fs.writeFileSync(path.join(ROOT, REGISTRY), registryBytes, { mode: 0o644 });
+// 3. Materialize as regular files (mode 0644): the adapter is created
+//    exclusively (wx: fails if anything appeared meanwhile); the registry is
+//    written to a temp file and renamed over (never follows a planted link).
+requireRealDirs(REGISTRY);
+if (adapterBytes) fs.writeFileSync(path.join(ROOT, 'interop', adapter), adapterBytes, { mode: 0o644, flag: 'wx' });
+const tmp = path.join(ROOT, 'interop', `.claims.json.${process.pid}.tmp`);
+fs.writeFileSync(tmp, registryBytes, { mode: 0o644, flag: 'wx' });
+fs.renameSync(tmp, path.join(ROOT, REGISTRY));
 process.stdout.write(`${claimId}\t${kind}\t${adapter}\n`);
 ```
 
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `node --test interop/submission-overlay.test.js`
-Expected: 6 pass, 0 fail. (If the `makeRepo` checkout of `master` fails because your git defaults to `main`, the test helper is wrong for your environment: change `'master'` to the branch name `git init` created, or set `git config --global init.defaultBranch master` for the test run. Report which you did.)
+Expected: 8 pass, 0 fail.
 
 - [ ] **Step 5: Commit**
 
@@ -452,9 +500,15 @@ git add interop/submission-overlay.js interop/submission-overlay.test.js
 git commit -s -m "interop: submission-overlay.js — blob-based, symlink-safe overlay of one submission"
 ```
 
-### Task 3: `interop/harness-integrity.js`
+---
 
-Snapshot the protected tree after the overlay; verify it is byte-identical after every claim (including failed ones). Detects a `bolyra-suite` run tampering with the harness before a later `external-suite` claim runs it on the VM.
+## Chunk 2: Harness integrity checker
+
+### Task 3: `interop/harness-integrity.js` (pure filesystem; executed from a copy outside the workspace)
+
+Snapshot the protected tree after the overlay; verify it is identical after every claim (including failed ones). The verifier is **copied out of the workspace before any replay and run from there** — a verifier that lived in the tree it checks could be replaced by the tamper it should detect. It never invokes `git` (a modified `.git/config` can make `git status` execute an fsmonitor command); it walks the filesystem.
+
+What it covers: everything (ignored files included) under `interop/`, `spec/`, `landing/`, `.github/`; root-level regular files (`package.json`, `.gitignore`, …, non-recursive); and `.git/` **except** `.git/objects` (content-addressed; `replay.js` re-verifies the materialized suite digest, so a tampered object cannot substitute a different vector set unnoticed). For each entry: type, full permission bits, and for files a sha256, for symlinks the target, for directories their entry list. What it does NOT cover, stated in the file header: the host toolchain (`node`, `git`, `docker`), `HOME`, scratch dirs, and changes restored before verification.
 
 **Files:**
 - Create: `interop/harness-integrity.js`
@@ -473,7 +527,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
-const SCRIPT = path.join(__dirname, 'harness-integrity.js');
+// The script is exercised from a COPY outside the repo, like the workflow does.
+const COPY = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hi-copy-')), 'harness-integrity.js');
+fs.copyFileSync(path.join(__dirname, 'harness-integrity.js'), COPY);
+
 const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
 function git(cwd, ...a) { return execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8', env: { ...process.env, ...GIT_ENV } }); }
 
@@ -487,59 +544,75 @@ function makeRepo() {
   fs.writeFileSync(path.join(repo, 'landing', 'x.html'), '<x>\n');
   fs.writeFileSync(path.join(repo, '.github', 'workflows', 'w.yml'), 'on: x\n');
   fs.writeFileSync(path.join(repo, 'other', 'scratch.txt'), 'ok\n');
+  fs.writeFileSync(path.join(repo, 'package.json'), '{}\n');
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'interop/*.log\n');
   git(repo, 'add', '-A'); git(repo, 'commit', '-q', '-m', 'base');
   return repo;
 }
-function run(repo, ...args) { return spawnSync(process.execPath, [SCRIPT, ...args], { cwd: repo, encoding: 'utf8' }); }
+function run(repo, ...args) {
+  return spawnSync(process.execPath, [COPY, ...args, '--root', repo], { encoding: 'utf8', env: { PATH: process.env.PATH } });
+}
 function snap(repo) { const f = path.join(os.tmpdir(), `snap-${process.pid}-${Math.random()}.json`); const r = run(repo, 'snapshot', f); assert.strictEqual(r.status, 0, r.stderr); return f; }
+const failsOn = (repo, f, re) => { const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1, 'expected verify to fail'); assert.match(r.stderr, re); };
 
-test('unchanged tree verifies', () => {
+test('unchanged tree verifies (from a copy, with a scrubbed environment)', () => {
   const repo = makeRepo(); const f = snap(repo);
-  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 0, r.stderr);
+  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 0, r.stderr); assert.match(r.stdout, /harness-integrity: OK/);
 });
-
-test('overlaid (dirty) files are part of the baseline and verify as long as they stay identical', () => {
+test('overlaid (dirty) files are part of the baseline; tampering them afterwards fails', () => {
   const repo = makeRepo();
-  fs.writeFileSync(path.join(repo, 'interop', 'claims.json'), '{"claims":[1]}\n');      // like the overlay
-  fs.writeFileSync(path.join(repo, 'interop', 'adapters', 'new.ts'), '// new\n');       // untracked, like a new adapter
+  fs.writeFileSync(path.join(repo, 'interop', 'claims.json'), '{"claims":[1]}\n');
+  fs.writeFileSync(path.join(repo, 'interop', 'adapters', 'new.ts'), '// new\n');
   const f = snap(repo);
   assert.strictEqual(run(repo, 'verify', f).status, 0);
-  fs.writeFileSync(path.join(repo, 'interop', 'claims.json'), '{"claims":[2]}\n');      // tamper the overlaid file
-  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1); assert.match(r.stderr, /interop\/claims\.json/);
+  fs.writeFileSync(path.join(repo, 'interop', 'claims.json'), '{"claims":[2]}\n');
+  failsOn(repo, f, /interop\/claims\.json/);
 });
-
-test('modifying a tracked harness file fails verify', () => {
+test('modifying a tracked harness file fails', () => {
   const repo = makeRepo(); const f = snap(repo);
-  fs.writeFileSync(path.join(repo, 'interop', 'replay.js'), '// evil\n');
-  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1); assert.match(r.stderr, /interop\/replay\.js/);
+  fs.writeFileSync(path.join(repo, 'interop', 'replay.js'), '// evil\n'); failsOn(repo, f, /interop\/replay\.js/);
 });
-
-test('adding an untracked file under a protected dir fails verify; outside protected dirs is ignored', () => {
+test('an IGNORED file added under a protected dir fails (git-based enumeration would miss it)', () => {
+  const repo = makeRepo(); const f = snap(repo);
+  fs.writeFileSync(path.join(repo, 'interop', 'sneaky.log'), 'x\n'); failsOn(repo, f, /interop\/sneaky\.log/);
+});
+test('untracked file under a protected dir fails; a file outside protected roots is ignored', () => {
   const repo = makeRepo(); const f = snap(repo);
   fs.writeFileSync(path.join(repo, 'other', 'more.txt'), 'x\n');
-  assert.strictEqual(run(repo, 'verify', f).status, 0, 'outside protected dirs');
-  fs.writeFileSync(path.join(repo, 'spec', 'sneaky.js'), 'x\n');
-  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1); assert.match(r.stderr, /spec\/sneaky\.js/);
+  assert.strictEqual(run(repo, 'verify', f).status, 0, 'outside protected roots');
+  fs.writeFileSync(path.join(repo, 'spec', 'sneaky.js'), 'x\n'); failsOn(repo, f, /spec\/sneaky\.js/);
 });
-
-test('replacing a file with a symlink fails verify', () => {
+test('root-level file change and .git/config change both fail', () => {
   const repo = makeRepo(); const f = snap(repo);
-  fs.unlinkSync(path.join(repo, 'spec', 'runner.js'));
-  fs.symlinkSync('/etc/hostname', path.join(repo, 'spec', 'runner.js'));
-  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1); assert.match(r.stderr, /spec\/runner\.js/);
+  fs.writeFileSync(path.join(repo, 'package.json'), '{"x":1}\n'); failsOn(repo, f, /package\.json/);
+  const f2 = snap(repo);
+  fs.appendFileSync(path.join(repo, '.git', 'config'), '[core]\n\tfsmonitor = /tmp/evil\n'); failsOn(repo, f2, /\.git\/config/);
 });
-
-test('deleting a tracked file fails verify', () => {
+test('a permission-bit-only change fails', () => {
   const repo = makeRepo(); const f = snap(repo);
-  fs.unlinkSync(path.join(repo, '.github', 'workflows', 'w.yml'));
-  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1); assert.match(r.stderr, /\.github\/workflows\/w\.yml/);
+  fs.chmodSync(path.join(repo, 'spec', 'runner.js'), 0o666); failsOn(repo, f, /spec\/runner\.js/);
+});
+test('replacing a file with a symlink, deleting a file, and adding a directory all fail', () => {
+  const repo = makeRepo(); const f = snap(repo);
+  fs.unlinkSync(path.join(repo, 'spec', 'runner.js')); fs.symlinkSync('/etc/hostname', path.join(repo, 'spec', 'runner.js')); failsOn(repo, f, /spec\/runner\.js/);
+  const repo2 = makeRepo(); const g = snap(repo2);
+  fs.unlinkSync(path.join(repo2, '.github', 'workflows', 'w.yml')); failsOn(repo2, g, /\.github\/workflows\/w\.yml/);
+  const repo3 = makeRepo(); const h = snap(repo3);
+  fs.mkdirSync(path.join(repo3, 'landing', 'evil')); failsOn(repo3, h, /landing\/evil/);
+});
+test('an unreadable entry is an error, not "absent"', () => {
+  if (process.getuid && process.getuid() === 0) return; // root can read anything
+  const repo = makeRepo(); const f = snap(repo);
+  fs.chmodSync(path.join(repo, 'spec'), 0o000);
+  try { const r = run(repo, 'verify', f); assert.strictEqual(r.status, 1); assert.match(r.stderr, /EACCES|EPERM/); }
+  finally { fs.chmodSync(path.join(repo, 'spec'), 0o755); }
 });
 ```
 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `node --test interop/harness-integrity.test.js`
-Expected: 6 FAIL (`MODULE_NOT_FOUND`).
+Expected: the test file fails to load (`copyFileSync` → `ENOENT` for `harness-integrity.js`), reported as 1 failing suite.
 
 - [ ] **Step 3: Implement**
 
@@ -549,76 +622,99 @@ Create `interop/harness-integrity.js`:
 #!/usr/bin/env node
 'use strict';
 // Snapshot/verify the protected tree so that a replay of one claim cannot
-// alter what a later claim executes (spec §3.5). The baseline is taken AFTER
-// the submission overlay, so overlaid files are part of it; anything that
-// differs afterwards — content, mode/type, additions, deletions — fails.
-//   node interop/harness-integrity.js snapshot <file.json>
-//   node interop/harness-integrity.js verify   <file.json>
+// alter what a later claim executes (spec §3.5). Pure filesystem: never runs
+// git (a tampered .git/config could make git execute a command). The workflow
+// COPIES this file out of the workspace and runs the copy under env -i, so the
+// verifier cannot be replaced by the tamper it is looking for.
+//   node harness-integrity.js snapshot <file.json> --root <workspace>
+//   node harness-integrity.js verify   <file.json> --root <workspace>
+// Coverage: everything under interop/ spec/ landing/ .github/ (ignored files
+// included); root-level regular files; .git/ minus .git/objects (content-
+// addressed; replay.js re-verifies the materialized suite digest).
+// NOT covered, by design: the host toolchain (node/git/docker), $HOME, scratch
+// dirs, and changes restored before verification. A container escape or host
+// compromise is out of this checker's scope (spec §3.5 stated residual).
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
 
-const ROOT = process.cwd();
-const PROTECTED = ['interop', 'spec', 'landing', '.github'];
+const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github'];
 
 function die(msg) { process.stderr.write(`harness-integrity: ${msg}\n`); process.exit(1); }
-function git(...a) { return execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
 
-// Every path git knows about under the protected dirs (tracked, modified,
-// deleted, untracked) — status covers deviations, ls-files covers the rest.
-function protectedPaths() {
-  const set = new Set();
-  for (const line of git('ls-files', '-z', '--', ...PROTECTED).split('\0')) if (line) set.add(line);
-  for (const line of git('status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...PROTECTED).split('\0')) {
-    if (line.length > 3) set.add(line.slice(3));
-  }
-  return [...set].sort();
+function fingerprint(abs) {
+  const st = fs.lstatSync(abs);              // any error other than ENOENT propagates → die
+  const mode = (st.mode & 0o7777).toString(8);
+  if (st.isSymbolicLink()) return `symlink:${mode}:${fs.readlinkSync(abs)}`;
+  if (st.isDirectory()) return `dir:${mode}:${fs.readdirSync(abs).sort().join('\0')}`;
+  if (st.isFile()) return `file:${mode}:${crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex')}`;
+  return `other:${mode}`;
 }
-function fingerprint(rel) {
-  const abs = path.join(ROOT, rel);
+function walk(root, rel, out, skip) {
+  const abs = path.join(root, rel);
   let st;
-  try { st = fs.lstatSync(abs); } catch { return 'absent'; }
-  if (st.isSymbolicLink()) return `symlink:${fs.readlinkSync(abs)}`;
-  if (!st.isFile()) return `other:${st.mode.toString(8)}`;
-  const h = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-  return `file:${(st.mode & 0o111) ? 'x' : '-'}:${h}`;
-}
-function snapshot() { const out = {}; for (const p of protectedPaths()) out[p] = fingerprint(p); return out; }
-
-const [cmd, file] = process.argv.slice(2);
-if (!file || !['snapshot', 'verify'].includes(cmd)) die('usage: snapshot|verify <file.json>');
-if (cmd === 'snapshot') {
-  fs.writeFileSync(file, JSON.stringify(snapshot(), null, 1));
-  console.log(`harness-integrity: snapshot of ${Object.keys(JSON.parse(fs.readFileSync(file, 'utf8'))).length} protected paths → ${file}`);
-} else {
-  const base = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const now = snapshot();
-  const diffs = [];
-  for (const p of new Set([...Object.keys(base), ...Object.keys(now)])) {
-    if (base[p] !== now[p]) diffs.push(`${p}: ${base[p] || 'absent'} -> ${now[p] || 'absent'}`);
+  try { st = fs.lstatSync(abs); } catch (e) { if (e.code === 'ENOENT') return; throw e; }
+  out[rel] = fingerprint(abs);
+  if (st.isDirectory()) for (const name of fs.readdirSync(abs).sort()) {
+    const childRel = `${rel}/${name}`;
+    if (skip.has(childRel)) continue;
+    walk(root, childRel, out, skip);
   }
-  if (diffs.length) die(`protected tree changed:\n  ${diffs.join('\n  ')}`);
-  console.log('harness-integrity: OK');
+}
+function snapshot(root) {
+  const out = {};
+  const skip = new Set(['.git/objects']);
+  for (const r of PROTECTED_ROOTS) walk(root, r, out, skip);
+  walk(root, '.git', out, skip);
+  for (const name of fs.readdirSync(root).sort()) {          // root-level regular files only
+    const abs = path.join(root, name);
+    if (fs.lstatSync(abs).isFile()) out[name] = fingerprint(abs);
+  }
+  return out;
+}
+
+const args = process.argv.slice(2);
+const cmd = args[0], file = args[1];
+const ri = args.indexOf('--root');
+const root = ri >= 0 ? path.resolve(args[ri + 1]) : null;
+if (!file || !root || !['snapshot', 'verify'].includes(cmd)) die('usage: snapshot|verify <file.json> --root <workspace>');
+
+try {
+  if (cmd === 'snapshot') {
+    const snap = snapshot(root);
+    fs.writeFileSync(file, JSON.stringify(snap, null, 1));
+    console.log(`harness-integrity: snapshot of ${Object.keys(snap).length} entries → ${file}`);
+  } else {
+    const base = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const now = snapshot(root);
+    const diffs = [];
+    for (const p of new Set([...Object.keys(base), ...Object.keys(now)])) {
+      if (base[p] !== now[p]) diffs.push(`${p}: ${base[p] || 'absent'} -> ${now[p] || 'absent'}`);
+    }
+    if (diffs.length) die(`protected tree changed:\n  ${diffs.join('\n  ')}`);
+    console.log('harness-integrity: OK');
+  }
+} catch (e) {
+  die(`${e.code || 'ERROR'}: ${e.message}`);
 }
 ```
 
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `node --test interop/harness-integrity.test.js`
-Expected: 6 pass, 0 fail.
+Expected: 9 pass, 0 fail.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 export GIT_AUTHOR_NAME="Viswanadha Pratap Kondoju" GIT_AUTHOR_EMAIL="kondojuviswanadha@gmail.com" GIT_COMMITTER_NAME="Viswanadha Pratap Kondoju" GIT_COMMITTER_EMAIL="saneGuy@users.noreply.github.com"
 git add interop/harness-integrity.js interop/harness-integrity.test.js
-git commit -s -m "interop: harness-integrity.js — snapshot/verify the protected tree between claims"
+git commit -s -m "interop: harness-integrity.js — pure-fs snapshot/verify of the protected tree, run from outside the workspace"
 ```
 
 ---
 
-## Chunk 2: Dispatch workflow and its CI proofs
+## Chunk 3: Dispatch workflow and its CI proofs
 
 ### Task 4: Pin the container image digest (verification-only task)
 
@@ -630,10 +726,12 @@ git commit -s -m "interop: harness-integrity.js — snapshot/verify the protecte
 ```bash
 docker run --rm node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5 sh -c 'git --version && node --version'
 ```
-Expected: `git version 2.x.y` and `v20.x.y`. If `git` is missing, instead run `docker pull node:20 && docker image inspect node:20 --format '{{index .RepoDigests 0}}'`, re-check with the same command, and use that digest. Write the chosen digest into `$RUNNER_HANDOFF` for Task 5:
+Expected: `git version 2.x.y` and `v20.x.y`. If `git` is missing, instead run `docker pull node:20 && docker image inspect node:20 --format '{{index .RepoDigests 0}}'`, re-check with the same command, and use that digest. Write the chosen digest into the handoff directory for Task 5:
 ```bash
-echo "REPLAY_IMAGE=node:20@sha256:<the 64-hex you verified>" >> "${RUNNER_HANDOFF:-/tmp/plan-handoff.env}"; cat "${RUNNER_HANDOFF:-/tmp/plan-handoff.env}"
+HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
+echo "REPLAY_IMAGE=node:20@sha256:<the 64-hex you verified>" > "$HANDOFF/image.env"; cat "$HANDOFF/image.env"
 ```
+(This is the same digest `claims.json` pins for the StillOS run; the workflow comment says so, so a future re-pin updates both deliberately.)
 
 ### Task 5: Rewrite `.github/workflows/interop-replay.yml`
 
@@ -642,17 +740,17 @@ echo "REPLAY_IMAGE=node:20@sha256:<the 64-hex you verified>" >> "${RUNNER_HANDOF
 
 - [ ] **Step 1: Behavioral checks that must pass after the rewrite (write them down before editing)**
 
-These are the acceptance checks for the workflow; they are executed in Task 6 (in CI) because a workflow cannot run locally. Copy this list into `$RUNNER_HANDOFF` as `WORKFLOW_ACCEPTANCE` so Task 6 can tick each:
+These are the acceptance checks for the workflow; they are executed in Task 6 (in CI) because a workflow cannot run locally. Task 6 ticks each:
 1. Dispatch with no inputs on the feature branch → `2/2 claims reproduced`, job green; mcp-use ran inside `docker run`, StillOS under `env -i`.
 2. Dispatch with `ref` set and `claim` empty → job fails fast: `ref requires claim`.
 3. Dispatch with `ref`=submission commit, `claim`=its new bolyra-suite id → overlay step prints `id<TAB>bolyra-suite<TAB>adapters/<name>.ts`, `--check` passes, exactly one claim replays.
-4. Probe adapter (Task 6) → its job is red with `PROBE_ENV=NONE` and `PROBE_WRITE=EROFS` in the mismatch reason; the integrity check after it passes; the following claims still run.
+4. Probe adapter (Task 6) → the run is red; the log's `REPLAY MISMATCH` block lists per-vector reasons containing the tokens `PROBE_ENV=NONE` and `PROBE_WRITE=EROFS`; `harness-integrity: OK` appears after EVERY claim including the red ones; the following claims still run.
 5. Unknown `claim` → job fails on the plan step: `no claim with id`.
 6. Wrong kind cannot reach the host branch: the `case` has a failing default (reviewed by reading the YAML).
 
 - [ ] **Step 2: Replace the workflow file**
 
-Write `.github/workflows/interop-replay.yml` exactly as below, substituting `REPLAY_IMAGE` from the handoff:
+`source /tmp/plan-handoff/image.env` and write `.github/workflows/interop-replay.yml` exactly as below, substituting `<digest>` (it appears once here and once in Step 3):
 
 ```yaml
 name: Interop replay
@@ -693,10 +791,13 @@ permissions:
   contents: read
 
 env:
-  # Full Debian node:20 (NOT slim/alpine: git is required). Re-pin by digest only.
+  # Full Debian node:20 (NOT slim/alpine: git is required). Same digest that
+  # interop/claims.json pins for the StillOS run — re-pin both deliberately.
   REPLAY_IMAGE: node:20@sha256:<digest>
   REF: ${{ inputs.ref }}
   CLAIM: ${{ inputs.claim }}
+  HARNESS_SHA: ${{ github.sha }}
+  HARNESS_REF: ${{ github.ref_name }}
 
 jobs:
   replay:
@@ -720,15 +821,21 @@ jobs:
 
       - name: Harness provenance
         run: |
-          echo "harness commit: ${{ github.sha }} (ref ${{ github.ref_name }})"
-          if [ "${{ github.ref_name }}" != "main" ]; then echo "::warning::harness is not main — acceptable for pre-merge proofs only"; fi
+          echo "harness commit: $HARNESS_SHA (ref $HARNESS_REF)"
+          if [ "$HARNESS_REF" != "main" ]; then echo "::warning::harness is not main — acceptable for pre-merge proofs only"; fi
+
+      # The verifier must not live in the tree it verifies: copy it out first.
+      - name: Stage the integrity verifier outside the workspace
+        run: cp interop/harness-integrity.js "$RUNNER_TEMP/harness-integrity.js"
 
       - name: Overlay submission (data only)
         if: env.REF != ''
         run: |
           set -euo pipefail
           [ -n "$CLAIM" ] || { echo "::error::ref requires claim (a submission is exactly one claim)"; exit 1; }
-          git fetch -q origin "$REF" || git fetch -q origin "+refs/pull/*/head:refs/remotes/origin/pr/*"
+          # Validate BEFORE git sees the value; `--` ends option parsing.
+          [[ "$REF" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::ref must be a full 40-hex commit sha"; exit 1; }
+          git fetch -q -- origin "$REF" || git fetch -q -- origin "+refs/pull/*/head:refs/remotes/origin/pr/*"
           node interop/submission-overlay.js --ref "$REF" --claim "$CLAIM" | tee "$RUNNER_TEMP/overlay.tsv"
           echo "overlaid:"; git status --porcelain -- interop
 
@@ -744,7 +851,7 @@ jobs:
           echo "selected:"; cat "$RUNNER_TEMP/plan.tsv"
 
       - name: Snapshot protected tree (baseline includes the overlay)
-        run: node interop/harness-integrity.js snapshot "$RUNNER_TEMP/integrity.json"
+        run: env -i PATH="$PATH" node "$RUNNER_TEMP/harness-integrity.js" snapshot "$RUNNER_TEMP/integrity.json" --root "$PWD"
 
       - name: Replay claims under per-kind isolation
         run: |
@@ -767,7 +874,8 @@ jobs:
               *) echo "::error::unknown kind '$kind' for $id"; exit 1 ;;
             esac
             echo "::endgroup::"
-            node interop/harness-integrity.js verify "$RUNNER_TEMP/integrity.json"
+            # Verify from the staged copy, scrubbed env, after EVERY claim (failed ones too).
+            env -i PATH="$PATH" node "$RUNNER_TEMP/harness-integrity.js" verify "$RUNNER_TEMP/integrity.json" --root "$PWD"
           done < "$RUNNER_TEMP/plan.tsv"
           echo "$((total-failed))/$total claims reproduced"
           [ "$failed" -eq 0 ]
@@ -778,19 +886,20 @@ jobs:
 Run: `ruby -ryaml -e 'YAML.load_file(".github/workflows/interop-replay.yml"); puts "yaml ok"'`
 Expected: `yaml ok`.
 
-The worktree's `.git` is a file; make a real clone for the container probe:
+The worktree's `.git` is a file; make a real clone and run the probe in a **checked subshell** (a failed clone must not let the probe fall through to the worktree):
 ```bash
-PROBE=$(mktemp -d) && git clone -q --no-local . "$PROBE/repo" && cd "$PROBE/repo" && git fetch -q origin 37b3fa631bcf50c1190474ca938b1846115a282a || true
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CLAIM_ID=probe \
-  -v "$PWD:/work:ro" --tmpfs /tmp:rw,exec -w /work "node:20@sha256:<digest>" sh -c '
-    echo "--- env names ---"; env | cut -d= -f1 | sort | tr "\n" " "; echo
-    echo "--- write test ---"; (echo x > /work/interop/replay.js) 2>&1 | head -1 || true
-    echo "--- tmpfs ---"; touch /tmp/ok && echo tmpfs-ok
-    echo "--- git reads ---"; git -C /work rev-parse --short HEAD; git -C /work archive HEAD spec | tar -t | head -1
-    echo "--- npm cache ---"; npm config get cache'
-cd - >/dev/null
+( set -euo pipefail
+  PROBE=$(mktemp -d); git clone -q --no-local . "$PROBE/repo"; cd "$PROBE/repo"
+  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CLAIM_ID=probe \
+    -v "$PWD:/work:ro" --tmpfs /tmp:rw,exec -w /work "node:20@sha256:<digest>" sh -c '
+      echo "--- env NAMES ---"; node -e "console.log(Object.keys(process.env).sort().join(\" \"))"
+      echo "--- write test ---"; (echo x > /work/interop/replay.js) 2>&1 | head -1 || true
+      echo "--- tmpfs ---"; touch /tmp/ok && echo tmpfs-ok
+      echo "--- git reads ---"; git -C /work rev-parse --short HEAD; git -C /work archive HEAD spec | tar -t | head -1
+      echo "--- npm cache ---"; npm config get cache'
+) && echo "probe subshell OK"
 ```
-Expected: env names are only `CLAIM_ID HOME HOSTNAME NODE_VERSION PATH PWD YARN_VERSION` (no `GITHUB_*`, no `ACTIONS_*`, no `RUNNER_*`); write test prints `sh: 1: cannot create /work/interop/replay.js: Read-only file system`; `tmpfs-ok`; a short SHA and `spec/`; `/tmp/.npm`.
+Expected: env NAMES are exactly `CLAIM_ID HOME HOSTNAME NODE_VERSION PATH PWD YARN_VERSION` (names only — never print values); write test prints `sh: 1: cannot create /work/interop/replay.js: Read-only file system`; `tmpfs-ok`; a short SHA and `spec/`; `/tmp/.npm`; `probe subshell OK`.
 
 And the scrubbed-env shape: `env -i PATH="$PATH" HOME="$HOME" CLAIM_ID=probe node -e 'console.log(Object.keys(process.env).sort().join(" "))'` → `CLAIM_ID HOME PATH`.
 
@@ -812,31 +921,41 @@ git push -u origin public-conformance-claims
 
 ### Task 6: CI proofs (acceptance checks 1–5 from Task 5 Step 1)
 
-**Files:** none merged. Two throwaway branches: `probe/isolation`, `probe/overlay`. Evidence goes into `$RUNNER_HANDOFF` as `PROOF_URLS` and later into the PR body.
+**Files:** none merged. Two throwaway branches: `probe/isolation`, `probe/overlay`. Evidence goes into `/tmp/plan-handoff/proofs.env` and later into the PR body.
 
-Helper to identify a dispatched run unambiguously (define once in your shell; reuse):
+- [ ] **Step 0: Save the dispatch helper to the handoff directory (Task 13 sources it too)**
+
 ```bash
-dispatch_and_wait() { # $1=branch  $2..=extra -f inputs   → prints RUN_ID, waits, prints conclusion
+HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
+cat > "$HANDOFF/dispatch.sh" <<'EOF'
+# dispatch_and_wait <branch> [-f key=value ...]  → sets RUN_ID and RUN_URL, waits, echoes conclusion=success|failure
+dispatch_and_wait() {
   local branch="$1"; shift
   local ts head; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); head=$(git rev-parse "origin/$branch")
   gh workflow run interop-replay.yml --repo bolyra/bolyra --ref "$branch" "$@"
-  sleep 20
-  RUN_ID=$(gh run list --repo bolyra/bolyra --workflow interop-replay.yml --branch "$branch" --json databaseId,createdAt,headSha \
-    --jq "[.[] | select(.createdAt >= \"$ts\" and .headSha == \"$head\")] | if length == 1 then .[0].databaseId else error(\"expected exactly one run, got \" + (length|tostring)) end")
-  echo "RUN_ID=$RUN_ID  https://github.com/bolyra/bolyra/actions/runs/$RUN_ID"
+  local i; for i in $(seq 1 30); do   # poll (foreground sleep may be blocked in some harnesses; use a monitor if so)
+    RUN_ID=$(gh run list --repo bolyra/bolyra --workflow interop-replay.yml --branch "$branch" --json databaseId,createdAt,headSha \
+      --jq "[.[] | select(.createdAt >= \"$ts\" and .headSha == \"$head\")] | if length == 1 then .[0].databaseId elif length == 0 then \"\" else error(\"ambiguous: \" + (length|tostring) + \" runs\") end") || return 1
+    [ -n "$RUN_ID" ] && break; sleep 5
+  done
+  [ -n "$RUN_ID" ] || { echo "no run appeared for $branch@$head"; return 1; }
+  RUN_URL="https://github.com/bolyra/bolyra/actions/runs/$RUN_ID"; echo "RUN_ID=$RUN_ID  $RUN_URL"
   gh run watch "$RUN_ID" --repo bolyra/bolyra --exit-status >/dev/null && echo "conclusion=success" || echo "conclusion=failure"
 }
+EOF
+source "$HANDOFF/dispatch.sh"; type dispatch_and_wait | head -1
 ```
+Expected: `dispatch_and_wait is a function`.
 
 - [ ] **Step 1: Check 1 — baseline replay on the feature branch (no inputs)**
 
 Run: `dispatch_and_wait public-conformance-claims`
-Expected: `conclusion=success`. In the log (`gh run view $RUN_ID --repo bolyra/bolyra --log | grep -E "replay .* \((bolyra|external)-suite\)|claims reproduced|harness-integrity"`): `replay mcp-use-evc-example@17642a5/host_behavior@0.5.0 (bolyra-suite)`, `replay x402-authority-verifier-kit@35e209d/own-corpus (external-suite)`, two `harness-integrity: OK`, `2/2 claims reproduced`. Save the URL as `PROOF_BASELINE`.
+Expected: `conclusion=success`. In the log (`gh run view $RUN_ID --repo bolyra/bolyra --log | grep -E "replay .* \((bolyra|external)-suite\)|claims reproduced|harness-integrity"`): `replay mcp-use-evc-example@17642a5/host_behavior@0.5.0 (bolyra-suite)`, `replay x402-authority-verifier-kit@35e209d/own-corpus (external-suite)`, two `harness-integrity: OK`, `2/2 claims reproduced`. Record: `echo "PROOF_BASELINE=$RUN_URL" >> /tmp/plan-handoff/proofs.env`.
 
 - [ ] **Step 2: Check 2 — `ref` without `claim` fails fast**
 
 Run: `dispatch_and_wait public-conformance-claims -f ref=$(git rev-parse origin/public-conformance-claims)`
-Expected: `conclusion=failure`; log contains `ref requires claim`. Save as `PROOF_REF_REQUIRES_CLAIM`.
+Expected: `conclusion=failure`; log contains `ref requires claim`. Record: `echo "PROOF_REF_REQUIRES_CLAIM=$RUN_URL" >> /tmp/plan-handoff/proofs.env`.
 
 - [ ] **Step 3: Build the `probe/isolation` branch (checks 4 and the external-suite env proof)**
 
@@ -845,9 +964,11 @@ git checkout -q -b probe/isolation origin/public-conformance-claims
 # bolyra-suite probe adapter: prints runner-env NAMES, tries to write the harness, exits 1 so the
 # runner surfaces its stderr (a green host's stderr is discarded; a failing host's first 200 chars are kept).
 cat > interop/adapters/probe-env.ts <<'EOF'
+import fs from "node:fs";
+// Names only, never values. Exit 1 so the runner surfaces stderr (a green host's stderr is discarded).
 const leaked = Object.keys(process.env).filter((k) => /^(GITHUB_|ACTIONS_|RUNNER_)/.test(k));
-process.stderr.write(`PROBE_ENV=${leaked.length ? leaked.join(',') : 'NONE'}\n`);
-try { require('node:fs').writeFileSync('/work/interop/replay.js', 'x'); process.stderr.write('PROBE_WRITE=WRITABLE\n'); }
+process.stderr.write(`PROBE_ENV=${leaked.length ? leaked.join(",") : "NONE"}\n`);
+try { fs.writeFileSync("/work/interop/replay.js", "x"); process.stderr.write("PROBE_WRITE=WRITABLE\n"); }
 catch (e: any) { process.stderr.write(`PROBE_WRITE=${e.code}\n`); }
 process.exit(1);
 EOF
@@ -858,9 +979,13 @@ const fs = require('fs'); const sha = process.argv[2];
 const reg = JSON.parse(fs.readFileSync('interop/claims.json', 'utf8'));
 const mcp = reg.claims.find((c) => c.id.startsWith('mcp-use-evc-example@'));
 const still = reg.claims.find((c) => c.kind === 'external-suite');
-const probe = { ...mcp, id: 'probe-env@17642a5/host_behavior@0.5.0', adapter: 'adapters/probe-env.ts', adapter_sha256: sha, claim_text: 'PROBE: isolation proof, must be red', verified_on: '2026-09-10' };
-const probeExt = { ...still, id: 'probe-ext@35e209d/env', claim_text: 'PROBE: external-suite env names, must be red (no summary line)', verified_on: '2026-09-10',
-  run: { ...still.run, command: ['sh', '-c', 'env | cut -d= -f1 | sort'] } };
+// expected totals are STATUS-CONSISTENT (every vector fails → runner exits 1) but wrong, so replay.js reaches
+// the branch that prints per-vector reasons (an exit/totals inconsistency would throw before that).
+const probe = { ...mcp, id: 'probe-env@17642a5/host_behavior@0.5.0', adapter: 'adapters/probe-env.ts', adapter_sha256: sha,
+  expected: { pass: 0, fail: 26, skip: 1 }, claim_text: 'PROBE: isolation proof, must be red', verified_on: '2026-09-10' };
+// external-suite probe: prints a COUNT of runner-env names (never values) and no summary line, so replay.js surfaces the stdout tail.
+const probeExt = { ...still, id: 'probe-ext@35e209d/env', claim_text: 'PROBE: external-suite env leak count, must be red (no summary line)', verified_on: '2026-09-10',
+  run: { ...still.run, command: ['node', '-e', 'const n=Object.keys(process.env).filter(k=>/^(GITHUB_|ACTIONS_|RUNNER_)/.test(k)).length; console.log("PROBE_LEAKED_COUNT="+n)'] } };
 reg.claims = [probe, ...reg.claims, probeExt];
 fs.writeFileSync('interop/claims.json', JSON.stringify(reg, null, 2) + '\n');
 EOF
@@ -869,11 +994,13 @@ export GIT_AUTHOR_NAME="Viswanadha Pratap Kondoju" GIT_AUTHOR_EMAIL="kondojuvisw
 git add -A && git commit -s -q -m "probe: isolation proofs (never merge)" && git push -q -u origin probe/isolation
 dispatch_and_wait probe/isolation
 ```
-Expected: `conclusion=failure` (the two probes are designed red). In the log: for the probe claim a `REPLAY MISMATCH` reason containing `stderr="PROBE_ENV=NONE\nPROBE_WRITE=EROFS\n"`; immediately after it `harness-integrity: OK`; then mcp-use and StillOS both reproduce; for `probe-ext` the error `no machine-readable summary line in suite stdout; tail:` followed by env NAMES containing none of `GITHUB_`, `ACTIONS_`, `RUNNER_`; final line `2/4 claims reproduced`. Save as `PROOF_ISOLATION`.
+Expected: `conclusion=failure` (the two probes are designed red). In the log: for the probe claim `REPLAY MISMATCH: expected 0/26/1, got 0/27/0` followed by per-vector reasons; grep the log for the two tokens `PROBE_ENV=NONE` and `PROBE_WRITE=EROFS` (they appear JSON-escaped inside `stderr=`; grep the tokens, not the quoted form); `harness-integrity: OK` appears **four** times (after every claim, including the two red ones — this is the §3.5 mixed-kind tampering proof); mcp-use and StillOS both reproduce; for `probe-ext` the error `no machine-readable summary line in suite stdout; tail:` followed by exactly `PROBE_LEAKED_COUNT=0`; final line `2/4 claims reproduced`. Record: `echo "PROOF_ISOLATION=$RUN_URL" >> /tmp/plan-handoff/proofs.env`.
 
 - [ ] **Step 4: Check 3 — overlay path (`probe/overlay` off `probe/isolation`)**
 
+Branch off `probe/isolation` deliberately: the harness's `--check` validates the WHOLE overlaid registry, so `probe-env.ts` must exist at the base or `--check` reds on `adapter file not found`.
 ```bash
+export GIT_AUTHOR_NAME="Viswanadha Pratap Kondoju" GIT_AUTHOR_EMAIL="kondojuviswanadha@gmail.com" GIT_COMMITTER_NAME="Viswanadha Pratap Kondoju" GIT_COMMITTER_EMAIL="saneGuy@users.noreply.github.com"
 git checkout -q -b probe/overlay
 cp interop/adapters/mcp-use-evc-example-hut.ts interop/adapters/probe-overlay.ts
 SHA=$(shasum -a 256 interop/adapters/probe-overlay.ts | cut -d' ' -f1)
@@ -889,12 +1016,12 @@ OVERLAY_SHA=$(git rev-parse HEAD)
 git checkout -q probe/isolation
 dispatch_and_wait probe/isolation -f ref="$OVERLAY_SHA" -f claim="probe-overlay@17642a5/host_behavior@0.5.0"
 ```
-Expected: `conclusion=success`; log shows the overlay step printing `probe-overlay@17642a5/host_behavior@0.5.0<TAB>bolyra-suite<TAB>adapters/probe-overlay.ts`, `--check` OK, `selected:` with exactly that one row, one `docker run` replay, `harness-integrity: OK`, `1/1 claims reproduced`. Save as `PROOF_OVERLAY`.
+Expected: `conclusion=success`; log shows the overlay step printing `probe-overlay@17642a5/host_behavior@0.5.0<TAB>bolyra-suite<TAB>adapters/probe-overlay.ts`, `--check` OK, `selected:` with exactly that one row, one `docker run` replay, `harness-integrity: OK`, `1/1 claims reproduced`. Record: `echo "PROOF_OVERLAY=$RUN_URL" >> /tmp/plan-handoff/proofs.env`.
 
 - [ ] **Step 5: Check 5 — unknown claim**
 
 Run: `dispatch_and_wait probe/isolation -f claim=does-not-exist`
-Expected: `conclusion=failure`; log: `no claim with id does-not-exist` in the "Select claims" step. Save as `PROOF_UNKNOWN_CLAIM`.
+Expected: `conclusion=failure`; log: `no claim with id does-not-exist` in the "Select claims" step. Record: `echo "PROOF_UNKNOWN_CLAIM=$RUN_URL" >> /tmp/plan-handoff/proofs.env`.
 
 - [ ] **Step 6: Clean up and hand off**
 
@@ -902,13 +1029,13 @@ Expected: `conclusion=failure`; log: `no claim with id does-not-exist` in the "S
 git checkout -q public-conformance-claims
 git push -q origin --delete probe/isolation probe/overlay
 git branch -q -D probe/isolation probe/overlay
-echo "PROOF_URLS: baseline=$PROOF_BASELINE ref_requires_claim=$PROOF_REF_REQUIRES_CLAIM isolation=$PROOF_ISOLATION overlay=$PROOF_OVERLAY unknown=$PROOF_UNKNOWN_CLAIM" >> "${RUNNER_HANDOFF:-/tmp/plan-handoff.env}"
+cat /tmp/plan-handoff/proofs.env
 ```
-Expected: both remote branches deleted; five URLs recorded.
+Expected: both remote branches deleted; `proofs.env` lists five `PROOF_*=https://…/actions/runs/…` lines.
 
 ---
 
-## Chunk 3: Generator, page, CI drift guard
+## Chunk 4: Generator, page, CI drift guard
 
 ### Task 7: `landing/gen-conformance.js` — validation
 
@@ -1331,7 +1458,7 @@ with
 - [ ] **Step 2: Validate and run the same commands locally**
 
 Run: `ruby -ryaml -e 'YAML.load_file(".github/workflows/ci.yml"); puts "yaml ok"' && node --test interop/replay.test.js interop/submission-overlay.test.js interop/harness-integrity.test.js && node interop/replay.js --check && node --test landing/gen-conformance.test.js && node landing/gen-conformance.js --check`
-Expected: `yaml ok`; 36 tests pass (24 + 6 + 6); registry OK lines; 15 pass; `--check OK`.
+Expected: `yaml ok`; 41 tests pass (24 + 8 + 9); registry OK lines; 15 pass; `--check OK`.
 
 - [ ] **Step 3: Commit, push, open the draft PR, watch CI**
 
@@ -1342,14 +1469,14 @@ git commit -s -m "ci: offline interop pin check, dispatch building-block tests, 
 git push
 gh pr create --repo bolyra/bolyra --base main --head public-conformance-claims --draft \
   --title "Public conformance claims (v1): page, generator, dispatch isolation, landing copy" \
-  --body "Implements docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md (v1 scope). Draft until Chunk 4 lands."
+  --body "Implements docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md (v1 scope). Draft until Chunk 5 lands."
 gh pr checks --repo bolyra/bolyra --watch
 ```
 Expected: all checks green, including `EVC conformance — package sync & both reference hosts`.
 
 ---
 
-## Chunk 4: Landing copy, deploy/verify, submission docs, end-to-end
+## Chunk 5: Landing copy, deploy/verify, submission docs, end-to-end
 
 ### Task 10: `landing/index.html` copy changes (spec §3.4)
 
@@ -1472,7 +1599,7 @@ guard_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
 # The advertised vector count must equal what the ADVERTISED package version
 # actually loads. Pin npx to the version the page names (unpinned npx can
 # serve the cache); guard_version above separately checks it is npm's latest.
-EVC_ADVERTISED=$(grep -oE '@bolyra/evc-conformance@[0-9]+\.[0-9]+\.[0-9]+' <<< "$LIVE_HTML" | sed 's/.*@//' | sort -u)
+EVC_ADVERTISED=$(grep -oE '@bolyra/evc-conformance@[0-9]+\.[0-9]+\.[0-9]+' <<< "$LIVE_HTML" | sed 's/.*@//' | sort -u || true)
 [ "$(wc -l <<< "$EVC_ADVERTISED" | tr -d ' ')" = "1" ] && [ -n "$EVC_ADVERTISED" ] || fail "page must advertise exactly one @bolyra/evc-conformance version (got: '$EVC_ADVERTISED')"
 ADVERTISED_COUNT=$(grep -oE '[0-9]+ wire-contract vectors' <<< "$LIVE_HTML" | head -1 | grep -oE '^[0-9]+' || true)
 [ -n "$ADVERTISED_COUNT" ] || fail "page does not advertise a wire-contract vector count"
@@ -1497,13 +1624,16 @@ grep -qF "11 domain-agnostic wire-envelope vectors" <<< "$LIVE_HTML" || fail "ro
 grep -qF 'href="/conformance"' <<< "$LIVE_HTML" || fail "root page does not link /conformance"
 pass "root page advertises 11 envelope vectors and links /conformance"
 
-# The conformance page is live and carries both published claims.
-CONF_HTML=$(curl -fsS "https://bolyra.ai/conformance?vguard=$(date +%s)") || fail "GET /conformance failed"
-grep -qF "17642a5" <<< "$CONF_HTML" || fail "/conformance lacks the mcp-use claim pin 17642a5"
-grep -qF "35e209d" <<< "$CONF_HTML" || fail "/conformance lacks the StillOS claim pin 35e209d"
-grep -qF "This is NOT Bolyra-suite conformance." <<< "$CONF_HTML" || fail "/conformance lacks the own-corpus qualifier"
-[ "$(grep -c '<h2 class="claim-id">' <<< "$CONF_HTML")" = "2" ] || fail "/conformance should show exactly 2 claims"
-pass "/conformance is live with both claims and the own-corpus qualifier"
+# The live conformance page must be exactly the page generated from the
+# registry at the deployed commit (future-proof: no hard-coded claim count).
+CONF_TMP=$(mktemp)
+curl -fsS "https://bolyra.ai/conformance?vguard=$(date +%s)" -o "$CONF_TMP" || fail "GET /conformance failed"
+if cmp -s "$CONF_TMP" "$SCRIPT_DIR/conformance.html"; then
+  pass "/conformance is byte-identical to landing/conformance.html at the deployed commit ($(grep -c '<h2 class="claim-id">' "$CONF_TMP") claims)"
+else
+  fail "/conformance differs from landing/conformance.html at the deployed commit (stale CDN or wrong deploy source)"
+fi
+rm -f "$CONF_TMP"
 ```
 
 - [ ] **Step 5: Syntax-check both scripts and dry-run the count logic against the live package**
@@ -1574,10 +1704,12 @@ submissions that do not follow them are not dispatched.
    `landing/conformance.html` together with your entry (and adapter).
 5. Open the PR. CI runs the offline checks. Nothing executes your code yet.
 6. The maintainer reviews the adapter and the pins, notes your head SHA, and
-   runs the `Interop replay` workflow by dispatch with `ref=<that SHA>` and
-   `claim=<your id>`. Only your registry entry and your one new adapter are
-   taken from that SHA; the harness runs from `main`. Any push after that
-   review needs a fresh review and a fresh dispatch.
+   runs the `Interop replay` workflow by dispatch (Actions → Interop replay →
+   Run workflow → branch `main`, `ref=<that SHA>`, `claim=<your id>`). The
+   reviewed `claims.json` and your one new adapter are overlaid from that SHA
+   (which is why "one added entry, nothing else changed" is reviewed by hand);
+   only the selected claim replays; the harness runs from `main`. Any push
+   after that review needs a fresh review and a fresh dispatch.
 7. Green dispatch on the reviewed SHA + code-owner review → merge → your row
    appears on https://bolyra.ai/conformance at the next deploy. The dispatch
    run URL is recorded in the merge commit.
@@ -1612,6 +1744,8 @@ git push
 - [ ] **Step 1: Submission proof on a throwaway branch (uses the overlay path, like a real submission)**
 
 ```bash
+HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"
+export GIT_AUTHOR_NAME="Viswanadha Pratap Kondoju" GIT_AUTHOR_EMAIL="kondojuviswanadha@gmail.com" GIT_COMMITTER_NAME="Viswanadha Pratap Kondoju" GIT_COMMITTER_EMAIL="saneGuy@users.noreply.github.com"
 git checkout -q -b probe/submission origin/public-conformance-claims
 node - <<'EOF'
 const fs = require('fs');
@@ -1620,16 +1754,16 @@ const still = reg.claims.find((c) => c.kind === 'external-suite');
 reg.claims.push({ ...still, id: 'probe@35e209d/own-corpus', claim_text: 'PROBE submission (never merge)', verified_on: '2026-09-10' });
 fs.writeFileSync('interop/claims.json', JSON.stringify(reg, null, 2) + '\n');
 EOF
-node landing/gen-conformance.js && node interop/replay.js --check
-export GIT_AUTHOR_NAME="Viswanadha Pratap Kondoju" GIT_AUTHOR_EMAIL="kondojuviswanadha@gmail.com" GIT_COMMITTER_NAME="Viswanadha Pratap Kondoju" GIT_COMMITTER_EMAIL="saneGuy@users.noreply.github.com"
+node landing/gen-conformance.js && node interop/replay.js --check   # the page is regenerated for the PR's offline drift check only; the overlay takes claims.json (+adapter) from the ref
 git add -A && git commit -s -q -m "probe: submission (never merge)" && git push -q -u origin probe/submission
 GOOD_SHA=$(git rev-parse HEAD)
 gh pr create --repo bolyra/bolyra --base public-conformance-claims --head probe/submission --draft --title "probe: submission proof (never merge)" --body "Evidence only."
 gh pr checks --repo bolyra/bolyra --watch     # offline checks green; inspect the evc-conformance job log: only --check/tests/generator ran
 git checkout -q public-conformance-claims
-dispatch_and_wait public-conformance-claims -f ref="$GOOD_SHA" -f claim="probe@35e209d/own-corpus"    # helper from Task 6
+dispatch_and_wait public-conformance-claims -f ref="$GOOD_SHA" -f claim="probe@35e209d/own-corpus"
+echo "PROOF_SUBMISSION_GREEN=$RUN_URL" >> "$HANDOFF/proofs.env"
 ```
-Expected: `conclusion=success`, `1/1 claims reproduced`. Save as `PROOF_SUBMISSION_GREEN`.
+Expected: `conclusion=success`, `1/1 claims reproduced`.
 
 Now the failing case (the spec's wording is "hash mismatch"; a bad `adapter_sha256` is caught OFFLINE by `--check` before any dispatch, so the dispatch-level failing case is an expectation mismatch):
 ```bash
@@ -1643,36 +1777,50 @@ node landing/gen-conformance.js    # regenerate, or the drift guard fails for th
 git add -A && git commit -s -q -m "probe: expectation mismatch (never merge)" && git push -q
 BAD_SHA=$(git rev-parse HEAD); git checkout -q public-conformance-claims
 dispatch_and_wait public-conformance-claims -f ref="$BAD_SHA" -f claim="probe@35e209d/own-corpus"
+echo "PROOF_SUBMISSION_RED=$RUN_URL" >> "$HANDOFF/proofs.env"
 ```
-Expected: `conclusion=failure`; log contains `REPLAY MISMATCH: expected 38/39 passed (9 scoped out), got 39/39 (9)`. Save as `PROOF_SUBMISSION_RED`. Then close the probe PR and delete the branch:
+Expected: `conclusion=failure`; log contains `REPLAY MISMATCH: expected 38/39 passed (9 scoped out), got 39/39 (9)`. Then close the probe PR and delete the branch:
 ```bash
 gh pr close --repo bolyra/bolyra probe/submission --delete-branch
 ```
 
-- [ ] **Step 2: Mark the PR ready with all evidence, then Codex review, then merge**
+- [ ] **Step 2: Mark the PR ready with all evidence; Codex review; final-head verification; merge**
 
-Edit the PR body to list, under "Isolation proofs (spec §3.5)" and "Submission proofs (spec §6)": every URL from `PROOF_URLS` (Task 6) plus `PROOF_SUBMISSION_GREEN` / `PROOF_SUBMISSION_RED`, and the `REPLAY_IMAGE` digest with the reason (git required). Then `gh pr ready --repo bolyra/bolyra`. The workspace rule applies: Codex reviews the full diff before merge; fix, re-review, then rebase-merge:
+Edit the PR body to list, under "Isolation proofs (spec §3.5)" and "Submission proofs (spec §6)", every line of `/tmp/plan-handoff/proofs.env`, and the `REPLAY_IMAGE` digest with the reason (git required). Then `gh pr ready --repo bolyra/bolyra`. Workspace rule: Codex reviews the full diff before merge; apply fixes; re-review until clean. **After the last fix, push, then verify the final head:**
 ```bash
-gh pr merge --repo bolyra/bolyra --rebase --delete-branch
-git fetch -q origin main && MERGE_SHA=$(git rev-parse origin/main) && echo "$MERGE_SHA"
+HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"
+git push; FINAL_HEAD=$(git rev-parse HEAD); echo "FINAL_HEAD=$FINAL_HEAD" > "$HANDOFF/pr.env"
+gh pr checks --repo bolyra/bolyra --watch            # all green on FINAL_HEAD
+dispatch_and_wait public-conformance-claims          # baseline replay green on the FINAL harness
+[ "$(gh pr view --repo bolyra/bolyra --json headRefOid --jq .headRefOid)" = "$FINAL_HEAD" ] || { echo "head moved since verification"; exit 1; }
+gh pr merge --repo bolyra/bolyra --rebase            # no --delete-branch from a linked worktree (it would try `git checkout main`)
+MERGE_SHA=$(gh pr view --repo bolyra/bolyra --json mergeCommit --jq .mergeCommit.oid)
+echo "MERGE_SHA=$MERGE_SHA" >> "$HANDOFF/pr.env"; cat "$HANDOFF/pr.env"
+git push -q origin --delete public-conformance-claims
 ```
+Expected: checks green; baseline `conclusion=success`; head unchanged; a 40-hex `MERGE_SHA` recorded (this PR's own integration commit, not whatever `origin/main` happens to be).
 
-- [ ] **Step 3: Deploy from the merge commit (never from the branch)**
+- [ ] **Step 3: Deploy from the merge commit, in a checked subshell, from the canonical remote**
 
 ```bash
-DEPLOY=$(mktemp -d) && git clone -q --no-local --branch main . "$DEPLOY/repo" 2>/dev/null || git clone -q https://github.com/bolyra/bolyra "$DEPLOY/repo"
-cd "$DEPLOY/repo" && git checkout -q "$MERGE_SHA" && ./landing/deploy.sh; cd - >/dev/null
+source /tmp/plan-handoff/pr.env
+( set -euo pipefail
+  DEPLOY=$(mktemp -d); git clone -q https://github.com/bolyra/bolyra "$DEPLOY/repo"; cd "$DEPLOY/repo"
+  git fetch -q origin "$MERGE_SHA"; git checkout -q "$MERGE_SHA"
+  [ "$(git rev-parse HEAD)" = "$MERGE_SHA" ] || { echo "checkout is not MERGE_SHA"; exit 1; }
+  ./landing/deploy.sh
+) && echo "deploy subshell OK"
 ```
-Expected: preflight lines including `OK: local page advertises @bolyra/evc-conformance@0.6.0` and `gen-conformance --check OK`; uploads including `conformance.html`; invalidation id; then `verify.sh` runs automatically and its output ends with the new `OK:` lines (`vector count`, `no hosted-verifier`, `root page advertises 11`, `/conformance is live`).
+Expected: preflight lines including `OK: local page advertises @bolyra/evc-conformance@0.6.0` and `gen-conformance --check OK:`; uploads including `conformance.html`; invalidation id; then `verify.sh` runs automatically and its output ends with the new `OK:` lines (`vector count`, `no hosted-verifier`, `root page advertises 11`, `/conformance is byte-identical`); finally `deploy subshell OK`.
 
-- [ ] **Step 4: Live curls**
+- [ ] **Step 4: Live curls (initial acceptance only — the permanent check is verify.sh's byte comparison)**
 
 ```bash
-curl -fsS https://bolyra.ai/conformance | grep -c '<h2 class="claim-id">'   # expect 2
+curl -fsS https://bolyra.ai/conformance | grep -c '<h2 class="claim-id">'   # expect 2 (today's registry)
 curl -fsS https://bolyra.ai/ | grep -c "hosted verifier preview"           # expect 0 (grep exits 1; that is the pass)
 curl -fsS https://bolyra.ai/ | grep -c "@bolyra/evc-conformance@0.6.0"     # expect 1
 ```
 
 - [ ] **Step 5: Record**
 
-Append the deploy + verify output summary and the live curls to the merged PR as a comment. Append a line to `~/.claude/projects/-Users-lordviswa-Projects/memory/github_activity_bolyra.md` with the PR number, `MERGE_SHA`, and a one-line summary; **add** a pointer line for this build to `MEMORY.md` marked DONE.
+Append the deploy + verify output summary and the live curls to the merged PR as a comment. Then, OUTSIDE the repository: append a line to `/Users/lordviswa/.claude/projects/-Users-lordviswa-Projects/memory/github_activity_bolyra.md` with the PR number, `MERGE_SHA`, and a one-line summary; **add** a pointer line for this build to `/Users/lordviswa/.claude/projects/-Users-lordviswa-Projects/memory/MEMORY.md` marked DONE (the existing line for this build there is the one to update).
