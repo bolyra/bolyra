@@ -40,6 +40,11 @@ conversion."
   maintainer reviews, then replays the exact PR head via the existing
   `workflow_dispatch` job before merging. No third-party code runs on any PR
   event.
+- **Per-kind execution isolation applied to the existing dispatch job**
+  (section 3.5): third-party code must not see runner credentials, and
+  `workflow_dispatch` retains cache-write access, so isolation is a v1
+  requirement, not an Appendix A nicety. This also closes a pre-existing
+  exposure in today's dispatch job.
 - **CI additions**: `node interop/replay.js --check` and the generator
   `--check` on every push and PR.
 - **Landing copy on the same surface**: current suite version and counts;
@@ -132,9 +137,9 @@ Static, self-contained, no JS. Per claim:
    third-party code.**
 4. The maintainer reviews the adapter and the pins, notes the exact head SHA,
    and runs the existing `Interop replay` workflow by `workflow_dispatch`
-   against that SHA (the dispatch job gains an optional `ref` input and a
-   `--claim <id>` input; it is otherwise unchanged and keeps its
-   `contents: read` / `persist-credentials: false` posture). Any push after
+   against that SHA (the dispatch job gains optional `ref` and `claim`
+   inputs, keeps `contents: read` / `persist-credentials: false`, and runs
+   third-party code under the per-kind isolation in section 3.5). Any push after
    that review requires a fresh review and a fresh dispatch.
 5. Green dispatch run on the reviewed SHA + CODEOWNERS review -> merge -> the
    row appears on the next landing deploy. The dispatch run URL is recorded
@@ -174,6 +179,38 @@ Exact edits (line numbers as of `f106b00`):
   dir and assert its "N test vectors loaded" (stdout, non-JSON mode) equals
   the advertised total (41 today: 30 host_behavior + 11 verifier_envelope).
 
+### 3.5 Dispatch job isolation (v1 requirement)
+`interop-replay.yml` today runs `replay.js` directly on the runner VM. That
+executes the implementer's code (`npm ci`, `tsx`, the adapter) where
+`ACTIONS_RUNTIME_TOKEN` and `GITHUB_TOKEN` are readable by any process, and
+`workflow_dispatch` retains cache-write access to default-branch scope
+(GitHub's 2026-06-26 change made only *untrusted* triggers read-only), so a
+malicious pinned implementer repo could poison caches that `ci.yml` and
+`docker-gateway.yml` restore. Maintainer review of the adapter and pins does
+not cover a whole third-party repository. Therefore the dispatch job adopts
+the per-kind model from Appendix A.1 verbatim:
+- `node interop/replay.js --check`: base code only; on the VM.
+- `bolyra-suite` claims (all third-party execution is inside `replay.js`'s
+  process tree): `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp
+  -e CLAIM_ID -v "$PWD:/work" -w /work node:20@<full-debian-digest> sh -c
+  'node interop/replay.js --claim "$CLAIM_ID"'` as the last step; full
+  Debian image because `git` is required; no runner environment passed.
+- `external-suite` claims: `replay.js` must drive the host `docker` CLI, so
+  it runs on the VM under `env -i PATH HOME CLAIM_ID`; the only implementer
+  execution is inside its existing `docker run --network none` child with no
+  `-e`, which is the boundary (verified against `replay.js:162-187`).
+- Replay-all (no `claim` input) iterates claims and applies the same
+  per-kind branch to each.
+- Stated residual: a container escape or host compromise exposes the
+  runner's credentials and privileges (passwordless sudo); the read-only
+  `GITHUB_TOKEN` does not bound it. The maintainer's decision to dispatch is
+  the control for the adapter; isolation is the control for the
+  implementer's code.
+- Proof (section 6): a probe `bolyra-suite` adapter and a probe
+  `external-suite` `run.command` that print their environment show no
+  `ACTIONS_RUNTIME_TOKEN` / `GITHUB_TOKEN`; the image digest is recorded in
+  the workflow with the reason.
+
 ## 4. Data flow
 Registry (PR-authored, gate-validated, CODEOWNERS-reviewed) -> generator
 (deterministic, escaped, link-validated) -> committed HTML (drift-guarded) ->
@@ -203,6 +240,10 @@ repository or to commit statuses.
   `main`) and `claim` (default all) inputs; a test proves `--claim <id>` on a
   non-`main` ref replays exactly that claim, and a hash-mismatched test claim
   goes red.
+- Isolation proofs on the dispatch job: probe `bolyra-suite` adapter prints
+  `env` inside the container -> no runner tokens; probe `external-suite`
+  `run.command` prints `env` inside the child -> no runner tokens; the
+  full-Debian `node:20` digest is recorded with the reason (git required).
 - `interop/replay.test.js`: all 18 existing parser tests retained, unchanged.
 - End-to-end proof on a test submission PR, recorded in the implementation
   PR: offline checks green on the PR with no third-party execution (verified
@@ -225,7 +266,9 @@ verification, explicit coverage boundaries, and a labeled link to replay
 history. `SUBMITTING.md` suffices for an outside implementer to open a
 correct submission PR without asking, and for the maintainer to replay the
 exact PR head by dispatch; a test submission has been taken through that
-path end to end, including a failing case. All hosted-verifier/managed-
+path end to end, including a failing case, with the dispatch job running
+third-party code only under the section 3.5 isolation (probe proofs
+recorded). All hosted-verifier/managed-
 platform copy is gone and the advertised suite version and counts are
 current and machine-checked at deploy.
 
