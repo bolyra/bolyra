@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-10
 **Author:** Claude (Fable 5.1) + Codex (gpt-6-astra) brainstorm; founder-approved scope
-**Status:** DRAFT v5 (rounds 1-4 applied from both reviewers; final review round)
+**Status:** v5.2 — spec reviewer ✅ Approved (v5.1); Codex round-5 items applied; confirm pass pending
 
 ## 1. Motivation
 
@@ -195,9 +195,16 @@ any other workflow cannot satisfy it. Per GitHub's documentation, ruleset
 workflows support `pull_request_target`, ignore activity filters, and run
 only for opened/synchronize/reopened; label and review events therefore
 never start the required run, which is why the restart path is a manual
-rerun. **Prerequisite (plan task 1):** confirm on `bolyra/bolyra` that the
-ruleset executes this file from `main` even when a PR edits it (test with a
-PR that modifies the workflow), and that `pull_request_target` is accepted.
+rerun. The same ruleset MUST also enable **"Require branches to be up to date
+before merging"**: the ancestry check inside the workflow sees only the
+captured `BASE_SHA` of its own run, so without this setting a previously
+green submission silently goes stale when `main` advances; with it, GitHub
+blocks the merge until the branch is updated, which changes the head SHA and
+requires fresh approval and replay. **Prerequisite (plan task 1):** confirm
+on `bolyra/bolyra` that the ruleset executes this file from `main` even when
+a PR edits it (test with a PR that modifies the workflow), that
+`pull_request_target` is accepted, and that the up-to-date rule is available
+alongside it.
 If either fails, the design blocks here; there is no `pull_request`
 fallback, because on that event `github.workflow_sha` is the PR merge ref
 and pins nothing. The proof in section 6 is mandatory.
@@ -330,8 +337,10 @@ Properties, stated plainly:
   escape/host-compromise residual is stated in "Stated residual" above and is
   full host exposure, not merely the read-only token.
 - Approval is bound to an exact SHA by GitHub's review record; the label
-  alone never authorizes; the live-head check defeats stale reruns; the
-  maintainer's manual rerun is the only way a replay starts.
+  alone never authorizes; the live-head check defeats stale reruns. The
+  documented restart after approval and labeling is a manual rerun;
+  automatic events (`synchronize`, `reopened`) also re-evaluate
+  authorization and will replay if it already holds.
 - `replay-claim` fails, never skips, for an unapproved submission, and passes
   trivially for non-submissions; the workflow has no `paths:` filter.
 - Fork PRs on `pull_request_target` need no "Approve and run"; the
@@ -427,7 +436,11 @@ the repository or to commit statuses.
   label WITHOUT rerun -> still red (no auto-restart); manual rerun ->
   green and merge unblocked; stale rerun on H1 after H2 exists -> red "head
   moved"; ruleset actually blocks merge on red (screenshot in the PR);
-  `workflow_sha` echoed and equal to `main` at run time; a probe
+  `workflow_sha` echoed and equal to the trusted source commit selected for
+  that run, and a rerun after `main` advances still reports the ORIGINAL
+  run's commit (reruns preserve pinning); green submission -> advance `main`
+  without touching the submission -> merge blocked by the up-to-date rule ->
+  rebase -> fresh approval + replay required; a probe
   `bolyra-suite` adapter that prints its environment shows no
   `ACTIONS_RUNTIME_TOKEN` / `GITHUB_TOKEN` inside the container; a probe
   `external-suite` `run.command` that prints `env` shows none inside the
@@ -457,6 +470,13 @@ runner's tokens.
 `SUBMITTING.md` suffices to reproduce the path without asking. All
 hosted-verifier copy is gone and the advertised suite version and counts are
 current and machine-checked at deploy.
+
+What this buys over maintainer-operated dispatch (Codex wording): compared
+with dispatch alone, this design makes successful trusted replay of the
+submitted SHA a merge prerequisite and automatically validates submission
+data. For a solo maintainer, merge enforcement primarily prevents mistakes,
+including mistakes induced by attacker-controlled or stale check evidence.
+It does not establish that malicious approved code reports honest results.
 
 ## 8. Kill criterion (Codex)
 If, within 30 days of the public records reaching both existing adopters,
