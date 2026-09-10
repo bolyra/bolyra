@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-10
 **Author:** Claude (Fable 5.1) + Codex (gpt-6-astra) brainstorm; founder-approved scope
-**Status:** v5.2 — spec reviewer ✅ Approved (v5.1); Codex round-5 items applied; confirm pass pending
+**Status:** APPROVED for v1 scope (founder decision 2026-09-10 after five review rounds). The automatic submission gate is DEFERRED to Appendix A, which is fully reviewed and ready to activate.
 
 ## 1. Motivation
 
@@ -26,7 +26,7 @@ conversion."
 
 ## 2. Scope
 
-### In
+### In (v1)
 - **`landing/conformance.html`**: one page rendering every claim in
   `interop/claims.json` (section 3.2).
 - **Explicit coverage boundaries** on every row; `external-suite` rows carry
@@ -34,34 +34,31 @@ conversion."
   author-provided text.
 - **Generator + drift guard**: `landing/gen-conformance.js` renders the page
   from `claims.json`; `--check` fails CI when the committed HTML drifts.
-- **Submission contract** (`interop/SUBMITTING.md`): one PR adds exactly one
-  claim (+ one new adapter for `bolyra-suite`) and the regenerated page.
-- **Trusted, label-gated replay of submissions** (section 3.4): one
-  base-controlled workflow, registered as a **required workflow in a
-  repository ruleset** so the check's identity is pinned to that file at
-  `main`; read-only token; no secrets, no caches, no status writes;
-  third-party code confined to a container without the runner environment;
-  execution only when a maintainer label is present AND the maintainer's
-  approving review is bound to the exact head SHA, started by the maintainer
-  re-running the required workflow (rulesets run it only on
-  opened/synchronize/reopened, so labels and reviews cannot start it); only
-  the submission's data and one adapter come from the PR.
+- **Maintainer-operated submission contract** (`interop/SUBMITTING.md`,
+  section 3.3): one PR adds exactly one claim (+ one new adapter for
+  `bolyra-suite`) and the regenerated page; offline checks run in CI; the
+  maintainer reviews, then replays the exact PR head via the existing
+  `workflow_dispatch` job before merging. No third-party code runs on any PR
+  event.
 - **CI additions**: `node interop/replay.js --check` and the generator
   `--check` on every push and PR.
 - **Landing copy on the same surface**: current suite version and counts;
-  removal of every hosted-verifier-preview sentence (the 2026-08-27 ruling was
-  not to build the hosted platform); a CTA that describes what exists; and
-  version preflight/guard coverage for `@bolyra/evc-conformance` in
-  `deploy.sh`/`verify.sh`, which today check only sdk/payment-protocols/
-  gateway/cli.
+  removal of every hosted-verifier/managed-platform sentence (the 2026-08-27
+  ruling was not to build the hosted platform); a CTA that describes what
+  exists; and version preflight/guard coverage for `@bolyra/evc-conformance`
+  in `deploy.sh`/`verify.sh`.
 
 ### Out
-New demos or examples, new vector classes, adapters written on an
+The automatic, label-gated submission replay and its ruleset dependency
+(deferred; the reviewed design is Appendix A and activates when a second real
+external submission arrives). The maintainer-only `verification_run_url`
+route (deferred with it). New demos or examples, new vector classes, adapters written on an
 implementer's behalf, hosted verification, accounts, dashboards, certification
 badges or logos, live replay status or results write-back from CI, x402
 #3376 hardening, Dependabot remediation, edits to existing pinned claims or
 adapters via the submission path, and any revival of the killed AAR/Nobulex
-adapter or `checked_layers` schema expansion.
+adapter or `checked_layers` schema expansion. `verification_run_url` is not
+rendered in v1 (no route to set it).
 
 ## 3. Architecture
 
@@ -69,14 +66,9 @@ adapter or `checked_layers` schema expansion.
 interop/claims.json --gen-conformance.js--> landing/conformance.html --deploy.sh--> bolyra.ai/conformance
         ^                                            ^
         | PR: +1 claim, +1 adapter, regenerated page | CI --check: committed HTML == generated
-        |
-  interop-submission.yml  (REQUIRED WORKFLOW via ruleset => identity pinned to main; base-controlled;
-                           contents:read + pull-requests:read only; no secrets/caches/status writes)
-     submission-check : classifies the diff as DATA; outputs is_submission, claim id, adapter, kind
-     replay-claim     : THE required check. non-submission -> pass. submission without
-                        (label present AND maintainer APPROVED review at commit_id == head.sha
-                         AND live head == captured head) -> FAIL. else overlay the validated
-                        files and replay `--claim <id>` INSIDE A CONTAINER (no runner env).
+        |                                              (+ node interop/replay.js --check, offline)
+  maintainer: review adapter + pins -> `Interop replay` workflow_dispatch on the PR head SHA
+              (existing job, unchanged) -> green -> merge.  No PR event executes third-party code.
 ```
 
 ### 3.1 Generator: `landing/gen-conformance.js`
@@ -93,10 +85,9 @@ interop/claims.json --gen-conformance.js--> landing/conformance.html --deploy.sh
 - Every registry string is HTML-escaped. **Link destinations are validated,
   not merely escaped**: `implementer.repo` must match
   `^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`; commit links are
-  constructed from that validated URL plus the 40-hex `commit`; an optional
-  `verification_run_url` must match
-  `^https://github\.com/bolyra/bolyra/actions/runs/\d+$`. Any other value
-  fails generation (exit 1), never renders.
+  constructed from that validated URL plus the 40-hex `commit`. Any other
+  value fails generation (exit 1), never renders. (v1 renders no
+  `verification_run_url`; the field is reserved for Appendix A.)
 - The page carries its own copy of the stylesheet rules it needs (it does not
   extract from `index.html` at generation time, so `index.html` style edits
   cannot trip `--check`).
@@ -116,55 +107,172 @@ Static, self-contained, no JS. Per claim:
   suite conformance."
 - **Recorded verification date**: `verified_on`. Directly beneath, page-wide:
   "These are dated claims. This page does not report current replay status."
-- Links, each labeled: "Full-registry replay history" ->
-  `.../actions/workflows/interop-replay.yml`; "Submission replay history" ->
-  `.../actions/workflows/interop-submission.yml`; and, when a claim carries
-  `verification_run_url`, "Verification run for this claim" -> that URL.
+- One labeled link: "Replay history" ->
+  `https://github.com/bolyra/bolyra/actions/workflows/interop-replay.yml`.
 - "How to add yours" -> absolute
   `https://github.com/bolyra/bolyra/blob/main/interop/SUBMITTING.md`.
 - `deploy.sh`: add the variable, the pre-check loop entry, two `aws s3 cp`
   calls (`/conformance.html` and `/conformance`), and both paths in the
   CloudFront invalidation list.
 
-### 3.3 Submission contract: `interop/SUBMITTING.md`
+### 3.3 Submission contract (maintainer-operated): `interop/SUBMITTING.md`
 1. Fork; add **exactly one** entry to `interop/claims.json` per the schema in
    `interop/README.md`. For `bolyra-suite`, add **one new** file
    `interop/adapters/<name>.ts` (pure I/O, README rules) and set
-   `adapter_sha256`. Do not modify any existing claim or adapter.
-2. Run `node interop/replay.js --check` (offline pins/schema) and
-   `node landing/gen-conformance.js`; commit the regenerated
-   `landing/conformance.html` with the claim and adapter.
-3. A submission PR may touch ONLY: `interop/claims.json`, one new regular
-   file under `interop/adapters/` (for `bolyra-suite`; none for
-   `external-suite`), and `landing/conformance.html`. Anything else fails
-   `submission-check`. Workflow, harness, runner, and dependency changes are
-   never accepted through this path; open a separate PR. Submission branches
-   must contain the current base of `main` (rebase before asking for review;
-   any commit to `main` between review and merge changes the head SHA on
-   rebase and requires a fresh approving review, accepted cost at current
-   volume).
-4. Open the PR. `submission-check` validates the diff; `replay-claim` (the
-   required check) FAILS with "awaiting maintainer review + replay-approved on
-   <head.sha>". Offline checks run in ordinary CI. No third-party code runs.
-5. The maintainer reviews the adapter and pins and submits an **approving PR
-   review** (GitHub records the reviewed `commit_id`), applies
-   `replay-approved`, then **re-runs the failed `Interop submission`
-   workflow** from the Actions tab. That rerun re-checks live authorization,
-   confirms the approving review's `commit_id` equals the current head SHA,
-   replays, and its conclusion is the check. (Ruleset-required workflows
-   ignore label and review events; the manual rerun is the restart path.)
-6. Any push after approval changes the head SHA (`synchronize` runs the
-   workflow; it fails "awaiting approving review on <new sha>"). The
-   maintainer re-reviews, re-approves on the new SHA, and re-runs. The label
-   may stay; it is necessary, not sufficient. A rerun whose captured head no
-   longer equals the live PR head fails "head moved" before touching any PR
-   bytes.
-7. Green `replay-claim` + CODEOWNERS review -> merge -> the row appears on
-   the next landing deploy. README rules restated: a red replay means
+   `adapter_sha256`. Do not modify any existing claim or adapter. Do not set
+   `verification_run_url`. `implementer.install` must be
+   `["npm","ci","--ignore-scripts"]` or `["npm","install","--ignore-scripts"]`,
+   optionally followed by `--no-audit` and/or `--no-fund`; `external-suite`
+   claims need a digest-pinned `node:` image and `run.network: "none"`.
+2. Run `node interop/replay.js --check` and `node landing/gen-conformance.js`;
+   commit the regenerated `landing/conformance.html` with the claim (and
+   adapter). A submission PR touches only those files.
+3. Open the PR. Ordinary CI runs the offline checks (`replay.js --check`,
+   generator `--check`, existing tests). **Nothing on the PR executes
+   third-party code.**
+4. The maintainer reviews the adapter and the pins, notes the exact head SHA,
+   and runs the existing `Interop replay` workflow by `workflow_dispatch`
+   against that SHA (the dispatch job gains an optional `ref` input and a
+   `--claim <id>` input; it is otherwise unchanged and keeps its
+   `contents: read` / `persist-credentials: false` posture). Any push after
+   that review requires a fresh review and a fresh dispatch.
+5. Green dispatch run on the reviewed SHA + CODEOWNERS review -> merge -> the
+   row appears on the next landing deploy. The dispatch run URL is recorded
+   in the merge commit message. README rules restated: a red replay means
    investigate, never edit the claim; claims stay pinned; re-verification at
    a newer set is a new row.
+6. Stated plainly in the document: this path relies on maintainer discipline
+   (review before dispatch; dispatch the reviewed SHA; do not merge red). It
+   is not machine-enforced. Machine enforcement is the deferred Appendix A.
 
-### 3.4 Trusted submission workflow: `.github/workflows/interop-submission.yml`
+### 3.4 Landing copy changes (`landing/index.html`) and deploy/verify coverage
+Exact edits (line numbers as of `f106b00`):
+- 948: delete "A hosted verifier preview is live for design partners:
+  `POST /v1/verify` ..." (the whole sentence).
+- 953: delete "Pilot against Bolyra's hosted verifier preview today, ...".
+- 1031: delete "Hosted `POST /v1/verify` preview for design partners, same
+  External Verifier Contract".
+- 953 tail: delete "... and managed verifier path" (the platform the ruling
+  said not to build).
+- 954: delete "Managed operations when you need them."
+- 955: "10 domain-agnostic wire-envelope vectors" -> "11 domain-agnostic
+  wire-envelope vectors".
+- Verified at `f106b00`: no other landing page mentions the hosted preview;
+  the design-partner section (1153-1180) is pilot copy, not hosted-verifier
+  copy, and stays.
+- Every advertised suite string: literally `@bolyra/evc-conformance@0.6.0`
+  and `41 wire-contract vectors`, including executable examples.
+- Replacement CTA copy (Codex text): "Run the published conformance suite,
+  explore the reference implementations, or verify locally with `bolyra
+  verify`." Keep the "Book a 20-min technical fit call" link. Keep historical
+  claim pins (e.g. "27/27 set 0.5.0 @ 17642a5") untouched.
+- Link the conformance section to `/conformance`.
+- `deploy.sh`: add `preflight_version "@bolyra/evc-conformance"
+  "@bolyra/evc-conformance@"`. `verify.sh`: add the matching `guard_version`,
+  and a check that the advertised count matches the installed package: run
+  the resolved `@bolyra/evc-conformance@<advertised>` self-test from an empty
+  dir and assert its "N test vectors loaded" (stdout, non-JSON mode) equals
+  the advertised total (41 today: 30 host_behavior + 11 verifier_envelope).
+
+## 4. Data flow
+Registry (PR-authored, gate-validated, CODEOWNERS-reviewed) -> generator
+(deterministic, escaped, link-validated) -> committed HTML (drift-guarded) ->
+`deploy.sh` -> S3/CloudFront -> `verify.sh`. Replay results exist only as
+dispatch-run conclusions and public run history; nothing is written to the
+repository or to commit statuses.
+
+## 5. Error handling
+- Malformed or unsafe registry entry: generator exits 1; CI red; no deploy.
+- Drift: `--check` red with a diff.
+- Out-of-scope submission diff, >1 claim, modified claim/adapter, bad
+  `install`/`image`/`command`, `verification_run_url` set: caught by the
+  maintainer's review checklist in SUBMITTING.md (v1) and by `replay.js
+  --check` where it validates shape; machine enforcement is Appendix A.
+- Replay failure on dispatch: red run; per README the claim is investigated,
+  never edited to pass; the PR is not merged.
+- Missing `conformance.html` at deploy: `deploy.sh` errors.
+
+## 6. Testing
+- `landing/gen-conformance.test.js` (node:test): deterministic output;
+  `--check` passes on identical input, fails with diff on a one-byte change;
+  `<script>` in `claim_text` is escaped; `javascript:` and non-GitHub
+  `implementer.repo` fail generation; unknown `kind` fails; external-suite
+  rows carry the fixed qualifier regardless of `claim_text`; stable ordering;
+  covered-classes derivation only from `--type` selectors.
+- Dispatch inputs: `interop-replay.yml` gains optional `ref` (default
+  `main`) and `claim` (default all) inputs; a test proves `--claim <id>` on a
+  non-`main` ref replays exactly that claim, and a hash-mismatched test claim
+  goes red.
+- `interop/replay.test.js`: all 18 existing parser tests retained, unchanged.
+- End-to-end proof on a test submission PR, recorded in the implementation
+  PR: offline checks green on the PR with no third-party execution (verified
+  from the run logs); maintainer dispatch on the PR head SHA green; the same
+  flow with a deliberately wrong `adapter_sha256` -> dispatch red.
+- CI: `node interop/replay.js --check` added to the `evc-conformance` job in
+  `ci.yml` (which today runs only `node --test interop/replay.test.js`); that
+  job's checkout gets `fetch-depth: 0` because `checkSuitePin` uses
+  `git show <suite.commit>:spec/test-vectors.json`. Generator `--check` in
+  the same job.
+- Landing after deploy: `verify.sh` green including the new evc-conformance
+  guard; live curl asserts the four changed strings present, all FIVE deleted
+  phrases absent (948, 953, 1031, the 953 tail "managed verifier path", 954
+  "Managed operations when you need them."), and `/conformance` reachable
+  with both claims.
+
+## 7. Completion criterion (v1)
+Both existing claims are publicly accessible with provenance, dated
+verification, explicit coverage boundaries, and a labeled link to replay
+history. `SUBMITTING.md` suffices for an outside implementer to open a
+correct submission PR without asking, and for the maintainer to replay the
+exact PR head by dispatch; a test submission has been taken through that
+path end to end, including a failing case. All hosted-verifier/managed-
+platform copy is gone and the advertised suite version and counts are
+current and machine-checked at deploy.
+
+What Appendix A would buy over this v1 (Codex wording): compared with
+dispatch alone, it makes successful trusted replay of the
+submitted SHA a merge prerequisite and automatically validates submission
+data. For a solo maintainer, merge enforcement primarily prevents mistakes,
+including mistakes induced by attacker-controlled or stale check evidence.
+It does not establish that malicious approved code reports honest results.
+
+## 8. Kill criterion (Codex)
+If, within 30 days of the public records reaching both existing adopters,
+neither references or uses its record and no new independent implementer
+submits a claim: stop expanding this feature. Leave the accurate page
+operational. Page views alone do not justify continuation.
+
+## 9. Decided questions
+1. `verified_on` is the recorded date and is never re-stamped; the page says
+   so explicitly. Per-claim `verification_run_url` is optional and manual.
+2. No generic `--changed-since`. Submissions are exactly one new claim;
+   `submission-check.js` derives the id and the existing `--claim <id>`
+   selector replays it. Full replay stays on dispatch.
+3. No commit statuses. The replay job's own conclusion is the required check
+   (v3), eliminating every write token from the workflow.
+4. Check identity is pinned by a ruleset-required workflow (v4); its
+   availability is plan task 1 and a hard prerequisite.
+5. Isolation is per kind (v5): `bolyra-suite` inside a container; `external-suite` on the VM because `replay.js` must drive the host `docker` CLI, and its implementer code already runs only in the `--network none` child container.
+6. No automatic restart (v5): ruleset workflows ignore label/review events; the maintainer re-runs the required workflow after approving and labeling.
+7. **Scope cut to v1 (founder, 2026-09-10).** After five review rounds the
+   automatic gate's "automatic" property collapsed (ruleset-required
+   workflows ignore label/review events, so the restart is a manual rerun
+   anyway); what remained was merge enforcement, which for a solo maintainer
+   prevents mistakes rather than attackers. Codex recommended deferring it;
+   Claude agreed; the founder chose v1. Appendix A is retained verbatim as
+   the reviewed activation design.
+8. Out of scope, noted for a follow-up: `integrations/evc-conformance/bin.js`
+   line 12 says "112-vector suite" (set is 125).
+
+## Appendix A (DEFERRED): automatic, label-gated submission replay
+
+**Status:** fully reviewed (five rounds, spec reviewer + Codex, 2026-09-10)
+and approved as a design; **not part of v1** by founder decision. Activate
+when a second real external submission arrives. Plan task 1 of that
+activation is verifying ruleset-required-workflow availability on
+`bolyra/bolyra`. Nothing below is implemented in v1.
+
+### A.1 Trusted submission workflow: `.github/workflows/interop-submission.yml`
 
 **Threat model, stated honestly.** Three kinds of PR-sourced code execute
 after approval: the reviewed adapter; the implementer repository at its
@@ -353,148 +461,3 @@ Properties, stated plainly:
   added afterwards through the maintainer metadata route above. Documented in
   `interop/README.md`'s schema.
 
-### 3.5 Landing copy changes (`landing/index.html`) and deploy/verify coverage
-Exact edits (line numbers as of `f106b00`):
-- 948: delete "A hosted verifier preview is live for design partners:
-  `POST /v1/verify` ..." (the whole sentence).
-- 953: delete "Pilot against Bolyra's hosted verifier preview today, ...".
-- 1031: delete "Hosted `POST /v1/verify` preview for design partners, same
-  External Verifier Contract".
-- 953 tail: delete "... and managed verifier path" (the platform the ruling
-  said not to build).
-- 954: delete "Managed operations when you need them."
-- 955: "10 domain-agnostic wire-envelope vectors" -> "11 domain-agnostic
-  wire-envelope vectors".
-- Verified at `f106b00`: no other landing page mentions the hosted preview;
-  the design-partner section (1153-1180) is pilot copy, not hosted-verifier
-  copy, and stays.
-- Every advertised suite string: literally `@bolyra/evc-conformance@0.6.0`
-  and `41 wire-contract vectors`, including executable examples.
-- Replacement CTA copy (Codex text): "Run the published conformance suite,
-  explore the reference implementations, or verify locally with `bolyra
-  verify`." Keep the "Book a 20-min technical fit call" link. Keep historical
-  claim pins (e.g. "27/27 set 0.5.0 @ 17642a5") untouched.
-- Link the conformance section to `/conformance`.
-- `deploy.sh`: add `preflight_version "@bolyra/evc-conformance"
-  "@bolyra/evc-conformance@"`. `verify.sh`: add the matching `guard_version`,
-  and a check that the advertised count matches the installed package: run
-  the resolved `@bolyra/evc-conformance@<advertised>` self-test from an empty
-  dir and assert its "N test vectors loaded" (stdout, non-JSON mode) equals
-  the advertised total (41 today: 30 host_behavior + 11 verifier_envelope).
-
-## 4. Data flow
-Registry (PR-authored, gate-validated, CODEOWNERS-reviewed) -> generator
-(deterministic, escaped, link-validated) -> committed HTML (drift-guarded) ->
-`deploy.sh` -> S3/CloudFront -> `verify.sh`. Replay results exist only as the
-`replay-claim` job conclusion and public run history; nothing is written to
-the repository or to commit statuses.
-
-## 5. Error handling
-- Malformed or unsafe registry entry: generator exits 1; CI red; no deploy.
-- Drift: `--check` red with a diff.
-- Out-of-scope diff, >1 claim, modified claim/adapter, symlink, bad charset,
-  stale branch, generator mismatch: `submission-check` red with the reason;
-  `replay-claim` red because its dependency failed.
-- Submission without label, or label present but no APPROVED maintainer review
-  at the current head SHA, or live head != captured head: `replay-claim` red
-  with the reason and SHA named.
-- Disallowed `install`/`run.image`/`run.command`, or `verification_run_url`
-  on a submitted entry: `submission-check` red naming the field.
-- Replay failure: `replay-claim` red; per README the claim is investigated,
-  never edited to pass.
-- Missing `conformance.html` at deploy: `deploy.sh` errors.
-
-## 6. Testing
-- `landing/gen-conformance.test.js` (node:test): deterministic output;
-  `--check` passes on identical input, fails with diff on a one-byte change;
-  `<script>` in `claim_text` is escaped; `javascript:` and non-GitHub
-  `implementer.repo` fail generation; unknown `kind` fails; external-suite
-  rows carry the fixed qualifier regardless of `claim_text`; stable ordering;
-  covered-classes derivation only from `--type` selectors.
-- `interop/submission-check.test.js`: exactly-one-added passes; zero added,
-  two added, modified existing, removed existing, extra path, modified
-  existing adapter each fail with the right message; non-submission PR exits 0.
-- `interop/replay.test.js`: all 18 existing parser tests retained, unchanged.
-- `interop/submission-check.test.js` additionally: symlink adapter rejected;
-  bad claim-id charset rejected; adapter name with shell metacharacters
-  rejected; external-suite with an adapter change rejected; head not
-  containing base rejected; generator mismatch rejected.
-- `interop/submission-check.test.js` additionally: `install` without
-  `--ignore-scripts` rejected; `["bash","-c",...]` rejected; non-`node:`
-  or undigested `run.image` rejected; `verification_run_url` on a submitted
-  entry rejected; deep-equality catches an `adapter_sha256` edit to an
-  existing entry; maintainer metadata route accepted only for the maintainer
-  id and only for that field; generator-only PR classified non-submission.
-- Ruleset proof (mandatory, recorded with a screenshot): a test PR that edits
-  `ci.yml` to add a green job named `replay-claim` remains blocked from merge.
-- Workflow proof on a test PR, recorded in the implementation PR: unrelated
-  label -> `replay-claim` red "awaiting"; label without approving review ->
-  red; approving review on H1 then push H2 then label -> red naming H2;
-  approving review on H2 + label -> replay runs; hash-mismatched claim ->
-  red; passing claim -> green; unrelated PR -> green without replay;
-  external-suite submission -> green with no adapter; approving review +
-  label WITHOUT rerun -> still red (no auto-restart); manual rerun ->
-  green and merge unblocked; stale rerun on H1 after H2 exists -> red "head
-  moved"; ruleset actually blocks merge on red (screenshot in the PR);
-  `workflow_sha` echoed and equal to the trusted source commit selected for
-  that run, and a rerun after `main` advances still reports the ORIGINAL
-  run's commit (reruns preserve pinning); green submission -> advance `main`
-  without touching the submission -> merge blocked by the up-to-date rule ->
-  rebase -> fresh approval + replay required; a probe
-  `bolyra-suite` adapter that prints its environment shows no
-  `ACTIONS_RUNTIME_TOKEN` / `GITHUB_TOKEN` inside the container; a probe
-  `external-suite` `run.command` that prints `env` shows none inside the
-  child container; the full-Debian `node:20` digest is recorded in the
-  workflow with the reason (git required).
-- CI: `node interop/replay.js --check` added to the `evc-conformance` job in
-  `ci.yml` (which today runs only `node --test interop/replay.test.js`); that
-  job's checkout gets `fetch-depth: 0` because `checkSuitePin` uses
-  `git show <suite.commit>:spec/test-vectors.json`. Generator `--check` in
-  the same job.
-- Landing after deploy: `verify.sh` green including the new evc-conformance
-  guard; live curl asserts the four changed strings present, all FIVE deleted
-  phrases absent (948, 953, 1031, the 953 tail "managed verifier path", 954
-  "Managed operations when you need them."), and `/conformance` reachable
-  with both claims.
-
-## 7. Completion criterion
-Both existing claims are publicly accessible with provenance, dated
-verification, and labeled links to replay history. A test submission PR is
-blocked by the required `replay-claim` check until a maintainer's approving
-review is bound to the head SHA and the label is present, then replays via
-base-controlled code pinned to `workflow_sha` and passes; a hash mismatch or
-failing replay leaves it red; a skipped or foreign-label run cannot satisfy
-it; a same-name job from a modified PR workflow does not unblock merge; no
-job in the workflow holds a write token; third-party code cannot see the
-runner's tokens.
-`SUBMITTING.md` suffices to reproduce the path without asking. All
-hosted-verifier copy is gone and the advertised suite version and counts are
-current and machine-checked at deploy.
-
-What this buys over maintainer-operated dispatch (Codex wording): compared
-with dispatch alone, this design makes successful trusted replay of the
-submitted SHA a merge prerequisite and automatically validates submission
-data. For a solo maintainer, merge enforcement primarily prevents mistakes,
-including mistakes induced by attacker-controlled or stale check evidence.
-It does not establish that malicious approved code reports honest results.
-
-## 8. Kill criterion (Codex)
-If, within 30 days of the public records reaching both existing adopters,
-neither references or uses its record and no new independent implementer
-submits a claim: stop expanding this feature. Leave the accurate page
-operational. Page views alone do not justify continuation.
-
-## 9. Decided questions
-1. `verified_on` is the recorded date and is never re-stamped; the page says
-   so explicitly. Per-claim `verification_run_url` is optional and manual.
-2. No generic `--changed-since`. Submissions are exactly one new claim;
-   `submission-check.js` derives the id and the existing `--claim <id>`
-   selector replays it. Full replay stays on dispatch.
-3. No commit statuses. The replay job's own conclusion is the required check
-   (v3), eliminating every write token from the workflow.
-4. Check identity is pinned by a ruleset-required workflow (v4); its
-   availability is plan task 1 and a hard prerequisite.
-5. Isolation is per kind (v5): `bolyra-suite` inside a container; `external-suite` on the VM because `replay.js` must drive the host `docker` CLI, and its implementer code already runs only in the `--network none` child container.
-6. No automatic restart (v5): ruleset workflows ignore label/review events; the maintainer re-runs the required workflow after approving and labeling.
-7. Out of scope, noted for a follow-up: `integrations/evc-conformance/bin.js`
-   line 12 says "112-vector suite" (set is 125).
