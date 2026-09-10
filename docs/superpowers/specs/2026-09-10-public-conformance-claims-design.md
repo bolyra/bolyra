@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-10
 **Author:** Claude (Fable 5.1) + Codex (gpt-6-astra) brainstorm; founder-approved scope
-**Status:** APPROVED for v1 scope (founder decision 2026-09-10 after five review rounds). The automatic submission gate is DEFERRED to Appendix A, which is fully reviewed and ready to activate.
+**Status:** APPROVED for v1 scope (founder decision 2026-09-10 after five review rounds; spec reviewer ✅ and Codex APPROVE on the v1 text). The automatic submission gate is DEFERRED to Appendix A, which is fully reviewed and ready to activate.
 
 ## 1. Motivation
 
@@ -139,7 +139,13 @@ Static, self-contained, no JS. Per claim:
    and runs the existing `Interop replay` workflow by `workflow_dispatch`
    against that SHA (the dispatch job gains optional `ref` and `claim`
    inputs, keeps `contents: read` / `persist-credentials: false`, and runs
-   third-party code under the per-kind isolation in section 3.5). Any push after
+   third-party code under the per-kind isolation in section 3.5). `ref` is
+   a commit SHA the job `git fetch`es (fork PR heads are not dispatchable as
+   branches); the workflow file and the harness always run from `main`, and
+   the job **overlays only `interop/claims.json` and the one new adapter**
+   from that SHA (A.1 style), never a wholesale checkout. A green dispatch
+   therefore means: the reviewed registry entry and adapter replay green
+   under the `main` harness. Any push after
    that review requires a fresh review and a fresh dispatch.
 5. Green dispatch run on the reviewed SHA + CODEOWNERS review -> merge -> the
    row appears on the next landing deploy. The dispatch run URL is recorded
