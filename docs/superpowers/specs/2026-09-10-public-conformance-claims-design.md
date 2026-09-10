@@ -226,8 +226,11 @@ the `kind` that `submission-check` emits:
 - `external-suite`: `replay.js` must call the host `docker` CLI
   (`replay.js:162-187`), so it cannot itself be containerized without
   exposing the daemon, which would be worse. Verified against the code: on
-  the host it runs only base code, a `git fetch` of the implementer (no
-  hooks execute on fetch), and a `JSON.parse` of its `package.json`; **the
+  the host it runs only base code: `docker version`, a fresh `git init` +
+  `fetch --depth 1 <sha>` + `checkout FETCH_HEAD` of the implementer (a fresh
+  init has only `.sample` hooks, so nothing executes on fetch or checkout),
+  and, only when the claim sets `requires_zero_dependencies`, a `JSON.parse`
+  of its `package.json`; **the
   only execution of implementer code is the kit's test command inside the
   existing child `docker run --network none` with no `-e` pass-through**,
   which therefore already sees no runner environment. That child container
@@ -245,7 +248,7 @@ isolation is the control for the implementer's code.
 name: Interop submission
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]     # the ruleset ignores other activity anyway
     branches: [main]
 # No label/review triggers: the ruleset ignores them. Restart = manual rerun.
 permissions:                          # load-bearing: pull_request_target is a privileged-family event
@@ -281,9 +284,13 @@ jobs:
           #    added entry has NO verification_run_url; kind ∈ {bolyra-suite, external-suite}
           #    bolyra-suite: exactly one ADDED regular file (mode 100644, not symlink), claim.adapter ==
           #      "adapters/<name>.ts", adapter_sha256 matches the blob;
-          #      implementer.install is EXACTLY ["npm","ci","--ignore-scripts"] or ["npm","install","--ignore-scripts"]
+          #      implementer.install is ["npm","ci"|"install","--ignore-scripts"] optionally followed by
+          #      "--no-audit" and/or "--no-fund" in that order, nothing else (matches the existing pinned claim;
+          #      both exact forms are printed in SUBMITTING.md)
           #    external-suite: zero adapter changes; run.image matches ^node:[^@]+@sha256:[0-9a-f]{64}$;
           #      run.command[0] ∈ {"npm","node"}; run.network == "none"
+          #    implementer.repo ~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ (explicit here, not only
+          #      via the generator; this URL is what `git remote add` + `fetch` consume on the VM)
           #    claim_id ~ ^[A-Za-z0-9@._/-]+$ ; adapter name ~ ^[A-Za-z0-9._-]+\.ts$
           #    validateClaim passes on head claims.json with the head adapter materialized into a temp interop/
           #    base generator on head claims.json == head landing/conformance.html (byte-equal)
@@ -303,10 +310,14 @@ jobs:
       - checkout ref: ${{ env.TRUSTED_SHA }}, fetch-depth: 0, persist-credentials: false
       - git fetch origin "$HEAD_SHA"; git checkout "$HEAD_SHA" -- interop/claims.json
       - if kind == bolyra-suite: git checkout "$HEAD_SHA" -- "interop/adapters/$ADAPTER_NAME"
-      - docker run --rm -v "$PWD:/work" -w /work node:20@<digest> \
-            node interop/replay.js --check
-      - docker run --rm -v "$PWD:/work" -w /work -e CLAIM_ID node:20@<digest> \
-            sh -c 'node interop/replay.js --claim "$CLAIM_ID"'   # env var, quoted; no runner env passed
+      - node interop/replay.js --check                            # base code only; on the VM
+      - if kind == bolyra-suite (LAST step of the job):
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CLAIM_ID \
+            -v "$PWD:/work" -w /work node:20@<full-debian-digest> \
+            sh -c 'node interop/replay.js --claim "$CLAIM_ID"'   # no runner env passed
+      - if kind == external-suite:
+          env -i PATH="$PATH" HOME="$HOME" CLAIM_ID="$CLAIM_ID" \
+            node interop/replay.js --claim "$CLAIM_ID"           # implementer code runs only in replay.js's own --network none child
 ```
 
 Properties, stated plainly:
@@ -314,10 +325,10 @@ Properties, stated plainly:
   on every run; confirmed on the first live run). Reruns replay the same SHAs.
 - Check identity is pinned by the ruleset; a same-name job from another
   workflow cannot satisfy it (proven in section 6).
-- No job holds a token that writes; third-party code runs in a container
-  that cannot see `ACTIONS_RUNTIME_TOKEN` or `GITHUB_TOKEN`. The residual for
-  code that escapes the container is the read-only `GITHUB_TOKEN` on the VM:
-  public reads and quota consumption, no writes. Accepted.
+- No job holds a token that writes; third-party code cannot see
+  `ACTIONS_RUNTIME_TOKEN` or `GITHUB_TOKEN` (per-kind isolation above). The
+  escape/host-compromise residual is stated in "Stated residual" above and is
+  full host exposure, not merely the read-only token.
 - Approval is bound to an exact SHA by GitHub's review record; the label
   alone never authorizes; the live-head check defeats stale reruns; the
   maintainer's manual rerun is the only way a replay starts.
@@ -428,8 +439,10 @@ the repository or to commit statuses.
   `git show <suite.commit>:spec/test-vectors.json`. Generator `--check` in
   the same job.
 - Landing after deploy: `verify.sh` green including the new evc-conformance
-  guard; live curl asserts the four changed strings present, the three
-  deleted sentences absent, and `/conformance` reachable with both claims.
+  guard; live curl asserts the four changed strings present, all FIVE deleted
+  phrases absent (948, 953, 1031, the 953 tail "managed verifier path", 954
+  "Managed operations when you need them."), and `/conformance` reachable
+  with both claims.
 
 ## 7. Completion criterion
 Both existing claims are publicly accessible with provenance, dated
