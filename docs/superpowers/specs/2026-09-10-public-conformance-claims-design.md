@@ -192,24 +192,40 @@ the per-kind model from Appendix A.1 verbatim:
 - `node interop/replay.js --check`: base code only; on the VM.
 - `bolyra-suite` claims (all third-party execution is inside `replay.js`'s
   process tree): `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp
-  -e CLAIM_ID -v "$PWD:/work" -w /work node:20@<full-debian-digest> sh -c
-  'node interop/replay.js --claim "$CLAIM_ID"'` as the last step; full
-  Debian image because `git` is required; no runner environment passed.
+  -e CLAIM_ID -v "$PWD:/work:ro" --tmpfs /tmp:rw,exec -w /work
+  node:20@<full-debian-digest> sh -c 'node interop/replay.js --claim
+  "$CLAIM_ID"'`; full Debian image because `git` is required; no runner
+  environment passed. **The workspace is mounted read-only** so third-party
+  code cannot modify the harness, the runner, the registry, or the other
+  adapters; `replay.js`'s own scratch (`mkdtemp`, clones, `git archive`
+  output, `npm ci` trees) lands on the tmpfs. If implementation finds a path
+  `replay.js` must write under the workspace, that exact path gets its own
+  tmpfs; the workspace itself never becomes writable.
 - `external-suite` claims: `replay.js` must drive the host `docker` CLI, so
   it runs on the VM under `env -i PATH HOME CLAIM_ID`; the only implementer
   execution is inside its existing `docker run --network none` child with no
   `-e`, which is the boundary (verified against `replay.js:162-187`).
 - Replay-all (no `claim` input) iterates claims and applies the same
-  per-kind branch to each.
+  per-kind branch to each. **Harness integrity is re-verified between
+  claims**: after every claim, `git diff --quiet HEAD -- interop spec
+  landing .github && test -z "$(git status --porcelain -- interop spec
+  landing .github)"` must hold, else the job fails "harness modified after
+  claim <id>" before the next claim runs. With the read-only mount this
+  should never trip; it exists so that a mount misconfiguration cannot
+  silently let a `bolyra-suite` run feed a tampered `replay.js` to a later
+  `external-suite` run on the VM.
 - Stated residual: a container escape or host compromise exposes the
   runner's credentials and privileges (passwordless sudo); the read-only
   `GITHUB_TOKEN` does not bound it. The maintainer's decision to dispatch is
   the control for the adapter; isolation is the control for the
   implementer's code.
-- Proof (section 6): a probe `bolyra-suite` adapter and a probe
+- Proofs (section 6): a probe `bolyra-suite` adapter and a probe
   `external-suite` `run.command` that print their environment show no
-  `ACTIONS_RUNTIME_TOKEN` / `GITHUB_TOKEN`; the image digest is recorded in
-  the workflow with the reason.
+  `ACTIONS_RUNTIME_TOKEN` / `GITHUB_TOKEN`; a probe `bolyra-suite` adapter
+  that attempts to write `interop/replay.js` fails on the read-only mount,
+  and a replay-all run with that probe first and an `external-suite` claim
+  second shows the integrity check passing and the harness unchanged; the
+  image digest is recorded in the workflow with the reason.
 
 ## 4. Data flow
 Registry (PR-authored, gate-validated, CODEOWNERS-reviewed) -> generator
@@ -243,7 +259,11 @@ repository or to commit statuses.
 - Isolation proofs on the dispatch job: probe `bolyra-suite` adapter prints
   `env` inside the container -> no runner tokens; probe `external-suite`
   `run.command` prints `env` inside the child -> no runner tokens; the
-  full-Debian `node:20` digest is recorded with the reason (git required).
+  full-Debian `node:20` digest is recorded with the reason (git required);
+  mixed-kind replay-all tampering proof: a probe `bolyra-suite` adapter that
+  tries to write `interop/replay.js` is denied by the read-only mount, and
+  the between-claims integrity check passes before the following
+  `external-suite` claim.
 - `interop/replay.test.js`: all 18 existing parser tests retained, unchanged.
 - End-to-end proof on a test submission PR, recorded in the implementation
   PR: offline checks green on the PR with no third-party execution (verified
@@ -471,8 +491,8 @@ jobs:
       - node interop/replay.js --check                            # base code only; on the VM
       - if kind == bolyra-suite (LAST step of the job):
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CLAIM_ID \
-            -v "$PWD:/work" -w /work node:20@<full-debian-digest> \
-            sh -c 'node interop/replay.js --claim "$CLAIM_ID"'   # no runner env passed
+            -v "$PWD:/work:ro" --tmpfs /tmp:rw,exec -w /work node:20@<full-debian-digest> \
+            sh -c 'node interop/replay.js --claim "$CLAIM_ID"'   # read-only workspace; no runner env passed
       - if kind == external-suite:
           env -i PATH="$PATH" HOME="$HOME" CLAIM_ID="$CLAIM_ID" \
             node interop/replay.js --claim "$CLAIM_ID"           # implementer code runs only in replay.js's own --network none child
