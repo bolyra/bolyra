@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-10
 **Author:** Claude (Fable 5.1) + Codex (gpt-6-astra) brainstorm; founder-approved scope
-**Status:** DRAFT v2 (spec-reviewer + Codex round 1 applied; pending round 2)
+**Status:** DRAFT v3 (rounds 1-2 applied from both reviewers; pending round 3)
 
 ## 1. Motivation
 
@@ -36,10 +36,12 @@ conversion."
   from `claims.json`; `--check` fails CI when the committed HTML drifts.
 - **Submission contract** (`interop/SUBMITTING.md`): one PR adds exactly one
   claim (+ one new adapter for `bolyra-suite`) and the regenerated page.
-- **Trusted, label-gated replay of submissions** (section 3.4): workflow and
-  harness from base; only the submission's data and adapter come from the PR;
-  read-only token; no secrets; maintainer approval bound to an exact SHA; a
-  merge-blocking gate that fails until that SHA has replayed green.
+- **Trusted, label-gated replay of submissions** (section 3.4): one
+  base-controlled job that is itself the required check; read-only token
+  everywhere; no secrets, no caches, no status writes; execution only when a
+  maintainer label is present AND the maintainer's approving review is bound
+  to the exact head SHA; only the submission's data and one adapter come from
+  the PR.
 - **CI additions**: `node interop/replay.js --check` and the generator
   `--check` on every push and PR.
 - **Landing copy on the same surface**: current suite version and counts;
@@ -64,10 +66,12 @@ interop/claims.json --gen-conformance.js--> landing/conformance.html --deploy.sh
         ^                                            ^
         | PR: +1 claim, +1 adapter, regenerated page | CI --check: committed HTML == generated
         |
-  interop-submission.yml (pull_request_target, base-controlled, contents:read, no secrets)
-     claims-gate  : fails until the current head SHA has a green replay status; required check
-     replay-claim : runs ONLY on `replay-approved` label by @saneGuy on a matching SHA;
-                   base checkout + overlay of the PR's claims.json and new adapter; sets status
+  interop-submission.yml (pull_request_target; workflow + harness pinned to github.workflow_sha;
+                          contents:read + pull-requests:read only; no secrets/caches/status writes)
+     submission-check : validates the diff as DATA; outputs is_submission, claim id, adapter name
+     replay-claim     : REQUIRED CHECK. non-submission -> pass. submission without
+                        (label present AND saneGuy APPROVED review at commit_id == head.sha) -> FAIL.
+                        else overlay the validated files at head.sha and replay `--claim <id>`.
 ```
 
 ### 3.1 Generator: `landing/gen-conformance.js`
@@ -125,109 +129,137 @@ Static, self-contained, no JS. Per claim:
 2. Run `node interop/replay.js --check` (offline pins/schema) and
    `node landing/gen-conformance.js`; commit the regenerated
    `landing/conformance.html` with the claim and adapter.
-3. A submission PR may touch ONLY: `interop/claims.json`, the one new file
-   under `interop/adapters/`, and `landing/conformance.html`. Any other path
-   makes `claims-gate` fail. Workflow, harness, runner, and dependency changes
-   are never accepted through this path; open a separate PR.
-4. Open the PR. `claims-gate` runs and FAILS with "awaiting approved replay";
-   the offline checks run in ordinary CI. No third-party code runs.
-5. The maintainer reviews the adapter and pins, notes the exact head SHA, and
-   applies `replay-approved`. `replay-claim` runs for that SHA and sets a
-   commit status. `claims-gate` re-evaluates and passes only on success.
-6. Any push after approval invalidates it: the status is bound to the old
-   SHA, `claims-gate` fails again, and the maintainer must re-review and
-   re-label. Removing the label does not cancel a running job; the maintainer
-   cancels it manually when revoking approval.
-7. Green gate + CODEOWNERS review -> merge -> the row appears on the next
-   landing deploy. README rules restated: a red replay means investigate,
-   never edit the claim; claims stay pinned; re-verification at a newer set is
-   a new row.
+3. A submission PR may touch ONLY: `interop/claims.json`, one new regular
+   file under `interop/adapters/` (for `bolyra-suite`; none for
+   `external-suite`), and `landing/conformance.html`. Anything else fails
+   `submission-check`. Workflow, harness, runner, and dependency changes are
+   never accepted through this path; open a separate PR. The branch must
+   contain the current base of `main` (rebase before asking for review).
+4. Open the PR. `submission-check` validates the diff; `replay-claim` (the
+   required check) FAILS with "awaiting maintainer review + replay-approved on
+   <head.sha>". Offline checks run in ordinary CI. No third-party code runs.
+5. The maintainer reviews the adapter and pins and submits an **approving PR
+   review** (GitHub records the reviewed `commit_id`), then applies
+   `replay-approved`. `replay-claim` re-runs, confirms the approving review's
+   `commit_id` equals the current head SHA, replays, and its own conclusion
+   is the check.
+6. Any push after approval changes the head SHA; the approving review no
+   longer matches; `replay-claim` fails again until the maintainer re-reviews
+   (new approving review on the new SHA). The label may stay; it is
+   necessary, not sufficient. In-progress runs on a superseded SHA are
+   cancelled by the newer event.
+7. Green `replay-claim` + CODEOWNERS review -> merge -> the row appears on
+   the next landing deploy. README rules restated: a red replay means
+   investigate, never edit the claim; claims stay pinned; re-verification at
+   a newer set is a new row.
 
 ### 3.4 Trusted submission workflow: `.github/workflows/interop-submission.yml`
 
-**Why `pull_request_target`, and why it is safe here.** Round 1 established
-that on the `pull_request` event the workflow file, `replay.js`, and the
-runner all execute from the PR's ref, so a PR can rewrite any of them and
-produce a green check; the `paths:` filter only affects triggering. A green
-result on `pull_request` is therefore not evidence. `pull_request_target`
-runs the workflow definition from the base branch, so the harness is trusted.
-Its documented danger is checking out and executing PR code while holding a
-privileged token or secrets. This workflow does neither: the token is
-downgraded explicitly, no secrets are referenced, no caches are used,
-credentials are not persisted, and the only PR-sourced bytes that execute are
-the one adapter the maintainer reviewed and approved by SHA. That is the same
-blast radius as the existing dispatch job (compute, egress, public reads).
-This is the repo's only use of `pull_request_target`; this section is the
+**Why `pull_request_target`.** On the `pull_request` event the workflow file,
+`replay.js`, and the runner execute from the PR's ref; a PR can rewrite any
+of them and go green, and `paths:` only affects triggering. A green result on
+`pull_request` is not evidence. `pull_request_target` runs the workflow
+definition from the base, so the harness is trusted. Its documented danger is
+executing PR code while holding a privileged token or secrets. This workflow
+holds neither: every job is `contents: read` (plus `pull-requests: read` for
+the review lookup), no secrets are referenced, `cache-mode: none`, no
+credentials persist, **no job writes anything to GitHub**, and the only
+PR-sourced bytes that execute are the one adapter a maintainer approved by
+SHA. This is the repo's only `pull_request_target` use; this section is the
 justification.
+
+**Why the replay job is the check.** v2 used commit statuses as the gate.
+That required `statuses: write` in the workflow, a finalizer job, a refresh
+mechanism, source validation of the status, and queue handling. Same-runner
+steps are not a security boundary, so any write token in the adapter's job is
+reachable by the adapter. v3 removes the write entirely: GitHub Actions
+reports the job's conclusion itself, which no adapter can forge.
 
 ```yaml
 name: Interop submission
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [main]             # submissions target main only
 permissions:
   contents: read
-  statuses: write        # only to record the replay result on the head SHA
+  pull-requests: read
 concurrency:
   group: submission-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true       # a newer event supersedes; last run on the current SHA is the check
+
+env:                             # captured once; every step uses these, never a moving ref
+  TRUSTED_SHA: ${{ github.workflow_sha }}
+  BASE_SHA:    ${{ github.event.pull_request.base.sha }}
+  HEAD_SHA:    ${{ github.event.pull_request.head.sha }}
+  PR_NUMBER:   ${{ github.event.pull_request.number }}
 
 jobs:
-  claims-gate:           # required status check in branch protection
-    runs-on: ubuntu-latest
+  submission-check:
+    permissions: { contents: read }
     steps:
-      - checkout BASE (ref: main), fetch-depth: 0, persist-credentials: false
-      - fetch the PR head SHA as a detached object: git fetch origin <head.sha>
-      - node interop/submission-check.js --base main --head <head.sha>
-          # fails unless: changed paths ⊆ {interop/claims.json, one new
-          # interop/adapters/*, landing/conformance.html}; base→head registry
-          # diff is exactly ONE added claim and zero modified/removed; no
-          # existing adapter modified; head claims.json passes validateClaim.
-          # If the PR touches none of the claim paths: exit 0 (not a submission).
-      - query commit status "interop/replay" on <head.sha>; pass only if
-        state == success; else fail "awaiting approved replay of <head.sha>"
+      - checkout ref: ${{ env.TRUSTED_SHA }}, fetch-depth: 0, persist-credentials: false
+      - git fetch origin "$HEAD_SHA"; git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA" || fail "rebase onto main"
+      - node interop/submission-check.js            # reads env, inspects git OBJECTS only
+          # outputs: is_submission (true/false), claim_id, adapter_name, kind
+          # rules when is_submission: changed paths (BASE_SHA...HEAD_SHA) ⊆ allowlist;
+          #   registry diff == exactly ONE added claim, zero modified/removed;
+          #   kind ∈ {bolyra-suite, external-suite}; bolyra-suite ⇒ exactly one ADDED
+          #   regular file interop/adapters/<name>.ts (mode 100644, no symlink) and the
+          #   claim's `adapter` == "adapters/<name>.ts" with matching adapter_sha256;
+          #   external-suite ⇒ zero adapter changes;
+          #   claim_id matches ^[A-Za-z0-9@._/-]+$, adapter_name matches ^[A-Za-z0-9._-]+\.ts$;
+          #   head claims.json passes validateClaim after materializing the head
+          #   adapter into a temp interop/ layout (writing a .ts file is not executing it);
+          #   base generator on head claims.json == head landing/conformance.html (byte-equal).
+          # when not a submission (no allowlisted path touched): is_submission=false, exit 0.
 
-  replay-claim:
-    needs: claims-gate     # never runs on an out-of-scope diff
-    if: >
-      github.event.action == 'labeled' &&
-      github.event.label.name == 'replay-approved' &&
-      github.event.sender.login == 'saneGuy'
-    runs-on: ubuntu-latest
+  replay-claim:                  # THE required status check in branch protection
+    needs: submission-check
+    if: always()                 # must produce a conclusion on every PR event
+    permissions: { contents: read, pull-requests: read }
     steps:
-      - checkout BASE (ref: main), fetch-depth: 0, persist-credentials: false
-      - echo "replaying head ${{ github.event.pull_request.head.sha }}"
-      - git fetch origin <head.sha>; git checkout <head.sha> --
-          interop/claims.json interop/adapters/<the one new file>
-          # overlay ONLY the submission's data and adapter; harness stays base
-      - setup-node 20, package-manager-cache: false
+      - if needs.submission-check.result != 'success': fail
+      - if outputs.is_submission != 'true': echo "not a submission"; exit 0
+      - authorization (trusted, metadata only, via REST with the job token):
+          label 'replay-approved' present on PR $PR_NUMBER; AND the most recent
+          review by 'saneGuy' has state APPROVED and commit_id == $HEAD_SHA.
+          Otherwise: fail "awaiting maintainer review + replay-approved on $HEAD_SHA"
+      - checkout ref: ${{ env.TRUSTED_SHA }}, fetch-depth: 0, persist-credentials: false
+      - git fetch origin "$HEAD_SHA"
+      - git checkout "$HEAD_SHA" -- interop/claims.json            # data
+      - if kind == bolyra-suite: git checkout "$HEAD_SHA" -- "interop/adapters/$ADAPTER_NAME"
+      - setup-node 20, cache-mode: none
       - node interop/replay.js --check
-      - node interop/replay.js --claim <id from submission-check>
-      - set commit status "interop/replay" = success|failure on <head.sha>
-        (the only step that uses the token; adapters run in earlier steps
-        with no token in their environment)
+      - node interop/replay.js --claim "$CLAIM_ID"                 # env var, quoted; never ${{ }} in run:
 ```
 
 Properties, stated plainly:
-- The gate and the replay both run base-controlled code. A submission cannot
-  alter what checks it.
-- Approval is bound to an exact SHA: the status is written on `head.sha`;
-  any new commit has no status and fails the gate. Re-runs of a completed job
-  replay the originally approved SHA.
-- The approving actor is restricted to the maintainer login; a label applied
-  by anyone else does not run adapters.
-- "Skipped" cannot satisfy the gate: `claims-gate` itself is the required
-  check, and it fails (not skips) while awaiting replay.
-- What the mechanism does NOT do: it does not judge whether an adapter is
-  honest. The label is a *reviewed submission gate*; the maintainer's review
-  of the adapter is the only defense against a malicious adapter, and this
-  is written into SUBMITTING.md and the workflow header.
+- Harness, gate script, and runner come from `github.workflow_sha`, an
+  immutable commit of the base branch; reruns replay the same SHAs.
+- A submission cannot alter what checks it, and no job holds a token that can
+  write anything. An adapter that compromises its runner gains: compute,
+  egress, and public reads. Nothing else exists on that VM.
+- Approval is bound to an exact SHA by GitHub's own review record: the
+  maintainer's APPROVED review must carry `commit_id == HEAD_SHA`. A push
+  after review breaks the binding; the label alone never authorizes.
+- A skipped or foreign-label run cannot satisfy the check: `replay-claim`
+  runs on every PR event and fails, not skips, for an unapproved submission.
+- Non-submission PRs pass the check trivially, so it can be required without
+  blocking unrelated work; the workflow has no `paths:` filter for this reason.
+- What the mechanism does NOT do: it does not judge whether an approved
+  adapter is honest. The maintainer's adapter review is the only defense
+  against a malicious adapter (stated in SUBMITTING.md and the workflow header).
 - Fork PRs on `pull_request_target` do not wait for "Approve and run"; the
-  label is the sole execution gate. The Actions setting "Require approval for
-  all outside collaborators" is still enabled for the `pull_request`-based
+  review-SHA binding plus label is the sole execution gate. "Require approval
+  for all outside collaborators" stays enabled for the `pull_request`-based
   `ci.yml`.
-- Create the `replay-approved` label (none exists today).
+- Create the `replay-approved` label (none exists today). Only `saneGuy` has
+  triage+; re-check this assumption if collaborators are added.
 - Full-registry replay stays on the dispatch workflow, unchanged.
+- `verification_run_url` is maintainer-only, added in a follow-up commit
+  after merge (a maintainer push to the PR would change the SHA and restart
+  the review cycle). Documented in `interop/README.md`'s schema.
 
 ### 3.5 Landing copy changes (`landing/index.html`) and deploy/verify coverage
 Exact edits (line numbers as of `f106b00`):
@@ -236,8 +268,14 @@ Exact edits (line numbers as of `f106b00`):
 - 953: delete "Pilot against Bolyra's hosted verifier preview today, ...".
 - 1031: delete "Hosted `POST /v1/verify` preview for design partners, same
   External Verifier Contract".
+- 953 tail: delete "... and managed verifier path" (the platform the ruling
+  said not to build).
+- 954: delete "Managed operations when you need them."
 - 955: "10 domain-agnostic wire-envelope vectors" -> "11 domain-agnostic
   wire-envelope vectors".
+- Verified at `f106b00`: no other landing page mentions the hosted preview;
+  the design-partner section (1153-1180) is pilot copy, not hosted-verifier
+  copy, and stays.
 - Every advertised suite string: literally `@bolyra/evc-conformance@0.6.0`
   and `41 wire-contract vectors`, including executable examples.
 - Replacement CTA copy (Codex text): "Run the published conformance suite,
@@ -249,23 +287,26 @@ Exact edits (line numbers as of `f106b00`):
   "@bolyra/evc-conformance@"`. `verify.sh`: add the matching `guard_version`,
   and a check that the advertised count matches the installed package: run
   the resolved `@bolyra/evc-conformance@<advertised>` self-test from an empty
-  dir and assert its "N test vectors loaded" equals the advertised total.
+  dir and assert its "N test vectors loaded" (stdout, non-JSON mode) equals
+  the advertised total (41 today: 30 host_behavior + 11 verifier_envelope).
 
 ## 4. Data flow
 Registry (PR-authored, gate-validated, CODEOWNERS-reviewed) -> generator
 (deterministic, escaped, link-validated) -> committed HTML (drift-guarded) ->
-`deploy.sh` -> S3/CloudFront -> `verify.sh`. Replay results flow only into a
-commit status on the PR head SHA and into public run history; never into the
-repository.
+`deploy.sh` -> S3/CloudFront -> `verify.sh`. Replay results exist only as the
+`replay-claim` job conclusion and public run history; nothing is written to
+the repository or to commit statuses.
 
 ## 5. Error handling
 - Malformed or unsafe registry entry: generator exits 1; CI red; no deploy.
 - Drift: `--check` red with a diff.
-- Out-of-scope submission diff, >1 claim, modified claim/adapter: gate red
-  with the offending paths/ids named.
-- Replay failure: status failure; gate red; per README the claim is
-  investigated, never edited to pass.
-- Label by non-maintainer or on a non-matching SHA: no replay; gate red.
+- Out-of-scope diff, >1 claim, modified claim/adapter, symlink, bad charset,
+  stale branch, generator mismatch: `submission-check` red with the reason;
+  `replay-claim` red because its dependency failed.
+- Submission without label, or label present but no APPROVED maintainer review
+  at the current head SHA: `replay-claim` red with the awaited SHA named.
+- Replay failure: `replay-claim` red; per README the claim is investigated,
+  never edited to pass.
 - Missing `conformance.html` at deploy: `deploy.sh` errors.
 
 ## 6. Testing
@@ -279,10 +320,17 @@ repository.
   two added, modified existing, removed existing, extra path, modified
   existing adapter each fail with the right message; non-submission PR exits 0.
 - `interop/replay.test.js`: all 18 existing parser tests retained, unchanged.
+- `interop/submission-check.test.js` additionally: symlink adapter rejected;
+  bad claim-id charset rejected; adapter name with shell metacharacters
+  rejected; external-suite with an adapter change rejected; head not
+  containing base rejected; generator mismatch rejected.
 - Workflow proof on a test PR, recorded in the implementation PR: unrelated
-  label -> no replay, gate red; push after approval -> gate red again;
-  hash-mismatched claim -> replay failure, gate red; passing claim -> green;
-  relabel after fresh push -> green.
+  label -> `replay-claim` red "awaiting"; label without approving review ->
+  red; approving review on H1 then push H2 then label -> red naming H2;
+  approving review on H2 + label -> replay runs; hash-mismatched claim ->
+  red; passing claim -> green; unrelated PR -> green without replay;
+  external-suite submission -> green with no adapter; branch protection
+  actually blocks merge on red (screenshot in the PR).
 - CI: `node interop/replay.js --check` added to the `evc-conformance` job in
   `ci.yml` (which today runs only `node --test interop/replay.test.js`); that
   job's checkout gets `fetch-depth: 0` because `checkSuitePin` uses
@@ -295,9 +343,11 @@ repository.
 ## 7. Completion criterion
 Both existing claims are publicly accessible with provenance, dated
 verification, and labeled links to replay history. A test submission PR is
-blocked by `claims-gate` until a maintainer labels a reviewed SHA, then
-replays via base-controlled code and passes; a hash mismatch or failing
-replay leaves the gate red; a skipped or foreign-label run cannot satisfy it.
+blocked by the required `replay-claim` check until a maintainer's approving
+review is bound to the head SHA and the label is present, then replays via
+base-controlled code pinned to `workflow_sha` and passes; a hash mismatch or
+failing replay leaves it red; a skipped or foreign-label run cannot satisfy
+it; no job in the workflow holds a write token.
 `SUBMITTING.md` suffices to reproduce the path without asking. All
 hosted-verifier copy is gone and the advertised suite version and counts are
 current and machine-checked at deploy.
@@ -314,3 +364,7 @@ operational. Page views alone do not justify continuation.
 2. No generic `--changed-since`. Submissions are exactly one new claim;
    `submission-check.js` derives the id and the existing `--claim <id>`
    selector replays it. Full replay stays on dispatch.
+3. No commit statuses. The replay job's own conclusion is the required check
+   (v3), eliminating every write token from the workflow.
+4. Out of scope, noted for a follow-up: `integrations/evc-conformance/bin.js`
+   line 12 says "112-vector suite" (set is 125).
