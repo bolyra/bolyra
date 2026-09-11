@@ -22,6 +22,7 @@
 - **Prerequisites:** an authenticated `gh` with push rights on `bolyra/bolyra`; a running Docker daemon; `ruby` (for YAML checks); Node 20 (`nvm use 20` if available — CI runs Node 20).
 - "Expected:" lines are what you must see. If you see something else, stop and report; do not improvise.
 - **Handoff directory:** every task that produces or consumes cross-task state uses `HANDOFF=/tmp/plan-handoff` (create with `mkdir -p "$HANDOFF"`). Files: `image.env` (REPLAY_IMAGE=…), `dispatch.sh` (the `dispatch_and_wait` helper; `source "$HANDOFF/dispatch.sh"` before use), `proofs.env` (one `NAME=URL` per line), `pr.env` (PR_NUMBER, then FINAL_HEAD and MERGE_SHA appended). **Every shell block that dispatches or records is self-contained**: it sets `HANDOFF`, sources what it needs, and exports the git identity; nothing is inherited between blocks.
+- **Checked subshells run standalone.** Never write `( set -e … ) && next`: a subshell on the left of `&&`/`||` runs with `errexit` disabled, so a failing command inside it would not stop it. Every checked block ends with its own success `echo` inside the parentheses.
 - Foreground `sleep` may be blocked in some agent harnesses; where the plan polls GitHub, use the poll loop as written or the harness's monitor facility — never skip the wait.
 - Memory files referenced at the end live under `~/.claude/projects/-Users-lordviswa-Projects/memory/` (absolute: `/Users/lordviswa/.claude/projects/-Users-lordviswa-Projects/memory/`), never inside the repository.
 
@@ -509,7 +510,7 @@ git commit -s -m "interop: submission-overlay.js — blob-based, symlink-safe ov
 
 Snapshot the protected tree after the overlay; verify it is identical after every claim (including failed ones). The verifier is **copied out of the workspace before any replay and run from there** — a verifier that lived in the tree it checks could be replaced by the tamper it should detect. It never invokes `git` (a modified `.git/config` can make `git status` execute an fsmonitor command); it walks the filesystem.
 
-What it covers: everything (ignored files included) under `interop/`, `spec/`, `landing/`, `.github/`; root-level regular files (`package.json`, `.gitignore`, …, non-recursive); and **all of `.git/`, objects included** (content addressing does not make stored bytes immutable, and `.git/objects/info/alternates` can redirect object lookup — so the whole directory is fingerprinted; with `fetch-depth: 0` this is tens of MB and takes seconds per claim). For each entry: type, full permission bits, and for files a sha256, for symlinks the target, for directories a sha256 of their sorted entry list. What it does NOT cover, stated in the file header: the host toolchain (`node`, `git`, `docker`), `HOME`, scratch dirs, and changes restored before verification.
+What it covers: everything (ignored files included) under `interop/`, `spec/`, `landing/`, `.github/`; root-level regular files (`package.json`, `.gitignore`, …, non-recursive); and **all of `.git/`, objects included** (content addressing does not make stored bytes immutable, and `.git/objects/info/alternates` can redirect object lookup — so the whole directory is fingerprinted; measured 2026-09-11: a fresh full-history clone's `.git` is 30 MB, largest pack 29 MB, so verify is well under a second per claim; files are hashed in 1 MiB chunks, never buffered whole; Task 6 Check 1 records the real step duration). For each entry: type, full permission bits, and for files a sha256, for symlinks the target, for directories a sha256 of their sorted entry list. What it does NOT cover, stated in the file header: the host toolchain (`node`, `git`, `docker`), `HOME`, scratch dirs, and changes restored before verification.
 
 **Files:**
 - Create: `interop/harness-integrity.js`
@@ -661,12 +662,21 @@ const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github'];
 
 function die(msg) { process.stderr.write(`harness-integrity: ${msg}\n`); process.exit(1); }
 
+// Streamed, so a large pack file is never buffered whole.
+function sha256File(abs) {
+  const h = crypto.createHash('sha256');
+  const fd = fs.openSync(abs, 'r');
+  const buf = Buffer.alloc(1 << 20);
+  try { let n; while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) h.update(buf.subarray(0, n)); }
+  finally { fs.closeSync(fd); }
+  return h.digest('hex');
+}
 function fingerprint(abs) {
   const st = fs.lstatSync(abs);              // any error other than ENOENT propagates → die
   const mode = (st.mode & 0o7777).toString(8);
   if (st.isSymbolicLink()) return `symlink:${mode}:${fs.readlinkSync(abs)}`;
   if (st.isDirectory()) return `dir:${mode}:${crypto.createHash('sha256').update(fs.readdirSync(abs).sort().join('\0')).digest('hex')}`;
-  if (st.isFile()) return `file:${mode}:${crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex')}`;
+  if (st.isFile()) return `file:${mode}:${sha256File(abs)}`;
   return `other:${mode}`;
 }
 function walk(root, rel, out) {
@@ -696,7 +706,7 @@ if (!file || !root || !['snapshot', 'verify'].includes(cmd)) die('usage: snapsho
 try {
   if (cmd === 'snapshot') {
     const snap = snapshot(root);
-    fs.writeFileSync(file, JSON.stringify(Object.assign({}, snap), null, 1)); // plain object for JSON; __proto__ key survives as own property
+    fs.writeFileSync(file, JSON.stringify(snap, null, 1)); // a null-prototype object serializes __proto__ as an ordinary key
     console.log(`harness-integrity: snapshot of ${Object.keys(snap).length} entries → ${file}`);
   } else {
     const base = Object.assign(Object.create(null), JSON.parse(fs.readFileSync(file, 'utf8')));
@@ -799,6 +809,13 @@ on:
         description: 'Claim id to replay. Required when `ref` is set. Empty = all claims.'
         required: false
         default: ''
+      nonce:
+        description: 'Correlation id set by automation so it can find exactly this run (optional; shown in the run name, never executed)'
+        required: false
+        default: ''
+
+# The nonce makes each dispatch uniquely identifiable (see dispatch_and_wait).
+run-name: Interop replay ${{ inputs.nonce }}
 
 # Third-party code executes in this job; give it nothing to steal.
 permissions:
@@ -911,7 +928,8 @@ The worktree's `.git` is a file; make a real clone and run the probe in a **chec
       echo "--- tmpfs ---"; touch /tmp/ok && echo tmpfs-ok
       echo "--- git reads ---"; git -C /work rev-parse --short HEAD; git -C /work archive HEAD spec > /tmp/spec.tar; tar -tf /tmp/spec.tar > /tmp/spec.lst; head -1 /tmp/spec.lst
       echo "--- npm cache ---"; npm config get cache'
-) && echo "probe subshell OK"
+  echo "probe subshell OK"
+)
 ```
 Expected: env NAMES are exactly `CLAIM_ID HOME HOSTNAME NODE_VERSION PATH PWD YARN_VERSION` (names only — never print values); write test prints `sh: 1: cannot create /work/interop/replay.js: Read-only file system`; `tmpfs-ok`; a short SHA and `spec/`; `/tmp/.npm`; `probe subshell OK`.
 
@@ -943,23 +961,25 @@ git push -u origin public-conformance-claims
 HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
 cat > "$HANDOFF/dispatch.sh" <<'DISPATCH'
 # dispatch_and_wait <expected: success|failure> <branch> [-f key=value ...]
-#   Dispatches, identifies the run unambiguously, waits, then VALIDATES the completed
-#   run's conclusion and head SHA against expectations. Returns 0 only on a match;
-#   any dispatch/query error or mismatch returns non-zero. Sets RUN_ID and RUN_URL.
+#   Dispatches with a fresh nonce (which the workflow puts in its run name), finds
+#   exactly that run, waits, then VALIDATES the completed run's conclusion and head
+#   SHA. Returns 0 only on a match; any dispatch/query error or mismatch returns
+#   non-zero. Sets RUN_ID and RUN_URL.
 dispatch_and_wait() {
   local expect="$1" branch="$2"; shift 2
   [ "$expect" = success ] || [ "$expect" = failure ] || { echo "expected must be success|failure"; return 2; }
-  local ts head; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); head=$(git rev-parse "origin/$branch") || return 1
-  gh workflow run interop-replay.yml --repo bolyra/bolyra --ref "$branch" "$@" || { echo "dispatch failed"; return 1; }
+  local head nonce; head=$(git rev-parse "origin/$branch") || return 1
+  nonce="$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"          # digits and dashes only: safe inside the jq string below
+  gh workflow run interop-replay.yml --repo bolyra/bolyra --ref "$branch" -f nonce="$nonce" "$@" || { echo "dispatch failed"; return 1; }
   local i; RUN_ID=""
-  for i in $(seq 1 30); do   # poll; if foreground sleep is blocked in your harness, use its monitor facility instead
-    RUN_ID=$(gh run list --repo bolyra/bolyra --workflow interop-replay.yml --branch "$branch" --json databaseId,createdAt,headSha \
-      --jq "[.[] | select(.createdAt >= \"$ts\" and .headSha == \"$head\")] | if length == 1 then .[0].databaseId elif length == 0 then \"\" else error(\"ambiguous: \" + (length|tostring) + \" runs\") end") || return 1
+  for i in $(seq 1 60); do   # poll; if foreground sleep is blocked in your harness, use its monitor facility instead
+    RUN_ID=$(gh run list --repo bolyra/bolyra --workflow interop-replay.yml --branch "$branch" --limit 50 --json databaseId,displayTitle,headSha \
+      --jq "[.[] | select(.displayTitle == \"Interop replay $nonce\" and .headSha == \"$head\")] | if length == 1 then .[0].databaseId elif length == 0 then \"\" else error(\"ambiguous: \" + (length|tostring) + \" runs\") end") || return 1
     [ -n "$RUN_ID" ] && break; sleep 5
   done
-  [ -n "$RUN_ID" ] || { echo "no run appeared for $branch@$head"; return 1; }
+  [ -n "$RUN_ID" ] || { echo "no run with nonce $nonce appeared for $branch@$head"; return 1; }
   RUN_URL="https://github.com/bolyra/bolyra/actions/runs/$RUN_ID"; echo "RUN_ID=$RUN_ID  $RUN_URL"
-  gh run watch "$RUN_ID" --repo bolyra/bolyra >/dev/null 2>&1 || true      # wait; the verdict comes from the API below
+  gh run watch "$RUN_ID" --repo bolyra/bolyra >/dev/null 2>&1 || true      # wait only; the verdict comes from the API below
   local got; got=$(gh run view "$RUN_ID" --repo bolyra/bolyra --json conclusion,headSha,status \
     --jq 'if .status != "completed" then error("run not completed") else (.conclusion + " " + .headSha) end') || return 1
   echo "conclusion=${got%% *}"
@@ -977,7 +997,8 @@ Expected: `dispatch_and_wait is a function`.
 HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"
 dispatch_and_wait success public-conformance-claims && echo "PROOF_BASELINE=$RUN_URL" >> "$HANDOFF/proofs.env"
 ```
-Expected: `conclusion=success` and the helper returns 0. In the log (`gh run view $RUN_ID --repo bolyra/bolyra --log | grep -E "replay .* \((bolyra|external)-suite\)|claims reproduced|harness-integrity"`): `replay mcp-use-evc-example@17642a5/host_behavior@0.5.0 (bolyra-suite)`, `replay x402-authority-verifier-kit@35e209d/own-corpus (external-suite)`, two `harness-integrity: OK`, `2/2 claims reproduced`. The `&&` above records the URL only on a validated match.
+Expected: `conclusion=success` and the helper returns 0. Also record the integrity-step durations:
+`gh run view "$RUN_ID" --repo bolyra/bolyra --json jobs --jq '.jobs[].steps[] | select(.name | test("Snapshot|Replay claims")) | "\(.name): \(.startedAt) -> \(.completedAt)"'`. The snapshot step should take seconds; if it takes more than 30 s, stop and report. In the log (`gh run view $RUN_ID --repo bolyra/bolyra --log | grep -E "replay .* \((bolyra|external)-suite\)|claims reproduced|harness-integrity"`): `replay mcp-use-evc-example@17642a5/host_behavior@0.5.0 (bolyra-suite)`, `replay x402-authority-verifier-kit@35e209d/own-corpus (external-suite)`, two `harness-integrity: OK`, `2/2 claims reproduced`. The `&&` above records the URL only on a validated match.
 
 - [ ] **Step 2: Check 2 — `ref` without `claim` fails fast**
 
@@ -1850,7 +1871,8 @@ Edit the PR body to list, under "Isolation proofs (spec §3.5)" and "Submission 
   [[ "$MERGE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "no merge commit oid yet: '$MERGE_SHA'"; exit 1; }
   echo "MERGE_SHA=$MERGE_SHA" >> "$HANDOFF/pr.env"; cat "$HANDOFF/pr.env"
   git push -q origin --delete public-conformance-claims
-) && echo "merge block OK"
+  echo "merge block OK"
+)
 ```
 Expected: checks green; `conclusion=success`; merge accepted for `FINAL_HEAD`; `pr.env` holds `PR_NUMBER`, `FINAL_HEAD`, and a 40-hex `MERGE_SHA` (this PR's own integration commit); `merge block OK`.
 
@@ -1863,7 +1885,8 @@ source /tmp/plan-handoff/pr.env
   git fetch -q origin "$MERGE_SHA"; git checkout -q "$MERGE_SHA"
   [ "$(git rev-parse HEAD)" = "$MERGE_SHA" ] || { echo "checkout is not MERGE_SHA"; exit 1; }
   ./landing/deploy.sh
-) && echo "deploy subshell OK"
+  echo "deploy subshell OK"
+)
 ```
 Expected: preflight lines including `OK: local page advertises @bolyra/evc-conformance@0.6.0` and `gen-conformance --check OK:`; uploads including `conformance.html`; invalidation id; then `verify.sh` runs automatically and its output ends with the new `OK:` lines (`vector count`, `no hosted-verifier`, `root page advertises 11`, `/conformance is byte-identical`); finally `deploy subshell OK`.
 
