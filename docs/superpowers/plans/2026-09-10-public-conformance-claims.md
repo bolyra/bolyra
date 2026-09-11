@@ -1454,7 +1454,7 @@ if (require.main === module) {
   console.log(`wrote ${path.relative(ROOT, OUT_PATH)} (${reg.claims.length} claims)`);
 }
 ```
-(The third link, `IMPLEMENTER.md`, is intentional and in addition to the two the spec names.)
+(The third link, `IMPLEMENTER.md`, is intentional and in addition to the two the spec names. Also deliberate: spec §3.1 says `--check` prints a unified diff; `checkFile` prints `line N: committed/expected` pairs instead, which is equivalent as a drift guard and needs no diff dependency.)
 
 - [ ] **Step 4: Run all generator tests**
 
@@ -1537,11 +1537,18 @@ git push
 gh pr create --repo bolyra/bolyra --base main --head public-conformance-claims --draft \
   --title "Public conformance claims (v1): page, generator, dispatch isolation, landing copy" \
   --body "Implements docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md (v1 scope). Draft until Chunk 5 lands."
-HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
-echo "PR_NUMBER=$(gh pr view --repo bolyra/bolyra --json number --jq .number)" > "$HANDOFF/pr.env"; cat "$HANDOFF/pr.env"
-gh pr checks --repo bolyra/bolyra --watch
+( set -euo pipefail
+  HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
+  # `gh pr view/checks --repo` REQUIRES a PR number or branch argument (gh 2.92 errors otherwise).
+  PR_NUMBER=$(gh pr view public-conformance-claims --repo bolyra/bolyra --json number --jq .number)
+  [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "could not resolve PR number: '$PR_NUMBER'"; exit 1; }
+  echo "PR_NUMBER=$PR_NUMBER" > "$HANDOFF/pr.env"; cat "$HANDOFF/pr.env"
+  PR_REF="$PR_NUMBER"; for i in $(seq 1 60); do [ -n "$(gh pr checks "$PR_REF" --repo bolyra/bolyra --json name --jq '.[].name' 2>/dev/null)" ] && break; sleep 5; done
+  gh pr checks "$PR_NUMBER" --repo bolyra/bolyra --watch
+  echo "PR recorded, checks green"
+)
 ```
-Expected: `PR_NUMBER=<n>` recorded; all checks green, including `EVC conformance — package sync & both reference hosts`.
+Expected: `PR_NUMBER=<n>` (digits) recorded; all checks green, including `EVC conformance — package sync & both reference hosts`; `PR recorded, checks green`.
 
 ---
 
@@ -1781,7 +1788,9 @@ submissions that do not follow them are not dispatched.
    after that review needs a fresh review and a fresh dispatch.
 7. Green dispatch on the reviewed SHA + code-owner review → merge → your row
    appears on https://bolyra.ai/conformance at the next deploy. The dispatch
-   run URL is recorded as a comment on your PR before merge.
+   run URL is recorded as a comment on your PR before merge. (Spec §3.3 says
+   "in the merge commit"; this repo rebase-merges, which leaves no editable
+   merge message, so a PR comment is the durable place. Deliberate.)
 
 ## Rules (from README)
 
@@ -1826,8 +1835,16 @@ JS
 node landing/gen-conformance.js && node interop/replay.js --check   # the page is regenerated for the PR's offline drift check only; the overlay takes claims.json (+adapter) from the ref
 git add -A && git commit -s -q -m "probe: submission (never merge)" && git push -q -u origin probe/submission
 GOOD_SHA=$(git rev-parse HEAD)
-gh pr create --repo bolyra/bolyra --base public-conformance-claims --head probe/submission --draft --title "probe: submission proof (never merge)" --body "Evidence only."
-gh pr checks --repo bolyra/bolyra --watch     # offline checks green; inspect the evc-conformance job log: only --check/tests/generator ran
+# Base on main: ci.yml runs pull_request only for branches:[main], so a PR based on the feature branch gets no CI.
+# Draft, titled never-merge, closed below. Its diff vs main includes the whole feature branch; that is expected.
+gh pr create --repo bolyra/bolyra --base main --head probe/submission --draft --title "probe: submission proof (never merge)" --body "Evidence only. Never merge."
+PR_REF=probe/submission; for i in $(seq 1 60); do [ -n "$(gh pr checks "$PR_REF" --repo bolyra/bolyra --json name --jq '.[].name' 2>/dev/null)" ] && break; sleep 5; done
+gh pr checks probe/submission --repo bolyra/bolyra --watch
+CI_RUN=$(gh run list --repo bolyra/bolyra --workflow ci.yml --branch probe/submission --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run view "$CI_RUN" --repo bolyra/bolyra --log > "$HANDOFF/probe-ci.log"
+grep -q "Interop registry — offline pin check" "$HANDOFF/probe-ci.log" && grep -q "gen-conformance --check OK" "$HANDOFF/probe-ci.log" \
+  && ! grep -q "claims reproduced" "$HANDOFF/probe-ci.log" \
+  && echo "PROOF_SUBMISSION_OFFLINE_CI=https://github.com/bolyra/bolyra/actions/runs/$CI_RUN" >> "$HANDOFF/proofs.env"   # offline checks ran; no replay executed on the PR
 git checkout -q public-conformance-claims
 dispatch_and_wait success public-conformance-claims -f ref="$GOOD_SHA" -f claim="probe@35e209d/own-corpus" \
   && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -q "1/1 claims reproduced" \
@@ -1855,15 +1872,36 @@ dispatch_and_wait failure public-conformance-claims -f ref="$BAD_SHA" -f claim="
 Expected: `conclusion=failure`; log contains `REPLAY MISMATCH: expected 38/39 passed (9 scoped out), got 39/39 (9)`. Then close the probe PR and delete the branch:
 ```bash
 gh pr close --repo bolyra/bolyra probe/submission --delete-branch
+git branch -D probe/submission 2>/dev/null || true      # --repo mode may skip the local branch
+[ "$(grep -c '^PROOF_SUBMISSION_' "$HANDOFF/proofs.env")" = "3" ] && echo "submission proofs recorded: 3"   # OFFLINE_CI, GREEN, RED
 ```
 
 - [ ] **Step 2: Mark the PR ready with all evidence; Codex review; final-head verification; merge**
 
-Edit the PR body to list, under "Isolation proofs (spec §3.5)" and "Submission proofs (spec §6)", every line of `/tmp/plan-handoff/proofs.env`, and the `REPLAY_IMAGE` digest from `image.env` with the reason (git required). Then `gh pr ready --repo bolyra/bolyra`. Workspace rule: Codex reviews the full diff before merge; apply fixes; re-review until clean. **After the last fix, run this checked block — it verifies the final head, gates on a green baseline replay, and merges only that exact head:**
+First write the evidence into the PR body and mark it ready:
+```bash
+( set -euo pipefail
+  HANDOFF=/tmp/plan-handoff; source "$HANDOFF/pr.env"; source "$HANDOFF/image.env"
+  { echo "Implements docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md (v1 scope)."; echo
+    echo "## Isolation proofs (spec §3.5)"; grep -E '^PROOF_(BASELINE|REF_REQUIRES_CLAIM|ISOLATION|OVERLAY|UNKNOWN_CLAIM)=' "$HANDOFF/proofs.env" | sed 's/^/- /'; echo
+    echo "## Submission proofs (spec §6)"; grep -E '^PROOF_SUBMISSION_' "$HANDOFF/proofs.env" | sed 's/^/- /'; echo
+    echo "Replay image: \`$REPLAY_IMAGE\` (full Debian node:20; git is required inside the container)."; echo
+    echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"; } > "$HANDOFF/pr-body.md"
+  gh pr edit "$PR_NUMBER" --repo bolyra/bolyra --body-file "$HANDOFF/pr-body.md"
+  gh pr ready "$PR_NUMBER" --repo bolyra/bolyra
+  echo "PR $PR_NUMBER ready"
+)
+```
+Workspace rule: Codex reviews the full diff before merge; apply fixes; re-review until clean. **After the last fix, run this checked block. It verifies the final head, gates on a green baseline replay, and merges only that exact head. `main` has no branch protection, so this block is the only merge gate:**
 ```bash
 ( set -euo pipefail
   HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"; source "$HANDOFF/pr.env"     # PR_NUMBER
   git push; FINAL_HEAD=$(git rev-parse HEAD); echo "FINAL_HEAD=$FINAL_HEAD" >> "$HANDOFF/pr.env"
+  # Race: right after a push, `gh pr checks` can still report the PREVIOUS head's green checks.
+  # Wait until the PR is on FINAL_HEAD, then until its checks have registered, then watch.
+  for i in $(seq 1 60); do [ "$(gh pr view "$PR_NUMBER" --repo bolyra/bolyra --json headRefOid --jq .headRefOid)" = "$FINAL_HEAD" ] && break; sleep 5; done
+  [ "$(gh pr view "$PR_NUMBER" --repo bolyra/bolyra --json headRefOid --jq .headRefOid)" = "$FINAL_HEAD" ]
+  PR_REF="$PR_NUMBER"; for i in $(seq 1 60); do [ -n "$(gh pr checks "$PR_REF" --repo bolyra/bolyra --json name --jq '.[].name' 2>/dev/null)" ] && break; sleep 5; done
   gh pr checks "$PR_NUMBER" --repo bolyra/bolyra --watch                                   # non-zero on any red check
   dispatch_and_wait success public-conformance-claims                                        # baseline replay must be green on the FINAL harness
   gh pr merge "$PR_NUMBER" --repo bolyra/bolyra --rebase --match-head-commit "$FINAL_HEAD"   # refuses if the head moved; no --delete-branch from a linked worktree
