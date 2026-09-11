@@ -21,7 +21,7 @@
 - `<digest>` in Chunk 3 (Task 5 Steps 2 and 3) is the one intentional placeholder; Task 4 resolves it first.
 - **Prerequisites:** an authenticated `gh` with push rights on `bolyra/bolyra`; a running Docker daemon; `ruby` (for YAML checks); Node 20 (`nvm use 20` if available — CI runs Node 20).
 - "Expected:" lines are what you must see. If you see something else, stop and report; do not improvise.
-- **Handoff directory:** every task that produces or consumes cross-task state uses `HANDOFF=/tmp/plan-handoff` (create with `mkdir -p "$HANDOFF"`). Files: `image.env` (REPLAY_IMAGE=…), `dispatch.sh` (the `dispatch_and_wait` helper; `source "$HANDOFF/dispatch.sh"` before use), `proofs.env` (one `NAME=URL` per line), `pr.env` (PR_NUMBER, then FINAL_HEAD and MERGE_SHA appended). **Every shell block that dispatches or records is self-contained**: it sets `HANDOFF`, sources what it needs, and exports the git identity; nothing is inherited between blocks.
+- **Handoff directory:** every task that produces or consumes cross-task state uses `HANDOFF=/tmp/plan-handoff` (create with `mkdir -p "$HANDOFF"`). Files: `image.env` (REPLAY_IMAGE=…), `dispatch.sh` (the `dispatch_and_wait` helper; `source "$HANDOFF/dispatch.sh"` before use), `proofs.env` (one `NAME=URL` per line), `pr.env` (PR_NUMBER, then FINAL_HEAD and MERGE_SHA appended), `expected-checks.txt` + `checks.sh` (the merge gate's expected check set and `wait_checks_green`; created in Task 9). Every proof chain ends `|| { echo FAIL…; exit 1; }`: a failing command in the middle of an `&&` list does NOT trip `errexit`, so assertions must abort explicitly. **Every shell block that dispatches or records is self-contained**: it sets `HANDOFF`, sources what it needs, and exports the git identity; nothing is inherited between blocks.
 - **Checked subshells run standalone.** Never write `( set -e … ) && next`: a subshell on the left of `&&`/`||` runs with `errexit` disabled, so a failing command inside it would not stop it. Every checked block ends with its own success `echo` inside the parentheses.
 - Foreground `sleep` may be blocked in some agent harnesses; where the plan polls GitHub, use the poll loop as written or the harness's monitor facility — never skip the wait.
 - Memory files referenced at the end live under `~/.claude/projects/-Users-lordviswa-Projects/memory/` (absolute: `/Users/lordviswa/.claude/projects/-Users-lordviswa-Projects/memory/`), never inside the repository.
@@ -753,7 +753,7 @@ docker run --rm node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde2
 Expected: `git version 2.x.y` and `v20.x.y`. If `git` is missing, instead run `docker pull node:20 && docker image inspect node:20 --format '{{index .RepoDigests 0}}'`, re-check with the same command, and use that digest. Write the chosen digest into the handoff directory for Task 5:
 ```bash
 HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
-echo "REPLAY_IMAGE=node:20@sha256:<the 64-hex you verified>" > "$HANDOFF/image.env"; cat "$HANDOFF/image.env"
+echo "REPLAY_IMAGE=node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5" > "$HANDOFF/image.env"; cat "$HANDOFF/image.env"   # if you used the fallback digest, write that one instead
 ```
 (This is the same digest `claims.json` pins for the StillOS run; the workflow comment says so, so a future re-pin updates both deliberately.)
 
@@ -969,7 +969,7 @@ dispatch_and_wait() {
   local expect="$1" branch="$2"; shift 2
   [ "$expect" = success ] || [ "$expect" = failure ] || { echo "expected must be success|failure"; return 2; }
   local head nonce; head=$(git rev-parse "origin/$branch") || return 1
-  nonce="$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"          # digits and dashes only: safe inside the jq string below
+  nonce="$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"          # digits, 'T' and dashes only: safe inside the jq string below
   gh workflow run interop-replay.yml --repo bolyra/bolyra --ref "$branch" -f nonce="$nonce" "$@" || { echo "dispatch failed"; return 1; }
   local i; RUN_ID=""
   for i in $(seq 1 60); do   # poll; if foreground sleep is blocked in your harness, use its monitor facility instead
@@ -995,20 +995,23 @@ Expected: `dispatch_and_wait is a function`.
 
 ```bash
 HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"
-dispatch_and_wait success public-conformance-claims && echo "PROOF_BASELINE=$RUN_URL" >> "$HANDOFF/proofs.env"
+dispatch_and_wait success public-conformance-claims \
+  && echo "PROOF_BASELINE=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: baseline replay"; exit 1; }
+gh run view "$RUN_ID" --repo bolyra/bolyra --json jobs --jq '.jobs[].steps[] | select(.name | test("Snapshot|Replay claims")) | "\(.name): \(.startedAt) -> \(.completedAt)"'
 ```
-Expected: `conclusion=success` and the helper returns 0. Also record the integrity-step durations:
-`gh run view "$RUN_ID" --repo bolyra/bolyra --json jobs --jq '.jobs[].steps[] | select(.name | test("Snapshot|Replay claims")) | "\(.name): \(.startedAt) -> \(.completedAt)"'`. The snapshot step should take seconds; if it takes more than 30 s, stop and report. In the log (`gh run view $RUN_ID --repo bolyra/bolyra --log | grep -E "replay .* \((bolyra|external)-suite\)|claims reproduced|harness-integrity"`): `replay mcp-use-evc-example@17642a5/host_behavior@0.5.0 (bolyra-suite)`, `replay x402-authority-verifier-kit@35e209d/own-corpus (external-suite)`, two `harness-integrity: OK`, `2/2 claims reproduced`. The `&&` above records the URL only on a validated match.
+Expected: `conclusion=success`; the helper returns 0; the last command prints the snapshot and replay step durations. The snapshot step should take seconds; if it takes more than 30 s, stop and report. In the log (`gh run view $RUN_ID --repo bolyra/bolyra --log | grep -E "replay .* \((bolyra|external)-suite\)|claims reproduced|harness-integrity"`): `replay mcp-use-evc-example@17642a5/host_behavior@0.5.0 (bolyra-suite)`, `replay x402-authority-verifier-kit@35e209d/own-corpus (external-suite)`, two `harness-integrity: OK`, `2/2 claims reproduced`. The `&&` above records the URL only on a validated match.
 
 - [ ] **Step 2: Check 2 — `ref` without `claim` fails fast**
 
 ```bash
 HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"
 dispatch_and_wait failure public-conformance-claims -f ref="$(git rev-parse origin/public-conformance-claims)" \
-  && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -q "ref requires claim" \
-  && echo "PROOF_REF_REQUIRES_CLAIM=$RUN_URL" >> "$HANDOFF/proofs.env"
+  && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -qF '##[error]ref requires claim' \
+  && echo "PROOF_REF_REQUIRES_CLAIM=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: ref-requires-claim proof"; exit 1; }
 ```
-Expected: `conclusion=failure`; the grep finds `ref requires claim`; the URL is recorded.
+Expected: `conclusion=failure`; the grep finds the `##[error]ref requires claim` annotation (not merely the echoed script text); the URL is recorded.
 
 - [ ] **Step 3: Build the `probe/isolation` branch (checks 4 and the external-suite env proof)**
 
@@ -1051,7 +1054,8 @@ dispatch_and_wait failure probe/isolation \
   && grep -q "PROBE_ENV=NONE" /tmp/plan-handoff/isolation.log && grep -q "PROBE_WRITE=EROFS" /tmp/plan-handoff/isolation.log \
   && [ "$(grep -c 'harness-integrity: OK' /tmp/plan-handoff/isolation.log)" = "4" ] \
   && grep -q "PROBE_LEAKED_COUNT=0" /tmp/plan-handoff/isolation.log && grep -q "2/4 claims reproduced" /tmp/plan-handoff/isolation.log \
-  && echo "PROOF_ISOLATION=$RUN_URL" >> "$HANDOFF/proofs.env"
+  && echo "PROOF_ISOLATION=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: isolation proof"; exit 1; }
 ```
 Expected: `conclusion=failure` (the two probes are designed red). In the log: for the probe claim `REPLAY MISMATCH: expected 0/26/1, got 0/27/0` followed by per-vector reasons; grep the log for the two tokens `PROBE_ENV=NONE` and `PROBE_WRITE=EROFS` (they appear JSON-escaped inside `stderr=`; grep the tokens, not the quoted form); `harness-integrity: OK` appears **four** times (after every claim, including the two red ones — this is the §3.5 mixed-kind tampering proof); mcp-use and StillOS both reproduce; for `probe-ext` the error `no machine-readable summary line in suite stdout; tail:` followed by exactly `PROBE_LEAKED_COUNT=0`; final line `2/4 claims reproduced`. The chained greps above assert every one of those and record the URL only if all hold.
 
@@ -1076,7 +1080,8 @@ OVERLAY_SHA=$(git rev-parse HEAD)
 git checkout -q probe/isolation
 dispatch_and_wait success probe/isolation -f ref="$OVERLAY_SHA" -f claim="probe-overlay@17642a5/host_behavior@0.5.0" \
   && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -q "1/1 claims reproduced" \
-  && echo "PROOF_OVERLAY=$RUN_URL" >> "$HANDOFF/proofs.env"
+  && echo "PROOF_OVERLAY=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: overlay proof"; exit 1; }
 ```
 Expected: `conclusion=success`; log shows the overlay step printing `probe-overlay@17642a5/host_behavior@0.5.0<TAB>bolyra-suite<TAB>adapters/probe-overlay.ts`, `--check` OK, `selected:` with exactly that one row, one `docker run` replay, `harness-integrity: OK`, `1/1 claims reproduced` (asserted by the chained grep; URL recorded only then).
 
@@ -1086,7 +1091,8 @@ Expected: `conclusion=success`; log shows the overlay step printing `probe-overl
 HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"
 dispatch_and_wait failure probe/isolation -f claim=does-not-exist \
   && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -q "no claim with id does-not-exist" \
-  && echo "PROOF_UNKNOWN_CLAIM=$RUN_URL" >> "$HANDOFF/proofs.env"
+  && echo "PROOF_UNKNOWN_CLAIM=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: unknown-claim proof"; exit 1; }
 ```
 Expected: `conclusion=failure`; the grep finds `no claim with id does-not-exist` (from the "Select claims" step); URL recorded.
 
@@ -1537,18 +1543,61 @@ git push
 gh pr create --repo bolyra/bolyra --base main --head public-conformance-claims --draft \
   --title "Public conformance claims (v1): page, generator, dispatch isolation, landing copy" \
   --body "Implements docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md (v1 scope). Draft until Chunk 5 lands."
+HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
+# The merge gate's expected check set: exactly the 14 check runs every PR to main produced on
+# 2026-09-11 (PR #145, all green). If a workflow is added or renamed later, update this file deliberately.
+cat > "$HANDOFF/expected-checks.txt" <<'CHECKS'
+Analyze (javascript-typescript)
+Analyze (python)
+CLI — typecheck & test (external verifier)
+Conformance test vectors
+Dependency audit — runtime deps only
+EVC conformance — package sync & both reference hosts
+Lockfiles — clean npm ci per manifest
+MCP integration — typecheck & test
+OpenClaw integration — typecheck & test
+Payment Protocols — typecheck & test
+SDK — typecheck & test
+Smoke test — fresh install from npm
+Typecheck — all TypeScript packages
+Verify Signed-off-by on every commit
+CHECKS
+cat > "$HANDOFF/checks.sh" <<'CHECKSH'
+# wait_checks_green <sha>
+#   Waits until EVERY name in $HANDOFF/expected-checks.txt has a check run on <sha>, every check run on
+#   <sha> has completed, expected checks concluded "success", and any extra runs concluded
+#   success/skipped/neutral. Non-zero on any red check, or on timeout (30 min) naming what is missing.
+#   It queries the COMMIT, not the PR: right after a push a PR's checks view can still show the
+#   previous head, and workflows register at different times.
+wait_checks_green() {
+  local sha="$1" i rows missing pending bad
+  [ -s "$HANDOFF/expected-checks.txt" ] || { echo "no $HANDOFF/expected-checks.txt"; return 2; }
+  for i in $(seq 1 180); do
+    rows=$(gh api "repos/bolyra/bolyra/commits/$sha/check-runs?filter=latest&per_page=100" \
+      --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv') || return 1
+    missing=$(printf '%s\n' "$rows" | cut -f1 | LC_ALL=C sort -u | LC_ALL=C comm -13 - <(LC_ALL=C sort -u "$HANDOFF/expected-checks.txt"))
+    pending=$(printf '%s\n' "$rows" | awk -F'\t' 'NF && $2 != "completed"')
+    bad=$(printf '%s\n' "$rows" | awk -F'\t' -v exp="$HANDOFF/expected-checks.txt" '
+      BEGIN { while ((getline l < exp) > 0) want[l] = 1 }
+      NF && $2 == "completed" && (($1 in want) ? ($3 != "success") : ($3 != "success" && $3 != "skipped" && $3 != "neutral"))')
+    if [ -n "$bad" ]; then echo "RED checks on $sha:"; printf '%s\n' "$bad"; return 1; fi
+    if [ -z "$missing" ] && [ -z "$pending" ]; then echo "checks green on $sha (all $(grep -c . "$HANDOFF/expected-checks.txt") expected present)"; return 0; fi
+    sleep 10
+  done
+  echo "timeout on $sha; missing: ${missing:-none}; pending: ${pending:-none}"; return 1
+}
+CHECKSH
 ( set -euo pipefail
-  HANDOFF=/tmp/plan-handoff; mkdir -p "$HANDOFF"
-  # `gh pr view/checks --repo` REQUIRES a PR number or branch argument (gh 2.92 errors otherwise).
+  HANDOFF=/tmp/plan-handoff; source "$HANDOFF/checks.sh"
+  # `gh pr view --repo` REQUIRES a PR number or branch argument (gh 2.92 errors otherwise).
   PR_NUMBER=$(gh pr view public-conformance-claims --repo bolyra/bolyra --json number --jq .number)
   [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "could not resolve PR number: '$PR_NUMBER'"; exit 1; }
   echo "PR_NUMBER=$PR_NUMBER" > "$HANDOFF/pr.env"; cat "$HANDOFF/pr.env"
-  PR_REF="$PR_NUMBER"; for i in $(seq 1 60); do [ -n "$(gh pr checks "$PR_REF" --repo bolyra/bolyra --json name --jq '.[].name' 2>/dev/null)" ] && break; sleep 5; done
-  gh pr checks "$PR_NUMBER" --repo bolyra/bolyra --watch
+  wait_checks_green "$(git rev-parse HEAD)"
   echo "PR recorded, checks green"
 )
 ```
-Expected: `PR_NUMBER=<n>` (digits) recorded; all checks green, including `EVC conformance — package sync & both reference hosts`; `PR recorded, checks green`.
+Expected: `PR_NUMBER=<n>` (digits) recorded; `checks green on <sha> (all 14 expected present)`; `PR recorded, checks green`. This PR is a draft: if the wait times out listing ONLY `Analyze (…)` as missing, CodeQL (configured at org level) may skip drafts. Note it and continue; this step is progress, not the merge gate, and Task 13 requires the full set on the ready PR.
 
 ---
 
@@ -1784,7 +1833,9 @@ submissions that do not follow them are not dispatched.
    Run workflow → branch `main`, `ref=<that SHA>`, `claim=<your id>`). The
    reviewed `claims.json` and your one new adapter are overlaid from that SHA
    (which is why "one added entry, nothing else changed" is reviewed by hand);
-   only the selected claim replays; the harness runs from `main`. Any push
+   only the selected claim replays; the harness runs from `main`. Before
+   dispatching, the maintainer runs `git diff main...<SHA> -- interop/claims.json`
+   and rejects the submission if any pre-existing entry changed. Any push
    after that review needs a fresh review and a fresh dispatch.
 7. Green dispatch on the reviewed SHA + code-owner review → merge → your row
    appears on https://bolyra.ai/conformance at the next deploy. The dispatch
@@ -1838,17 +1889,25 @@ GOOD_SHA=$(git rev-parse HEAD)
 # Base on main: ci.yml runs pull_request only for branches:[main], so a PR based on the feature branch gets no CI.
 # Draft, titled never-merge, closed below. Its diff vs main includes the whole feature branch; that is expected.
 gh pr create --repo bolyra/bolyra --base main --head probe/submission --draft --title "probe: submission proof (never merge)" --body "Evidence only. Never merge."
-PR_REF=probe/submission; for i in $(seq 1 60); do [ -n "$(gh pr checks "$PR_REF" --repo bolyra/bolyra --json name --jq '.[].name' 2>/dev/null)" ] && break; sleep 5; done
-gh pr checks probe/submission --repo bolyra/bolyra --watch
-CI_RUN=$(gh run list --repo bolyra/bolyra --workflow ci.yml --branch probe/submission --limit 1 --json databaseId --jq '.[0].databaseId')
+# Find the COMPLETED ci.yml run for exactly this head (not "the latest run", which may not exist yet).
+CI_RUN=""
+for i in $(seq 1 120); do
+  CI_RUN=$(gh run list --repo bolyra/bolyra --workflow ci.yml --branch probe/submission --json databaseId,headSha,status \
+    --jq "[.[] | select(.headSha == \"$GOOD_SHA\" and .status == \"completed\")][0].databaseId // \"\"")
+  [ -n "$CI_RUN" ] && break; sleep 10
+done
+[ -n "$CI_RUN" ] || { echo "FAIL: no completed ci.yml run for probe/submission@$GOOD_SHA"; exit 1; }
 gh run view "$CI_RUN" --repo bolyra/bolyra --log > "$HANDOFF/probe-ci.log"
-grep -q "Interop registry — offline pin check" "$HANDOFF/probe-ci.log" && grep -q "gen-conformance --check OK" "$HANDOFF/probe-ci.log" \
+[ "$(gh run view "$CI_RUN" --repo bolyra/bolyra --json conclusion --jq .conclusion)" = success ] \
+  && grep -q "Interop registry — offline pin check" "$HANDOFF/probe-ci.log" && grep -q "gen-conformance --check OK" "$HANDOFF/probe-ci.log" \
   && ! grep -q "claims reproduced" "$HANDOFF/probe-ci.log" \
-  && echo "PROOF_SUBMISSION_OFFLINE_CI=https://github.com/bolyra/bolyra/actions/runs/$CI_RUN" >> "$HANDOFF/proofs.env"   # offline checks ran; no replay executed on the PR
+  && echo "PROOF_SUBMISSION_OFFLINE_CI=https://github.com/bolyra/bolyra/actions/runs/$CI_RUN" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: offline-CI proof (run not green, offline steps missing, or a replay ran on the PR)"; exit 1; }
 git checkout -q public-conformance-claims
 dispatch_and_wait success public-conformance-claims -f ref="$GOOD_SHA" -f claim="probe@35e209d/own-corpus" \
   && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -q "1/1 claims reproduced" \
-  && echo "PROOF_SUBMISSION_GREEN=$RUN_URL" >> "$HANDOFF/proofs.env"
+  && echo "PROOF_SUBMISSION_GREEN=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: submission green proof"; exit 1; }
 ```
 Expected: `conclusion=success`, `1/1 claims reproduced`, URL recorded.
 
@@ -1867,13 +1926,18 @@ git add -A && git commit -s -q -m "probe: expectation mismatch (never merge)" &&
 BAD_SHA=$(git rev-parse HEAD); git checkout -q public-conformance-claims
 dispatch_and_wait failure public-conformance-claims -f ref="$BAD_SHA" -f claim="probe@35e209d/own-corpus" \
   && gh run view "$RUN_ID" --repo bolyra/bolyra --log | grep -q "REPLAY MISMATCH: expected 38/39 passed (9 scoped out), got 39/39 (9)" \
-  && echo "PROOF_SUBMISSION_RED=$RUN_URL" >> "$HANDOFF/proofs.env"
+  && echo "PROOF_SUBMISSION_RED=$RUN_URL" >> "$HANDOFF/proofs.env" \
+  || { echo "FAIL: submission red proof"; exit 1; }
 ```
-Expected: `conclusion=failure`; log contains `REPLAY MISMATCH: expected 38/39 passed (9 scoped out), got 39/39 (9)`. Then close the probe PR and delete the branch:
+Expected: `conclusion=failure`; log contains `REPLAY MISMATCH: expected 38/39 passed (9 scoped out), got 39/39 (9)`; `PROOF_SUBMISSION_OFFLINE_CI`, `_GREEN` and `_RED` recorded. Then close the probe PR and delete the branch (Expected: `submission proofs recorded: 3`):
 ```bash
+HANDOFF=/tmp/plan-handoff
 gh pr close --repo bolyra/bolyra probe/submission --delete-branch
 git branch -D probe/submission 2>/dev/null || true      # --repo mode may skip the local branch
-[ "$(grep -c '^PROOF_SUBMISSION_' "$HANDOFF/proofs.env")" = "3" ] && echo "submission proofs recorded: 3"   # OFFLINE_CI, GREEN, RED
+for k in PROOF_SUBMISSION_OFFLINE_CI PROOF_SUBMISSION_GREEN PROOF_SUBMISSION_RED; do
+  grep -q "^$k=https://github.com/bolyra/bolyra/actions/runs/[0-9][0-9]*$" "$HANDOFF/proofs.env" || { echo "FAIL: missing $k"; exit 1; }
+done
+echo "submission proofs recorded: 3"
 ```
 
 - [ ] **Step 2: Mark the PR ready with all evidence; Codex review; final-head verification; merge**
@@ -1882,6 +1946,10 @@ First write the evidence into the PR body and mark it ready:
 ```bash
 ( set -euo pipefail
   HANDOFF=/tmp/plan-handoff; source "$HANDOFF/pr.env"; source "$HANDOFF/image.env"
+  for k in PROOF_BASELINE PROOF_REF_REQUIRES_CLAIM PROOF_ISOLATION PROOF_OVERLAY PROOF_UNKNOWN_CLAIM \
+           PROOF_SUBMISSION_OFFLINE_CI PROOF_SUBMISSION_GREEN PROOF_SUBMISSION_RED; do
+    grep -q "^$k=https://github.com/bolyra/bolyra/actions/runs/[0-9][0-9]*$" "$HANDOFF/proofs.env" || { echo "missing proof $k: not marking ready"; exit 1; }
+  done
   { echo "Implements docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md (v1 scope)."; echo
     echo "## Isolation proofs (spec §3.5)"; grep -E '^PROOF_(BASELINE|REF_REQUIRES_CLAIM|ISOLATION|OVERLAY|UNKNOWN_CLAIM)=' "$HANDOFF/proofs.env" | sed 's/^/- /'; echo
     echo "## Submission proofs (spec §6)"; grep -E '^PROOF_SUBMISSION_' "$HANDOFF/proofs.env" | sed 's/^/- /'; echo
@@ -1895,14 +1963,14 @@ First write the evidence into the PR body and mark it ready:
 Workspace rule: Codex reviews the full diff before merge; apply fixes; re-review until clean. **After the last fix, run this checked block. It verifies the final head, gates on a green baseline replay, and merges only that exact head. `main` has no branch protection, so this block is the only merge gate:**
 ```bash
 ( set -euo pipefail
-  HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"; source "$HANDOFF/pr.env"     # PR_NUMBER
+  HANDOFF=/tmp/plan-handoff; source "$HANDOFF/dispatch.sh"; source "$HANDOFF/checks.sh"; source "$HANDOFF/pr.env"     # PR_NUMBER
   git push; FINAL_HEAD=$(git rev-parse HEAD); echo "FINAL_HEAD=$FINAL_HEAD" >> "$HANDOFF/pr.env"
-  # Race: right after a push, `gh pr checks` can still report the PREVIOUS head's green checks.
-  # Wait until the PR is on FINAL_HEAD, then until its checks have registered, then watch.
+  # Race: right after a push the PR's checks view can still show the PREVIOUS head, and workflows
+  # register at different times. Wait for the PR to be on FINAL_HEAD, then gate on the COMMIT:
+  # every expected check present on FINAL_HEAD and green (fail closed on red or on a missing check).
   for i in $(seq 1 60); do [ "$(gh pr view "$PR_NUMBER" --repo bolyra/bolyra --json headRefOid --jq .headRefOid)" = "$FINAL_HEAD" ] && break; sleep 5; done
   [ "$(gh pr view "$PR_NUMBER" --repo bolyra/bolyra --json headRefOid --jq .headRefOid)" = "$FINAL_HEAD" ]
-  PR_REF="$PR_NUMBER"; for i in $(seq 1 60); do [ -n "$(gh pr checks "$PR_REF" --repo bolyra/bolyra --json name --jq '.[].name' 2>/dev/null)" ] && break; sleep 5; done
-  gh pr checks "$PR_NUMBER" --repo bolyra/bolyra --watch                                   # non-zero on any red check
+  wait_checks_green "$FINAL_HEAD"
   dispatch_and_wait success public-conformance-claims                                        # baseline replay must be green on the FINAL harness
   gh pr merge "$PR_NUMBER" --repo bolyra/bolyra --rebase --match-head-commit "$FINAL_HEAD"   # refuses if the head moved; no --delete-branch from a linked worktree
   MERGE_SHA=$(gh pr view "$PR_NUMBER" --repo bolyra/bolyra --json mergeCommit --jq .mergeCommit.oid)
@@ -1912,7 +1980,7 @@ Workspace rule: Codex reviews the full diff before merge; apply fixes; re-review
   echo "merge block OK"
 )
 ```
-Expected: checks green; `conclusion=success`; merge accepted for `FINAL_HEAD`; `pr.env` holds `PR_NUMBER`, `FINAL_HEAD`, and a 40-hex `MERGE_SHA` (this PR's own integration commit); `merge block OK`.
+Expected: checks green; `conclusion=success`; merge accepted for `FINAL_HEAD`; `pr.env` holds `PR_NUMBER`, `FINAL_HEAD`, and a 40-hex `MERGE_SHA` (this PR's own integration commit); `merge block OK`. If `wait_checks_green` times out listing only `Analyze (…)` as missing, CodeQL did not run for this head (for example, it was pushed while the PR was a draft): run `gh pr close "$PR_NUMBER" --repo bolyra/bolyra && gh pr reopen "$PR_NUMBER" --repo bolyra/bolyra` to re-trigger the full set on the ready PR, then re-run this block. Never merge around a missing expected check.
 
 - [ ] **Step 3: Deploy from the merge commit, in a checked subshell, from the canonical remote**
 
