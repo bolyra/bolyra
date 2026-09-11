@@ -1577,8 +1577,8 @@ wait_checks_green() {
       --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv') || return 1
     missing=$(printf '%s\n' "$rows" | cut -f1 | LC_ALL=C sort -u | LC_ALL=C comm -13 - <(LC_ALL=C sort -u "$HANDOFF/expected-checks.txt"))
     pending=$(printf '%s\n' "$rows" | awk -F'\t' 'NF && $2 != "completed"')
-    bad=$(printf '%s\n' "$rows" | awk -F'\t' -v exp="$HANDOFF/expected-checks.txt" '
-      BEGIN { while ((getline l < exp) > 0) want[l] = 1 }
+    bad=$(printf '%s\n' "$rows" | awk -F'\t' -v expected_file="$HANDOFF/expected-checks.txt" '
+      BEGIN { while ((getline l < expected_file) > 0) want[l] = 1 }   # not "exp": that is a builtin in gawk/mawk
       NF && $2 == "completed" && (($1 in want) ? ($3 != "success") : ($3 != "success" && $3 != "skipped" && $3 != "neutral"))')
     if [ -n "$bad" ]; then echo "RED checks on $sha:"; printf '%s\n' "$bad"; return 1; fi
     if [ -z "$missing" ] && [ -z "$pending" ]; then echo "checks green on $sha (all $(grep -c . "$HANDOFF/expected-checks.txt") expected present)"; return 0; fi
