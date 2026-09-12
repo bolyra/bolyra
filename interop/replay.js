@@ -33,9 +33,15 @@ const crypto = require('crypto');
 const { execFileSync, spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-// REPLAY_CLAIMS_PATH is for tests only (points --list at a fixture registry).
-// The dispatch workflow runs with an explicit environment and never sets it.
-const CLAIMS_PATH = process.env.REPLAY_CLAIMS_PATH || path.join(__dirname, 'claims.json');
+// REPLAY_CLAIMS_PATH is for tests only: it points --list at a fixture
+// registry, and only takes effect when --list is on argv (checked directly
+// since `args`/`flag` aren't defined until after this line runs). Every
+// other mode — including a full replay that clones and runs third-party
+// code — always reads the real interop/claims.json, regardless of env.
+const CLAIMS_PATH =
+  process.argv.includes('--list') && process.env.REPLAY_CLAIMS_PATH
+    ? process.env.REPLAY_CLAIMS_PATH
+    : path.join(__dirname, 'claims.json');
 const CLAIMS = JSON.parse(fs.readFileSync(CLAIMS_PATH, 'utf8'));
 
 const args = process.argv.slice(2);
@@ -379,8 +385,16 @@ function main() {
       // error here, because the workflow branches on this value.
       const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
       if (!KINDS.has(kind)) return fail(`--list: unknown kind ${kind} (claim ${id})`);
-      const adapter = c.adapter === undefined ? '' : String(c.adapter);
+      // Same boundary as id: this crosses into the same TSV consumer, so it
+      // gets the same scrutiny — including that it must actually BE a string
+      // (a bare String() coercion would turn null/7/{} into a plausible but
+      // fake adapter path on the wire).
+      if (c.adapter !== undefined && typeof c.adapter !== 'string') {
+        return fail(`--list: adapter must be a string (claim ${id})`);
+      }
+      const adapter = c.adapter === undefined ? '' : c.adapter;
       if (/[\x00-\x1f\x7f]/.test(adapter)) return fail(`--list: adapter contains a control character (claim ${id})`);
+      if (adapter.startsWith('-')) return fail(`--list: adapter must not start with '-': ${JSON.stringify(adapter)} (claim ${id})`);
       out.push(`${id}\t${kind}\t${adapter}`);
     }
     process.stdout.write(out.join('\n') + '\n');
