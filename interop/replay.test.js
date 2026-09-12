@@ -176,9 +176,16 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+// A developer with REPLAY_CLAIMS_PATH already exported must not silently
+// validate the wrong registry — always start from a clean env.
+function cleanEnv() {
+  const env = { ...process.env };
+  delete env.REPLAY_CLAIMS_PATH;
+  return env;
+}
 function runList(extra = [], env = {}) {
   return spawnSync(process.execPath, [path.join(__dirname, 'replay.js'), '--list', '--check', ...extra], {
-    encoding: 'utf8', timeout: 20000, env: { ...process.env, ...env },
+    encoding: 'utf8', timeout: 20000, env: { ...cleanEnv(), ...env },
   });
 }
 function rows(stdout) {
@@ -187,12 +194,17 @@ function rows(stdout) {
   lines.pop();
   return lines.map((l) => l.split('\t'));
 }
+const tmpDirs = [];
 function withRegistry(claims) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'replay-list-'));
+  tmpDirs.push(dir);
   const p = path.join(dir, 'claims.json');
   fs.writeFileSync(p, JSON.stringify({ version: '1.0', claims }));
   return { REPLAY_CLAIMS_PATH: p };
 }
+test.after(() => {
+  for (const dir of tmpDirs) fs.rmSync(dir, { recursive: true, force: true });
+});
 
 test('--list prints id<TAB>kind<TAB>adapter per claim, nothing else', () => {
   const r = runList();
@@ -246,10 +258,23 @@ test('--list refuses ids with control chars or a leading dash, duplicate ids, an
     ['duplicate id', [{ ...base, id: 'dup' }, { ...base, id: 'dup' }], /duplicate id dup/],
     ['unknown kind', [{ ...base, id: 'k', kind: 'mystery' }], /unknown kind mystery/],
     ['empty id', [{ ...base, id: '' }], /missing id/],
+    ['adapter tab', [{ ...base, id: 'ok-adapter-tab', adapter: 'a\tb' }], /adapter contains a control character/],
+    ['adapter leading dash (flag collision)', [{ ...base, id: 'ok-adapter-dash', adapter: '--rm' }], /adapter must not start with '-'/],
+    ['adapter non-string (null)', [{ ...base, id: 'ok-adapter-null', adapter: null }], /adapter must be a string/],
+    ['adapter non-string (number)', [{ ...base, id: 'ok-adapter-number', adapter: 7 }], /adapter must be a string/],
   ]) {
     const r = runList([], withRegistry(claims));
     assert.strictEqual(r.status, 1, label);
     assert.strictEqual(r.stdout, '', label);
     assert.match(r.stderr, re, label);
   }
+});
+
+test('REPLAY_CLAIMS_PATH is ignored unless --list is present (a full run never reads the fixture registry)', () => {
+  const env = withRegistry([{ id: 'phantom-claim-should-never-surface' }]);
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'replay.js'), '--check'], {
+    encoding: 'utf8', timeout: 20000, env: { ...cleanEnv(), ...env },
+  });
+  assert.ok(!r.stdout.includes('phantom-claim-should-never-surface'), r.stdout);
+  assert.ok(!r.stderr.includes('phantom-claim-should-never-surface'), r.stderr);
 });
