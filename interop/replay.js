@@ -23,6 +23,7 @@
  *   node interop/replay.js --claim <id>  # replay one claim
  *   node interop/replay.js --check      # offline: validate registry + pins
  *   node interop/replay.js --keep       # keep workdirs for inspection
+ *   node interop/replay.js --list       # offline: id<TAB>kind<TAB>adapter per claim (before validation)
  */
 'use strict';
 const fs = require('fs');
@@ -32,7 +33,10 @@ const crypto = require('crypto');
 const { execFileSync, spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const CLAIMS = JSON.parse(fs.readFileSync(path.join(__dirname, 'claims.json'), 'utf8'));
+// REPLAY_CLAIMS_PATH is for tests only (points --list at a fixture registry).
+// The dispatch workflow runs with an explicit environment and never sets it.
+const CLAIMS_PATH = process.env.REPLAY_CLAIMS_PATH || path.join(__dirname, 'claims.json');
+const CLAIMS = JSON.parse(fs.readFileSync(CLAIMS_PATH, 'utf8'));
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -351,6 +355,35 @@ function main() {
   const claims = CLAIMS.claims.filter((c) => !only || c.id === only);
   if (!claims.length) {
     fail(only ? `no claim with id ${only}` : 'claims.json has no claims');
+    return;
+  }
+
+  // --list: id<TAB>kind<TAB>adapter per selected claim, no execution and no
+  // registry validation (a submission's adapter may not be on disk yet). The
+  // dispatch workflow consumes this as TSV, so refuse anything that could be
+  // misparsed: control characters in ids, duplicate ids, unknown kinds.
+  if (flag('--list')) {
+    const KINDS = new Set(['bolyra-suite', 'external-suite']);
+    const seen = new Set();
+    const out = [];
+    for (const c of claims) {
+      const id = c.id;
+      if (typeof id !== 'string' || !id) return fail('--list: missing id');
+      // Control chars would break the TSV consumer; a leading '-' could collide
+      // with our own presence-based flag parsing (`--claim --check`).
+      if (/[\x00-\x1f\x7f]/.test(id)) return fail(`--list: id contains a control character: ${JSON.stringify(id)}`);
+      if (id.startsWith('-')) return fail(`--list: id must not start with '-': ${JSON.stringify(id)}`);
+      if (seen.has(id)) return fail(`--list: duplicate id ${id}`);
+      seen.add(id);
+      // Stricter than validateClaim on purpose: a SUPPLIED empty/null kind is an
+      // error here, because the workflow branches on this value.
+      const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
+      if (!KINDS.has(kind)) return fail(`--list: unknown kind ${kind} (claim ${id})`);
+      const adapter = c.adapter === undefined ? '' : String(c.adapter);
+      if (/[\x00-\x1f\x7f]/.test(adapter)) return fail(`--list: adapter contains a control character (claim ${id})`);
+      out.push(`${id}\t${kind}\t${adapter}`);
+    }
+    process.stdout.write(out.join('\n') + '\n');
     return;
   }
 
