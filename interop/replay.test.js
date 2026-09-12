@@ -277,4 +277,12 @@ test('REPLAY_CLAIMS_PATH is ignored unless --list is present (a full run never r
   });
   assert.ok(!r.stdout.includes('phantom-claim-should-never-surface'), r.stdout);
   assert.ok(!r.stderr.includes('phantom-claim-should-never-surface'), r.stderr);
+  // Absence of the marker is not enough — a replay.js that crashed at module
+  // load would show neither stream containing it while proving nothing was
+  // actually read. Assert the run succeeded AND that the real registry (not
+  // an empty/failed read) was the one consulted.
+  assert.strictEqual(r.status, 0, r.stderr);
+  const realClaims = require('./claims.json').claims;
+  assert.ok(realClaims.length > 0, 'fixture precondition: interop/claims.json must have at least one claim');
+  for (const c of realClaims) assert.ok(r.stdout.includes(c.id), `expected real claim id ${c.id} in stdout: ${r.stdout}`);
 });
