@@ -165,3 +165,91 @@ test('external-suite: FAIL marker on stderr must throw despite green stdout', ()
   const run = { status: 0, signal: null, stdout: GREEN, stderr: '  FAIL  case-x  -- boom\n' };
   assert.throws(() => validateExternalSuiteOutput(run, EXT_CLAIM), /FAIL-marked/);
 });
+
+// ---- --list -------------------------------------------------------------
+// The dispatch workflow reads id/kind/adapter per claim without executing
+// anything. Tests pass --check too: on a harness that ignores --list, --check
+// runs OFFLINE (no third-party code) and the output format mismatch fails the
+// test; on the real harness --list returns before --check.
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+function runList(extra = [], env = {}) {
+  return spawnSync(process.execPath, [path.join(__dirname, 'replay.js'), '--list', '--check', ...extra], {
+    encoding: 'utf8', timeout: 20000, env: { ...process.env, ...env },
+  });
+}
+function rows(stdout) {
+  const lines = stdout.split('\n');
+  assert.strictEqual(lines[lines.length - 1], '', 'stdout must end with exactly one newline');
+  lines.pop();
+  return lines.map((l) => l.split('\t'));
+}
+function withRegistry(claims) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'replay-list-'));
+  const p = path.join(dir, 'claims.json');
+  fs.writeFileSync(p, JSON.stringify({ version: '1.0', claims }));
+  return { REPLAY_CLAIMS_PATH: p };
+}
+
+test('--list prints id<TAB>kind<TAB>adapter per claim, nothing else', () => {
+  const r = runList();
+  assert.strictEqual(r.status, 0, r.stderr);
+  const claims = require('./claims.json').claims;
+  const got = rows(r.stdout);
+  assert.strictEqual(got.length, claims.length);
+  claims.forEach((c, i) => assert.deepStrictEqual(got[i], [c.id, c.kind || 'bolyra-suite', c.adapter || '']));
+});
+
+test('--list keeps the empty adapter field on a final external-suite row (trailing tab survives)', () => {
+  const env = withRegistry([
+    { id: 'a', kind: 'external-suite', implementer: { repo: 'r', commit: 'a'.repeat(40) }, run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['npm', 'test'], network: 'none', expect: { pass: 1, run: 1 } } },
+  ]);
+  const r = runList([], env);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(r.stdout, 'a\texternal-suite\t\n');
+});
+
+test('--list --claim <id> prints only that claim', () => {
+  const first = require('./claims.json').claims[0];
+  const r = runList(['--claim', first.id]);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(rows(r.stdout), [[first.id, first.kind || 'bolyra-suite', first.adapter || '']]);
+});
+
+test('--list --claim <unknown> exits 1 with empty stdout', () => {
+  const r = runList(['--claim', 'does-not-exist']);
+  assert.strictEqual(r.status, 1);
+  assert.strictEqual(r.stdout, '');
+  assert.match(r.stderr, /no claim with id does-not-exist/);
+});
+
+test('--list runs before registry validation (a claim whose adapter is missing on disk still lists)', () => {
+  const env = withRegistry([
+    { id: 'new@1', implementer: { repo: 'r', commit: 'a'.repeat(40) }, suite: { commit: 'b'.repeat(40), test_vectors_sha256: 'c'.repeat(64) }, adapter: 'adapters/not-on-disk.ts', adapter_sha256: 'd'.repeat(64), expected: { pass: 1, fail: 0, skip: 0 } },
+  ]);
+  const r = runList([], env);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(r.stdout, 'new@1\tbolyra-suite\tadapters/not-on-disk.ts\n');
+});
+
+test('--list refuses ids with control chars or a leading dash, duplicate ids, and unknown kinds — with no stdout', () => {
+  const base = { implementer: { repo: 'r', commit: 'a'.repeat(40) }, run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['x'], network: 'none', expect: { pass: 1, run: 1 } }, kind: 'external-suite' };
+  for (const [label, claims, re] of [
+    ['tab in id', [{ ...base, id: 'a\tb' }], /id contains a control character/],
+    ['newline in id', [{ ...base, id: 'a\nb' }], /id contains a control character/],
+    ['CR in id', [{ ...base, id: 'a\rb' }], /id contains a control character/],
+    ['NUL in id', [{ ...base, id: 'a\u0000b' }], /id contains a control character/],
+    ['leading dash (flag collision)', [{ ...base, id: '--check' }], /id must not start with '-'/],
+    ['duplicate id', [{ ...base, id: 'dup' }, { ...base, id: 'dup' }], /duplicate id dup/],
+    ['unknown kind', [{ ...base, id: 'k', kind: 'mystery' }], /unknown kind mystery/],
+    ['empty id', [{ ...base, id: '' }], /missing id/],
+  ]) {
+    const r = runList([], withRegistry(claims));
+    assert.strictEqual(r.status, 1, label);
+    assert.strictEqual(r.stdout, '', label);
+    assert.match(r.stderr, re, label);
+  }
+});
