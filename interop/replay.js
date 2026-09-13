@@ -69,11 +69,51 @@ function sha256File(p) {
   return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 }
 
+// The claim contract shared by every consumer. It lives here, in the component
+// that clones a repo and spawns processes, because containment has to hold where
+// the execution happens — not in whichever consumer happens to branch on kind.
+// (Design doc §"submission-check" specifies these same shapes; submission-check.js
+// will reuse this rather than restate it.)
+const KINDS = new Set(['bolyra-suite', 'external-suite']);
+const REPO_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const ADAPTER_RE = /^adapters\/[A-Za-z0-9._-]+\.ts$/;
+
+// An ABSENT kind defaults; a SUPPLIED empty/null/0 kind is an error everywhere,
+// so every consumer branches on the same value. One definition, no `||`.
+function kindOf(c) { return c.kind === undefined ? 'bolyra-suite' : c.kind; }
+
+function badCount(v) { return !Number.isSafeInteger(v) || v < 0; }
+
+// ["npm","ci"|"install","--ignore-scripts"] then --no-audit and/or --no-fund in
+// that order, nothing else. This argv is spawned verbatim against a third-party
+// checkout, so it is an allowlist, not a sanity check.
+function installError(install) {
+  if (!Array.isArray(install)) return 'implementer.install must be an argv array';
+  const [npm, verb, ignore, ...rest] = install;
+  if (npm !== 'npm' || (verb !== 'ci' && verb !== 'install') || ignore !== '--ignore-scripts') {
+    return 'implementer.install must begin ["npm","ci"|"install","--ignore-scripts"]';
+  }
+  const allowed = ['--no-audit', '--no-fund'];
+  let next = 0;
+  for (const arg of rest) {
+    const at = allowed.indexOf(arg, next);
+    if (at === -1) return `implementer.install: unexpected ${JSON.stringify(arg)} (only --no-audit and/or --no-fund, in that order)`;
+    next = at + 1;
+  }
+  return null;
+}
+
 function validateClaim(c) {
   const errors = [];
-  const kind = c.kind || 'bolyra-suite';
+  const kind = kindOf(c);
+  if (!KINDS.has(kind)) errors.push(`unknown kind ${JSON.stringify(c.kind)}`);
   if (c.implementer && !/^[0-9a-f]{40}$/.test(c.implementer.commit || '')) {
     errors.push('implementer.commit must be a full 40-hex sha');
+  }
+  // repo is consumed by `git remote add` + `git fetch`; install is spawned as
+  // argv. Both are checked before anything touches the filesystem or a process.
+  if (c.implementer && !REPO_RE.test(c.implementer.repo || '')) {
+    errors.push('implementer.repo must match https://github.com/<owner>/<repo>');
   }
 
   if (kind === 'external-suite') {
@@ -92,8 +132,14 @@ function validateClaim(c) {
     if (run.network !== 'none') {
       errors.push('run.network must be "none" (third-party code executes here)');
     }
-    if (!run.expect || typeof run.expect.pass !== 'number' || typeof run.expect.run !== 'number') {
-      errors.push('run.expect must carry numeric pass and run counts');
+    if (Array.isArray(run.command) && run.command.length && !['npm', 'node'].includes(run.command[0])) {
+      errors.push(`run.command[0] must be npm or node, got ${JSON.stringify(run.command[0])}`);
+    }
+    if (!run.expect || badCount(run.expect.pass) || badCount(run.expect.run)) {
+      errors.push('run.expect must carry non-negative numeric pass and run counts');
+    } else if (run.expect.scoped_out !== undefined && badCount(run.expect.scoped_out)) {
+      // The page prints scoped_out as fact; a missing one renders "0 scoped out".
+      errors.push('run.expect.scoped_out must be a non-negative integer when present');
     }
     return errors;
   }
@@ -107,7 +153,23 @@ function validateClaim(c) {
   if (c.suite && !/^[0-9a-f]{64}$/.test(c.suite.test_vectors_sha256 || '')) {
     errors.push('suite.test_vectors_sha256 must be a full sha256 hex digest');
   }
-  if (c.adapter) {
+  // bolyra-suite only: external-suite installs nothing, it runs run.command in a
+  // digest-pinned container.
+  if (c.implementer) {
+    const bad = installError(c.implementer.install);
+    if (bad) errors.push(bad);
+  }
+  // Every count the public page prints must be present and numeric, or the page
+  // renders the word "undefined" with both offline gates green.
+  if (c.expected) {
+    for (const k of ['pass', 'fail', 'skip']) {
+      if (badCount(c.expected[k])) errors.push(`expected.${k} must be a non-negative integer`);
+    }
+  }
+  if (c.adapter !== undefined && (typeof c.adapter !== 'string' || !ADAPTER_RE.test(c.adapter))) {
+    // Checked before the join: this path is read, hashed, and then EXECUTED by tsx.
+    errors.push('adapter must match adapters/<name>.ts');
+  } else if (c.adapter) {
     const adapterPath = path.join(__dirname, c.adapter);
     if (!fs.existsSync(adapterPath)) {
       errors.push(`adapter file not found: ${c.adapter}`);
@@ -369,7 +431,6 @@ function main() {
   // dispatch workflow consumes this as TSV, so refuse anything that could be
   // misparsed: control characters in ids, duplicate ids, unknown kinds.
   if (flag('--list')) {
-    const KINDS = new Set(['bolyra-suite', 'external-suite']);
     const seen = new Set();
     const out = [];
     for (const c of claims) {
@@ -383,7 +444,7 @@ function main() {
       seen.add(id);
       // Stricter than validateClaim on purpose: a SUPPLIED empty/null kind is an
       // error here, because the workflow branches on this value.
-      const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
+      const kind = kindOf(c);
       if (!KINDS.has(kind)) return fail(`--list: unknown kind ${kind} (claim ${id})`);
       // Same boundary as id: this crosses into the same TSV consumer, so it
       // gets the same scrutiny — including that it must actually BE a string
@@ -427,7 +488,7 @@ function main() {
   let ok = 0;
   for (const c of claims) {
     try {
-      const replay = (c.kind || 'bolyra-suite') === 'external-suite' ? replayExternalSuite : replayClaim;
+      const replay = kindOf(c) === 'external-suite' ? replayExternalSuite : replayClaim;
       if (replay(c, flag('--keep'))) ok += 1;
     } catch (e) {
       fail(`${c.id}: ${e.message}`);
@@ -437,6 +498,6 @@ function main() {
   if (ok !== claims.length) process.exitCode = 1;
 }
 
-module.exports = { validateRunnerOutput, validateClaim, validateExternalSuiteOutput, shellQuote };
+module.exports = { validateRunnerOutput, validateClaim, validateExternalSuiteOutput, shellQuote, kindOf, KINDS };
 
 if (require.main === module) main();
