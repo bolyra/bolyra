@@ -34,9 +34,17 @@ optionally followed by `"--no-audit"` and/or `"--no-fund"`, in that order.
 `run.expect.pass`, `run`, and `scoped_out`. `implementer.repo` must be
 `https://github.com/<owner>/<repo>`.
 
-`node interop/replay.js --check` enforces all of the above mechanically
-(`validateClaim` in `interop/replay.js`), and CI runs it on every pull
-request. Maintainer review is in addition to that check, not instead of it.
+What is enforced mechanically, on every pull request, by CI:
+
+- the field shapes above — `implementer.repo`, `implementer.install`, the
+  `node:` image and `network`, integer counts, the adapter pathname — by
+  `node interop/replay.js --check` (`validateClaim` in `interop/replay.js`);
+- `verification_run_url` being absent, and the page matching the registry,
+  by `node landing/gen-conformance.js --check`.
+
+What is enforced only by maintainer review: that the pull request touches
+only the files listed, adds exactly one entry, and changes no existing claim
+or adapter. Nothing mechanical checks those yet.
 
 ## Steps
 
