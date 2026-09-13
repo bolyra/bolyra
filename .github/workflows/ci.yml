@@ -443,3 +443,26 @@ jobs:
           validate_cumulative_bit_encoding(bitmask)
           print(f'✓ Python SDK: bitmask={bitmask}, types import OK')
           "
+
+  verified-actions-demo:
+    name: Verified-actions demo — README path from a clean checkout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # The demo is what the operator emails promise. It depends on the
+      # PUBLISHED @bolyra packages, so this proves the README's two commands
+      # work with nothing else in the repo built. The demo exits non-zero if
+      # any scene verdict, receipt-tamper check, or chain check comes out wrong.
+      - name: Install, run the demo, re-verify the audit log, run its tests
+        working-directory: examples/verified-actions-demo
+        run: |
+          npm ci --no-audit --no-fund
+          npm run demo
+          npm run verify
+          npm test
+
