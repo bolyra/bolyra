@@ -159,6 +159,31 @@ async function main(): Promise<void> {
 
   section('Audit — every decision left a signed receipt');
   const receipts = readAuditLog(audit.logPath);
+
+  // The scene verdicts ARE the demo's claim. Audit integrity alone would pass a
+  // run where the upstream returned 500 but still left validly signed receipts,
+  // so assert the HTTP outcome of every scene and the decision each receipt
+  // records, in order. Any mismatch fails the run (see the exit gate below).
+  const sceneChecks: Array<{ name: string; want: number; got: number; ok: boolean }> = [
+    { name: 'scene 1 refund allowed (WRITE_DATA)', want: 200, got: scene1.status, ok: scene1.status === 200 && scene1.body.result !== undefined },
+    { name: 'scene 2 refund denied (READ only)', want: 403, got: scene2.status, ok: scene2.status === 403 },
+    { name: 'scene 3 read allowed (in scope)', want: 200, got: scene3.status, ok: scene3.status === 200 && scene3.body.result !== undefined },
+    { name: 'scene 4 replay rejected', want: 401, got: scene4.status, ok: scene4.status === 401 },
+    { name: 'scene 5 forgery rejected', want: 401, got: scene5.status, ok: scene5.status === 401 },
+  ];
+  const wantDecisions = [true, false, true, false, false];
+  const decisionsOk =
+    receipts.length === wantDecisions.length &&
+    receipts.every((r, i) => r.payload.decision.allowed === wantDecisions[i]);
+  console.log('  scene outcomes:');
+  for (const c of sceneChecks) {
+    console.log(`    ${c.ok ? green('OK      ') : red('MISMATCH')} ${c.name} (HTTP ${c.got}, expected ${c.want})`);
+  }
+  console.log(
+    `    ${decisionsOk ? green('OK      ') : red('MISMATCH')} receipts record allow/deny/allow/deny/deny ` +
+      `(got ${receipts.map((r) => (r.payload.decision.allowed ? 'allow' : 'deny')).join('/') || 'none'})`,
+  );
+  const scenesOk = sceneChecks.every((c) => c.ok) && decisionsOk;
   console.log(`  ${receipts.length} receipts in ${path.relative(ROOT, audit.logPath)}:\n`);
   console.log(dim('  #  id                  decision  score  agent                        reason'));
   receipts.forEach((r, i) => {
@@ -226,7 +251,8 @@ async function main(): Promise<void> {
   upstream.close();
   host.close();
 
-  if (!allValid || !tamperCaught || !chainValid || !logTamperCaught) {
+  if (!scenesOk || !allValid || !tamperCaught || !chainValid || !logTamperCaught) {
+    console.error(red('\n  DEMO FAILED: ') + [!scenesOk && 'scene outcomes', !allValid && 'receipt signatures', !tamperCaught && 'receipt tamper checks', !chainValid && 'chain', !logTamperCaught && 'log tamper checks'].filter(Boolean).join(', '));
     process.exitCode = 1;
   }
 }

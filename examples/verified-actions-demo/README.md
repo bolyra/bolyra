@@ -7,20 +7,22 @@ through, an out-of-scope call is blocked, a replayed proof is rejected, a
 forged permission claim is caught, and every decision lands as an
 individually signed, offline-verifiable receipt in a JSONL audit log.
 
-## Run it (about a minute)
+## Run it
 
 ```bash
 cd examples/verified-actions-demo
-npm install
+npm ci
 npm run demo
 ```
 
-That's it. Measured on Node 20 from a fresh clone: `npm install` about 10
-seconds, `npm run demo` about 1 second (all five scenes, the receipt checks,
-and the chain checks). The demo depends on the published `@bolyra/gateway`,
+That's it. Measured on Node 20 from a fresh clone: `npm ci` about 4 seconds,
+`npm run demo` about 1 second (all five scenes, the receipt checks, and the
+chain checks). The demo depends on the published `@bolyra/gateway`,
 `@bolyra/mcp`, and `@bolyra/receipts` packages, exactly as an operator would
 install them, so it needs nothing else in this repository built first. CI runs
-this same path from a clean checkout on every pull request. You'll see four scenes and an audit section:
+these same two commands from a clean checkout on every pull request, and the
+demo exits non-zero if any scene verdict, receipt check, or chain check comes
+out wrong. You'll see five scenes and an audit section:
 
 | Scene | What happens | Verdict |
 |---|---|---|
