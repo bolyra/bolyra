@@ -422,7 +422,7 @@ test('validateClaim anchors run.image, so a docker option cannot pose as the ima
   const ext = () => ({
     id: 'x/y@1', kind: 'external-suite',
     implementer: { repo: 'https://github.com/o/r', commit: 'a'.repeat(40) },
-    run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['npm', 'test'], network: 'none', expect: { pass: 1, run: 1 } },
+    run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['npm', 'test'], network: 'none', expect: { pass: 1, run: 1, scoped_out: 0 } },
   });
   assert.strictEqual(vc(ext()).length, 0, 'the spec-shaped image must pass');
   // Placed before the first positional, docker parses this as an option: a
@@ -438,4 +438,26 @@ test('validateClaim anchors run.image, so a docker option cannot pose as the ima
     const c = ext(); c.run.image = image;
     assert.match(vc(c).join(' | '), /digest-pinned/, `accepted ${JSON.stringify(image)}`);
   }
+});
+
+test('REPO_RE rejects dot-only owner or repo segments in the executor, same as the renderer', () => {
+  for (const repo of ['https://github.com/./r', 'https://github.com/../r', 'https://github.com/o/.', 'https://github.com/o/..']) {
+    assert.match(errsFor((c) => { c.implementer.repo = repo; }), /implementer\.repo must match/, `accepted ${repo}`);
+  }
+  for (const repo of ['https://github.com/o/.github', 'https://github.com/o/r.git', 'https://github.com/o-1/r_2']) {
+    assert.strictEqual(errsFor((c) => { c.implementer.repo = repo; }).includes('implementer.repo'), false, `rejected ${repo}`);
+  }
+});
+
+test('external-suite: scoped_out is required, and the replay always compares it', () => {
+  const ext = {
+    id: 'x/y@1', kind: 'external-suite',
+    implementer: { repo: 'https://github.com/o/r', commit: 'a'.repeat(40) },
+    run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['npm', 'test'], network: 'none', expect: { pass: 39, run: 39 } },
+  };
+  assert.match(vc(ext).join(' | '), /run\.expect\.scoped_out must be a non-negative integer/);
+  // Output says 9 scoped out; an expectation that omits the count must not silently pass.
+  const run = { status: 0, signal: null, stdout: GREEN, stderr: '' };
+  assert.throws(() => validateExternalSuiteOutput(run, { run: { expect: { pass: 39, run: 39 } } }), /REPLAY MISMATCH/);
+  assert.deepStrictEqual(validateExternalSuiteOutput(run, { run: { expect: { pass: 39, run: 39, scoped_out: 9 } } }), { pass: 39, run: 39, scoped_out: 9 });
 });
