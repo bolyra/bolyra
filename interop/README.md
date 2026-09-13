@@ -49,6 +49,8 @@ the pinned runner via the committed HUT adapter.
   lockfiles, but replaying still executes the implementer's host code. Run
   in CI's ephemeral runner (the `interop-replay` workflow) or a container
   when the pin has not been run before.
+- **Submitting a claim**: see [SUBMITTING.md](SUBMITTING.md). `verification_run_url`
+  is a reserved field (not rendered in v1; rejected on submissions).
 
 ## CI
 
