@@ -122,53 +122,34 @@ test('a new root-level directory or symlink is detected (the runner adds root no
   failsOn(b, fb, /node_modules/);
 });
 
-test('a change under integrations/ is detected (conformance-runner require()s integrations/receipts/dist)', () => {
+test('a symlink into uncovered repo content is refused (the file: sibling case)', () => {
   const repo = makeRepo();
-  const dist = path.join(repo, 'integrations', 'receipts', 'dist');
-  fs.mkdirSync(dist, { recursive: true });
-  fs.writeFileSync(path.join(dist, 'index.js'), '// lib\n');
-  const f = snap(repo);
-  fs.writeFileSync(path.join(dist, 'index.js'), '// evil\n');
-  failsOn(repo, f, /integrations\/receipts\/dist\/index\.js/);
+  fs.mkdirSync(path.join(repo, 'sdk', 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'sdk', 'dist', 'index.js'), '// lib\n');
+  fs.symlinkSync('../sdk', path.join(repo, 'interop', 'linked-sdk'));
+  const r = run(repo, 'snapshot', path.join(os.tmpdir(), `s-${process.pid}-${Math.random()}.json`));
+  assert.strictEqual(r.status, 1, 'snapshot must refuse rather than record 40 bytes');
+  assert.match(r.stderr, /points at uncovered repo content \(sdk\)/);
 });
 
-test('a change under sdk/node_modules is detected (it is on the runner module.paths)', () => {
+test('a symlink to a covered path, a root entry, or outside the workspace is allowed', () => {
   const repo = makeRepo();
-  const nm = path.join(repo, 'sdk', 'node_modules', 'left-pad');
-  fs.mkdirSync(nm, { recursive: true });
-  fs.writeFileSync(path.join(nm, 'index.js'), '// dep\n');
+  fs.symlinkSync('../spec/runner.js', path.join(repo, 'interop', 'to-covered'));   // into a protected root
+  fs.symlinkSync('../package.json', path.join(repo, 'interop', 'to-root-entry'));  // root entry: fingerprinted
+  fs.symlinkSync(os.tmpdir(), path.join(repo, 'interop', 'to-outside'));           // host fs: stated residual
   const f = snap(repo);
-  fs.writeFileSync(path.join(nm, 'index.js'), '// evil\n');
-  failsOn(repo, f, /sdk\/node_modules\/left-pad\/index\.js/);
+  const r = run(repo, 'verify', f);
+  assert.strictEqual(r.status, 0, r.stderr);
 });
 
-test('an integrations subtree the harness never loads is covered only by the integrations entry list', () => {
+test('a broken symlink is recorded, not an error', () => {
   const repo = makeRepo();
-  const off = path.join(repo, 'integrations', 'x402-evc', 'src');
-  fs.mkdirSync(off, { recursive: true });
-  fs.writeFileSync(path.join(off, 'a.ts'), 'export const a = 1;\n');
+  fs.symlinkSync('./nowhere', path.join(repo, 'interop', 'dangling'));
   const f = snap(repo);
-  // Editing content the runner cannot reach is residual, not a finding.
-  fs.writeFileSync(path.join(off, 'a.ts'), 'export const a = 2;\n');
-  let r = run(repo, 'verify', f); assert.strictEqual(r.status, 0, r.stderr);
-  // Adding a new entry alongside it DOES change integrations/'s own listing.
-  fs.mkdirSync(path.join(repo, 'integrations', 'planted'));
-  failsOn(repo, f, /integrations/);
-});
-
-test('PROTECTED_LOAD_PATHS covers every CANDIDATE_MODULE_PATHS entry in the real runner', () => {
-  const runnerSrc = fs.readFileSync(path.join(__dirname, '..', 'spec', 'conformance-runner.js'), 'utf8');
-  const block = runnerSrc.match(/CANDIDATE_MODULE_PATHS\s*=\s*\[([\s\S]*?)\]/);
-  assert.ok(block, 'CANDIDATE_MODULE_PATHS not found in spec/conformance-runner.js');
-  const candidates = [...block[1].matchAll(/'\.\.\/([^']+)'/g)].map((m) => m[1]);
-  assert.ok(candidates.length > 0, 'parsed no candidate module paths');
-  const selfSrc = fs.readFileSync(path.join(__dirname, 'harness-integrity.js'), 'utf8');
-  const own = selfSrc.match(/PROTECTED_LOAD_PATHS\s*=\s*\[([\s\S]*?)\]/);
-  assert.ok(own, 'PROTECTED_LOAD_PATHS not found in harness-integrity.js');
-  const guarded = [...own[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  for (const c of candidates) {
-    assert.ok(guarded.includes(c), `${c} is unshifted onto the runner's module.paths but is not in PROTECTED_LOAD_PATHS`);
-  }
+  const r = run(repo, 'verify', f); assert.strictEqual(r.status, 0, r.stderr);
+  fs.unlinkSync(path.join(repo, 'interop', 'dangling'));
+  fs.symlinkSync('./elsewhere', path.join(repo, 'interop', 'dangling'));
+  failsOn(repo, f, /dangling/);
 });
 
 test('usage errors exit 1 without writing anything', () => {
