@@ -59,6 +59,13 @@ preflight_version "@bolyra/gateway" "npm v"
 preflight_version "@bolyra/sdk"     "TS SDK at v"
 preflight_version "@bolyra/cli"     "@bolyra/cli@"
 preflight_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
+# preflight_version only proves the page CONTAINS the latest. Also require that
+# it pins exactly one @bolyra/evc-conformance version and that the pin IS the
+# latest as a whole string, so "0.6.0-rc.1" cannot pass for 0.6.0 and a page
+# carrying an old and a new pin cannot deploy.
+EVC_PINS=$(grep -oE '@bolyra/evc-conformance@[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?' "$INDEX" | sed 's|^@bolyra/evc-conformance@||' | sort -u || true)
+EVC_LATEST=$(npm view "@bolyra/evc-conformance" version 2>/dev/null | tr -d '[:space:]') || { echo "ERROR: npm view @bolyra/evc-conformance failed" >&2; exit 1; }
+[ "$EVC_PINS" = "$EVC_LATEST" ] || { echo "ERROR: landing/index.html must pin exactly @bolyra/evc-conformance@$EVC_LATEST (found: '$(echo "$EVC_PINS" | tr '\n' ' ')')" >&2; exit 1; }
 # The committed page must match the registry; deploying a stale page is a
 # silent lie about which claims exist.
 node "$SCRIPT_DIR/gen-conformance.js" --check || { echo "ERROR: landing/conformance.html drifts from interop/claims.json — run node landing/gen-conformance.js" >&2; exit 1; }

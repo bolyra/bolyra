@@ -244,16 +244,30 @@ guard_version "@bolyra/cli"     "@bolyra/cli@"
 guard_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
 
 # The advertised vector count must equal what the ADVERTISED package version
-# actually loads. Pin npx to the version the page names (unpinned npx can
-# serve the cache); guard_version above separately checks it is npm's latest.
-EVC_ADVERTISED=$(grep -oE '@bolyra/evc-conformance@[0-9]+\.[0-9]+\.[0-9]+' <<< "$LIVE_HTML" | sed 's/.*@//' | sort -u || true)
-[ "$(wc -l <<< "$EVC_ADVERTISED" | tr -d ' ')" = "1" ] && [ -n "$EVC_ADVERTISED" ] || fail "page must advertise exactly one @bolyra/evc-conformance version (got: '$EVC_ADVERTISED')"
-ADVERTISED_COUNT=$(grep -oE '[0-9]+ wire-contract vectors' <<< "$LIVE_HTML" | head -1 | grep -oE '^[0-9]+' || true)
-[ -n "$ADVERTISED_COUNT" ] || fail "page does not advertise a wire-contract vector count"
+# actually loads. Pin and count are both read from $LIVE_HTML — the SAME fetch —
+# not from the earlier $ROOT_TMP snapshot, so two CDN edges cannot be validated
+# against each other. Full semver (prerelease AND +build metadata) is captured
+# so the whole-string comparison below cannot be satisfied by a truncation:
+# guard_version above only proves the page CONTAINS the latest, which both
+# "0.6.0-rc.1" and "0.6.0+build.1" would satisfy for 0.6.0.
+EVC_ADVERTISED=$(grep -oE '@bolyra/evc-conformance@[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?' <<< "$LIVE_HTML" | sed 's|^@bolyra/evc-conformance@||' | sort -u || true)
+[ "$(printf '%s' "$EVC_ADVERTISED" | grep -c . || true)" = "1" ] || fail "page must pin exactly one @bolyra/evc-conformance version (got: '$(echo "$EVC_ADVERTISED" | tr '\n' ' ')')"
+EVC_LATEST=$(npm view "@bolyra/evc-conformance" version 2>/dev/null | tr -d '[:space:]') || fail "npm view @bolyra/evc-conformance failed"
+[ "$EVC_ADVERTISED" = "$EVC_LATEST" ] || fail "page pins @bolyra/evc-conformance@$EVC_ADVERTISED but npm latest is $EVC_LATEST"
+# Exactly one DISTINCT advertised count: taking the first match would let a page
+# that says both 40 and 41 pass against whichever the package happens to load.
+ADVERTISED_COUNT=$(grep -oE '[0-9]+ wire-contract vectors' <<< "$LIVE_HTML" | grep -oE '^[0-9]+' | sort -u || true)
+[ "$(printf '%s' "$ADVERTISED_COUNT" | grep -c . || true)" = "1" ] || fail "page must advertise exactly one wire-contract vector count (got: '$(echo "$ADVERTISED_COUNT" | tr '\n' ' ')')"
+# Run the pinned package and require BOTH a zero exit and exactly one count
+# line. The bare run executes the built-in reference host (exit 0 on 0.6.0);
+# a `|| true` here would let a crash after the count line read as green.
 EVC_TMP=$(mktemp -d)
-LOADED_COUNT=$( (cd "$EVC_TMP" && npx -y "@bolyra/evc-conformance@${EVC_ADVERTISED}" 2>/dev/null | grep -oE '^[0-9]+ test vectors loaded' | head -1 | grep -oE '^[0-9]+') || true )
+if ! EVC_OUT=$(cd "$EVC_TMP" && npx -y "@bolyra/evc-conformance@${EVC_ADVERTISED}" 2>&1); then
+  rm -rf "$EVC_TMP"; fail "@bolyra/evc-conformance@$EVC_ADVERTISED exited non-zero: $(tail -3 <<< "$EVC_OUT" | tr '\n' ' ')"
+fi
 rm -rf "$EVC_TMP"
-[[ "$LOADED_COUNT" =~ ^[0-9]+$ ]] || fail "could not read '<N> test vectors loaded' from @bolyra/evc-conformance@$EVC_ADVERTISED (got '$LOADED_COUNT')"
+LOADED_COUNT=$(grep -oE '^[0-9]+ test vectors loaded' <<< "$EVC_OUT" | grep -oE '^[0-9]+' | sort -u || true)
+[ "$(printf '%s' "$LOADED_COUNT" | grep -c . || true)" = "1" ] || fail "expected exactly one '<N> test vectors loaded' line from @bolyra/evc-conformance@$EVC_ADVERTISED (got: '$(echo "$LOADED_COUNT" | tr '\n' ' ')')"
 if [ "$ADVERTISED_COUNT" = "$LOADED_COUNT" ]; then
   pass "vector count: page advertises $ADVERTISED_COUNT, @bolyra/evc-conformance@$EVC_ADVERTISED loads $LOADED_COUNT"
 else
@@ -272,15 +286,21 @@ grep -qF 'href="/conformance"' <<< "$LIVE_HTML" || fail "root page does not link
 pass "root page advertises 11 envelope vectors and links /conformance"
 
 # The live conformance page must be exactly the page generated from the
-# registry at the deployed commit (future-proof: no hard-coded claim count).
+# registry in this checkout. First prove the checkout is self-consistent
+# (page == registry): otherwise a stale local page and a stale live page could
+# match each other after claims.json changed. Then compare every URL a reader
+# can hit: the bare path links use, the .html path, and a cache-busted fetch
+# (what a fresh edge serves). All three must be byte-identical to the local
+# file. Convention: verify.sh runs from the same checkout deploy.sh deployed
+# from; there is no deployed-commit marker on the site to anchor on.
+node "$SCRIPT_DIR/gen-conformance.js" --check >/dev/null || fail "landing/conformance.html drifts from interop/claims.json in this checkout — run node landing/gen-conformance.js"
 CONF_TMP=$(mktemp)
-curl -fsS "https://bolyra.ai/conformance?vguard=$(date +%s)" -o "$CONF_TMP" || fail "GET /conformance failed"
-if cmp -s "$CONF_TMP" "$SCRIPT_DIR/conformance.html"; then
-  pass "/conformance is byte-identical to landing/conformance.html at the deployed commit ($(grep -c '<h2 class="claim-id">' "$CONF_TMP") claims)"
-else
-  fail "/conformance differs from landing/conformance.html at the deployed commit (stale CDN or wrong deploy source)"
-fi
+for url in "https://bolyra.ai/conformance" "https://bolyra.ai/conformance.html" "https://bolyra.ai/conformance?vguard=$(date +%s)"; do
+  curl -fsS "$url" -o "$CONF_TMP" || { rm -f "$CONF_TMP"; fail "GET $url failed"; }
+  cmp -s "$CONF_TMP" "$SCRIPT_DIR/conformance.html" || { rm -f "$CONF_TMP"; fail "$url differs from landing/conformance.html (stale CDN or wrong deploy source)"; }
+done
 rm -f "$CONF_TMP"
+pass "/conformance, /conformance.html and a cache-busted fetch are byte-identical to landing/conformance.html ($(grep -c '<h2 class="claim-id">' "$SCRIPT_DIR/conformance.html") claims)"
 
 # GitHub link sanity — the page CTAs must resolve for unauthenticated visitors.
 # GitHub returns 404 (not 403) for private repos, so this catches re-privatization too.
