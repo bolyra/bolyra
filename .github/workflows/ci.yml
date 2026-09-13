@@ -233,6 +233,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          # replay.js --check does `git show <suite.commit>:spec/test-vectors.json`
+          # at historical pins, which needs full history.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -262,8 +266,20 @@ jobs:
 
       # Offline harness tests only — the live interop replay (network,
       # third-party code) is the separate interop-replay dispatch workflow.
-      - name: Interop replay harness — offline regression tests
-        run: node --test interop/replay.test.js
+      - name: Interop replay harness + dispatch building blocks — offline tests
+        run: node --test interop/replay.test.js interop/submission-overlay.test.js interop/harness-integrity.test.js
+
+      # Registry + suite-pin validation without executing anything (the live
+      # replay is the separate interop-replay dispatch workflow).
+      - name: Interop registry — offline pin check
+        run: node interop/replay.js --check
+
+      # landing/conformance.html is generated from interop/claims.json and
+      # committed; any drift between them is a CI failure.
+      - name: Conformance page — generator tests + drift check
+        run: |
+          node --test landing/gen-conformance.test.js
+          node landing/gen-conformance.js --check
 
   typecheck-all:
     name: Typecheck — all TypeScript packages
