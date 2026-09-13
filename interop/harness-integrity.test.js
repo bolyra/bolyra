@@ -55,11 +55,17 @@ test('an IGNORED file added under a protected dir fails (git-based enumeration w
   const repo = makeRepo(); const f = snap(repo);
   fs.writeFileSync(path.join(repo, 'interop', 'sneaky.log'), 'x\n'); failsOn(repo, f, /interop\/sneaky\.log/);
 });
-test('untracked file under a protected dir fails; a file outside protected roots is ignored', () => {
+test('protected roots are covered in full; unprotected root dirs only by their entry list', () => {
   const repo = makeRepo(); const f = snap(repo);
+  // The documented residual: content inside an unprotected root directory.
+  fs.writeFileSync(path.join(repo, 'other', 'scratch.txt'), 'changed\n');
+  assert.strictEqual(run(repo, 'verify', f).status, 0, 'content of an existing file in an unprotected root dir is not covered');
+  // But its immediate entry list IS fingerprinted, so a NEW entry is caught —
+  // this is what makes a planted root node_modules/ detectable.
   fs.writeFileSync(path.join(repo, 'other', 'more.txt'), 'x\n');
-  assert.strictEqual(run(repo, 'verify', f).status, 0, 'outside protected roots');
-  fs.writeFileSync(path.join(repo, 'spec', 'sneaky.js'), 'x\n'); failsOn(repo, f, /spec\/sneaky\.js/);
+  failsOn(repo, f, /other/);
+  const repo2 = makeRepo(); const f2 = snap(repo2);
+  fs.writeFileSync(path.join(repo2, 'spec', 'sneaky.js'), 'x\n'); failsOn(repo2, f2, /spec\/sneaky\.js/);
 });
 test('root-level file change and .git/config change both fail', () => {
   const repo = makeRepo(); const f = snap(repo);
@@ -97,6 +103,49 @@ test('a root-level file named __proto__ is fingerprinted (no prototype-setter sw
   assert.ok(Object.prototype.hasOwnProperty.call(JSON.parse(fs.readFileSync(f, 'utf8')), '__proto__'));
   fs.writeFileSync(path.join(repo, '__proto__'), 'b\n'); failsOn(repo, f, /__proto__/);
 });
+test('.git must be a real directory — a worktree gitfile would silently gut .git coverage', () => {
+  const repo = makeRepo();
+  const dotgit = path.join(repo, '.git');
+  fs.rmSync(dotgit, { recursive: true, force: true });
+  fs.writeFileSync(dotgit, 'gitdir: /elsewhere/.git/worktrees/x\n');
+  const r = run(repo, 'snapshot', path.join(os.tmpdir(), `snap-gitfile-${process.pid}-${Math.random()}.json`));
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /\.git is not a directory/);
+});
+
+test('a new root-level directory or symlink is detected (the runner adds root node_modules to module.paths)', () => {
+  const a = makeRepo(); const fa = snap(a);
+  fs.mkdirSync(path.join(a, 'node_modules'));
+  failsOn(a, fa, /node_modules/);
+  const b = makeRepo(); const fb = snap(b);
+  fs.symlinkSync('/tmp', path.join(b, 'node_modules'));
+  failsOn(b, fb, /node_modules/);
+});
+
+test('a change under integrations/ is detected (conformance-runner require()s integrations/receipts/dist)', () => {
+  const repo = makeRepo();
+  const dist = path.join(repo, 'integrations', 'receipts', 'dist');
+  fs.mkdirSync(dist, { recursive: true });
+  fs.writeFileSync(path.join(dist, 'index.js'), '// lib\n');
+  const f = snap(repo);
+  fs.writeFileSync(path.join(dist, 'index.js'), '// evil\n');
+  failsOn(repo, f, /integrations\/receipts\/dist\/index\.js/);
+});
+
+test('usage errors exit 1 without writing anything', () => {
+  const repo = makeRepo();
+  const cwdBefore = fs.readdirSync(process.cwd()).length;
+  let r = run(repo, 'snapshot');                       // file argument omitted: must not create a file named --root
+  assert.strictEqual(r.status, 1); assert.match(r.stderr, /usage:/);
+  r = run(repo, 'bogus', path.join(os.tmpdir(), `x-${process.pid}.json`));
+  assert.strictEqual(r.status, 1); assert.match(r.stderr, /usage:/);
+  const bad = path.join(os.tmpdir(), `manifest-${process.pid}-${Math.random()}.json`);
+  fs.writeFileSync(bad, '"not an object"');
+  r = run(repo, 'verify', bad);
+  assert.strictEqual(r.status, 1); assert.match(r.stderr, /is not a manifest object/);
+  assert.strictEqual(fs.readdirSync(process.cwd()).length, cwdBefore, 'must not create files in cwd');
+});
+
 test('an unreadable entry is an error, not "absent"', () => {
   if (process.getuid && process.getuid() === 0) return; // root can read anything
   const repo = makeRepo(); const f = snap(repo);
