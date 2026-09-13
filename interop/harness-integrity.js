@@ -7,17 +7,23 @@
 // verifier cannot be replaced by the tamper it is looking for.
 //   node harness-integrity.js snapshot <file.json> --root <workspace>
 //   node harness-integrity.js verify   <file.json> --root <workspace>
-// Coverage: everything under interop/ spec/ landing/ .github/ (ignored files
-// included); root-level regular files; ALL of .git/ including objects (stored
-// bytes are not immutable and objects/info/alternates can redirect lookups).
-// NOT covered, by design: the host toolchain (node/git/docker), $HOME, scratch
-// dirs, and changes restored before verification. A container escape or host
-// compromise is out of this checker's scope (spec §3.5 stated residual).
+// Coverage: everything under interop/ spec/ landing/ .github/ integrations/
+// (ignored files included) — integrations/ because spec/conformance-runner.js
+// require()s integrations/receipts/dist/index.js at run time; ALL of .git/
+// including objects (stored bytes are not immutable and objects/info/alternates
+// can redirect lookups); and EVERY root-level entry non-recursively — files,
+// directories and symlinks — so a planted root node_modules/, which the runner
+// unshifts onto module.paths, cannot appear unnoticed.
+// NOT covered, by design: the contents of unprotected root directories beyond
+// their immediate entry list, the host toolchain (node/git/docker), $HOME,
+// scratch dirs, and changes restored before verification. A container escape or
+// host compromise is out of this checker's scope (spec §3.5 stated residual).
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github'];
+const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github', 'integrations'];
+const MAX_DIFFS = 50;
 
 function die(msg) { process.stderr.write(`harness-integrity: ${msg}\n`); process.exit(1); }
 
@@ -47,11 +53,16 @@ function walk(root, rel, out) {
 }
 function snapshot(root) {
   const out = Object.create(null);                            // a file named __proto__ must not hit the setter
+  // In a git worktree or submodule `.git` is a pointer FILE; walking it would
+  // record 66 bytes and silently cover none of the object store. Fail loudly
+  // rather than report a hollow success.
+  const gitSt = fs.lstatSync(path.join(root, '.git'));
+  if (!gitSt.isDirectory()) die('.git is not a directory (gitfile: worktree or submodule) — run against a full checkout');
   for (const r of PROTECTED_ROOTS) walk(root, r, out);
   walk(root, '.git', out);
-  for (const name of fs.readdirSync(root).sort()) {          // root-level regular files only
-    const abs = path.join(root, name);
-    if (fs.lstatSync(abs).isFile()) out[name] = fingerprint(abs);
+  for (const name of fs.readdirSync(root).sort()) {          // EVERY root entry, non-recursive
+    if (name === '.git' || PROTECTED_ROOTS.includes(name)) continue;   // already walked in full
+    out[name] = fingerprint(path.join(root, name));
   }
   return out;
 }
@@ -59,8 +70,12 @@ function snapshot(root) {
 const args = process.argv.slice(2);
 const cmd = args[0], file = args[1];
 const ri = args.indexOf('--root');
-const root = ri >= 0 ? path.resolve(args[ri + 1]) : null;
-if (!file || !root || !['snapshot', 'verify'].includes(cmd)) die('usage: snapshot|verify <file.json> --root <workspace>');
+const root = ri >= 0 && args[ri + 1] ? path.resolve(args[ri + 1]) : null;
+// `file.startsWith('-')` catches an omitted file argument (`snapshot --root X`),
+// which would otherwise write a file literally named `--root` and exit 0.
+if (!['snapshot', 'verify'].includes(cmd) || !file || file.startsWith('-') || !root) {
+  die('usage: harness-integrity.js snapshot|verify <file.json> --root <workspace>');
+}
 
 try {
   if (cmd === 'snapshot') {
@@ -68,15 +83,20 @@ try {
     fs.writeFileSync(file, JSON.stringify(snap, null, 1)); // a null-prototype object serializes __proto__ as an ordinary key
     console.log(`harness-integrity: snapshot of ${Object.keys(snap).length} entries → ${file}`);
   } else {
-    const base = Object.assign(Object.create(null), JSON.parse(fs.readFileSync(file, 'utf8')));
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) die(`${file} is not a manifest object`);
+    const base = Object.assign(Object.create(null), parsed);
     const now = snapshot(root);
     const diffs = [];
     for (const p of new Set([...Object.keys(base), ...Object.keys(now)])) {
       if (base[p] !== now[p]) diffs.push(`${p}: ${base[p] || 'absent'} -> ${now[p] || 'absent'}`);
     }
-    if (diffs.length) die(`protected tree changed:\n  ${diffs.join('\n  ')}`);
+    if (diffs.length) {
+      const more = diffs.length > MAX_DIFFS ? `\n  … and ${diffs.length - MAX_DIFFS} more` : '';
+      die(`protected tree changed:\n  ${diffs.slice(0, MAX_DIFFS).join('\n  ')}${more}`);
+    }
     console.log('harness-integrity: OK');
   }
 } catch (e) {
-  die(`${e.code || 'ERROR'}: ${e.message}`);
+  die(e.message);   // Node's message already leads with the errno code
 }
