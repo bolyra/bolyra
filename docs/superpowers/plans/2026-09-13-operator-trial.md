@@ -66,11 +66,12 @@
     "build": "tsc",
     "test": "tsc && node --test dist/test/*.test.js"
   },
+  "engines": { "node": ">=20" },
   "dependencies": {
     "@bolyra/gateway": "0.6.0",
     "@bolyra/mcp": "0.6.5",
     "@bolyra/receipts": "0.11.0",
-    "yaml": "^2.5.0"
+    "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -118,7 +119,8 @@ trial-out/
 action: refund                      # the name Bolyra gates; appears in receipts
 method: POST
 url: https://staging.example.com/v1/refunds
-bodyFile: ./refund.json             # optional; sent byte-for-byte; not allowed with GET/HEAD/DELETE
+# bodyFile: ./refund.json           # optional. Create the file first, then uncomment.
+                                    # Sent byte-for-byte; not allowed with GET/HEAD/DELETE.
 headers:
   Authorization: "Bearer ${THEIR_TOKEN}"   # ${NAME} is replaced from the environment; unset = error
   Content-Type: application/json
@@ -446,18 +448,31 @@ test('rejects a non-http scheme', () => rejects(valid({ url: 'ftp://x' }), 'sche
 test('rejects credentials in the URL', () => rejects(valid({ url: 'https://u:p@x.example/' }), 'credentials'));
 test('rejects an unknown permission', () => rejects(valid({ requiredPermission: 'ROOT' }), 'requiredPermission'));
 
-test('substitutes ${ENV} in header values and records the secret', () => {
+test('substitutes ${ENV} in header values and records the secret needles', () => {
   const cfg = validateTrialConfig(
     valid({ headers: { Authorization: 'Bearer ${T}', 'X-Static': 'plain' } }),
     base,
     { T: 'sekrit-123' },
   );
   assert.equal(cfg.headers.Authorization, 'Bearer sekrit-123');
-  assert.deepEqual(cfg.secrets, ['sekrit-123', 'Bearer sekrit-123', 'plain']);
+  assert.equal(cfg.headers['X-Static'], 'plain');
+  // Needles: each substituted env value, and each header value that contained a
+  // substitution. Static header values are not needles (a short static value such
+  // as "application/json" would false-positive against the bundle's own content).
+  assert.deepEqual(cfg.secrets, ['sekrit-123', 'Bearer sekrit-123']);
 });
 
 test('fails on an unset ${ENV} before anything else runs (spec test 9)', () => {
   rejects(valid({ headers: { Authorization: 'Bearer ${MISSING}' } }), 'MISSING', {});
+});
+
+test('parse errors never echo file content', () => {
+  const y = path.join(base, 'broken.yaml');
+  fs.writeFileSync(y, 'action: refund\nheaders: {Authorization: "Bearer sekrit-in-file\n');
+  assert.throws(
+    () => loadTrialConfig(y, {}),
+    (err: unknown) => err instanceof TrialConfigError && !err.message.includes('sekrit-in-file') && /could not be parsed/.test(err.message),
+  );
 });
 
 test('rejects bodyFile with GET, HEAD, DELETE', () => {
@@ -539,9 +554,10 @@ export interface TrialConfig {
   body?: Buffer;
   requiredPermission: PermissionName;
   /**
-   * Values the secret scan must never find in the bundle: every substituted
-   * environment value and every resolved header value (deduplicated, empty
-   * strings dropped).
+   * Needles the secret scan must never find in the bundle: every substituted
+   * environment value, and every header value that contained a substitution
+   * (deduplicated, empty strings dropped). Static header values are not
+   * needles; a short one would false-positive against the bundle itself.
    */
   secrets: string[];
 }
@@ -551,12 +567,19 @@ export function loadTrialConfig(filePath: string, env: NodeJS.ProcessEnv = proce
   if (!fs.existsSync(resolved)) {
     throw new TrialConfigError(`config file not found: ${resolved}`);
   }
-  const raw = fs.readFileSync(resolved, 'utf8');
+  let raw: string;
+  try {
+    raw = fs.readFileSync(resolved, 'utf8');
+  } catch (err) {
+    throw new TrialConfigError(`config file could not be read: ${(err as NodeJS.ErrnoException).code ?? 'error'}`);
+  }
   let parsed: unknown;
   try {
     parsed = resolved.toLowerCase().endsWith('.json') ? JSON.parse(raw) : parseYaml(raw);
-  } catch (err) {
-    throw new TrialConfigError(`config file could not be parsed: ${(err as Error).message}`);
+  } catch {
+    // Parser messages can quote the source, which may contain a secret. Say
+    // only that parsing failed.
+    throw new TrialConfigError('config file could not be parsed (invalid YAML/JSON); check quoting and indentation');
   }
   return validateTrialConfig(parsed, path.dirname(resolved), env);
 }
@@ -598,7 +621,7 @@ export function validateTrialConfig(
     throw new TrialConfigError('url: credentials in the URL are not allowed');
   }
 
-  const envValues: string[] = [];
+  const needles: string[] = [];
   const headers: Record<string, string> = {};
   if (obj.headers !== undefined) {
     if (typeof obj.headers !== 'object' || obj.headers === null || Array.isArray(obj.headers)) {
@@ -607,7 +630,9 @@ export function validateTrialConfig(
     for (const [name, value] of Object.entries(obj.headers as Record<string, unknown>)) {
       if (!HEADER_NAME_RE.test(name)) throw new TrialConfigError(`headers.${name}: invalid header name`);
       if (typeof value !== 'string') throw new TrialConfigError(`headers.${name}: value must be a string`);
-      headers[name] = substituteEnv(value, env, `headers.${name}`, envValues);
+      const before = needles.length;
+      headers[name] = substituteEnv(value, env, `headers.${name}`, needles);
+      if (needles.length > before) needles.push(headers[name]); // the whole resolved value is a needle too
     }
   }
 
@@ -617,7 +642,11 @@ export function validateTrialConfig(
     if (BODYLESS.has(method)) throw new TrialConfigError(`bodyFile: not allowed with method ${method}`);
     const bodyPath = path.resolve(baseDir, obj.bodyFile);
     if (!fs.existsSync(bodyPath)) throw new TrialConfigError(`bodyFile: not found: ${bodyPath}`);
-    body = fs.readFileSync(bodyPath);
+    try {
+      body = fs.readFileSync(bodyPath);
+    } catch (err) {
+      throw new TrialConfigError(`bodyFile: could not be read: ${(err as NodeJS.ErrnoException).code ?? 'error'}`);
+    }
   }
 
   const rp = obj.requiredPermission;
@@ -625,7 +654,7 @@ export function validateTrialConfig(
     throw new TrialConfigError(`requiredPermission: required; one of ${PERMISSION_NAMES.join(' ')}`);
   }
 
-  const secrets = dedupe([...envValues, ...Object.values(headers)]).filter((s) => s.length > 0);
+  const secrets = dedupe(needles).filter((s) => s.length > 0);
 
   return {
     action,
@@ -691,7 +720,7 @@ test('echo counts requests and returns the configured status', async () => {
     const r1 = await fetch(echo.url, { method: 'POST', body: '{}' });
     assert.equal(r1.status, 200);
     assert.deepEqual(await r1.json(), { echoed: true });
-    await fetch(echo.url, { method: 'POST', body: '{}' });
+    await (await fetch(echo.url, { method: 'POST', body: '{}' })).arrayBuffer();
     assert.equal(echo.requestCount, 2);
   } finally {
     await echo.close();
@@ -920,6 +949,58 @@ test('partial append failure rolls back to the committed prefix and breaks the c
   assert.match(fs.readFileSync(path.join(dir, 'VERIFY.txt'), 'utf8'), /--expect-count 1/);
 });
 
+test('readBackLast returns the persisted receipt, not the in-memory one', () => {
+  const dir = tmp();
+  const audit = new Audit({
+    runDir: dir,
+    gatewayConfig: gatewayConfig(),
+    io: {
+      appendFileSync(p, data) {
+        // Corrupt the persisted line without throwing.
+        fs.appendFileSync(p, data.replace('"allowed":true', '"allowed":false'));
+      },
+    },
+  });
+  const inMemory = audit.record(input('allowed', '1'));
+  const persisted = audit.readBackLast();
+  assert.ok(persisted);
+  assert.equal(persisted!.payload.decision.allowed, false);
+  assert.equal(inMemory.payload.decision.allowed, true);
+  assert.equal(verifyReceipt(persisted!, audit.signerInfo.signer), false);
+});
+
+test('abort scans and deletes on a hit, keeps a clean directory', () => {
+  const dir = tmp();
+  const audit = new Audit({ runDir: dir, gatewayConfig: gatewayConfig() });
+  audit.record(input('allowed', '1'));
+  audit.abort([]);
+  assert.ok(fs.existsSync(dir));
+  audit.record(input('allowed sekrit-abc', '2'));
+  audit.abort(['sekrit-abc']);
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('chain-verification failure with a secret present still deletes the directory', () => {
+  const dir = tmp();
+  let calls = 0;
+  const audit = new Audit({
+    runDir: dir,
+    gatewayConfig: gatewayConfig(),
+    io: {
+      appendFileSync(p, data) {
+        calls += 1;
+        // Second line: flip a signature byte so the chain fails verification.
+        fs.appendFileSync(p, calls === 2 ? data.replace(/"value":"0x[0-9a-f]{2}/, (m) => m.slice(0, -2) + '00') : data);
+      },
+    },
+  });
+  audit.record(input('allowed', '1'));
+  audit.record(input('denied sekrit-q', '2'));
+  const fin = audit.finalize(finalizeInput({ secrets: ['sekrit-q'] }));
+  assert.equal(fin.ok, false);
+  assert.equal(fs.existsSync(dir), false);
+});
+
 test('failed truncate marks the file unverifiable; finalize does not parse it (spec test 13)', () => {
   const dir = tmp();
   let calls = 0;
@@ -949,6 +1030,8 @@ test('failed truncate marks the file unverifiable; finalize does not parse it (s
   assert.equal(fs.existsSync(path.join(dir, 'VERIFY.txt')), false);
   const summary = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'));
   assert.equal(summary.fileState, 'unverifiable');
+  assert.equal(summary.ok, false);
+  assert.equal(summary.receiptCount, null);
 });
 
 test('zero receipts: failure summary, no VERIFY.txt (spec test 10)', () => {
@@ -1173,10 +1256,53 @@ export class Audit {
     return raw.split('\n').map((l) => JSON.parse(l) as SignedReceipt);
   }
 
+  /**
+   * The last receipt as it exists ON DISK (the host verifies this, not the
+   * in-memory object, before dispatching). Null when the file is empty or the
+   * last line does not parse.
+   */
+  readBackLast(): SignedReceipt | null {
+    const raw = fs.readFileSync(this.receiptsPath, 'utf8').trimEnd();
+    if (raw === '') return null;
+    const last = raw.slice(raw.lastIndexOf('\n') + 1);
+    try {
+      return JSON.parse(last) as SignedReceipt;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Cleanup for a run that ended by exception before finalize. Scans what was
+   * written; deletes the directory on a hit or if the scan itself fails, so a
+   * retained directory is always a scanned one. Only ever deletes the
+   * directory this instance created.
+   */
+  abort(secrets: string[]): void {
+    let hit: string | null;
+    try {
+      hit = this.scanSecrets(secrets);
+    } catch {
+      hit = 'scan failed';
+    }
+    if (hit) fs.rmSync(this.runDir, { recursive: true, force: true });
+  }
+
   finalize(input: FinalizeInput): FinalizeResult {
+    try {
+      return this.finalizeInner(input);
+    } catch (err) {
+      // A summary/VERIFY write failure must not leave an unscanned directory.
+      const hit = this.scanSecretsOrFail(input.secrets);
+      if (hit) return this.deleteAndFail(hit);
+      return { ok: false, reason: `finalize failed: ${(err as Error).message}`, receiptCount: null, headReceiptHash: null, verifyCommand: null };
+    }
+  }
+
+  private finalizeInner(input: FinalizeInput): FinalizeResult {
     // Step 0: scan whatever exists before anything else is decided, so a kept
     // directory is never an unscanned directory.
-    const early = this.scanSecrets(input.secrets);
+    const early = this.scanSecretsOrFail(input.secrets);
     if (early) return this.deleteAndFail(early);
 
     const base = {
@@ -1209,7 +1335,7 @@ export class Audit {
     });
     if (!chain.ok || !chain.headHash) {
       const issues = chain.issues.map((i) => i.code).join(', ');
-      return { ok: false, reason: `receipt chain failed verification: ${issues}`, receiptCount: receipts.length, headReceiptHash: null, verifyCommand: null };
+      return this.scanAfter(input.secrets, { ok: false, reason: `receipt chain failed verification: ${issues}`, receiptCount: receipts.length, headReceiptHash: null, verifyCommand: null });
     }
 
     const ok = input.attemptsOk && this.fileState === 'ok';
@@ -1238,8 +1364,17 @@ export class Audit {
     return null;
   }
 
+  /** Like scanSecrets, but a scan that cannot complete counts as a hit. */
+  private scanSecretsOrFail(secrets: string[]): string | null {
+    try {
+      return this.scanSecrets(secrets);
+    } catch {
+      return 'scan failed';
+    }
+  }
+
   private scanAfter(secrets: string[], result: FinalizeResult): FinalizeResult {
-    const hit = this.scanSecrets(secrets);
+    const hit = this.scanSecretsOrFail(secrets);
     return hit ? this.deleteAndFail(hit) : result;
   }
 
@@ -1259,7 +1394,9 @@ export class Audit {
 - [ ] **Step 5: Run the tests**
 
 Run: `npm test`
-Expected: all pass. If `createGatewayReceiptSigner` is reported as not exported, stop: the installed `@bolyra/gateway` is not 0.6.0. Check `node -p "require('@bolyra/gateway/package.json').version"`.
+Expected: all pass. If `createGatewayReceiptSigner` is reported as not exported, stop: the installed `@bolyra/gateway` is not 0.6.0. Check with `npm ls @bolyra/gateway` (the package has an `exports` map, so `require('@bolyra/gateway/package.json')` is not allowed).
+
+Note for the README (Task 8): `@bolyra/gateway 0.6.0` bundles its own `@bolyra/receipts 0.8.0`, so receipts are signed by 0.8.0 and verified by the trial with 0.11.0 and by the operator with CLI 0.9.0. The formats interoperate (the chunk reviewer ran all three), but `summary.packages.receipts` names the verifier version, not the signer's.
 
 - [ ] **Step 6: Commit**
 
@@ -1473,6 +1610,26 @@ test('allow receipt write failure: 500, not dispatched, receiptError (spec test 
   }
 });
 
+test('corrupted persisted allow receipt: 500, not dispatched (persistence is what is verified)', async () => {
+  const f = await fixture('WRITE_DATA', 200, {
+    io: {
+      appendFileSync(p, data) {
+        fs.appendFileSync(p, data.replace('"allowed":true', '"allowed":false'));
+      },
+    },
+  });
+  try {
+    assert.equal(await call(f.host, 'refund', buildDevBundle(f.granted).header), 500);
+    const r = await f.host.nextResult();
+    assert.equal(r.dispatched, false);
+    assert.match(r.receiptError ?? '', /persisted receipt/);
+    assert.equal(f.echo.requestCount, 0);
+    assert.equal(f.host.dispatchCount, 0);
+  } finally {
+    await f.close();
+  }
+});
+
 test('permission matrix: granted passes, withheld fails, for every name (spec test 7)', async () => {
   for (const name of PERMISSION_NAMES) {
     const f = await fixture(name);
@@ -1604,9 +1761,11 @@ export async function startHost(opts: HostOptions): Promise<TrialHost> {
       signal: AbortSignal.timeout(timeoutMs),
     };
     if (config.body) init.body = new Uint8Array(config.body);
+    dispatchCount += 1; // counted at the moment fetch is invoked
     try {
       const res = await fetchImpl(config.url, init);
-      await res.arrayBuffer().catch(() => undefined); // drain and discard
+      // Discard the body without buffering it; a read failure classifies below.
+      if (res.body) await res.body.cancel();
       if (res.status >= 300 && res.status < 400) return { upstreamStatus: res.status, outcome: 'not_followed' };
       return { upstreamStatus: res.status, outcome: 'completed' };
     } catch (err) {
@@ -1657,11 +1816,18 @@ export async function startHost(opts: HostOptions): Promise<TrialHost> {
 
       let receiptId: string;
       try {
-        const receipt = audit.record(input);
-        if (!verifyReceipt(receipt, audit.signerInfo.signer)) {
-          throw new Error('allow receipt failed re-verification');
+        const signed = audit.record(input);
+        // Verify what is ON DISK, not the object in memory: the persisted line
+        // is the only thing the operator can hand to a verifier later.
+        const persisted = audit.readBackLast();
+        if (
+          !persisted ||
+          persisted.signature.payloadHash !== signed.signature.payloadHash ||
+          !verifyReceipt(persisted, audit.signerInfo.signer)
+        ) {
+          throw new Error('persisted receipt does not match or does not verify');
         }
-        receiptId = receipt.id;
+        receiptId = signed.id;
       } catch (err) {
         sendJson(res, 500, { error: 'receipt persistence failed' });
         publish({
@@ -1677,7 +1843,6 @@ export async function startHost(opts: HostOptions): Promise<TrialHost> {
         return;
       }
 
-      dispatchCount += 1;
       const { upstreamStatus, outcome } = await dispatch();
       log(`allow: dispatched ${config.method} ${config.url.host}${config.url.pathname} -> ${upstreamStatus ?? outcome}`);
       const result: HostDecision = {
@@ -1866,19 +2031,48 @@ test('deny-receipt write failure produces a partial but verifiable bundle (spec 
   assert.match(fs.readFileSync(path.join(summary.runDir, 'VERIFY.txt'), 'utf8'), /--expect-count 1/);
 });
 
-test('cli: --dry-run exits 0; missing --config exits 2 (spec test 9 at the CLI edge)', () => {
+test('allow-receipt write failure on attempt 1: 500/403/401, 0/0/0, empty bundle, no VERIFY (spec test 10)', async () => {
+  const summary = await runTrial({
+    outDir: outDir(),
+    dryRun: true,
+    log: () => undefined,
+    audit: {
+      io: {
+        appendFileSync() {
+          throw new Error('disk full');
+        },
+      },
+    },
+  });
+  assert.equal(summary.ok, false);
+  assert.deepEqual(summary.attempts.map((a) => a.httpStatus), [500, 403, 401]);
+  assert.deepEqual(summary.dispatchCounts, [0, 0, 0]);
+  assert.equal(summary.echoRequestCount, 0);
+  assert.match(summary.attempts[0].receiptError ?? '', /disk full/);
+  assert.match(summary.attempts[1].receiptError ?? '', /chain broken/);
+  assert.match(summary.attempts[2].receiptError ?? '', /chain broken/);
+  assert.equal(fs.readFileSync(path.join(summary.runDir, 'receipts.jsonl'), 'utf8'), '');
+  const persisted = JSON.parse(fs.readFileSync(path.join(summary.runDir, 'summary.json'), 'utf8'));
+  assert.equal(persisted.ok, false);
+  assert.equal(persisted.receiptCount, 0);
+  assert.equal(fs.existsSync(path.join(summary.runDir, 'VERIFY.txt')), false);
+});
+
+test('cli: --dry-run exits 0; missing --config exits 2; unset ${ENV} exits 2 (spec test 9 at the CLI edge)', () => {
   const cli = path.join(ROOT, 'dist', 'src', 'cli.js');
   const ok = spawnSync(process.execPath, [cli, '--dry-run', '--out-dir', outDir()], { encoding: 'utf8', timeout: 60_000 });
   assert.equal(ok.status, 0, ok.stderr);
+
   const bad = spawnSync(process.execPath, [cli], { encoding: 'utf8', timeout: 60_000 });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /--config/);
-  const missingEnv = spawnSync(process.execPath, [cli, '--config', path.join(ROOT, 'trial.example.yaml'), '--out-dir', outDir()], {
-    encoding: 'utf8',
-    timeout: 60_000,
-    env: { ...process.env, THEIR_TOKEN: '' } as NodeJS.ProcessEnv,
-  });
-  // THEIR_TOKEN set but empty is allowed; unset must fail. Unset it explicitly:
+
+  const unknownFlag = spawnSync(process.execPath, [cli, '--dry-run', '--nope'], { encoding: 'utf8', timeout: 60_000 });
+  assert.equal(unknownFlag.status, 2);
+
+  // trial.example.yaml references ${THEIR_TOKEN}. With it unset, config
+  // loading must fail before any server starts. (Do not run the example with
+  // the variable SET: its url is a real hostname and attempt 1 would dispatch.)
   const env = { ...process.env } as Record<string, string | undefined>;
   delete env.THEIR_TOKEN;
   const unset = spawnSync(process.execPath, [cli, '--config', path.join(ROOT, 'trial.example.yaml'), '--out-dir', outDir()], {
@@ -1888,7 +2082,6 @@ test('cli: --dry-run exits 0; missing --config exits 2 (spec test 9 at the CLI e
   });
   assert.equal(unset.status, 2, unset.stderr);
   assert.match(unset.stderr, /THEIR_TOKEN/);
-  void missingEnv;
 });
 ```
 
@@ -1995,29 +2188,44 @@ export async function runTrial(opts: RunTrialOptions): Promise<TrialSummary> {
   const granted = createDemoAgent('granted', required);
   const withheld = createDemoAgent('withheld', withheldMask(config.requiredPermission));
   const gatewayConfig = buildGatewayConfig(config.action, required, granted, withheld);
-  const audit = new Audit({ runDir, gatewayConfig, io: opts.audit?.io });
 
-  log('Bolyra operator trial');
-  log(`  action:   ${config.action}  ${config.method} ${config.url.host}${config.url.pathname}${opts.dryRun ? '  (dry run: built-in echo endpoint)' : ''}`);
-  log(`  policy:   ${config.action} requires ${config.requiredPermission}`);
-  log(`  headers sent: ${Object.keys(config.headers).join(', ') || '(none)'}`);
-  log(`  receipts: ${path.relative(process.cwd(), audit.receiptsPath)}  signer ${audit.signerInfo.signer} (ephemeral, ES256K)`);
-  log('');
-  log('  Controlled trial: credentials are simulated and registered locally; ZK proof verification is disabled (dev mode).');
-  log('  The trial protects traffic routed through this local Bolyra host. It does not stop anyone from calling the endpoint directly.');
-  log('');
-
-  const host = await startHost({ config, gatewayConfig, audit, fetchImpl: opts.fetchImpl });
+  // From here on, every exit path closes the servers and leaves no unscanned
+  // directory behind (spec §3.3 step 0 / §5).
+  let audit: Audit | undefined;
+  let host: TrialHost | undefined;
   const attempts: AttemptResult[] = [];
   try {
+    audit = new Audit({ runDir, gatewayConfig, io: opts.audit?.io });
+
+    log('Bolyra operator trial');
+    log(`  action:   ${config.action}  ${config.method} ${config.url.host}${config.url.pathname}${opts.dryRun ? '  (dry run: built-in echo endpoint)' : ''}`);
+    log(`  policy:   ${config.action} requires ${config.requiredPermission}`);
+    log(`  headers sent: ${Object.keys(config.headers).join(', ') || '(none)'}`);
+    log(`  receipts: ${path.relative(process.cwd(), audit.receiptsPath)}  signer ${audit.signerInfo.signer} (ephemeral, ES256K)`);
+    log('');
+    log('  Controlled trial: credentials are simulated and registered locally; ZK proof verification is disabled (dev mode).');
+    log('  Production Bolyra uses real proofs and a credential registry.');
+    log('  The trial protects traffic routed through this local Bolyra host. It does not stop anyone from calling the endpoint directly.');
+    log("  'dispatched' means this host invoked the request; delivery and execution at your endpoint are not proven by the receipts.");
+    if (!opts.dryRun) {
+      log('  Use a staging endpoint or a reversible action. Attempt 1 really executes.');
+    }
+    log('');
+
+    host = await startHost({ config, gatewayConfig, audit, fetchImpl: opts.fetchImpl });
     const first = buildDevBundle(granted);
     attempts.push(await attempt(host, config, 1, 'granted', first.header));
     attempts.push(await attempt(host, config, 2, 'withheld', buildDevBundle(withheld).header));
     attempts.push(await attempt(host, config, 3, 'replay', first.header));
+  } catch (err) {
+    audit?.abort(config.secrets);
+    throw err;
   } finally {
-    await host.close();
+    if (host) await host.close();
     if (echo) await echo.close();
   }
+  // The try block either assigned audit or threw; this satisfies the type checker.
+  if (!audit) throw new Error('unreachable: audit not created');
 
   const dispatchCounts: [number, number, number] = [attempts[0].dispatches, attempts[1].dispatches, attempts[2].dispatches];
   const attemptsOk = expectationsMet(attempts) && dispatchCounts.join() === '1,0,0';
@@ -2098,15 +2306,17 @@ function narrate(log: (l: string) => void, config: TrialConfig, s: TrialSummary,
   log(`dispatches to your endpoint: ${s.dispatchCounts.join(' / ')}`);
   if (fs.existsSync(s.runDir)) log(`bundle: ${path.relative(process.cwd(), s.runDir)}/`);
   if (s.verifyCommand) {
-    log(`verify independently (needs @bolyra/cli ${CLI_VERSION}; the first npx run downloads it):`);
+    log(`verify independently (needs @bolyra/cli ${CLI_VERSION}; the first npx run downloads it). From inside the bundle directory:`);
     log(`  ${s.verifyCommand}`);
   }
   if (!s.ok) log(`RESULT: FAILED${s.finalizeReason ? ` (${s.finalizeReason})` : ''}`);
   log('');
   log('Receipts verify signed claims and chain integrity against the signer in signer.json, which is ephemeral to this run.');
   log('summary.json is unsigned observation; endpoint execution is not proven by the receipts.');
+  log('The bundle was scanned for the values this trial substituted from the environment and the header values that contained them; nothing else is redacted.');
   if (dryRun) {
-    log('This was a dry run against the built-in echo endpoint. It does not count toward anything. Point trial.yaml at a staging endpoint or a reversible action you own and run again.');
+    log('This was a dry run against the built-in echo endpoint. It does not count toward anything. Point trial.yaml at a staging endpoint or a reversible action you own and run again,');
+    log('then email that bundle directory to hello@bolyra.ai. Nothing is sent automatically.');
   } else {
     log('If this ran against an endpoint you own, email the bundle directory to hello@bolyra.ai. Nothing is sent automatically.');
   }
@@ -2130,14 +2340,21 @@ import { loadTrialConfig, TrialConfigError } from './config';
 import { runTrial } from './trial';
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
-    options: {
-      config: { type: 'string' },
-      'dry-run': { type: 'boolean', default: false },
-      'out-dir': { type: 'string', default: './trial-out' },
-    },
-    strict: true,
-  });
+  let values: { config?: string; 'dry-run'?: boolean; 'out-dir'?: string };
+  try {
+    values = parseArgs({
+      options: {
+        config: { type: 'string' },
+        'dry-run': { type: 'boolean', default: false },
+        'out-dir': { type: 'string', default: './trial-out' },
+      },
+      strict: true,
+    }).values;
+  } catch (err) {
+    // Unknown options, positionals, or a missing option value: a config
+    // error, exit 2, nothing started.
+    throw new TrialConfigError((err as Error).message);
+  }
   const dryRun = values['dry-run'] === true;
   if (!dryRun && !values.config) {
     throw new TrialConfigError('--config <trial.yaml> is required unless --dry-run is set');
@@ -2246,9 +2463,13 @@ cd trial-out/<timestamp>
 npx @bolyra/cli@0.9.0 receipt verify-chain ./receipts.jsonl --signer <signer> --expect-count 3 --expect-head <hash>
 ```
 
-Header values, body content, credentials, and upstream response bodies are never written to the bundle or the console. The trial scans the bundle for every value it substituted from the environment and every header value it sent, and deletes the directory on a hit. That scan covers only values the trial itself resolved.
+Run the verify command from inside the bundle directory (`VERIFY.txt` is written with that working directory in mind).
 
-**If this ran against an endpoint you own, email the bundle directory to hello@bolyra.ai.** Nothing is sent automatically.
+Header values, body content, credentials, and upstream response bodies are never written to the bundle or the console. The trial scans the bundle for every value it substituted from the environment and every header value that contained one, and deletes the directory on a hit. That scan covers only values the trial itself resolved; nothing else is redacted.
+
+Receipts are signed by the `@bolyra/receipts` bundled inside `@bolyra/gateway 0.6.0` (0.8.0) and verified with 0.11.0 here and 0.9.0 in the CLI; the formats interoperate. `summary.json` records the verifier versions.
+
+**If this ran against an endpoint you own, email the bundle directory to hello@bolyra.ai.** Nothing is sent automatically. `dispatched: true` means this host invoked the request; delivery and execution at your endpoint are not proven by the receipts.
 
 ## What this is, and is not
 
@@ -2279,18 +2500,18 @@ git commit -s -m "operator-trial: README with the operator path and honesty labe
 - Create: `landing/operator-trial.html`
 - Modify: `landing/deploy.sh` (add the page to the upload list, next to `CONFORMANCE`)
 
-- [ ] **Step 1: Read `landing/deploy.sh`** around the `CONFORMANCE=` variable (line ~36) and the `aws s3 cp "$CONFORMANCE"` block (line ~158) to see how one extra page is uploaded.
+- [ ] **Step 1: Read `landing/deploy.sh`** at three places: the `CONFORMANCE=` variable (line ~36), the file-existence loop right below it (line ~38, `for f in ... "$CONFORMANCE"`), the `aws s3 cp "$CONFORMANCE"` block (line ~158, which uploads BOTH `conformance.html` and the extensionless `conformance`), and the CloudFront `create-invalidation --paths` list (line ~272). `landing/verify.sh` needs no change: it byte-compares only `conformance.html` and greps the root page; it never sees this page.
 
 - [ ] **Step 2: Create `landing/operator-trial.html`**
 
-Reuse the head, `:root` tokens, `body`, `main`, `a`, `h1`, `.lede`, `.notice`, `code`, and `footer` rules from `landing/conformance.html` verbatim (copy lines 1 through the end of `<style>`). Then the body:
+Copy `landing/conformance.html` from line 1 through the closing `</style>` and `</head>`, then replace the `<title>` with `Operator Trial — Bolyra` and the `<meta name="description">` content with `Put one HTTP action you own behind a Bolyra authorization rule and see the decision, the dispatch, and the signed receipt for three attempts.` Keep the favicon and viewport tags. The stylesheet is dark-only by design (no `prefers-color-scheme` block); keep it that way. Then the body:
 
 ```html
 <body>
 <main>
   <p><a href="/">&larr; bolyra.ai</a></p>
   <h1>Operator trial</h1>
-  <p class="lede">Put one HTTP action you own behind a Bolyra authorization rule. Attempt it three ways. See the decision, whether a request reached your endpoint, and the signed receipt, for each.</p>
+  <p class="lede">Put one HTTP action you own behind a Bolyra authorization rule. Attempt it three ways. See the decision, whether a request was dispatched to your endpoint, and the signed receipt, for each.</p>
   <p class="notice">Use a staging endpoint or a reversible action. Attempt 1 really executes.</p>
 
   <h2>Run it</h2>
@@ -2316,11 +2537,11 @@ verify independently:
   <ul>
     <li>A controlled trial: credentials are simulated and registered locally; ZK proof verification is disabled. Production Bolyra uses real proofs and a credential registry.</li>
     <li>It protects traffic routed through the local Bolyra host. It does not stop anyone from calling your endpoint directly.</li>
-    <li>Receipts verify signed claims and chain integrity against an ephemeral signer. Endpoint execution is an unsigned observation.</li>
-    <li>Header values, bodies, and credentials never leave your machine and never enter the bundle. Nothing is sent automatically.</li>
+    <li>Receipts verify signed claims and chain integrity against an ephemeral signer. "Dispatched" means the local host invoked the request; delivery and execution at your endpoint are unsigned observations.</li>
+    <li>Your configured headers and body are sent to your endpoint, and nowhere else. They never enter the bundle. No results are submitted to Bolyra automatically.</li>
   </ul>
 
-  <p>If it ran against an endpoint you own, email the bundle directory to <a href="mailto:hello@bolyra.ai">hello@bolyra.ai</a>. Full details: <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial">examples/operator-trial</a>.</p>
+  <p>If it ran against an endpoint you own, email the bundle directory to <a href="mailto:hello@bolyra.ai">hello@bolyra.ai</a>. Full details: <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial">examples/operator-trial</a> (that link resolves once the branch is merged; the page deploys after merge).</p>
 
   <footer>Bolyra (ZKProva Inc.) — Apache-2.0.</footer>
 </main>
@@ -2330,11 +2551,15 @@ verify independently:
 
 Add `h2 { font-size: 1.25rem; margin: 32px 0 12px; } pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 12px; padding: 16px; overflow-x: auto; } ul { padding-left: 20px; } li { margin-bottom: 8px; }` to the copied `<style>`.
 
-- [ ] **Step 3: Add the page to `landing/deploy.sh`**
+- [ ] **Step 3: Add the page to `landing/deploy.sh`** at all three touch points, changing nothing else:
 
-Next to `CONFORMANCE="$SCRIPT_DIR/conformance.html"` add `OPERATOR_TRIAL="$SCRIPT_DIR/operator-trial.html"`, and next to the `aws s3 cp "$CONFORMANCE" "s3://$BUCKET/conformance.html"` block add an identical block for `"$OPERATOR_TRIAL"` to `operator-trial.html` with the same flags. Do not change anything else in the script and do not run it; deploying is the founder's action.
+1. Next to `CONFORMANCE="$SCRIPT_DIR/conformance.html"` add `OPERATOR_TRIAL="$SCRIPT_DIR/operator-trial.html"`, and add `"$OPERATOR_TRIAL"` to the file-existence loop directly below.
+2. Next to the `aws s3 cp "$CONFORMANCE"` block, add the same two uploads for the new page: `"$OPERATOR_TRIAL"` to `s3://$BUCKET/operator-trial.html` AND to the extensionless `s3://$BUCKET/operator-trial`, with the same flags, so `bolyra.ai/operator-trial` works like `/conformance`.
+3. In the CloudFront `create-invalidation --paths` list add `"/operator-trial.html" "/operator-trial"`, or redeploys of the page stay stale at the edge.
 
-- [ ] **Step 4: Open the page locally and check both themes render** (`open landing/operator-trial.html`). The page must not scroll horizontally on a 390px-wide window; the `<pre>` blocks scroll inside themselves.
+Do not run the script; deploying is the founder's action.
+
+- [ ] **Step 4: Open the page locally** (`open landing/operator-trial.html`). Dark-only by design. The page must not scroll horizontally at 390px width; the `<pre>` blocks scroll inside themselves. The sample output block is illustrative; if you can, paste a real dry-run line and change the upstream status to a real-endpoint example such as `201`.
 
 - [ ] **Step 5: Commit**
 
@@ -2374,16 +2599,16 @@ git commit -s -m "landing: operator trial entry page"
           npm test
 ```
 
-- [ ] **Step 2: Regenerate the lockfile on Linux** so `scripts/verify-lockfiles.sh` (the `lockfiles` CI job) passes. From the repo root:
+- [ ] **Step 2: Regenerate the lockfile on Linux** so `scripts/verify-lockfiles.sh` (the `lockfiles` CI job) passes. The lockfile must come from a FULL install, not `--package-lock-only`: `tasks/lessons.md` (2026-07-23) records that lock-only regeneration omits the `@emnapi/*` optional subtree and fails `npm ci` in CI. From the repo root:
 
 ```bash
-docker run --rm -v "$PWD/examples/operator-trial":/w -w /w node:20 sh -c 'rm -rf node_modules package-lock.json && npm install --no-audit --no-fund --package-lock-only && npm ci --no-audit --no-fund'
+docker run --rm -v "$PWD/examples/operator-trial":/w -w /w node:20 sh -c 'rm -rf node_modules package-lock.json && npm install --no-audit --no-fund && rm -rf node_modules && npm ci --no-audit --no-fund'
 ```
 
-Expected: exits 0 and leaves a `package-lock.json` that `npm ci` accepts on Linux. Then, still from the repo root:
+Expected: exits 0 and leaves a `package-lock.json` that `npm ci` accepts on Linux. If `npm ci` reports `EUSAGE`, run the `npm install` step once more before assuming the lockfile is broken (same lesson). Then, still from the repo root:
 
 Run: `bash scripts/verify-lockfiles.sh`
-Expected: `examples/operator-trial` listed as passing; exit 0.
+Expected: `examples/operator-trial` listed as passing; exit 0. (The script checks every tracked lockfile; the other packages' results are CI's concern, not this task's.)
 
 - [ ] **Step 3: Re-run the package tests locally with the regenerated lockfile**
 
@@ -2417,7 +2642,7 @@ git commit -s -m "ci: operator-trial job; Linux-clean lockfile"
 Hours spent: ___ of the 20h cap. Deviations from spec: ___. Anything cut to stay under the cap: ___.
 ```
 
-- [ ] **Step 2: Add to `CLAUDE.md`** under the "Verified Agent Actions (EVC + MPP)" bullets:
+- [ ] **Step 2: Add to `CLAUDE.md`** as the last bullet of the "Verified Agent Actions (EVC + MPP)" list, after the `hosted-verify` bullet:
 
 ```markdown
 - **operator-trial** (`examples/operator-trial/`) — clone-and-run: one HTTP action an operator owns behind `createGatewayMiddleware`, three attempts (allow / policy deny / replay deny), signed receipt chain, exportable bundle. Entry page `landing/operator-trial.html`. Metric: one external operator completes it on their own endpoint (bundle emailed to hello@bolyra.ai).
@@ -2458,4 +2683,6 @@ EOF
 )"
 ```
 
-Expected: PR URL printed. CI jobs `operator-trial`, `lockfiles`, `dco`, `typecheck-all` must go green before the PR leaves draft.
+Expected: PR URL printed. CI jobs `operator-trial`, `lockfiles`, `dco`, `typecheck-all` must go green before the PR leaves draft. **Do not merge, undraft, or push to main. Those are the founder's actions.** Report the PR URL and the CI status and stop.
+
+**Working directories, to be explicit:** `git` commands and repository-relative paths (`examples/operator-trial/...`, `.github/...`, `landing/...`) run from the repository root; `npm` commands run from `examples/operator-trial/`.
