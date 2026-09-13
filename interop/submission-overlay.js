@@ -94,6 +94,11 @@ if (kind === 'bolyra-suite') {
   if (lstatOrNull(path.join(ROOT, rel))) die(`${adapter} already exists at the base; submissions may only ADD an adapter`);
   requireRegularBlob(ref, rel);
   adapterBytes = gitRaw('cat-file', '-p', `${ref}:${rel}`);
+} else if (c.adapter !== undefined) {
+  // Containment has to hold HERE, not in whichever consumer happens to branch
+  // on kind. An external-suite claim has no adapter, so carrying the field can
+  // only smuggle an unvalidated path onto disk and into `--list` output.
+  die(`external-suite claim ${claimId} must not carry an adapter field`);
 }
 
 // 4. Merge ONLY the selected claim into the base registry read in step 2.
@@ -118,16 +123,16 @@ try {
   if (adapterBytes) {
     const fd = fs.openSync(path.join(ROOT, 'interop', adapter), 'wx', 0o644);
     created.push(path.join(ROOT, 'interop', adapter));
-    try { fs.writeSync(fd, adapterBytes); } finally { fs.closeSync(fd); }
+    try { fs.writeFileSync(fd, adapterBytes); } finally { fs.closeSync(fd); }   // writeFileSync loops; writeSync can short-write
   }
   const fd = fs.openSync(tmpPath, 'wx', 0o644);
   created.push(tmpPath);
-  try { fs.writeSync(fd, mergedBytes); } finally { fs.closeSync(fd); }
+  try { fs.writeFileSync(fd, mergedBytes); } finally { fs.closeSync(fd); }
   fs.renameSync(tmpPath, registryPath);  // replaces the link itself: a planted symlink is not followed
   created.length = 0;                    // rename consumed the temp; the installed registry now references the adapter
 } catch (e) {
   failure = e;
   for (const leftover of created) { try { fs.unlinkSync(leftover); } catch { /* best effort */ } }
 }
-if (failure) die(`${failure.code || 'ERROR'}: ${failure.message}`);
+if (failure) die(failure.message);   // Node's message already leads with the errno code
 process.stdout.write(`${claimId}\t${kind}\t${adapter}\n`);

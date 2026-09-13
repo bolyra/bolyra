@@ -164,6 +164,34 @@ test('selecting a claim that already exists at the base is refused', () => {
   assert.match(r.stderr, /already exists at the base; submissions may only ADD a claim/);
 });
 
+test('an external-suite claim carrying an adapter field is refused', () => {
+  const { repo, subSha } = makeRepo((r) => writeRegistry(r, [BASE_CLAIM, { ...EXT_CLAIM, adapter: '../../../../etc/passwd' }]));
+  const r = run(repo, ['--ref', subSha, '--claim', 'ext@1']);
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /must not carry an adapter field/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(repo, 'interop', 'claims.json'), 'utf8')).claims.length, 1);
+});
+
+test('a failure after the adapter write removes only what this run created', () => {
+  if (process.getuid && process.getuid() === 0) return;   // root ignores mode bits
+  const NEW = { ...BASE_CLAIM, id: 'new@2', adapter: 'adapters/new.ts' };
+  const { repo, subSha } = makeRepo((r) => {
+    writeRegistry(r, [BASE_CLAIM, NEW]);
+    fs.writeFileSync(path.join(r, 'interop', 'adapters', 'new.ts'), '// new adapter\n');
+  });
+  const interopDir = path.join(repo, 'interop');
+  const mode = fs.statSync(interopDir).mode;
+  fs.chmodSync(interopDir, 0o555);            // adapters/ stays writable; the temp file in interop/ cannot be created
+  let r;
+  try { r = run(repo, ['--ref', subSha, '--claim', 'new@2']); } finally { fs.chmodSync(interopDir, mode); }
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /^submission-overlay: /);
+  assert.ok(!/\n\s+at /.test(r.stderr), 'must be the error contract, not a raw stack trace');
+  assert.ok(!fs.existsSync(path.join(repo, 'interop', 'adapters', 'new.ts')), 'the adapter this run created must be removed');
+  assert.deepStrictEqual(fs.readdirSync(interopDir).filter((f) => f.startsWith('.claims.json.')), []);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(interopDir, 'claims.json'), 'utf8')).claims.length, 1, 'registry untouched');
+});
+
 test('no temp file survives, on success or on refusal', () => {
   const leftovers = (repo) => fs.readdirSync(path.join(repo, 'interop')).filter((f) => f.startsWith('.claims.json.'));
   const NEW = { ...BASE_CLAIM, id: 'new@2', adapter: 'adapters/new.ts' };
