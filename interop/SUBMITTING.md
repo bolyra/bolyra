@@ -3,8 +3,9 @@
 This is the maintainer-operated path (v1). Nothing on a pull request executes
 third-party code; the maintainer replays your exact commit by hand before
 merging. It relies on maintainer discipline, stated here so nobody mistakes it
-for machine enforcement. The isolation your code runs under is described in
-`docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md` §3.5.
+for machine enforcement. The isolation your code runs under is described in the header of
+`.github/workflows/interop-replay.yml`, and proven by the runs linked from the
+pull request that introduced it.
 
 ## What you submit
 
