@@ -961,6 +961,29 @@ test('VERIFY.txt write failure leaves no ok:true summary behind', () => {
   assert.match(summary.finalizeError, /disk full/);
 });
 
+test('a partially written summary temp file never survives', () => {
+  const dir = tmp();
+  const audit = new Audit({
+    runDir: dir,
+    gatewayConfig: gatewayConfig(),
+    io: {
+      writeFileSync(p, data) {
+        if (p.endsWith('summary.json.tmp')) {
+          fs.writeFileSync(p, data.slice(0, 10));
+          throw new Error('disk full');
+        }
+        fs.writeFileSync(p, data);
+      },
+    },
+  });
+  audit.record(input('allowed', '1'));
+  const fin = audit.finalize(finalizeInput());
+  assert.equal(fin.ok, false);
+  assert.equal(fs.existsSync(path.join(dir, 'summary.json')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'summary.json.tmp')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'VERIFY.txt')), false);
+});
+
 test('secret-free corrupted chain: directory retained, no summary, no VERIFY', () => {
   const dir = tmp();
   let calls = 0;
@@ -1465,12 +1488,19 @@ export class Audit {
     return this.scanAfter(input.secrets, { ok, receiptCount: receipts.length, headReceiptHash: chain.headHash, verifyCommand });
   }
 
-  /** Atomic publish: write to a temp file, then rename over summary.json. */
+  /**
+   * Atomic publish: write to a temp file, then rename over summary.json. The
+   * temp file never survives, whether the write or the rename fails.
+   */
   private writeSummary(summary: Record<string, unknown>): void {
     const target = path.join(this.runDir, 'summary.json');
     const tmp = target + '.tmp';
-    this.io.writeFileSync(tmp, JSON.stringify(summary, null, 2) + '\n');
-    fs.renameSync(tmp, target);
+    try {
+      this.io.writeFileSync(tmp, JSON.stringify(summary, null, 2) + '\n');
+      fs.renameSync(tmp, target);
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
   }
 
   /** Returns "<file>" naming the first file containing a secret, or null. */
