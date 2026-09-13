@@ -31,7 +31,7 @@ Requires Node 20 or newer on macOS or Linux. Windows is untested.
 |---|---|---|
 | `action` | yes | `^[a-z][a-z0-9_-]{0,63}$`; the name Bolyra gates, recorded in every receipt |
 | `method` | yes | `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, or `DELETE` |
-| `url` | yes | `http` or `https`; no credentials in the URL |
+| `url` | yes | `http` or `https`; no credentials in the URL. The host and path are recorded in every receipt and in `summary.json` (the query string is not), so do not use an endpoint whose path embeds a secret, such as a webhook URL; put secrets in headers via `${ENV}` |
 | `headers` | no | map of header name to value; `${NAME}` is replaced from the environment, unset is an error |
 | `bodyFile` | no | path relative to the config file, sent byte for byte; not allowed with `GET`, `HEAD`, `DELETE` |
 | `requiredPermission` | yes | `READ_DATA`, `WRITE_DATA`, `FINANCIAL_SMALL`, `FINANCIAL_MEDIUM`, `FINANCIAL_UNLIMITED`, `SIGN_ON_BEHALF`, `SUB_DELEGATE`, `ACCESS_PII` |
@@ -60,7 +60,7 @@ Run the verify command from inside the bundle directory (`VERIFY.txt` is written
 
 Header values, body content, credentials, and upstream response bodies are never written to the bundle or the console. The trial scans the bundle for every value it substituted from the environment and every header value that contained one, and deletes the directory on a hit. That scan covers only values the trial itself resolved; nothing else is redacted.
 
-Receipts are signed by the `@bolyra/receipts` bundled inside `@bolyra/gateway 0.6.0` (0.8.0) and verified with 0.11.0 here and 0.9.0 in the CLI; the formats interoperate. `summary.json` records the verifier versions.
+Receipts are signed by the `@bolyra/receipts` bundled inside `@bolyra/gateway 0.6.0` (receipts 0.8.0) and verified with `@bolyra/receipts` 0.11.0 here and by `@bolyra/cli` 0.9.0, which bundles receipts 0.11.0; the formats interoperate. `summary.json` records the verifier versions. The bundle's `summary.json` and every receipt name the action's host and path; see the `url` row above.
 
 **If this ran against an endpoint you own, email the bundle directory to hello@bolyra.ai.** Nothing is sent automatically. `dispatched: true` means this host invoked the request; delivery and execution at your endpoint are not proven by the receipts.
 

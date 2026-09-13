@@ -51,4 +51,4 @@ https://datatracker.ietf.org/submit/ — then push branch + PR + merge.
 - [ ] 30-day metric (from ship date): ≥1 external workflow owner emails a bundle from their own endpoint. Dry-runs and vendor runs do not count.
 
 ## Review (operator trial)
-Hours spent: subagent-executed; founder hours ≈ 0 of the 20h cap. Deviations from spec: ___. Anything cut to stay under the cap: ___.
+Hours spent: subagent-executed; founder hours ≈ 0 of the 20h cap. Deviations from spec: Task 7b hardening added after the chunk 2 quality review (host publishes a result on internal error so the run cannot hang; `committedBytes` read from the file via `statSync`; timeout/network_error pinned by tests); `gateway-config.ts` sets `receipts.issuer/keyId` because `createGatewayReceiptSigner` reads them; scan needles narrowed to substituted values (spec §3.3 updated to match); README/example/.gitignore hardened after the final review (URL path is recorded in receipts; `trial.yaml` ignored). Anything cut to stay under the cap: nothing; executed by subagents.
