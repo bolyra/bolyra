@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+'use strict';
+// Snapshot/verify the protected tree so that a replay of one claim cannot
+// alter what a later claim executes (spec §3.5). Pure filesystem: never runs
+// git (a tampered .git/config could make git execute a command). The workflow
+// COPIES this file out of the workspace and runs the copy under env -i, so the
+// verifier cannot be replaced by the tamper it is looking for.
+//   node harness-integrity.js snapshot <file.json> --root <workspace>
+//   node harness-integrity.js verify   <file.json> --root <workspace>
+// Coverage: everything under interop/ spec/ landing/ .github/ (ignored files
+// included); root-level regular files; ALL of .git/ including objects (stored
+// bytes are not immutable and objects/info/alternates can redirect lookups).
+// NOT covered, by design: the host toolchain (node/git/docker), $HOME, scratch
+// dirs, and changes restored before verification. A container escape or host
+// compromise is out of this checker's scope (spec §3.5 stated residual).
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github'];
+
+function die(msg) { process.stderr.write(`harness-integrity: ${msg}\n`); process.exit(1); }
+
+// Streamed, so a large pack file is never buffered whole.
+function sha256File(abs) {
+  const h = crypto.createHash('sha256');
+  const fd = fs.openSync(abs, 'r');
+  const buf = Buffer.alloc(1 << 20);
+  try { let n; while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) h.update(buf.subarray(0, n)); }
+  finally { fs.closeSync(fd); }
+  return h.digest('hex');
+}
+function fingerprint(abs) {
+  const st = fs.lstatSync(abs);              // any error other than ENOENT propagates → die
+  const mode = (st.mode & 0o7777).toString(8);
+  if (st.isSymbolicLink()) return `symlink:${mode}:${fs.readlinkSync(abs)}`;
+  if (st.isDirectory()) return `dir:${mode}:${crypto.createHash('sha256').update(fs.readdirSync(abs).sort().join('\0')).digest('hex')}`;
+  if (st.isFile()) return `file:${mode}:${sha256File(abs)}`;
+  return `other:${mode}`;
+}
+function walk(root, rel, out) {
+  const abs = path.join(root, rel);
+  let st;
+  try { st = fs.lstatSync(abs); } catch (e) { if (e.code === 'ENOENT') return; throw e; }
+  out[rel] = fingerprint(abs);
+  if (st.isDirectory()) for (const name of fs.readdirSync(abs).sort()) walk(root, `${rel}/${name}`, out);
+}
+function snapshot(root) {
+  const out = Object.create(null);                            // a file named __proto__ must not hit the setter
+  for (const r of PROTECTED_ROOTS) walk(root, r, out);
+  walk(root, '.git', out);
+  for (const name of fs.readdirSync(root).sort()) {          // root-level regular files only
+    const abs = path.join(root, name);
+    if (fs.lstatSync(abs).isFile()) out[name] = fingerprint(abs);
+  }
+  return out;
+}
+
+const args = process.argv.slice(2);
+const cmd = args[0], file = args[1];
+const ri = args.indexOf('--root');
+const root = ri >= 0 ? path.resolve(args[ri + 1]) : null;
+if (!file || !root || !['snapshot', 'verify'].includes(cmd)) die('usage: snapshot|verify <file.json> --root <workspace>');
+
+try {
+  if (cmd === 'snapshot') {
+    const snap = snapshot(root);
+    fs.writeFileSync(file, JSON.stringify(snap, null, 1)); // a null-prototype object serializes __proto__ as an ordinary key
+    console.log(`harness-integrity: snapshot of ${Object.keys(snap).length} entries → ${file}`);
+  } else {
+    const base = Object.assign(Object.create(null), JSON.parse(fs.readFileSync(file, 'utf8')));
+    const now = snapshot(root);
+    const diffs = [];
+    for (const p of new Set([...Object.keys(base), ...Object.keys(now)])) {
+      if (base[p] !== now[p]) diffs.push(`${p}: ${base[p] || 'absent'} -> ${now[p] || 'absent'}`);
+    }
+    if (diffs.length) die(`protected tree changed:\n  ${diffs.join('\n  ')}`);
+    console.log('harness-integrity: OK');
+  }
+} catch (e) {
+  die(`${e.code || 'ERROR'}: ${e.message}`);
+}
