@@ -65,6 +65,7 @@ Beyond the ZKP core, the shipped wedge is **authorization for AI agent actions**
 - **@bolyra/receipts** (`integrations/receipts/`, v0.11.0) — ES256K-signed, hash-chained decision receipts with instance binding; verify with `bolyra receipt verify` / `verify-chain`.
 - **@bolyra/evc-conformance** (`integrations/evc-conformance/`, v0.4.0) — the published conformance suite (vector set 0.8.0, 30 host-behavior vectors, zero runtime deps): `npx @bolyra/evc-conformance --host "<cmd>"`. Vendored snapshot of `spec/` — edit in `spec/`, then `node scripts/sync.js`; CI enforces `sync:check`. Outside-implementer pass path: `spec/IMPLEMENTER.md`. First independent external implementation: `khandrew1/mcp-use-evc-example` (27/27 pinned, listed in IMPLEMENTER.md §9).
 - **hosted-verify** (`integrations/hosted-verify/`) — a Cloudflare Worker classical-verify **design-partner preview** (no SLA, not production). `pilot/` is the thin readiness harness over it.
+- **operator-trial** (`examples/operator-trial/`) — clone-and-run: one HTTP action an operator owns behind `createGatewayMiddleware`, three attempts (allow / policy deny / replay deny), signed receipt chain, exportable bundle. Entry page `landing/operator-trial.html`. Metric: one external operator completes it on their own endpoint (bundle emailed to hello@bolyra.ai).
 
 ## Circuits
 

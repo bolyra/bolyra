@@ -507,3 +507,24 @@ jobs:
           npm run verify
           npm test
 
+  operator-trial:
+    name: Operator trial — dry run and tests from a clean checkout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # The trial is what the operator entry page promises. It depends on the
+      # PUBLISHED @bolyra packages, so this proves the README path works with
+      # nothing else in the repo built. The dry run exits non-zero if any
+      # attempt verdict, dispatch count, or chain check comes out wrong.
+      - name: Install, dry-run the trial, run its tests
+        working-directory: examples/operator-trial
+        run: |
+          npm ci --no-audit --no-fund
+          npm run trial -- --dry-run
+          npm test
+

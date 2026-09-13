@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Trial — Bolyra</title>
+  <meta name="description" content="Put one HTTP action you own behind a Bolyra authorization rule and see the decision, the dispatch, and the signed receipt for three attempts.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #0a0a0a; --bg-elevated: #111113; --bg-code: #1a1a2e; --text: #e0e0e0; --text-muted: #888; --accent: #6366f1; --accent-hover: #818cf8; --cyan: #22d3ee; --border: #222; --max-width: 1100px; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; }
+    main { max-width: var(--max-width); margin: 0 auto; padding: 48px 24px 96px; }
+    a { color: var(--accent); text-decoration: none; } a:hover { color: var(--accent-hover); }
+    h1 { font-size: 2rem; margin-bottom: 8px; } .lede { color: var(--text-muted); margin-bottom: 8px; }
+    .notice { color: var(--cyan); margin: 16px 0 32px; font-weight: 600; }
+    .claim { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; overflow-x: auto; }
+    .claim-id { font-size: 1.1rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 12px; word-break: break-all; }
+    .qualifier { color: var(--cyan); margin-bottom: 12px; }
+    table { border-collapse: collapse; width: 100%; } th, td { text-align: left; vertical-align: top; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); white-space: nowrap; width: 220px; font-weight: 500; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; word-break: break-all; }
+    .links a { margin-right: 24px; } footer { color: var(--text-muted); margin-top: 48px; font-size: 0.9rem; }
+    h2 { font-size: 1.25rem; margin: 32px 0 12px; }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 12px; padding: 16px; overflow-x: auto; }
+    ul { padding-left: 20px; } li { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="/">&larr; bolyra.ai</a></p>
+  <h1>Operator trial</h1>
+  <p class="lede">Put one HTTP action you own behind a Bolyra authorization rule. Attempt it three ways. See the decision, whether a request was dispatched to your endpoint, and the signed receipt, for each.</p>
+  <p class="notice">Use a staging endpoint or a reversible action. Attempt 1 really executes.</p>
+
+  <h2>Run it</h2>
+  <pre><code>git clone https://github.com/bolyra/bolyra
+cd bolyra/examples/operator-trial
+npm ci
+npm run trial -- --dry-run
+cp trial.example.yaml trial.yaml   # your endpoint, method, header, permission
+THEIR_TOKEN=... npm run trial -- --config ./trial.yaml</code></pre>
+  <p>Node 20 or newer, macOS or Linux. About ten minutes once you have endpoint credentials.</p>
+
+  <h2>What you see</h2>
+  <pre><code>Attempt 1  credential granted WRITE_DATA            -> ALLOW  dispatched: yes  upstream 201  receipt 0x95e24b…
+Attempt 2  credential granted READ_DATA only        -> DENY   dispatched: no                 receipt 0x7afa08…
+Attempt 3  replay of attempt 1's bundle             -> DENY   dispatched: no                 receipt 0x465d01…
+
+dispatches to your endpoint: 1 / 0 / 0
+bundle: trial-out/2026-09-13T19-27-50-571Z/
+verify independently:
+  npx @bolyra/cli@0.9.0 receipt verify-chain ./receipts.jsonl --signer 0xf0a38d314317ca6a06cb7bcfd9d13405a422f728 --expect-count 3 --expect-head 0xa42d98b359b693e0279efd82ed003474336f1dfde72ec6d242db7c21f150e8cf</code></pre>
+
+  <h2>What it is, and is not</h2>
+  <ul>
+    <li>A controlled trial: credentials are simulated and registered locally; ZK proof verification is disabled. Production Bolyra uses real proofs and a credential registry.</li>
+    <li>It protects traffic routed through the local Bolyra host. It does not stop anyone from calling your endpoint directly.</li>
+    <li>Receipts verify signed claims and chain integrity against an ephemeral signer. "Dispatched" means the local host invoked the request; delivery and execution at your endpoint are unsigned observations.</li>
+    <li>Your configured headers and body are sent to your endpoint, and nowhere else. They never enter the bundle. No results are submitted to Bolyra automatically.</li>
+  </ul>
+
+  <p>If it ran against an endpoint you own, email the bundle directory to <a href="mailto:hello@bolyra.ai">hello@bolyra.ai</a>. Full details: <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial">examples/operator-trial</a>.</p>
+
+
+  <footer>Bolyra (ZKProva Inc.) — Apache-2.0.</footer>
+</main>
+</body>
+</html>

@@ -42,3 +42,13 @@ Branch ietf-evc-01 (single commit) kept LOCAL deliberately: repo is public and
 the -01 text should hit the datatracker before (or with) the repo. Founder
 submits spec/draft-kondoju-evc-01.txt (or .xml) at
 https://datatracker.ietf.org/submit/ — then push branch + PR + merge.
+
+## Operator authorization trial (2026-09-13, Codex-ruled build, spec docs/superpowers/specs/2026-09-13-operator-trial-design.md)
+- [x] Scaffold, versions, agents, config, echo (Chunk 1)
+- [x] Audit with rollback, host with result channel, runTrial + CLI (Chunk 2)
+- [x] README, landing/operator-trial.html, CI job, Linux lockfile (Chunk 3)
+- [ ] Founder: deploy landing (`landing/deploy.sh`), add one link to the trial in the next outreach
+- [ ] 30-day metric (from ship date): ≥1 external workflow owner emails a bundle from their own endpoint. Dry-runs and vendor runs do not count.
+
+## Review (operator trial)
+Hours spent: subagent-executed; founder hours ≈ 0 of the 20h cap. Deviations from spec: Task 7b hardening added after the chunk 2 quality review (host publishes a result on internal error so the run cannot hang; `committedBytes` read from the file via `statSync`; timeout/network_error pinned by tests); `gateway-config.ts` sets `receipts.issuer/keyId` because `createGatewayReceiptSigner` reads them; scan needles narrowed to substituted values (spec §3.3 updated to match); README/example/.gitignore hardened after the final review (URL path is recorded in receipts; `trial.yaml` ignored). Anything cut to stay under the cap: nothing; executed by subagents.
