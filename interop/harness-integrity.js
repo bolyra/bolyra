@@ -8,39 +8,28 @@
 //   node harness-integrity.js snapshot <file.json> --root <workspace>
 //   node harness-integrity.js verify   <file.json> --root <workspace>
 // Coverage: everything under interop/ spec/ landing/ .github/ (ignored files
-// included) plus the paths the runner LOADS CODE FROM (see PROTECTED_LOAD_PATHS);
-// ALL of .git/
-// including objects (stored bytes are not immutable and objects/info/alternates
-// can redirect lookups); and EVERY root-level entry non-recursively — files,
-// directories and symlinks — so a planted root node_modules/, which the runner
-// unshifts onto module.paths, cannot appear unnoticed.
+// included); ALL of .git/ including objects (stored bytes are not immutable and
+// objects/info/alternates can redirect lookups); and EVERY root-level entry
+// non-recursively — files, directories and symlinks.
+// Why this set and not the conformance runner's module paths: replay.js never
+// executes the in-repo runner. It does `git archive <suite.commit> spec` into a
+// tmpdir and runs THAT copy (replay.js:312,342), and the external-suite branch
+// runs entirely inside a container. So the in-repo load surface during a claim is
+// interop/replay.js (which requires builtins only), interop/claims.json,
+// interop/adapters/*.ts (also sha256-pinned at run time) and .git/. Protecting
+// sdk/node_modules et al. would hash ~33k files that nothing can reach; the
+// invariant that keeps it that way is pinned by tests in replay.test.js instead.
 // NOT covered, by design: the contents of unprotected root directories beyond
-// their immediate entry list (this includes integrations/ subtrees the harness
-// never loads, e.g. integrations/x402-evc/ — a change there cannot alter what a
-// later claim executes), the host toolchain (node/git/docker), $HOME,
-// scratch dirs, and changes restored before verification. A container escape or
-// host compromise is out of this checker's scope (spec §3.5 stated residual).
+// their immediate entry list — so for a root node_modules/ this detects a new or
+// removed package but NOT an edit inside an existing one; the host toolchain
+// (node/git/docker), $HOME, scratch dirs; a symlink target outside the workspace
+// (recorded by target string only); and changes restored before verification. A
+// container escape or host compromise is out of scope (spec §3.5 residual).
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github'];
-// Beyond the first-party roots above, the runner LOADS code from these paths, so a
-// replayed claim could use them to change what a later claim executes.
-// spec/conformance-runner.js require()s ../integrations/receipts/dist/index.js
-// (whose own bare requires then resolve through integrations/receipts/node_modules),
-// and its lines 113-118 unshift CANDIDATE_MODULE_PATHS onto module.paths. Scoping by
-// what is loaded rather than by repo layout is both wider and narrower than
-// protecting integrations/ wholesale: it picks up sdk/node_modules, which is on
-// module.paths and was previously unfingerprinted, and drops ~27k files under
-// integrations/ that the harness can never reach. A test keeps this list in step
-// with the runner by parsing CANDIDATE_MODULE_PATHS out of conformance-runner.js.
-const PROTECTED_LOAD_PATHS = [
-  'integrations/receipts',
-  'circuits/node_modules',
-  'sdk/node_modules',
-  'integrations/cli/node_modules',
-];
 const MAX_DIFFS = 50;
 
 function die(msg) { process.stderr.write(`harness-integrity: ${msg}\n`); process.exit(1); }
@@ -62,11 +51,35 @@ function fingerprint(abs) {
   if (st.isFile()) return `file:${mode}:${sha256File(abs)}`;
   return `other:${mode}`;
 }
+// A path's CONTENT is covered iff it sits under a protected root or .git (walked
+// in full), or it is a root entry that is not a directory — a root-entry file or
+// symlink gets a full fingerprint, whereas a root-entry DIRECTORY is recorded only
+// by its listing, so its contents are not covered.
+function isCovered(rel, abs) {
+  if (rel === '') return false;
+  const top = rel.split('/')[0];
+  if (top === '.git' || PROTECTED_ROOTS.includes(top)) return true;
+  if (rel.includes('/')) return false;
+  return !fs.lstatSync(abs).isDirectory();
+}
 function walk(root, rel, out) {
   const abs = path.join(root, rel);
   let st;
   try { st = fs.lstatSync(abs); } catch (e) { if (e.code === 'ENOENT') return; throw e; }
   out[rel] = fingerprint(abs);
+  // Symlinks are recorded by target string and never followed (loop safety), so a
+  // link INTO uncovered repo content would leave that content unprotected — the
+  // `file:`-sibling case, e.g. cli/node_modules/@bolyra/sdk -> ../../../sdk. Refuse
+  // rather than record 40 bytes and report OK.
+  if (st.isSymbolicLink()) {
+    let target = null;
+    try { target = fs.realpathSync(abs); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    if (target !== null) {
+      const dest = path.relative(root, target);
+      const insideRepo = dest !== '' && !dest.startsWith('..') && !path.isAbsolute(dest);
+      if (insideRepo && !isCovered(dest, target)) die(`symlink ${rel} points at uncovered repo content (${dest}); add it to PROTECTED_ROOTS or remove the link`);
+    }
+  }
   if (st.isDirectory()) for (const name of fs.readdirSync(abs).sort()) walk(root, `${rel}/${name}`, out);
 }
 function snapshot(root) {
@@ -77,7 +90,6 @@ function snapshot(root) {
   const gitSt = fs.lstatSync(path.join(root, '.git'));
   if (!gitSt.isDirectory()) die('.git is not a directory (gitfile: worktree or submodule) — run against a full checkout');
   for (const r of PROTECTED_ROOTS) walk(root, r, out);
-  for (const r of PROTECTED_LOAD_PATHS) walk(root, r, out);   // absent paths are skipped by walk()
   walk(root, '.git', out);
   for (const name of fs.readdirSync(root).sort()) {          // EVERY root entry, non-recursive
     if (name === '.git' || PROTECTED_ROOTS.includes(name)) continue;   // already walked in full
@@ -89,7 +101,10 @@ function snapshot(root) {
 const args = process.argv.slice(2);
 const cmd = args[0], file = args[1];
 const ri = args.indexOf('--root');
-const root = ri >= 0 && args[ri + 1] ? path.resolve(args[ri + 1]) : null;
+// realpath, not just resolve: on macOS os.tmpdir() lives under /var, itself a
+// symlink to /private/var, so an un-resolved root makes every in-repo symlink
+// target look like it points outside the workspace.
+const root = ri >= 0 && args[ri + 1] ? fs.realpathSync(path.resolve(args[ri + 1])) : null;
 // `file.startsWith('-')` catches an omitted file argument (`snapshot --root X`),
 // which would otherwise write a file literally named `--root` and exit 0.
 if (!['snapshot', 'verify'].includes(cmd) || !file || file.startsWith('-') || !root) {
