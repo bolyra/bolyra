@@ -2564,6 +2564,131 @@ git add examples/operator-trial/src/trial.ts examples/operator-trial/src/cli.ts 
 git commit -s -m "operator-trial: runTrial, narration, and CLI"
 ```
 
+### Task 7b: Hardening from the chunk 2 code-quality review
+
+Added after Tasks 5-7 were implemented and reviewed. Four small, additive changes; no behavior the reviewers approved changes.
+
+**Files:**
+- Modify: `examples/operator-trial/src/host.ts` (the outer `catch` in the request handler)
+- Modify: `examples/operator-trial/src/audit.ts` (`record()`, the `committedBytes` update)
+- Modify: `examples/operator-trial/test/host.test.ts` (two new tests)
+- Modify: `examples/operator-trial/test/audit.test.ts` (one assertion added)
+
+- [ ] **Step 1: Write the two failing host tests.** Append to `test/host.test.ts`, after the permission-matrix test. They construct the host directly with an injected `fetchImpl`, so they need the same imports the file already has plus `TrialConfig` (already imported as a type).
+
+```ts
+async function fixtureWithFetch(fetchImpl: typeof fetch) {
+  const granted = createDemoAgent('granted', requiredMask('WRITE_DATA'));
+  const withheld = createDemoAgent('withheld', withheldMask('WRITE_DATA'));
+  const gatewayConfig = buildGatewayConfig('refund', requiredMask('WRITE_DATA'), granted, withheld);
+  const config: TrialConfig = {
+    action: 'refund',
+    method: 'POST',
+    url: new URL('http://127.0.0.1:9/never-reached'),
+    headers: {},
+    requiredPermission: 'WRITE_DATA',
+    secrets: [],
+  };
+  const runDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'trial-host-fetch-')), 'run');
+  const audit = new Audit({ runDir, gatewayConfig });
+  const host = await startHost({ config, gatewayConfig, audit, fetchImpl });
+  return { host, granted, close: () => host.close() };
+}
+
+test('upstream timeout: dispatched, outcome timeout, status null, counter 1', async () => {
+  const timeoutFetch: typeof fetch = async () => {
+    throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  };
+  const f = await fixtureWithFetch(timeoutFetch);
+  try {
+    assert.equal(await call(f.host, 'refund', buildDevBundle(f.granted).header), 200);
+    const r = await f.host.nextResult();
+    assert.equal(r.decision, 'allow');
+    assert.equal(r.dispatched, true);
+    assert.equal(r.outcome, 'timeout');
+    assert.equal(r.upstreamStatus, null);
+    assert.equal(f.host.dispatchCount, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test('upstream network error: dispatched, outcome network_error, status null, counter 1', async () => {
+  const failingFetch: typeof fetch = async () => {
+    throw new TypeError('fetch failed');
+  };
+  const f = await fixtureWithFetch(failingFetch);
+  try {
+    assert.equal(await call(f.host, 'refund', buildDevBundle(f.granted).header), 200);
+    const r = await f.host.nextResult();
+    assert.equal(r.dispatched, true);
+    assert.equal(r.outcome, 'network_error');
+    assert.equal(r.upstreamStatus, null);
+    assert.equal(f.host.dispatchCount, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+```
+
+The outer-catch hardening in Step 3 cannot be reached through `fetchImpl` (a throw inside `dispatch()` is caught there and classified `network_error`), so it has no test; it is covered by inspection.
+
+- [ ] **Step 2: Run the tests**
+
+Run: `npm test`
+Expected: both new tests pass immediately if the `TimeoutError`/`AbortError` mapping in `dispatch()` is correct (it was reviewed as correct). They are pins, not red-green; if either fails, report BLOCKED with the assertion.
+
+- [ ] **Step 3: Harden the host's outer catch.** In `src/host.ts`, replace:
+
+```ts
+    } catch (err) {
+      log(`host error: ${(err as Error).message}`);
+      if (!res.headersSent) sendJson(res, 500, { error: 'internal trial host error' });
+    }
+```
+
+with:
+
+```ts
+    } catch (err) {
+      log(`host error: ${(err as Error).message}`);
+      if (!res.headersSent) sendJson(res, 500, { error: 'internal trial host error' });
+      // Always publish, so a waiting nextResult() resolves and the trial
+      // fails instead of hanging.
+      publish({
+        decision: 'deny',
+        reason: 'internal trial host error',
+        httpStatus: 500,
+        dispatched: false,
+        upstreamStatus: null,
+        outcome: 'not_dispatched',
+        receiptId: null,
+        receiptError: `internal trial host error: ${(err as Error).message}`,
+      });
+    }
+```
+
+- [ ] **Step 4: Derive `committedBytes` from the file.** In `src/audit.ts` `record()`, replace `this.committedBytes += Buffer.byteLength(line);` with `this.committedBytes = fs.statSync(this.receiptsPath).size;` so an injected writer that persists a different byte count cannot desynchronize the rollback offset.
+
+- [ ] **Step 5: Make the initial-scan test prove its precondition.** In `test/audit.test.ts`, in the test named `a secret already on disk is caught by the initial scan even when the chain is also broken`, before the `finalize` call add:
+
+```ts
+  assert.equal(verifyReceiptChain(audit.readReceipts(), { expectedSigner: audit.signerInfo.signer }).ok, false);
+```
+
+- [ ] **Step 6: Run the tests**
+
+Run: `npm test`
+Expected: all pass (`# fail 0`; 49 + 2 = 51).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add examples/operator-trial/src/host.ts examples/operator-trial/src/audit.ts examples/operator-trial/test/host.test.ts examples/operator-trial/test/audit.test.ts
+git commit -s -m "operator-trial: publish on internal host error; stat-derived committedBytes; timeout/network tests"
+```
+
 ---
 
 ## Chunk 3: README, entry page, CI, lockfile, hand-off
