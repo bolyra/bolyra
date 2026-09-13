@@ -33,8 +33,9 @@ VIDEO6="$SCRIPT_DIR/video-offchain.html"
 VIDEO7="$SCRIPT_DIR/video-frameworks.html"
 VIDEO8="$SCRIPT_DIR/video-oauth.html"
 PLAYGROUND="$SCRIPT_DIR/playground.html"
+CONFORMANCE="$SCRIPT_DIR/conformance.html"
 
-for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND" "$CONFORMANCE"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
@@ -57,6 +58,10 @@ preflight_version "@bolyra/gateway" "@bolyra/gateway@"
 preflight_version "@bolyra/gateway" "npm v"
 preflight_version "@bolyra/sdk"     "TS SDK at v"
 preflight_version "@bolyra/cli"     "@bolyra/cli@"
+preflight_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
+# The committed page must match the registry; deploying a stale page is a
+# silent lie about which claims exist.
+node "$SCRIPT_DIR/gen-conformance.js" --check || { echo "ERROR: landing/conformance.html drifts from interop/claims.json — run node landing/gen-conformance.js" >&2; exit 1; }
 
 echo "→ uploading index.html to s3://$BUCKET/"
 aws s3 cp "$INDEX" "s3://$BUCKET/index.html" \
@@ -140,6 +145,14 @@ aws s3 cp "$SCRIPT_DIR/agent-spend.html" "s3://$BUCKET/agent-spend.html" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 aws s3 cp "$SCRIPT_DIR/agent-spend.html" "s3://$BUCKET/agent-spend" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
+echo "→ uploading conformance.html to s3://$BUCKET/"
+aws s3 cp "$CONFORMANCE" "s3://$BUCKET/conformance.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$CONFORMANCE" "s3://$BUCKET/conformance" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
@@ -249,7 +262,7 @@ done
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" \
+  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/conformance.html" "/conformance" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" \
   --query 'Invalidation.Id' \
   --output text)
 
