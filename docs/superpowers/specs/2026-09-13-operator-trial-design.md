@@ -1,7 +1,7 @@
 # Operator authorization trial — design
 
 **Date:** 2026-09-13
-**Status:** design, Codex-ruled (session 01a098bb), founder-accepted; revision 3 after two spec-review rounds
+**Status:** design, Codex-ruled (session 01a098bb), founder-accepted; revision 4 after three spec-review rounds
 **Location:** `examples/operator-trial/` (private example, not published)
 **Budget:** 20 hours across two weeks of evenings. If it runs long, narrow the supported environments; do not extend the schedule.
 **Supported environment (initial):** macOS and Linux, Node 20 or newer. Windows is untested and not claimed.
@@ -111,7 +111,7 @@ Notes on this object: `DemoAgent` (copied from the demo's `agents.ts`) exposes `
 4. If `ok === false`: build the deny receipt input from `req.bolyraDenial` (`stage`, `reason`, `authCtx?`, `bundle?`). `stage` is one of `missing_auth | malformed_bundle | verification_failed | credential_binding_failed | policy_denied`. Input shape, copied from the demo host:
    - `stage` is `credential_binding_failed` or `policy_denied` (verification succeeded, so `authCtx.verified === true` and its DID is populated) → `decisionInput(bundle, authCtx, false, reason)`.
    - `stage` is `verification_failed` with a `bundle` (including attempt 3's replay; the middleware's `authCtx` here is a failure context whose `did` and `effectiveCommitment` are empty strings) → `authFailInput(bundle, reason)`, which derives the DID from `bundle.credentialCommitment`.
-   - no `bundle` (`missing_auth`, `malformed_bundle`) → `anonymousDenyInput(reason)`.
+   - no `bundle`, whatever the stage (`missing_auth`, `malformed_bundle`, or a `verification_failed` whose parsed JSON lacked usable proof material) → `anonymousDenyInput(reason)`. The rule is keyed on the presence of `req.bolyraDenial.bundle`, not on the stage name.
    `reasonCode = req.bolyraDenial.reason + descriptor` (see §3.3). Sign and persist. Push an `AttemptResult` with `dispatched: false`. If persistence fails, record `receiptError` in the result and mark the run failed; the HTTP response was already sent by the middleware.
 5. If `ok === true`: build the allow receipt input from `req.bolyra` and `req.bolyraBundle` with `reasonCode = 'allowed' + descriptor`. Sign and persist **before** dispatch, then immediately re-verify the persisted receipt with `verifyReceipt`. If either fails, respond 500, push an `AttemptResult` with `dispatched: false, receiptError`, and mark the run failed. No dispatch.
 6. Dispatch exactly once: `fetch(url, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(15_000) })`. Record `upstreamStatus` and discard the response body and headers. Outcome mapping:
@@ -182,8 +182,8 @@ Sequence:
 5. Attempt 2: fresh dev bundle for `withheld`. Expect host 403, `stage: 'policy_denied'`, `dispatched: false`.
 6. Attempt 3: resend attempt 1's exact `Authorization` header. Expect host 401, `stage: 'verification_failed'`, reason containing `Nonce already used`, `dispatched: false`.
 7. After each attempt, `await host.nextResult()`.
-8. Close servers. Ask `audit.ts` to finalize the bundle (§3.3).
-9. Compare results against expectations and the `1 / 0 / 0` counters. Any mismatch, any `receiptError`, or a finalize failure sets `summary.ok = false`.
+8. Close servers. Compare results against expectations and the `1 / 0 / 0` counters; any mismatch or any `receiptError` sets `attemptsOk = false`.
+9. Ask `audit.ts` to finalize the bundle (§3.3), passing `attemptsOk`. `summary.ok = attemptsOk && finalizeOk`, computed before `summary.json` is written so the persisted and returned values agree.
 10. Print narration, counters, bundle path, verify command, honesty labels (§9), and the email ask. Return the summary.
 
 The CLI wrapper (`npm run trial`) maps outcomes to exit codes: config errors (`TrialConfigError`) exit 2 before any server starts; `summary.ok === false` exits 1; otherwise 0. Tests call `runTrial` directly and assert on the returned summary and thrown `TrialConfigError`, never on process exit.
@@ -194,12 +194,12 @@ Copied in shape from `examples/verified-actions-demo/src/audit.ts`, trimmed to w
 
 - Ephemeral ES256K key per run; `signer.json` written at construction with `{ issuer: 'operator-trial', keyId: 'trial-k1', alg: 'ES256K', signer, ephemeral: true }`.
 - `ReceiptChain` hash-chains the receipts; each is `createAuthReceipt(input, { issuer, keyId })` then `chain.sign(payload, signerConfig)`, appended to `receipts.jsonl` synchronously.
-- **Write-failure rule.** `ReceiptChain.sign` advances `seq` and `prevReceiptHash` before the append happens, so a receipt that was signed but not written leaves a gap that every later receipt would chain past. On the first append failure `audit.ts` marks itself `broken` and refuses to sign further receipts; each later attempt gets `receiptError: 'chain broken by earlier write failure'` and no receipt. The file therefore always holds an intact prefix, and that prefix is what `finalize` verifies and what `VERIFY.txt` describes. The partial-run promise is limited to this intact prefix.
+- **Write-failure rule.** `ReceiptChain.sign` advances `seq` and `prevReceiptHash` before the append happens, so a receipt that was signed but not written leaves a gap that every later receipt would chain past. `audit.ts` tracks `committedBytes`, the file length after the last successful append. On an append failure it (1) truncates the file back to `committedBytes` with `fs.truncateSync`, because `appendFileSync` can write part of a line before throwing; (2) marks itself `broken` and refuses to sign further receipts, so each later attempt gets `receiptError: 'chain broken by earlier write failure'` and no receipt. If the truncate itself fails, the audit records `fileState: 'unverifiable'`, and `finalize` writes no `VERIFY.txt`. Otherwise the file holds an intact prefix, and that prefix is what `finalize` verifies and what `VERIFY.txt` describes. The partial-run promise is limited to this intact prefix.
 - **Action descriptor.** Every `reasonCode` is `<middleware reason or 'allowed'> | action=<name> <METHOD> <host><path>`. Query string, headers, and body never appear. This is signed descriptive context, not request instance binding. No receipt schema change.
 - Run directory `trial-out/<ISO timestamp, colons replaced>/`, created fresh; the run refuses to start if it already exists.
 - `finalize(results, meta)`:
   0. Secret scan first, on whatever has been written so far (see step 4). It runs on every path that retains artifacts, including a chain-verification failure in step 1, so a kept directory is never an unscanned directory.
-  1. Read back `receipts.jsonl`, run `verifyReceiptChain(receipts, { expectedSigner, expectedCount: receipts.length })`. On failure, write nothing else, keep the directory, and return a failure.
+  1. Read back `receipts.jsonl`. **Zero receipts** (or `fileState: 'unverifiable'`): skip chain verification, write `summary.json` with `ok: false`, `receiptCount: 0`, `headReceiptHash: null`, and no `VERIFY.txt`; return a failure. Otherwise run `verifyReceiptChain(receipts, { expectedSigner, expectedCount: receipts.length })`; on failure, write nothing else, keep the directory, and return a failure.
   2. Write `summary.json`:
      ```
      { trialVersion, packages: { gateway, mcp, receipts }, dryRun, ok,
@@ -268,8 +268,9 @@ Loads YAML or JSON (`yaml` package, already a gateway dependency). Every violati
 7. Permission matrix: for every row in §3.2, `granted` passes policy and `withheld` fails with `policy_denied` (host-level test, no dispatch needed).
 8. Secret exclusion: with `headers: { Authorization: 'Bearer ${T}' }` and `T=sekrit-…`, no file in the run directory and no captured log line contains the value.
 9. Missing env var: `loadTrialConfig` throws `TrialConfigError` naming `T`, and no server was started.
-10. Allow-receipt write failure: the audit's append is made to throw on attempt 1 (an injectable `appendLine` in `audit.ts`, defaulting to `fs.appendFileSync`). Expect host 500, `dispatched: false`, `receiptError` on attempt 1, `receiptError` on attempts 2 and 3 naming the broken chain, zero receipts in the file, `summary.ok === false`, and `VERIFY.txt` not written.
-11. Deny-receipt write failure: the append throws on attempt 2 only. Expect attempt 1 allowed and receipted, attempt 2 denied with `receiptError`, attempt 3 denied with `receiptError` naming the broken chain, exactly one receipt in the file, chain verification of that prefix passing, `summary.ok === false`.
+10. Allow-receipt write failure: the audit's append is made to throw on attempt 1 (an injectable `appendLine` in `audit.ts`, defaulting to `fs.appendFileSync`). Expect host 500, `dispatched: false`, `receiptError` on attempt 1, `receiptError` on attempts 2 and 3 naming the broken chain, zero receipts in the file, `summary.json` with `ok: false` and `receiptCount: 0`, and `VERIFY.txt` not written.
+11. Deny-receipt partial write failure: on attempt 2 the injected append writes half the line to the file and then throws. Expect attempt 1 allowed and receipted, attempt 2 denied with `receiptError`, attempt 3 denied with `receiptError` naming the broken chain, the file truncated back to exactly one complete receipt line, chain verification of that prefix passing, `VERIFY.txt` naming count 1, `summary.ok === false`.
+12. Bundle-less denial: `Authorization: Bolyra <base64 of "{}">` returns 401, is receipted through the anonymous shape (`credentialCommitment: '0'`), and is not dispatched.
 
 CI: a new job `operator-trial` copied from `verified-actions-demo` (Node 20, `npm ci --no-audit --no-fund`, `npm run trial -- --dry-run`, `npm test`). `scripts/verify-lockfiles.sh` picks up the tracked lockfile automatically; it must `npm ci` cleanly on Linux (regenerate on Linux or in Docker if the `@emnapi/*` optional subtree goes missing, per `tasks/lessons.md`). The `dependency-audit` job lists published packages plus hosted-verify and does not include `verified-actions-demo`; this example follows the same convention and is not added.
 
