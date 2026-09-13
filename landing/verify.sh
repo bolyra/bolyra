@@ -241,6 +241,47 @@ guard_version "@bolyra/gateway" "npm v"
 guard_version "@bolyra/sdk"     "TS SDK at v"
 guard_version "@bolyra/cli"     "@bolyra/cli@"
 
+guard_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
+
+# The advertised vector count must equal what the ADVERTISED package version
+# actually loads. Pin npx to the version the page names (unpinned npx can
+# serve the cache); guard_version above separately checks it is npm's latest.
+EVC_ADVERTISED=$(grep -oE '@bolyra/evc-conformance@[0-9]+\.[0-9]+\.[0-9]+' <<< "$LIVE_HTML" | sed 's/.*@//' | sort -u || true)
+[ "$(wc -l <<< "$EVC_ADVERTISED" | tr -d ' ')" = "1" ] && [ -n "$EVC_ADVERTISED" ] || fail "page must advertise exactly one @bolyra/evc-conformance version (got: '$EVC_ADVERTISED')"
+ADVERTISED_COUNT=$(grep -oE '[0-9]+ wire-contract vectors' <<< "$LIVE_HTML" | head -1 | grep -oE '^[0-9]+' || true)
+[ -n "$ADVERTISED_COUNT" ] || fail "page does not advertise a wire-contract vector count"
+EVC_TMP=$(mktemp -d)
+LOADED_COUNT=$( (cd "$EVC_TMP" && npx -y "@bolyra/evc-conformance@${EVC_ADVERTISED}" 2>/dev/null | grep -oE '^[0-9]+ test vectors loaded' | head -1 | grep -oE '^[0-9]+') || true )
+rm -rf "$EVC_TMP"
+[[ "$LOADED_COUNT" =~ ^[0-9]+$ ]] || fail "could not read '<N> test vectors loaded' from @bolyra/evc-conformance@$EVC_ADVERTISED (got '$LOADED_COUNT')"
+if [ "$ADVERTISED_COUNT" = "$LOADED_COUNT" ]; then
+  pass "vector count: page advertises $ADVERTISED_COUNT, @bolyra/evc-conformance@$EVC_ADVERTISED loads $LOADED_COUNT"
+else
+  fail "vector count drift: page advertises $ADVERTISED_COUNT but @bolyra/evc-conformance@$EVC_ADVERTISED loads $LOADED_COUNT"
+fi
+
+# Copy that promised a hosted/managed platform was removed on 2026-09-10 and
+# must not come back (settled 2026-08-27 ruling: no hosted platform). The four
+# patterns cover all five deleted phrases (two shared "hosted verifier preview").
+for phrase in "hosted verifier preview" "Hosted <code>POST /v1/verify</code> preview" "managed verifier path" "Managed operations when you need them"; do
+  if grep -qF "$phrase" <<< "$LIVE_HTML"; then fail "removed copy reappeared on the live page: '$phrase'"; fi
+done
+pass "no hosted-verifier / managed-platform copy on the live page"
+grep -qF "11 domain-agnostic wire-envelope vectors" <<< "$LIVE_HTML" || fail "root page lacks '11 domain-agnostic wire-envelope vectors'"
+grep -qF 'href="/conformance"' <<< "$LIVE_HTML" || fail "root page does not link /conformance"
+pass "root page advertises 11 envelope vectors and links /conformance"
+
+# The live conformance page must be exactly the page generated from the
+# registry at the deployed commit (future-proof: no hard-coded claim count).
+CONF_TMP=$(mktemp)
+curl -fsS "https://bolyra.ai/conformance?vguard=$(date +%s)" -o "$CONF_TMP" || fail "GET /conformance failed"
+if cmp -s "$CONF_TMP" "$SCRIPT_DIR/conformance.html"; then
+  pass "/conformance is byte-identical to landing/conformance.html at the deployed commit ($(grep -c '<h2 class="claim-id">' "$CONF_TMP") claims)"
+else
+  fail "/conformance differs from landing/conformance.html at the deployed commit (stale CDN or wrong deploy source)"
+fi
+rm -f "$CONF_TMP"
+
 # GitHub link sanity — the page CTAs must resolve for unauthenticated visitors.
 # GitHub returns 404 (not 403) for private repos, so this catches re-privatization too.
 declare -a GH_URLS=(
