@@ -417,3 +417,25 @@ test('kindOf defaults only an ABSENT kind; a supplied empty kind is an error eve
     assert.match(errsFor((c) => { c.kind = kind; }), /unknown kind/);
   }
 });
+
+test('validateClaim anchors run.image, so a docker option cannot pose as the image', () => {
+  const ext = () => ({
+    id: 'x/y@1', kind: 'external-suite',
+    implementer: { repo: 'https://github.com/o/r', commit: 'a'.repeat(40) },
+    run: { image: 'node:20@sha256:' + 'b'.repeat(64), command: ['npm', 'test'], network: 'none', expect: { pass: 1, run: 1 } },
+  });
+  assert.strictEqual(vc(ext()).length, 0, 'the spec-shaped image must pass');
+  // Placed before the first positional, docker parses this as an option: a
+  // writable bind mount of the daemon host, with run.command[0] as the image.
+  for (const image of [
+    '--mount=type=bind,source=/,target=/h@sha256:' + 'b'.repeat(64),
+    '-v=/:/h@sha256:' + 'b'.repeat(64),
+    'evil/image@sha256:' + 'b'.repeat(64),      // pinned, but not the node image the spec names
+    'node@sha256:' + 'b'.repeat(64),            // no tag
+    'node:20',                                  // no digest
+    'node:20@sha256:' + 'b'.repeat(63),
+  ]) {
+    const c = ext(); c.run.image = image;
+    assert.match(vc(c).join(' | '), /digest-pinned/, `accepted ${JSON.stringify(image)}`);
+  }
+});
