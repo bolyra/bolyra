@@ -7,22 +7,40 @@
 // verifier cannot be replaced by the tamper it is looking for.
 //   node harness-integrity.js snapshot <file.json> --root <workspace>
 //   node harness-integrity.js verify   <file.json> --root <workspace>
-// Coverage: everything under interop/ spec/ landing/ .github/ integrations/
-// (ignored files included) — integrations/ because spec/conformance-runner.js
-// require()s integrations/receipts/dist/index.js at run time; ALL of .git/
+// Coverage: everything under interop/ spec/ landing/ .github/ (ignored files
+// included) plus the paths the runner LOADS CODE FROM (see PROTECTED_LOAD_PATHS);
+// ALL of .git/
 // including objects (stored bytes are not immutable and objects/info/alternates
 // can redirect lookups); and EVERY root-level entry non-recursively — files,
 // directories and symlinks — so a planted root node_modules/, which the runner
 // unshifts onto module.paths, cannot appear unnoticed.
 // NOT covered, by design: the contents of unprotected root directories beyond
-// their immediate entry list, the host toolchain (node/git/docker), $HOME,
+// their immediate entry list (this includes integrations/ subtrees the harness
+// never loads, e.g. integrations/x402-evc/ — a change there cannot alter what a
+// later claim executes), the host toolchain (node/git/docker), $HOME,
 // scratch dirs, and changes restored before verification. A container escape or
 // host compromise is out of this checker's scope (spec §3.5 stated residual).
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github', 'integrations'];
+const PROTECTED_ROOTS = ['interop', 'spec', 'landing', '.github'];
+// Beyond the first-party roots above, the runner LOADS code from these paths, so a
+// replayed claim could use them to change what a later claim executes.
+// spec/conformance-runner.js require()s ../integrations/receipts/dist/index.js
+// (whose own bare requires then resolve through integrations/receipts/node_modules),
+// and its lines 113-118 unshift CANDIDATE_MODULE_PATHS onto module.paths. Scoping by
+// what is loaded rather than by repo layout is both wider and narrower than
+// protecting integrations/ wholesale: it picks up sdk/node_modules, which is on
+// module.paths and was previously unfingerprinted, and drops ~27k files under
+// integrations/ that the harness can never reach. A test keeps this list in step
+// with the runner by parsing CANDIDATE_MODULE_PATHS out of conformance-runner.js.
+const PROTECTED_LOAD_PATHS = [
+  'integrations/receipts',
+  'circuits/node_modules',
+  'sdk/node_modules',
+  'integrations/cli/node_modules',
+];
 const MAX_DIFFS = 50;
 
 function die(msg) { process.stderr.write(`harness-integrity: ${msg}\n`); process.exit(1); }
@@ -59,6 +77,7 @@ function snapshot(root) {
   const gitSt = fs.lstatSync(path.join(root, '.git'));
   if (!gitSt.isDirectory()) die('.git is not a directory (gitfile: worktree or submodule) — run against a full checkout');
   for (const r of PROTECTED_ROOTS) walk(root, r, out);
+  for (const r of PROTECTED_LOAD_PATHS) walk(root, r, out);   // absent paths are skipped by walk()
   walk(root, '.git', out);
   for (const name of fs.readdirSync(root).sort()) {          // EVERY root entry, non-recursive
     if (name === '.git' || PROTECTED_ROOTS.includes(name)) continue;   // already walked in full
