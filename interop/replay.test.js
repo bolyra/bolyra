@@ -351,3 +351,69 @@ test('ROOT is only ever passed to git -C, never used to build an executed path',
     assert.match(line, /execFileSync\('git', \['-C', ROOT,/, `line ${n}: ROOT must only reach git -C`);
   }
 });
+
+// --- The claim contract, exercised through BOTH consumers. Each case below was
+// accepted by both gates before this contract moved into validateClaim: a partial
+// `expected` published the literal word "undefined" to the page, and repo/install/
+// adapter reached git and tsx validated only by the page generator.
+
+const { validateClaim: vc, kindOf: kof } = require('./replay.js');
+const BASE = () => ({
+  id: 'x/y@1', kind: 'bolyra-suite',
+  implementer: { repo: 'https://github.com/o/r', commit: 'a'.repeat(40), install: ['npm', 'ci', '--ignore-scripts'] },
+  suite: { commit: 'b'.repeat(40), test_vectors_sha256: 'c'.repeat(64) },
+  adapter: 'adapters/x.ts', adapter_sha256: 'd'.repeat(64),
+  expected: { pass: 1, fail: 0, skip: 0 },
+});
+const errsFor = (mutate) => { const c = BASE(); mutate(c); return vc(c).join(' | '); };
+
+test('validateClaim requires every count the public page prints', () => {
+  for (const k of ['pass', 'fail', 'skip']) {
+    const e = errsFor((c) => { delete c.expected[k]; });
+    assert.match(e, new RegExp(`expected\\.${k} must be a non-negative integer`));
+  }
+  assert.match(errsFor((c) => { c.expected.fail = -1; }), /expected\.fail/);
+  assert.match(errsFor((c) => { c.expected.skip = 1.5; }), /expected\.skip/);
+  assert.strictEqual(vc(BASE()).filter((e) => /expected\./.test(e)).length, 0);
+});
+
+test('validateClaim allowlists implementer.repo, which git remote add + fetch consume', () => {
+  for (const repo of ['ext::sh -c evil', 'git@github.com:o/r', 'https://evil.example/o/r',
+                      'https://github.com/o/r/../../x', 'https://github.com/o', '']) {
+    assert.match(errsFor((c) => { c.implementer.repo = repo; }),
+      /implementer\.repo must match/, `accepted ${JSON.stringify(repo)}`);
+  }
+  assert.strictEqual(vc(BASE()).filter((e) => /implementer\.repo/.test(e)).length, 0);
+});
+
+test('validateClaim allowlists implementer.install, which is spawned as argv', () => {
+  for (const install of [['npm', 'ci'], ['npm', 'ci', '--ignore-scripts', '; curl evil'],
+                        ['sh', '-c', 'evil'], ['npm', 'ci', '--ignore-scripts', '--no-fund', '--no-audit'],
+                        'npm ci', undefined]) {
+    assert.match(errsFor((c) => { c.implementer.install = install; }),
+      /implementer\.install/, `accepted ${JSON.stringify(install)}`);
+  }
+  for (const ok of [['npm', 'ci', '--ignore-scripts'], ['npm', 'install', '--ignore-scripts'],
+                    ['npm', 'ci', '--ignore-scripts', '--no-audit'],
+                    ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund']]) {
+    assert.strictEqual(errsFor((c) => { c.implementer.install = ok; }).includes('install'), false,
+      `rejected ${JSON.stringify(ok)}`);
+  }
+});
+
+test('validateClaim constrains the adapter pathname before it is read or executed', () => {
+  for (const a of ['../landing/gen-conformance.js', '/etc/passwd', 'adapters/../../x.ts',
+                   'adapters/x.js', 'x.ts', 7]) {
+    assert.match(errsFor((c) => { c.adapter = a; }),
+      /adapter must match/, `accepted ${JSON.stringify(a)}`);
+  }
+});
+
+test('kindOf defaults only an ABSENT kind; a supplied empty kind is an error everywhere', () => {
+  assert.strictEqual(kof({}), 'bolyra-suite');
+  assert.strictEqual(kof({ kind: 'external-suite' }), 'external-suite');
+  for (const kind of ['', null, 0, false]) {
+    assert.strictEqual(kof({ kind }), kind, 'must NOT coerce a supplied falsy kind');
+    assert.match(errsFor((c) => { c.kind = kind; }), /unknown kind/);
+  }
+});
