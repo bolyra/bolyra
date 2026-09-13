@@ -1,0 +1,12 @@
+# Copy to trial.yaml and edit. Use a STAGING endpoint or a reversible action:
+# attempt 1 really executes.
+action: refund                      # the name Bolyra gates; appears in receipts
+method: POST
+url: https://staging.example.com/v1/refunds
+# bodyFile: ./refund.json           # optional. Create the file first, then uncomment.
+                                    # Sent byte-for-byte; not allowed with GET/HEAD/DELETE.
+headers:
+  Authorization: "Bearer ${THEIR_TOKEN}"   # ${NAME} is replaced from the environment; unset = error
+  Content-Type: application/json
+requiredPermission: WRITE_DATA      # READ_DATA | WRITE_DATA | FINANCIAL_SMALL | FINANCIAL_MEDIUM
+                                    # | FINANCIAL_UNLIMITED | SIGN_ON_BEHALF | SUB_DELEGATE | ACCESS_PII
