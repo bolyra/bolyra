@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { validateClaim } = require('../interop/replay.js');
+const { validateClaim, kindOf } = require('../interop/replay.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const REGISTRY_PATH = path.join(ROOT, 'interop', 'claims.json');
@@ -33,7 +33,7 @@ function validateRegistry(reg) {
     if (!isStr(c.id)) errors.push(`${id}: id must be a non-empty string`);
     else if (seen.has(c.id)) errors.push(`${id}: duplicate id ${c.id}`);
     seen.add(c.id);
-    const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
+    const kind = kindOf(c);
     if (!KINDS.has(kind)) errors.push(`${id}: unknown kind ${String(kind)}`);
     const impl = c.implementer && typeof c.implementer === 'object' ? c.implementer : {};
     const m = isStr(impl.repo) ? REPO_RE.exec(impl.repo) : null;
@@ -49,7 +49,7 @@ function validateRegistry(reg) {
 }
 
 function coveredClasses(c) {
-  if ((c.kind === undefined ? 'bolyra-suite' : c.kind) === 'external-suite') return 'not applicable (own corpus)';
+  if (kindOf(c) === 'external-suite') return 'not applicable (own corpus)';
   const args = (c.suite && Array.isArray(c.suite.runner_args)) ? c.suite.runner_args : [];
   const types = [];
   for (let i = 0; i + 1 < args.length; i++) if (args[i] === '--type') types.push(args[i + 1]);
@@ -66,7 +66,7 @@ function sortClaims(claims) {
 }
 
 function renderClaim(c) {
-  const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
+  const kind = kindOf(c);
   const repo = c.implementer.repo;      // validated by REPO_RE
   const commit = c.implementer.commit;  // validated 40-hex
   const rows = [];
