@@ -75,7 +75,9 @@ function sha256File(p) {
 // (Design doc §"submission-check" specifies these same shapes; submission-check.js
 // will reuse this rather than restate it.)
 const KINDS = new Set(['bolyra-suite', 'external-suite']);
-const REPO_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+// The lookaheads reject a "." or ".." owner/repo segment while still allowing
+// names like ".github" and "r.git". Shared with the page generator: one regex.
+const REPO_RE = /^https:\/\/github\.com\/(?!\.\.?\/)[A-Za-z0-9_.-]+\/(?!\.\.?$)[A-Za-z0-9_.-]+$/;
 const ADAPTER_RE = /^adapters\/[A-Za-z0-9._-]+\.ts$/;
 
 // An ABSENT kind defaults; a SUPPLIED empty/null/0 kind is an error everywhere,
@@ -142,9 +144,10 @@ function validateClaim(c) {
     }
     if (!run.expect || badCount(run.expect.pass) || badCount(run.expect.run)) {
       errors.push('run.expect must carry non-negative numeric pass and run counts');
-    } else if (run.expect.scoped_out !== undefined && badCount(run.expect.scoped_out)) {
-      // The page prints scoped_out as fact; a missing one renders "0 scoped out".
-      errors.push('run.expect.scoped_out must be a non-negative integer when present');
+    } else if (badCount(run.expect.scoped_out)) {
+      // Required: the page prints it as fact and the replay compares it, so an
+      // omitted count would render as a claim nobody checked.
+      errors.push('run.expect.scoped_out must be a non-negative integer');
     }
     return errors;
   }
@@ -220,7 +223,7 @@ function validateExternalSuiteOutput(run, c) {
   }
   const got = { pass: Number(matches[0][1]), run: Number(matches[0][2]), scoped_out: Number(matches[0][3]) };
   const exp = c.run.expect;
-  if (got.pass !== exp.pass || got.run !== exp.run || (exp.scoped_out !== undefined && got.scoped_out !== exp.scoped_out)) {
+  if (got.pass !== exp.pass || got.run !== exp.run || got.scoped_out !== exp.scoped_out) {
     throw new Error(
       `REPLAY MISMATCH: expected ${exp.pass}/${exp.run} passed (${exp.scoped_out} scoped out), ` +
         `got ${got.pass}/${got.run} (${got.scoped_out})`
@@ -504,6 +507,6 @@ function main() {
   if (ok !== claims.length) process.exitCode = 1;
 }
 
-module.exports = { validateRunnerOutput, validateClaim, validateExternalSuiteOutput, shellQuote, kindOf, KINDS };
+module.exports = { validateRunnerOutput, validateClaim, validateExternalSuiteOutput, shellQuote, kindOf, KINDS, REPO_RE };
 
 if (require.main === module) main();
