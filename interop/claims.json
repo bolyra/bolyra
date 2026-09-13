@@ -4,7 +4,7 @@
     {
       "id": "mcp-use-evc-example@17642a5/host_behavior@0.5.0",
       "published_in": [
-        "spec/IMPLEMENTER.md \u00a79 (Independent implementations)",
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
         "draft-kondoju-evc-01 and -02, Implementation Status: mcp-use-evc-example"
       ],
       "claim_text": "27/27 host_behavior vectors, vector set 0.5.0, at pinned commit 17642a5",
@@ -44,11 +44,40 @@
       "id": "x402-authority-verifier-kit@35e209d/own-corpus",
       "kind": "external-suite",
       "published_in": [
-        "spec/IMPLEMENTER.md \u00a79 (Independent implementations)",
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
         "bolyra.ai conformance section"
       ],
       "claim_text": "39/39 of the kit's own pinned corpus (StillOS own-corpus reproduction; NOT Bolyra-suite conformance)",
       "verified_on": "2026-09-09",
+      "implementer": {
+        "repo": "https://github.com/stillmarcus24/x402-authority-verifier-kit",
+        "commit": "35e209d5b994ef817519b1ac0ae1f03f2bdf4d5f"
+      },
+      "run": {
+        "image": "node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5",
+        "command": [
+          "npm",
+          "test",
+          "--silent"
+        ],
+        "network": "none",
+        "requires_zero_dependencies": true,
+        "expect": {
+          "pass": 39,
+          "run": 39,
+          "scoped_out": 9
+        }
+      }
+    },
+    {
+      "id": "probe@35e209d/own-corpus",
+      "kind": "external-suite",
+      "published_in": [
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
+        "bolyra.ai conformance section"
+      ],
+      "claim_text": "PROBE submission (never merge)",
+      "verified_on": "2026-09-10",
       "implementer": {
         "repo": "https://github.com/stillmarcus24/x402-authority-verifier-kit",
         "commit": "35e209d5b994ef817519b1ac0ae1f03f2bdf4d5f"
