@@ -1,7 +1,7 @@
 # Operator authorization trial — design
 
 **Date:** 2026-09-13
-**Status:** design, Codex-ruled (session 01a098bb), founder-accepted; revision 2 after spec review
+**Status:** design, Codex-ruled (session 01a098bb), founder-accepted; revision 3 after two spec-review rounds
 **Location:** `examples/operator-trial/` (private example, not published)
 **Budget:** 20 hours across two weeks of evenings. If it runs long, narrow the supported environments; do not extend the schedule.
 **Supported environment (initial):** macOS and Linux, Node 20 or newer. Windows is untested and not claimed.
@@ -91,8 +91,8 @@ const gatewayConfig: GatewayConfig = {
   network: 'base-sepolia',
   devMode: true,
   credentials: { type: 'static', map: {
-    [granted.commitment.toString()]:  { permissionBitmask: granted.mask.toString() },
-    [withheld.commitment.toString()]: { permissionBitmask: withheld.mask.toString() },
+    [granted.commitment.toString()]:  { permissionBitmask: granted.permissionBitmask.toString() },
+    [withheld.commitment.toString()]: { permissionBitmask: withheld.permissionBitmask.toString() },
   } },
   tools: { [actionName]: { requireBitmask: Number(requiredMask) } },
   nonce: { store: 'memory', maxProofAge: 300 },   // middleware dereferences nonce.maxProofAge
@@ -101,19 +101,25 @@ const gatewayConfig: GatewayConfig = {
 };
 ```
 
+Notes on this object: `DemoAgent` (copied from the demo's `agents.ts`) exposes `permissionBitmask`, not `mask`. `port: 0` and the placeholder `target` are acceptable because the middleware is embedded directly; they would not pass the gateway's `validateConfig`, which the trial does not call. `buildCredentialRegistry` parses the static map but does not validate cumulative closure; closure is guaranteed by the table in §3.2, which is the only source of masks.
+
 **Per request:**
 
 1. Route check. Method must be `POST` and path must be `/action/<configured name>`; otherwise 404, no verification, no receipt, no `AttemptResult`.
 2. Read and discard the body. The middleware does not need `req.rawBody` or `req.jsonRpcBody`; it reads only `req.jsonRpcBody?.id` through optional chaining.
 3. `const ok = await middleware(req, res, actionName)`. With `actionName` passed, the middleware itself performs bundle verification, nonce replay (401), dev credential binding against the static map (401 `credential_unknown` / `credential_mismatch`), and tool policy (403). On deny it has already written a JSON-RPC error response. The host duplicates none of these checks.
-4. If `ok === false`: build the deny receipt input from `req.bolyraDenial` (`stage`, `reason`, `authCtx?`, `bundle?`). When `bundle` is present use the demo's `decisionInput` shape; when absent (malformed or missing header) use the demo's `anonymousDenyInput` shape. `reasonCode = req.bolyraDenial.reason + descriptor` (see §3.3). Sign and persist. Push an `AttemptResult` with `dispatched: false`. If persistence fails, record `receiptError` in the result and mark the run failed; the HTTP response was already sent by the middleware.
+4. If `ok === false`: build the deny receipt input from `req.bolyraDenial` (`stage`, `reason`, `authCtx?`, `bundle?`). `stage` is one of `missing_auth | malformed_bundle | verification_failed | credential_binding_failed | policy_denied`. Input shape, copied from the demo host:
+   - `stage` is `credential_binding_failed` or `policy_denied` (verification succeeded, so `authCtx.verified === true` and its DID is populated) → `decisionInput(bundle, authCtx, false, reason)`.
+   - `stage` is `verification_failed` with a `bundle` (including attempt 3's replay; the middleware's `authCtx` here is a failure context whose `did` and `effectiveCommitment` are empty strings) → `authFailInput(bundle, reason)`, which derives the DID from `bundle.credentialCommitment`.
+   - no `bundle` (`missing_auth`, `malformed_bundle`) → `anonymousDenyInput(reason)`.
+   `reasonCode = req.bolyraDenial.reason + descriptor` (see §3.3). Sign and persist. Push an `AttemptResult` with `dispatched: false`. If persistence fails, record `receiptError` in the result and mark the run failed; the HTTP response was already sent by the middleware.
 5. If `ok === true`: build the allow receipt input from `req.bolyra` and `req.bolyraBundle` with `reasonCode = 'allowed' + descriptor`. Sign and persist **before** dispatch, then immediately re-verify the persisted receipt with `verifyReceipt`. If either fails, respond 500, push an `AttemptResult` with `dispatched: false, receiptError`, and mark the run failed. No dispatch.
 6. Dispatch exactly once: `fetch(url, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(15_000) })`. Record `upstreamStatus` and discard the response body and headers. Outcome mapping:
    - 2xx/4xx/5xx → `outcome: 'completed'`
    - 3xx → `outcome: 'not_followed'` (redirect not followed)
    - abort → `outcome: 'timeout'`, `upstreamStatus: null`
    - any other fetch rejection → `outcome: 'network_error'`, `upstreamStatus: null`
-   In every case the dispatch counter increments and `dispatched: true`. `dispatched` means a request was sent from this process; it does not prove the endpoint received or executed it.
+   In every case the dispatch counter increments and `dispatched: true`. `dispatched` means the host invoked `fetch` for this attempt; it does not prove bytes left the machine, or that the endpoint received or executed anything.
 7. Respond to the trial client with `{ decision: 'allow', dispatched: true, upstreamStatus, outcome, receiptId }` and push the same `AttemptResult`.
 
 **In-process result channel.** The host exposes `results: AttemptResult[]` and `nextResult(): Promise<AttemptResult>` which resolves after the receipt for the current request has been persisted (or its persistence failure recorded). `trial.ts` awaits `nextResult()` after each attempt's `fetch` settles, so it never reads a deny's receipt id from the HTTP body (the middleware's JSON-RPC error body carries none).
@@ -123,10 +129,10 @@ interface AttemptResult {
   n: 1 | 2 | 3;
   credential: 'granted' | 'withheld' | 'replay';
   decision: 'allow' | 'deny';
-  stage?: 'missing_auth' | 'verification_failed' | 'credential_binding_failed' | 'policy_denied';
+  stage?: 'missing_auth' | 'malformed_bundle' | 'verification_failed' | 'credential_binding_failed' | 'policy_denied';
   reason: string;                // middleware reason or 'allowed'
   httpStatus: number;            // what the client saw from the host
-  dispatched: boolean;           // a request was sent from this process
+  dispatched: boolean;           // the host invoked fetch for this attempt
   upstreamStatus: number | null;
   outcome: 'completed' | 'not_followed' | 'timeout' | 'network_error' | 'not_dispatched';
   receiptId: string | null;
@@ -138,7 +144,7 @@ The host keeps `dispatchCount` and a per-attempt count. The trial asserts `1 / 0
 
 ### 3.2 `trial.ts` and `agents.ts` — the operator's three attempts
 
-**Permission table** (`agents.ts`). Bit positions follow `@bolyra/sdk`'s `Permission` enum; masks are cumulative-closed so they pass the gateway's static-map validation:
+**Permission table** (`agents.ts`). Bit positions follow `@bolyra/sdk`'s `Permission` enum; masks are cumulative-closed (they satisfy `validateCumulativeBitEncoding`, though the embedded middleware does not itself call `validateConfig`):
 
 | Name | Bit | Closed mask | Withheld credential gets |
 |---|---|---|---|
@@ -151,7 +157,7 @@ The host keeps `dispatchCount` and a per-attempt count. The trial asserts `1 / 0
 | `SUB_DELEGATE` | 6 | `64` | `32` (SIGN_ON_BEHALF) |
 | `ACCESS_PII` | 7 | `128` | `64` (SUB_DELEGATE) |
 
-`requiredPermission` must be one of these names. The policy's `requireBitmask` is the required name's closed mask. The withheld credential's mask is the closed mask of the previous row (`0` for `READ_DATA`). Soundness: `checkToolPolicy` denies unless `(mask & required) === required`, and a lower row's mask never contains the required row's own bit, so the withheld credential fails policy for every row. Dev-mode verification still passes for the withheld credential: a bundle scores 40 + 20 + 20 (if any of bits 0–1 set) + 10 (fresh nonce) + 10, so 100, or 80 for the zero mask, both above the default `minScore` of 70. The deny is therefore a 403 `policy_denied`, never a 401.
+`requiredPermission` must be one of these names. The policy's `requireBitmask` is the required name's closed mask. The withheld credential's mask is the closed mask of the previous row (`0` for `READ_DATA`). Soundness: `checkToolPolicy` denies unless `(mask & required) === required`, and a lower row's mask never contains the required row's own bit, so the withheld credential fails policy for every row. Dev-mode verification still passes for the withheld credential: a fresh bundle scores 40 + 20 + 10 (fresh nonce) + 10, plus 20 when either bit 0 or bit 1 is set. So masks containing READ or WRITE score 100; the zero mask and every financial-only or higher-bit-only mask score 80. All are above the default `minScore` of 70, so the deny is a 403 `policy_denied`, never a 401.
 
 `agents.ts` is copied from `examples/verified-actions-demo/src/agents.ts` (`createDemoAgent`, `buildDevBundle`, fresh production-layout nonce per bundle) with the table above added.
 
@@ -188,21 +194,23 @@ Copied in shape from `examples/verified-actions-demo/src/audit.ts`, trimmed to w
 
 - Ephemeral ES256K key per run; `signer.json` written at construction with `{ issuer: 'operator-trial', keyId: 'trial-k1', alg: 'ES256K', signer, ephemeral: true }`.
 - `ReceiptChain` hash-chains the receipts; each is `createAuthReceipt(input, { issuer, keyId })` then `chain.sign(payload, signerConfig)`, appended to `receipts.jsonl` synchronously.
+- **Write-failure rule.** `ReceiptChain.sign` advances `seq` and `prevReceiptHash` before the append happens, so a receipt that was signed but not written leaves a gap that every later receipt would chain past. On the first append failure `audit.ts` marks itself `broken` and refuses to sign further receipts; each later attempt gets `receiptError: 'chain broken by earlier write failure'` and no receipt. The file therefore always holds an intact prefix, and that prefix is what `finalize` verifies and what `VERIFY.txt` describes. The partial-run promise is limited to this intact prefix.
 - **Action descriptor.** Every `reasonCode` is `<middleware reason or 'allowed'> | action=<name> <METHOD> <host><path>`. Query string, headers, and body never appear. This is signed descriptive context, not request instance binding. No receipt schema change.
 - Run directory `trial-out/<ISO timestamp, colons replaced>/`, created fresh; the run refuses to start if it already exists.
 - `finalize(results, meta)`:
+  0. Secret scan first, on whatever has been written so far (see step 4). It runs on every path that retains artifacts, including a chain-verification failure in step 1, so a kept directory is never an unscanned directory.
   1. Read back `receipts.jsonl`, run `verifyReceiptChain(receipts, { expectedSigner, expectedCount: receipts.length })`. On failure, write nothing else, keep the directory, and return a failure.
   2. Write `summary.json`:
      ```
      { trialVersion, packages: { gateway, mcp, receipts }, dryRun, ok,
        action: { name, method, host, path },
        attempts: AttemptResult[], dispatchCounts: [n1, n2, n3],
-       receiptCount, headReceiptHash, startedAt, finishedAt,
+       receiptCount, headReceiptHash /* verifyReceiptChain(...).headHash */, startedAt, finishedAt,
        note: "unsigned observations; signer key is ephemeral" }
      ```
      `path` is operator-visible content and is written as-is.
   3. Write `VERIFY.txt` with `npx @bolyra/cli@0.9.0 receipt verify-chain ./receipts.jsonl --signer <signer> --expect-count <receiptCount> --expect-head <headReceiptHash>`. The count is the actual number of receipts, so a partial run still produces a verifiable bundle and `summary.ok` records that it was partial.
-  4. Secret scan: for every resolved header value and every `${ENV}` value the trial substituted, search every file written in the run directory. On a hit, delete the directory and return a failure naming the file. The console states that this scan covers only values the trial itself resolved.
+  4. Secret scan (also run as step 0 and again after `summary.json` and `VERIFY.txt` are written): for every resolved header value and every `${ENV}` value the trial substituted, search every file in the run directory. On a hit, delete the directory and return a failure naming the file. The console states that this scan covers only values the trial itself resolved.
 
 ### 3.4 `echo.ts` — dry-run endpoint
 
@@ -239,7 +247,7 @@ Loads YAML or JSON (`yaml` package, already a gateway dependency). Every violati
 | Run directory already exists | `TrialConfigError` |
 | Request to any route other than `POST /action/<name>` | 404; no verification, no receipt, no result |
 | Middleware deny | Deny receipt persisted; `dispatched: false`; result pushed |
-| Deny receipt persistence fails | Result carries `receiptError`; `summary.ok = false`; run continues so remaining attempts are still observable |
+| Deny receipt persistence fails | Result carries `receiptError`; `summary.ok = false`; the chain is marked broken and no further receipts are signed; run continues so remaining attempts are still observable |
 | Allow receipt persistence or re-verify fails | 500 to the client; no dispatch; `receiptError`; `summary.ok = false` |
 | Dispatch 3xx | `outcome: 'not_followed'`; counts as dispatched |
 | Dispatch timeout or network error | `outcome: 'timeout'` or `'network_error'`, `upstreamStatus: null`; counts as dispatched; `summary.ok` unaffected by the upstream outcome alone |
@@ -255,12 +263,13 @@ Loads YAML or JSON (`yaml` package, already a gateway dependency). Every violati
 2. Echo `requestCount === 1`; `dispatchCounts` deep-equals `[1, 0, 0]`.
 3. Receipts in `receipts.jsonl` verify individually with `verifyReceipt(r, signer)` and as a chain; `VERIFY.txt` names the same count and head hash as the file.
 4. Route bypass: while the host is up, `POST /action/other` and `GET /action/<name>` return 404 and the receipt count does not change.
-5. Credential mismatch: a bundle for `granted`'s commitment claiming `granted.mask | 128n` returns 401 with reason starting `credential_mismatch`, is receipted, and is not dispatched.
+5. Credential mismatch: with `requiredPermission: WRITE_DATA` pinned, a **fresh** bundle built as `buildDevBundle({ ...granted, permissionBitmask: granted.permissionBitmask | 128n })` (mask `130`, new nonce) scores 100, reaches credential binding, returns 401 with reason starting `credential_mismatch`, is receipted, and is not dispatched. The test pins WRITE_DATA because for `ACCESS_PII` the forged mask would equal the registered one.
 6. Redirect: `echo: { status: 302 }` gives attempt 1 `outcome: 'not_followed'`, `dispatched: true`, `dispatchCounts[0] === 1`.
 7. Permission matrix: for every row in §3.2, `granted` passes policy and `withheld` fails with `policy_denied` (host-level test, no dispatch needed).
 8. Secret exclusion: with `headers: { Authorization: 'Bearer ${T}' }` and `T=sekrit-…`, no file in the run directory and no captured log line contains the value.
 9. Missing env var: `loadTrialConfig` throws `TrialConfigError` naming `T`, and no server was started.
-10. Allow-receipt write failure (audit stubbed to throw) yields host 500, `dispatched: false`, `receiptError`, `summary.ok === false`.
+10. Allow-receipt write failure: the audit's append is made to throw on attempt 1 (an injectable `appendLine` in `audit.ts`, defaulting to `fs.appendFileSync`). Expect host 500, `dispatched: false`, `receiptError` on attempt 1, `receiptError` on attempts 2 and 3 naming the broken chain, zero receipts in the file, `summary.ok === false`, and `VERIFY.txt` not written.
+11. Deny-receipt write failure: the append throws on attempt 2 only. Expect attempt 1 allowed and receipted, attempt 2 denied with `receiptError`, attempt 3 denied with `receiptError` naming the broken chain, exactly one receipt in the file, chain verification of that prefix passing, `summary.ok === false`.
 
 CI: a new job `operator-trial` copied from `verified-actions-demo` (Node 20, `npm ci --no-audit --no-fund`, `npm run trial -- --dry-run`, `npm test`). `scripts/verify-lockfiles.sh` picks up the tracked lockfile automatically; it must `npm ci` cleanly on Linux (regenerate on Linux or in Docker if the `@emnapi/*` optional subtree goes missing, per `tasks/lessons.md`). The `dependency-audit` job lists published packages plus hosted-verify and does not include `verified-actions-demo`; this example follows the same convention and is not added.
 
