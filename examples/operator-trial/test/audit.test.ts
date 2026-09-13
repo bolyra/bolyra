@@ -265,6 +265,7 @@ test('a secret already on disk is caught by the initial scan even when the chain
   });
   audit.record(input('allowed', '1'));
   audit.record(input('denied sekrit-q', '2'));
+  assert.equal(verifyReceiptChain(audit.readReceipts(), { expectedSigner: audit.signerInfo.signer }).ok, false);
   const fin = audit.finalize(finalizeInput({ secrets: ['sekrit-q'] }));
   assert.equal(fin.ok, false);
   assert.equal(fs.existsSync(dir), false);

@@ -229,3 +229,56 @@ test('permission matrix: granted passes, withheld fails, for every name (spec te
     }
   }
 });
+
+async function fixtureWithFetch(fetchImpl: typeof fetch) {
+  const granted = createDemoAgent('granted', requiredMask('WRITE_DATA'));
+  const withheld = createDemoAgent('withheld', withheldMask('WRITE_DATA'));
+  const gatewayConfig = buildGatewayConfig('refund', requiredMask('WRITE_DATA'), granted, withheld);
+  const config: TrialConfig = {
+    action: 'refund',
+    method: 'POST',
+    url: new URL('http://127.0.0.1:9/never-reached'),
+    headers: {},
+    requiredPermission: 'WRITE_DATA',
+    secrets: [],
+  };
+  const runDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'trial-host-fetch-')), 'run');
+  const audit = new Audit({ runDir, gatewayConfig });
+  const host = await startHost({ config, gatewayConfig, audit, fetchImpl });
+  return { host, granted, close: () => host.close() };
+}
+
+test('upstream timeout: dispatched, outcome timeout, status null, counter 1', async () => {
+  const timeoutFetch: typeof fetch = async () => {
+    throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  };
+  const f = await fixtureWithFetch(timeoutFetch);
+  try {
+    assert.equal(await call(f.host, 'refund', buildDevBundle(f.granted).header), 200);
+    const r = await f.host.nextResult();
+    assert.equal(r.decision, 'allow');
+    assert.equal(r.dispatched, true);
+    assert.equal(r.outcome, 'timeout');
+    assert.equal(r.upstreamStatus, null);
+    assert.equal(f.host.dispatchCount, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test('upstream network error: dispatched, outcome network_error, status null, counter 1', async () => {
+  const failingFetch: typeof fetch = async () => {
+    throw new TypeError('fetch failed');
+  };
+  const f = await fixtureWithFetch(failingFetch);
+  try {
+    assert.equal(await call(f.host, 'refund', buildDevBundle(f.granted).header), 200);
+    const r = await f.host.nextResult();
+    assert.equal(r.dispatched, true);
+    assert.equal(r.outcome, 'network_error');
+    assert.equal(r.upstreamStatus, null);
+    assert.equal(f.host.dispatchCount, 1);
+  } finally {
+    await f.close();
+  }
+});

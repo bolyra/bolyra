@@ -207,6 +207,18 @@ export async function startHost(opts: HostOptions): Promise<TrialHost> {
     } catch (err) {
       log(`host error: ${(err as Error).message}`);
       if (!res.headersSent) sendJson(res, 500, { error: 'internal trial host error' });
+      // Always publish, so a waiting nextResult() resolves and the trial
+      // fails instead of hanging.
+      publish({
+        decision: 'deny',
+        reason: 'internal trial host error',
+        httpStatus: 500,
+        dispatched: false,
+        upstreamStatus: null,
+        outcome: 'not_dispatched',
+        receiptId: null,
+        receiptError: `internal trial host error: ${(err as Error).message}`,
+      });
     }
   });
 

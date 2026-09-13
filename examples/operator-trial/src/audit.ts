@@ -159,7 +159,7 @@ export class Audit {
       }
       throw new AuditWriteError(`receipt write failed: ${(err as Error).message}`);
     }
-    this.committedBytes += Buffer.byteLength(line);
+    this.committedBytes = fs.statSync(this.receiptsPath).size;
     return receipt;
   }
 
