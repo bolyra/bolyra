@@ -914,10 +914,88 @@ test('records a verifiable chain and writes the bundle', () => {
   assert.equal(summary.note, 'unsigned observations; signer key is ephemeral');
 });
 
-test('refuses to start in an existing run directory', () => {
+test('refuses to start in an existing run directory (EEXIST reservation)', () => {
   const dir = tmp();
   fs.mkdirSync(dir, { recursive: true });
   assert.throws(() => new Audit({ runDir: dir, gatewayConfig: gatewayConfig() }), /already exists/);
+});
+
+test('constructor write failure removes the directory it reserved', () => {
+  const dir = tmp();
+  assert.throws(
+    () =>
+      new Audit({
+        runDir: dir,
+        gatewayConfig: gatewayConfig(),
+        io: {
+          writeFileSync() {
+            throw new Error('read-only filesystem');
+          },
+        },
+      }),
+    /read-only filesystem/,
+  );
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('VERIFY.txt write failure leaves no ok:true summary behind', () => {
+  const dir = tmp();
+  const audit = new Audit({
+    runDir: dir,
+    gatewayConfig: gatewayConfig(),
+    io: {
+      writeFileSync(p, data) {
+        if (p.endsWith('VERIFY.txt')) throw new Error('disk full');
+        fs.writeFileSync(p, data);
+      },
+    },
+  });
+  audit.record(input('allowed', '1'));
+  const fin = audit.finalize(finalizeInput());
+  assert.equal(fin.ok, false);
+  assert.match(fin.reason ?? '', /disk full/);
+  assert.equal(fs.existsSync(path.join(dir, 'VERIFY.txt')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'summary.json.tmp')), false);
+  const summary = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'));
+  assert.equal(summary.ok, false);
+  assert.match(summary.finalizeError, /disk full/);
+});
+
+test('secret-free corrupted chain: directory retained, no summary, no VERIFY', () => {
+  const dir = tmp();
+  let calls = 0;
+  const audit = new Audit({
+    runDir: dir,
+    gatewayConfig: gatewayConfig(),
+    io: {
+      appendFileSync(p, data) {
+        calls += 1;
+        // Second line: rewrite the reason inside the signed payload so the
+        // signature no longer matches and the chain fails verification.
+        fs.appendFileSync(p, calls === 2 ? data.replace('"reasonCode":"denied"', '"reasonCode":"edited"') : data);
+      },
+    },
+  });
+  audit.record(input('allowed', '1'));
+  audit.record(input('denied', '2'));
+  const fin = audit.finalize(finalizeInput());
+  assert.equal(fin.ok, false);
+  assert.match(fin.reason ?? '', /chain failed verification/);
+  assert.ok(fs.existsSync(dir));
+  assert.equal(fs.existsSync(path.join(dir, 'summary.json')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'VERIFY.txt')), false);
+});
+
+test('a needle that first appears in summary.json is caught by the second scan', () => {
+  const dir = tmp();
+  const audit = new Audit({ runDir: dir, gatewayConfig: gatewayConfig() });
+  audit.record(input('allowed', '1'));
+  const startedAt = '2026-09-13T00:00:00.000Z';
+  // Not present in any file before finalize; written into summary.json by it.
+  const fin = audit.finalize(finalizeInput({ startedAt, secrets: [startedAt] }));
+  assert.equal(fin.ok, false);
+  assert.match(fin.reason ?? '', /summary\.json/);
+  assert.equal(fs.existsSync(dir), false);
 });
 
 test('partial append failure rolls back to the committed prefix and breaks the chain (spec test 11)', () => {
@@ -980,7 +1058,7 @@ test('abort scans and deletes on a hit, keeps a clean directory', () => {
   assert.equal(fs.existsSync(dir), false);
 });
 
-test('chain-verification failure with a secret present still deletes the directory', () => {
+test('a secret already on disk is caught by the initial scan even when the chain is also broken', () => {
   const dir = tmp();
   let calls = 0;
   const audit = new Audit({
@@ -1140,6 +1218,8 @@ export class AuditWriteError extends Error {
 export interface AuditIo {
   appendFileSync(filePath: string, data: string): void;
   truncateSync(filePath: string, length: number): void;
+  /** Used for every artifact write (signer.json, summary.json, VERIFY.txt). */
+  writeFileSync(filePath: string, data: string): void;
 }
 
 export interface AuditOptions {
@@ -1201,16 +1281,16 @@ export class Audit {
   private readonly io: AuditIo;
 
   constructor(opts: AuditOptions) {
-    if (fs.existsSync(opts.runDir)) {
-      throw new Error(`run directory already exists: ${opts.runDir}`);
-    }
     this.runDir = opts.runDir;
     this.receiptsPath = path.join(opts.runDir, 'receipts.jsonl');
     this.io = {
       appendFileSync: opts.io?.appendFileSync ?? ((p, d) => fs.appendFileSync(p, d)),
       truncateSync: opts.io?.truncateSync ?? ((p, l) => fs.truncateSync(p, l)),
+      writeFileSync: opts.io?.writeFileSync ?? ((p, d) => fs.writeFileSync(p, d)),
     };
 
+    // Everything below that can throw happens BEFORE the directory exists,
+    // so a failure here leaves nothing behind.
     this.signer = createGatewayReceiptSigner(opts.gatewayConfig);
     if (!this.signer.ephemeral) {
       throw new Error('trial signer must be ephemeral; do not configure receipts.privateKey');
@@ -1223,9 +1303,29 @@ export class Audit {
       ephemeral: true,
     };
 
-    fs.mkdirSync(opts.runDir, { recursive: true });
-    fs.writeFileSync(path.join(opts.runDir, 'signer.json'), JSON.stringify(this.signerInfo, null, 2) + '\n');
-    fs.writeFileSync(this.receiptsPath, '');
+    // Reserve the run directory atomically: a non-recursive mkdir fails with
+    // EEXIST if anything else created it first, so two runs can never share
+    // (and later delete) the same directory.
+    fs.mkdirSync(path.dirname(opts.runDir), { recursive: true });
+    try {
+      fs.mkdirSync(opts.runDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Error(`run directory already exists: ${opts.runDir}`);
+      }
+      throw err;
+    }
+
+    // From here the directory is ours. If an initial write fails, remove it
+    // before rethrowing so no caller has to clean up an instance that was
+    // never constructed.
+    try {
+      this.io.writeFileSync(path.join(opts.runDir, 'signer.json'), JSON.stringify(this.signerInfo, null, 2) + '\n');
+      this.io.writeFileSync(this.receiptsPath, '');
+    } catch (err) {
+      fs.rmSync(opts.runDir, { recursive: true, force: true });
+      throw err;
+    }
   }
 
   /** Sign and persist one decision. Throws AuditWriteError after rolling back a failed append. */
@@ -1339,17 +1439,38 @@ export class Audit {
     }
 
     const ok = input.attemptsOk && this.fileState === 'ok';
-    this.writeSummary({ ...base, ok, receiptCount: receipts.length, headReceiptHash: chain.headHash });
     const verifyCommand =
       `npx @bolyra/cli@${CLI_VERSION} receipt verify-chain ./receipts.jsonl ` +
       `--signer ${this.signerInfo.signer} --expect-count ${receipts.length} --expect-head ${chain.headHash}`;
-    fs.writeFileSync(path.join(this.runDir, 'VERIFY.txt'), verifyCommand + '\n');
+
+    // Order matters: VERIFY.txt first, the summary last and atomically, so a
+    // retained directory never holds a summary saying ok:true next to a
+    // missing or partial VERIFY.txt. On any write failure remove the partial
+    // artifacts, persist ok:false if we can, and let the outer catch scan.
+    try {
+      this.io.writeFileSync(path.join(this.runDir, 'VERIFY.txt'), verifyCommand + '\n');
+      this.writeSummary({ ...base, ok, receiptCount: receipts.length, headReceiptHash: chain.headHash });
+    } catch (err) {
+      fs.rmSync(path.join(this.runDir, 'VERIFY.txt'), { force: true });
+      fs.rmSync(path.join(this.runDir, 'summary.json'), { force: true });
+      fs.rmSync(path.join(this.runDir, 'summary.json.tmp'), { force: true });
+      try {
+        this.writeSummary({ ...base, ok: false, receiptCount: receipts.length, headReceiptHash: chain.headHash, finalizeError: (err as Error).message });
+      } catch {
+        // No summary at all is acceptable; a wrong one is not.
+      }
+      throw err;
+    }
 
     return this.scanAfter(input.secrets, { ok, receiptCount: receipts.length, headReceiptHash: chain.headHash, verifyCommand });
   }
 
+  /** Atomic publish: write to a temp file, then rename over summary.json. */
   private writeSummary(summary: Record<string, unknown>): void {
-    fs.writeFileSync(path.join(this.runDir, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
+    const target = path.join(this.runDir, 'summary.json');
+    const tmp = target + '.tmp';
+    this.io.writeFileSync(tmp, JSON.stringify(summary, null, 2) + '\n');
+    fs.renameSync(tmp, target);
   }
 
   /** Returns "<file>" naming the first file containing a secret, or null. */
@@ -1764,8 +1885,13 @@ export async function startHost(opts: HostOptions): Promise<TrialHost> {
     dispatchCount += 1; // counted at the moment fetch is invoked
     try {
       const res = await fetchImpl(config.url, init);
-      // Discard the body without buffering it; a read failure classifies below.
-      if (res.body) await res.body.cancel();
+      // Discard the body without buffering it. A discard failure must not
+      // mask the status we already observed.
+      try {
+        if (res.body) await res.body.cancel();
+      } catch {
+        // ignore
+      }
       if (res.status >= 300 && res.status < 400) return { upstreamStatus: res.status, outcome: 'not_followed' };
       return { upstreamStatus: res.status, outcome: 'completed' };
     } catch (err) {
@@ -2201,7 +2327,7 @@ export async function runTrial(opts: RunTrialOptions): Promise<TrialSummary> {
     log(`  action:   ${config.action}  ${config.method} ${config.url.host}${config.url.pathname}${opts.dryRun ? '  (dry run: built-in echo endpoint)' : ''}`);
     log(`  policy:   ${config.action} requires ${config.requiredPermission}`);
     log(`  headers sent: ${Object.keys(config.headers).join(', ') || '(none)'}`);
-    log(`  receipts: ${path.relative(process.cwd(), audit.receiptsPath)}  signer ${audit.signerInfo.signer} (ephemeral, ES256K)`);
+    log(`  receipts: ${displayPath(audit.receiptsPath)}  signer ${audit.signerInfo.signer} (ephemeral, ES256K)`);
     log('');
     log('  Controlled trial: credentials are simulated and registered locally; ZK proof verification is disabled (dev mode).');
     log('  Production Bolyra uses real proofs and a credential registry.');
@@ -2290,6 +2416,19 @@ function toSummaryAttempt(a: AttemptResult): SummaryAttempt {
   return rest;
 }
 
+/**
+ * Path for narration. Compares real paths so a symlinked cwd (macOS /tmp is
+ * /private/tmp) does not print "../../../..."; falls back to the absolute path.
+ */
+function displayPath(p: string): string {
+  try {
+    const rel = path.relative(fs.realpathSync(process.cwd()), fs.existsSync(p) ? fs.realpathSync(p) : p);
+    return rel.startsWith('..') ? p : rel;
+  } catch {
+    return p;
+  }
+}
+
 function narrate(log: (l: string) => void, config: TrialConfig, s: TrialSummary, dryRun: boolean): void {
   const labels: Record<Credential, string> = {
     granted: `credential granted ${config.requiredPermission}`,
@@ -2304,7 +2443,7 @@ function narrate(log: (l: string) => void, config: TrialConfig, s: TrialSummary,
   }
   log('');
   log(`dispatches to your endpoint: ${s.dispatchCounts.join(' / ')}`);
-  if (fs.existsSync(s.runDir)) log(`bundle: ${path.relative(process.cwd(), s.runDir)}/`);
+  if (fs.existsSync(s.runDir)) log(`bundle: ${displayPath(s.runDir)}/`);
   if (s.verifyCommand) {
     log(`verify independently (needs @bolyra/cli ${CLI_VERSION}; the first npx run downloads it). From inside the bundle directory:`);
     log(`  ${s.verifyCommand}`);
@@ -2428,7 +2567,7 @@ Requires Node 20 or newer on macOS or Linux. Windows is untested.
 
 ## What happens
 
-1. The trial mints two simulated credentials and registers them with a local Bolyra host: one granted the permission your action requires, one granted only the tier below it.
+1. The trial mints two simulated credentials and registers them with a local Bolyra host: one granted the permission your action requires, one granted only the next lower tier (or nothing, for `READ_DATA`).
 2. **Attempt 1** presents the granted credential. The host verifies it, signs an allow receipt, then dispatches your configured request once. You see the upstream status.
 3. **Attempt 2** presents the withheld credential. Policy denies it (403). Nothing is dispatched. A deny receipt is signed.
 4. **Attempt 3** replays attempt 1's exact proof bundle. Nonce replay protection denies it (401). Nothing is dispatched. A deny receipt is signed.
@@ -2447,9 +2586,11 @@ Requires Node 20 or newer on macOS or Linux. Windows is untested.
 
 Unknown keys are rejected. Redirects are not followed. There are no retries. The upstream timeout is 15 seconds.
 
+`--dry-run --config ./trial.yaml` keeps your headers and permission but replaces the URL with the built-in echo endpoint, so your resolved `${ENV}` values are still sent, to loopback only. `--out-dir <dir>` changes where bundles go (default `./trial-out`).
+
 ## The bundle
 
-`trial-out/<timestamp>/`:
+`trial-out/<timestamp>/` (the timestamp includes milliseconds, e.g. `2026-09-13T15-40-12-345Z`):
 
 - `receipts.jsonl`: three ES256K-signed, hash-chained receipts (allow and both denies).
 - `signer.json`: the ephemeral signer for this run.
@@ -2541,7 +2682,9 @@ verify independently:
     <li>Your configured headers and body are sent to your endpoint, and nowhere else. They never enter the bundle. No results are submitted to Bolyra automatically.</li>
   </ul>
 
-  <p>If it ran against an endpoint you own, email the bundle directory to <a href="mailto:hello@bolyra.ai">hello@bolyra.ai</a>. Full details: <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial">examples/operator-trial</a> (that link resolves once the branch is merged; the page deploys after merge).</p>
+  <p>If it ran against an endpoint you own, email the bundle directory to <a href="mailto:hello@bolyra.ai">hello@bolyra.ai</a>. Full details: <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial">examples/operator-trial</a>.</p>
+  <!-- The examples link resolves once the branch is merged; the page deploys after merge. -->
+
 
   <footer>Bolyra (ZKProva Inc.) — Apache-2.0.</footer>
 </main>
