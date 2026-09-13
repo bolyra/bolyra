@@ -123,8 +123,13 @@ function validateClaim(c) {
       if (!c[k]) errors.push(`missing field ${k}`);
     }
     const run = c.run || {};
-    if (!/@sha256:[0-9a-f]{64}$/.test(run.image || '')) {
-      errors.push('run.image must be digest-pinned (image@sha256:<64-hex>)');
+    // Anchored at BOTH ends (spec: ^node:[^@]+@sha256:[0-9a-f]{64}$). This string
+    // is placed in docker's argv before the first positional; a suffix-only check
+    // let "--mount=type=bind,source=/,target=/x@sha256:<64-hex>" through, which
+    // docker parses as a writable bind mount of the host with run.command[0] as
+    // the (unpinned) image.
+    if (!/^node:[^@\s]+@sha256:[0-9a-f]{64}$/.test(run.image || '')) {
+      errors.push('run.image must be a digest-pinned node image (node:<tag>@sha256:<64-hex>)');
     }
     if (!Array.isArray(run.command) || !run.command.length) {
       errors.push('run.command must be a non-empty argv array');
@@ -255,7 +260,8 @@ function replayExternalSuite(c, keep) {
     console.log(`running suite in ${c.run.image.split('@')[0]} (network ${c.run.network})…`);
     const run = spawnSync(
       'docker',
-      ['run', '--rm', '--network', c.run.network, '-v', `${implDir}:/kit:ro`, '-w', '/kit', c.run.image, ...c.run.command],
+      // `--` ends option parsing: whatever run.image holds, docker treats it as the image.
+      ['run', '--rm', '--network', c.run.network, '-v', `${implDir}:/kit:ro`, '-w', '/kit', '--', c.run.image, ...c.run.command],
       { encoding: 'utf8' }
     );
     const got = validateExternalSuiteOutput(run, c);
@@ -442,8 +448,8 @@ function main() {
       if (id.startsWith('-')) return fail(`--list: id must not start with '-': ${JSON.stringify(id)}`);
       if (seen.has(id)) return fail(`--list: duplicate id ${id}`);
       seen.add(id);
-      // Stricter than validateClaim on purpose: a SUPPLIED empty/null kind is an
-      // error here, because the workflow branches on this value.
+      // Same rule as validateClaim (kindOf): a SUPPLIED empty/null kind is an
+      // error, and the workflow branches on this value.
       const kind = kindOf(c);
       if (!KINDS.has(kind)) return fail(`--list: unknown kind ${kind} (claim ${id})`);
       // Same boundary as id: this crosses into the same TSV consumer, so it
