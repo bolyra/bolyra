@@ -99,6 +99,47 @@ jobs:
       - run: npm test -- --testPathIgnorePatterns='e2e'
         working-directory: integrations/mcp
 
+  gateway-tests:
+    name: Gateway — typecheck & test (source integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # The gateway's jest config maps @bolyra/sdk and @bolyra/mcp to sibling
+      # SOURCE and @bolyra/receipts to its built dist, so this job is the one
+      # place gateway + mcp + receipts are exercised together from the tree.
+      # (The verified-actions demo runs against PUBLISHED packages on purpose
+      # and does not cover source changes here.)
+      - name: Build local @bolyra/sdk
+        run: cd sdk && npm ci && npm run build
+
+      - name: Build local @bolyra/receipts
+        run: cd integrations/receipts && npm install && npm run build
+
+      - name: Build local @bolyra/mcp with file:// SDK + receipts
+        working-directory: integrations/mcp
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';p.dependencies['@bolyra/receipts']='file:../receipts';fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+          rm -f package-lock.json
+          npm install
+          npm run build
+
+      - name: Install gateway with file:// SDK + receipts + mcp
+        working-directory: integrations/gateway
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies['@bolyra/sdk']='file:../../sdk';p.dependencies['@bolyra/receipts']='file:../receipts';p.dependencies['@bolyra/mcp']='file:../mcp';fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+          rm -f package-lock.json
+          npm install
+
+      - run: npx tsc --noEmit
+        working-directory: integrations/gateway
+      - run: npx jest --ci
+        working-directory: integrations/gateway
+
   payment-protocols-tests:
     name: Payment Protocols — typecheck & test
     runs-on: ubuntu-latest
