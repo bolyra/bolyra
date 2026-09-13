@@ -1,11 +1,5 @@
 # Submitting a conformance claim
 
-> **Status: not yet accepting submissions.** The isolated dispatch workflow
-> this document describes (spec §3.5) has not landed. Until it does, a pull
-> request of this shape will pass its offline checks but will not be replayed
-> or merged. The process is published now so it can be reviewed before it is
-> live; this notice is removed in the pull request that enables it.
-
 This is the maintainer-operated path (v1). Nothing on a pull request executes
 third-party code; the maintainer replays your exact commit by hand before
 merging. It relies on maintainer discipline, stated here so nobody mistakes it
