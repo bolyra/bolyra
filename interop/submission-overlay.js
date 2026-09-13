@@ -68,7 +68,21 @@ const c = matches[0];
 const kind = c.kind === undefined ? 'bolyra-suite' : c.kind;
 if (!KINDS.has(kind)) die(`unknown kind ${kind} (claim ${claimId})`);
 
-// 2. Adapter (bolyra-suite only): pathname allowlist, regular blob, and never
+// 2. The base registry, and the duplicate-id refusal. This runs BEFORE any
+//    adapter handling: re-using an existing claim id implies re-using that
+//    id's already-materialized adapter path, so an adapter-exists check first
+//    would pre-empt this one and report the wrong reason.
+requireRealDirs(REGISTRY);
+const registryPath = path.join(ROOT, REGISTRY);
+let baseReg;
+try { baseReg = JSON.parse(fs.readFileSync(registryPath, 'utf8')); }
+catch { die(`${REGISTRY} in the working tree is not valid JSON`); }
+if (!baseReg || !Array.isArray(baseReg.claims)) die(`${REGISTRY} in the working tree: registry.claims must be an array`);
+if (baseReg.claims.some((b) => b && b.id === claimId)) {
+  die(`claim ${claimId} already exists at the base; submissions may only ADD a claim (a re-verification is a NEW row with a new id)`);
+}
+
+// 3. Adapter (bolyra-suite only): pathname allowlist, regular blob, and never
 //    a replacement of an adapter that already exists at the base.
 let adapter = '';
 let adapterBytes = null;
@@ -82,12 +96,38 @@ if (kind === 'bolyra-suite') {
   adapterBytes = gitRaw('cat-file', '-p', `${ref}:${rel}`);
 }
 
-// 3. Materialize as regular files (mode 0644): the adapter is created
-//    exclusively (wx: fails if anything appeared meanwhile); the registry is
-//    written to a temp file and renamed over (never follows a planted link).
-requireRealDirs(REGISTRY);
-if (adapterBytes) fs.writeFileSync(path.join(ROOT, 'interop', adapter), adapterBytes, { mode: 0o644, flag: 'wx' });
-const tmp = path.join(ROOT, 'interop', `.claims.json.${process.pid}.tmp`);
-fs.writeFileSync(tmp, registryBytes, { mode: 0o644, flag: 'wx' });
-fs.renameSync(tmp, path.join(ROOT, REGISTRY));
+// 4. Merge ONLY the selected claim into the base registry read in step 2.
+//    Installing the submitted file wholesale would let a submission rewrite
+//    OTHER claims' fields — e.g. another claim's `adapter` — and the
+//    workflow's unscoped `node interop/replay.js --check` reads every claim's
+//    adapter path. The written registry is therefore NOT byte-identical to the
+//    submitted blob; nothing pins its bytes, and the maintainer reviews the PR
+//    diff separately.
+baseReg.claims.push(c);
+const mergedBytes = Buffer.from(JSON.stringify(baseReg, null, 2) + '\n', 'utf8');
+
+// 5. Write. Everything above is validation and serialisation, so the only
+//    failures here are filesystem errors. Record ownership BEFORE writing and
+//    remove only what THIS invocation created — never a pre-existing file,
+//    which is why a `wx` (EEXIST) failure cleans up nothing. `die()` exits the
+//    process, so it is called AFTER the try/catch, never inside it.
+const created = [];
+const tmpPath = path.join(ROOT, 'interop', `.claims.json.${process.pid}.tmp`);
+let failure = null;
+try {
+  if (adapterBytes) {
+    const fd = fs.openSync(path.join(ROOT, 'interop', adapter), 'wx', 0o644);
+    created.push(path.join(ROOT, 'interop', adapter));
+    try { fs.writeSync(fd, adapterBytes); } finally { fs.closeSync(fd); }
+  }
+  const fd = fs.openSync(tmpPath, 'wx', 0o644);
+  created.push(tmpPath);
+  try { fs.writeSync(fd, mergedBytes); } finally { fs.closeSync(fd); }
+  fs.renameSync(tmpPath, registryPath);  // replaces the link itself: a planted symlink is not followed
+  created.length = 0;                    // rename consumed the temp; the installed registry now references the adapter
+} catch (e) {
+  failure = e;
+  for (const leftover of created) { try { fs.unlinkSync(leftover); } catch { /* best effort */ } }
+}
+if (failure) die(`${failure.code || 'ERROR'}: ${failure.message}`);
 process.stdout.write(`${claimId}\t${kind}\t${adapter}\n`);

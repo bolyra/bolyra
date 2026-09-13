@@ -139,3 +139,41 @@ test('rejections: unknown claim, bad adapter pathname, unknown kind, non-commit 
   r = run(repo2, ['--ref', s2, '--claim', 'base@1']);
   assert.strictEqual(r.status, 1); assert.match(r.stderr, /claims\.json is not valid JSON/);
 });
+
+test('sibling claims come from the BASE registry, never from the submission', () => {
+  // The submission adds new@2 AND tampers base@1's adapter with a traversal path.
+  // Only new@2 may be taken; base@1 must survive exactly as the base had it.
+  const NEW = { ...BASE_CLAIM, id: 'new@2', adapter: 'adapters/new.ts' };
+  const TAMPERED_BASE = { ...BASE_CLAIM, adapter: '../../../../etc/passwd' };
+  const { repo, subSha } = makeRepo((r) => {
+    writeRegistry(r, [TAMPERED_BASE, NEW]);
+    fs.writeFileSync(path.join(r, 'interop', 'adapters', 'new.ts'), '// new adapter\n');
+  });
+  const r = run(repo, ['--ref', subSha, '--claim', 'new@2']);
+  assert.strictEqual(r.status, 0, r.stderr);
+  const reg = JSON.parse(fs.readFileSync(path.join(repo, 'interop', 'claims.json'), 'utf8'));
+  assert.deepStrictEqual(reg.claims.map((x) => x.id), ['base@1', 'new@2']);
+  assert.deepStrictEqual(reg.claims[0], BASE_CLAIM, 'base@1 must be the BASE entry, not the submitted one');
+  assert.strictEqual(reg.claims[1].id, 'new@2');
+});
+
+test('selecting a claim that already exists at the base is refused', () => {
+  const { repo, subSha } = makeRepo((r) => writeRegistry(r, [BASE_CLAIM, { ...EXT_CLAIM }]));
+  const r = run(repo, ['--ref', subSha, '--claim', 'base@1']);
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /already exists at the base; submissions may only ADD a claim/);
+});
+
+test('no temp file survives, on success or on refusal', () => {
+  const leftovers = (repo) => fs.readdirSync(path.join(repo, 'interop')).filter((f) => f.startsWith('.claims.json.'));
+  const NEW = { ...BASE_CLAIM, id: 'new@2', adapter: 'adapters/new.ts' };
+  const ok = makeRepo((r) => {
+    writeRegistry(r, [BASE_CLAIM, NEW]);
+    fs.writeFileSync(path.join(r, 'interop', 'adapters', 'new.ts'), '// new adapter\n');
+  });
+  assert.strictEqual(run(ok.repo, ['--ref', ok.subSha, '--claim', 'new@2']).status, 0);
+  assert.deepStrictEqual(leftovers(ok.repo), []);
+  const bad = makeRepo((r) => writeRegistry(r, [BASE_CLAIM, { ...EXT_CLAIM, id: 'k@4', kind: 'mystery' }]));
+  assert.strictEqual(run(bad.repo, ['--ref', bad.subSha, '--claim', 'k@4']).status, 1);
+  assert.deepStrictEqual(leftovers(bad.repo), []);
+});
