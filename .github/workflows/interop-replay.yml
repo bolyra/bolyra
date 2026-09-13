@@ -1,16 +1,55 @@
 name: Interop replay
 
-# Mechanically re-verify every published external interop claim at its pins
-# (interop/claims.json). Manual dispatch only: this executes third-party host
-# code (pinned, --ignore-scripts) and needs network access to external repos,
-# so it is not part of per-push CI. Run before citing a claim in a new public
-# document and after any conformance-runner change.
+# Mechanically re-verify published external interop claims at their pins
+# (interop/claims.json). Manual dispatch only: this executes third-party
+# code (pinned, --ignore-scripts) and needs network access to external repos.
+#
+# Trust model (spec docs/superpowers/specs/2026-09-10-public-conformance-claims-design.md §3.3 step 4, §3.5):
+#   * The harness is the commit this workflow file came from (github.sha).
+#     Production dispatches use --ref main; the job prints the ref it ran
+#     from. A submission's data is OVERLAID from `ref` as git blobs (never a
+#     checkout); harness, runner, and every other adapter stay at github.sha.
+#   * bolyra-suite  -> replay.js runs INSIDE a container: workspace mounted
+#     READ-ONLY, scratch on a tmpfs, no runner environment.
+#   * external-suite-> replay.js runs on the VM under env -i (it must drive
+#     the host docker CLI); the implementer's code runs only inside
+#     replay.js's own `docker run --network none` child.
+#   * The protected tree is fingerprinted after the overlay and re-verified
+#     after EVERY claim, so one claim cannot alter what a later one executes.
+#   Runner tokens (GITHUB_TOKEN, ACTIONS_RUNTIME_TOKEN) are never visible to
+#   third-party code. workflow_dispatch retains cache WRITE access, which is
+#   why this matters even with cache-mode none.
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Full 40-hex commit SHA to overlay interop/claims.json (+ one new adapter) FROM. Requires `claim`. Empty = registry as committed at the harness commit.'
+        required: false
+        default: ''
+      claim:
+        description: 'Claim id to replay. Required when `ref` is set. Empty = all claims.'
+        required: false
+        default: ''
+      nonce:
+        description: 'Correlation id set by automation so it can find exactly this run (optional; shown in the run name, never executed)'
+        required: false
+        default: ''
+
+# The nonce makes each dispatch uniquely identifiable (see dispatch_and_wait).
+run-name: Interop replay ${{ inputs.nonce }}
 
 # Third-party code executes in this job; give it nothing to steal.
 permissions:
   contents: read
+
+env:
+  # Full Debian node:20 (NOT slim/alpine: git is required). Same digest that
+  # interop/claims.json pins for the StillOS run — re-pin both deliberately.
+  REPLAY_IMAGE: node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5
+  REF: ${{ inputs.ref }}
+  CLAIM: ${{ inputs.claim }}
+  HARNESS_SHA: ${{ github.sha }}
+  HARNESS_REF: ${{ github.ref_name }}
 
 jobs:
   replay:
@@ -19,7 +58,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          # git archive at historical suite pins needs full history
+          # The harness is exactly the commit this workflow came from.
+          ref: ${{ github.sha }}
+          # git archive/show at historical suite pins needs full history
           fetch-depth: 0
           # do not leave the checkout token on disk where implementer
           # lifecycle code could read it
@@ -30,8 +71,63 @@ jobs:
           node-version: 20
           package-manager-cache: false
 
-      - name: Offline registry + pin check
+      - name: Harness provenance
+        run: |
+          echo "harness commit: $HARNESS_SHA (ref $HARNESS_REF)"
+          if [ "$HARNESS_REF" != "main" ]; then echo "::warning::harness is not main — acceptable for pre-merge proofs only"; fi
+
+      # The verifier must not live in the tree it verifies: copy it out first.
+      - name: Stage the integrity verifier outside the workspace
+        run: cp interop/harness-integrity.js "$RUNNER_TEMP/harness-integrity.js"
+
+      - name: Overlay submission (data only)
+        if: env.REF != ''
+        run: |
+          set -euo pipefail
+          [ -n "$CLAIM" ] || { echo "::error::ref requires claim (a submission is exactly one claim)"; exit 1; }
+          # Validate BEFORE git sees the value; `--` ends option parsing.
+          [[ "$REF" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::ref must be a full 40-hex commit sha"; exit 1; }
+          git fetch -q -- origin "$REF" || git fetch -q -- origin "+refs/pull/*/head:refs/remotes/origin/pr/*"
+          node interop/submission-overlay.js --ref "$REF" --claim "$CLAIM" | tee "$RUNNER_TEMP/overlay.tsv"
+          echo "overlaid:"; git status --porcelain -- interop
+
+      - name: Offline registry + pin check (base code only)
         run: node interop/replay.js --check
 
-      - name: Replay all claims
-        run: node interop/replay.js
+      - name: Select claims
+        run: |
+          set -euo pipefail
+          if [ -n "$CLAIM" ]; then node interop/replay.js --list --claim "$CLAIM" > "$RUNNER_TEMP/plan.tsv"
+          else node interop/replay.js --list > "$RUNNER_TEMP/plan.tsv"; fi
+          [ -s "$RUNNER_TEMP/plan.tsv" ] || { echo "::error::no claims selected"; exit 1; }
+          echo "selected:"; cat "$RUNNER_TEMP/plan.tsv"
+
+      - name: Snapshot protected tree (baseline includes the overlay)
+        run: env -i PATH="$PATH" node "$RUNNER_TEMP/harness-integrity.js" snapshot "$RUNNER_TEMP/integrity.json" --root "$PWD"
+
+      - name: Replay claims under per-kind isolation
+        run: |
+          set -euo pipefail
+          failed=0; total=0
+          while IFS=$'\t' read -r id kind adapter; do
+            total=$((total+1))
+            echo "::group::replay $id ($kind)"
+            case "$kind" in
+              bolyra-suite)
+                docker run --rm \
+                  --user "$(id -u):$(id -g)" -e HOME=/tmp -e CLAIM_ID="$id" \
+                  -v "$PWD:/work:ro" --tmpfs /tmp:rw,exec -w /work \
+                  "$REPLAY_IMAGE" sh -c 'git config --global --add safe.directory /work && node interop/replay.js --claim "$CLAIM_ID"' </dev/null \
+                  || failed=$((failed+1)) ;;
+              external-suite)
+                env -i PATH="$PATH" HOME="$HOME" CLAIM_ID="$id" \
+                  node interop/replay.js --claim "$id" </dev/null \
+                  || failed=$((failed+1)) ;;
+              *) echo "::error::unknown kind '$kind' for $id"; exit 1 ;;
+            esac
+            echo "::endgroup::"
+            # Verify from the staged copy, scrubbed env, after EVERY claim (failed ones too).
+            env -i PATH="$PATH" node "$RUNNER_TEMP/harness-integrity.js" verify "$RUNNER_TEMP/integrity.json" --root "$PWD"
+          done < "$RUNNER_TEMP/plan.tsv"
+          echo "$((total-failed))/$total claims reproduced"
+          [ "$failed" -eq 0 ]
