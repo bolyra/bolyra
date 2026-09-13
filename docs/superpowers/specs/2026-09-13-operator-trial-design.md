@@ -1,7 +1,7 @@
 # Operator authorization trial — design
 
 **Date:** 2026-09-13
-**Status:** design, Codex-ruled (session 01a098bb), founder-accepted; revision 4 after three spec-review rounds
+**Status:** design, Codex-ruled (session 01a098bb), founder-accepted; revision 5. Spec review: subagent reviewer approved rev 2; Codex approved rev 4 (session 01a09b7b), its final advisory applied here.
 **Location:** `examples/operator-trial/` (private example, not published)
 **Budget:** 20 hours across two weeks of evenings. If it runs long, narrow the supported environments; do not extend the schedule.
 **Supported environment (initial):** macOS and Linux, Node 20 or newer. Windows is untested and not claimed.
@@ -199,7 +199,7 @@ Copied in shape from `examples/verified-actions-demo/src/audit.ts`, trimmed to w
 - Run directory `trial-out/<ISO timestamp, colons replaced>/`, created fresh; the run refuses to start if it already exists.
 - `finalize(results, meta)`:
   0. Secret scan first, on whatever has been written so far (see step 4). It runs on every path that retains artifacts, including a chain-verification failure in step 1, so a kept directory is never an unscanned directory.
-  1. Read back `receipts.jsonl`. **Zero receipts** (or `fileState: 'unverifiable'`): skip chain verification, write `summary.json` with `ok: false`, `receiptCount: 0`, `headReceiptHash: null`, and no `VERIFY.txt`; return a failure. Otherwise run `verifyReceiptChain(receipts, { expectedSigner, expectedCount: receipts.length })`; on failure, write nothing else, keep the directory, and return a failure.
+  1. If `fileState === 'unverifiable'`, do not parse `receipts.jsonl` at all (a failed truncate can leave a malformed trailing line); write `summary.json` with `ok: false`, `receiptCount: null`, `headReceiptHash: null`, `fileState`, and no `VERIFY.txt`; return a failure. Otherwise read back `receipts.jsonl`. **Zero receipts**: skip chain verification, write `summary.json` with `ok: false`, `receiptCount: 0`, `headReceiptHash: null`, and no `VERIFY.txt`; return a failure. Otherwise run `verifyReceiptChain(receipts, { expectedSigner, expectedCount: receipts.length })`; on failure, write nothing else, keep the directory, and return a failure.
   2. Write `summary.json`:
      ```
      { trialVersion, packages: { gateway, mcp, receipts }, dryRun, ok,
@@ -271,6 +271,7 @@ Loads YAML or JSON (`yaml` package, already a gateway dependency). Every violati
 10. Allow-receipt write failure: the audit's append is made to throw on attempt 1 (an injectable `appendLine` in `audit.ts`, defaulting to `fs.appendFileSync`). Expect host 500, `dispatched: false`, `receiptError` on attempt 1, `receiptError` on attempts 2 and 3 naming the broken chain, zero receipts in the file, `summary.json` with `ok: false` and `receiptCount: 0`, and `VERIFY.txt` not written.
 11. Deny-receipt partial write failure: on attempt 2 the injected append writes half the line to the file and then throws. Expect attempt 1 allowed and receipted, attempt 2 denied with `receiptError`, attempt 3 denied with `receiptError` naming the broken chain, the file truncated back to exactly one complete receipt line, chain verification of that prefix passing, `VERIFY.txt` naming count 1, `summary.ok === false`.
 12. Bundle-less denial: `Authorization: Bolyra <base64 of "{}">` returns 401, is receipted through the anonymous shape (`credentialCommitment: '0'`), and is not dispatched.
+13. Partial append plus failed truncate: on attempt 2 the injected append writes half a line and throws, and the injected `truncate` also throws. Expect `fileState: 'unverifiable'`, `summary.json` written with `ok: false`, `receiptCount: null`, no `VERIFY.txt`, and no JSON parse error surfaced from `finalize`.
 
 CI: a new job `operator-trial` copied from `verified-actions-demo` (Node 20, `npm ci --no-audit --no-fund`, `npm run trial -- --dry-run`, `npm test`). `scripts/verify-lockfiles.sh` picks up the tracked lockfile automatically; it must `npm ci` cleanly on Linux (regenerate on Linux or in Docker if the `@emnapi/*` optional subtree goes missing, per `tasks/lessons.md`). The `dependency-audit` job lists published packages plus hosted-verify and does not include `verified-actions-demo`; this example follows the same convention and is not added.
 
