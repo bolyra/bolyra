@@ -171,7 +171,7 @@ test('external-suite: FAIL marker on stderr must throw despite green stdout', ()
 // anything. Tests pass --check too: on a harness that ignores --list, --check
 // runs OFFLINE (no third-party code) and the output format mismatch fails the
 // test; on the real harness --list returns before --check.
-const { spawnSync } = require('node:child_process');
+const { spawnSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -285,4 +285,69 @@ test('REPLAY_CLAIMS_PATH is ignored unless --list is present (a full run never r
   const realClaims = require('./claims.json').claims;
   assert.ok(realClaims.length > 0, 'fixture precondition: interop/claims.json must have at least one claim');
   for (const c of realClaims) assert.ok(r.stdout.includes(c.id), `expected real claim id ${c.id} in stdout: ${r.stdout}`);
+});
+
+// --- Invariants that keep the repo tree OUT of the load surface during a claim.
+// harness-integrity.js protects interop/ spec/ landing/ .github/ and .git/ and
+// nothing else, which is only sound because replay.js materializes the suite from
+// a pinned commit into a tmpdir instead of executing anything in the repo. These
+// three tests pin that. They are behavioural where they can be: a source-shaped
+// assertion is what already failed open once here.
+
+test('replay.js archives exactly the spec pathspec, from a pinned commit, into a tmpdir', () => {
+  const repo = path.join(__dirname, '..');
+  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  const claim = JSON.parse(fs.readFileSync(path.join(repo, 'interop', 'claims.json'), 'utf8'))
+    .claims.find((c) => c.suite && c.suite.commit);
+  assert.ok(claim, 'no bolyra-suite claim in the registry to exercise');
+
+  // git is shimmed, not mocked: the implementer clone is stubbed so the test needs
+  // no network, and everything else passes through to the real binary so the
+  // materialized-digest check still runs for real.
+  const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'replay-shim-'));
+  const log = path.join(shim, 'argv.log');
+  fs.writeFileSync(path.join(shim, 'git'), `#!/bin/sh
+printf '%s\n' "$*" >> ${log}
+case "$*" in
+  *" init "*|*" init"|*"remote add"*|*" fetch "*|*" checkout "*) exit 0 ;;
+  *"rev-parse HEAD"*) echo "${claim.implementer.commit}"; exit 0 ;;
+esac
+exec ${realGit} "$@"
+`, { mode: 0o755 });
+  fs.writeFileSync(path.join(shim, 'npm'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });   // stop before the network
+
+  spawnSync(process.execPath, [path.join(repo, 'interop', 'replay.js'), '--claim', claim.id],
+    { encoding: 'utf8', env: { PATH: `${shim}:${process.env.PATH}`, HOME: os.tmpdir() } });
+
+  const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
+  const archives = lines.filter((l) => / archive /.test(l));
+  assert.strictEqual(archives.length, 1, `expected exactly one git archive, got:\n${archives.join('\n')}`);
+  const argv = archives[0].split(' ');
+  assert.deepStrictEqual(argv.slice(0, 2), ['-C', repo], 'archive must read from this repo');
+  assert.deepStrictEqual(argv.slice(2), ['archive', claim.suite.commit, 'spec'],
+    'archive must take the pinned commit and EXACTLY the spec pathspec — any additional pathspec ' +
+    'puts repo content into the runner tree, which harness-integrity does not protect');
+});
+
+test('replay.js loads no non-builtin module (so it has no node_modules surface)', () => {
+  const entry = require.resolve('./replay.js');
+  require(entry);
+  const loaded = require.cache[entry].children.map((c) => c.filename);
+  assert.deepStrictEqual(loaded, [],
+    `replay.js must require builtins only; it loaded: ${loaded.join(', ')}`);
+});
+
+test('ROOT is only ever passed to git -C, never used to build an executed path', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'replay.js'), 'utf8');
+  const uses = src.split('\n')
+    .map((line, i) => [i + 1, line])
+    .filter(([, line]) => /\bROOT\b/.test(line));
+  assert.strictEqual(uses.length, 3,
+    `pinned at 3 uses of ROOT (1 definition + 2 git -C); found ${uses.length}. A new use must be ` +
+    `reviewed against harness-integrity's protected set:\n${uses.map(([n, l]) => `  ${n}: ${l.trim()}`).join('\n')}`);
+  const [[, def], ...rest] = uses;
+  assert.match(def, /^const ROOT = path\.resolve\(__dirname, '\.\.'\);$/);
+  for (const [n, line] of rest) {
+    assert.match(line, /execFileSync\('git', \['-C', ROOT,/, `line ${n}: ROOT must only reach git -C`);
+  }
 });
