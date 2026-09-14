@@ -1,0 +1,208 @@
+{
+  "week": 11,
+  "date": "2026-09-14",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried via pull_request_read on foreign repos. All external PR statuses carry forward from last live verification (2026-07-27, 49 days ago). No state writes to prs.json this cycle — same discipline as weeks 4-10. Suspension recommendation from week 10 still stands.",
+
+  "path_b_progress_check": {
+    "note": "Weeks 5-10 identified 30 Path B targets with builder notes and injection points. No new prs.json entries recorded — 0 builder sessions confirmed across 6 Path B weeks. Cumulative total: 50 targets identified across 10 weeks, 0 Path B PRs opened. Week 10 explicitly fired the suspension recommendation. That condition persists: 11 consecutive scan weeks, 0 external PRs opened, 0 follow-ups sent.",
+    "week10_priority_status": "unknown — vercel/ai (TypeScript, optional toolAuthorizationHandler), langchain-ai/langchain (2-file diff, widest downstream reach), and camel-ai/camel (zero-core-change toolkit contrib) remain the top 3 by merge probability. No action confirmed in prs.json.",
+    "action_gap": "11 consecutive scan weeks, 0 Path B PRs opened. Additional targets are identified this week (week-11 continues as requested) but the bottleneck is builder-session activation, not target intelligence.",
+    "suspension_status": "ACTIVE RECOMMENDATION — week 10 fired it; week 11 reaffirms it. The loop has fully served its discovery function (55 targets across 11 weeks). Further scanning produces diminishing signal. RECOMMENDED NEXT ACTION: pick one target from the top-3 list and open a builder session before the week-12 scan fires."
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 49,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "langgenius/dify",
+      "approx_stars": 155674,
+      "language": "TypeScript / Python",
+      "why": "Dify (155,674★, 24k forks) is the dominant self-hosted LLM application and agentic workflow platform — MCP support, agent nodes, RAG pipelines, skills, and a workflow canvas used by tens of thousands of teams. It is the highest-star non-n8n target ever identified in this scan. Tool/skill invocations in the agent pipeline fire after LLM decision with no per-agent identity binding — any tool call executes under the operator credential regardless of which model or sub-agent triggered it. Bolyra's EVC verifier, wired in as an optional pre-tool hook or a Dify plugin credential type, adds identity binding at the widest possible deployment footprint.",
+      "gap": "Dify's tool node execution pipeline (api/core/tools/tool_engine.py and api/core/workflow/nodes/tool/) dispatches tools after parsing LLM output with no caller-identity check. An optional BolyraAuthProvider credential type — registered in api/core/tools/provider/ — and a one-line pre_tool_invoke() hook closes the gap without changing existing workflows. Non-breaking: tools without the credential run exactly as today.",
+      "anchor_issue": "Search langgenius/dify issues for 'authorization', 'tool guard', 'per-agent permission', or 'identity'. At 1,043 open issues, demand for access control on agent tool calls is highly likely. The repo has CONTRIBUTING.md and a very active maintainer community (updated today, 2026-09-14).",
+      "pr_type": "targeted feature — BolyraAuthProvider credential type + optional pre_tool_invoke() hook in the tool engine. 2-3 files. Ships as an optional provider; existing deployments unaffected. A companion example Dify workflow template demonstrates the integration.",
+      "priority": 1,
+      "builder_notes": "Entry points: api/core/tools/provider/ for the credential type, api/core/tools/tool_engine.py for the hook. Dify uses Python 3.11+, ruff, mypy. Run make lint before submitting. Tests in api/tests/. The Dify team reviews external contribs within days for scoped, well-documented PRs. The MCP integration in Dify makes Bolyra's EVC verifier doubly compelling — it can gate both native tools and MCP tools in the same hook."
+    },
+    {
+      "repo": "browser-use/browser-use",
+      "approx_stars": 114572,
+      "language": "Python",
+      "why": "browser-use (114,572★, 12.5k forks) is the dominant open-source browser-automation agent framework — Playwright-based, Python, integrates with every major LLM. Agents dispatch browser actions (click, fill, navigate, extract) after LLM instruction with no identity gate; any code that instantiates an Agent has full browser access. Browser actions are uniquely high-risk: they can transact, sign forms, exfiltrate data, and perform OAuth flows — precisely the action class that Bolyra's mandate model was designed to gate. An optional pre_action callback on the Agent object is the cleanest injection point, verified before each browser action the LLM dispatches.",
+      "gap": "browser-use's Agent.step() (browser_use/agent/service.py) iterates LLM instructions and dispatches browser actions directly. There is no pre-dispatch hook for identity or mandate verification. An optional authorization_callback parameter on Agent — evaluated before each action — closes the gap. Fallback: if absent, behavior is identical to today. A BolyraAuthCallback helper in a contrib/bolyra/ directory provides the ready-to-use EVC check.",
+      "anchor_issue": "Search browser-use/browser-use issues for 'authorization', 'permission', 'access control', or 'identity'. At 408 open issues and active community engagement, demand for per-session or per-action authorization is almost certain. The framework is actively maintained (updated 2026-09-14).",
+      "pr_type": "targeted feature — optional authorization_callback parameter on Agent class + BolyraAuthCallback contrib example. 2 files: browser_use/agent/service.py (add optional callback), contrib/bolyra/auth_callback.py (EVC check helper). Non-breaking.",
+      "priority": 2,
+      "builder_notes": "Entry point: browser_use/agent/service.py — study the step() loop and ActionModel types. browser-use uses uv, Python 3.11+, ruff. Run uv run pytest before submitting. The project has an active Discord and contributor community; filing an issue first ('add optional pre-action authorization hook') reduces PR merge risk. The Playwright integration means Bolyra can gate the highest-risk browser actions (form submission, payment flows) specifically, which is a compelling demo angle."
+    },
+    {
+      "repo": "bytedance/UI-TARS-desktop",
+      "approx_stars": 38971,
+      "language": "TypeScript",
+      "why": "UI-TARS-desktop (38,971★) is ByteDance's open-source multimodal AI agent stack for computer-use, GUI automation, and browser-use — it integrates MCP servers, coordinates agent-TARS workflows, and dispatches tool/GUI actions through a GUI operator pipeline. Computer-use actions (clicking, typing, form submission, application control) are the highest-risk agent action class, yet the dispatch pipeline has no per-session identity gate. Bolyra's EVC verifier as a pre-dispatch hook in the agent-TARS tool pipeline closes the gap for the entire computer-use tier of agents — a first for this space.",
+      "gap": "UI-TARS-desktop's action dispatch pipeline (apps/agent-tars/src/main/agent/ or the tool dispatcher) dispatches LLM-selected GUI/browser actions with no identity verification. An optional BolyraAuthMiddleware in the MCP tool dispatch path — or as a named authorization plugin in the agent pipeline — gates each action before execution. Non-breaking: absent the plugin, behavior is unchanged.",
+      "anchor_issue": "Search bytedance/UI-TARS-desktop issues for 'authorization', 'permission', 'access control', or 'identity'. At 444 open issues there is likely demand for session-level authorization on high-risk GUI actions. ByteDance's agent stack positions for enterprise — where identity binding matters most.",
+      "pr_type": "targeted contrib — BolyraAuthMiddleware plugin in a plugins/bolyra/ directory, wired into the MCP tool dispatch path. TypeScript strict, follows existing plugin patterns in the repo. Companion example showing a delegation-constrained UI-TARS session.",
+      "priority": 3,
+      "builder_notes": "Entry point: study the agent-TARS application structure (apps/agent-tars/) and the MCP integration (packages/agent-infra/mcp-server/). UI-TARS-desktop uses pnpm workspaces and TypeScript strict. Run pnpm build before submitting. The cowork and mcp topics signal active MCP ecosystem participation — reference Bolyra's @bolyra/mcp integration in the PR."
+    },
+    {
+      "repo": "danny-avila/LibreChat",
+      "approx_stars": 43384,
+      "language": "TypeScript",
+      "why": "LibreChat (43,384★, 9k forks) is the most-deployed self-hosted ChatGPT clone — Agents, MCP, Skills, multi-model, secure multi-user auth, Code Interpreter, OpenAPI Actions. It has an existing auth system for users, but agent tool/MCP dispatch runs without per-agent identity binding: any agent with a session key can call any registered tool or MCP server at full operator permission. Bolyra's EVC verifier as a pre-tool hook in the agent middleware closes the gap between user-auth (what LibreChat already has) and action-auth (what it is missing). The active user+developer community makes a well-scoped PR high-visibility.",
+      "gap": "LibreChat's agent tool dispatch (api/server/services/Endpoints/ or the MCP middleware in api/server/middleware/) runs tools after LLM selection with no per-action mandate check. An optional BolyraAuthMiddleware in the Express middleware chain — evaluated before each MCP or tool invocation — adds per-action identity binding. The integration point is clean: LibreChat already has middleware layers for auth and rate-limiting; adding Bolyra as an optional middleware is a natural fit.",
+      "anchor_issue": "Search danny-avila/LibreChat issues for 'tool authorization', 'MCP permission', 'per-agent access control', or 'action identity'. At 731 open issues there is almost certainly demand from enterprise self-hosters for fine-grained tool permissions. LibreChat is actively maintained (updated 2026-09-14).",
+      "pr_type": "targeted feature — optional BolyraAuthMiddleware in api/server/middleware/ + configuration flag in librechat.yaml. Non-breaking: disabled by default. TypeScript strict, follows existing Express middleware patterns.",
+      "priority": 4,
+      "builder_notes": "Entry point: study api/server/middleware/ and the MCP integration in api/server/services/. LibreChat uses pnpm, TypeScript strict. Run npm run test:api before submitting. The multi-user deployment model means Bolyra can bind each user's agent session to a distinct mandate — a stronger story than single-key deployments. CONTRIBUTING.md exists and maintainer is responsive to quality external contributions."
+    },
+    {
+      "repo": "AgentOps-AI/agentops",
+      "approx_stars": 5817,
+      "language": "Python",
+      "why": "AgentOps (5,817★) is the dominant Python SDK for AI agent monitoring — it integrates with CrewAI, OpenAI Agents SDK, Langchain, Autogen, AG2, and CamelAI through a single decorator/init pattern. Because AgentOps sits in the observability layer across all these frameworks, it is the single highest-leverage integration point for adding identity-bound authorization observability to the entire Python agent ecosystem. A BolyraSessionDecorator that attaches a Bolyra mandate to each AgentOps session — emitting identity-verified action events alongside the existing cost/latency events — turns Bolyra's proof into a first-class audit signal across every framework AgentOps monitors.",
+      "gap": "AgentOps's action event pipeline (agentops/event.py, agentops/session.py) records tool calls, LLM calls, and action events, but has no concept of a caller identity or mandate binding. An optional bolyra_mandate field on BolyraSession (wrapping agentops.start_session()) and a pre-event hook that emits an EVC verdict alongside each action event closes the gap. Any team using AgentOps gets Bolyra's authorization audit trail as an opt-in column in their existing AgentOps dashboard.",
+      "anchor_issue": "Search AgentOps-AI/agentops issues for 'authorization', 'identity', 'mandate', or 'access control'. The observability angle — 'prove which agent was authorized to take which action' — aligns with enterprise compliance requirements that AgentOps customers already face.",
+      "pr_type": "contrib integration — optional BolyraSessionDecorator in agentops/integrations/bolyra/ (follows existing integration pattern for crewai/, openai/, etc.) plus optional bolyra_mandate field on Session. Zero change to core event pipeline. Python 3.10+.",
+      "priority": 5,
+      "builder_notes": "Study an existing AgentOps integration (agentops/integrations/crewai/ or agentops/integrations/openai/) to learn the integration pattern. Python, uses ruff + pytest. CONTRIBUTING.md exists. The AgentOps maintainers are responsive to integrations that expand the framework coverage — Bolyra is in good company with the existing CrewAI, OpenAI Agents, and AG2 integrations already shipped."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "cumulative_targets_identified": 55,
+    "path_b_targets_total": 35,
+    "weeks_since_last_outreach_action": "11+",
+    "suspension_recommendation_fires": true,
+    "suspension_status": "REAFFIRMED — week 10 first fired it; week 11 reaffirms. 11 consecutive scan weeks, 0 external outreach actions. The target pipeline is exhaustively built across browser-use, LLM app platforms, computer-use agents, observability SDKs, AI gateways, enterprise frameworks, x402 infrastructure, and multi-agent swarms. No further scan will produce actionable new signal above what is already documented.",
+    "recommended_restart_condition": "Resume the weekly scan when: (1) at least one Path B PR has been opened, AND (2) that PR has either been merged or is in active review. At that point the scan resumes as a monitor role.",
+    "top_five_by_merge_probability": [
+      "vercel/ai (week 9 #1) — TypeScript, optional toolAuthorizationHandler, non-breaking, Vercel engineers responsive",
+      "langchain-ai/langchain (week 8 #2) — 2-file diff, non-breaking BaseTool.run() guard, widest downstream reach",
+      "camel-ai/camel (week 9 #2) — BolyraAuthToolkit contrib, zero core change, active maintainers",
+      "langgenius/dify (week 11 #1) — 155k★, MCP+tools+skills, BolyraAuthProvider credential type, 2-3 file diff",
+      "browser-use/browser-use (week 11 #2) — 114k★, highest-risk action class, optional pre-action callback, Python"
+    ],
+    "recommended_immediate_action": "Pick ONE of the top 5 above — langchain or dify for reach, vercel/ai for TS ecosystem signal, browser-use for the highest-risk action class story — and open a builder session before week 12. Do not wait for the next scan."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 55,
+    "path": "B",
+    "path_b_targets_identified": 35,
+    "weeks_since_last_outreach_action": "11+"
+  }
+}

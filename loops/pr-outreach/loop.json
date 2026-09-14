@@ -2,7 +2,7 @@
   "loop": "bolyra-pr-outreach",
   "start_date": "2026-06-30",
   "cadence": "weekly",
-  "current_week": 10,
+  "current_week": 11,
   "status": "paused",
   "paused_date": "2026-07-27",
   "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
@@ -22,7 +22,7 @@
     "prs_closed": 0,
     "prs_stale": 9,
     "review_comments_responded": 0,
-    "new_repos_identified": 50
+    "new_repos_identified": 55
   },
   "kill_criteria": {
     "week_4": "0 PRs merged out of 10+ open → switch strategy",
@@ -139,6 +139,17 @@
       "follow_ups_drafted": 0,
       "review_comments_responded": 0,
       "notes": "SUSPENSION RECOMMENDATION FIRES. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5-9. 5 new Path B targets identified: (1) n8n-io/n8n ~203618★ — highest-star target in 10 weeks of scanning; AI Agent node tool dispatch has no per-agent identity gate; Bolyra EVC credential type is the fix. (2) x402-foundation/x402 ~6582★ — the canonical x402 foundation protocol reference (distinct from coinbase/x402 in week 6); facilitator verifyPayment() has no agent identity binding; optional bolyra_mandate field closes the gap at the protocol reference layer. (3) ruvnet/ruflo ~71179★ — agent meta-harness, MCP-server, multi-agent swarms; no identity gate in tool dispatch across swarm agents; BolyraAuthSkill contrib in the skills system. (4) HKUDS/nanobot ~47834★ — self-hosted Python AI agent, MCP, tools; tool execution pipeline has no authorization hook; BolyraAuthPlugin contrib. (5) zhayujie/CowAgent ~46802★ — multi-channel agent harness, MCP, openclaw topic; plugin tool dispatch has no identity gate; BolyraToolPlugin contrib. Total repos identified across 10 weeks: 50, Path B targets: 30. RECOMMENDATION: suspend the weekly scan loop. The target pipeline is fully built. Invest the next session budget in a builder session, not another scan. Restart the scan only after a Path B PR is opened and reaches active review."
+    },
+    {
+      "week": 11,
+      "date": "2026-09-14",
+      "prs_merged": 0,
+      "prs_closed": 0,
+      "new_stale": 0,
+      "new_repos_identified": 5,
+      "follow_ups_drafted": 0,
+      "review_comments_responded": 0,
+      "notes": "SUSPENSION REAFFIRMED. Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5-10. 5 new targets identified in the browser-use / LLM-platform / computer-use tier (first time this tier appears in the backlog): (1) langgenius/dify ~155674★ — highest-star target yet; MCP+tools+skills+agentic workflows; BolyraAuthProvider credential type, 2-3 file diff. (2) browser-use/browser-use ~114572★ — dominant browser automation agent; optional pre-action callback on Agent.step(); Python. (3) bytedance/UI-TARS-desktop ~38971★ — GUI/computer-use/MCP agent stack; BolyraAuthMiddleware plugin in MCP dispatch path. (4) danny-avila/LibreChat ~43384★ — most-deployed self-hosted ChatGPT clone with Agents+MCP+Skills; optional BolyraAuthMiddleware in Express middleware chain. (5) AgentOps-AI/agentops ~5817★ — dominant Python agent monitoring SDK; BolyraSessionDecorator adds identity-verified audit trail across CrewAI/OpenAI Agents/Langchain/AG2. Total repos identified across 11 weeks: 55, Path B targets: 35. Top 5 by merge probability: vercel/ai, langchain, camel-ai/camel, langgenius/dify, browser-use. RECOMMENDED IMMEDIATE ACTION: pick ONE target and open a builder session before week 12."
     }
   ]
 }
