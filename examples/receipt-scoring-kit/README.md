@@ -19,25 +19,26 @@ offline: all you need is the corpus and the signer's public address
 base=https://raw.githubusercontent.com/bolyra/bolyra/main/examples/receipt-scoring-kit/corpus; curl -sO "$base/receipts.jsonl" -sO "$base/signer.json" -sO "$base/allow.json" -sO "$base/tampered.jsonl" -sO "$base/operator-b.jsonl" -sO "$base/signer-b.json" -sO "$base/manifest.json"
 
 # 2. Verify the whole chain: every signature + linkage + count + head
-npx -y -p @bolyra/cli@0.5.0 bolyra receipt verify-chain receipts.jsonl \
+npx -y -p @bolyra/cli@0.9.0 bolyra receipt verify-chain receipts.jsonl \
   --signer 0x17c5185167401ed00cf5f5b2fc97d9bbfdb7d025 \
   --expect-count 8 \
   --expect-head 0x8150d2464e2f17dd1bfa921283ae8622d912160bfa7e24ffefd930fc06e31d92
 # -> PASS: all signatures valid, chain intact
 
 # 3. Verify one receipt standalone (schema, hash, id, signature, signer)
-npx -y -p @bolyra/receipts@0.8.0 bolyra-receipt-verify allow.json \
+npx -y -p @bolyra/receipts@0.11.0 bolyra-receipt-verify allow.json \
   --signer 0x17c5185167401ed00cf5f5b2fc97d9bbfdb7d025 --max-age 315360000
 # -> PASS — receipt is valid
 
 # 4. Prove tampering is detectable: this log has one edited line
-npx -y -p @bolyra/cli@0.5.0 bolyra receipt verify-chain tampered.jsonl \
+npx -y -p @bolyra/cli@0.9.0 bolyra receipt verify-chain tampered.jsonl \
   --signer 0x17c5185167401ed00cf5f5b2fc97d9bbfdb7d025
-# -> FAIL line 3: [receipt-hash-mismatch] ... (the edit)
+# -> FAIL line 3: [signature-invalid] ...    (the edit broke the signature)
+# -> FAIL line 3: [receipt-hash-mismatch] ... (and the content hash)
 # -> FAIL line 4: [prev-hash-mismatch] ...    (the chain break it causes)
 
 # 5. A second, independent operator's log verifies under ITS signer only
-npx -y -p @bolyra/cli@0.5.0 bolyra receipt verify-chain operator-b.jsonl \
+npx -y -p @bolyra/cli@0.9.0 bolyra receipt verify-chain operator-b.jsonl \
   --signer 0xae72a48c1a36bd18af168541c53037965d26e4a8 --expect-count 3 \
   --expect-head 0x4f1e6808ba5d49ce6e502ec5aa39cc177a4d3a44747e3366b4c9aba1d68d01d0
 ```
@@ -75,8 +76,8 @@ Expected counts and head hashes for all files live in
 ## Known caveats (stated plainly)
 
 1. **Signer key distribution is a trust decision you still make.** You get
-   the signer address from `signer.json` (out-of-band pin) or, once
-   `@bolyra/cli` 0.6.0 ships, from `corpus/bolyra-signers.json` via
+   the signer address from `signer.json` (out-of-band pin) or, with
+   `@bolyra/cli` 0.6.0+, from `corpus/bolyra-signers.json` via
    `--signer-from` (Receipt Signer Discovery v1,
    `spec/receipt-signer-discovery-v1.md`). Discovery is not endorsement:
    it moves the decision from "trust this key" to "trust this origin" — it
