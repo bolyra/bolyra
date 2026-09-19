@@ -30,15 +30,19 @@ describe('/.well-known/bolyra-signers.json', () => {
     expect(typeof doc.issuer).toBe('string');
     expect(typeof doc.updatedAt).toBe('number');
     expect(doc.signers).toHaveLength(1);
-    expect(doc.signers[0].alg).toBe('ES256K');
-    expect(doc.signers[0].signer).toMatch(/^0x[0-9a-fA-F]{40}$/);
-    expect(typeof doc.signers[0].keyId).toBe('string');
+    // noUncheckedIndexedAccess: index first, then assert presence, then fields.
+    const signer = doc.signers[0];
+    expect(signer).toBeDefined();
+    expect(signer?.alg).toBe('ES256K');
+    expect(signer?.signer).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(typeof signer?.keyId).toBe('string');
   });
 
   it('signer address is stable across requests (cached derivation)', async () => {
     const doc = (await (await SELF.fetch(WELL_KNOWN)).json()) as Doc;
     const doc2 = (await (await SELF.fetch(WELL_KNOWN)).json()) as Doc;
-    expect(doc2.signers[0].signer).toBe(doc.signers[0].signer);
+    expect(doc.signers[0]?.signer).toBeDefined();
+    expect(doc2.signers[0]?.signer).toBe(doc.signers[0]?.signer);
   });
 
   it('404s when no signer key is configured', async () => {
