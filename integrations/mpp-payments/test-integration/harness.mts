@@ -1,5 +1,5 @@
 /**
- * Real-mppx harness for the gate's integration tests (spec §10 "Gate").
+ * Real-mppx harness for the gate's integration tests.
  * A custom `Method.from` method with a stub `verify` stands in for a payment
  * rail; the challenge is minted by the SAME Mppx instance so its signature
  * validates; the Bolyra bundle comes from the package's own issuance path.
@@ -66,7 +66,7 @@ export type StubVerifierFetchOptions =
 
 /**
  * Replace `globalThis.fetch` with a stub for the `url` verifier and return a
- * matching verifier config (spec §10: the registry does not exist yet at step 1).
+ * matching verifier config (the stub stands in for a registry built later).
  *
  * - `{ status, body }`: every call resolves with `body` (JSON-encoded unless
  *   already a string) at `status`.
@@ -154,20 +154,10 @@ export async function requestWith(opts: { payment?: string; bundle?: string | nu
 }
 
 /**
- * `bolyraGate` typed as identity-on-method for real mppx servers. This is the
- * ONE cast in the harness, and it is required by `src/gate.ts`, not by mppx:
- * the structural `MppxServerMethodLike` declares `preflight`/`verify` with
- * property syntax, so under `strictFunctionTypes` their parameter types are
- * checked contravariantly, and its `PreflightParameters` lacks `realm` /
- * `secretKey` (and has `credential: unknown`), so a real `Method.Server` fails
- * the generic constraint and the return type degrades to `MppxServerMethodLike`.
- * Runtime is unaffected: `bolyraGate` returns the same method with `preflight`
- * wrapped. Remove this once gate.ts declares the hooks with method syntax
- * (bivariant) or aligns the parameter types with mppx's (a src/ change).
+ * `bolyraGate` is identity-on-method for real mppx servers with no cast:
+ * `MppxServerMethodLike` declares its hooks with method syntax and carries
+ * mppx's optional `realm` / `secretKey` / `credential` / `request` fields.
  */
-export const gate = bolyraGate as unknown as <method extends TestServerMethod>(
-  method: method,
-  options: BolyraGateOptions,
-) => method;
+export const gate = bolyraGate;
 
 export { bolyraGate };

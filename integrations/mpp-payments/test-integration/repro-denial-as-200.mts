@@ -1,5 +1,5 @@
 /**
- * Reproduction of the spec §3.1 finding, kept as documentation.
+ * Reproduction of the denial-as-200 finding, kept as documentation.
  * Before the fix this prints
  *   { outerStatus: 200, responseStatus: 401, actionCount: 1 }
  * i.e. mppx reported status 200 to the handler, the handler's protected action

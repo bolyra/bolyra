@@ -230,7 +230,11 @@ export interface BolyraGateOptions {
   nonceStore?: NonceStoreLike;
   /** ES256K authorization-receipt signing. Ephemeral key when omitted. */
   receipts?: GateReceiptConfig;
-  /** Sink for every signed decision receipt (allow AND deny). */
+  /**
+   * Sink for every signed decision receipt (allow AND deny). Synchronous. A
+   * returned Promise is treated as a sink failure and the request is denied
+   * — an async sink's rejection could otherwise never fail the decision.
+   */
   onReceipt?: (receipt: SignedReceipt) => void;
   /**
    * Clock override (unix seconds). Tests only. Mutually exclusive with

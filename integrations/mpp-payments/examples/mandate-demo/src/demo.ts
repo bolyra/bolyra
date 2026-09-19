@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { Challenge, Credential, Method, Receipt, z } from 'mppx';
 import { Mppx } from 'mppx/server';
 import { derivePublicKey } from '@bolyra/sdk';
-import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER } from '@bolyra/mpp';
+import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER, handleDenials } from '@bolyra/mpp';
 
 // ─── 1. OPERATOR: delegate a small-tier spend mandate with `bolyra mandate` ──
 //
@@ -153,14 +153,16 @@ async function createServer() {
     recipient: 'merchant-account-1',
   };
 
-  // The standard mppx route-handler pattern, unchanged by the gate.
-  return async function handler(request: Request): Promise<Response> {
+  // The standard mppx route-handler pattern; `handleDenials` turns the
+  // gate's thrown BolyraDeniedError into its Problem Details response, so the
+  // protected action below never runs on a denial.
+  return handleDenials(async function handler(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const amount = url.pathname === '/api/report' ? '25' : '500';
     const result = await mppx.charge({ amount, ...routeDefaults })(request);
     if (result.status === 402) return result.challenge;
     return result.withReceipt(Response.json({ data: `paid content for ${url.pathname}` }));
-  };
+  });
 }
 
 // ─── 3. AGENT: MPP 402 flow + the mandate header ────────────────────────────

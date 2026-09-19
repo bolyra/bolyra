@@ -8,6 +8,7 @@
  */
 
 import { verifyReceipt, type SignedReceipt } from '@bolyra/receipts';
+import { BolyraDeniedError } from '../src/errors';
 import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER } from '../src/gate';
 import type { BolyraGateOptions, OperatorKey } from '../src/types';
 import { AUDIENCE, EXPIRY, NOW_UNIX, makeBundle, operatorKey } from './helpers';
@@ -54,16 +55,22 @@ async function drive(
     method: input.method,
     url: new URL(input.url),
   });
-  const preflightResult = await wrapped.preflight?.({
-    capturedRequest,
-    credential,
-    input,
-    options,
-    realm: 'api.merchant.example',
-    secretKey: 'test-secret-key-test-secret-key-32',
-  });
+  let preflightResult: unknown;
+  try {
+    preflightResult = await wrapped.preflight?.({
+      capturedRequest,
+      credential,
+      input,
+      options,
+      realm: 'api.merchant.example',
+      secretKey: 'test-secret-key-test-secret-key-32',
+    });
+  } catch (err) {
+    if (err instanceof BolyraDeniedError) return { denied: err.response, receipt: undefined };
+    throw err;
+  }
   if (preflightResult instanceof Response) {
-    return { denied: preflightResult, receipt: undefined };
+    throw new Error('drive(): preflight returned a Response — the gate must THROW on deny');
   }
   const receipt = await wrapped.verify({
     credential,
@@ -282,14 +289,14 @@ describe('bolyraGate', () => {
     const { method } = mockMethod();
     const wrapped = bolyraGate(method, await gateOptions());
 
-    const result = await wrapped.preflight?.({
-      capturedRequest: Object.freeze({}),
-      credential: null,
-      input: requestWithBundle(undefined),
-      options: { amount: '25' },
-    });
-    expect(result).toBeInstanceOf(Response);
-    expect((result as Response).status).toBe(401);
+    await expect(
+      wrapped.preflight?.({
+        capturedRequest: Object.freeze({}),
+        credential: null,
+        input: requestWithBundle(undefined),
+        options: { amount: '25' },
+      }),
+    ).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'missing_authorization' } });
   });
 
   test('the method\'s own preflight still runs after an allow', async () => {
@@ -423,5 +430,82 @@ describe('bolyraGate', () => {
     expect(wrapped.name).toBe('mock');
     expect(wrapped.intent).toBe('charge');
     expect(wrapped.schema).toBe(method.schema);
+  });
+});
+
+describe('receipt sink failure (fail closed, sink called once)', () => {
+  const throwingSink = () => jest.fn(() => { throw new Error('sink down'); });
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  test('allow path: an otherwise-valid request denies 500 internal_error', async () => {
+    const onReceipt = throwingSink();
+    const { method, verifySpy } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onReceipt }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied?.status).toBe(500);
+    const problem = await denied!.json();
+    expect(problem.code).toBe('internal_error');
+    expect(problem.detail).toBe('authorization receipt sink failed');
+    expect(onReceipt).toHaveBeenCalledTimes(1);
+    expect(verifySpy).not.toHaveBeenCalled();
+  });
+
+  test('ordinary deny path: the original code is replaced by internal_error', async () => {
+    const onReceipt = throwingSink();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onReceipt }));
+    const { denied } = await drive(wrapped, requestWithBundle(undefined), { amount: '25' }); // missing_authorization
+    expect(denied?.status).toBe(500);
+    expect((await denied!.json()).code).toBe('internal_error');
+    expect(onReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  test('first emission inside the outer catch: nothing escapes', async () => {
+    const onReceipt = throwingSink();
+    const { method } = mockMethod();
+    const reserve = jest.fn(async () => { throw new Error('store down'); });
+    const nonceStore = { reserve };
+    const verifier = { kind: 'url' as const, url: 'https://verify.test/v1/verify' };
+    const fetchStub = jest.fn(async () => new Response(JSON.stringify({
+      verdict: 'allow', kind: 'classical',
+      consume_nonces: [{ issuer_key: 'op', nonce: 'n-1', retain_until: NOW_UNIX + 60 }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    global.fetch = fetchStub as unknown as typeof fetch;
+    const wrapped = bolyraGate(method, await gateOptions({ onReceipt, verifier, nonceStore }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied?.status).toBe(500);
+    const problem = await denied!.json();
+    expect(problem.code).toBe('internal_error');
+    expect(problem.detail).toBe('authorization receipt sink failed');
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(onReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  test('an async sink (returned Promise) is a sink failure: denied 500, no unhandled rejection', async () => {
+    let unhandled = 0;
+    const onUnhandled = () => { unhandled += 1; };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const onReceipt = jest.fn(async () => { throw new Error('x'); });
+      const { method, verifySpy } = mockMethod();
+      const wrapped = bolyraGate(method, await gateOptions({ onReceipt }));
+      const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+      expect(denied?.status).toBe(500);
+      const problem = await denied!.json();
+      expect(problem.code).toBe('internal_error');
+      expect(problem.detail).toMatch(/synchronous/);
+      expect(onReceipt).toHaveBeenCalledTimes(1);
+      expect(verifySpy).not.toHaveBeenCalled();
+      // Let the sink's rejected promise settle: the gate attached a handler,
+      // so the host sees no unhandled rejection.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).toBe(0);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });

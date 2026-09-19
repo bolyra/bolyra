@@ -10,6 +10,7 @@ import { computeInstanceRef, verifyInstanceBinding, verifyReceipt } from '@bolyr
 import type { SignedReceipt } from '@bolyra/receipts';
 import {
   bolyraGate,
+  BolyraDeniedError,
   buildDecisionInstance,
   issueMandate,
   type BolyraGateOptions,
@@ -38,7 +39,11 @@ async function gateOptions(overrides: Partial<BolyraGateOptions> = {}): Promise<
   } as BolyraGateOptions;
 }
 
-/** Drive preflight only — receipts are emitted at decision time. */
+/**
+ * Drive preflight only — receipts are emitted at decision time. A denial is
+ * a thrown `BolyraDeniedError`; the helper returns its Problem Details
+ * `Response` so callers can assert on the body.
+ */
 async function preflight(
   wrapped: ReturnType<typeof bolyraGate>,
   bundle: string | undefined,
@@ -47,18 +52,23 @@ async function preflight(
   const input = new Request('https://api.merchant.example/paid', {
     headers: bundle !== undefined ? { 'x-bolyra-authorization': bundle } : {},
   });
-  return wrapped.preflight?.({
-    capturedRequest: Object.freeze({
-      headers: new Headers(input.headers),
-      method: input.method,
-      url: new URL(input.url),
-    }),
-    credential: { challenge: {}, payload: {} } as unknown,
-    input,
-    options,
-    realm: 'api.merchant.example',
-    secretKey: 'test-secret-key-test-secret-key-32',
-  });
+  try {
+    return await wrapped.preflight?.({
+      capturedRequest: Object.freeze({
+        headers: new Headers(input.headers),
+        method: input.method,
+        url: new URL(input.url),
+      }),
+      credential: { challenge: {}, payload: {} } as unknown,
+      input,
+      options,
+      realm: 'api.merchant.example',
+      secretKey: 'test-secret-key-test-secret-key-32',
+    });
+  } catch (err) {
+    if (err instanceof BolyraDeniedError) return err.response;
+    throw err;
+  }
 }
 
 describe('clock injection (exactly one of now / nowMs)', () => {
