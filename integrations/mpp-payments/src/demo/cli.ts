@@ -26,6 +26,7 @@ import { verifyReceipt, verifyReceiptChain, type SignedReceipt } from '@bolyra/r
 import {
   bolyraGate,
   BOLYRA_AUTHORIZATION_HEADER,
+  BolyraDeniedError,
   issueMandate,
   type MppxServerMethodLike,
 } from '../index';
@@ -105,21 +106,30 @@ export async function runDemo(write: WriteLine = console.log): Promise<void> {
 
   /**
    * The stub transport: one HTTP exchange the way mppx drives a gated method.
-   * The (wrapped) preflight runs first; a returned Response fully handles the
-   * request (that is a gate denial). Otherwise a credential-less request gets
-   * the minimal 402 stub challenge, and a credential-bearing one reaches the
-   * (wrapped) verify, which attaches the bolyraAuthorization receipt field.
+   * The (wrapped) preflight runs first; a gate denial is a thrown
+   * BolyraDeniedError whose Problem Details response is returned as-is. The
+   * surviving `instanceof Response` check models mppx's own-preflight
+   * semantics (a method's OWN preflight may return a Response, e.g. for 402
+   * discovery) — it is not a gate denial. Otherwise a credential-less request
+   * gets the minimal 402 stub challenge, and a credential-bearing one reaches
+   * the (wrapped) verify, which attaches the bolyraAuthorization receipt field.
    */
   async function handleOnce(request: Request, amount: string): Promise<Response> {
     const capturedRequest = {}; // mppx's per-request snapshot token
     const credential = request.headers.get('authorization');
-    const preflight = await gated.preflight?.({
-      capturedRequest,
-      credential,
-      input: request,
-      options: { amount },
-    });
-    if (preflight instanceof Response) return preflight; // gate denial
+    let preflight: unknown;
+    try {
+      preflight = await gated.preflight?.({
+        capturedRequest,
+        credential,
+        input: request,
+        options: { amount },
+      });
+    } catch (e) {
+      if (e instanceof BolyraDeniedError) return e.response; // gate denial
+      throw e;
+    }
+    if (preflight instanceof Response) return preflight;
     if (credential !== `Stub ${STUB_PAYMENT_TOKEN}`) {
       return Response.json({ stub: 'payment challenge' }, { status: 402 });
     }

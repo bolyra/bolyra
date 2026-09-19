@@ -16,9 +16,13 @@
  *
  * Mechanics (HTTP transport):
  *   - The gate composes into the method's `preflight` hook, which mppx calls
- *     before the challenge/verification path. A denial returns an RFC 9457
- *     Problem Details response and fully handles the request — no challenge
- *     is issued, no credential is inspected, no payment logic runs.
+ *     before the challenge/verification path. A denial THROWS a
+ *     `BolyraDeniedError` carrying the verdict and its RFC 9457 Problem
+ *     Details response (see `handleDenials`) — no challenge is issued, no
+ *     credential is inspected, no payment logic runs, and the route handler's
+ *     own statements after `mppx.charge(...)(request)` never execute. (A
+ *     returned non-402 Response would be turned into outer status 200 by
+ *     mppx, and the application would run its protected action.)
  *   - On allow, the decision is stashed (keyed by mppx's captured-request
  *     snapshot) and the method's own `preflight` runs unchanged.
  *   - The gate also wraps `verify`: it FAILS CLOSED if payment verification
@@ -29,10 +33,12 @@
  *     are preserved into the Payment-Receipt header by mppx).
  */
 
+import type { SignedReceipt } from '@bolyra/receipts';
 import { peekBundle } from './bundle';
 import { parseBundle, type ParsedBundle } from './bundle';
 import { verifyClassical } from './classical';
 import { denyResponse } from './deny';
+import { BolyraDeniedError } from './errors';
 import { callUrlVerifier, runCommandVerifier } from './evc';
 import { NonceStore } from './nonces';
 import {
@@ -65,8 +71,12 @@ export const BOLYRA_AUTHORIZATION_HEADER = 'x-bolyra-authorization';
 export interface MppxServerMethodLike {
   name: string;
   intent: string;
-  preflight?: (parameters: PreflightParameters) => unknown;
-  verify: (parameters: VerifyParameters) => Promise<Record<string, unknown>>;
+  // Method syntax (bivariant parameters), not property syntax: under
+  // `strictFunctionTypes` a property-typed hook would check a real mppx
+  // `Method.Server`'s narrower parameter types contravariantly and fail the
+  // `bolyraGate<method>` constraint, degrading the return type.
+  preflight?(parameters: PreflightParameters): unknown;
+  verify(parameters: VerifyParameters): Promise<Record<string, unknown>>;
   [key: string]: unknown;
 }
 
@@ -75,11 +85,15 @@ interface PreflightParameters {
   credential: unknown;
   input: Request;
   options: Record<string, unknown>;
+  realm?: string;
+  secretKey?: string;
   [key: string]: unknown;
 }
 
 interface VerifyParameters {
   envelope?: { capturedRequest: object } | undefined;
+  credential?: unknown;
+  request?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -200,7 +214,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
 
   async function decide(input: Request, routeOptions: Record<string, unknown>): Promise<
     | { outcome: 'allow'; decision: GateDecision }
-    | { outcome: 'deny'; response: Response }
+    | { outcome: 'deny'; verdict: DenyVerdict; response: Response }
   > {
     let tier: FinancialTier | undefined;
     let amountUsd = '0';
@@ -244,8 +258,47 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       }
     };
 
-    const denyWith = (verdict: Pick<DenyVerdict, 'code' | 'message'>): {
+    // Receipt-sink failure is a host fault and MUST become a 500 internal_error
+    // denial on every path — allow, ordinary deny, and a first emission that
+    // happens inside the outer catch — without the sink ever being invoked a
+    // second time. (Reviewer finding: before 0.5.0 an onReceipt throw inside
+    // denyWith re-entered the outer catch, which called denyWith again, and
+    // the SECOND throw escaped as a plain Error.) `emit` reports whether the
+    // sink accepted the receipt; once it has failed it is never called again.
+    //
+    // The sink contract is SYNCHRONOUS. A sink that returns a Promise (an
+    // `async` function) is a failure too: its rejection would land after the
+    // decision and could never fail this request, so it is treated as
+    // undelivered and the request denies. The returned promise gets a no-op
+    // rejection handler so the host sees no unhandled rejection.
+    type SinkFailure = 'threw' | 'async';
+    let sinkFailure: SinkFailure | undefined;
+    const emit = (signed: SignedReceipt): 'ok' | SinkFailure => {
+      if (sinkFailure !== undefined) return sinkFailure;
+      try {
+        const returned: unknown = options.onReceipt?.(signed);
+        if (typeof (returned as { then?: unknown } | null | undefined)?.then === 'function') {
+          Promise.resolve(returned).catch(() => {});
+          sinkFailure = 'async';
+          return 'async';
+        }
+        return 'ok';
+      } catch {
+        sinkFailure = 'threw';
+        return 'threw';
+      }
+    };
+    const SINK_FAILED: DenyVerdict = deny('internal_error', 'authorization receipt sink failed');
+    const SINK_ASYNC: DenyVerdict = deny(
+      'internal_error',
+      'onReceipt must be synchronous: it returned a Promise, so its failures could not fail this request',
+    );
+    const sinkVerdict = (failure: SinkFailure): DenyVerdict =>
+      failure === 'async' ? SINK_ASYNC : SINK_FAILED;
+
+    const denyWith = (verdict: DenyVerdict): {
       outcome: 'deny';
+      verdict: DenyVerdict;
       response: Response;
     } => {
       const facts: DecisionReceiptFacts = {
@@ -264,8 +317,11 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       const instance =
         tier !== undefined && decisionAt !== undefined ? tryInstance(facts) : undefined;
       const signed = receiptSigner.sign(buildDecisionReceiptInput(facts), instance);
-      options.onReceipt?.(signed);
-      return { outcome: 'deny', response: denyResponse(verdict) };
+      // If the sink failed on this emission — or had already failed — the decision
+      // is internal_error, whatever code we were about to return.
+      const emitted = emit(signed);
+      const final = emitted === 'ok' ? verdict : sinkVerdict(emitted);
+      return { outcome: 'deny', verdict: final, response: denyResponse(final) };
     };
 
     try {
@@ -337,6 +393,8 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       //    if construction fails (host fault, internal_error), the
       //    presentation must remain replayable for the retry — denying after
       //    reservation would turn the retry into a bogus nonce_replayed.
+      //    Host faults do not burn nonces, except an undeliverable allow
+      //    receipt (see step 7 below).
       const allowFacts: DecisionReceiptFacts = {
         request: requestContext,
         tier,
@@ -365,7 +423,18 @@ export function bolyraGate<method extends MppxServerMethodLike>(
 
       // 7. Allow: sign the decision receipt and stash for the verify hook.
       const signed = receiptSigner.sign(buildDecisionReceiptInput(allowFacts), allowInstance);
-      options.onReceipt?.(signed);
+      const emitted = emit(signed);
+      if (emitted !== 'ok') {
+        // The allow receipt could not be delivered: fail closed, never allow.
+        // The nonce was reserved at step 6, before this emission, and
+        // NonceStore has no release API, so the client's retry of the same
+        // presentation denies nonce_replayed. This is the ONE host fault that
+        // consumes a nonce, deliberately: a receipt that cannot be delivered
+        // must not coexist with an allow.
+        // The per-gate hash chain advances by the undelivered allow link and
+        // then the truthful deny link that denyWith signs.
+        return denyWith(sinkVerdict(emitted)); // emit() is latched; denyWith returns the sink verdict
+      }
 
       return {
         outcome: 'allow',
@@ -410,9 +479,9 @@ export function bolyraGate<method extends MppxServerMethodLike>(
 
       const result = await decide(input, routeOptions ?? {});
       if (result.outcome === 'deny') {
-        // Returning a Response from preflight fully handles the request —
-        // the payment path never runs.
-        return result.response;
+        // Throw, never return: mppx turns a returned non-402 Response into
+        // outer status 200 and the application runs its action.
+        throw new BolyraDeniedError(result.verdict, result.response);
       }
 
       if (capturedRequest !== undefined) {
