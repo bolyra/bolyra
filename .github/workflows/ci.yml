@@ -156,7 +156,12 @@ jobs:
         working-directory: integrations/mpp-payments
       - run: npx tsc --noEmit
         working-directory: integrations/mpp-payments
+      - run: npm run typecheck:integration
+        working-directory: integrations/mpp-payments
       - run: npx jest --ci
+        working-directory: integrations/mpp-payments
+      - run: npm run test:integration
+        if: always()
         working-directory: integrations/mpp-payments
 
   hosted-verify-tests:
