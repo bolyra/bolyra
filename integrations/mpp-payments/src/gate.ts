@@ -22,15 +22,21 @@
  *     credential is inspected, no payment logic runs, and the route handler's
  *     own statements after `mppx.charge(...)(request)` never execute. (A
  *     returned non-402 Response would be turned into outer status 200 by
- *     mppx, and the application would run its protected action.)
+ *     mppx, and the application would run its protected action.) This is the
+ *     ONLY denial path `handleDenials` sees.
  *   - On allow, the decision is stashed (keyed by mppx's captured-request
  *     snapshot) and the method's own `preflight` runs unchanged.
- *   - The gate also wraps `verify`: it FAILS CLOSED if payment verification
- *     is reached without a stashed allow (e.g. standalone
- *     `mppx.verifyCredential()` calls or non-HTTP transports, where the
- *     preflight hook never ran), and on success it attaches the
+ *   - The gate also wraps `verify`, consuming the stashed decision one-use:
+ *     it FAILS CLOSED (throws `BolyraDeniedError`) if payment verification is
+ *     reached without a stashed allow — standalone `mppx.verifyCredential()`
+ *     calls, non-HTTP transports, a bypassed preflight, or a repeat verify
+ *     against an already-consumed decision — and on success it attaches the
  *     authorization-receipt metadata to the mppx receipt (extension fields
- *     are preserved into the Payment-Receipt header by mppx).
+ *     are preserved into the Payment-Receipt header by mppx). A denial
+ *     thrown from `verify` does NOT reach `handleDenials` the way a
+ *     preflight denial does: mppx catches errors from `verify`, treats
+ *     anything that isn't one of its own `PaymentError`s as an internal
+ *     fault, and re-issues a 402 challenge to the client instead.
  */
 
 import type { SignedReceipt } from '@bolyra/receipts';
@@ -526,15 +532,33 @@ export function bolyraGate<method extends MppxServerMethodLike>(
     async verify(parameters: VerifyParameters): Promise<Record<string, unknown>> {
       const key = parameters.envelope?.capturedRequest;
       const decision = key !== undefined ? decisions.get(key) : undefined;
-      if (decision === undefined) {
+      if (key === undefined || decision === undefined) {
         // Fail closed: payment verification was reached without a Bolyra
         // authorization decision for this request (standalone
-        // verifyCredential(), non-HTTP transport, or a bypassed preflight).
-        throw new Error(
-          '@bolyra/mpp: payment verification reached without an authorization decision — ' +
-            'denying (the gate covers HTTP request flows; see README for scope)',
+        // verifyCredential(), non-HTTP transport, a bypassed preflight, or a
+        // repeated verify against an already-consumed decision — see below).
+        //
+        // Boundary: a BolyraDeniedError thrown from THIS hook does not reach
+        // the application the way a preflight denial does. mppx's verify path
+        // catches errors from `verify`, treats anything that isn't one of its
+        // own `PaymentError`s as an internal fault (logs
+        // "mppx: internal verification error"), and re-issues a 402
+        // challenge — `handleDenials` only ever sees preflight-stage denials.
+        const verdict = deny(
+          'internal_error',
+          'payment verification reached without an authorization decision for this request ' +
+            '(standalone verifyCredential(), non-HTTP transport, bypassed preflight, or a repeated ' +
+            'verify against an already-consumed decision) — denying',
         );
+        throw new BolyraDeniedError(verdict, denyResponse(verdict));
       }
+      // One-use: consume before the payment rail runs, so the same captured
+      // request can never be verified twice on one decision. Consequence: if
+      // `originalVerify` below throws (the payment rail itself failed), the
+      // decision is already gone — the client's retry must re-run preflight,
+      // which spends a fresh host-mode nonce reservation, rather than
+      // re-verifying this same captured request.
+      decisions.delete(key);
 
       const receipt = await originalVerify(parameters);
       const bolyraAuthorization: BolyraAuthorizationReceiptField = {

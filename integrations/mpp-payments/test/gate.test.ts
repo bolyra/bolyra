@@ -606,3 +606,39 @@ describe('credential-less passthrough', () => {
     ).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'missing_authorization' } });
   });
 });
+
+describe('one-use stash', () => {
+  test('a second verify against the same captured request fails closed', async () => {
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions());
+    const input = requestWithBundle(await makeBundle());
+    const capturedRequest = Object.freeze({ headers: new Headers(input.headers), method: input.method, url: new URL(input.url) });
+    const credential = { challenge: {}, payload: {} } as unknown;
+    await wrapped.preflight?.({ capturedRequest, credential, input, options: { amount: '25' }, realm: 'api.merchant.example', secretKey: 'test-secret-key-test-secret-key-32' });
+    const envelope = { capturedRequest, challenge: {}, credential, request: { amount: '25' } };
+    await expect(wrapped.verify({ credential, envelope, request: { amount: '25' } })).resolves.toMatchObject({ bolyraAuthorization: { decision: 'allow' } });
+    await expect(wrapped.verify({ credential, envelope, request: { amount: '25' } })).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'internal_error' } });
+  });
+
+  test('verify without a prior decision throws BolyraDeniedError', async () => {
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions());
+    const rejection = wrapped.verify({ credential: {}, envelope: undefined, request: { amount: '25' } } as never);
+    await expect(rejection).rejects.toBeInstanceOf(BolyraDeniedError);
+    await expect(rejection).rejects.toMatchObject({ verdict: { code: 'internal_error' } });
+  });
+
+  test('a payment-rail failure consumes the decision; the retry must re-preflight, not re-verify', async () => {
+    const { method, verifySpy } = mockMethod();
+    const railError = new Error('rail down');
+    verifySpy.mockRejectedValueOnce(railError);
+    const wrapped = bolyraGate(method, await gateOptions());
+    const input = requestWithBundle(await makeBundle());
+    const capturedRequest = Object.freeze({ headers: new Headers(input.headers), method: input.method, url: new URL(input.url) });
+    const credential = { challenge: {}, payload: {} } as unknown;
+    await wrapped.preflight?.({ capturedRequest, credential, input, options: { amount: '25' }, realm: 'api.merchant.example', secretKey: 'test-secret-key-test-secret-key-32' });
+    const envelope = { capturedRequest, challenge: {}, credential, request: { amount: '25' } };
+    await expect(wrapped.verify({ credential, envelope, request: { amount: '25' } })).rejects.toBe(railError);
+    await expect(wrapped.verify({ credential, envelope, request: { amount: '25' } })).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'internal_error' } });
+  });
+});
