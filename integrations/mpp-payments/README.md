@@ -35,7 +35,7 @@ npm install @bolyra/mpp mppx
 
 `mppx` is an optional peer dependency — this package never imports it at
 runtime; it wraps the method objects you already build with mppx. The test
-suite runs against real mppx (currently 0.8.12).
+suite runs against real mppx (0.8.13, the lockfile pin).
 
 ## Quickstart
 
@@ -63,7 +63,7 @@ Hono, Elysia, Next.js) is covered automatically:
 
 ```ts
 import { Mppx, tempo } from 'mppx/server'
-import { bolyraGate } from '@bolyra/mpp'
+import { bolyraGate, handleDenials } from '@bolyra/mpp'
 
 const tempoCharge = tempo({
   currency: '0x20c0000000000000000000000000000000000000',
@@ -83,18 +83,29 @@ const gatedCharge = bolyraGate(tempoCharge, {
 
 const mppx = Mppx.create({ methods: [gatedCharge], secretKey })
 
-// Your route handler is unchanged:
-export async function handler(request: Request) {
+// A denial THROWS `BolyraDeniedError` before your handler body runs, so the
+// protected action below can only execute on an allow. `handleDenials` turns
+// the throw into the RFC 9457 response; without it, the error propagates and
+// your framework's error path answers (still no side effect).
+export const handler = handleDenials(async (request: Request) => {
   const result = await mppx.charge({ amount: '25' })(request)
   if (result.status === 402) return result.challenge
+  // ...the protected action...
   return result.withReceipt(Response.json({ data: '...' }))
-}
+})
 ```
 
+> **Why it throws.** mppx maps any non-402 `Response` returned from a method
+> `preflight` to an outer `{ status: 200, withReceipt }`, so a *returned* denial
+> reaches your handler as success and the action runs before the client sees
+> the 401/403. 0.5.0 changed the gate to throw. (Breaking for handlers that
+> relied on a returned denial; see CHANGELOG.)
+
 The agent carries its mandate presentation (a `bvp/1` bundle, base64url JSON)
-in the `X-Bolyra-Authorization` header on every request. Denials return RFC
-9457 Problem Details (`application/problem+json`) with a stable machine-readable
-`code`, **before** any challenge is issued or payment logic runs:
+in the `X-Bolyra-Authorization` header on every request. A denial is thrown as
+`BolyraDeniedError` **before** any challenge is issued or payment logic runs;
+`handleDenials` renders it as RFC 9457 Problem Details
+(`application/problem+json`) with a stable machine-readable `code`:
 
 ```json
 {
@@ -110,6 +121,17 @@ On allow, the mppx receipt (and therefore the `Payment-Receipt` header) gains
 a `bolyraAuthorization` extension field — tier, amount, verifier kind, and the
 ES256K-signed, hash-chained authorization receipt reference — giving the
 **approved → paid** audit pair described in the companion note.
+
+### Hooks and discovery (read before combining with method hooks)
+
+- The gate uses `enforce: 'always'` unless you say otherwise: Bolyra runs before your method's `preflight`/`authorize`, including on requests with no Payment credential.
+- `enforce: 'payment'` keeps credential-less 402 discovery **only** when the method has **no `authorize` hook** (refused at construction with `BolyraGateConfigError`) and its `preflight` returns nothing or a 402. Any other credential-less outcome fails closed.
+- Every hook that runs during ungated discovery must perform **no protected effects**. The gate cannot verify that by inspecting hooks; it is your integration's obligation.
+- At request time, nothing inside the gate escapes as an exception **except `BolyraDeniedError`** (internal faults, including a throwing `onReceipt` sink, become a 500 `internal_error` denial thrown the same way — a sink failure denies even an otherwise-valid request). Construction-time validation throws `TypeError`/`BolyraGateConfigError` synchronously; your method's own hooks keep their own error behavior.
+- **`onReceipt` is synchronous.** A sink that returns a Promise is treated as a failure and the request is denied (an async sink's rejection could otherwise never fail the decision); do your I/O in a queue the sink hands off to synchronously.
+- **Where a denial surfaces depends on the stage.** A `preflight` denial propagates out of `mppx.charge(...)(request)` (this is what `handleDenials` catches). A denial thrown from `verify` — a missing or already-consumed decision — is caught by mppx itself, logged as `mppx: internal verification error`, and re-issued as a 402 challenge; the Bolyra Problem Details are not recoverable there. Both are fail-closed.
+- A failed `originalVerify` is not retryable against the same captured request: the decision is consumed one-use; the client re-runs the request **with a fresh presentation** (a fresh authorization decision; in host-nonce mode the original presentation's nonce was already reserved on the allow, so re-sending it would deny `nonce_replayed`).
+- Tested scope: single-method HTTP `Request` charge handlers at mppx 0.8.13. `compose` intents, non-`Request` transports, and per-item streaming authorization are not established.
 
 ### Issuing the mandate (operator side)
 
