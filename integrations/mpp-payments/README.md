@@ -131,6 +131,7 @@ ES256K-signed, hash-chained authorization receipt reference — giving the
 - **`onReceipt` is synchronous.** A sink that returns a Promise is treated as a failure and the request is denied (an async sink's rejection could otherwise never fail the decision); do your I/O in a queue the sink hands off to synchronously.
 - **Where a denial surfaces depends on the stage.** A `preflight` denial propagates out of `mppx.charge(...)(request)` (this is what `handleDenials` catches). A denial thrown from `verify` — a missing or already-consumed decision — is caught by mppx itself, logged as `mppx: internal verification error`, and re-issued as a 402 challenge; the Bolyra Problem Details are not recoverable there. Both are fail-closed.
 - A failed `originalVerify` is not retryable against the same captured request: the decision is consumed one-use; the client re-runs the request **with a fresh presentation** (a fresh authorization decision; in host-nonce mode the original presentation's nonce was already reserved on the allow, so re-sending it would deny `nonce_replayed`).
+- **One bundle = one presentation.** Issue a fresh presentation per action (`issueMandate` / `bolyra mandate issue`; the signer is local and cheap) rather than re-sending one. Each issuance mints a fresh random nullifier (`publicSignals[1]`); a hosted verifier hands that nullifier back for the gate to reserve before acting, so the same bundle presented twice denies `nonce_replayed` while a re-issued one does not. Classical-mode replay protection is **cooperative**: the nullifier is host-reserved, not proof-bound — an in-process `{ kind: 'classical' }` verifier reserves nothing (see "What is and isn't checked").
 - Tested scope: single-method HTTP `Request` charge handlers at mppx 0.8.13. `compose` intents, non-`Request` transports, and per-item streaming authorization are not established.
 
 ### Issuing the mandate (operator side)
@@ -160,6 +161,11 @@ a wallet:** the operator key is one you already hold; `bolyra mandate issue`
 never generates, stores, or rotates keys, holds funds, or settles payments — it
 signs one standing spend mandate. `@bolyra/mpp`'s test fixtures mint through the
 same issuance path (`issueMandate`), so there is one code path, not two.
+
+The mandate is standing; the **presentation is one-shot**. Every issuance carries
+a fresh random nullifier, and a hosted verifier has the gate reserve it on allow,
+so mint a new presentation for each action instead of re-sending one (the signer
+is local; issuing is cheap). See "Hooks and discovery" above.
 
 In classical mode the operator signature binds the request binding
 (`{agent, audience, program, model, capabilities, expiry}` — binding v2), so both
