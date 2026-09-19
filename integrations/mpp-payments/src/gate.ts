@@ -38,7 +38,7 @@ import { peekBundle } from './bundle';
 import { parseBundle, type ParsedBundle } from './bundle';
 import { verifyClassical } from './classical';
 import { denyResponse } from './deny';
-import { BolyraDeniedError } from './errors';
+import { BolyraDeniedError, BolyraGateConfigError } from './errors';
 import { callUrlVerifier, runCommandVerifier } from './evc';
 import { NonceStore } from './nonces';
 import {
@@ -165,6 +165,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
     );
   }
   const enforce = options.enforce ?? 'always';
+  if (enforce === 'payment' && typeof (method as { authorize?: unknown }).authorize === 'function') {
+    throw new BolyraGateConfigError(
+      "bolyraGate: enforce:'payment' cannot be combined with a method `authorize` hook — " +
+        'authorize can grant application success on a credential-less request without a Bolyra ' +
+        "decision. Use enforce:'always' or remove the hook.",
+    );
+  }
   const amountToUsd = options.amountToUsd ?? defaultAmountToUsd;
   // Exactly one clock: `now` (seconds) or `nowMs` (milliseconds). Each
   // derives from the other so there is a single time source; `nowMs` also
@@ -474,7 +481,33 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       // vanilla client can still discover the 402 challenge; the
       // credential-bearing retry is always gated.
       if (enforce === 'payment' && (credential === null || credential === undefined)) {
-        return originalPreflight ? originalPreflight(parameters) : undefined;
+        // The construction-time refusal covers the method as wrapped; the
+        // returned wrapper is a plain mutable object and mppx reads
+        // `authorize` from it at request time, so re-check here in case a
+        // hook was attached after bolyraGate() returned.
+        if (typeof (wrapped as { authorize?: unknown }).authorize === 'function') {
+          const verdict = deny(
+            'internal_error',
+            "a method authorize hook was attached after bolyraGate() under enforce:'payment'; " +
+              'refusing to expose application success without a Bolyra decision',
+          );
+          throw new BolyraDeniedError(verdict, denyResponse(verdict));
+        }
+        // Discovery only: the original preflight may issue the 402 challenge
+        // or do nothing. Any other outcome would surface as application
+        // success (mppx maps non-402 preflight Responses to status 200).
+        const discovery = originalPreflight ? await originalPreflight(parameters) : undefined;
+        if (discovery === undefined) return undefined;
+        // `instanceof Response` is deliberate and stricter than mppx's own
+        // duck-typed `status === 402` check: a cross-realm Response (another
+        // global's constructor) is denied here, which is the fail-closed side.
+        if (discovery instanceof Response && discovery.status === 402) return discovery;
+        const verdict = deny(
+          'internal_error',
+          'credential-less preflight produced a non-402 result; refusing to expose application ' +
+            'success without a Bolyra decision',
+        );
+        throw new BolyraDeniedError(verdict, denyResponse(verdict));
       }
 
       const result = await decide(input, routeOptions ?? {});
