@@ -140,6 +140,49 @@ jobs:
       - run: npx jest --ci
         working-directory: integrations/gateway
 
+  mpp-payments-tests:
+    name: MPP gate — typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # Registry pins only: no sibling file: deps; the committed lockfile is
+      # authoritative (never file: links).
+      - run: npm ci
+        working-directory: integrations/mpp-payments
+      - run: npx tsc --noEmit
+        working-directory: integrations/mpp-payments
+      - run: npx jest --ci
+        working-directory: integrations/mpp-payments
+
+  hosted-verify-tests:
+    name: Hosted verify — typecheck & test (workers pool)
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          # wrangler 4.124 (lockfile pin) requires Node >= 22; smoke-test already uses 22.
+          node-version: 22
+
+      # @cloudflare/vitest-pool-workers runs workerd locally; no Cloudflare
+      # credentials are needed. Registry pins only. `npm run typecheck` runs
+      # `wrangler types` first: the Cloudflare runtime globals live in the
+      # generated, gitignored worker-configuration.d.ts (baseline finding).
+      - run: npm ci
+        working-directory: integrations/hosted-verify
+      - run: npm run typecheck
+        working-directory: integrations/hosted-verify
+      - run: npx vitest run
+        working-directory: integrations/hosted-verify
+
   payment-protocols-tests:
     name: Payment Protocols — typecheck & test
     runs-on: ubuntu-latest
@@ -362,6 +405,20 @@ jobs:
           rm -f package-lock.json
           npm install
           npx tsc --noEmit
+
+      # Registry pins, no file: rewrite.
+      - name: Typecheck integrations/mpp-payments
+        run: cd integrations/mpp-payments && npm ci && npx tsc --noEmit
+
+      # hosted-verify needs Node 22 (wrangler) and generated runtime types. This setup-node
+      # is sticky for later steps: keep the hosted-verify typecheck LAST in this job.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Typecheck integrations/hosted-verify
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: cd integrations/hosted-verify && npm ci && npm run typecheck
 
   dependency-audit:
     name: Dependency audit — runtime deps only
