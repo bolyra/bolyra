@@ -93,6 +93,36 @@ test('replay: an allow that consumes a nonce denies nonce_replayed on the second
   assert.deepEqual(Object.keys(stub.calls[0]!.body as object).sort(), ['bundle', 'now_unix', 'request', 'version']);
 });
 
+test('standing mandate: two fresh presentations of the SAME binding through one gate allow twice (counter 0→1→2); an unrelated mandate from the same operator still allows', async () => {
+  // A hosted verifier returns the presentation's publicSignals[1] as the one-time nullifier and the
+  // gate reserves it before acting (issuer_key = operator key, retained until expiry). Each issuance
+  // must therefore carry a fresh nullifier: a constant would make the FIRST allow reserve it for the
+  // whole operator and every later presentation from that operator deny nonce_replayed until expiry.
+  const stub = stubVerifierFetch({ allowFromBundle: true });
+  restoreFetch = stub.restore;
+  const gated = gate(serverMethod(), await classicalGateOptions({ verifier: stub.verifier }));
+  const { mppx, state, handler } = buildApp(gated);
+
+  // Same binding, minted twice = two presentations of one standing mandate.
+  const first = await handler(await requestWith({ payment: await paymentHeader(mppx), bundle: await makeBundle() }));
+  assert.equal(first.status, 200);
+  assert.equal(state.counter, 1);
+  const second = await handler(await requestWith({ payment: await paymentHeader(mppx), bundle: await makeBundle() }));
+  assert.equal(second.status, 200, 'a second fresh presentation of the same standing mandate allows');
+  assert.equal(state.counter, 2);
+
+  // An unrelated mandate from the SAME operator (different agent binding) is not blocked either.
+  const other = await makeBundle({ binding: { agent_name: 'auditor-bot' } });
+  const third = await handler(await requestWith({ payment: await paymentHeader(mppx), bundle: other }));
+  assert.equal(third.status, 200, 'an unrelated mandate from the same operator still allows');
+  assert.equal(state.counter, 3);
+
+  // The stub derived a DIFFERENT nullifier from each presented bundle (no fixed nonce in play).
+  assert.equal(stub.calls.length, 3);
+  const nullifiers = stub.calls.map((c) => JSON.parse((c.body as { bundle: string }).bundle).agent.envelope.publicSignals[1] as string);
+  assert.equal(new Set(nullifiers).size, 3, `expected 3 distinct nullifiers, got ${JSON.stringify(nullifiers)}`);
+});
+
 test("discovery: enforce:'payment' + no Payment credential => 402, counter 0", async () => {
   const gated = gate(serverMethod(), await classicalGateOptions({ enforce: 'payment' }));
   const { state, handler } = buildApp(gated);

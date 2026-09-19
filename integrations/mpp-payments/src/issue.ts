@@ -40,6 +40,7 @@
  */
 
 import {
+  BN254_FIELD_ORDER,
   derivePublicKey,
   eddsaSign,
   permissionsToBitmask,
@@ -146,6 +147,27 @@ function isValidTier(value: unknown): value is FinancialTier {
 }
 
 /**
+ * Mint the one-time nullifier carried in `publicSignals[1]`: a uniformly
+ * random NONZERO BN254 scalar-field element, by rejection sampling over 32
+ * random bytes (values `>= p` or `== 0` are discarded and redrawn — well under
+ * half of the draws, so the loop terminates almost immediately).
+ *
+ * Why it must be fresh per issuance: a hosted verifier returns this signal as
+ * the nonce in `consume_nonces` (issuer_key = operator key, retained until the
+ * credential expiry) and the gate reserves it before acting. Every issuance,
+ * even of the same binding, is therefore one presentation: a constant here
+ * would let the FIRST allow reserve the operator's only nullifier and deny
+ * every later presentation from that operator `nonce_replayed` until expiry.
+ * `0` is excluded because verifiers deny `nonce_missing` for a zero nullifier.
+ */
+function mintNullifier(): bigint {
+  for (;;) {
+    const candidate = BigInt('0x' + randomBytes(32).toString('hex'));
+    if (candidate !== 0n && candidate < BN254_FIELD_ORDER) return candidate;
+  }
+}
+
+/**
  * Internal `bvp/1` assembler — the SINGLE code path that turns already-resolved
  * issuance parts into a serialized presentation. `issueMandate` (the public,
  * validated, tier-based entry point the CLI wraps) and the package's own test
@@ -200,12 +222,14 @@ export async function mintPresentation(params: {
         version: '1.0.0',
         circuit: { name: 'AgentPolicy', version: '1.0.0' },
         proofType: 'groth16',
-        // Only publicSignals[2] (scopeCommitment) and [3] (bitmask) are read on
-        // the classical path; the rest are structurally-valid placeholders —
-        // classical mode carries no real Groth16 proof (see file header).
+        // publicSignals[1] is the one-time nullifier a hosted verifier hands
+        // back for reserve-before-act (fresh per issuance — see mintNullifier);
+        // [2] (scopeCommitment) and [3] (bitmask) are read on the classical
+        // path; the rest are structurally-valid placeholders — classical mode
+        // carries no real Groth16 proof (see file header).
         publicSignals: [
           '1',
-          '2',
+          mintNullifier().toString(),
           scopeCommitment.toString(),
           bitmask.toString(),
           String(expiry),

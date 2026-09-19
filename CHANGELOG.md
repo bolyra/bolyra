@@ -26,6 +26,7 @@ under `contracts/deployments/` and `circuits/build/`.
 - `enforce: 'payment'` combined with a method `authorize` hook is refused at construction (`BolyraGateConfigError`); credential-less discovery under `enforce: 'payment'` may only yield `undefined` or a 402 from the method's own `preflight` — anything else is denied. **Migration:** use `enforce: 'always'` (the default) or remove the hook.
 - The stashed authorization decision is consumed one-use: a second `verify` against the same captured request fails closed; a failed payment rail means the client retries with a fresh presentation.
 - A receipt sink failure (throw or Promise) now denies the request `internal_error` on every path instead of escaping; on the allow path this consumes the presentation's nonce.
+- `issueMandate` now mints a fresh, random nullifier (`publicSignals[1]`) per issuance. Previously it was a constant, which made every standing mandate single-use against a hosted verifier that reserves the nullifier. Presentations minted by 0.4.0 keep working; re-issue rather than re-present.
 
 ### Added
 

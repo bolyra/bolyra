@@ -7,7 +7,7 @@
  * round-trip through the verifier a payment route runs.
  */
 
-import { derivePublicKey } from '@bolyra/sdk';
+import { BN254_FIELD_ORDER, derivePublicKey } from '@bolyra/sdk';
 import { issueMandate } from '../src/issue';
 import { verifyClassical } from '../src/classical';
 import { parseBundle } from '../src/bundle';
@@ -255,6 +255,45 @@ describe('issueMandate', () => {
       await operatorKey(),
     ]);
     expect(verdict).toMatchObject({ verdict: 'allow' });
+  });
+
+  test('mints a fresh, random nullifier (publicSignals[1]) per issuance; the binding signature does not cover it', async () => {
+    // A hosted verifier returns publicSignals[1] as the one-time nullifier the
+    // gate reserves before acting, so two presentations of one standing
+    // mandate MUST carry distinct nullifiers or the second denies nonce_replayed.
+    const input = {
+      operatorPrivateKey: OPERATOR_PRIV,
+      agentName: AGENT,
+      audience: AUDIENCE,
+      model: MODEL,
+      tier: 'small' as const,
+      expiry: EXPIRY,
+      encoding: 'json' as const,
+    };
+    const first = JSON.parse((await issueMandate(input)).presentation);
+    const second = JSON.parse((await issueMandate(input)).presentation);
+
+    const nullifiers = [first, second].map(
+      (obj) => obj.agent.envelope.publicSignals[1] as string,
+    );
+    for (const n of nullifiers) {
+      expect(n).toMatch(/^[1-9][0-9]*$/); // decimal, nonzero, no leading zeros
+      expect(BigInt(n)).toBeGreaterThan(0n);
+      expect(BigInt(n) < BN254_FIELD_ORDER).toBe(true);
+    }
+    expect(nullifiers[0]).not.toBe(nullifiers[1]);
+
+    // The operator signature is over the binding only: same binding, same bytes.
+    expect(first.binding).toEqual(second.binding);
+    expect(first.sig).toEqual(second.sig);
+
+    // Both presentations verify classically (the nullifier is not proof-bound).
+    for (const obj of [first, second]) {
+      const verdict = await verifyClassical(verifierRequest(JSON.stringify(obj)), [
+        await operatorKey(),
+      ]);
+      expect(verdict).toMatchObject({ verdict: 'allow' });
+    }
   });
 
   describe('fail-closed input validation', () => {

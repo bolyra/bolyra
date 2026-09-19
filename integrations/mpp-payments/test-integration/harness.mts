@@ -7,6 +7,7 @@
 import { Mppx } from 'mppx/server';
 import { Credential, Method, z } from 'mppx';
 import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER } from '../src/gate.js';
+import { parseBundle } from '../src/bundle.js';
 import type { BolyraGateOptions } from '../src/types.js'; // not re-exported by gate.ts
 import { makeBundle, operatorKey, AUDIENCE, NOW_UNIX } from '../test/helpers.js';
 
@@ -61,8 +62,9 @@ export interface VerifierFetchCall {
 }
 
 export type StubVerifierFetchOptions =
-  | { status: number; body: unknown; unreachable?: false | undefined }
-  | { unreachable: true };
+  | { status: number; body: unknown; unreachable?: false | undefined; allowFromBundle?: false | undefined }
+  | { unreachable: true }
+  | { allowFromBundle: true };
 
 /**
  * Replace `globalThis.fetch` with a stub for the `url` verifier and return a
@@ -71,6 +73,12 @@ export type StubVerifierFetchOptions =
  * - `{ status, body }`: every call resolves with `body` (JSON-encoded unless
  *   already a string) at `status`.
  * - `{ unreachable: true }`: every call rejects with `ECONNREFUSED`.
+ * - `{ allowFromBundle: true }`: every call resolves 200 `allow` whose
+ *   `consume_nonces` is derived from the PRESENTED bundle exactly as a hosted
+ *   verifier derives it: `issuer_key` = the revealed operator key as `x:y`,
+ *   `nonce` = `publicSignals[1]` (the one-time nullifier), `retain_until` = the
+ *   credential expiry. Two presentations minted for one binding therefore
+ *   reserve two different nonces, and the same presentation twice replays.
  *
  * `calls` records `{ url, body }` for each invocation so a test can assert the
  * POSTed `VerifierRequest` (and, later, `consume_nonces`). The stub stays
@@ -98,7 +106,25 @@ export function stubVerifierFetch(options: StubVerifierFetchOptions): {
       }
     }
     calls.push({ url, body });
-    if (options.unreachable === true) throw new Error('ECONNREFUSED');
+    if ('unreachable' in options && options.unreachable === true) throw new Error('ECONNREFUSED');
+    if ('allowFromBundle' in options && options.allowFromBundle === true) {
+      const presented = (body as { bundle?: unknown }).bundle;
+      if (typeof presented !== 'string') throw new Error('stub: POSTed body carries no bundle string');
+      const parsed = parseBundle(presented);
+      const { operator_pubkey, expiry } = parsed.agent.credential;
+      const nullifier = parsed.agent.envelope.publicSignals[1];
+      if (nullifier === undefined) throw new Error('stub: presented bundle has no publicSignals[1]');
+      return Response.json(
+        {
+          verdict: 'allow',
+          kind: 'classical',
+          consume_nonces: [
+            { issuer_key: `${operator_pubkey.x}:${operator_pubkey.y}`, nonce: nullifier, retain_until: expiry },
+          ],
+        },
+        { status: 200 },
+      );
+    }
     const payload = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
     return new Response(payload, {
       status: options.status,
