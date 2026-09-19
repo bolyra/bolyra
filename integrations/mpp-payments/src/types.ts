@@ -210,9 +210,24 @@ export interface BolyraGateOptions {
     options: Record<string, unknown>;
   }) => string | number;
   /**
-   * When to run the gate. `"always"` (default) also gates challenge-issuance
-   * requests, so unauthorized agents never see a 402 challenge. `"payment"`
-   * gates only requests that present a payment credential.
+   * When to run the Bolyra decision.
+   *
+   * `"always"` (default) runs the decision on every request, including ones
+   * that carry no Payment credential — so a credential-less request denies
+   * `missing_authorization` before any method hook runs, and unauthorized
+   * agents never see a 402 challenge.
+   *
+   * `"payment"` skips the decision only for credential-less discovery
+   * requests (the 402 challenge probe); every credential-bearing request is
+   * gated. Because a skipped decision must not become application success,
+   * this mode is constrained:
+   *   (a) the wrapped method must not have an `authorize` hook — refused at
+   *       construction with `BolyraGateConfigError` (and denied
+   *       `internal_error` at request time if one is attached afterwards);
+   *   (b) on a credential-less request the method's own `preflight` may
+   *       return only `undefined` or a 402 `Response`; anything else is
+   *       denied `internal_error`, because mppx would deliver a non-402
+   *       preflight Response to the application as success.
    */
   enforce?: 'always' | 'payment';
   /**

@@ -8,7 +8,7 @@
  */
 
 import { verifyReceipt, type SignedReceipt } from '@bolyra/receipts';
-import { BolyraDeniedError } from '../src/errors';
+import { BolyraDeniedError, BolyraGateConfigError } from '../src/errors';
 import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER } from '../src/gate';
 import type { BolyraGateOptions, OperatorKey } from '../src/types';
 import { AUDIENCE, EXPIRY, NOW_UNIX, makeBundle, operatorKey } from './helpers';
@@ -78,6 +78,20 @@ async function drive(
     request: options,
   });
   return { denied: undefined, receipt };
+}
+
+/**
+ * Drive only the preflight hook, passing `credential` through untouched (null
+ * exercises the credential-less branch). Denials propagate as thrown errors.
+ */
+async function drivePreflight(
+  wrapped: ReturnType<typeof bolyraGate<ReturnType<typeof mockMethod>['method']>>,
+  input: Request,
+  options: Record<string, unknown>,
+  { credential }: { credential: unknown },
+) {
+  const capturedRequest = Object.freeze({ headers: new Headers(input.headers), method: input.method, url: new URL(input.url) });
+  return wrapped.preflight?.({ capturedRequest, credential, input, options, realm: 'api.merchant.example', secretKey: 'test-secret-key-test-secret-key-32' });
 }
 
 async function gateOptions(overrides: Partial<BolyraGateOptions> = {}): Promise<BolyraGateOptions> {
@@ -507,5 +521,88 @@ describe('receipt sink failure (fail closed, sink called once)', () => {
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
+  });
+});
+
+describe('credential-less passthrough', () => {
+  test("enforce:'payment' + a method with an authorize hook is refused at construction", async () => {
+    const { method } = mockMethod();
+    const withAuthorize = { ...method, authorize: async () => undefined };
+    await expect(async () =>
+      bolyraGate(withAuthorize, await gateOptions({ enforce: 'payment' })),
+    ).rejects.toBeInstanceOf(BolyraGateConfigError);
+  });
+
+  test("enforce:'payment' + credential-less request + original preflight returning 402 passes through", async () => {
+    const { method } = mockMethod();
+    const challenge = new Response(null, { status: 402 });
+    const m = { ...method, preflight: jest.fn(() => challenge) };
+    const wrapped = bolyraGate(m, await gateOptions({ enforce: 'payment' }));
+    const out = await drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null });
+    expect(out).toBe(challenge);
+    expect(m.preflight).toHaveBeenCalledTimes(1);
+  });
+
+  test("enforce:'payment' + credential-less request + original preflight returning undefined passes through as undefined", async () => {
+    const { method, preflightSpy } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ enforce: 'payment' }));
+    const out = await drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null });
+    expect(out).toBeUndefined();
+    expect(preflightSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("enforce:'payment' + credential-less request + a method with NO original preflight yields undefined", async () => {
+    const { method } = mockMethod();
+    const { preflight: _omitted, ...withoutPreflight } = method;
+    const wrapped = bolyraGate(withoutPreflight, await gateOptions({ enforce: 'payment' }));
+    const out = await drivePreflight(
+      wrapped as ReturnType<typeof bolyraGate<typeof method>>,
+      requestWithBundle(undefined),
+      { amount: '25' },
+      { credential: null },
+    );
+    expect(out).toBeUndefined();
+  });
+
+  test("enforce:'payment' + credential-less request + a REJECTING original preflight propagates its own error", async () => {
+    const { method } = mockMethod();
+    const boom = new Error('original preflight exploded');
+    const m = { ...method, preflight: jest.fn(async () => { throw boom; }) };
+    const wrapped = bolyraGate(m, await gateOptions({ enforce: 'payment' }));
+    let caught: unknown;
+    try {
+      await drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBe(boom);
+    expect(caught).not.toBeInstanceOf(BolyraDeniedError);
+  });
+
+  test("enforce:'payment' + an authorize hook attached AFTER bolyraGate() is denied internal_error at request time", async () => {
+    const { method, preflightSpy } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ enforce: 'payment' }));
+    (wrapped as any).authorize = async () => undefined;
+    await expect(
+      drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null }),
+    ).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'internal_error' } });
+    expect(preflightSpy).not.toHaveBeenCalled();
+  });
+
+  test("enforce:'payment' + credential-less request + original preflight returning a NON-402 Response fails closed", async () => {
+    const { method } = mockMethod();
+    const m = { ...method, preflight: jest.fn(() => new Response('nope', { status: 403 })) };
+    const wrapped = bolyraGate(m, await gateOptions({ enforce: 'payment' }));
+    await expect(
+      drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null }),
+    ).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'internal_error' } });
+  });
+
+  test("enforce:'always' (default) gates credential-less requests too", async () => {
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions());
+    await expect(
+      drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null }),
+    ).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'missing_authorization' } });
   });
 });
