@@ -41,6 +41,13 @@ still requires the zk-class [`bolyra verify`](../cli/) CLI. The live
 [`/health`](#get-health) response spells out exactly which checks are
 signature-authenticated vs. consistency-only.
 
+## Developing
+
+Node **22+** (wrangler's requirement). `npm run typecheck` runs `wrangler types` first: the
+Cloudflare runtime globals (`ExecutionContext`, `AnalyticsEngineDataset`, …) come from the
+generated, gitignored `worker-configuration.d.ts`, so a plain `tsc --noEmit` on a fresh clone
+fails until it exists. `npm test` (vitest in the workers pool) does not need it.
+
 ## 5-minute quickstart
 
 You need the preview URL and bearer token (ask Viswa — issued per design
