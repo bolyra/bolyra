@@ -17,6 +17,23 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/mpp 0.5.0 (2026-09-19)
+
+### Changed (BREAKING)
+
+- Denials are **thrown** as `BolyraDeniedError` from the gate's `preflight`/`verify` hooks instead of being returned as a `Response`. mppx converts a returned non-402 preflight `Response` into an outer `status: 200`, which let the documented handler run the protected action after a denial. **Migration:** wrap route handlers with `handleDenials` (or catch `BolyraDeniedError` and return `err.response`).
+- `onReceipt` must be **synchronous**. A sink that returns a Promise is treated as a sink failure and the request is denied `internal_error` (an async sink's rejection could otherwise never fail the decision). **Migration:** hand off to a queue synchronously inside the sink.
+- `enforce: 'payment'` combined with a method `authorize` hook is refused at construction (`BolyraGateConfigError`); credential-less discovery under `enforce: 'payment'` may only yield `undefined` or a 402 from the method's own `preflight` — anything else is denied. **Migration:** use `enforce: 'always'` (the default) or remove the hook.
+- The stashed authorization decision is consumed one-use: a second `verify` against the same captured request fails closed; a failed payment rail means the client retries with a fresh presentation.
+- A receipt sink failure (throw or Promise) now denies the request `internal_error` on every path instead of escaping; on the allow path this consumes the presentation's nonce.
+
+### Added
+
+- `handleDenials`, `BolyraDeniedError`, `BolyraGateConfigError`, `isBolyraDeniedError` exports.
+- `test-integration/`: the gate driven through real `Mppx.create()` (mppx pinned 0.8.13), with an application-owned execution counter; runs in CI alongside `typecheck:integration`.
+- `MppxServerMethodLike` hook typing accepts a real mppx `Method.Server` under strict settings (method syntax; optional `realm`/`secretKey`/`credential`/`request` fields).
+- The shipped `demo` CLI and `examples/mandate-demo` migrated to the new contract.
+
 ## @bolyra/evc-conformance 0.6.0 (UNRELEASED)
 
 ### Added
