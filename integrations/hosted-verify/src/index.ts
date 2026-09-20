@@ -286,9 +286,15 @@ function fail(status: number, code: RegistryErrorCode, message: string): RouteOu
   return { response: registryError(status, code, message), code };
 }
 
-/** A registry result the declared union does not name: log its shape (never its content), fail closed. */
-function unknownOutcome(operation: string, result: unknown): RouteOutcome {
-  const shape = typeof result === 'object' && result !== null ? Object.keys(result).sort().join(',') : typeof result;
+/**
+ * A registry result the declared union does not name: log its shape (never its
+ * content), fail closed. Typed `never` so a forgotten arm in the caller's switch
+ * is a compile error (the value is not `never` until every declared arm returns)
+ * while a value outside the union still lands here at runtime.
+ */
+function unknownOutcome(operation: string, result: never): RouteOutcome {
+  const value: unknown = result;
+  const shape = typeof value === 'object' && value !== null ? Object.keys(value).sort().join(',') : typeof value;
   console.error('hosted-verify registry returned an unknown outcome:', { operation, shape });
   return fail(500, 'internal_error', 'registry storage failure');
 }
@@ -623,9 +629,10 @@ export default {
               response = registryError(404, 'not_found', 'no such credential');
               break;
             }
-            const registry = registryFor(env, gate.auth);
             let result: RouteOutcome;
             try {
+              // Inside the guard: a missing or unapplied binding fails here, not as a bare exception.
+              const registry = registryFor(env, gate.auth);
               result =
                 id === undefined
                   ? await handleRegister(request, gate.auth, registry, requestId)
