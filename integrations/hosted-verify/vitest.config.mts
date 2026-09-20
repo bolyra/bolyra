@@ -10,12 +10,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 // wrangler.jsonc, comments stripped (every comment in that file is a full line), for the
 // config drift test. Wrangler itself is the authority on the file; this only pins values.
-const wranglerConfig = JSON.parse(
-  readFileSync(join(here, 'wrangler.jsonc'), 'utf8')
+const wranglerConfig = (() => {
+  const stripped = readFileSync(join(here, 'wrangler.jsonc'), 'utf8')
     .split('\n')
     .filter((line) => !/^\s*\/\//.test(line))
-    .join('\n'),
-) as Record<string, unknown>;
+    .join('\n');
+  try {
+    return JSON.parse(stripped) as Record<string, unknown>;
+  } catch (e) {
+    throw new Error(
+      'wrangler.jsonc could not be parsed after stripping full-line // comments. This reader does not handle inline // or /* */ comments — keep every comment in wrangler.jsonc on its own line. (' +
+        String(e) +
+        ')',
+    );
+  }
+})();
 
 // Tests trust the operator key behind the conformance request fixtures.
 const fixture = JSON.parse(

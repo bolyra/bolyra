@@ -41,9 +41,11 @@
     "RECEIPT_ISSUER": "bolyra-hosted-verify-preview",
     "RECEIPT_KEY_ID": "preview-1",
     // CAPABILITY_MAP: JSON capability → permission-name map merged per key over the
-    // built-in default (src/verify/capabilities.ts). This is @bolyra/mpp's spend-mandate
-    // vocabulary (MPP_CAPABILITY_MAP); without it every mpp mandate denies
-    // unknown_capability. Global, not per tenant. test/wrangler-config.spec.ts pins it.
+    // built-in default (src/verify/capabilities.ts). This value is @bolyra/mpp@0.5.0's
+    // MPP_CAPABILITY_MAP, snapshotted in test/fixtures/mandate.json and pinned to this
+    // file by test/wrangler-config.spec.ts; without it every mpp mandate denies
+    // unknown_capability. Global, not per tenant. When mpp's vocabulary changes,
+    // regenerate the fixture and update both copies here (production and staging).
     "CAPABILITY_MAP": "{\"mpp:financial:small\":[\"FINANCIAL_SMALL\"],\"mpp:financial:medium\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\"],\"mpp:financial:unlimited\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\",\"FINANCIAL_UNLIMITED\"]}"
   },
 
@@ -62,6 +64,8 @@
       "vars": {
         "RECEIPT_ISSUER": "bolyra-hosted-verify-staging",
         "RECEIPT_KEY_ID": "staging-1",
+        // Byte-identical to the top-level CAPABILITY_MAP on purpose: the test pins both
+        // to the same test/fixtures/mandate.json snapshot.
         "CAPABILITY_MAP": "{\"mpp:financial:small\":[\"FINANCIAL_SMALL\"],\"mpp:financial:medium\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\"],\"mpp:financial:unlimited\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\",\"FINANCIAL_UNLIMITED\"]}"
       }
     }
