@@ -3,21 +3,35 @@
  *
  * External Verifier Contract v1 over HTTP (spec/external-verifier-contract-v1.md):
  *
- *   POST /v1/verify   Bearer-auth'd. Body = the spec §2.1 request object (the
- *                     same JSON `bolyra verify` reads on stdin). Response body
- *                     = exactly one strict §3.4 verdict object, always
+ *   POST /v1/verify   Verifier-token auth. Body = the spec §2.1 request object
+ *                     (the same JSON `bolyra verify` reads on stdin). Response
+ *                     body = exactly one strict §3.4 verdict object, always
  *                     `kind: "classical"` (spec §3.5). Fail-closed everywhere.
  *   GET  /health      Unauthenticated status + preview labeling + the exact
  *                     list of checks this preview does / does not perform.
  *
+ * Tenancy and roles (src/tenants.ts): the `TENANTS` secret maps an org id to
+ * an admin token, a verifier token and that tenant's trusted operator keys.
+ * Tenant and role derive exclusively from which token matched; no route
+ * accepts an org id from the request.
+ *
+ *   request ──► loadTenants(TENANTS) ──defect──► 500 deny internal_error
+ *                    │                            (/health: tenants:"invalid")
+ *                    ▼
+ *              resolveAuth(token) ──none──► 401 { error: "unauthorized" }
+ *                    │
+ *                    ├── role ≠ verifier ──► 403 { error: "forbidden" }
+ *                    ├── tenant.disabled ─► 500 deny internal_error
+ *                    └── ok ──► verifyClassical(body, tenant.trusted_operators, capabilityMap)
+ *
  * HTTP mapping of the CLI exit-code semantics (§7.1): every decision-level
  * verdict (allow or policy/crypto deny) is HTTP 200; `deny internal_error`
  * (the CLI's "non-zero exit" case) is HTTP 500. Auth/transport failures
- * (401/404/405) happen BEFORE the contract and carry an `{ "error": ... }`
+ * (401/403/404/405) happen BEFORE the contract and carry an `{ "error": ... }`
  * body, not a verdict.
  *
- * NOT in this preview (deliberately): SLAs, billing, dashboards,
- * multi-tenancy, zk verification, custom policy UI, customer-managed keys.
+ * NOT in this preview (deliberately): SLAs, billing, dashboards, tenant
+ * self-service, zk verification, custom policy UI, customer-managed keys.
  * Observability IS here: Workers Logs + one Analytics Engine data point per
  * request (labels/verdicts/latency only — see README "Observability").
  */
@@ -28,16 +42,19 @@ import {
   CHECKS_CONSISTENCY,
   CHECKS_NOT_PERFORMED,
 } from './verify/core';
-import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/verdict';
-import { loadTrustedOperators } from './verify/operators';
 import { loadCapabilityMap, type CapabilityMap } from './verify/capabilities';
+import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/verdict';
+import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
+// Never log or serialize an AuthResult wholesale on a hot path — log org_id and role as separate fields.
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
 
 export interface Env {
-  PREVIEW_TOKEN?: string;
-  /** JSON object mapping partner label → bearer token, e.g. {"theseus":"…"}. */
-  PARTNER_TOKENS?: string;
-  TRUSTED_OPERATORS?: string;
+  /**
+   * Secret. JSON object: org_id → { admin_token, verifier_token,
+   * trusted_operators: ["x:y", …], disabled? }. See src/tenants.ts.
+   */
+  TENANTS?: string;
+  /** Optional JSON capability → permission-name map, merged over the built-in default. */
   CAPABILITY_MAP?: string;
   RECEIPT_SIGNER_KEY?: string;
   RECEIPT_ISSUER?: string;
@@ -62,68 +79,26 @@ function json(status: number, body: unknown, extra?: Record<string, string>): Re
   });
 }
 
-/** Constant-time byte comparison (no early exit on mismatch). */
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  const len = Math.max(ab.length, bb.length);
-  for (let i = 0; i < len; i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
-  }
-  return diff === 0;
+/**
+ * The one shape for non-verdict error bodies: `{ "error": <code>, ...extra }`.
+ * `/v1/verify`'s 401 keeps its historical `hint` member; other routes add a
+ * `message`. Never a verdict object (those are HTTP 200/500 decisions).
+ */
+function errorJson(
+  status: number,
+  code: string,
+  extra?: Record<string, unknown>,
+  headers?: Record<string, string>,
+): Response {
+  return json(status, { error: code, ...extra }, headers);
 }
 
-/** Reserved partner label recorded for requests with no valid bearer token. */
+/** Reserved usage label recorded for requests with no valid bearer token. */
 const UNAUTHENTICATED = 'unauthenticated';
 
-/**
- * Resolve the presented bearer token to a partner label, or null.
- *
- * Two token sources, both optional (no source configured = fail closed):
- *   - PARTNER_TOKENS: JSON object mapping label → token. Named bearer tokens
- *     only — NOT multi-tenant admin. Malformed JSON, non-string tokens, empty
- *     labels/tokens, and the reserved "unauthenticated" label grant nothing.
- *   - PREVIEW_TOKEN: the legacy shared token, kept working as label "preview".
- *
- * Every candidate token is compared with the constant-time comparator, and
- * ALL candidates are always scanned (no early exit on match).
- */
-function authenticate(request: Request, env: Env): string | null {
-  const header = request.headers.get('authorization') ?? '';
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  if (match === null || match[1] === undefined) return null;
-  const presented = match[1];
-
-  let label: string | null = null;
-
-  if (env.PARTNER_TOKENS !== undefined && env.PARTNER_TOKENS !== '') {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(env.PARTNER_TOKENS);
-    } catch {
-      parsed = undefined; // malformed mapping grants nothing (fail closed)
-    }
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      for (const [name, token] of Object.entries(parsed as Record<string, unknown>)) {
-        if (typeof token !== 'string' || token === '') continue;
-        if (name === '' || name === UNAUTHENTICATED) continue;
-        if (timingSafeEqual(presented, token) && label === null) label = name;
-      }
-    }
-  }
-
-  if (
-    env.PREVIEW_TOKEN !== undefined &&
-    env.PREVIEW_TOKEN !== '' &&
-    timingSafeEqual(presented, env.PREVIEW_TOKEN) &&
-    label === null
-  ) {
-    label = 'preview';
-  }
-
-  return label;
+/** Usage label for an authenticated request: `<org_id>:<role>` (never anything else from the auth result). */
+function tenantLabel(auth: AuthResult): string {
+  return `${auth.org_id}:${auth.role}`;
 }
 
 /**
@@ -182,17 +157,40 @@ function configErrorVerdict(e: unknown): DenyVerdict {
   return deny('internal_error', 'missing or invalid trust configuration');
 }
 
+/** Outcome of authenticating a request for a route that requires `required`. */
+type Gate =
+  | { kind: 'config_error'; verdict: DenyVerdict }
+  | { kind: 'unauthenticated' }
+  | { kind: 'forbidden'; auth: AuthResult }
+  | { kind: 'disabled'; auth: AuthResult }
+  | { kind: 'ok'; auth: AuthResult };
+
+/**
+ * auth → role → quarantine, in that order. The tenant map is re-parsed per
+ * request (≤ 4 KiB; a rotated secret takes effect on the next request).
+ */
+function authorize(request: Request, env: Env, required: Role): Gate {
+  let tenants: Map<string, TenantConfig>;
+  try {
+    tenants = loadTenants(env.TENANTS);
+  } catch (e) {
+    return { kind: 'config_error', verdict: configErrorVerdict(e) };
+  }
+  const auth = resolveAuth(request, tenants);
+  if (auth === null) return { kind: 'unauthenticated' };
+  if (auth.role !== required) return { kind: 'forbidden', auth };
+  if (auth.disabled) return { kind: 'disabled', auth };
+  return { kind: 'ok', auth };
+}
+
 async function handleVerify(
   request: Request,
+  trustedOperators: ReadonlySet<string>,
   env: Env,
 ): Promise<{ verdict: Verdict; response: Response }> {
   // Configuration first: a defect must not depend on what the body says.
-  let trustedOperators: Set<string>;
   let capabilityMap: CapabilityMap;
   try {
-    trustedOperators = loadTrustedOperators(
-      (env.TRUSTED_OPERATORS ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0),
-    );
     capabilityMap = loadCapabilityMap(env.CAPABILITY_MAP);
   } catch (e) {
     const verdict = configErrorVerdict(e);
@@ -218,6 +216,14 @@ async function handleVerify(
 }
 
 function handleHealth(env: Env): Response {
+  // /health is the diagnostic surface: a broken TENANTS is REPORTED here at
+  // 200, never thrown (the authenticated routes are the ones that fail closed).
+  let tenants: 'ok' | 'invalid' = 'ok';
+  try {
+    loadTenants(env.TENANTS);
+  } catch {
+    tenants = 'invalid';
+  }
   return json(200, {
     status: 'ok',
     service: 'bolyra-hosted-verify',
@@ -225,9 +231,10 @@ function handleHealth(env: Env): Response {
     contract: 'external-verifier-contract-v1 (spec/external-verifier-contract-v1.md)',
     verifier_kind: 'classical',
     nonce_mode: 'host',
+    tenants,
     receipts_enabled: env.RECEIPT_SIGNER_KEY !== undefined && env.RECEIPT_SIGNER_KEY !== '',
     trust_model:
-      'an allow means a configured trusted operator (TRUSTED_OPERATORS) signed a binding ' +
+      'an allow means an operator the calling tenant configured as trusted signed a binding ' +
       'authorizing this exact request. The proof itself is NOT verified — the Merkle root and ' +
       'all public signals are unverified. Sound scope/expiry enforcement requires the zk-class ' +
       '`bolyra verify` CLI.',
@@ -242,13 +249,16 @@ function handleHealth(env: Env): Response {
  * Explicitly never stored: request bodies, proofs, credentials, bearer
  * tokens, IPs. Documented in README "Observability" (trust statement).
  *
- *   blobs   = [route, partner_label, verdict, code, proof_kind, request_id]
+ *   blobs   = [route, label, verdict, code, proof_kind, request_id]
  *   doubles = [latency_ms, http_status]
- *   indexes = [partner_label]
+ *   indexes = [label]
+ *
+ * `label` is `<org_id>:<role>` for an authenticated request (including one
+ * refused for the wrong role), or `unauthenticated`.
  */
 interface Usage {
   route: string; // '/v1/verify' | '/health' | 'other' (never raw paths)
-  label: string; // partner label, or 'unauthenticated'
+  label: string; // '<org_id>:<role>' or 'unauthenticated'
   verdict: 'allow' | 'deny' | 'error';
   code: string; // deny code, transport-error code, or '' on allow
   kind: string; // verdict proof kind ('classical'), '' for non-verdicts
@@ -287,7 +297,7 @@ export default {
       route = '/health';
       if (request.method !== 'GET') {
         code = 'method_not_allowed';
-        response = json(405, { error: 'method_not_allowed' }, { allow: 'GET' });
+        response = errorJson(405, 'method_not_allowed', undefined, { allow: 'GET' });
       } else {
         outcome = 'allow';
         response = handleHealth(env);
@@ -296,19 +306,46 @@ export default {
       route = '/v1/verify';
       if (request.method !== 'POST') {
         code = 'method_not_allowed';
-        response = json(405, { error: 'method_not_allowed' }, { allow: 'POST' });
+        response = errorJson(405, 'method_not_allowed', undefined, { allow: 'POST' });
       } else {
-        const partner = authenticate(request, env);
-        if (partner === null) {
-          code = 'unauthorized';
-          response = json(401, { error: 'unauthorized', hint: 'Authorization: Bearer <token>' });
-        } else {
-          label = partner;
-          const { verdict, response: verdictRes } = await handleVerify(request, env);
-          response = verdictRes;
-          outcome = verdict.verdict;
-          code = verdict.verdict === 'deny' ? verdict.code : '';
-          kind = verdict.kind;
+        const gate = authorize(request, env, 'verifier');
+        switch (gate.kind) {
+          case 'config_error': {
+            outcome = 'deny';
+            code = gate.verdict.code;
+            kind = gate.verdict.kind;
+            response = verdictResponse(gate.verdict, undefined, env);
+            break;
+          }
+          case 'unauthenticated': {
+            code = 'unauthorized';
+            response = errorJson(401, 'unauthorized', { hint: 'Authorization: Bearer <token>' });
+            break;
+          }
+          case 'forbidden': {
+            label = tenantLabel(gate.auth);
+            code = 'forbidden';
+            response = errorJson(403, 'forbidden');
+            break;
+          }
+          case 'disabled': {
+            label = tenantLabel(gate.auth);
+            const verdict = configErrorVerdict(new Error(`tenant ${gate.auth.org_id} is disabled`));
+            outcome = 'deny';
+            code = verdict.code;
+            kind = verdict.kind;
+            response = verdictResponse(verdict, undefined, env);
+            break;
+          }
+          case 'ok': {
+            label = tenantLabel(gate.auth);
+            const { verdict, response: verdictRes } = await handleVerify(request, gate.auth.trusted_operators, env);
+            response = verdictRes;
+            outcome = verdict.verdict;
+            code = verdict.verdict === 'deny' ? verdict.code : '';
+            kind = verdict.kind;
+            break;
+          }
         }
       }
     } else if (url.pathname === '/.well-known/bolyra-signers.json') {
@@ -317,12 +354,12 @@ export default {
       route = '/.well-known/bolyra-signers.json';
       if (request.method !== 'GET') {
         code = 'method_not_allowed';
-        response = json(405, { error: 'method_not_allowed' }, { allow: 'GET' });
+        response = errorJson(405, 'method_not_allowed', undefined, { allow: 'GET' });
       } else {
         const doc = buildSignerDiscoveryDoc(env);
         if (doc === undefined) {
           code = 'not_found';
-          response = json(404, { error: 'not_found', hint: 'receipt signing is not configured' });
+          response = errorJson(404, 'not_found', { hint: 'receipt signing is not configured' });
         } else {
           outcome = 'allow';
           response = json(200, doc);
@@ -330,8 +367,7 @@ export default {
       }
     } else {
       code = 'not_found';
-      response = json(404, {
-        error: 'not_found',
+      response = errorJson(404, 'not_found', {
         routes: ['GET /health', 'POST /v1/verify', 'GET /.well-known/bolyra-signers.json'],
       });
     }

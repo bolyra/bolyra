@@ -14,12 +14,22 @@ import { bindingDigest } from '../src/verify/binding';
 import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
 import { VerifyDenial } from '../src/verify/verdict';
-import { postVerify, cloneWithBundle, BASE, TOKEN } from './helpers';
+import { postVerify, cloneWithBundle, BASE, TOKENS, ORGS, buildTestTenants } from './helpers';
 import { validateVerdictSchema } from './verdict-schema';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
 import allowHuman from '../../cli/test/fixtures/verify/allow-human/request.json';
 import allowDelegation from '../../cli/test/fixtures/verify/allow-delegation-1hop/request.json';
+
+/** The conformance fixture's operator key, canonical `x:y`. */
+const FIXTURE_OPERATOR_KEY = (() => {
+  const { operator_pubkey } = (JSON.parse(allowAgentOnly.bundle) as {
+    agent: { credential: { operator_pubkey: { x: string; y: string } } };
+  }).agent.credential;
+  return `${operator_pubkey.x}:${operator_pubkey.y}`;
+})();
+
+const LEGACY_NAMES = /TRUSTED_OPERATORS|PARTNER_TOKENS|PREVIEW_TOKEN/;
 
 async function verdictOf(res: Response): Promise<Record<string, unknown>> {
   const v = (await res.json()) as Record<string, unknown>;
@@ -32,6 +42,14 @@ function decodeReceipt(header: string): SignedReceipt {
   const b64 = header.replace(/-/g, '+').replace(/_/g, '/');
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(bytes)) as SignedReceipt;
+}
+
+function verifyReq(token: string, body: unknown = allowAgentOnly): Request {
+  return new Request(`${BASE}/v1/verify`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 describe('binding v2 digest conformance', () => {
@@ -65,10 +83,19 @@ describe('routing + auth', () => {
     expect(String(body.phase)).toContain('DESIGN PARTNER PREVIEW');
     expect(body.verifier_kind).toBe('classical');
     expect(body.nonce_mode).toBe('host');
+    expect(body.tenants).toBe('ok');
     expect((body.checks_authenticated as string[]).join(' ')).toContain('trusted-operator');
     expect((body.checks_consistency_only as string[]).length).toBeGreaterThan(3);
     expect((body.checks_not_performed as string[]).join(' ')).toContain('Groth16');
     expect(String(body.trust_model)).toContain('proof itself is NOT verified');
+    // The legacy configuration names must not survive on any public surface.
+    expect(JSON.stringify(body)).not.toMatch(LEGACY_NAMES);
+  });
+
+  it('GET /health reports tenants:"invalid" at 200 when TENANTS is malformed', async () => {
+    const res = await worker.fetch(new Request(`${BASE}/health`), { ...env, TENANTS: '{not json' });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { tenants: string }).tenants).toBe('invalid');
   });
 
   it('unknown route → 404; wrong methods → 405', async () => {
@@ -77,9 +104,10 @@ describe('routing + auth', () => {
     expect((await SELF.fetch(`${BASE}/v1/verify`, { method: 'GET' })).status).toBe(405);
   });
 
-  it('POST /v1/verify without a token → 401', async () => {
+  it('POST /v1/verify without a token → 401 with the unchanged error body', async () => {
     const res = await postVerify(allowAgentOnly, { token: null });
     expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized', hint: 'Authorization: Bearer <token>' });
   });
 
   it('POST /v1/verify with a wrong token → 401', async () => {
@@ -87,14 +115,31 @@ describe('routing + auth', () => {
     expect(res.status).toBe(401);
   });
 
-  it('fails closed (401) when PREVIEW_TOKEN is not configured', async () => {
-    const req = new Request(`${BASE}/v1/verify`, {
-      method: 'POST',
-      headers: { authorization: 'Bearer anything' },
-      body: JSON.stringify(allowAgentOnly),
-    });
-    const res = await worker.fetch(req, { ...env, PREVIEW_TOKEN: '' });
-    expect(res.status).toBe(401);
+  it('an ADMIN token on /v1/verify → 403 with exactly { error: "forbidden" }', async () => {
+    const res = await postVerify(allowAgentOnly, { token: TOKENS.A.admin });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+  });
+
+  it("another tenant's verifier (org-b does not trust the fixture operator) → deny untrusted_root", async () => {
+    const res = await postVerify(allowAgentOnly, { token: TOKENS.B.verifier });
+    expect(res.status).toBe(200);
+    expect((await verdictOf(res)).code).toBe('untrusted_root');
+  });
+
+  it('a second tenant trusting the same operator (org-c) → allow', async () => {
+    const res = await postVerify(allowAgentOnly, { token: TOKENS.C.verifier });
+    expect((await verdictOf(res)).verdict).toBe('allow');
+  });
+
+  it('a disabled tenant → 500 deny internal_error; other tenants unaffected', async () => {
+    const e = { ...env, TENANTS: buildTestTenants(FIXTURE_OPERATOR_KEY, { disabled: [ORGS.A] }) };
+    const disabled = await worker.fetch(verifyReq(TOKENS.A.verifier), e);
+    expect(disabled.status).toBe(500);
+    expect((await verdictOf(disabled)).code).toBe('internal_error');
+    const other = await worker.fetch(verifyReq(TOKENS.C.verifier), e);
+    expect(other.status).toBe(200);
+    expect((await verdictOf(other)).verdict).toBe('allow');
     createExecutionContext(); // keep the import exercised under the workers pool
   });
 });
@@ -215,7 +260,7 @@ describe('classical pipeline', () => {
     expect(v.code).toBe('unsupported_version');
   });
 
-  it('operator key not in TRUSTED_OPERATORS → deny untrusted_root', async () => {
+  it("operator key not in the tenant's trusted_operators → deny untrusted_root", async () => {
     const { bundle, commit } = cloneWithBundle(allowAgentOnly);
     // A different (untrusted) operator key. The signature will not verify
     // either, but the trust-anchor gate fires first.
@@ -287,51 +332,37 @@ describe('classical pipeline', () => {
 });
 
 describe('fail-closed configuration (config errors are a 500 VERDICT, never a bare error body)', () => {
-  function verifyReq(): Request {
-    return new Request(`${BASE}/v1/verify`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify(allowAgentOnly),
-    });
-  }
-
-  it('no trusted operator configured → HTTP 500 deny internal_error (spec §12)', async () => {
-    const res = await worker.fetch(verifyReq(), { ...env, TRUSTED_OPERATORS: '' });
-    expect(res.status).toBe(500);
-    const v = await verdictOf(res);
-    expect(v.code).toBe('internal_error');
-    expect(v.message).toBe('missing or invalid trust configuration');
-    expect(v).not.toHaveProperty('detail');
-  });
-
-  it('malformed trusted-operator entry → HTTP 500 deny internal_error', async () => {
-    const res = await worker.fetch(verifyReq(), { ...env, TRUSTED_OPERATORS: 'not-a-pair' });
-    expect(res.status).toBe(500);
-    const v = await verdictOf(res);
-    expect(v.code).toBe('internal_error');
-    expect(v.message).toBe('missing or invalid trust configuration');
-    expect(v).not.toHaveProperty('detail');
-  });
-
-  it('malformed CAPABILITY_MAP → HTTP 500 deny internal_error', async () => {
-    const res = await worker.fetch(verifyReq(), { ...env, CAPABILITY_MAP: '{not json' });
-    expect(res.status).toBe(500);
-    const v = await verdictOf(res);
-    expect(v.code).toBe('internal_error');
-    expect(v.message).toBe('missing or invalid trust configuration');
-    expect(v).not.toHaveProperty('detail');
-  });
-
-  it('CAPABILITY_MAP naming an unknown permission → HTTP 500 deny internal_error', async () => {
-    const res = await worker.fetch(verifyReq(), {
-      ...env,
+  it.each([
+    ['TENANTS unset', { TENANTS: '' }],
+    ['TENANTS malformed', { TENANTS: '{not json' }],
+    ['TENANTS with an empty trusted_operators list', {
+      TENANTS: JSON.stringify({
+        [ORGS.A]: { admin_token: TOKENS.A.admin, verifier_token: TOKENS.A.verifier, trusted_operators: [] },
+      }),
+    }],
+    ['TENANTS with a malformed operator entry', {
+      TENANTS: JSON.stringify({
+        [ORGS.A]: { admin_token: TOKENS.A.admin, verifier_token: TOKENS.A.verifier, trusted_operators: ['nope'] },
+      }),
+    }],
+    ['TENANTS with one token value used by two tenants', {
+      TENANTS: JSON.stringify({
+        [ORGS.A]: { admin_token: TOKENS.A.admin, verifier_token: TOKENS.A.verifier, trusted_operators: ['1:2'] },
+        [ORGS.B]: { admin_token: TOKENS.B.admin, verifier_token: TOKENS.A.verifier, trusted_operators: ['1:2'] },
+      }),
+    }],
+    ['CAPABILITY_MAP malformed', { CAPABILITY_MAP: '{not json' }],
+    ['CAPABILITY_MAP naming an unknown permission', {
       CAPABILITY_MAP: JSON.stringify({ send_message: ['NO_SUCH_PERMISSION'] }),
-    });
+    }],
+  ])('%s → HTTP 500 deny internal_error', async (_name, overrides) => {
+    const res = await worker.fetch(verifyReq(TOKENS.A.verifier), { ...env, ...overrides });
     expect(res.status).toBe(500);
     const v = await verdictOf(res);
     expect(v.code).toBe('internal_error');
     expect(v.message).toBe('missing or invalid trust configuration');
-    expect(v).not.toHaveProperty('detail');
+    expect(v).not.toHaveProperty('detail'); // config internals never reach the wire
+    expect(JSON.stringify(v)).not.toMatch(LEGACY_NAMES);
   });
 });
 
@@ -358,11 +389,7 @@ describe('signed receipts (X-Bolyra-Receipt)', () => {
   });
 
   it('receipts are omitted when RECEIPT_SIGNER_KEY is unset', async () => {
-    const req = new Request(`${BASE}/v1/verify`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify(allowAgentOnly),
-    });
+    const req = verifyReq(TOKENS.A.verifier);
     const res = await worker.fetch(req, { ...env, RECEIPT_SIGNER_KEY: '' });
     expect(res.status).toBe(200);
     expect(res.headers.get('x-bolyra-receipt')).toBeNull();
