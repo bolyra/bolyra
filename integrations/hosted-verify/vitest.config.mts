@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildTestTenants } from './test/tenants-fixture';
-import mandate from './test/fixtures/mandate.json' with { type: 'json' };
+import mandate from './test/fixtures/mandate.json';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -41,8 +41,9 @@ export default defineConfig({
           // org-a and org-c trust the conformance-fixture operator key,
           // org-b trusts a second test-only key. See test/tenants-fixture.ts.
           TENANTS: buildTestTenants(opKey),
-          // The capability vocabulary spend mandates sign; the built-in default holds
-          // messaging capabilities only. Same JSON the deployment must carry.
+          // The mandate fixture's capability vocabulary, for these tests only.
+          // A deployment that verifies mpp mandates must set CAPABILITY_MAP to
+          // the same JSON itself — wrangler.jsonc does not set it.
           CAPABILITY_MAP: JSON.stringify(mandate.capability_map),
           // Deterministic test signing key (NOT a real secret).
           RECEIPT_SIGNER_KEY:

@@ -42,15 +42,17 @@ const FIXTURES: Record<string, unknown> = {
   'deny-model-mismatch': denyModelMismatch,
 };
 
-// The allow vectors present the allow-agent-only fixture; the deny vectors are
-// denied before the registry is consulted, so only one registration is needed.
-beforeAll(async () => {
-  await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
-});
-
 const vectors = (vectorsFile as { vectors: Vector[] }).vectors.filter(
   (v) => v.type === 'external_verifier',
 );
+
+// allow-agent-only and deny-scope-exceeded share a byte-identical binding
+// (they differ only in request.granted_capabilities), so one registration
+// covers both; deny-model-mismatch has a different binding but is denied by
+// the model check before the registry is ever consulted.
+beforeAll(async () => {
+  await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+});
 
 describe('spec external_verifier conformance vectors', () => {
   it('found the external_verifier vectors', () => {

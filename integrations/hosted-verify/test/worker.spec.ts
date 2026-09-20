@@ -15,20 +15,22 @@ import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
 import { verifyClassical } from '../src/verify/core';
 import { VerifyDenial } from '../src/verify/verdict';
-import { postVerify, cloneWithBundle, BASE, TOKENS, ORGS, buildTestTenants, registerFixture, fixtureRegistration } from './helpers';
+import {
+  postVerify,
+  cloneWithBundle,
+  BASE,
+  TOKENS,
+  ORGS,
+  buildTestTenants,
+  registerFixture,
+  fixtureRegistration,
+  FIXTURE_OPERATOR_KEY,
+} from './helpers';
 import { validateVerdictSchema } from './verdict-schema';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
 import allowHuman from '../../cli/test/fixtures/verify/allow-human/request.json';
 import allowDelegation from '../../cli/test/fixtures/verify/allow-delegation-1hop/request.json';
-
-/** The conformance fixture's operator key, canonical `x:y`. */
-const FIXTURE_OPERATOR_KEY = (() => {
-  const { operator_pubkey } = (JSON.parse(allowAgentOnly.bundle) as {
-    agent: { credential: { operator_pubkey: { x: string; y: string } } };
-  }).agent.credential;
-  return `${operator_pubkey.x}:${operator_pubkey.y}`;
-})();
 
 const LEGACY_NAMES = /TRUSTED_OPERATORS|PARTNER_TOKENS|PREVIEW_TOKEN/;
 
