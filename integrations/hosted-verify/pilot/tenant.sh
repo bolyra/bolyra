@@ -40,6 +40,7 @@
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
+#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock); a stale lock names itself.
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -74,6 +75,30 @@ else
   # wrangler does not warn about an unspecified environment.
   WRANGLER_ENV=("--env=")
 fi
+# One tenant.sh at a time per environment. Every mutating command ends in a full rebuild of
+# TENANTS from the registry + keychain, so two overlapping runs can interleave: the one that
+# paused inside wrangler puts its OLDER map last and silently undoes the other (a quarantine
+# comes back re-enabled). The lock is taken before the first registry or keychain mutation
+# and held through the final `wrangler secret put`. mkdir is atomic on every filesystem here,
+# which flock (not on macOS) and lockfile helpers are not.
+LOCK_DIR="$TENANTS_DIR/.lock"
+LOCK_HELD=0
+release_lock() {
+  # Only ever remove a lock this process created — a failed acquire must leave the holder's.
+  [ "$LOCK_HELD" = 1 ] || return 0
+  LOCK_HELD=0
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+acquire_lock() {
+  mkdir -p "$TENANTS_DIR" || die "could not create the registry directory $TENANTS_DIR"
+  mkdir "$LOCK_DIR" 2>/dev/null || die "another tenant.sh is running for this environment (lock $LOCK_DIR); if none is, remove that directory and re-run"
+  LOCK_HELD=1
+  # Installed only once the lock is ours. `die` exits, so every refusal path releases it too.
+  trap 'release_lock' EXIT
+  echo "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+}
+
 # The repo conformance-fixture operator key (its private half is public). Seeded into a
 # preview tenant ONLY on --with-fixture-key, so the quickstart and examples/managed-revocation
 # verify before the partner's own key issues anything. Preview-only; never in a real deployment.
@@ -301,13 +326,16 @@ cmd="${1:-}"
 if [ $# -gt 0 ]; then shift; fi
 # One positional past what each subcommand uses, so an unexpected extra argument is seen
 # and refused rather than silently ignored.
+# Every command but `show` mutates or assembles the map, so each takes the lock first —
+# `sync --dry-run` included: it reads the registry and the keychain, and is only worth
+# reporting if nothing was rewriting them underneath. `show` is read-only and never waits.
 case "$cmd" in
-  add)     cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
-  rotate)  cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
-  disable) cmd_disable "${1:-}" "${2:-}" ;;
-  enable)  cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
-  remove)  cmd_remove "${1:-}" "${2:-}" ;;
-  sync)    cmd_sync "${1:-}" "${2:-}" ;;
+  add)     acquire_lock; cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
+  rotate)  acquire_lock; cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
+  disable) acquire_lock; cmd_disable "${1:-}" "${2:-}" ;;
+  enable)  acquire_lock; cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
+  remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" ;;
+  sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" ;;
   show)    cmd_show "${1:-}" ;;
   *)       usage ;;
 esac
