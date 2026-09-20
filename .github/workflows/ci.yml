@@ -195,9 +195,12 @@ jobs:
         working-directory: integrations/hosted-verify
         run: |
           bash -n pilot/tenant.sh
-          node --check pilot/tenants-assemble.mjs && node --check pilot/tenants-put.mjs
+          node --check pilot/tenants-assemble.mjs
+          node --check pilot/tenants-put.mjs
           bash pilot/tenant.sh >/dev/null 2>&1 && exit 1 || test $? -eq 2
           printf '' | node pilot/tenants-put.mjs --env=ci && exit 1 || test $? -eq 1
+          d="$(mktemp -d)"; printf '#!/bin/sh\necho "SANITIZE=$WRANGLER_LOG_SANITIZE WRITE_LOGS=$WRANGLER_WRITE_LOGS"\n' > "$d/npx"; chmod +x "$d/npx"
+          printf '{"acme":{}}' | PATH="$d:$PATH" WRANGLER_LOG_SANITIZE=false WRANGLER_WRITE_LOGS=true node pilot/tenants-put.mjs --env=ci | grep -qx 'SANITIZE=true WRITE_LOGS=false'
           TENANTS_DIR="$(mktemp -d)" bash pilot/tenant.sh show
           sed -n 's/^TENANTS=//p' .dev.vars.example | node pilot/tenants-check.mjs
           printf '{}' | node pilot/tenants-check.mjs && exit 1 || test $? -eq 1

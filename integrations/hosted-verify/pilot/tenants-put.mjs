@@ -27,8 +27,18 @@ process.stdin.on('end', () => {
     process.stderr.write('tenants-put: refusing to push a map that is not a non-empty JSON object; wrangler was NOT started and the live map was NOT changed\n');
     process.exit(1);
   }
+  // The map goes to wrangler on stdin, so wrangler's own logging decides whether the secret
+  // ever reaches disk. WRANGLER_LOG_SANITIZE=false or WRANGLER_WRITE_LOGS=true in the
+  // operator's shell would be inherited here and write the full token map into wrangler's
+  // debug log; the three are pinned on the child so the environment cannot opt into that.
   const child = spawn('npx', ['--no-install', 'wrangler', 'secret', 'put', 'TENANTS', ...process.argv.slice(2)], {
     stdio: ['pipe', 'inherit', 'inherit'],
+    env: {
+      ...process.env,
+      WRANGLER_LOG_SANITIZE: 'true',
+      WRANGLER_WRITE_LOGS: 'false',
+      WRANGLER_SEND_METRICS: 'false',
+    },
   });
   child.on('error', (e) => {
     process.stderr.write(`tenants-put: ${e.message}\n`);

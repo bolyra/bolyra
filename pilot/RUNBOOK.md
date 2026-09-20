@@ -58,7 +58,9 @@ loader by `test/tenants-check.spec.ts` — and refuses to push anything that
 would fail. `wrangler secret put` is write-only (the live map cannot be read
 back), so the keychain items plus the registry files **are** the authoritative
 copy. Back the keychain up; lose it and the only recovery is re-keying every
-tenant.
+tenant. Every command except `show` holds a per-environment lock for its whole
+run, so two operators cannot interleave a quarantine and a sync; a stale lock
+names its directory.
 
 **Seeded fixture key.** `tenant.sh add … --with-fixture-key` trusts the partner's
 key(s) **and** the repo conformance fixture key; without the flag only the keys
