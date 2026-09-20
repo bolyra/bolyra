@@ -22,7 +22,7 @@
  *   resolveAuth(request, tenants)   every token of every tenant is compared in
  *          │                         constant time; the scan never exits early
  *          ├─ no match ──► null
- *          └─ match ─────► { org_id, role: 'admin' | 'verifier', tenant }
+ *          └─ match ─────► { org_id, role: 'admin' | 'verifier', disabled, trusted_operators }
  *
  * Load-time validation is strict and total: malformed JSON, a bad org id, an
  * unknown field (a typo in `disabled` must not silently leave a tenant live),
@@ -46,11 +46,17 @@ export interface TenantConfig {
   disabled: boolean;
 }
 
+/**
+ * What a successful resolution hands the caller. Deliberately carries NO token
+ * value — an auth result may be logged or serialized; a tenant's tokens never.
+ */
 export interface AuthResult {
   org_id: string;
   role: Role;
-  /** The resolved tenant — callers MUST check `.disabled` before serving. */
-  tenant: TenantConfig;
+  /** Quarantine switch — callers MUST refuse to serve a disabled tenant. */
+  disabled: boolean;
+  /** The tenant's canonical operator key ids, for the verify core. */
+  trusted_operators: ReadonlySet<string>;
 }
 
 /** Lowercase, 2–63 chars, no leading hyphen — it is also a durable identity. */
@@ -91,8 +97,6 @@ export function timingSafeEqual(a: string, b: string): boolean {
 /**
  * Build a load-time defect. `detail` names the tenant and the field only —
  * NEVER a token value or any part of one: the Worker logs these details.
- * A rejected org id is truncated (it failed the charset check, so it may be
- * arbitrary text).
  */
 function invalid(message: string, detail?: Record<string, unknown>): VerifyDenial {
   return new VerifyDenial('internal_error', `TENANTS: ${message}`, detail);
@@ -146,11 +150,11 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
 
   const tenants = new Map<string, TenantConfig>();
   const seenTokens = new Set<string>();
-  for (const [rawOrgId, value] of entries) {
-    if (!ORG_ID_PATTERN.test(rawOrgId)) {
-      throw invalid('org_id must match ^[a-z0-9][a-z0-9-]{1,62}$', { org_id: rawOrgId.slice(0, 64) });
+  for (const [orgId, value] of entries) {
+    if (!ORG_ID_PATTERN.test(orgId)) {
+      // A rejected org id failed the charset check, so it may be arbitrary text: truncate before it reaches a log.
+      throw invalid('org_id must match ^[a-z0-9][a-z0-9-]{1,62}$', { org_id: orgId.slice(0, 64) });
     }
-    const orgId = rawOrgId;
     if (!isPlainObject(value)) throw invalid('tenant entry must be an object', { org_id: orgId });
     for (const key of Object.keys(value)) {
       if (!TENANT_FIELDS.has(key)) {
@@ -209,7 +213,9 @@ export function resolveAuth(request: Request, tenants: Map<string, TenantConfig>
       ['verifier', tenant.verifier_token],
     ];
     for (const [role, token] of candidates) {
-      if (timingSafeEqual(presented, token) && result === null) result = { org_id, role, tenant };
+      if (timingSafeEqual(presented, token) && result === null) {
+        result = { org_id, role, disabled: tenant.disabled, trusted_operators: tenant.trusted_operators };
+      }
     }
   }
   return result;

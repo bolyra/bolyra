@@ -1,5 +1,5 @@
 /**
- * `TENANTS` loading and token → { org_id, role, tenant } resolution. Pure
+ * `TENANTS` loading and token → { org_id, role, disabled, trusted_operators } resolution. Pure
  * functions; every defect must fail closed with `internal_error` (never a
  * partial map).
  */
@@ -217,7 +217,28 @@ describe('resolveAuth', () => {
   ])('resolves %s', (_name, token, expected) => {
     const result = resolveAuth(requestWithAuth(`Bearer ${token}`), tenants);
     expect(result).toMatchObject(expected);
-    expect(result?.tenant).toBe(tenants.get(expected.org_id));
+    expect(result?.disabled).toBe(false);
+    expect(result?.trusted_operators).toBe(tenants.get(expected.org_id)!.trusted_operators);
+    // The shape is locked: a future field (a token, a header) must fail here.
+    expect(Object.keys(result!).sort()).toEqual(['disabled', 'org_id', 'role', 'trusted_operators']);
+  });
+
+  it('an AuthResult carries no token value in any serialization', () => {
+    const auth = resolveAuth(requestWithAuth(`Bearer ${TOKENS.A.admin}`), tenants)!;
+    const blob = JSON.stringify(auth);
+    for (const org of Object.values(TOKENS)) {
+      expect(blob).not.toContain(org.admin);
+      expect(blob).not.toContain(org.verifier);
+    }
+  });
+
+  it('a disabled tenant still resolves, flagged', () => {
+    const quarantined = loadTenants(buildTestTenants(FIXTURE_KEY, { disabled: [ORGS.B] }));
+    expect(resolveAuth(requestWithAuth(`Bearer ${TOKENS.B.admin}`), quarantined)).toMatchObject({
+      org_id: ORGS.B,
+      role: 'admin',
+      disabled: true,
+    });
   });
 
   it('accepts a case-insensitive scheme and a tab separator', () => {
