@@ -88,7 +88,7 @@ function isDecString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
-function isPointDec(value: unknown): value is PointDec {
+export function isPointDec(value: unknown): value is PointDec {
   return isPlainObject(value) && isDecString(value.x) && isDecString(value.y);
 }
 
@@ -258,8 +258,12 @@ const BINDING_V2_KEYS = new Set([
  * `unsupported_version` — v1 did not signature-bind expiry and is obsolete.
  * Malformed shape, a non-integer/non-positive `expiry`, or any unexpected key
  * is `invalid_bundle`.
+ *
+ * Exported because the credential-registration route validates the SAME
+ * binding shape: one validator, so the digest a registration derives and the
+ * digest the verify path derives can never disagree on canonical form.
  */
-function parseBinding(raw: unknown): Binding {
+export function parseBinding(raw: unknown): Binding {
   if (
     !isPlainObject(raw) ||
     typeof raw.agent_name !== 'string' ||
@@ -298,7 +302,7 @@ function parseBinding(raw: unknown): Binding {
   };
 }
 
-function parseSig(raw: unknown): BundleSignature {
+export function parseSig(raw: unknown): BundleSignature {
   if (!isPlainObject(raw) || !isPointDec(raw.R8) || !isDecString(raw.S)) {
     throw new VerifyDenial('invalid_bundle', 'sig is missing or has ill-typed fields');
   }
