@@ -13,6 +13,7 @@ locally and is not revocation evidence.
 ## Run it
 
 ```bash
+# from the repo root
 # 1. the hosted verifier (built from this repo — it is not published)
 cd integrations/hosted-verify && npm ci --no-audit --no-fund && cd ../..
 # 2. the example (published @bolyra/mpp 0.5.0 + mppx 0.8.13 from the registry)
@@ -20,11 +21,16 @@ cd examples/managed-revocation && npm ci --no-audit --no-fund
 npm run demo:local
 ```
 
-`demo:local` writes `integrations/hosted-verify/.dev.vars` (the repo's documented
-placeholder tenant, the mpp capability vocabulary read from the installed
-`@bolyra/mpp`, and a throwaway receipt signing key — none of it secret, none of
-it printed), starts `wrangler dev` on `127.0.0.1:8787`, waits for `/health`,
-runs the sequence, and stops the Worker. Node 22 (wrangler's requirement).
+`demo:local` writes `integrations/hosted-verify/.dev.vars` (the repo's
+documented placeholder tenant, the mpp capability vocabulary read from the
+installed `@bolyra/mpp`, and a throwaway receipt signing key — none of it
+secret, none of it printed), starts `wrangler dev` on `127.0.0.1:8787`
+(`HOSTED_VERIFY_PORT` picks another port; a busy 8787 is an error, not a
+fallback), waits for `/health`, runs the sequence, and stops the Worker. Node 22
+(wrangler's requirement), on macOS or Linux — `demo:local` is a bash script and
+uses `lsof` and `curl`. Windows is untested. The generated `.dev.vars` is
+removed on exit; an existing `.dev.vars` this script did not write blocks the
+run rather than being overwritten.
 Measured from a fresh clone with a warm npm cache: the two installs about
 10 seconds together, `npm run demo:local` about 4 seconds, of which the Worker
 start is about one; a cold CI cache adds to the installs, not the run.
@@ -32,6 +38,9 @@ start is about one; a cold CI cache adds to the installs, not the run.
 Against a verifier you already run: `VERIFY_URL=… ADMIN_TOKEN=… VERIFIER_TOKEN=… npm run demo`.
 The tenant must trust the example's operator key (the repo's documented
 test-only scalar, `42`) and its `CAPABILITY_MAP` must carry the mpp vocabulary.
+The deployment must also have receipts on (`RECEIPT_SIGNER_KEY`) and serve
+`/.well-known/bolyra-signers.json` — rows 0 and 3 check both, and the run exits
+non-zero without them.
 
 ## What happens
 
@@ -82,9 +91,13 @@ Worker.
 - A production verifier. `wrangler dev` runs the Worker locally with a
   placeholder tenant; the same sequence against a deployed instance needs a
   tenant that trusts your operator key and carries `CAPABILITY_MAP`.
+- ZK proofs. The hosted verifier is classical-only — Bolyra Core: the
+  operator's EdDSA signature over the binding, checked against the tenant's
+  trusted operator keys. See
+  [`integrations/hosted-verify`](../../integrations/hosted-verify/README.md).
 - Revocation reaching the gate by any path other than the verifier's verdict.
-  Revocation is trust-anchor removal at the verifier; the gate learns it on the
-  next presentation.
+  Revocation is a registry-status change at the verifier — the operator key
+  stays trusted (row 8); the gate learns it on the next presentation.
 
 ## Tests
 
