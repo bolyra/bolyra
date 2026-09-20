@@ -39,9 +39,32 @@
 
   "vars": {
     "RECEIPT_ISSUER": "bolyra-hosted-verify-preview",
-    "RECEIPT_KEY_ID": "preview-1"
-    // CAPABILITY_MAP (optional): JSON capability → permission-name map merged
-    // over the built-in default (src/verify/capabilities.ts).
+    "RECEIPT_KEY_ID": "preview-1",
+    // CAPABILITY_MAP: JSON capability → permission-name map merged per key over the
+    // built-in default (src/verify/capabilities.ts). This is @bolyra/mpp's spend-mandate
+    // vocabulary (MPP_CAPABILITY_MAP); without it every mpp mandate denies
+    // unknown_capability. Global, not per tenant. test/wrangler-config.spec.ts pins it.
+    "CAPABILITY_MAP": "{\"mpp:financial:small\":[\"FINANCIAL_SMALL\"],\"mpp:financial:medium\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\"],\"mpp:financial:unlimited\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\",\"FINANCIAL_UNLIMITED\"]}"
+  },
+
+  // Staging: a separately deployed Worker, `bolyra-hosted-verify-staging` (Wrangler appends
+  // the environment name), with its own secrets (`wrangler secret put … --env staging`),
+  // its own Durable Object namespace, and its own analytics dataset. Environments inherit
+  // `main`, `compatibility_date`, `workers_dev`, `observability`, `migrations`, and the
+  // global `alias` — but NOT `vars`, `durable_objects`, or `analytics_engine_datasets`,
+  // so those are redeclared here; test/wrangler-config.spec.ts keeps them in step.
+  "env": {
+    "staging": {
+      "durable_objects": { "bindings": [{ "name": "TENANT", "class_name": "TenantRegistry" }] },
+      "analytics_engine_datasets": [
+        { "binding": "USAGE", "dataset": "bolyra_hosted_verify_usage_staging" }
+      ],
+      "vars": {
+        "RECEIPT_ISSUER": "bolyra-hosted-verify-staging",
+        "RECEIPT_KEY_ID": "staging-1",
+        "CAPABILITY_MAP": "{\"mpp:financial:small\":[\"FINANCIAL_SMALL\"],\"mpp:financial:medium\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\"],\"mpp:financial:unlimited\":[\"FINANCIAL_SMALL\",\"FINANCIAL_MEDIUM\",\"FINANCIAL_UNLIMITED\"]}"
+      }
+    }
   }
 
   // Secrets (set via `wrangler secret put`):

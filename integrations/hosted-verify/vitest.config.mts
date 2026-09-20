@@ -8,6 +8,15 @@ import mandate from './test/fixtures/mandate.json';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+// wrangler.jsonc, comments stripped (every comment in that file is a full line), for the
+// config drift test. Wrangler itself is the authority on the file; this only pins values.
+const wranglerConfig = JSON.parse(
+  readFileSync(join(here, 'wrangler.jsonc'), 'utf8')
+    .split('\n')
+    .filter((line) => !/^\s*\/\//.test(line))
+    .join('\n'),
+) as Record<string, unknown>;
+
 // Tests trust the operator key behind the conformance request fixtures.
 const fixture = JSON.parse(
   readFileSync(join(here, '../cli/test/fixtures/verify/allow-agent-only/request.json'), 'utf8'),
@@ -41,10 +50,10 @@ export default defineConfig({
           // org-a and org-c trust the conformance-fixture operator key,
           // org-b trusts a second test-only key. See test/tenants-fixture.ts.
           TENANTS: buildTestTenants(opKey),
-          // The mandate fixture's capability vocabulary, for these tests only.
-          // A deployment that verifies mpp mandates must set CAPABILITY_MAP to
-          // the same JSON itself — wrangler.jsonc does not set it.
+          // The mandate fixture's capability vocabulary. wrangler.jsonc carries the same
+          // JSON for both environments; test/wrangler-config.spec.ts pins the two together.
           CAPABILITY_MAP: JSON.stringify(mandate.capability_map),
+          WRANGLER_CONFIG: JSON.stringify(wranglerConfig),
           // Deterministic test signing key (NOT a real secret).
           RECEIPT_SIGNER_KEY:
             '0x0101010101010101010101010101010101010101010101010101010101010101',
