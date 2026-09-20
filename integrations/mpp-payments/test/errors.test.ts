@@ -1,4 +1,9 @@
-import { BolyraDeniedError, BolyraGateConfigError, isBolyraDeniedError } from '../src/errors';
+import {
+  BolyraDeniedError,
+  BolyraGateConfigError,
+  isBolyraDeniedError,
+  isBolyraGateConfigError,
+} from '../src/errors';
 import { handleDenials, sendDenial } from '../src/handle-denials';
 import { deny } from '../src/types';
 import { denyResponse } from '../src/deny';
@@ -153,5 +158,22 @@ describe('sendDenial (Express-style res)', () => {
     expect(await sendDenial(new Error('boom'), res)).toBe(false);
     expect(await sendDenial(undefined, res)).toBe(false);
     expect(writes).toEqual([]);
+  });
+});
+
+describe('isBolyraGateConfigError', () => {
+  test('true for a real BolyraGateConfigError instance', () => {
+    expect(isBolyraGateConfigError(new BolyraGateConfigError('bad hooks'))).toBe(true);
+  });
+
+  test('true for a structurally matching plain object (a second hoisted copy)', () => {
+    expect(isBolyraGateConfigError({ name: 'BolyraGateConfigError', message: 'bad hooks' })).toBe(true);
+  });
+
+  test('false for an unrelated Error, a denial, and null', () => {
+    expect(isBolyraGateConfigError(new Error('x'))).toBe(false);
+    const verdict = deny('missing_authorization', 'no header');
+    expect(isBolyraGateConfigError(new BolyraDeniedError(verdict, denyResponse(verdict)))).toBe(false);
+    expect(isBolyraGateConfigError(null)).toBe(false);
   });
 });
