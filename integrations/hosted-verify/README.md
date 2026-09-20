@@ -70,8 +70,10 @@ fails until it exists. `npm test` (vitest in the workers pool) does not need it.
 
 `npx wrangler dev` needs a `TENANTS` value: `cp .dev.vars.example .dev.vars`.
 That file defines one local tenant with placeholder tokens (not secrets) whose
-`trusted_operators` is the repo fixture operator key, so the example requests
-below verify against a local dev server.
+`trusted_operators` is the repo fixture operator key. The local registry starts
+empty, so run quickstart step 2 (register `examples/registration.allow.json`
+with the local admin token) before the example requests below verify against
+a local dev server.
 
 ## 5-minute quickstart
 
