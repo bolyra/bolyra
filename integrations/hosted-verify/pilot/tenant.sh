@@ -40,7 +40,9 @@
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
-#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock); a stale lock names itself.
+#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock); a stale lock
+#   names itself; an interrupt (Ctrl-C/TERM) takes effect only after the in-flight put has
+#   finished, so a half-pushed map cannot be raced.
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -87,8 +89,33 @@ release_lock() {
   # Only ever remove a lock this process created — a failed acquire must leave the holder's.
   [ "$LOCK_HELD" = 1 ] || return 0
   LOCK_HELD=0
+  # The upload can outlive this shell: a `kill -9`, a closed terminal, or a wrangler still
+  # talking to the API leaves the put running with no one to wait for it. Releasing the lock
+  # then is exactly the interleaving the lock exists to prevent — a second operator's sync
+  # would land FIRST and this one's older map would overwrite it, silently undoing a
+  # quarantine. So when the recorded upload pid is still alive, keep the lock and say so.
+  local _upload=""
+  [ ! -f "$LOCK_DIR/upload.pid" ] || _upload="$(cat "$LOCK_DIR/upload.pid" 2>/dev/null || true)"
+  if [ -n "$_upload" ] && kill -0 "$_upload" 2>/dev/null; then
+    echo "error: lock retained at $LOCK_DIR: the upload (pid $_upload) may still be running; when it is gone, remove that directory and run: pilot/tenant.sh sync --dry-run" >&2
+    return 0
+  fi
+  rm -f "$LOCK_DIR/upload.pid"
   rm -f "$LOCK_DIR/pid"
   rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+on_signal() {  # $1 the signal name, INT or TERM
+  # Bash defers a trapped signal that arrives while a FOREGROUND command is running until that
+  # command returns, and the last stage of the sync pipeline does not return until wrangler has
+  # exited. So by the time this body runs the in-flight put has either landed or failed, with
+  # the lock held for all of it — an interrupt cannot leave a half-pushed map open to a race.
+  echo "error: interrupted by SIG$1 after the in-flight command finished; run: pilot/tenant.sh sync --dry-run to see the state that was pushed" >&2
+  # Exit with the conventional 128+signal code, and through the EXIT trap, so release_lock
+  # still runs and still applies the retain rule above.
+  case "$1" in
+    INT) exit 130 ;;
+    *)   exit 143 ;;
+  esac
 }
 acquire_lock() {
   mkdir -p "$TENANTS_DIR" || die "could not create the registry directory $TENANTS_DIR"
@@ -96,7 +123,16 @@ acquire_lock() {
   LOCK_HELD=1
   # Installed only once the lock is ours. `die` exits, so every refusal path releases it too.
   trap 'release_lock' EXIT
+  # Ctrl-C and TERM are taken with the lock, not left to the default disposition: the default
+  # kills this shell the moment the in-flight command returns, running the EXIT trap while the
+  # upload child is still alive. Handled, the interrupt is reported after that command has
+  # finished and still leaves through the EXIT trap.
+  trap 'on_signal INT' INT
+  trap 'on_signal TERM' TERM
   echo "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+  # The put stage records wrangler's pid in the lock directory, so release_lock can tell an
+  # upload that has finished from one that may still be in flight.
+  export TENANT_LOCK_DIR="$LOCK_DIR"
 }
 
 # The repo conformance-fixture operator key (its private half is public). Seeded into a

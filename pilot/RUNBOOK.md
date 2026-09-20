@@ -59,8 +59,9 @@ would fail. `wrangler secret put` is write-only (the live map cannot be read
 back), so the keychain items plus the registry files **are** the authoritative
 copy. Back the keychain up; lose it and the only recovery is re-keying every
 tenant. Every command except `show` holds a per-environment lock for its whole
-run, so two operators cannot interleave a quarantine and a sync; a stale lock
-names its directory.
+run, so two operators cannot interleave a quarantine and a sync. An interrupt
+takes effect only after the in-flight put has finished; if a lock survives a
+crash it names its directory.
 
 **Seeded fixture key.** `tenant.sh add … --with-fixture-key` trusts the partner's
 key(s) **and** the repo conformance fixture key; without the flag only the keys
