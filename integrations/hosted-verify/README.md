@@ -141,7 +141,8 @@ Each tenant has its own registry: a SQLite-backed Durable Object named by the
 tenant's `org_id`, reachable only through the tenant's **admin** token (the
 verifier token gets `403 {"error":"forbidden"}`). It records which operator-
 signed bindings the tenant has registered and whether each is ACTIVE or
-REVOKED. Every non-2xx body on these routes is `{ "error": <code>, "message": … }`.
+REVOKED. Every non-2xx body on these routes is `{ "error": <code>, "message": … }`,
+except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
 
 - **`POST /v1/credentials`** — register a binding. Body (≤ 64 KiB):
   `{ "version": 1, "binding": { agent_name, project_key, program, model, capabilities, expiry },
