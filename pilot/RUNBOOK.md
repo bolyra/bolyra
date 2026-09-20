@@ -37,7 +37,8 @@ tenant fails closed — `POST /v1/verify` returns `500` `internal_error` and
 - an empty `trusted_operators` list (never "trust everyone"), or an entry that
   is not an `x:y` decimal pair;
 - an unknown field on an entry (a typo in `disabled` must not silently leave a
-  tenant live);
+  tenant live), or a mistyped VALUE — `"disabled": "true"` is a string, not a
+  boolean, and is a defect (you are hand-editing this JSON);
 - a token shorter than 32 or longer than 256 characters, or containing anything
   outside `[A-Za-z0-9._~+/-]`;
 - the same token value used twice anywhere in the map (it then grants nothing);
@@ -58,6 +59,11 @@ partner's operator key(s) **and** the repo conformance fixture key (the one in
 `integrations/hosted-verify/.dev.vars.example`). That is deliberate: the
 fixture key is what makes the quickstart in `integrations/hosted-verify/`
 and the smoke step below work for them before their own key issues anything.
+Its private half is in the public repo
+(`integrations/cli/test/fixtures/verify/generate.ts`), so anyone can sign a
+fixture-key presentation: a fixture-signed `allow` proves transport and the
+bearer token, nothing about who the caller is. The seeding is preview-only and
+must never survive into a real deployment.
 
 ## 0. One-time prereqs
 
@@ -132,7 +138,8 @@ cd integrations/hosted-verify
 # Each of these is an edit to your complete copy of the map followed by one
 # `npx wrangler secret put TENANTS` (the put REPLACES the whole map):
 #   quarantine  set "disabled": true on the tenant's entry — entry, keys and
-#               label all stay, but every route answers 500 internal_error,
+#               label all stay, but every authenticated route answers 500
+#               internal_error (`/health` stays 200),
 #               which the partner cannot tell apart from a config defect on
 #               our side; tell them it is deliberate, or they will report a
 #               broken deployment
