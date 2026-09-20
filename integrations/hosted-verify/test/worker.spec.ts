@@ -300,18 +300,26 @@ describe('fail-closed configuration (config errors are a 500 VERDICT, never a ba
     expect(res.status).toBe(500);
     const v = await verdictOf(res);
     expect(v.code).toBe('internal_error');
+    expect(v.message).toBe('missing or invalid trust configuration');
+    expect(v).not.toHaveProperty('detail');
   });
 
   it('malformed trusted-operator entry → HTTP 500 deny internal_error', async () => {
     const res = await worker.fetch(verifyReq(), { ...env, TRUSTED_OPERATORS: 'not-a-pair' });
     expect(res.status).toBe(500);
-    expect((await verdictOf(res)).code).toBe('internal_error');
+    const v = await verdictOf(res);
+    expect(v.code).toBe('internal_error');
+    expect(v.message).toBe('missing or invalid trust configuration');
+    expect(v).not.toHaveProperty('detail');
   });
 
   it('malformed CAPABILITY_MAP → HTTP 500 deny internal_error', async () => {
     const res = await worker.fetch(verifyReq(), { ...env, CAPABILITY_MAP: '{not json' });
     expect(res.status).toBe(500);
-    expect((await verdictOf(res)).code).toBe('internal_error');
+    const v = await verdictOf(res);
+    expect(v.code).toBe('internal_error');
+    expect(v.message).toBe('missing or invalid trust configuration');
+    expect(v).not.toHaveProperty('detail');
   });
 
   it('CAPABILITY_MAP naming an unknown permission → HTTP 500 deny internal_error', async () => {
@@ -320,7 +328,10 @@ describe('fail-closed configuration (config errors are a 500 VERDICT, never a ba
       CAPABILITY_MAP: JSON.stringify({ send_message: ['NO_SUCH_PERMISSION'] }),
     });
     expect(res.status).toBe(500);
-    expect((await verdictOf(res)).code).toBe('internal_error');
+    const v = await verdictOf(res);
+    expect(v.code).toBe('internal_error');
+    expect(v.message).toBe('missing or invalid trust configuration');
+    expect(v).not.toHaveProperty('detail');
   });
 });
 

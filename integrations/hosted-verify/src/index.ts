@@ -30,7 +30,7 @@ import {
 } from './verify/core';
 import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/verdict';
 import { loadTrustedOperators } from './verify/operators';
-import { loadCapabilityMap } from './verify/capabilities';
+import { loadCapabilityMap, type CapabilityMap } from './verify/capabilities';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
 
 export interface Env {
@@ -170,11 +170,14 @@ function verdictResponse(verdict: Verdict, body: unknown, env: Env): Response {
  * never an allow and never a bare error body — the gate on the other side
  * treats it as a deny. Details are logged server-side only (spec §3.3: wire
  * messages never carry config internals).
+ * Because configuration is checked before the body is read, the signed receipt
+ * on such a 500 is the anonymous form (no credential attribution).
  */
 function configErrorVerdict(e: unknown): DenyVerdict {
   console.error(
     'hosted-verify configuration error:',
-    isVerifyDenial(e) ? e.message : e instanceof Error ? e.stack : String(e),
+    isVerifyDenial(e) ? `${e.code}: ${e.message}` : e instanceof Error ? e.stack : String(e),
+    isVerifyDenial(e) ? (e.detail ?? {}) : {},
   );
   return deny('internal_error', 'missing or invalid trust configuration');
 }
@@ -185,7 +188,7 @@ async function handleVerify(
 ): Promise<{ verdict: Verdict; response: Response }> {
   // Configuration first: a defect must not depend on what the body says.
   let trustedOperators: Set<string>;
-  let capabilityMap: ReturnType<typeof loadCapabilityMap>;
+  let capabilityMap: CapabilityMap;
   try {
     trustedOperators = loadTrustedOperators(
       (env.TRUSTED_OPERATORS ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0),

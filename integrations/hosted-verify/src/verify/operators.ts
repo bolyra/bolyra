@@ -60,7 +60,7 @@ export function loadTrustedOperators(entries: readonly string[]): Set<string> {
  * same vocabulary).
  */
 export function assertTrustedOperator(
-  operators: Set<string>,
+  operators: ReadonlySet<string>,
   opX: bigint,
   opY: bigint,
 ): void {
