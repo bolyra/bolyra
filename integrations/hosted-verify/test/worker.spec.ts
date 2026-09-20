@@ -286,17 +286,41 @@ describe('classical pipeline', () => {
   });
 });
 
-describe('fail-closed configuration', () => {
-  it('no TRUSTED_OPERATORS configured → HTTP 500 deny internal_error (spec §12)', async () => {
-    const req = new Request(`${BASE}/v1/verify`, {
+describe('fail-closed configuration (config errors are a 500 VERDICT, never a bare error body)', () => {
+  function verifyReq(): Request {
+    return new Request(`${BASE}/v1/verify`, {
       method: 'POST',
       headers: { authorization: `Bearer ${TOKEN}` },
       body: JSON.stringify(allowAgentOnly),
     });
-    const res = await worker.fetch(req, { ...env, TRUSTED_OPERATORS: '' });
+  }
+
+  it('no trusted operator configured → HTTP 500 deny internal_error (spec §12)', async () => {
+    const res = await worker.fetch(verifyReq(), { ...env, TRUSTED_OPERATORS: '' });
     expect(res.status).toBe(500);
     const v = await verdictOf(res);
     expect(v.code).toBe('internal_error');
+  });
+
+  it('malformed trusted-operator entry → HTTP 500 deny internal_error', async () => {
+    const res = await worker.fetch(verifyReq(), { ...env, TRUSTED_OPERATORS: 'not-a-pair' });
+    expect(res.status).toBe(500);
+    expect((await verdictOf(res)).code).toBe('internal_error');
+  });
+
+  it('malformed CAPABILITY_MAP → HTTP 500 deny internal_error', async () => {
+    const res = await worker.fetch(verifyReq(), { ...env, CAPABILITY_MAP: '{not json' });
+    expect(res.status).toBe(500);
+    expect((await verdictOf(res)).code).toBe('internal_error');
+  });
+
+  it('CAPABILITY_MAP naming an unknown permission → HTTP 500 deny internal_error', async () => {
+    const res = await worker.fetch(verifyReq(), {
+      ...env,
+      CAPABILITY_MAP: JSON.stringify({ send_message: ['NO_SUCH_PERMISSION'] }),
+    });
+    expect(res.status).toBe(500);
+    expect((await verdictOf(res)).code).toBe('internal_error');
   });
 });
 

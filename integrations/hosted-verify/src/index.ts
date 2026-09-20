@@ -28,7 +28,9 @@ import {
   CHECKS_CONSISTENCY,
   CHECKS_NOT_PERFORMED,
 } from './verify/core';
-import { deny, type Verdict } from './verify/verdict';
+import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/verdict';
+import { loadTrustedOperators } from './verify/operators';
+import { loadCapabilityMap } from './verify/capabilities';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
 
 export interface Env {
@@ -163,10 +165,37 @@ function verdictResponse(verdict: Verdict, body: unknown, env: Env): Response {
   return json(status, verdict, receipt !== undefined ? { 'x-bolyra-receipt': receipt } : undefined);
 }
 
+/**
+ * A configuration defect is a fail-closed 500 VERDICT (`deny internal_error`),
+ * never an allow and never a bare error body — the gate on the other side
+ * treats it as a deny. Details are logged server-side only (spec §3.3: wire
+ * messages never carry config internals).
+ */
+function configErrorVerdict(e: unknown): DenyVerdict {
+  console.error(
+    'hosted-verify configuration error:',
+    isVerifyDenial(e) ? e.message : e instanceof Error ? e.stack : String(e),
+  );
+  return deny('internal_error', 'missing or invalid trust configuration');
+}
+
 async function handleVerify(
   request: Request,
   env: Env,
 ): Promise<{ verdict: Verdict; response: Response }> {
+  // Configuration first: a defect must not depend on what the body says.
+  let trustedOperators: Set<string>;
+  let capabilityMap: ReturnType<typeof loadCapabilityMap>;
+  try {
+    trustedOperators = loadTrustedOperators(
+      (env.TRUSTED_OPERATORS ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0),
+    );
+    capabilityMap = loadCapabilityMap(env.CAPABILITY_MAP);
+  } catch (e) {
+    const verdict = configErrorVerdict(e);
+    return { verdict, response: verdictResponse(verdict, undefined, env) };
+  }
+
   const text = await readBodyCapped(request);
   if (text === null) {
     const verdict = deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`);
@@ -181,7 +210,7 @@ async function handleVerify(
     return { verdict, response: verdictResponse(verdict, undefined, env) };
   }
 
-  const verdict = verifyClassical(body, env);
+  const verdict = verifyClassical(body, trustedOperators, capabilityMap);
   return { verdict, response: verdictResponse(verdict, body, env) };
 }
 
