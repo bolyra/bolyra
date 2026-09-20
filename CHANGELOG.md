@@ -29,6 +29,12 @@ under `contracts/deployments/` and `circuits/build/`.
 - Usage analytics attribute every request to `<org_id>:<role>` instead of a bare partner label; the reserved label `unauthenticated` is unchanged. Tokens are still never recorded.
 - `/health` reports `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses. It is a parseability signal, not per-tenant availability: a quarantined (`disabled`) tenant still reports `ok`.
 
+### Added
+
+#### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
+
+- A managed credential registry per tenant (a SQLite-backed Durable Object named by `org_id`) and three admin-token routes: `POST /v1/credentials` registers an operator-signed binding (checks: trusted operator → signature → expiry; `201`, or `200` with the original `registered_at`, or `409` once revoked), `GET /v1/credentials/{id}` returns the record with its history, `POST /v1/credentials/{id}/revoke` is idempotent (`204`). `credential_id` is derived from the canonical operator key id and the signed binding — never from a presentation. Revoked records are retained indefinitely; a quarantined tenant gets `503 tenant_disabled` on these routes. `/health` reports `registry` and `credential_id_version`. The README's storage disclosure now states exactly what the registry persists.
+
 ## @bolyra/mpp 0.5.0 (2026-09-19)
 
 ### Changed (BREAKING)

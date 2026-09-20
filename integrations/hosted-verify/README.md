@@ -135,6 +135,36 @@ requires the zk-class `bolyra verify` CLI. Treat host-mode replay reservation
 here as consistency-only, in the same bucket as the permission bitmask/scope
 (expiry, by contrast, is signature-bound as of binding v2).
 
+### Managed credential registry (`/v1/credentials`, admin token)
+
+Each tenant has its own registry: a SQLite-backed Durable Object named by the
+tenant's `org_id`, reachable only through the tenant's **admin** token (the
+verifier token gets `403 {"error":"forbidden"}`). It records which operator-
+signed bindings the tenant has registered and whether each is ACTIVE or
+REVOKED. Every non-2xx body on these routes is `{ "error": <code>, "message": … }`.
+
+- **`POST /v1/credentials`** — register a binding. Body (≤ 64 KiB):
+  `{ "version": 1, "binding": { agent_name, project_key, program, model, capabilities, expiry },
+     "signature": { "R8": { "x", "y" }, "S" }, "operator_pubkey": { "x", "y" } }`
+  — the same binding shape a presentation carries, signed by the operator key.
+  Checks, in order: the operator key is in this tenant's `trusted_operators`
+  (`403 untrusted_operator`), the signature verifies (`400 binding_signature_invalid`),
+  `expiry` is in the future by the Worker's clock (`400 binding_expired`).
+  Then: `201 { credential_id, status: "ACTIVE", registered_at }` for a new
+  binding, `200` with the original `registered_at` for one already ACTIVE,
+  `409 credential_revoked` for one that was revoked (revocation is terminal).
+  `credential_id` is a stable identifier derived from the canonical operator
+  key id and the signed binding — never from a presentation's nonce or proof.
+- **`GET /v1/credentials/{id}`** — `200 { credential_id, status, operator_key,
+  binding, registered_at, revoked_at, history: [{ event, ts, request_id }] }`;
+  `404` for an id this tenant never registered (a malformed id is also `404`).
+- **`POST /v1/credentials/{id}/revoke`** — `204`; idempotent; `404` if absent.
+
+The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the request's `cf-ray` id (or a UUID when absent).
+`/health` reports `registry: "durable-object"` and `credential_id_version: "v1"`.
+A registry storage failure is `500 internal_error`; a quarantined tenant gets
+`503 tenant_disabled` on these routes.
+
 ### `GET /health`
 
 Unauthenticated. Returns service status, the **DESIGN PARTNER PREVIEW**
@@ -229,18 +259,27 @@ Two layers, both configured in `wrangler.jsonc`:
 | Column    | Field         | Values                                                        |
 | --------- | ------------- | ------------------------------------------------------------- |
 | timestamp | (implicit)    | write time                                                    |
-| `blob1`   | route         | `/v1/verify`, `/health`, or `other` (raw paths are never stored) |
+| `blob1`   | route         | `/v1/verify`, `/v1/credentials`, `/health`, `/.well-known/bolyra-signers.json`, or `other` (raw paths and ids are never stored) |
 | `blob2`   | tenant label  | `<org_id>:<role>`, or `unauthenticated`                       |
-| `blob3`   | verdict       | `allow` / `deny` / `error` (transport-level 401/404/405)       |
-| `blob4`   | code          | deny code (spec §9), transport-error code, or empty on allow   |
+| `blob3`   | verdict       | `allow` / `deny` (verifier verdicts), `ok` (a successful registry route), `error` (any other non-2xx) |
+| `blob4`   | code          | deny code (spec §9), transport-error code, or empty on success |
 | `blob5`   | proof kind    | `classical` for verdict responses, empty otherwise             |
 | `blob6`   | request id    | the `cf-ray` id (or a random UUID)                             |
 | `double1` | latency_ms    | request handling time                                          |
 | `double2` | HTTP status   | response status code                                           |
 | `index1`  | tenant label  | same as `blob2` (query/sampling index)                        |
 
-**We store nothing else — explicitly no request bodies, no proofs, no
-credentials, no bearer tokens, no IPs.** Tenant attribution is by
+**Analytics stores nothing else — no request bodies, no proofs, no bearer
+tokens, no IPs, no credential ids.**
+
+Separately, the managed registry persists,
+per tenant, for every registered credential: the canonical signed binding
+(`agent_name`, `project_key`, `program`, `model`, `capabilities`, `expiry`), the
+operator public key, the derived `credential_id`, status, and
+registration/revocation timestamps with request ids. It does **not** persist
+presentations, proofs, nonces, bearer tokens, IPs, or verify-request bodies.
+Revoked records are retained indefinitely.
+Tenant attribution is by
 `<org_id>:<role>` only; the raw token never leaves the auth comparison.
 
 ### Querying usage
