@@ -3,30 +3,33 @@
  *
  *   credential_id = lowercase_hex( SHA-256( DST || LP(K) || LP(B) ) )
  *
- *   DST   = UTF8("bolyra:managed-credential-id:v1") || 0x00
+ *   DST   = UTF8("bolyra:managed-credential-id:" + CREDENTIAL_ID_VERSION) || 0x00
  *   LP(x) = uint32_be(byte_length(x)) || x
  *   K     = UTF8 of the CANONICAL operator key id (`operatorKeyId`, "x:y",
- *           decimal, no leading zeros — the same form `loadTrustedOperators`
- *           produces, so a config entry written with leading zeros cannot
- *           yield a second id for the same key)
+ *           decimal, no leading zeros) — derived HERE from the key's
+ *           coordinates, so a caller cannot pass a non-canonical spelling and
+ *           mint a second id for the same key
  *   B     = the 32-byte big-endian encoding of the binding digest
  *           (`bindingDigest(binding)`, already reduced mod the BN254 order)
  *
  * The id derives only from the verified signer and the canonical signed
  * binding — never from presentation fields (nonce, proof envelope, the
- * revealed credential expiry). Changing the digest algorithm is a new id
- * version, not an edit here.
+ * revealed credential expiry). The encoding is injective: fixed DST, then two
+ * length-prefixed fields, the second always 32 bytes. Changing the digest
+ * algorithm is a new CREDENTIAL_ID_VERSION, which changes the DST and so
+ * every id.
  */
 
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
+import { operatorKeyId } from './verify/operators';
 
 export const CREDENTIAL_ID_VERSION = 'v1';
 
 /** Exactly 64 lowercase hex characters; anything else is "no such credential". */
 export const CREDENTIAL_ID_PATTERN = /^[0-9a-f]{64}$/;
 
-const DST = 'bolyra:managed-credential-id:v1';
+export const CREDENTIAL_ID_DST = `bolyra:managed-credential-id:${CREDENTIAL_ID_VERSION}`;
 
 const encoder = new TextEncoder();
 
@@ -52,9 +55,9 @@ export function bigintToBytes32(value: bigint): Uint8Array {
   return out;
 }
 
-export function credentialId(operatorKeyId: string, bindingDigest: bigint): string {
-  const dst = encoder.encode(DST);
-  const k = lengthPrefixed(encoder.encode(operatorKeyId));
+export function credentialId(operator: { x: bigint; y: bigint }, bindingDigest: bigint): string {
+  const dst = encoder.encode(CREDENTIAL_ID_DST);
+  const k = lengthPrefixed(encoder.encode(operatorKeyId(operator.x, operator.y)));
   const b = lengthPrefixed(bigintToBytes32(bindingDigest));
   const payload = new Uint8Array(dst.length + 1 + k.length + b.length);
   payload.set(dst, 0);
