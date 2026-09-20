@@ -13,11 +13,11 @@
  *   - An Analytics Engine outage never affects the verdict (fail-tolerant).
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { SELF, env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 
 import worker, { type Env } from '../src/index';
-import { postVerify, BASE, TOKENS, ORGS, registerFixture, fixtureRegistration } from './helpers';
+import { postVerify, BASE, TOKENS, ORGS, registerFixture, fixtureRegistration, getCredential } from './helpers';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
 import registrations from './fixtures/registrations.json';
@@ -239,5 +239,67 @@ describe('Analytics Engine usage data point', () => {
     expect(get.status).toBe(200);
     expect(points[1]!.blobs![0]).toBe('/v1/credentials');
     expect(JSON.stringify(points[1])).not.toContain(valid.credential_id);
+  });
+});
+
+describe('one structured log line per /v1/verify decision', () => {
+  it('carries request_id, org_id, role, route, verdict, code, credential_id (on allow) and latency_ms — and never a token or body', async () => {
+    const lines: unknown[] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => { lines.push(args); });
+    try {
+      const res = await postVerify(allowAgentOnly);
+      expect(res.status).toBe(200);
+      const decision = lines.find((l) => Array.isArray(l) && l[0] === 'hosted-verify decision') as [string, Record<string, unknown>] | undefined;
+      expect(decision).toBeDefined();
+      const line = decision![1];
+      expect(Object.keys(line).sort()).toEqual(['code', 'credential_id', 'latency_ms', 'org_id', 'request_id', 'role', 'route', 'verdict']);
+      expect(line.org_id).toBe(ORGS.A);
+      expect(line.role).toBe('verifier');
+      expect(line.route).toBe('/v1/verify');
+      expect(line.verdict).toBe('allow');
+      expect(line.code).toBe('');
+      expect(line.credential_id).toMatch(/^[0-9a-f]{64}$/);
+      expect(typeof line.latency_ms).toBe('number');
+      const flat = JSON.stringify(line);
+      expect(flat).not.toContain(TOKENS.A.verifier);
+      expect(flat).not.toContain(allowAgentOnly.bundle.slice(0, 32));
+      expect(flat).not.toContain('publicSignals');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a registry request logs the same shape; register names the id it minted, get names the path id', async () => {
+    const lines: unknown[] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => { lines.push(args); });
+    let id: string;
+    try {
+      id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+      await getCredential(id);
+    } finally {
+      spy.mockRestore();
+    }
+    const reg = lines.filter((l) => Array.isArray(l) && l[0] === 'hosted-verify registry request') as [string, Record<string, unknown>][];
+    expect(reg).toHaveLength(2);
+    expect(reg[0]![1].credential_id).toBe(id);
+    expect(reg[1]![1].credential_id).toBe(id);
+    expect(reg[1]![1].route).toBe('/v1/credentials');
+    expect(reg[1]![1].role).toBe('admin');
+    expect(Object.keys(reg[0]![1]).sort()).toEqual(['code', 'credential_id', 'latency_ms', 'org_id', 'request_id', 'role', 'route', 'verdict']);
+    expect(JSON.stringify(reg)).not.toContain(TOKENS.A.admin);
+  });
+
+  it('a deny before the registry read logs no credential_id', async () => {
+    const lines: unknown[] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => { lines.push(args); });
+    try {
+      await postVerify({ ...allowAgentOnly, version: 2 });
+      const decision = lines.find((l) => Array.isArray(l) && l[0] === 'hosted-verify decision') as [string, Record<string, unknown>];
+      expect(decision[1].verdict).toBe('deny');
+      expect(decision[1].code).toBe('unsupported_version');
+      expect(decision[1]).not.toHaveProperty('credential_id');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

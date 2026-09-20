@@ -94,6 +94,10 @@ describe('routing + auth', () => {
     expect(body.verifier_kind).toBe('classical');
     expect(body.nonce_mode).toBe('host');
     expect(body.tenants).toBe('ok');
+    expect(body.registry).toBe('durable-object');
+    expect(body.registry_enforced).toBe(true);
+    expect(String(body.trust_policy)).toContain('ACTIVE');
+    expect(String(body.trust_model)).toContain('registry');
     expect((body.checks_authenticated as string[]).join(' ')).toContain('trusted-operator');
     expect((body.checks_consistency_only as string[]).length).toBeGreaterThan(3);
     expect((body.checks_not_performed as string[]).join(' ')).toContain('Groth16');

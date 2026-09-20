@@ -107,6 +107,7 @@ export const CHECKS_AUTHENTICATED = [
   'byte-literal request↔binding match (agent_name/project_key/program/model)',
   'granted_capabilities ⊆ operator-signed capabilities',
   'signed binding.expiry == revealed credential.expiry (binding v2 — expiry is signature-bound)',
+  "registry membership: the verified signed binding is ACTIVE in the calling tenant's managed credential registry (checked last; a registry failure fails closed)",
 ] as const;
 
 /**
