@@ -172,7 +172,7 @@ function validateRequest(request: unknown): asserts request is VerifierRequest {
  */
 export function verifyClassical(
   body: unknown,
-  trustedOperators: Set<string>,
+  trustedOperators: ReadonlySet<string>,
   capabilityMap: CapabilityMap,
 ): Verdict {
   try {
