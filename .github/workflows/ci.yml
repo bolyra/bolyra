@@ -590,3 +590,32 @@ jobs:
           npm run trial -- --dry-run
           npm test
 
+  managed-revocation-example:
+    name: Managed revocation example — register, spend, revoke, deny against wrangler dev
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          # wrangler 4.124 (hosted-verify's lockfile pin) requires Node >= 22.
+          node-version: 22
+
+      # The example is the revocation demonstration: it registers an operator-signed
+      # mandate with the in-repo hosted verifier, spends under it through the PUBLISHED
+      # @bolyra/mpp gate, revokes it, and proves the next fresh presentation is denied
+      # before the paid action runs. The Worker is the one thing built from the repo
+      # (it is not published); its .dev.vars is generated from documented placeholders
+      # and never printed. The example exits non-zero if any check comes out wrong.
+      - name: Install the hosted verifier and the example
+        run: |
+          (cd integrations/hosted-verify && npm ci --no-audit --no-fund)
+          (cd examples/managed-revocation && npm ci --no-audit --no-fund)
+
+      - name: Run the example against wrangler dev, then its tests
+        working-directory: examples/managed-revocation
+        run: |
+          npm run demo:local
+          npm test

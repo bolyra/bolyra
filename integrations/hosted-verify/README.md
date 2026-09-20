@@ -129,6 +129,11 @@ so the quickstart works as issued. To verify **your own** presentations, your
 operator public key must be in that list *and* each signed binding must be
 registered — that is the design-partner conversation.
 
+The runnable revocation demonstration — issue, register, spend through the
+published `@bolyra/mpp` gate, revoke, and the next fresh presentation denied
+before the paid action runs — is
+[`examples/managed-revocation`](../../examples/managed-revocation/README.md).
+
 ## API
 
 ### `POST /v1/verify`
