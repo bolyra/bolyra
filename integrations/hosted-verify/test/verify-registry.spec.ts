@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELF, env, reset } from 'cloudflare:test';
 import { canonicalize } from '@bolyra/receipts';
 
-import worker, { REGISTRY_DEADLINE_MS } from '../src/index';
+import worker from '../src/index';
+import { REGISTRY_DEADLINE_MS } from '../src/deadlines';
 import { bindingDigest } from '../src/verify/binding';
 import { credentialId } from '../src/credential-id';
 import { postVerify, postRevoke, getCredential, registerFixture, fixtureRegistration, cloneWithBundle, decodeReceipt, BASE, TOKENS, ORGS } from './helpers';

@@ -490,3 +490,17 @@ describe('signed receipts (X-Bolyra-Receipt)', () => {
     expect(JSON.stringify(receipt)).not.toContain(TOKENS.A.verifier);
   });
 });
+
+describe('entry module', () => {
+  it('exports only what the Workers runtime accepts: handlers, classes, and functions', async () => {
+    // workerd refuses to start a Worker whose entry module has any other named export
+    // ("not of type 'function or ExportedHandler'"); the vitest pool does not enforce
+    // this, so a plain constant exported here breaks `wrangler dev` and every deploy
+    // while the suite stays green.
+    const entry = (await import('../src/index')) as Record<string, unknown>;
+    for (const [name, value] of Object.entries(entry)) {
+      const accepted = typeof value === 'function' || (name === 'default' && typeof value === 'object' && value !== null);
+      expect(accepted, `export "${name}" is a ${typeof value}`).toBe(true);
+    }
+  });
+});
