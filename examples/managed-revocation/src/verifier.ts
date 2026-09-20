@@ -6,10 +6,10 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { parseBundle, type IssuedMandate } from '@bolyra/mpp';
+import { parseBundle, tierCapability, type IssuedMandate } from '@bolyra/mpp';
 
 export interface HostedVerifier {
   url: string;
@@ -23,10 +23,22 @@ export interface Health {
   tenants?: unknown;
 }
 
+/** Read a JSON body, or an empty object when the response is not JSON (reported with the status by the caller). */
+async function jsonOf(res: Response): Promise<{ text: string; body: Record<string, unknown> }> {
+  const text = await res.text();
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return { text, body: typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {} };
+  } catch {
+    return { text, body: {} };
+  }
+}
+
 export async function health(v: HostedVerifier): Promise<Health> {
   const res = await fetch(`${v.url}/health`);
-  if (res.status !== 200) throw new Error(`GET /health → HTTP ${res.status}`);
-  return (await res.json()) as Health;
+  const { text, body } = await jsonOf(res);
+  if (res.status !== 200) throw new Error(`GET /health → HTTP ${res.status}: ${text.slice(0, 200)}`);
+  return body as Health;
 }
 
 /** The registration body is the signed binding lifted out of a presentation the operator just issued. */
@@ -58,7 +70,7 @@ export async function register(v: HostedVerifier, mandate: IssuedMandate): Promi
     headers: { authorization: `Bearer ${v.adminToken}`, 'content-type': 'application/json' },
     body: JSON.stringify(registrationOf(mandate)),
   });
-  const body = (await res.json()) as { credential_id?: unknown; error?: unknown };
+  const { text, body } = await jsonOf(res);
   if (res.status === 201 || res.status === 200) {
     if (typeof body.credential_id !== 'string' || !/^[0-9a-f]{64}$/.test(body.credential_id)) {
       throw new Error(`POST /v1/credentials → HTTP ${res.status} without a credential_id`);
@@ -66,7 +78,7 @@ export async function register(v: HostedVerifier, mandate: IssuedMandate): Promi
     return { status: res.status, credential_id: body.credential_id };
   }
   if (res.status === 409) return { status: 409, error: typeof body.error === 'string' ? body.error : undefined };
-  throw new Error(`POST /v1/credentials → HTTP ${res.status}: ${JSON.stringify(body)}`);
+  throw new Error(`POST /v1/credentials → HTTP ${res.status}: ${text.slice(0, 200)}`);
 }
 
 export async function revoke(v: HostedVerifier, credentialId: string): Promise<number> {
@@ -74,7 +86,7 @@ export async function revoke(v: HostedVerifier, credentialId: string): Promise<n
     method: 'POST',
     headers: { authorization: `Bearer ${v.adminToken}` },
   });
-  if (res.status !== 204) throw new Error(`POST /v1/credentials/{id}/revoke → HTTP ${res.status}: ${await res.text()}`);
+  if (res.status !== 204) throw new Error(`POST /v1/credentials/{id}/revoke → HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return res.status;
 }
 
@@ -85,7 +97,13 @@ export interface VerifyOutcome {
   receiptHeader: string | null;
 }
 
-/** Present a mandate to `POST /v1/verify` with the request shape the gate sends, keeping the response headers. */
+/**
+ * Present a mandate to `POST /v1/verify` with the gate's CHARGE-stage request shape — the
+ * mandate's own identity fields plus its tier capability — keeping the response headers.
+ * (The gate's preflight stage sends the same fields with no granted capabilities; the
+ * charge stage carries the amount's tier, which for this example's $25 charge is the
+ * mandate's `small`.)
+ */
 export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise<VerifyOutcome> {
   const body = {
     version: 1,
@@ -95,7 +113,7 @@ export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise
       project_key: mandate.audience,
       program: mandate.program,
       model: mandate.model,
-      granted_capabilities: [`mpp:financial:${mandate.tier}`],
+      granted_capabilities: [tierCapability(mandate.tier)],
     },
     now_unix: Math.floor(Date.now() / 1000),
   };
@@ -104,9 +122,11 @@ export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise
     headers: { authorization: `Bearer ${v.verifierToken}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+  const { text, body: verdict } = await jsonOf(res);
+  if (Object.keys(verdict).length === 0) throw new Error(`POST /v1/verify → HTTP ${res.status} with a non-JSON body: ${text.slice(0, 200)}`);
   return {
     status: res.status,
-    verdict: (await res.json()) as Record<string, unknown>,
+    verdict,
     credentialIdHeader: res.headers.get('x-bolyra-credential-id'),
     receiptHeader: res.headers.get('x-bolyra-receipt'),
   };
@@ -123,7 +143,8 @@ export function verifyReceiptWithCli(v: HostedVerifier, receiptHeader: string): 
   const file = path.join(dir, 'receipt.json');
   try {
     writeFileSync(file, json);
-    const cli = fileURLToPath(new URL('../node_modules/@bolyra/cli/dist/main.js', import.meta.url));
+    const cliDir = path.dirname(createRequire(import.meta.url).resolve('@bolyra/cli/package.json'));
+    const cli = path.join(cliDir, 'dist', 'main.js');
     return execFileSync(
       process.execPath,
       [cli, 'receipt', 'verify', file, '--signer-from', `${v.url}/.well-known/bolyra-signers.json`],

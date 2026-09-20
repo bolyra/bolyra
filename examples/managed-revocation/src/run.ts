@@ -56,19 +56,18 @@ function issue(agentName: string): Promise<IssuedMandate> {
   return issueMandate({ operatorPrivateKey: OPERATOR_PRIVATE_KEY, agentName, audience: AUDIENCE, model: MODEL, tier: 'small', expiry: EXPIRY });
 }
 
-function detailOf(verdict: Record<string, unknown> | DenyLike | undefined): { reason?: unknown; credential_id?: unknown } {
-  const d = verdict !== undefined ? (verdict as { detail?: unknown }).detail : undefined;
+function detailOf(verdict: { detail?: unknown } | undefined): { reason?: unknown; credential_id?: unknown } {
+  const d = verdict?.detail;
   return typeof d === 'object' && d !== null ? (d as { reason?: unknown; credential_id?: unknown }) : {};
 }
-type DenyLike = { code: string; detail?: unknown };
 
 async function main(): Promise<void> {
   console.log(`managed revocation — @bolyra/mpp ${PACKAGES.mpp}, mppx ${PACKAGES.mppx}, @bolyra/cli ${CLI_VERSION}, verifier ${hosted.url}\n`);
 
   // 0. The verifier is a registry-enforcing build with receipts on.
   const h = await health(hosted);
-  check('[verifier]', 'GET /health registry_enforced', h.registry_enforced === true, 'true', String(h.registry_enforced));
-  check('[verifier]', 'GET /health receipts_enabled', h.receipts_enabled === true, 'true', `${String(h.receipts_enabled)} (run scripts/dev-vars.mjs before wrangler dev)`);
+  check('[verifier]', 'GET /health registry_enforced + tenants', h.registry_enforced === true && h.tenants === 'ok', 'registry_enforced true, tenants ok', `registry_enforced ${String(h.registry_enforced)}, tenants ${String(h.tenants)}`);
+  check('[verifier]', 'GET /health receipts_enabled', h.receipts_enabled === true, 'true — scripts/dev-vars.mjs writes the signing key the Worker needs (demo:local runs it)', String(h.receipts_enabled));
 
   const server = createServer({ url: hosted.url, token: hosted.verifierToken });
 
@@ -83,8 +82,9 @@ async function main(): Promise<void> {
   // 2. Spend: one 402→pay handshake, two fresh presentations, the action runs once.
   const paid1 = await paidCall(server.handler, (await issue(AGENT)).presentation, (await issue(AGENT)).presentation);
   check('[gate]', 'paid call #1', paid1.status === 200 && server.state.counter === 1, '200, counter 1', `${paid1.status}, counter ${server.state.counter}`);
-  const receipt1 = Receipt.deserialize(paid1.headers.get('Payment-Receipt') ?? '') as { bolyraAuthorization?: { verifier?: unknown; tier?: unknown } };
-  check('[gate]', 'Payment-Receipt.bolyraAuthorization', receipt1.bolyraAuthorization?.verifier === 'url' && receipt1.bolyraAuthorization?.tier === 'small', 'verifier url, tier small', `verifier ${String(receipt1.bolyraAuthorization?.verifier)}, tier ${String(receipt1.bolyraAuthorization?.tier)}`);
+  const encoded1 = paid1.headers.get('Payment-Receipt');
+  const receipt1 = (encoded1 === null ? {} : Receipt.deserialize(encoded1)) as { bolyraAuthorization?: { verifier?: unknown; tier?: unknown } };
+  check('[gate]', 'Payment-Receipt.bolyraAuthorization', encoded1 !== null && receipt1.bolyraAuthorization?.verifier === 'url' && receipt1.bolyraAuthorization?.tier === 'small', 'verifier url, tier small', encoded1 === null ? 'no Payment-Receipt header' : `verifier ${String(receipt1.bolyraAuthorization?.verifier)}, tier ${String(receipt1.bolyraAuthorization?.tier)}`);
 
   // 3. What the verifier adds on an allow: the credential id header and a signed receipt.
   const v1 = await verify(hosted, await issue(AGENT));
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
   const problem = (await denied.json()) as { code?: unknown; detail?: unknown };
   check('[gate]', 'paid call #3 after revoke', denied.status === 401 && problem.code === 'untrusted_root' && server.state.counter === 2, '401 untrusted_root, counter 2', `${denied.status} ${String(problem.code)}, counter ${server.state.counter}`);
   const thrown = detailOf(server.state.lastDenial);
-  check('[gate]', 'in-process verdict.detail (the wire body carries only the message)', thrown.reason === 'credential_not_active' && thrown.credential_id === id, 'credential_not_active, registered id', `${String(thrown.reason)}, ${thrown.credential_id === id ? 'registered id' : String(thrown.credential_id)}`);
+  check('[gate]', 'in-process verdict.detail (the wire body carries only the message; the id is cross-checked against the registration)', thrown.reason === 'credential_not_active' && thrown.credential_id === id, 'credential_not_active, registered id', `${String(thrown.reason)}, ${thrown.credential_id === id ? 'registered id' : String(thrown.credential_id)}`);
 
   // 7. The verifier's own words for the same presentation.
   const v2 = await verify(hosted, await issue(AGENT));
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
   check('[gate]', 'paid call #4 with the independent credential', paid3.status === 200 && server.state.counter === 3, '200, counter 3', `${paid3.status}, counter ${server.state.counter}`);
 
   const failed = rows.filter((r) => !r.ok);
-  console.log(`\n${rows.length - failed.length}/${rows.length} checks passed; counter ended at ${server.state.counter} (1 → 2 → revoke → 2 → 3).`);
+  console.log(`\n${rows.length - failed.length}/${rows.length} checks passed; counter ended at ${server.state.counter} (expected trajectory 1 → 2 → revoke → 2 → 3).`);
   if (failed.length > 0) {
     console.error(`\n${failed.length} check(s) failed:`);
     for (const r of failed) console.error(`  ${r.source} ${r.step}: expected ${r.expected}, observed ${r.observed}`);
