@@ -17,7 +17,7 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
-## Unreleased
+## Unreleased — hosted verify endpoint
 
 ### Changed (BREAKING)
 
