@@ -10,25 +10,34 @@
  *   GET  /health      Unauthenticated status + preview labeling + the exact
  *                     list of checks this preview does / does not perform.
  *
+ *   POST /v1/credentials               Admin-token auth. Register an operator-signed
+ *   GET  /v1/credentials/{id}          binding in the tenant's managed credential
+ *   POST /v1/credentials/{id}/revoke   registry (src/registry.ts); read it; revoke it.
+ *
  * Tenancy and roles (src/tenants.ts): the `TENANTS` secret maps an org id to
  * an admin token, a verifier token and that tenant's trusted operator keys.
  * Tenant and role derive exclusively from which token matched; no route
- * accepts an org id from the request.
+ * accepts an org id from the request, and the ONLY code path that obtains a
+ * registry stub is `registryFor(auth)` below — authenticated routing is the
+ * isolation control.
  *
- *   request ──► loadTenants(TENANTS) ──defect──► 500 deny internal_error
- *                    │                            (/health: tenants:"invalid")
- *                    ▼
- *              resolveAuth(token) ──none──► 401 { error: "unauthorized" }
+ *   request ──► loadTenants(TENANTS) + loadCapabilityMap ──defect──► 500
+ *                    │                     (verify: deny internal_error verdict;
+ *                    ▼                      registry routes: { error: "internal_error" })
+ *              resolveAuth(token) ──none──► 401
  *                    │
- *                    ├── tenant.disabled ─► 500 deny internal_error (quarantine outranks role)
- *                    ├── role ≠ verifier ──► 403 { error: "forbidden" }
- *                    └── ok ──► verifyClassical(body, tenant.trusted_operators, capabilityMap)
+ *                    ├── tenant.disabled ─► verify: 500 verdict · registry: 503 tenant_disabled
+ *                    ├── wrong role ──────► 403 { error: "forbidden" }
+ *                    └── ok ──► verify: verifyClassical(body, tenant.trusted_operators, capabilityMap)
+ *                              registry: trust → signature → expiry → credentialId → TenantRegistry RPC
  *
  * HTTP mapping of the CLI exit-code semantics (§7.1): every decision-level
  * verdict (allow or policy/crypto deny) is HTTP 200; `deny internal_error`
  * (the CLI's "non-zero exit" case) is HTTP 500. Auth/transport failures
  * (401/403/404/405) happen BEFORE the contract and carry an `{ "error": ... }`
- * body, not a verdict.
+ * body, not a verdict. The registry routes are HTTP resources, not verifiers:
+ * their non-2xx bodies are `{ "error", "message" }` (the 403 stays exactly
+ * `{ "error": "forbidden" }`).
  *
  * NOT in this preview (deliberately): SLAs, billing, dashboards, tenant
  * self-service, zk verification, custom policy UI, customer-managed keys.
@@ -44,9 +53,13 @@ import {
 } from './verify/core';
 import { loadCapabilityMap, type CapabilityMap } from './verify/capabilities';
 import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/verdict';
+import { bindingDigest, verifyBindingSig } from './verify/binding';
+import { operatorKeyId } from './verify/operators';
+import { canonicalize } from '@bolyra/receipts';
 import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
-
+import { credentialId, CREDENTIAL_ID_PATTERN, CREDENTIAL_ID_VERSION } from './credential-id';
+import { parseRegistration, type RegistryErrorCode } from './routes/credentials';
 import type { TenantRegistry } from './registry';
 
 // Durable Object classes must be exported from the Worker's main module.
@@ -69,8 +82,11 @@ export interface Env {
   TENANT: DurableObjectNamespace<TenantRegistry>;
 }
 
-/** Request-body bound — mirrors the spec §6 1 MiB stdin bound. */
+/** Request-body bound for /v1/verify — mirrors the spec §6 1 MiB stdin bound. */
 const MAX_BODY_BYTES = 1_048_576;
+
+/** Request-body bound for a registration (a binding plus a signature is well under 4 KiB). */
+const MAX_REGISTRATION_BYTES = 65_536;
 
 const PREVIEW_HEADERS: Record<string, string> = {
   'content-type': 'application/json; charset=utf-8',
@@ -99,6 +115,11 @@ function errorJson(
   return json(status, { error: code, ...extra }, headers);
 }
 
+/** Registry-route error body: `{ error, message }`. */
+function registryError(status: number, code: RegistryErrorCode, message: string): Response {
+  return errorJson(status, code, { message });
+}
+
 /** Reserved usage label recorded for requests with no valid bearer token. */
 const UNAUTHENTICATED = 'unauthenticated';
 
@@ -112,12 +133,24 @@ function tenantLabel(auth: AuthResult): string {
 }
 
 /**
+ * The request id recorded in analytics and in registry history. `cf-ray` is
+ * assigned at Cloudflare's edge in production, but in `wrangler dev` and tests
+ * a client can supply any value — so only the documented shape
+ * (`<16 hex>[-<3 uppercase>]`) is accepted; anything else gets a fresh UUID.
+ */
+const CF_RAY_PATTERN = /^[0-9a-f]{16}(-[A-Z]{3})?$/;
+function requestIdFrom(request: Request): string {
+  const ray = request.headers.get('cf-ray');
+  return ray !== null && CF_RAY_PATTERN.test(ray) ? ray : crypto.randomUUID();
+}
+
+/**
  * Read the request body with a hard byte cap. Returns the decoded text, or
  * null when the body exceeds the bound (a fail-closed `malformed_input`).
  */
-async function readBodyCapped(request: Request): Promise<string | null> {
+async function readBodyCapped(request: Request, maxBytes: number): Promise<string | null> {
   const declared = request.headers.get('content-length');
-  if (declared !== null && Number(declared) > MAX_BODY_BYTES) return null;
+  if (declared !== null && Number(declared) > maxBytes) return null;
 
   const reader = request.body?.getReader();
   if (reader === undefined) return '';
@@ -127,7 +160,7 @@ async function readBodyCapped(request: Request): Promise<string | null> {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > MAX_BODY_BYTES) {
+    if (total > maxBytes) {
       await reader.cancel();
       return null;
     }
@@ -141,6 +174,9 @@ async function readBodyCapped(request: Request): Promise<string | null> {
   }
   return new TextDecoder('utf-8').decode(merged);
 }
+
+/** The one wire message for every fail-closed configuration or quarantine 500. */
+const CONFIG_ERROR_MESSAGE = 'missing or invalid trust configuration';
 
 function verdictResponse(verdict: Verdict, body: unknown, env: Env): Response {
   // §7.1 nuance mapped to HTTP: internal_error is the fail-closed
@@ -164,7 +200,7 @@ function configErrorVerdict(e: unknown): DenyVerdict {
     isVerifyDenial(e) ? `${e.code}: ${e.message}` : e instanceof Error ? e.stack : String(e),
     isVerifyDenial(e) ? (e.detail ?? {}) : {},
   );
-  return deny('internal_error', 'missing or invalid trust configuration');
+  return deny('internal_error', CONFIG_ERROR_MESSAGE);
 }
 
 /**
@@ -174,7 +210,7 @@ function configErrorVerdict(e: unknown): DenyVerdict {
  */
 function quarantineVerdict(orgId: string): DenyVerdict {
   console.warn('hosted-verify tenant disabled:', { org_id: orgId });
-  return deny('internal_error', 'missing or invalid trust configuration');
+  return deny('internal_error', CONFIG_ERROR_MESSAGE);
 }
 
 /** Outcome of authenticating a request for a route that requires `required`. */
@@ -210,6 +246,11 @@ function authorize(request: Request, env: Env, required: Role): Gate {
   return { kind: 'ok', auth, capabilityMap };
 }
 
+/** The ONLY way a registry stub is obtained: from a resolved authentication result. */
+function registryFor(env: Env, auth: AuthResult): DurableObjectStub<TenantRegistry> {
+  return env.TENANT.get(env.TENANT.idFromName(auth.org_id));
+}
+
 /** Configuration was validated by `authorize` before the body is read. */
 async function handleVerify(
   request: Request,
@@ -217,7 +258,7 @@ async function handleVerify(
   capabilityMap: CapabilityMap,
   env: Env,
 ): Promise<{ verdict: Verdict; response: Response }> {
-  const text = await readBodyCapped(request);
+  const text = await readBodyCapped(request, MAX_BODY_BYTES);
   if (text === null) {
     const verdict = deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`);
     return { verdict, response: verdictResponse(verdict, undefined, env) };
@@ -234,6 +275,140 @@ async function handleVerify(
   const verdict = verifyClassical(body, trustedOperators, capabilityMap);
   return { verdict, response: verdictResponse(verdict, body, env) };
 }
+
+/** A registry-route outcome: the response plus the code recorded in analytics ('' on success). */
+interface RouteOutcome {
+  response: Response;
+  code: string;
+}
+
+function fail(status: number, code: RegistryErrorCode, message: string): RouteOutcome {
+  return { response: registryError(status, code, message), code };
+}
+
+/** Server time, unix seconds — the registry's clock for expiry and timestamps. */
+function nowUnix(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/**
+ * POST /v1/credentials — checks in order, all fail-closed:
+ *   parse → trust membership (403) → signature (400) → expiry (400) → id → RPC.
+ * Trust membership is a separate assertion from the signature check:
+ * `verifyBindingSig` only proves a signature against the key the caller supplied.
+ */
+async function handleRegister(
+  request: Request,
+  auth: AuthResult,
+  registry: DurableObjectStub<TenantRegistry>,
+  requestId: string,
+): Promise<RouteOutcome> {
+  const text = await readBodyCapped(request, MAX_REGISTRATION_BYTES);
+  if (text === null) {
+    return fail(400, 'malformed_input', `request body exceeds the ${MAX_REGISTRATION_BYTES}-byte bound`);
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return fail(400, 'malformed_input', 'request body is not valid JSON');
+  }
+  const parsed = parseRegistration(raw);
+  if (!parsed.ok) return fail(400, 'malformed_input', parsed.message);
+  const { binding, signature, operator_pubkey } = parsed.value;
+
+  let pub: { x: bigint; y: bigint };
+  let sig: { R8: { x: bigint; y: bigint }; S: bigint };
+  try {
+    pub = { x: BigInt(operator_pubkey.x), y: BigInt(operator_pubkey.y) };
+    sig = { R8: { x: BigInt(signature.R8.x), y: BigInt(signature.R8.y) }, S: BigInt(signature.S) };
+  } catch {
+    return fail(400, 'malformed_input', 'operator_pubkey and signature must be decimal integers');
+  }
+  const keyId = operatorKeyId(pub.x, pub.y);
+  if (!auth.trusted_operators.has(keyId)) {
+    return fail(403, 'untrusted_operator', "operator key is not in this tenant's trusted operators");
+  }
+  try {
+    verifyBindingSig(binding, sig, pub);
+  } catch (e) {
+    if (isVerifyDenial(e)) return fail(400, 'binding_signature_invalid', e.message);
+    throw e;
+  }
+  const now = nowUnix();
+  if (binding.expiry <= now) {
+    return fail(400, 'binding_expired', 'binding.expiry is not in the future');
+  }
+
+  // Only now — after the trust check and the signature verified against `pub` —
+  // is `pub` a key we may derive an identity from.
+  const digest = bindingDigest(binding);
+  const id = credentialId(pub, digest); // coordinates, never the request's spelling of them
+  const result = await registry.register({
+    credential_id: id,
+    operator_key: keyId,
+    binding_digest_hex: digest.toString(16).padStart(64, '0'),
+    binding_json: canonicalize(binding),
+    expiry: binding.expiry,
+    now,
+    request_id: requestId,
+  });
+  switch (result.outcome) {
+    case 'created':
+      return { response: json(201, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '' };
+    case 'unchanged':
+      return { response: json(200, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '' };
+    case 'revoked':
+      return fail(409, 'credential_revoked', 'this credential was revoked; revocation is terminal');
+    case 'expired':
+      return fail(400, 'binding_expired', 'binding.expiry is not in the future');
+    case 'mismatch':
+      // The same derived id already holds a different key or binding: an
+      // id-derivation defect or a collision, never a client error to paper over.
+      console.error('hosted-verify registry id mismatch:', { org_id: auth.org_id, credential_id: id, request_id: requestId });
+      return fail(500, 'internal_error', 'registry integrity failure');
+    case 'invalid_input':
+    case 'storage_error':
+      return fail(500, 'internal_error', 'registry storage failure');
+  }
+}
+
+async function handleGet(registry: DurableObjectStub<TenantRegistry>, id: string): Promise<RouteOutcome> {
+  const result = await registry.get(id);
+  switch (result.outcome) {
+    case 'found': {
+      // Rendered from the STORED record, never from a request.
+      const { binding_json, binding_digest_hex: _digest, ...rest } = result.record;
+      return { response: json(200, { ...rest, binding: JSON.parse(binding_json) as unknown }), code: '' };
+    }
+    case 'absent':
+      return fail(404, 'not_found', 'no such credential');
+    case 'invalid_input':
+    case 'storage_error':
+      return fail(500, 'internal_error', 'registry storage failure');
+  }
+}
+
+async function handleRevoke(
+  registry: DurableObjectStub<TenantRegistry>,
+  id: string,
+  requestId: string,
+): Promise<RouteOutcome> {
+  const result = await registry.revoke(id, nowUnix(), requestId);
+  switch (result) {
+    case 'revoked':
+    case 'unchanged':
+      return { response: new Response(null, { status: 204, headers: PREVIEW_HEADERS }), code: '' };
+    case 'absent':
+      return fail(404, 'not_found', 'no such credential');
+    case 'invalid_input':
+    case 'storage_error':
+      return fail(500, 'internal_error', 'registry storage failure');
+  }
+}
+
+/** `/v1/credentials`, `/v1/credentials/{id}`, `/v1/credentials/{id}/revoke` — nothing else. */
+const CREDENTIALS_ROUTE = /^\/v1\/credentials(?:\/([^/]+)(\/revoke)?)?$/;
 
 function handleHealth(env: Env): Response {
   // /health is the diagnostic surface: a broken TENANTS is REPORTED here at
@@ -252,6 +427,8 @@ function handleHealth(env: Env): Response {
     verifier_kind: 'classical',
     nonce_mode: 'host',
     tenants,
+    registry: 'durable-object',
+    credential_id_version: CREDENTIAL_ID_VERSION,
     receipts_enabled: env.RECEIPT_SIGNER_KEY !== undefined && env.RECEIPT_SIGNER_KEY !== '',
     trust_model:
       'an allow means an operator the calling tenant configured as trusted signed a binding ' +
@@ -267,20 +444,22 @@ function handleHealth(env: Env): Response {
 /**
  * One structured Analytics Engine data point per request — and NOTHING else.
  * Explicitly never stored: request bodies, proofs, credentials, bearer
- * tokens, IPs. Documented in README "Observability" (trust statement).
+ * tokens, IPs, credential ids. Documented in README "Observability".
  *
  *   blobs   = [route, label, verdict, code, proof_kind, request_id]
  *   doubles = [latency_ms, http_status]
  *   indexes = [label]
  *
- * `label` is `<org_id>:<role>` for an authenticated request (including one
- * refused for the wrong role), or `unauthenticated`.
+ * `route` is one of a fixed set (`/v1/verify`, `/v1/credentials`, `/health`,
+ * `/.well-known/bolyra-signers.json`, `other`) — never a raw path. `label` is
+ * `<org_id>:<role>` for an authenticated request (including one refused for
+ * the wrong role), or `unauthenticated`.
  */
 interface Usage {
-  route: string; // '/v1/verify' | '/health' | 'other' (never raw paths)
-  label: string; // '<org_id>:<role>' or 'unauthenticated'
+  route: string;
+  label: string;
   verdict: 'allow' | 'deny' | 'error';
-  code: string; // deny code, transport-error code, or '' on allow
+  code: string; // deny code, transport-error code, or '' on success
   kind: string; // verdict proof kind ('classical'), '' for non-verdicts
   requestId: string;
   latencyMs: number;
@@ -303,7 +482,7 @@ function writeUsage(env: Env, usage: Usage): void {
 export default {
   async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const start = Date.now();
-    const requestId = request.headers.get('cf-ray') ?? crypto.randomUUID();
+    const requestId = requestIdFrom(request);
     const url = new URL(request.url);
 
     let route = 'other';
@@ -312,8 +491,9 @@ export default {
     let code = '';
     let kind = '';
     // Left uninitialized on purpose: a Gate case that forgets to assign it is a
-    // compile error (definite assignment), so the switch stays exhaustive.
+    // compile error (definite assignment), so the switches stay exhaustive.
     let response: Response;
+    const credentials = CREDENTIALS_ROUTE.exec(url.pathname);
 
     if (url.pathname === '/health') {
       route = '/health';
@@ -375,6 +555,63 @@ export default {
           }
         }
       }
+    } else if (credentials !== null) {
+      // Registry routes: the analytics route is the family name, never a path with an id in it.
+      route = '/v1/credentials';
+      const id = credentials[1];
+      const isRevoke = credentials[2] !== undefined;
+      const method = id === undefined || isRevoke ? 'POST' : 'GET';
+      if (request.method !== method) {
+        code = 'method_not_allowed';
+        response = errorJson(405, 'method_not_allowed', { message: `use ${method}` }, { allow: method });
+      } else {
+        const gate = authorize(request, env, 'admin');
+        switch (gate.kind) {
+          case 'config_error': {
+            code = 'internal_error';
+            response = registryError(500, 'internal_error', CONFIG_ERROR_MESSAGE);
+            break;
+          }
+          case 'unauthenticated': {
+            code = 'unauthorized';
+            response = registryError(401, 'unauthorized', 'Authorization: Bearer <admin token>');
+            break;
+          }
+          case 'forbidden': {
+            label = tenantLabel(gate.auth);
+            code = 'forbidden';
+            response = errorJson(403, 'forbidden');
+            break;
+          }
+          case 'disabled': {
+            label = tenantLabel(gate.auth);
+            console.warn('hosted-verify tenant disabled:', { org_id: gate.auth.org_id });
+            code = 'tenant_disabled';
+            response = registryError(503, 'tenant_disabled', 'this tenant is disabled');
+            break;
+          }
+          case 'ok': {
+            label = tenantLabel(gate.auth);
+            if (id !== undefined && !CREDENTIAL_ID_PATTERN.test(id)) {
+              // Malformed and unknown ids are indistinguishable on the wire.
+              code = 'not_found';
+              response = registryError(404, 'not_found', 'no such credential');
+              break;
+            }
+            const registry = registryFor(env, gate.auth);
+            const result =
+              id === undefined
+                ? await handleRegister(request, gate.auth, registry, requestId)
+                : isRevoke
+                  ? await handleRevoke(registry, id, requestId)
+                  : await handleGet(registry, id);
+            response = result.response;
+            code = result.code;
+            outcome = response.status < 300 ? 'allow' : 'error';
+            break;
+          }
+        }
+      }
     } else if (url.pathname === '/.well-known/bolyra-signers.json') {
       // Receipt Signer Discovery v1 (spec/receipt-signer-discovery-v1.md):
       // public, like /health — publishing the signer address is the point.
@@ -395,7 +632,14 @@ export default {
     } else {
       code = 'not_found';
       response = errorJson(404, 'not_found', {
-        routes: ['GET /health', 'POST /v1/verify', 'GET /.well-known/bolyra-signers.json'],
+        routes: [
+          'GET /health',
+          'POST /v1/verify',
+          'POST /v1/credentials',
+          'GET /v1/credentials/{id}',
+          'POST /v1/credentials/{id}/revoke',
+          'GET /.well-known/bolyra-signers.json',
+        ],
       });
     }
 

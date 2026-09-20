@@ -20,6 +20,7 @@ import worker, { type Env } from '../src/index';
 import { postVerify, BASE, TOKENS, ORGS } from './helpers';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
+import registrations from './fixtures/registrations.json';
 
 interface DataPoint {
   blobs?: string[];
@@ -211,5 +212,27 @@ describe('Analytics Engine usage data point', () => {
     delete e.USAGE;
     const res = await worker.fetch(verifyRequest(TOKENS.A.verifier), e);
     expect(res.status).toBe(200);
+  });
+
+  it('registry routes are recorded as /v1/credentials with the admin label; ids never reach the route blob', async () => {
+    const { env: e, points } = usageEnv();
+    const valid = (registrations as { valid: { body: unknown; credential_id: string } }).valid;
+    const res = await worker.fetch(
+      new Request(`${BASE}/v1/credentials`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' },
+        body: JSON.stringify(valid.body),
+      }),
+      e,
+    );
+    expect(res.status).toBe(201);
+    expect(points[0]!.blobs!.slice(0, 5)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'allow', '', '']);
+    const get = await worker.fetch(
+      new Request(`${BASE}/v1/credentials/${valid.credential_id}`, { headers: { authorization: `Bearer ${TOKENS.A.admin}` } }),
+      e,
+    );
+    expect(get.status).toBe(200);
+    expect(points[1]!.blobs![0]).toBe('/v1/credentials');
+    expect(JSON.stringify(points[1])).not.toContain(valid.credential_id);
   });
 });
