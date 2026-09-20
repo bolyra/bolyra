@@ -5,6 +5,8 @@
 // anywhere. Extra arguments (`--env=staging`, or `--env=` for production) are passed
 // through to wrangler.
 import { spawn } from 'node:child_process';
+import { unlinkSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 const chunks = [];
 process.stdin.on('data', (d) => chunks.push(d));
@@ -40,6 +42,36 @@ process.stdin.on('end', () => {
       WRANGLER_SEND_METRICS: 'false',
     },
   });
+  // tenant.sh exports TENANT_LOCK_DIR for as long as it holds the per-environment lock.
+  // Recording wrangler's pid there is what lets the lock outlive an interrupted shell: without
+  // it, a lock released while this upload is still in flight would let a second operator's sync
+  // land first and be overwritten by this older map — a quarantine silently undone.
+  // Best effort in both directions: an unwritable lock directory must never stop a push that is
+  // otherwise fine, and a pid file that is already gone must never fail the exit path.
+  const uploadPidFile = process.env.TENANT_LOCK_DIR
+    ? path.join(process.env.TENANT_LOCK_DIR, 'upload.pid')
+    : undefined;
+  if (uploadPidFile !== undefined) {
+    try {
+      writeFileSync(uploadPidFile, String(child.pid));
+    } catch {
+      // The lock is advisory from here; tenant.sh still holds it for this whole process.
+    }
+  }
+  // Forward an interrupt to wrangler rather than dying under it. This process must outlive the
+  // child: it is what removes the upload pid file at the moment the upload is really over, and
+  // what keeps the pipeline stage that tenant.sh is waiting on running until then, so tenant.sh
+  // sees a finished put before its own deferred handler runs. The `exit` listener below is the
+  // only way out; on a signal death `code` is null and it exits non-zero.
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      try {
+        child.kill(sig);
+      } catch {
+        // Already gone — the `exit` listener has fired or is about to.
+      }
+    });
+  }
   child.on('error', (e) => {
     process.stderr.write(`tenants-put: ${e.message}\n`);
     process.exit(1);
@@ -51,5 +83,16 @@ process.stdin.on('end', () => {
     process.stderr.write(`tenants-put: could not send the map to wrangler (${e.code ?? 'error'}); wrangler's own error is above\n`);
   });
   child.stdin.end(body);
-  child.on('exit', (code) => process.exit(code ?? 1));
+  child.on('exit', (code) => {
+    // Clear the pid BEFORE exiting: after this point no upload is in flight, so tenant.sh's
+    // release_lock must be free to remove the lock directory.
+    if (uploadPidFile !== undefined) {
+      try {
+        unlinkSync(uploadPidFile);
+      } catch {
+        // Already removed, or the lock directory is gone; nothing to undo.
+      }
+    }
+    process.exit(code ?? 1);
+  });
 });

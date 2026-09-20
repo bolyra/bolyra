@@ -204,6 +204,8 @@ jobs:
           TENANTS_DIR="$(mktemp -d)" bash pilot/tenant.sh show
           sed -n 's/^TENANTS=//p' .dev.vars.example | node pilot/tenants-check.mjs
           printf '{}' | node pilot/tenants-check.mjs && exit 1 || test $? -eq 1
+          bash -n pilot/tenant-lock-check.sh
+          bash pilot/tenant-lock-check.sh
 
   payment-protocols-tests:
     name: Payment Protocols — typecheck & test
