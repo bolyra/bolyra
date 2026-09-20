@@ -77,6 +77,12 @@ else
   # wrangler does not warn about an unspecified environment.
   WRANGLER_ENV=("--env=")
 fi
+# The lock path is exported to the put stage, which runs after `cd "$WORKER_DIR"` — a relative
+# TENANTS_DIR would resolve there instead of here, so make it absolute before anything uses it.
+case "$TENANTS_DIR" in
+  /*) ;;
+  *) TENANTS_DIR="$PWD/$TENANTS_DIR" ;;
+esac
 # One tenant.sh at a time per environment. Every mutating command ends in a full rebuild of
 # TENANTS from the registry + keychain, so two overlapping runs can interleave: the one that
 # paused inside wrangler puts its OLDER map last and silently undoes the other (a quarantine
