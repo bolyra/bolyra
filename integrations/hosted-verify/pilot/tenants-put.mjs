@@ -72,6 +72,28 @@ const ownsLock = () => {
   }
 };
 
+// Every marker carries the token of the lock it was written under, on its first line. Reading
+// `owner` once at startup is not enough on its own: between that read and the marker write
+// there is a window in which an `unlock` can clear the lock (this shell is dead, and no marker
+// exists yet to stop it) and a fresh `sync` can take a replacement at the same path — and this
+// stage, already past its check, would then drop a stale `starting` marker into somebody
+// else's lock, clobbering their tracking or leaving their `unlock` demanding --force. Stamping
+// the token INTO the marker makes that marker recognisably not the new lock's, from either
+// side: this stage refuses to overwrite one it does not own, and tenant.sh reads a marker
+// whose owner does not match the lock's as foreign.
+const MARKER_OWNER_LINE = /^owner (\S+)/m;
+const markerOwner = (file) => {
+  try {
+    const m = MARKER_OWNER_LINE.exec(readFileSync(file, 'utf8'));
+    return m === null ? undefined : m[1];
+  } catch (err) {
+    // Unreadable is not "someone else's": the caller decides, and an error that is not simply
+    // a missing file is reported as what it is.
+    return err.code === 'ENOENT' ? undefined : err;
+  }
+};
+const marker = (extra) => `owner ${lockToken}\nstarting\nput ${process.pid}\n${extra}`;
+
 // A refusal that starts no upload must leave the lock exactly as it found it, so that the
 // sync upstream can say — and only then — that this run changed nothing. The marker written
 // at startup is removed, but ONLY while `owner` still names this run: under a replacement
@@ -80,6 +102,10 @@ const ownsLock = () => {
 // answer.
 const clearPendingOnRefusal = () => {
   if (pendingFile === undefined || !ownsLock()) return;
+  // Both halves have to agree before anything is deleted: the lock must still be ours AND the
+  // marker under it must be the one this run wrote. A marker stamped with another token is
+  // another run's tracking, and removing it is the very damage this is here to prevent.
+  if (markerOwner(pendingFile) !== lockToken) return;
   try {
     unlinkSync(pendingFile);
   } catch {
@@ -93,9 +119,27 @@ if (lockDir !== undefined) {
     process.exit(1);
   }
   try {
-    writeFileSync(pendingFile, `starting\nput ${process.pid}\n`);
+    // Exclusive create. A marker that is already there was put there by a run that is not
+    // this one — or by this one, twice — and either way the honest move is to start nothing:
+    // overwriting it would erase whatever tracking `unlock` would have used.
+    writeFileSync(pendingFile, marker(''), { flag: 'wx' });
   } catch (err) {
-    process.stderr.write(`tenants-put: cannot record the upload under the lock (${err.code ?? err}); wrangler was NOT started and the live map was NOT changed\n`);
+    if (err.code !== 'EEXIST') {
+      process.stderr.write(`tenants-put: cannot record the upload under the lock (${err.code ?? err}); wrangler was NOT started and the live map was NOT changed\n`);
+      process.exit(1);
+    }
+    const existing = markerOwner(pendingFile);
+    if (existing !== undefined && typeof existing !== 'string') {
+      // Something is in the way that cannot even be read — a directory, most often. It is not
+      // a marker, and it is not ours to move aside.
+      process.stderr.write(`tenants-put: cannot record the upload under the lock (${existing.code ?? existing}); wrangler was NOT started and the live map was NOT changed\n`);
+      process.exit(1);
+    }
+    if (existing === lockToken) {
+      process.stderr.write('tenants-put: an upload is already recorded under this lock; nothing was started\n');
+      process.exit(1);
+    }
+    process.stderr.write('tenants-put: the lock is held by another run (marker owner mismatch); nothing was started\n');
     process.exit(1);
   }
 }
@@ -176,18 +220,29 @@ process.stdin.on('end', () => {
   });
   child.stdin.end(body);
   if (pendingFile !== undefined) {
-    try {
-      // `pgid` is what `unlock` needs and the only thing that covers the whole upload: the
-      // launcher can exit long before the process actually talking to Cloudflare does, and a
-      // group id stays valid for as long as ANY member of it is alive. `put` is this process,
-      // the one that still has to confirm the upload; an operator reading a leftover marker
-      // wants the group. `starting` is kept as the first line so a marker written before the
-      // spawn and one written after it read the same way.
-      writeFileSync(pendingFile, `starting\nput ${process.pid}\npgid ${child.pid}\n`);
-    } catch {
-      // The upload is already running, so this is not a reason to stop — but nothing can now
-      // prove it has finished, and `unlock` must not clear a lock over an upload it cannot
-      // see. It refuses until an operator says otherwise.
+    // `pgid` is what `unlock` needs and the only thing that covers the whole upload: the
+    // launcher can exit long before the process actually talking to Cloudflare does, and a
+    // group id stays valid for as long as ANY member of it is alive. `put` is this process,
+    // the one that still has to confirm the upload; an operator reading a leftover marker
+    // wants the group. The `owner` and `starting` lines are kept, so a marker written before
+    // the spawn and one written after it read the same way.
+    //
+    // The marker is re-read first. If it no longer carries this run's token the lock was
+    // cleared and re-taken while the map was on its way down the pipe, and the marker now
+    // there belongs to whoever took it: overwriting it would destroy their tracking. The
+    // upload has already started, so this is not a reason to stop — it is a reason to say
+    // that nothing can now prove it finished, which is exactly what `unlock` then refuses on.
+    const owned = markerOwner(pendingFile) === lockToken;
+    let recorded = false;
+    if (owned) {
+      try {
+        writeFileSync(pendingFile, marker(`pgid ${child.pid}\n`));
+        recorded = true;
+      } catch {
+        recorded = false;
+      }
+    }
+    if (!recorded) {
       process.stderr.write('tenants-put: the upload\'s process group could not be recorded; unlock will refuse until an operator confirms no wrangler process remains\n');
     }
   }

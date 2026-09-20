@@ -513,7 +513,7 @@ deadpid=999999
 while kill -0 "$deadpid" 2>/dev/null; do deadpid=$((deadpid + 1)); done
 mkdir -p "$LOCK_DIR"
 printf '%s\n' stale-token > "$LOCK_DIR/owner"
-printf 'starting\nput %s\n' "$deadpid" > "$LOCK_DIR/upload.pending"
+printf 'owner stale-token\nstarting\nput %s\n' "$deadpid" > "$LOCK_DIR/upload.pending"
 out="$(tenant unlock 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "unlock over incomplete tracking exited $rc, expected 1: $out"
 case "$out" in *"process group was never recorded"*) ;; *) fail "incomplete tracking was refused for the wrong reason: $out" ;; esac
@@ -527,5 +527,40 @@ out="$(tenant unlock --nonsense 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "unlock with an unknown argument exited $rc, expected 1: $out"
 case "$out" in *"unknown argument"*) ;; *) fail "unlock accepted an unknown argument: $out" ;; esac
 ok "a lock whose upload was never fully recorded is cleared only with --force, and unlock refuses any other argument"
+
+# (g14) the window the owner token in the MARKER closes: the put stage reads the lock's owner,
+# and only then writes its marker. In between, its shell being dead, an `unlock` can clear the
+# lock and a fresh `sync` can take a replacement at the same path — and the orphan, already
+# past its check, drops a stale marker into the new owner's lock. Tracking that names a run
+# nobody is waiting for must never read as the new owner's own, or its `unlock` would clear a
+# lock on the strength of pids that prove nothing.
+mkdir -p "$LOCK_DIR"
+printf '%s\n' bbbb > "$LOCK_DIR/owner"
+printf 'owner aaaa\nstarting\nput %s\npgid %s\n' "$deadpid" "$deadpid" > "$LOCK_DIR/upload.pending"
+out="$(tenant unlock 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "unlock over a marker belonging to another run exited $rc, expected 1: $out"
+case "$out" in *"belongs to another run"*) ;; *) fail "the stale marker was refused for the wrong reason: $out" ;; esac
+case "$out" in *"--force"*) ;; *) fail "the refusal did not name --force: $out" ;; esac
+[ -d "$LOCK_DIR" ] || fail "unlock cleared a lock on the strength of another run's marker"
+out="$(tenant unlock --force 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "unlock --force exited $rc over a stale marker: $out"
+[ ! -d "$LOCK_DIR" ] || fail "unlock --force left the lock directory behind"
+ok "a marker stamped with another lock's token is refused as stale and cleared only with --force"
+
+# (g15) and the other side of the same window: a marker is created EXCLUSIVELY, so a put stage
+# arriving at a lock that already has one starts nothing rather than overwriting the tracking
+# that is there.
+mkdir -p "$WORK/lock-taken"
+printf '%s\n' g15-token > "$WORK/lock-taken/owner"
+printf 'owner g15-token\nstarting\nput %s\npgid %s\n' "$deadpid" "$deadpid" > "$WORK/lock-taken/upload.pending"
+cp "$WORK/lock-taken/upload.pending" "$WORK/lock-taken-marker.before"
+out="$(printf '{"acme":{}}' | env PATH="$SHIM:$PATH" MARKER="$WORK/marker-taken" MARKER_BODY="$WORK/body-taken" \
+  TENANT_LOCK_DIR="$WORK/lock-taken" TENANT_LOCK_TOKEN=g15-token node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "the put stage exited $rc against a lock that already has a marker, expected 1: $out"
+case "$out" in *"already recorded"*) ;; *) fail "the existing marker was not reported: $out" ;; esac
+case "$out" in *"nothing was started"*) ;; *) fail "the refusal did not say that nothing was started: $out" ;; esac
+[ ! -e "$WORK/marker-taken" ] || fail "a put stage that found a marker already there still reached the uploader"
+cmp -s "$WORK/lock-taken-marker.before" "$WORK/lock-taken/upload.pending" || fail "the existing marker was overwritten: $(cat "$WORK/lock-taken/upload.pending")"
+ok "a marker already under the lock is never overwritten, and the put stage starts nothing"
 
 echo "tenant-lock-check: all checks passed"

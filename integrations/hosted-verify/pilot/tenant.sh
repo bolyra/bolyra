@@ -128,6 +128,20 @@ release_lock() {
   rm -f "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid" "$LOCK_DIR/owner"
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
+# True when the marker at $1 was NOT written under the lock that is there now. The put stage
+# stamps the lock's owner token into the first line of every marker it writes. Between its
+# startup check and that write there is a window — this shell dead, no marker yet to stop an
+# unlock — in which the lock can be cleared and re-taken at the same path, and the orphaned put
+# stage would then leave its stale marker in the new lock: tracking that names a run nobody
+# here is waiting for. A marker whose token is not the current lock's is that marker, and
+# neither the sync's report nor unlock's clearing may be based on it.
+marker_is_foreign() {  # $1 marker path
+  local m l
+  m="$(awk '/^owner /{print $2; exit}' "$1" 2>/dev/null)" || m=""
+  l="$(cat "$LOCK_DIR/owner" 2>/dev/null)" || l=""
+  [ -n "$m" ] && [ -n "$l" ] && [ "$m" = "$l" ] && return 1
+  return 0
+}
 on_signal() {  # $1 the signal name, INT or TERM
   # Bash defers a trapped signal that arrives while a FOREGROUND command is running until that
   # command returns, and the last stage of the sync pipeline does not return until wrangler has
@@ -380,6 +394,14 @@ cmd_sync() {
     esac
     exit "$rc"
   fi
+  if [ -e "$LOCK_DIR/upload.pending" ] && marker_is_foreign "$LOCK_DIR/upload.pending"; then
+    # Not this run's marker: some earlier run's put stage outlived its shell and recorded
+    # itself here after this lock was taken. Nothing under it describes THIS sync, so it
+    # cannot be reported as this sync's outcome — and the lock stays until someone has looked.
+    echo "error: the upload marker under this lock belongs to another run (stale); the lock is retained — run: pilot/tenant.sh unlock" >&2
+    [ "$rc" != 0 ] || rc=1
+    exit "$rc"
+  fi
   if [ -e "$LOCK_DIR/upload.pending" ]; then
     echo "error: the outcome of the upload is UNKNOWN — the intended map may or may not be live; the lock is retained. Recovery: pilot/tenant.sh unlock (refuses while the upload can still be running), then pilot/tenant.sh sync to re-put the intended map, then confirm on the Worker (/health tenants \"ok\" and one authenticated request)." >&2
     [ "$rc" != 0 ] || rc=1
@@ -414,7 +436,7 @@ release_unlock() {
 # Clear a lock that a previous run retained. Takes NO registry lock, and refuses while
 # anything it can still see could be uploading.
 cmd_unlock() {
-  local force=0 p pgid putpid
+  local force=0 foreign=0 p pgid putpid
   while [ $# -gt 0 ]; do
     case "$1" in
       --force) force=1 ;;
@@ -437,6 +459,8 @@ cmd_unlock() {
     return 0
   fi
   if [ -e "$LOCK_DIR/upload.pending" ]; then
+    foreign=0
+    marker_is_foreign "$LOCK_DIR/upload.pending" && foreign=1
     # `pgid` covers the WHOLE upload: the launcher, wrangler, and anything either started.
     # A group id answers for all of them at once and stays valid while any member lives,
     # which a launcher pid does not — kill the launcher and its uploader carries on talking
@@ -451,7 +475,13 @@ cmd_unlock() {
     if [ -n "$putpid" ] && kill -0 "$putpid" 2>/dev/null; then
       die "the put stage (pid $putpid) is still alive; wait for it to finish, then re-run unlock"
     fi
-    if [ -z "$pgid" ]; then
+    if [ "$foreign" = 1 ]; then
+      # A marker stamped with a different token than the lock it sits in. Whatever it records
+      # belongs to a run this lock knows nothing about, so its pids prove nothing either way
+      # about whether an upload is in flight — the same position as tracking that was never
+      # completed, and the same answer.
+      [ "$force" = 1 ] || die "the upload marker under this lock belongs to another run (marker owner does not match $LOCK_DIR/owner); confirm no wrangler process is running (pgrep -fl wrangler), then run: pilot/tenant.sh unlock --force"
+    elif [ -z "$pgid" ]; then
       # The marker exists but the group was never written into it: either the put stage died
       # between writing the marker and starting the upload, or the rewrite that records the
       # group failed. An upload may therefore be running that nothing here can see, and an
