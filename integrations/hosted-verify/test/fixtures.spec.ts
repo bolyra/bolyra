@@ -13,7 +13,12 @@ import { credentialId } from '../src/credential-id';
 import registrations from './fixtures/registrations.json';
 import { env } from 'cloudflare:test';
 import mandate from './fixtures/mandate.json';
-import { FIXTURE_OPERATOR_KEY } from './helpers';
+import { FIXTURE_OPERATOR_KEY, fixtureRegistration } from './helpers';
+import exampleAllow from '../examples/request.allow.json';
+import exampleDenyScope from '../examples/request.deny-scope.json';
+import exampleRegistration from '../examples/registration.allow.json';
+import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
+import denyScopeExceeded from '../../cli/test/fixtures/verify/deny-scope-exceeded/request.json';
 
 type Fixture = {
   body: { version: number; binding: unknown; signature: unknown; operator_pubkey: { x: string; y: string } };
@@ -62,5 +67,16 @@ describe('capability map fixture', () => {
       'mpp:financial:unlimited',
     ]);
     expect(mandate.operator_key).toBe(FIXTURE_OPERATOR_KEY);
+  });
+});
+
+describe('README examples', () => {
+  it('the example requests are the v2 conformance fixtures, verbatim', () => {
+    expect(exampleAllow).toEqual(allowAgentOnly);
+    expect(exampleDenyScope).toEqual(denyScopeExceeded);
+  });
+
+  it('the registration example is the allow example\'s signed binding in the registry shape', () => {
+    expect(exampleRegistration).toEqual(fixtureRegistration(exampleAllow));
   });
 });
