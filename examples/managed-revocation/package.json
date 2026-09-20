@@ -1,0 +1,28 @@
+{
+  "name": "@bolyra/managed-revocation-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Register an operator-signed spend mandate with a hosted Bolyra verifier, spend under it through an mppx payment gate, revoke it, and watch the next fresh presentation deny before the paid action runs.",
+  "scripts": {
+    "demo": "tsx src/run.ts",
+    "demo:local": "bash scripts/with-worker.sh npm run demo",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@bolyra/mpp": "0.5.0",
+    "mppx": "0.8.13"
+  },
+  "devDependencies": {
+    "@bolyra/cli": "0.9.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  },
+  "overrides": {
+    "ws": "^8.21.3",
+    "underscore": "^1.13.8"
+  }
+}
