@@ -1,8 +1,9 @@
 /**
- * Timing constants shared by the Worker and its tests. They live outside the entry
- * module on purpose: the Workers runtime accepts only handlers, classes and functions
- * as exports of the entry module and refuses to start otherwise — a rule the vitest
- * pool does not enforce. Keep every plain value out of `src/index.ts`.
+ * The verify path's timing constant lives here, outside the entry module, on purpose:
+ * the Workers runtime accepts only handlers, classes and functions as exports of the
+ * entry module and refuses to instantiate it otherwise — a rule the vitest pool does not
+ * enforce. Keep every non-function value out of the entry module's *exports*; unexported
+ * constants are fine where they are.
  */
 
 /**

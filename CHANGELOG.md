@@ -40,7 +40,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 #### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
 
-- The Worker entry module exported a plain constant (`REGISTRY_DEADLINE_MS`), which the Workers runtime refuses at startup (`not of type 'function or ExportedHandler'`): `wrangler dev` and any deploy of the registry-enforcing build would have failed to start, while the vitest pool — which does not enforce that rule — stayed green. The constant now lives in `src/deadlines.ts`, and a test asserts every export of the entry module is a handler, a class, or a function.
+- `REGISTRY_DEADLINE_MS` moved from the Worker entry module to `src/deadlines.ts`. The Workers runtime accepts only handlers, classes and functions as entry-module exports and refuses to instantiate otherwise (`not of type 'function or ExportedHandler'`), so `wrangler dev` would not start and a deploy would be rejected when the runtime instantiated the module — while the vitest pool, which does not enforce that rule, stayed green. A test now pins what the entry module may export.
 
 ## @bolyra/mpp 0.5.0 (2026-09-19)
 
