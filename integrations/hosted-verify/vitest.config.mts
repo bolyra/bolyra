@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildTestTenants } from './test/tenants-fixture';
+import mandate from './test/fixtures/mandate.json' with { type: 'json' };
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,9 @@ export default defineConfig({
           // org-a and org-c trust the conformance-fixture operator key,
           // org-b trusts a second test-only key. See test/tenants-fixture.ts.
           TENANTS: buildTestTenants(opKey),
+          // The capability vocabulary spend mandates sign; the built-in default holds
+          // messaging capabilities only. Same JSON the deployment must carry.
+          CAPABILITY_MAP: JSON.stringify(mandate.capability_map),
           // Deterministic test signing key (NOT a real secret).
           RECEIPT_SIGNER_KEY:
             '0x0101010101010101010101010101010101010101010101010101010101010101',

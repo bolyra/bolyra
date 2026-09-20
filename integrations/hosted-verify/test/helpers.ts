@@ -71,3 +71,39 @@ export async function postRevoke(id: string, opts: { token?: string | null; head
     headers: { ...adminHeaders(token), ...(opts.headers ?? {}) },
   });
 }
+
+/**
+ * Register a signed binding for `org` (admin token) so that org's verifier
+ * gets an allow for presentations of it. Storage isolation is per test FILE:
+ * call this in a `beforeAll` of every spec whose allow assertions depend on
+ * it. Returns the credential id.
+ */
+export async function registerFixture(
+  registration: unknown,
+  org: keyof typeof TOKENS = 'A',
+): Promise<string> {
+  const res = await SELF.fetch(CREDENTIALS, {
+    method: 'POST',
+    headers: adminHeaders(TOKENS[org].admin),
+    body: JSON.stringify(registration),
+  });
+  if (res.status !== 201 && res.status !== 200) {
+    throw new Error(`registerFixture(${org}) → ${res.status}: ${await res.text()}`);
+  }
+  return ((await res.json()) as { credential_id: string }).credential_id;
+}
+
+/** The registration body of the CLI conformance fixture (allow-agent-only), for `registerFixture`. */
+export function fixtureRegistration(fixture: { bundle: string }): unknown {
+  const b = JSON.parse(fixture.bundle) as {
+    binding: unknown;
+    sig: { R8: { x: string; y: string }; S: string };
+    agent: { credential: { operator_pubkey: { x: string; y: string } } };
+  };
+  return {
+    version: 1,
+    binding: b.binding,
+    signature: { R8: { x: b.sig.R8.x, y: b.sig.R8.y }, S: b.sig.S },
+    operator_pubkey: { x: b.agent.credential.operator_pubkey.x, y: b.agent.credential.operator_pubkey.y },
+  };
+}

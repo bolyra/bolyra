@@ -4,7 +4,7 @@
  * and env fail-closed behavior.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { SELF, env, createExecutionContext } from 'cloudflare:test';
 import { verifyReceipt } from '@bolyra/receipts';
 import type { SignedReceipt } from '@bolyra/receipts';
@@ -15,7 +15,7 @@ import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
 import { verifyClassical } from '../src/verify/core';
 import { VerifyDenial } from '../src/verify/verdict';
-import { postVerify, cloneWithBundle, BASE, TOKENS, ORGS, buildTestTenants } from './helpers';
+import { postVerify, cloneWithBundle, BASE, TOKENS, ORGS, buildTestTenants, registerFixture, fixtureRegistration } from './helpers';
 import { validateVerdictSchema } from './verdict-schema';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
@@ -31,6 +31,13 @@ const FIXTURE_OPERATOR_KEY = (() => {
 })();
 
 const LEGACY_NAMES = /TRUSTED_OPERATORS|PARTNER_TOKENS|PREVIEW_TOKEN/;
+
+// Every allow in this file presents the conformance fixture: register it for
+// the tenants that trust its operator (org-a and org-c). Per-file isolation.
+beforeAll(async () => {
+  await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+  await registerFixture(fixtureRegistration(allowAgentOnly), 'C');
+});
 
 async function verdictOf(res: Response): Promise<Record<string, unknown>> {
   const v = (await res.json()) as Record<string, unknown>;
