@@ -53,13 +53,13 @@ You'll receive from us: the base URL; **two** bearer tokens — a *verifier*
 token for `POST /v1/verify` and an *admin* token for the registry routes —
 labelled with your org id (usage analytics record only `<org_id>:<role>`,
 counts and latency — never request bodies, proofs, credentials, tokens, or
-IPs; our per-request server log additionally records the request id and, on
-an allow, the registered credential id); confirmation that **your operator
-public key is pinned** for your tenant; and the capability vocabulary the
-deployment carries (`mpp:financial:small|medium|unlimited` plus the messaging
-default). Until your key is pinned, only bindings signed by the repo's fixture
-key (if we seeded it for your tenant) can be registered — and nothing verifies
-until it is registered.
+IPs; our per-request server log additionally records the request id, and the
+credential id on any request that names or creates one); confirmation that
+**your operator public key is pinned** for your tenant; and the capability
+vocabulary the deployment carries (`mpp:financial:small|medium|unlimited`
+plus the messaging default). Until your key is pinned, only bindings signed
+by the repo's fixture key (if we seeded it for your tenant) can be registered
+— and nothing verifies until it is registered.
 
 ### Curl test
 
