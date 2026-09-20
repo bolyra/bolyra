@@ -44,7 +44,7 @@
  *   `consume_nonces` entry per spec §7.3).
  */
 
-import { parseBundle } from './bundle';
+import { parseBundle, type Binding } from './bundle';
 import { assertTrustedOperator } from './operators';
 import { assertScopeAnchored, assertSubset, assertNotExpired } from './scope';
 import { verifyBindingSig, checkRequestBinding, checkModelBinding } from './binding';
@@ -77,6 +77,22 @@ export interface VerifierRequest {
    * implements `classical`; an explicit `zk` (or any other value) is denied.
    */
   kind?: string;
+}
+
+/**
+ * What a classical allow proves, handed to the caller so that a policy layered
+ * on top (a registry membership check) derives its identity from the VERIFIED
+ * binding and the VERIFIED operator key — never from fields a failed check
+ * touched. Present only when every classical check passed.
+ */
+export interface VerifiedClassical {
+  binding: Binding;
+  operator: { x: bigint; y: bigint };
+}
+
+export interface ClassicalResult {
+  verdict: Verdict;
+  verified?: VerifiedClassical;
 }
 
 /**
@@ -168,13 +184,14 @@ function validateRequest(request: unknown): asserts request is VerifierRequest {
  * resolves to a `deny` verdict (spec §7 — decision-level outcomes are
  * verdicts, not errors). Configuration is the CALLER's problem: it hands in
  * the tenant's canonical trusted-operator set and the effective capability
- * map, both already validated (a defect there is the caller's 500).
+ * map, both already validated (a defect there is the caller's 500). Returns the
+ * verdict and, on allow, what was verified.
  */
 export function verifyClassical(
   body: unknown,
   trustedOperators: ReadonlySet<string>,
   capabilityMap: CapabilityMap,
-): Verdict {
+): ClassicalResult {
   try {
     // 1. Request shape + version (cheapest, no crypto).
     validateRequest(body);
@@ -285,12 +302,15 @@ export function verifyClassical(
         retain_until: Number(effectiveExpiry),
       },
     ];
-    return allow(consumeNonces);
+    return {
+      verdict: allow(consumeNonces),
+      verified: { binding: bundle.binding, operator: operatorPubkey },
+    };
   } catch (e) {
-    if (isVerifyDenial(e)) return e.toVerdict();
+    if (isVerifyDenial(e)) return { verdict: e.toVerdict() };
     // Unexpected fault: never echo raw internals on the wire (spec §3.3 —
     // messages must not leak secrets/paths). Log server-side only.
     console.error('hosted-verify internal error:', e instanceof Error ? e.stack : String(e));
-    return deny('internal_error', 'internal verification error');
+    return { verdict: deny('internal_error', 'internal verification error') };
   }
 }
