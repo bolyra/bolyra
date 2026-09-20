@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SELF, env, reset, runInDurableObject } from 'cloudflare:test';
 
+import { canonicalize } from '@bolyra/receipts';
 import worker from '../src/index';
 import { BASE, CREDENTIALS, ORGS, TOKENS, buildTestTenants, getCredential, postRegister, postRevoke } from './helpers';
 import registrations from './fixtures/registrations.json';
@@ -276,6 +277,100 @@ describe('auth, roles, tenants', () => {
     expect((await postRevoke(F.valid.credential_id, { token: TOKENS.A.admin })).status).toBe(204);
     expect((await body(await getCredential(F.valid.credential_id, { token: TOKENS.A.admin }))).status).toBe('REVOKED');
     expect((await body(await getCredential(F.valid.credential_id, { token: TOKENS.C.admin }))).status).toBe('ACTIVE');
+  });
+});
+
+describe('failures behind the registry call are the documented 500 with an analytics point', () => {
+  const throwing = {
+    get: () => ({
+      register: async () => { throw new Error('Durable Object reset because its code was updated'); },
+      get: async () => { throw new Error('Network connection lost.'); },
+      revoke: async () => { throw new Error('Network connection lost.'); },
+      status: async () => { throw new Error('Network connection lost.'); },
+    }),
+    idFromName: (name: string) => env.TENANT.idFromName(name),
+  } as unknown as typeof env.TENANT;
+  const alien = {
+    get: () => ({
+      register: async () => ({ outcome: 'something_new' }),
+      get: async () => ({ outcome: 'found', record: { credential_id: 'x', status: 'ACTIVE', operator_key: '1:2', binding_digest_hex: '0', binding_json: 'NOT JSON', registered_at: 1, revoked_at: null, history: [] } }),
+      revoke: async () => 'something_new',
+      status: async () => 'ACTIVE',
+    }),
+    idFromName: (name: string) => env.TENANT.idFromName(name),
+  } as unknown as typeof env.TENANT;
+
+  it.each([
+    ['a rejecting RPC on register', throwing, 'POST', ''],
+    ['a rejecting RPC on get', throwing, 'GET', `/${'a'.repeat(64)}`],
+    ['a rejecting RPC on revoke', throwing, 'POST', `/${'a'.repeat(64)}/revoke`],
+    ['an outcome outside the union on register', alien, 'POST', ''],
+    ['stored text that is not JSON on get', alien, 'GET', `/${'a'.repeat(64)}`],
+    ['an outcome outside the union on revoke', alien, 'POST', `/${'a'.repeat(64)}/revoke`],
+  ] as const)('%s → 500 internal_error, one data point recorded', async (_name, tenant, method, suffix) => {
+    const points: Array<{ blobs?: string[] }> = [];
+    const usage = { writeDataPoint: (p: { blobs?: string[] }) => { points.push(p); } } as unknown as AnalyticsEngineDataset;
+    const res = await worker.fetch(
+      new Request(`${CREDENTIALS}${suffix}`, {
+        method,
+        headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' },
+        ...(method === 'POST' && suffix === '' ? { body: JSON.stringify(F.valid.body) } : {}),
+      }),
+      { ...env, TENANT: tenant, USAGE: usage },
+    );
+    expect(res.status).toBe(500);
+    expect(await body(res)).toEqual({ error: 'internal_error', message: 'registry storage failure' });
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'error', 'internal_error']);
+  });
+});
+
+describe('wire grammar and canonical form', () => {
+  it('coordinates spelled as hex or with whitespace are 400 malformed_input (decimal digits only)', async () => {
+    for (const x of ['0x7b', ' 123', '+123']) {
+      const spelled = structuredClone(F.valid.body) as { operator_pubkey: { x: string } };
+      spelled.operator_pubkey.x = x;
+      const res = await postRegister(spelled);
+      expect(res.status).toBe(400);
+      expect((await body(res)).error).toBe('malformed_input');
+    }
+  });
+
+  it('a negative coordinate is 403 untrusted_operator (never reaches the id derivation)', async () => {
+    const neg = structuredClone(F.valid.body) as { operator_pubkey: { x: string } };
+    neg.operator_pubkey.x = `-${neg.operator_pubkey.x}`;
+    const res = await postRegister(neg);
+    expect(res.status).toBe(400); // '-' fails the decimal grammar first
+    expect((await body(res)).error).toBe('malformed_input');
+  });
+
+  it('a reordered binding is the SAME credential; the returned binding is the canonical (key-sorted) form', async () => {
+    const first = await body(await postRegister(F.valid.body));
+    const b = F.valid.body.binding as Record<string, unknown>;
+    const reordered = { ...F.valid.body, binding: Object.fromEntries(Object.keys(b).sort().reverse().map((k) => [k, b[k]])) };
+    const again = await postRegister(reordered);
+    expect(again.status).toBe(200);
+    expect((await body(again)).credential_id).toBe(first.credential_id);
+    const g = await body(await getCredential(F.valid.credential_id));
+    expect(JSON.stringify(g.binding)).toBe(canonicalize(F.valid.body.binding as Record<string, unknown>));
+    expect(g.binding_digest_hex).toBe(F.valid.binding_digest_hex);
+  });
+
+  it('version must be the number 1', async () => {
+    const res = await postRegister({ ...F.valid.body, version: '1' });
+    expect(res.status).toBe(400);
+    expect((await body(res)).message).toBe('version must be 1');
+  });
+
+  it('the body bound is inclusive at 65,536 bytes', async () => {
+    const base = JSON.stringify(F.valid.body);
+    // Pad inside a string value the parser rejects anyway; only the byte cap is under test here.
+    const pad = (n: number) => `${base.slice(0, -1)},"extra":"${'x'.repeat(n)}"}`;
+    const overhead = Buffer.byteLength(pad(0), 'utf8');
+    const exact = await postRegister(pad(65_536 - overhead));
+    expect((await body(exact)).message).toBe('request carries an unexpected field'); // read fully, then rejected by shape
+    const over = await postRegister(pad(65_537 - overhead));
+    expect((await body(over)).message).toContain('exceeds');
   });
 });
 

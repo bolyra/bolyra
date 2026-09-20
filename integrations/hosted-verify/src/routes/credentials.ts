@@ -44,6 +44,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The wire grammar is decimal digits only — narrower than what `BigInt()` would accept. */
+const isDecimal = (v: string): boolean => /^[0-9]+$/.test(v);
+
 export function parseRegistration(body: unknown): ParseResult {
   if (!isPlainObject(body)) return { ok: false, message: 'request must be a JSON object' };
   for (const key of Object.keys(body)) {
@@ -72,8 +75,11 @@ export function parseRegistration(body: unknown): ParseResult {
     if (isVerifyDenial(e)) return { ok: false, message: 'signature: missing or ill-typed fields' };
     throw e;
   }
-  if (!isPointDec(body.operator_pubkey)) {
+  if (!isPointDec(body.operator_pubkey) || !isDecimal(body.operator_pubkey.x) || !isDecimal(body.operator_pubkey.y)) {
     return { ok: false, message: 'operator_pubkey must be { x, y } decimal strings' };
+  }
+  if (!isDecimal(signature.R8.x) || !isDecimal(signature.R8.y) || !isDecimal(signature.S)) {
+    return { ok: false, message: 'signature: missing or ill-typed fields' };
   }
   return {
     ok: true,

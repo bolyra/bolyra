@@ -18,8 +18,8 @@
  * an admin token, a verifier token and that tenant's trusted operator keys.
  * Tenant and role derive exclusively from which token matched; no route
  * accepts an org id from the request, and the ONLY code path that obtains a
- * registry stub is `registryFor(auth)` below — authenticated routing is the
- * isolation control.
+ * registry stub is `registryFor(env, auth)` below — authenticated routing is
+ * the isolation control.
  *
  *   request ──► loadTenants(TENANTS) + loadCapabilityMap ──defect──► 500
  *                    │                     (verify: deny internal_error verdict;
@@ -286,6 +286,13 @@ function fail(status: number, code: RegistryErrorCode, message: string): RouteOu
   return { response: registryError(status, code, message), code };
 }
 
+/** A registry result the declared union does not name: log its shape (never its content), fail closed. */
+function unknownOutcome(operation: string, result: unknown): RouteOutcome {
+  const shape = typeof result === 'object' && result !== null ? Object.keys(result).sort().join(',') : typeof result;
+  console.error('hosted-verify registry returned an unknown outcome:', { operation, shape });
+  return fail(500, 'internal_error', 'registry storage failure');
+}
+
 /** Server time, unix seconds — the registry's clock for expiry and timestamps. */
 function nowUnix(): number {
   return Math.floor(Date.now() / 1000);
@@ -332,7 +339,9 @@ async function handleRegister(
   try {
     verifyBindingSig(binding, sig, pub);
   } catch (e) {
-    if (isVerifyDenial(e)) return fail(400, 'binding_signature_invalid', e.message);
+    if (isVerifyDenial(e)) {
+      return fail(400, 'binding_signature_invalid', 'binding signature does not verify against the operator key');
+    }
     throw e;
   }
   const now = nowUnix();
@@ -366,11 +375,16 @@ async function handleRegister(
       // The same derived id already holds a different key or binding: an
       // id-derivation defect or a collision, never a client error to paper over.
       console.error('hosted-verify registry id mismatch:', { org_id: auth.org_id, credential_id: id, request_id: requestId });
-      return fail(500, 'internal_error', 'registry integrity failure');
+      // Wire body stays the fixed internal_error shape; analytics get their own code.
+      return { response: registryError(500, 'internal_error', 'registry integrity failure'), code: 'registry_mismatch' };
     case 'invalid_input':
     case 'storage_error':
       return fail(500, 'internal_error', 'registry storage failure');
   }
+  // Unreachable for the declared union (the switch above is exhaustive and a
+  // forgotten arm is a compile error), but an outcome outside the union can
+  // arrive across a rolling deploy — fail closed rather than return undefined.
+  return unknownOutcome('register', result);
 }
 
 async function handleGet(registry: DurableObjectStub<TenantRegistry>, id: string): Promise<RouteOutcome> {
@@ -378,7 +392,7 @@ async function handleGet(registry: DurableObjectStub<TenantRegistry>, id: string
   switch (result.outcome) {
     case 'found': {
       // Rendered from the STORED record, never from a request.
-      const { binding_json, binding_digest_hex: _digest, ...rest } = result.record;
+      const { binding_json, ...rest } = result.record;
       return { response: json(200, { ...rest, binding: JSON.parse(binding_json) as unknown }), code: '' };
     }
     case 'absent':
@@ -387,6 +401,7 @@ async function handleGet(registry: DurableObjectStub<TenantRegistry>, id: string
     case 'storage_error':
       return fail(500, 'internal_error', 'registry storage failure');
   }
+  return unknownOutcome('get', result);
 }
 
 async function handleRevoke(
@@ -398,13 +413,20 @@ async function handleRevoke(
   switch (result) {
     case 'revoked':
     case 'unchanged':
-      return { response: new Response(null, { status: 204, headers: PREVIEW_HEADERS }), code: '' };
+      return {
+        response: new Response(null, {
+          status: 204,
+          headers: { 'cache-control': 'no-store', 'x-bolyra-preview': 'design-partner-preview' },
+        }),
+        code: '',
+      };
     case 'absent':
       return fail(404, 'not_found', 'no such credential');
     case 'invalid_input':
     case 'storage_error':
       return fail(500, 'internal_error', 'registry storage failure');
   }
+  return unknownOutcome('revoke', result);
 }
 
 /** `/v1/credentials`, `/v1/credentials/{id}`, `/v1/credentials/{id}/revoke` — nothing else. */
@@ -453,12 +475,15 @@ function handleHealth(env: Env): Response {
  * `route` is one of a fixed set (`/v1/verify`, `/v1/credentials`, `/health`,
  * `/.well-known/bolyra-signers.json`, `other`) — never a raw path. `label` is
  * `<org_id>:<role>` for an authenticated request (including one refused for
- * the wrong role), or `unauthenticated`.
+ * the wrong role), or `unauthenticated`. `verdict` is `allow`/`deny` only for
+ * verifier verdicts; a successful resource route records `ok`, so verifier
+ * allow-rate queries stay pure without a route filter.
  */
 interface Usage {
   route: string;
   label: string;
-  verdict: 'allow' | 'deny' | 'error';
+  /** `allow`/`deny` are verifier verdicts; `ok` is a successful resource route; `error` is any non-2xx non-verdict. */
+  verdict: 'allow' | 'deny' | 'ok' | 'error';
   code: string; // deny code, transport-error code, or '' on success
   kind: string; // verdict proof kind ('classical'), '' for non-verdicts
   requestId: string;
@@ -599,15 +624,30 @@ export default {
               break;
             }
             const registry = registryFor(env, gate.auth);
-            const result =
-              id === undefined
-                ? await handleRegister(request, gate.auth, registry, requestId)
-                : isRevoke
-                  ? await handleRevoke(registry, id, requestId)
-                  : await handleGet(registry, id);
+            let result: RouteOutcome;
+            try {
+              result =
+                id === undefined
+                  ? await handleRegister(request, gate.auth, registry, requestId)
+                  : isRevoke
+                    ? await handleRevoke(registry, id, requestId)
+                    : await handleGet(registry, id);
+            } catch (e) {
+              // The object itself never throws, but the RPC transport can (the
+              // object was reset or evicted mid-call, a connection was lost), an
+              // outcome outside the union can arrive across a rolling deploy, and
+              // stored text is re-parsed once. Every such failure is the documented
+              // 500 with its analytics point — never a bare runtime exception.
+              console.error(
+                'hosted-verify registry call failed:',
+                { org_id: gate.auth.org_id, request_id: requestId },
+                e instanceof Error ? (e.stack ?? e.message) : String(e),
+              );
+              result = fail(500, 'internal_error', 'registry storage failure');
+            }
             response = result.response;
             code = result.code;
-            outcome = response.status < 300 ? 'allow' : 'error';
+            outcome = response.status < 300 ? 'ok' : 'error';
             break;
           }
         }
