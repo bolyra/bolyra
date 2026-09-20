@@ -54,8 +54,9 @@ import {
   deny,
   isVerifyDenial,
   VerifyDenial,
+  type AllowVerdict,
+  type DenyVerdict,
   type ConsumeNonce,
-  type Verdict,
 } from './verdict';
 
 export interface VerifierRequestContext {
@@ -80,20 +81,21 @@ export interface VerifierRequest {
 }
 
 /**
- * What a classical allow proves, handed to the caller so that a policy layered
- * on top (a registry membership check) derives its identity from the VERIFIED
- * binding and the VERIFIED operator key — never from fields a failed check
- * touched. Present only when every classical check passed.
+ * The facts a classical `allow` rests on: the operator-signed binding (spec §4)
+ * and the trusted operator key the signature verified against. Populated ONLY
+ * on the allow path — every denial returns a verdict alone — so a caller that
+ * derives identity from these values is using signature-covered data, not the
+ * self-asserted credential fields.
  */
 export interface VerifiedClassical {
-  binding: Binding;
-  operator: { x: bigint; y: bigint };
+  readonly binding: Readonly<Binding>;
+  readonly operator: { readonly x: bigint; readonly y: bigint };
 }
 
-export interface ClassicalResult {
-  verdict: Verdict;
-  verified?: VerifiedClassical;
-}
+/** `verified` is present exactly when the verdict is an allow; the type carries the rule. */
+export type ClassicalResult =
+  | { verdict: AllowVerdict; verified: VerifiedClassical }
+  | { verdict: DenyVerdict; verified?: undefined };
 
 /**
  * The classical authorization surface (sound: every item is either a

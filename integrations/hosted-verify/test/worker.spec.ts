@@ -349,13 +349,14 @@ describe('classical pipeline', () => {
     const trusted = new Set([FIXTURE_OPERATOR_KEY]);
     const ok = verifyClassical(allowAgentOnly, trusted, DEFAULT_CAPABILITY_MAP);
     expect(ok.verdict.verdict).toBe('allow');
-    expect(ok.verified).toBeDefined();
+    const verified = ok.verified;
+    expect(verified).toBeDefined();
     const bundle = JSON.parse(allowAgentOnly.bundle) as {
       binding: Record<string, unknown>;
       agent: { credential: { operator_pubkey: { x: string; y: string } } };
     };
-    expect(ok.verified!.binding).toEqual(bundle.binding);
-    expect(ok.verified!.operator).toEqual({
+    expect(verified?.binding).toEqual(bundle.binding);
+    expect(verified?.operator).toEqual({
       x: BigInt(bundle.agent.credential.operator_pubkey.x),
       y: BigInt(bundle.agent.credential.operator_pubkey.y),
     });
@@ -372,6 +373,12 @@ describe('classical pipeline', () => {
     expect(denied.verdict.verdict).toBe('deny');
     expect((denied.verdict as { code: string }).code).toBe('request_mismatch');
     expect(denied.verified).toBeUndefined();
+
+    // The operator gate really did run first: the same request against an
+    // untrusted set stops earlier, at untrusted_root.
+    expect(
+      (verifyClassical(req, new Set<string>(), DEFAULT_CAPABILITY_MAP).verdict as { code: string }).code,
+    ).toBe('untrusted_root');
   });
 });
 
