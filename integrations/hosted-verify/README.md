@@ -156,8 +156,9 @@ REVOKED. Every non-2xx body on these routes is `{ "error": <code>, "message": �
   `credential_id` is a stable identifier derived from the canonical operator
   key id and the signed binding — never from a presentation's nonce or proof.
 - **`GET /v1/credentials/{id}`** — `200 { credential_id, status, operator_key,
-  binding, registered_at, revoked_at, history: [{ event, ts, request_id }] }`;
-  `404` for an id this tenant never registered (a malformed id is also `404`).
+  binding, binding_digest_hex, registered_at, revoked_at, history: [{ event, ts, request_id }] }`;
+  `404` for an id this tenant never registered. A malformed id is `404` for
+  every caller, before authentication is even considered.
 - **`POST /v1/credentials/{id}/revoke`** — `204`; idempotent; `404` if absent.
 
 The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the request's `cf-ray` id (or a UUID when absent).

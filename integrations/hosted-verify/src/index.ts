@@ -592,7 +592,12 @@ export default {
       const id = credentials[1];
       const isRevoke = credentials[2] !== undefined;
       const method = id === undefined || isRevoke ? 'POST' : 'GET';
-      if (request.method !== method) {
+      if (id !== undefined && !CREDENTIAL_ID_PATTERN.test(id)) {
+        // Before method and auth: a malformed id is "no such credential" for every
+        // caller, so the response cannot depend on who asks or how.
+        code = 'not_found';
+        response = registryError(404, 'not_found', 'no such credential');
+      } else if (request.method !== method) {
         code = 'method_not_allowed';
         response = errorJson(405, 'method_not_allowed', { message: `use ${method}` }, { allow: method });
       } else {
@@ -623,12 +628,6 @@ export default {
           }
           case 'ok': {
             label = tenantLabel(gate.auth);
-            if (id !== undefined && !CREDENTIAL_ID_PATTERN.test(id)) {
-              // Malformed and unknown ids are indistinguishable on the wire.
-              code = 'not_found';
-              response = registryError(404, 'not_found', 'no such credential');
-              break;
-            }
             let result: RouteOutcome;
             try {
               // Inside the guard: a missing or unapplied binding fails here, not as a bare exception.
@@ -645,11 +644,13 @@ export default {
               // outcome outside the union can arrive across a rolling deploy, and
               // stored text is re-parsed once. Every such failure is the documented
               // 500 with its analytics point — never a bare runtime exception.
-              console.error(
-                'hosted-verify registry call failed:',
-                { org_id: gate.auth.org_id, request_id: requestId },
-                e instanceof Error ? (e.stack ?? e.message) : String(e),
-              );
+              // Static metadata only: a JSON.parse SyntaxError quotes the offending
+              // text, and stored text is tenant data — never put it in a log line.
+              console.error('hosted-verify registry call failed:', {
+                org_id: gate.auth.org_id,
+                request_id: requestId,
+                error: e instanceof Error ? e.name : typeof e,
+              });
               result = fail(500, 'internal_error', 'registry storage failure');
             }
             response = result.response;
