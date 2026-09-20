@@ -7,6 +7,8 @@
  *                     (the same JSON `bolyra verify` reads on stdin). Response
  *                     body = exactly one strict §3.4 verdict object, always
  *                     `kind: "classical"` (spec §3.5). Fail-closed everywhere.
+ *                     An allow additionally requires the signed binding to be
+ *                     ACTIVE in the tenant's registry.
  *   GET  /health      Unauthenticated status + preview labeling + the exact
  *                     list of checks this preview does / does not perform.
  *
@@ -29,6 +31,12 @@
  *                    ├── tenant.disabled ─► verify: 500 verdict · registry: 503 tenant_disabled
  *                    ├── wrong role ──────► 403 { error: "forbidden" }
  *                    └── ok ──► verify: verifyClassical(body, tenant.trusted_operators, capabilityMap)
+ *                              │         ──deny──► that verdict (the registry is never read)
+ *                              │         ──allow─► credentialId(verified operator, verified binding)
+ *                              │                   → TenantRegistry.status, 2 s deadline
+ *                              │                   → ACTIVE  : allow + x-bolyra-credential-id
+ *                              │                   → REVOKED/ABSENT : deny untrusted_root
+ *                              │                   → error/timeout  : deny internal_error (500)
  *                              registry: trust → signature → expiry → credentialId → TenantRegistry RPC
  *
  * HTTP mapping of the CLI exit-code semantics (§7.1): every decision-level
@@ -96,6 +104,9 @@ const MAX_REGISTRATION_BYTES = 65_536;
  * eventual settlement is ignored.
  */
 export const REGISTRY_DEADLINE_MS = 2_000;
+
+/** The deadline's own resolution value: a symbol no registry status can collide with. */
+const TIMEOUT = Symbol('registry deadline');
 
 const PREVIEW_HEADERS: Record<string, string> = {
   'content-type': 'application/json; charset=utf-8',
@@ -274,15 +285,15 @@ async function readMembership(
   registry: DurableObjectStub<TenantRegistry>,
   credential_id: string,
 ): Promise<Membership> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), REGISTRY_DEADLINE_MS);
-  });
   const read = registry.status(credential_id);
   read.catch(() => {}); // never an unhandled rejection after the deadline wins
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof TIMEOUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMEOUT), REGISTRY_DEADLINE_MS);
+  });
   try {
     const outcome = await Promise.race([read, deadline]);
-    if (outcome === 'timeout') return { kind: 'unavailable', message: 'registry timeout' };
+    if (outcome === TIMEOUT) return { kind: 'unavailable', message: 'registry timeout' };
     switch (outcome) {
       case 'ACTIVE':
         return { kind: 'active', credential_id };
@@ -304,7 +315,8 @@ async function readMembership(
 /** A status the declared union does not name (a rolling deploy): fail closed. */
 function unknownStatus(outcome: never): Membership {
   const value: unknown = outcome;
-  console.error('hosted-verify registry returned an unknown status:', { shape: typeof value });
+  const shape = typeof value === 'object' && value !== null ? Object.keys(value).sort().join(',') : typeof value;
+  console.error('hosted-verify registry returned an unknown status:', { operation: 'status', shape });
   return { kind: 'unavailable', message: 'registry unavailable' };
 }
 
@@ -360,10 +372,11 @@ async function handleVerify(
       // One verifier-visible reason for revoked and never-registered alike;
       // revoked-vs-unregistered is admin-only. The id is derivable from the
       // bundle the verifier already holds, so exposing it reveals nothing new.
-      const verdict = deny('untrusted_root', 'the presented binding is not an active credential in this tenant\'s registry', {
-        reason: 'credential_not_active',
-        credential_id: membership.credential_id,
-      });
+      const verdict = deny(
+        'untrusted_root',
+        "the presented binding is not an active credential in this tenant's registry",
+        { reason: 'credential_not_active', credential_id: membership.credential_id },
+      );
       return { verdict, response: verdictResponse(verdict, body, env) };
     }
     case 'unavailable': {
@@ -380,7 +393,7 @@ async function membershipOf(env: Env, auth: AuthResult, verified: VerifiedClassi
   try {
     return await readMembership(registryFor(env, auth), id);
   } catch {
-    // A missing or unapplied binding fails here, not as a bare exception.
+    // A missing or unapplied TENANT Durable Object binding fails here, not as a bare exception.
     return { kind: 'unavailable', message: 'registry unavailable' };
   }
 }
@@ -568,21 +581,21 @@ function handleHealth(env: Env): Response {
     tenants,
     registry: 'durable-object',
     credential_id_version: CREDENTIAL_ID_VERSION,
-    // Emitted only by builds that consult the registry on /v1/verify: the
-    // mechanical guard a deployment procedure and a runnable check assert on.
+    // Build marker: true for every build that consults the registry on /v1/verify.
+    // worker.spec.ts asserts it; a deploy check can assert it against the live URL.
     registry_enforced: true,
     receipts_enabled: env.RECEIPT_SIGNER_KEY !== undefined && env.RECEIPT_SIGNER_KEY !== '',
     trust_model:
       'an allow means an operator the calling tenant configured as trusted signed a binding ' +
-      'authorizing this exact request AND that signed binding is ACTIVE in the tenant\'s managed ' +
+      "authorizing this exact request AND that signed binding is ACTIVE in the tenant's managed " +
       'registry. The proof itself is NOT verified — the Merkle root and all public signals are ' +
       'unverified. Sound scope/expiry enforcement requires the zk-class `bolyra verify` CLI.',
     trust_policy:
       'For this verifier, the configured trusted-root source (spec §9, untrusted_root) is ' +
-      'active signer-binding membership in the tenant\'s registry, in addition to operator-key ' +
+      "active signer-binding membership in the tenant's registry, in addition to operator-key " +
       'membership. A credential that is not ACTIVE in the registry is outside the trusted-root ' +
-      'source, and revocation is trust-anchor removal. The registry does not define revocation; ' +
-      'this is a documented verifier policy, permitted because untrusted_root is ' +
+      'source, and revocation is trust-anchor removal. The EVC spec does not define a revocation ' +
+      'mechanism; this is a documented verifier policy, permitted because untrusted_root is ' +
       'proof-system-agnostic and the deny schema is unchanged.',
     checks_authenticated: CHECKS_AUTHENTICATED,
     checks_consistency_only: CHECKS_CONSISTENCY,
@@ -757,7 +770,8 @@ export default {
             label = tenantLabel(gate.auth);
             let result: RouteOutcome;
             try {
-              // Inside the guard: a missing or unapplied binding fails here, not as a bare exception.
+              // Inside the guard: a missing or unapplied TENANT Durable Object binding fails here,
+              // not as a bare exception.
               const registry = registryFor(env, gate.auth);
               result =
                 id === undefined
@@ -784,6 +798,7 @@ export default {
             code = result.code;
             outcome = response.status < 300 ? 'ok' : 'error';
             // One structured line per registry request (Workers Logs). Never a body, token or IP.
+            const loggedId = result.credential_id ?? id;
             console.info('hosted-verify registry request', {
               request_id: requestId,
               org_id: gate.auth.org_id,
@@ -791,7 +806,7 @@ export default {
               route,
               verdict: outcome,
               code,
-              ...((result.credential_id ?? id) !== undefined ? { credential_id: result.credential_id ?? id } : {}),
+              ...(loggedId !== undefined ? { credential_id: loggedId } : {}),
               latency_ms: Date.now() - start,
             });
             break;
