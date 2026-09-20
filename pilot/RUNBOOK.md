@@ -166,9 +166,10 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # remove — deletes both tokens from the keychain and the entry from the map. The registry
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
 # nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
-# because the file exists: set "status": "active" in the registry file by hand, then
-# `rotate <org_id> admin` and `rotate <org_id> verifier` to re-mint both tokens; the
-# Durable Object resumes as it was — revoked credentials stay revoked:
+# because the file exists: run `rotate <org_id> admin` and `rotate <org_id> verifier`
+# to re-mint both tokens first — a removed tenant is skipped by sync, so both pass
+# cleanly — then set "status": "active" in the registry file by hand and run `sync`;
+# the Durable Object resumes as it was — revoked credentials stay revoked:
 pilot/tenant.sh remove <org_id>
 
 # revoke ONE credential (not the tenant): the partner does this with their admin token,
