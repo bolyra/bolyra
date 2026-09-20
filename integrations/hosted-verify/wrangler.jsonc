@@ -31,6 +31,12 @@
     "snarkjs": "./src/stubs/zk-not-available.ts"
   },
 
+  // Managed credential registry: one SQLite-backed Durable Object per tenant.
+  // The object is named by the tenant's org_id and is reachable ONLY through
+  // authenticated routing in src/index.ts — no request may name an org id.
+  "durable_objects": { "bindings": [{ "name": "TENANT", "class_name": "TenantRegistry" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TenantRegistry"] }],
+
   "vars": {
     "RECEIPT_ISSUER": "bolyra-hosted-verify-preview",
     "RECEIPT_KEY_ID": "preview-1"
