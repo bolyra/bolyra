@@ -27,6 +27,38 @@ Commercials + success criteria: `docs/pilot/design-partner-brief.md` and
 | CF analytics token | keychain service `bolyra-hosted-verify`, account `cf-analytics-token` |
 | Receipts | `X-Bolyra-Receipt` response header (hosted, signed, unchained) / gateway-shield receipt logs (signed, hash-chained) |
 
+## The `TENANTS` secret (read before editing it)
+
+The Worker re-parses `TENANTS` on **every** request and validates the map as a
+whole. Any defect in any entry invalidates the whole map, and then **every**
+tenant fails closed — `POST /v1/verify` returns `500` `internal_error` and
+`/health` reports `tenants: "invalid"` — until a valid map is put. Defects:
+
+- an empty `trusted_operators` list (never "trust everyone"), or an entry that
+  is not an `x:y` decimal pair;
+- an unknown field on an entry (a typo in `disabled` must not silently leave a
+  tenant live);
+- a token shorter than 32 or longer than 256 characters, or containing anything
+  outside `[A-Za-z0-9._~+/-]`;
+- the same token value used twice anywhere in the map (it then grants nothing);
+- an `org_id` outside `^[a-z0-9][a-z0-9-]{1,62}$`;
+- an empty map (`{}`), invalid JSON, or a serialized map of 4,096 bytes or more.
+
+So every recipe below is **one atomic put of a complete, valid map**. Never
+push a placeholder entry meant to be filled in later.
+
+**Your plaintext copy.** `wrangler secret put` is write-only — the live map
+cannot be read back — so keep one authoritative copy of the whole map: a
+1Password (or macOS keychain) item, or a `chmod 600` file outside every repo
+checkout, e.g. `~/.bolyra/tenants.json`. Lose it and there is no recovery but
+re-keying: new tokens for every tenant, re-sent over secure channels.
+
+**Seeded fixture key.** Each pilot tenant's `trusted_operators` carries the
+partner's operator key(s) **and** the repo conformance fixture key (the one in
+`integrations/hosted-verify/.dev.vars.example`). That is deliberate: the
+fixture key is what makes the quickstart in `integrations/hosted-verify/`
+and the smoke step below work for them before their own key issues anything.
+
 ## 0. One-time prereqs
 
 ```bash
@@ -40,28 +72,34 @@ curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq .status
 ```bash
 cd integrations/hosted-verify
 
-# 1. Add the tenant to the TENANTS map: pick an org_id, generate two tokens
-#    (`openssl rand -hex 32` each), add
-#      "<org_id>": {"admin_token": "…", "verifier_token": "…",
-#                   "trusted_operators": []}
-#    to your complete copy of the map, then push it (the put REPLACES the
-#    whole map — anything you leave out is revoked):
+# 1. Collect the partner's operator public key(s) FIRST (x:y decimal pairs).
+#    Without them there is no valid entry to push — an empty trusted_operators
+#    list 500s EVERY tenant — so until you have a key, push nothing.
+#    Then ONE atomic put of the complete map, the new entry carrying their
+#    key(s) AND the seeded fixture key:
+#      "<org_id>": {"admin_token": "<openssl rand -hex 32>",
+#                   "verifier_token": "<a different openssl rand -hex 32>",
+#                   "trusted_operators": ["<their x:y>", "<fixture x:y>"]}
+#    (the put REPLACES the whole map — anything you leave out is revoked):
 npx wrangler secret put TENANTS
 
 # 2. Fill in the registry + policy records (contacts, operator keys, tier cap):
 #      pilot/partners/<label>.json          (from pilot/partner-config.example.json)
 #      pilot/partners/<label>.policy.json   (from pilot/policy-config.example.json)
 
-# 3. Pin the partner's operator key(s) — REQUIRED before their own
-#    presentations verify (without this they can only run the fixture examples):
-#    add their x:y decimal pair(s) to that tenant's trusted_operators and
-#    re-put the whole map — no redeploy needed:
+# 3. Adding or replacing an operator key later (a second key, a re-issue):
+#    edit that tenant's trusted_operators in your copy of the map and re-put
+#    the whole map — takes effect on the next request, no redeploy. Their own
+#    presentations verify only once their key is in that list; never empty the
+#    list to revoke a key (see "3. Disable / re-enable / revoke a partner"):
 npx wrangler secret put TENANTS
 
 # 4. Send the partner: the base URL, their verifier token (secure channel —
 #    from your own copy of the TENANTS map), and pilot/INTEGRATION.md.
 
-# 5. Smoke it as them:
+# 5. Smoke it as them. examples/request.allow.json is signed by the repo
+#    fixture key, so an "allow" here proves their token plus the seeded
+#    fixture key — a request signed by THEIR operator key is the real proof:
 TOKEN=<their verifier token>
 curl -s -X POST https://bolyra-hosted-verify.<account>.workers.dev/v1/verify \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -93,10 +131,17 @@ npx wrangler secret put TENANTS
 cd integrations/hosted-verify
 # Each of these is an edit to your complete copy of the map followed by one
 # `npx wrangler secret put TENANTS` (the put REPLACES the whole map):
-#   quarantine  set "disabled": true on the tenant's entry — its tokens stop
-#               working on every route; entry, keys and label all stay
+#   quarantine  set "disabled": true on the tenant's entry — entry, keys and
+#               label all stay, but every route answers 500 internal_error,
+#               which the partner cannot tell apart from a config defect on
+#               our side; tell them it is deliberate, or they will report a
+#               broken deployment
 #   re-enable   set "disabled": false (or drop the field)
 #   revoke      delete the tenant's entry from the map
+#
+# To de-trust an operator key, delete the entry or quarantine it. NEVER clear
+# a tenant's trusted_operators to [] — an empty list is a defect that 500s
+# every OTHER tenant too.
 npx wrangler secret put TENANTS
 # sanity: the map parses (it does not list tenants):
 curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq .tenants
@@ -106,11 +151,14 @@ Notes:
 - Secrets take effect immediately; no redeploy.
 - `wrangler secret put TENANTS` replaces the WHOLE map: always start from your
   complete copy, or every tenant you left out is revoked by accident.
-- Removing the **last** tenant leaves a map that authenticates nobody: every
-  request is then `401`, recorded under the reserved `unauthenticated` label.
-- Quarantining a tenant does **not** un-pin their operator keys. If trust
-  itself is the problem (not just the token), also clear their keys from that
-  tenant's `trusted_operators` in the same put.
+- Removing the **last** tenant leaves `{}`, which the loader rejects: every
+  request is then `500` `internal_error` and `/health` reports
+  `tenants: "invalid"` — not `401`. To stand the deployment down with no
+  active partners, quarantine the remaining tenants instead.
+- Quarantining a tenant does **not** un-pin their operator keys, and that is
+  fine: a quarantined tenant is served on no route. If trust itself is the
+  problem, delete the whole entry — never leave the entry with an empty
+  `trusted_operators`.
 
 ## 4. Check a partner's usage
 
