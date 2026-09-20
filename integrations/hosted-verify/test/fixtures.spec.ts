@@ -2,6 +2,8 @@
  * `test/fixtures/registrations.json` is committed cryptographic material. This
  * spec recomputes every entry with the package's own primitives so the file
  * cannot silently drift from `canonicalize`, `bindingDigest` or `credentialId`.
+ * It also pins the test `CAPABILITY_MAP` binding to the mpp mandate fixture,
+ * so the two cannot silently diverge.
  */
 import { describe, expect, it } from 'vitest';
 import { VerifyDenial } from '../src/verify/verdict';
@@ -11,6 +13,7 @@ import { credentialId } from '../src/credential-id';
 import registrations from './fixtures/registrations.json';
 import { env } from 'cloudflare:test';
 import mandate from './fixtures/mandate.json';
+import { FIXTURE_OPERATOR_KEY } from './helpers';
 
 type Fixture = {
   body: { version: number; binding: unknown; signature: unknown; operator_pubkey: { x: string; y: string } };
@@ -48,13 +51,16 @@ describe('registration fixtures', () => {
     expect(F.badSig!.body.signature).toEqual(F.valid!.body.signature);
     expect(F.badSig!.credential_id).toBe(F.valid2!.credential_id);
   });
+});
 
-  it('the deployment capability map is the mpp mandate vocabulary, verbatim', () => {
+describe('capability map fixture', () => {
+  it('the test CAPABILITY_MAP binding is the mpp mandate vocabulary, verbatim', () => {
     expect(JSON.parse(env.CAPABILITY_MAP!)).toEqual(mandate.capability_map);
     expect(Object.keys(mandate.capability_map).sort()).toEqual([
       'mpp:financial:medium',
       'mpp:financial:small',
       'mpp:financial:unlimited',
     ]);
+    expect(mandate.operator_key).toBe(FIXTURE_OPERATOR_KEY);
   });
 });

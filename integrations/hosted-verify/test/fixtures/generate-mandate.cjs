@@ -1,8 +1,11 @@
 // Generates test/fixtures/mandate.json for hosted-verify: two presentations of ONE
 // mpp-issued spend mandate (same signed binding, fresh nullifier each), the verifier
 // request that presents it, and the registration body for the same binding.
-// Run in any directory where the PUBLISHED package is installed (never a source checkout):
-//   npm install @bolyra/mpp@0.5.0 && node generate-mandate.cjs > mandate.json
+// Run against the PUBLISHED package, never a source checkout:
+//   1. copy this script to an empty directory
+//   2. npm install @bolyra/mpp@0.5.0
+//   3. node generate-mandate.cjs > mandate.json
+//   4. copy mandate.json back to integrations/hosted-verify/test/fixtures/
 // The checked-in mandate.json is the source of truth; do not regenerate it casually —
 // EdDSA-Poseidon signing is deterministic but the nullifiers are random, so
 // regeneration yields new presentations of the same binding.

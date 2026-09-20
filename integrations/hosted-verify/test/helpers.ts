@@ -1,9 +1,19 @@
 import { SELF } from 'cloudflare:test';
 import { TOKENS } from './tenants-fixture';
 
+import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
+
 export { ORGS, TOKENS, ORG_B_OPERATOR_KEY, buildTestTenants } from './tenants-fixture';
 
 export const BASE = 'https://hosted-verify.test';
+
+/** The conformance fixture's operator key, canonical `x:y`. */
+export const FIXTURE_OPERATOR_KEY = (() => {
+  const { operator_pubkey } = (JSON.parse(allowAgentOnly.bundle) as {
+    agent: { credential: { operator_pubkey: { x: string; y: string } } };
+  }).agent.credential;
+  return `${operator_pubkey.x}:${operator_pubkey.y}`;
+})();
 
 /**
  * POST a body to /v1/verify as org-a's VERIFIER (the default caller). Objects
@@ -72,6 +82,14 @@ export async function postRevoke(id: string, opts: { token?: string | null; head
   });
 }
 
+/** The registration body `registerFixture` posts to `/v1/credentials`. */
+export interface FixtureRegistration {
+  version: number;
+  binding: unknown;
+  signature: { R8: { x: string; y: string }; S: string };
+  operator_pubkey: { x: string; y: string };
+}
+
 /**
  * Register a signed binding for `org` (admin token) so that org's verifier
  * gets an allow for presentations of it. Storage isolation is per test FILE:
@@ -79,22 +97,22 @@ export async function postRevoke(id: string, opts: { token?: string | null; head
  * it. Returns the credential id.
  */
 export async function registerFixture(
-  registration: unknown,
+  registration: FixtureRegistration,
   org: keyof typeof TOKENS = 'A',
 ): Promise<string> {
-  const res = await SELF.fetch(CREDENTIALS, {
-    method: 'POST',
-    headers: adminHeaders(TOKENS[org].admin),
-    body: JSON.stringify(registration),
-  });
+  const res = await postRegister(registration, { token: TOKENS[org].admin });
   if (res.status !== 201 && res.status !== 200) {
     throw new Error(`registerFixture(${org}) → ${res.status}: ${await res.text()}`);
   }
-  return ((await res.json()) as { credential_id: string }).credential_id;
+  const { credential_id: id } = (await res.json()) as { credential_id?: unknown };
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error(`registerFixture(${org}) → ${res.status} without a credential_id`);
+  }
+  return id;
 }
 
-/** The registration body of the CLI conformance fixture (allow-agent-only), for `registerFixture`. */
-export function fixtureRegistration(fixture: { bundle: string }): unknown {
+/** Builds the registration body for any conformance request fixture presenting a signed binding (generic over `{ bundle: string }`), for `registerFixture`. */
+export function fixtureRegistration(fixture: { bundle: string }): FixtureRegistration {
   const b = JSON.parse(fixture.bundle) as {
     binding: unknown;
     sig: { R8: { x: string; y: string }; S: string };

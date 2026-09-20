@@ -17,7 +17,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { SELF, env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 
 import worker, { type Env } from '../src/index';
-import { postVerify, getCredential, BASE, TOKENS, ORGS, registerFixture, fixtureRegistration } from './helpers';
+import { postVerify, BASE, TOKENS, ORGS, registerFixture, fixtureRegistration } from './helpers';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
 import registrations from './fixtures/registrations.json';
