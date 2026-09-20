@@ -7,7 +7,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SELF, env, createExecutionContext } from 'cloudflare:test';
 import { verifyReceipt } from '@bolyra/receipts';
-import type { SignedReceipt } from '@bolyra/receipts';
 
 import worker from '../src/index';
 import { bindingDigest } from '../src/verify/binding';
@@ -25,6 +24,7 @@ import {
   registerFixture,
   fixtureRegistration,
   FIXTURE_OPERATOR_KEY,
+  decodeReceipt,
 } from './helpers';
 import { validateVerdictSchema } from './verdict-schema';
 
@@ -46,12 +46,6 @@ async function verdictOf(res: Response): Promise<Record<string, unknown>> {
   expect(validateVerdictSchema(v)).toEqual({ ok: true });
   expect(v.kind).toBe('classical');
   return v;
-}
-
-function decodeReceipt(header: string): SignedReceipt {
-  const b64 = header.replace(/-/g, '+').replace(/_/g, '/');
-  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  return JSON.parse(new TextDecoder().decode(bytes)) as SignedReceipt;
 }
 
 function verifyReq(token: string, body: unknown = allowAgentOnly): Request {

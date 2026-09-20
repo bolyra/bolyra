@@ -10,7 +10,7 @@ import { canonicalize } from '@bolyra/receipts';
 import worker, { REGISTRY_DEADLINE_MS } from '../src/index';
 import { bindingDigest } from '../src/verify/binding';
 import { credentialId } from '../src/credential-id';
-import { postVerify, postRevoke, getCredential, registerFixture, fixtureRegistration, cloneWithBundle, BASE, TOKENS, ORGS } from './helpers';
+import { postVerify, postRevoke, getCredential, registerFixture, fixtureRegistration, cloneWithBundle, decodeReceipt, BASE, TOKENS, ORGS } from './helpers';
 import { validateVerdictSchema } from './verdict-schema';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
@@ -139,6 +139,9 @@ describe('ordering: classical checks come first', () => {
     expect(v.message).toBe('registry unavailable');
     expect(v).not.toHaveProperty('detail');
     expect(res.headers.get('x-bolyra-credential-id')).toBeNull();
+    const header = res.headers.get('x-bolyra-receipt');
+    expect(header).not.toBeNull();
+    expect(decodeReceipt(header!).payload.subject.rootDid).toBe('did:bolyra:preview:anonymous');
   });
 
   it('a registry status the union does not name → 500 internal_error', async () => {
@@ -165,6 +168,29 @@ describe('ordering: classical checks come first', () => {
       const v = await verdictOf(res);
       expect(v.code).toBe('internal_error');
       expect(v.message).toBe('registry timeout');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a read that resolves ACTIVE after the deadline is still the timeout verdict, never an allow', async () => {
+    vi.useFakeTimers();
+    try {
+      const late = {
+        get: () => ({ status: () => new Promise((r) => setTimeout(() => r('ACTIVE'), REGISTRY_DEADLINE_MS * 2)) }),
+        idFromName: (n: string) => env.TENANT.idFromName(n),
+      } as unknown as typeof env.TENANT;
+      const pending = worker.fetch(
+        new Request(`${BASE}/v1/verify`, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.verifier}`, 'content-type': 'application/json' }, body: JSON.stringify(allowAgentOnly) }),
+        { ...env, TENANT: late },
+      );
+      await vi.advanceTimersByTimeAsync(REGISTRY_DEADLINE_MS * 3);
+      const res = await pending;
+      expect(res.status).toBe(500);
+      const v = await verdictOf(res);
+      expect(v.code).toBe('internal_error');
+      expect(v.message).toBe('registry timeout');
+      expect(res.headers.get('x-bolyra-credential-id')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

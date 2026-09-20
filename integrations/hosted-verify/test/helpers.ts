@@ -1,4 +1,5 @@
 import { SELF } from 'cloudflare:test';
+import type { SignedReceipt } from '@bolyra/receipts';
 import { TOKENS } from './tenants-fixture';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
@@ -31,6 +32,13 @@ export async function postVerify(
     headers,
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
+}
+
+/** Decode the base64url `x-bolyra-receipt` header into the signed receipt it carries. */
+export function decodeReceipt(header: string): SignedReceipt {
+  const b64 = header.replace(/-/g, '+').replace(/_/g, '/');
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes)) as SignedReceipt;
 }
 
 /** Deep-clone a fixture request and re-materialize its bundle as an object. */
