@@ -36,6 +36,12 @@ under `contracts/deployments/` and `circuits/build/`.
 
 - A managed credential registry per tenant (a SQLite-backed Durable Object named by `org_id`) and three admin-token routes: `POST /v1/credentials` registers an operator-signed binding (checks: trusted operator → signature → expiry; `201`, or `200` with the original `registered_at`, or `409` once revoked), `GET /v1/credentials/{id}` returns the record with its history, `POST /v1/credentials/{id}/revoke` is idempotent (`204`). `credential_id` is derived from the canonical operator key id and the signed binding — never from a presentation. Revoked records are retained indefinitely; a quarantined tenant gets `503 tenant_disabled` on these routes. `/health` reports `registry` and `credential_id_version`. The README's storage disclosure now states exactly what the registry persists.
 
+### Fixed
+
+#### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
+
+- The Worker entry module exported a plain constant (`REGISTRY_DEADLINE_MS`), which the Workers runtime refuses at startup (`not of type 'function or ExportedHandler'`): `wrangler dev` and any deploy of the registry-enforcing build would have failed to start, while the vitest pool — which does not enforce that rule — stayed green. The constant now lives in `src/deadlines.ts`, and a test asserts every export of the entry module is a handler, a class, or a function.
+
 ## @bolyra/mpp 0.5.0 (2026-09-19)
 
 ### Changed (BREAKING)

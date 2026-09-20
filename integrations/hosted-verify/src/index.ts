@@ -67,6 +67,7 @@ import { operatorKeyId } from './verify/operators';
 import { canonicalize } from '@bolyra/receipts';
 import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
+import { REGISTRY_DEADLINE_MS } from './deadlines';
 import { credentialId, CREDENTIAL_ID_PATTERN, CREDENTIAL_ID_VERSION } from './credential-id';
 import { parseRegistration, type RegistryErrorCode } from './routes/credentials';
 import type { TenantRegistry } from './registry';
@@ -96,14 +97,6 @@ const MAX_BODY_BYTES = 1_048_576;
 
 /** Request-body bound for a registration (a binding plus a signature is well under 4 KiB). */
 const MAX_REGISTRATION_BYTES = 65_536;
-
-/**
- * The registry read on the verify path is raced against this deadline. An
- * `AbortSignal` cannot cancel a Durable Object RPC, so the race is the only
- * bound; on expiry the verdict is the fail-closed 500 and the orphaned RPC's
- * eventual settlement is ignored.
- */
-export const REGISTRY_DEADLINE_MS = 2_000;
 
 /** The deadline's own resolution value: a symbol no registry status can collide with. */
 const TIMEOUT = Symbol('registry deadline');
