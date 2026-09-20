@@ -4,7 +4,7 @@
  *
  *   {
  *     "<org_id>": {
- *       "admin_token":       "<opaque; ≥ 32 bytes of entropy from provisioning>",
+ *       "admin_token":       "<opaque; 32–256 chars, ≥ 32 bytes of entropy>",
  *       "verifier_token":    "<opaque>",
  *       "trusted_operators": ["<x>:<y>", …],      // BabyJubjub public keys, decimal
  *       "disabled":          false                  // optional quarantine switch
@@ -22,13 +22,14 @@
  *   resolveAuth(request, tenants)   every token of every tenant is compared in
  *          │                         constant time; the scan never exits early
  *          ├─ no match ──► null
- *          └─ match ─────► { org_id, role: 'admin' | 'verifier' }
+ *          └─ match ─────► { org_id, role: 'admin' | 'verifier', tenant }
  *
- * Load-time validation is strict and total: malformed JSON, a bad org id, a
- * missing role, a duplicate token value ANYWHERE (a token that appears twice
- * grants nothing anywhere), an empty or malformed operator list, an oversize
- * secret, or an empty map — each throws, and the caller must treat that as
- * "no tenant is trusted", never "all tenants are trusted".
+ * Load-time validation is strict and total: malformed JSON, a bad org id, an
+ * unknown field (a typo in `disabled` must not silently leave a tenant live),
+ * a missing or weak token, a duplicate token value ANYWHERE (a token that
+ * appears twice grants nothing anywhere), an empty or malformed operator list,
+ * an oversize secret, or an empty map — each throws, and the caller must treat
+ * that as "no tenant is trusted", never "all tenants are trusted".
  */
 
 import { loadTrustedOperators } from './verify/operators';
@@ -48,10 +49,27 @@ export interface TenantConfig {
 export interface AuthResult {
   org_id: string;
   role: Role;
+  /** The resolved tenant — callers MUST check `.disabled` before serving. */
+  tenant: TenantConfig;
 }
 
 /** Lowercase, 2–63 chars, no leading hyphen — it is also a durable identity. */
 export const ORG_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/;
+
+/**
+ * Opaque bearer tokens: 32–256 characters of the RFC 6750 token68 alphabet
+ * (minus `=`), never whitespace — so a token can neither be trivially weak nor
+ * ambiguous under header parsing.
+ */
+export const TOKEN_PATTERN = /^[A-Za-z0-9._~+/-]{32,256}$/;
+
+/** The only keys a tenant entry may carry; anything else is a defect. */
+const TENANT_FIELDS: ReadonlySet<string> = new Set([
+  'admin_token',
+  'verifier_token',
+  'trusted_operators',
+  'disabled',
+]);
 
 /** Cloudflare's per-secret limit is 5 KB; the margin is deliberate (~10 tenants). */
 export const MAX_TENANTS_BYTES = 4096;
@@ -73,6 +91,8 @@ export function timingSafeEqual(a: string, b: string): boolean {
 /**
  * Build a load-time defect. `detail` names the tenant and the field only —
  * NEVER a token value or any part of one: the Worker logs these details.
+ * A rejected org id is truncated (it failed the charset check, so it may be
+ * arbitrary text).
  */
 function invalid(message: string, detail?: Record<string, unknown>): VerifyDenial {
   return new VerifyDenial('internal_error', `TENANTS: ${message}`, detail);
@@ -90,6 +110,9 @@ function requireToken(
 ): string {
   if (typeof raw !== 'string' || raw === '') {
     throw invalid(`${field} must be a non-empty string`, { org_id: orgId });
+  }
+  if (!TOKEN_PATTERN.test(raw)) {
+    throw invalid(`${field} must be 32-256 characters of [A-Za-z0-9._~+/-]`, { org_id: orgId });
   }
   if (seen.has(raw)) {
     throw invalid('duplicate token value — a token that appears twice grants nothing anywhere', {
@@ -123,11 +146,17 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
 
   const tenants = new Map<string, TenantConfig>();
   const seenTokens = new Set<string>();
-  for (const [orgId, value] of entries) {
-    if (!ORG_ID_PATTERN.test(orgId)) {
-      throw invalid('org_id must match ^[a-z0-9][a-z0-9-]{1,62}$', { org_id: orgId });
+  for (const [rawOrgId, value] of entries) {
+    if (!ORG_ID_PATTERN.test(rawOrgId)) {
+      throw invalid('org_id must match ^[a-z0-9][a-z0-9-]{1,62}$', { org_id: rawOrgId.slice(0, 64) });
     }
+    const orgId = rawOrgId;
     if (!isPlainObject(value)) throw invalid('tenant entry must be an object', { org_id: orgId });
+    for (const key of Object.keys(value)) {
+      if (!TENANT_FIELDS.has(key)) {
+        throw invalid('unknown tenant field', { org_id: orgId, field: key.slice(0, 64) });
+      }
+    }
 
     const adminToken = requireToken(value.admin_token, 'admin_token', orgId, seenTokens);
     const verifierToken = requireToken(value.verifier_token, 'verifier_token', orgId, seenTokens);
@@ -159,14 +188,17 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
 }
 
 /**
- * Resolve the presented bearer token to a tenant and role, or null. Every
- * candidate token of every tenant is compared with the constant-time
- * comparator and ALL candidates are always scanned (no early exit on match).
- * Duplicate values are impossible here — `loadTenants` rejects them.
+ * Resolve the presented bearer token to a tenant and role, or null. The
+ * scheme grammar is deliberately narrower than RFC 7235 (SP/HTAB separators,
+ * visible-ASCII token) so a fronting proxy or log parser cannot see a
+ * different token than the Worker does. Every candidate token of every tenant
+ * is compared with the constant-time comparator and ALL candidates are always
+ * scanned (no early exit on match). Duplicate values are impossible here —
+ * `loadTenants` rejects them.
  */
 export function resolveAuth(request: Request, tenants: Map<string, TenantConfig>): AuthResult | null {
   const header = request.headers.get('authorization') ?? '';
-  const match = /^Bearer\s+(.+)$/i.exec(header);
+  const match = /^Bearer[ \t]+([\x21-\x7e]+)$/i.exec(header);
   if (match === null || match[1] === undefined) return null;
   const presented = match[1];
 
@@ -177,7 +209,7 @@ export function resolveAuth(request: Request, tenants: Map<string, TenantConfig>
       ['verifier', tenant.verifier_token],
     ];
     for (const [role, token] of candidates) {
-      if (timingSafeEqual(presented, token) && result === null) result = { org_id, role };
+      if (timingSafeEqual(presented, token) && result === null) result = { org_id, role, tenant };
     }
   }
   return result;
