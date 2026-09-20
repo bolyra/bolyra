@@ -48,15 +48,20 @@ descendants() {
   done
 }
 
-cleanup() {
+# Stop a process and everything below it: TERM, one second, then KILL; then reap.
+stop_tree() {
   local pids
-  pids="$(descendants "$worker_pid") $worker_pid"
+  pids="$(descendants "$1") $1"
   # shellcheck disable=SC2086
   kill -TERM $pids 2>/dev/null || true
   sleep 1
   # shellcheck disable=SC2086
   kill -KILL $pids 2>/dev/null || true
-  wait "$worker_pid" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+}
+
+cleanup() {
+  stop_tree "$worker_pid"
   if [ -n "$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)" ]; then
     echo "warning: something still listens on port $port after the Worker was stopped; it was not started by this script and was left alone" >&2
   fi
@@ -88,11 +93,12 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-# Run the command as a child so a signal to this script reaches it, then cleanup runs.
+# Run the command as a child so a signal to this script stops the command's whole
+# process tree before the Worker is torn down.
 "$@" &
 cmd_pid=$!
-trap 'kill -INT "$cmd_pid" 2>/dev/null || true; exit 130' INT
-trap 'kill -TERM "$cmd_pid" 2>/dev/null || true; exit 143' TERM
+trap 'stop_tree "$cmd_pid"; exit 130' INT
+trap 'stop_tree "$cmd_pid"; exit 143' TERM
 if wait "$cmd_pid"; then
   status=0
 else
