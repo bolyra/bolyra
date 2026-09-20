@@ -94,8 +94,8 @@ also be in that list — that is the design-partner conversation.
 
 - **Auth:** `Authorization: Bearer <verifier token>` — anything else is `401`.
   Every design partner is a **tenant** in the deployment's `TENANTS` secret with
-  two tokens: a *verifier* token (this route) and an *admin* token (tenant
-  administration routes). Tokens are compared in constant
+  two tokens: a *verifier* token (this route) and an *admin* token (reserved
+  for tenant administration; refused on this route). Tokens are compared in constant
   time; an admin token on this route is `403 {"error":"forbidden"}`. Usage
   analytics attribute requests to `<org_id>:<role>` — never to token values.
   Auth failures are recorded under the reserved label `unauthenticated`.

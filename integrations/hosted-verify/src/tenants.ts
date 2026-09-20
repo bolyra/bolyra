@@ -106,6 +106,52 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * `JSON.parse` silently keeps the LAST of duplicate members, so
+ * `"disabled": true, …, "disabled": false` would leave a tenant live and a
+ * shadowed duplicate token would escape the duplicate-value check. Reject a
+ * repeated key in any object, at any depth, BEFORE parsing. The scan is a
+ * plain string walk (strings honour escapes; a string is a key when the next
+ * non-space character is `:`); anything it cannot follow is left for
+ * `JSON.parse` to reject. Key text is never logged.
+ */
+function assertNoDuplicateKeys(raw: string): void {
+  const stack: Array<Set<string> | null> = []; // Set for an object, null for an array
+  const n = raw.length;
+  let i = 0;
+  while (i < n) {
+    const c = raw[i]!;
+    if (c === '"') {
+      const start = i;
+      i++;
+      while (i < n && raw[i] !== '"') i += raw[i] === '\\' ? 2 : 1;
+      if (i >= n) return; // unterminated string: JSON.parse rejects it
+      const text = raw.slice(start, i + 1);
+      i++;
+      const top = stack[stack.length - 1];
+      if (top instanceof Set) {
+        let j = i;
+        while (j < n && (raw[j] === ' ' || raw[j] === '\n' || raw[j] === '\r' || raw[j] === '\t')) j++;
+        if (raw[j] === ':') {
+          let key: string;
+          try {
+            key = JSON.parse(text) as string;
+          } catch {
+            return; // malformed escape: JSON.parse rejects it
+          }
+          if (top.has(key)) throw invalid('duplicate key in a JSON object', { depth: stack.length });
+          top.add(key);
+        }
+      }
+      continue;
+    }
+    if (c === '{') stack.push(new Set());
+    else if (c === '[') stack.push(null);
+    else if (c === '}' || c === ']') stack.pop();
+    i++;
+  }
+}
+
 function requireToken(
   raw: unknown,
   field: 'admin_token' | 'verifier_token',
@@ -138,6 +184,7 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
     throw invalid(`serialized size must be under ${MAX_TENANTS_BYTES} bytes`);
   }
 
+  assertNoDuplicateKeys(raw);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -150,16 +197,16 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
 
   const tenants = new Map<string, TenantConfig>();
   const seenTokens = new Set<string>();
-  for (const [orgId, value] of entries) {
+  for (const [index, [orgId, value]] of entries.entries()) {
     if (!ORG_ID_PATTERN.test(orgId)) {
-      // A rejected org id failed the charset check, so it may be arbitrary text: truncate before it reaches a log.
-      throw invalid('org_id must match ^[a-z0-9][a-z0-9-]{1,62}$', { org_id: orgId.slice(0, 64) });
+      // A rejected org id failed the charset check, so it may be ANY text (even a
+      // token pasted into the wrong place): log its position, never its value.
+      throw invalid('org_id must match ^[a-z0-9][a-z0-9-]{1,62}$', { entry_index: index });
     }
     if (!isPlainObject(value)) throw invalid('tenant entry must be an object', { org_id: orgId });
     for (const key of Object.keys(value)) {
-      if (!TENANT_FIELDS.has(key)) {
-        throw invalid('unknown tenant field', { org_id: orgId, field: key.slice(0, 64) });
-      }
+      // Same rule: an unknown key may be a misplaced secret — name the tenant only.
+      if (!TENANT_FIELDS.has(key)) throw invalid('unknown tenant field', { org_id: orgId });
     }
 
     const adminToken = requireToken(value.admin_token, 'admin_token', orgId, seenTokens);

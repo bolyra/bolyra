@@ -378,6 +378,27 @@ describe('fail-closed configuration (config errors are a 500 VERDICT, never a ba
     expect(v).not.toHaveProperty('detail'); // config internals never reach the wire
     expect(JSON.stringify(v)).not.toMatch(LEGACY_NAMES);
   });
+
+  it('a configuration defect is the 500 verdict for EVERY caller — no token, wrong token, admin token', async () => {
+    const e = { ...env, CAPABILITY_MAP: '{not json' };
+    for (const token of [null, 'not-a-real-token-0000000000000000000', TOKENS.A.admin]) {
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (token !== null) headers['authorization'] = `Bearer ${token}`;
+      const res = await worker.fetch(
+        new Request(`${BASE}/v1/verify`, { method: 'POST', headers, body: JSON.stringify(allowAgentOnly) }),
+        e,
+      );
+      expect(res.status).toBe(500);
+      expect((await verdictOf(res)).code).toBe('internal_error');
+    }
+  });
+
+  it('a duplicate JSON member in TENANTS is a defect (the last value must never silently win)', async () => {
+    const raw = `{"${ORGS.A}":{"admin_token":"${TOKENS.A.admin}","verifier_token":"${TOKENS.A.verifier}","trusted_operators":["${FIXTURE_OPERATOR_KEY}"],"disabled":true,"disabled":false}}`;
+    const res = await worker.fetch(verifyReq(TOKENS.A.verifier), { ...env, TENANTS: raw });
+    expect(res.status).toBe(500);
+    expect((await verdictOf(res)).code).toBe('internal_error');
+  });
 });
 
 describe('signed receipts (X-Bolyra-Receipt)', () => {
