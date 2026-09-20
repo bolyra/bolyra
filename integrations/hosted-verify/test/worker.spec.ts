@@ -142,6 +142,20 @@ describe('routing + auth', () => {
     expect((await verdictOf(other)).verdict).toBe('allow');
     createExecutionContext(); // keep the import exercised under the workers pool
   });
+
+  it("a disabled tenant's ADMIN token on /v1/verify → the quarantine 500, not a 403 (no route serves it)", async () => {
+    const e = { ...env, TENANTS: buildTestTenants(FIXTURE_OPERATOR_KEY, { disabled: [ORGS.A] }) };
+    const res = await worker.fetch(verifyReq(TOKENS.A.admin), e);
+    expect(res.status).toBe(500);
+    expect((await verdictOf(res)).code).toBe('internal_error');
+  });
+
+  it('GET /health reports tenants:"ok" for a parseable map even when a tenant is disabled (parseability, not availability)', async () => {
+    const e = { ...env, TENANTS: buildTestTenants(FIXTURE_OPERATOR_KEY, { disabled: [ORGS.A] }) };
+    const res = await worker.fetch(new Request(`${BASE}/health`), e);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { tenants: string }).tenants).toBe('ok');
+  });
 });
 
 describe('fail-closed input handling', () => {
@@ -393,5 +407,21 @@ describe('signed receipts (X-Bolyra-Receipt)', () => {
     const res = await worker.fetch(req, { ...env, RECEIPT_SIGNER_KEY: '' });
     expect(res.status).toBe(200);
     expect(res.headers.get('x-bolyra-receipt')).toBeNull();
+  });
+
+  it('401 and 403 carry no receipt (they are not verdicts)', async () => {
+    expect((await postVerify(allowAgentOnly, { token: null })).headers.get('x-bolyra-receipt')).toBeNull();
+    expect((await postVerify(allowAgentOnly, { token: TOKENS.A.admin })).headers.get('x-bolyra-receipt')).toBeNull();
+  });
+
+  it('the disabled-tenant 500 receipt is anonymous and names no tenant or token', async () => {
+    const e = { ...env, TENANTS: buildTestTenants(FIXTURE_OPERATOR_KEY, { disabled: [ORGS.A] }) };
+    const res = await worker.fetch(verifyReq(TOKENS.A.verifier), e);
+    const header = res.headers.get('x-bolyra-receipt');
+    expect(header).not.toBeNull();
+    const receipt = decodeReceipt(header!);
+    expect(receipt.payload.subject.rootDid).toBe('did:bolyra:preview:anonymous');
+    expect(JSON.stringify(receipt)).not.toContain(ORGS.A);
+    expect(JSON.stringify(receipt)).not.toContain(TOKENS.A.verifier);
   });
 });

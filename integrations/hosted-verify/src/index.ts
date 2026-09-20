@@ -45,7 +45,6 @@ import {
 import { loadCapabilityMap, type CapabilityMap } from './verify/capabilities';
 import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/verdict';
 import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
-// Never log or serialize an AuthResult wholesale on a hot path — log org_id and role as separate fields.
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
 
 export interface Env {
@@ -96,7 +95,11 @@ function errorJson(
 /** Reserved usage label recorded for requests with no valid bearer token. */
 const UNAUTHENTICATED = 'unauthenticated';
 
-/** Usage label for an authenticated request: `<org_id>:<role>` (never anything else from the auth result). */
+/**
+ * Usage label for an authenticated request: `<org_id>:<role>`. This is the ONLY
+ * projection of an AuthResult that may reach a log line, a data point, or a
+ * response — never the object itself.
+ */
 function tenantLabel(auth: AuthResult): string {
   return `${auth.org_id}:${auth.role}`;
 }
@@ -157,6 +160,16 @@ function configErrorVerdict(e: unknown): DenyVerdict {
   return deny('internal_error', 'missing or invalid trust configuration');
 }
 
+/**
+ * A quarantined tenant is refused with the same fail-closed 500 verdict as a
+ * configuration defect, but it is NOT one: logged at warn level, no stack, so
+ * an alert on configuration errors never fires on parked-tenant traffic.
+ */
+function quarantineVerdict(orgId: string): DenyVerdict {
+  console.warn('hosted-verify tenant disabled:', { org_id: orgId });
+  return deny('internal_error', 'missing or invalid trust configuration');
+}
+
 /** Outcome of authenticating a request for a route that requires `required`. */
 type Gate =
   | { kind: 'config_error'; verdict: DenyVerdict }
@@ -166,7 +179,7 @@ type Gate =
   | { kind: 'ok'; auth: AuthResult };
 
 /**
- * auth → role → quarantine, in that order. The tenant map is re-parsed per
+ * auth → quarantine → role, in that order. The tenant map is re-parsed per
  * request (≤ 4 KiB; a rotated secret takes effect on the next request).
  */
 function authorize(request: Request, env: Env, required: Role): Gate {
@@ -178,8 +191,10 @@ function authorize(request: Request, env: Env, required: Role): Gate {
   }
   const auth = resolveAuth(request, tenants);
   if (auth === null) return { kind: 'unauthenticated' };
-  if (auth.role !== required) return { kind: 'forbidden', auth };
+  // Quarantine outranks role: NO route serves a disabled tenant, whichever of
+  // its tokens is presented.
   if (auth.disabled) return { kind: 'disabled', auth };
+  if (auth.role !== required) return { kind: 'forbidden', auth };
   return { kind: 'ok', auth };
 }
 
@@ -291,6 +306,8 @@ export default {
     let outcome: Usage['verdict'] = 'error';
     let code = '';
     let kind = '';
+    // Left uninitialized on purpose: a Gate case that forgets to assign it is a
+    // compile error (definite assignment), so the switch stays exhaustive.
     let response: Response;
 
     if (url.pathname === '/health') {
@@ -330,7 +347,7 @@ export default {
           }
           case 'disabled': {
             label = tenantLabel(gate.auth);
-            const verdict = configErrorVerdict(new Error(`tenant ${gate.auth.org_id} is disabled`));
+            const verdict = quarantineVerdict(gate.auth.org_id);
             outcome = 'deny';
             code = verdict.code;
             kind = verdict.kind;

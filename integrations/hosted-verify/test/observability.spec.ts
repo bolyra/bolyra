@@ -69,12 +69,17 @@ describe('per-tenant tokens (TENANTS)', () => {
     expect(points[0]!.indexes).toEqual([`${ORGS.A}:verifier`]);
   });
 
-  it('an admin token is attributed to its tenant but recorded as a forbidden error', async () => {
-    const { env: e, points } = usageEnv();
-    const res = await worker.fetch(verifyRequest(TOKENS.A.admin), e);
-    expect(res.status).toBe(403);
-    expect(points[0]!.blobs!.slice(0, 5)).toEqual(['/v1/verify', `${ORGS.A}:admin`, 'error', 'forbidden', '']);
-    expect(points[0]!.indexes).toEqual([`${ORGS.A}:admin`]);
+  it('an admin token is attributed to ITS tenant but recorded as a forbidden error', async () => {
+    for (const [token, org] of [
+      [TOKENS.A.admin, ORGS.A],
+      [TOKENS.B.admin, ORGS.B],
+    ] as const) {
+      const { env: e, points } = usageEnv();
+      const res = await worker.fetch(verifyRequest(token), e);
+      expect(res.status).toBe(403);
+      expect(points[0]!.blobs!.slice(0, 5)).toEqual(['/v1/verify', `${org}:admin`, 'error', 'forbidden', '']);
+      expect(points[0]!.indexes).toEqual([`${org}:admin`]);
+    }
   });
 
   it('rejects a wrong token', async () => {
