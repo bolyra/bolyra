@@ -1,0 +1,148 @@
+/**
+ * The revocation demonstration, end to end, against a running hosted verifier:
+ *
+ *   /health ─► issue ─► register ─► spend (allow, counter 1) ─► spend again with a fresh
+ *   presentation (allow, counter 2) ─► REVOKE ─► spend with a fresh presentation
+ *   (deny untrusted_root / credential_not_active, counter still 2) ─► an independent
+ *   credential under the same operator (allow, counter 3).
+ *
+ * Two evidence sources, labelled in the output:
+ *   [gate]     what the published @bolyra/mpp gate proves — the counter and the Problem
+ *              Details `code`; plus the in-process verdict the gate threw.
+ *   [verifier] what only the hosted verifier shows — the `x-bolyra-credential-id` header,
+ *              the signed receipt (checked with `bolyra receipt verify`), and the deny
+ *              `detail` (`reason`, `credential_id`).
+ *
+ * Environment: VERIFY_URL (default http://127.0.0.1:8787), ADMIN_TOKEN and VERIFIER_TOKEN
+ * (default: the placeholder tenant of integrations/hosted-verify/.dev.vars.example — not
+ * secrets). Exit code 0 only when every check passed. Nothing prints a token. Runs are
+ * independent: each issues bindings under a per-run agent name.
+ */
+import { randomBytes } from 'node:crypto';
+import { Receipt } from 'mppx';
+import { issueMandate, type IssuedMandate } from '@bolyra/mpp';
+import { paidCall } from './client.js';
+import { AUDIENCE, MODEL, createServer } from './server.js';
+import { health, register, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
+import { CLI_VERSION, PACKAGES } from './versions.js';
+
+/** The repo's documented test-only operator scalar; the placeholder tenant trusts its public key. */
+const OPERATOR_PRIVATE_KEY = 42n;
+const EXPIRY = Math.floor(Date.now() / 1000) + 3600;
+/**
+ * `wrangler dev` keeps the registry's SQLite under .wrangler/state across restarts, so a
+ * run must not reuse a binding an earlier run revoked: the agent name carries a per-run
+ * suffix (a different binding ⇒ a different credential id).
+ */
+const RUN = randomBytes(4).toString('hex');
+const AGENT = `managed-revocation-agent-${RUN}`;
+const OTHER_AGENT = `${AGENT}-2`;
+
+const hosted: HostedVerifier = {
+  url: (process.env.VERIFY_URL ?? 'http://127.0.0.1:8787').replace(/\/+$/, ''),
+  adminToken: process.env.ADMIN_TOKEN ?? 'local-admin-token-000000000000000000',
+  verifierToken: process.env.VERIFIER_TOKEN ?? 'local-verifier-token-0000000000000000',
+};
+
+interface Row { source: '[gate]' | '[verifier]'; step: string; expected: string; observed: string; ok: boolean }
+const rows: Row[] = [];
+function check(source: Row['source'], step: string, ok: boolean, expected: string, observed: string): void {
+  rows.push({ source, step, expected, observed, ok });
+  console.log(`${ok ? '  ok ' : ' FAIL'} ${source} ${step}: ${observed}${ok ? '' : ` (expected ${expected})`}`);
+}
+
+/** One presentation of a mandate. Every presentation of the same input shares the signed binding and gets a fresh nullifier. */
+function issue(agentName: string): Promise<IssuedMandate> {
+  return issueMandate({ operatorPrivateKey: OPERATOR_PRIVATE_KEY, agentName, audience: AUDIENCE, model: MODEL, tier: 'small', expiry: EXPIRY });
+}
+
+function detailOf(verdict: Record<string, unknown> | DenyLike | undefined): { reason?: unknown; credential_id?: unknown } {
+  const d = verdict !== undefined ? (verdict as { detail?: unknown }).detail : undefined;
+  return typeof d === 'object' && d !== null ? (d as { reason?: unknown; credential_id?: unknown }) : {};
+}
+type DenyLike = { code: string; detail?: unknown };
+
+async function main(): Promise<void> {
+  console.log(`managed revocation — @bolyra/mpp ${PACKAGES.mpp}, mppx ${PACKAGES.mppx}, @bolyra/cli ${CLI_VERSION}, verifier ${hosted.url}\n`);
+
+  // 0. The verifier is a registry-enforcing build with receipts on.
+  const h = await health(hosted);
+  check('[verifier]', 'GET /health registry_enforced', h.registry_enforced === true, 'true', String(h.registry_enforced));
+  check('[verifier]', 'GET /health receipts_enabled', h.receipts_enabled === true, 'true', `${String(h.receipts_enabled)} (run scripts/dev-vars.mjs before wrangler dev)`);
+
+  const server = createServer({ url: hosted.url, token: hosted.verifierToken });
+
+  // 1. Issue and register. The registration is the signed binding lifted from the presentation.
+  const mandate = await issue(AGENT);
+  const reg = await register(hosted, mandate);
+  const id = reg.credential_id ?? '';
+  check('[verifier]', 'POST /v1/credentials (new binding)', reg.status === 201 && id !== '', '201 + credential_id', `${reg.status} ${id.slice(0, 16)}…`);
+  const again = await register(hosted, await issue(AGENT));
+  check('[verifier]', 'POST /v1/credentials (same binding, fresh presentation)', again.status === 200 && again.credential_id === id, '200, same id', `${again.status} ${again.credential_id === id ? 'same id' : 'DIFFERENT id'}`);
+
+  // 2. Spend: one 402→pay handshake, two fresh presentations, the action runs once.
+  const paid1 = await paidCall(server.handler, (await issue(AGENT)).presentation, (await issue(AGENT)).presentation);
+  check('[gate]', 'paid call #1', paid1.status === 200 && server.state.counter === 1, '200, counter 1', `${paid1.status}, counter ${server.state.counter}`);
+  const receipt1 = Receipt.deserialize(paid1.headers.get('Payment-Receipt') ?? '') as { bolyraAuthorization?: { verifier?: unknown; tier?: unknown } };
+  check('[gate]', 'Payment-Receipt.bolyraAuthorization', receipt1.bolyraAuthorization?.verifier === 'url' && receipt1.bolyraAuthorization?.tier === 'small', 'verifier url, tier small', `verifier ${String(receipt1.bolyraAuthorization?.verifier)}, tier ${String(receipt1.bolyraAuthorization?.tier)}`);
+
+  // 3. What the verifier adds on an allow: the credential id header and a signed receipt.
+  const v1 = await verify(hosted, await issue(AGENT));
+  check('[verifier]', 'POST /v1/verify verdict', v1.status === 200 && v1.verdict.verdict === 'allow', '200 allow', `${v1.status} ${String(v1.verdict.verdict)}`);
+  check('[verifier]', 'x-bolyra-credential-id equals the registered id', v1.credentialIdHeader === id, id.slice(0, 16) + '…', `${(v1.credentialIdHeader ?? 'absent').slice(0, 16)}…`);
+  let cliLine = 'no receipt header';
+  if (v1.receiptHeader !== null) {
+    try {
+      cliLine = verifyReceiptWithCli(hosted, v1.receiptHeader).split('\n')[0] ?? '';
+    } catch (e) {
+      cliLine = `bolyra receipt verify failed: ${(e as { stderr?: string }).stderr?.trim() ?? String(e)}`;
+    }
+  }
+  check('[verifier]', 'x-bolyra-receipt → bolyra receipt verify --signer-from', cliLine.startsWith('PASS'), 'PASS', cliLine);
+
+  // 4. Spend again with fresh presentations: still allowed, counter 2.
+  const paid2 = await paidCall(server.handler, (await issue(AGENT)).presentation, (await issue(AGENT)).presentation);
+  check('[gate]', 'paid call #2 (fresh presentations)', paid2.status === 200 && server.state.counter === 2, '200, counter 2', `${paid2.status}, counter ${server.state.counter}`);
+
+  // 5. REVOKE. From here every fresh presentation of this binding must deny.
+  const revoked = await revoke(hosted, id);
+  check('[verifier]', 'POST /v1/credentials/{id}/revoke', revoked === 204, '204', String(revoked));
+  const revokedAgain = await revoke(hosted, id);
+  check('[verifier]', 'revoke again (idempotent)', revokedAgain === 204, '204', String(revokedAgain));
+  const reRegister = await register(hosted, await issue(AGENT));
+  check('[verifier]', 'POST /v1/credentials after revoke (terminal)', reRegister.status === 409 && reRegister.error === 'credential_revoked', '409 credential_revoked', `${reRegister.status} ${reRegister.error ?? ''}`);
+
+  // 6. The gate denies before any 402; the paid action does not run.
+  const denied = await paidCall(server.handler, (await issue(AGENT)).presentation, (await issue(AGENT)).presentation);
+  const problem = (await denied.json()) as { code?: unknown; detail?: unknown };
+  check('[gate]', 'paid call #3 after revoke', denied.status === 401 && problem.code === 'untrusted_root' && server.state.counter === 2, '401 untrusted_root, counter 2', `${denied.status} ${String(problem.code)}, counter ${server.state.counter}`);
+  const thrown = detailOf(server.state.lastDenial);
+  check('[gate]', 'in-process verdict.detail (the wire body carries only the message)', thrown.reason === 'credential_not_active' && thrown.credential_id === id, 'credential_not_active, registered id', `${String(thrown.reason)}, ${thrown.credential_id === id ? 'registered id' : String(thrown.credential_id)}`);
+
+  // 7. The verifier's own words for the same presentation.
+  const v2 = await verify(hosted, await issue(AGENT));
+  const d2 = detailOf(v2.verdict);
+  check('[verifier]', 'POST /v1/verify after revoke', v2.status === 200 && v2.verdict.verdict === 'deny' && v2.verdict.code === 'untrusted_root', '200 deny untrusted_root', `${v2.status} ${String(v2.verdict.verdict)} ${String(v2.verdict.code)}`);
+  check('[verifier]', 'deny detail', d2.reason === 'credential_not_active' && d2.credential_id === id, 'credential_not_active, registered id', `${String(d2.reason)}, ${d2.credential_id === id ? 'registered id' : String(d2.credential_id)}`);
+  check('[verifier]', 'no x-bolyra-credential-id on a deny', v2.credentialIdHeader === null, 'absent', v2.credentialIdHeader === null ? 'absent' : 'present');
+
+  // 8. An independent credential under the same operator is unaffected.
+  const other = await issue(OTHER_AGENT);
+  const regOther = await register(hosted, other);
+  check('[verifier]', 'register an independent binding (same operator)', regOther.status === 201 && regOther.credential_id !== undefined && regOther.credential_id !== id, '201, a different id', `${regOther.status} ${regOther.credential_id === id ? 'SAME id' : 'different id'}`);
+  const paid3 = await paidCall(server.handler, (await issue(OTHER_AGENT)).presentation, (await issue(OTHER_AGENT)).presentation);
+  check('[gate]', 'paid call #4 with the independent credential', paid3.status === 200 && server.state.counter === 3, '200, counter 3', `${paid3.status}, counter ${server.state.counter}`);
+
+  const failed = rows.filter((r) => !r.ok);
+  console.log(`\n${rows.length - failed.length}/${rows.length} checks passed; counter ended at ${server.state.counter} (1 → 2 → revoke → 2 → 3).`);
+  if (failed.length > 0) {
+    console.error(`\n${failed.length} check(s) failed:`);
+    for (const r of failed) console.error(`  ${r.source} ${r.step}: expected ${r.expected}, observed ${r.observed}`);
+    process.exitCode = 1;
+  }
+}
+
+main().catch((e: unknown) => {
+  console.error(e instanceof Error ? e.message : String(e));
+  process.exitCode = 1;
+});
