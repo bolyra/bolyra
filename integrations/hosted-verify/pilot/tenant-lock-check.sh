@@ -10,6 +10,11 @@
 # silently undone. The same applies when the put stage is killed outright: the upload may
 # already have been accepted, so the lock must stay until someone has looked.
 #
+# It also holds the reporting to the same standard. What a sync says about an upload comes
+# from the marker the put stage left under the lock, never from an exit code — confirmed,
+# unknown, or never started — and a retained lock is cleared only by `unlock`, which refuses
+# while the recorded upload can still be alive.
+#
 # Self-contained and offline: shims for `security`, `npx` and `wrangler` go FIRST on PATH, so
 # no keychain item is read or written on any machine, no network call is made, and wrangler is
 # never reached. The `npx` shim behaves like the real launcher: it reads the map off stdin,
@@ -227,7 +232,10 @@ echo "$out" | grep -qE '^acme[[:space:]]+disabled' || fail "show does not report
 ok "show reports acme as disabled"
 
 # (g1) the owner's own lock is retained when the put stage dies without confirming: the upload
-# it started is orphaned, not cancelled, and may already have been accepted.
+# it started is orphaned, not cancelled, and may already have been accepted. So the sync must
+# report the outcome as UNKNOWN — saying the map was "NOT updated" would send an operator away
+# from a quarantine that might well be live — and the lock it leaves behind is cleared only by
+# `unlock`, which refuses for as long as that orphan can still be talking to Cloudflare.
 rm -f "$MARKER.pid"
 env "${TENANT_ENV[@]}" SHIM_SLEEP=6 bash "$TENANT" sync > "$WORK/sync-kill.log" 2>&1 &
 BG=$!
@@ -240,27 +248,51 @@ kill -9 "$put" || fail "could not kill the put stage (pid $put)"
 wait "$BG"; rc=$?
 BG=""
 [ "$rc" != 0 ] || fail "a sync whose put was killed reported success: $(cat "$WORK/sync-kill.log")"
-grep -q "was NOT updated" "$WORK/sync-kill.log" || fail "the killed put was not reported: $(cat "$WORK/sync-kill.log")"
+grep -q "outcome of the upload is UNKNOWN" "$WORK/sync-kill.log" \
+  || fail "the killed put was not reported as an unknown outcome: $(cat "$WORK/sync-kill.log")"
+if grep -q "was NOT updated" "$WORK/sync-kill.log"; then
+  fail "the killed put was reported as having changed nothing: $(cat "$WORK/sync-kill.log")"
+fi
 grep -q "lock retained at" "$WORK/sync-kill.log" || fail "the lock was not retained: $(cat "$WORK/sync-kill.log")"
 [ -d "$LOCK_DIR" ] || fail "the lock was released after the put was killed"
 [ -e "$LOCK_DIR/upload.pending" ] || fail "the unconfirmed upload left no marker under the lock"
+[ ! -e "$LOCK_DIR/upload.confirmed" ] || fail "a put that never confirmed left a confirmation behind"
 out="$(tenant disable acme 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "disable against a retained lock exited $rc, expected 1: $out"
 case "$out" in *"another tenant.sh is running"*) ;; *) fail "disable was refused for the wrong reason: $out" ;; esac
+# The orphan is still sleeping, so the recovery must not run yet: clearing the lock now is the
+# interleaving the lock exists to prevent, with the orphan's older map landing last.
+out="$(tenant unlock 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "unlock while the upload was still alive exited $rc, expected 1: $out"
+case "$out" in *"is still running"*) ;; *) fail "unlock was refused for the wrong reason: $out" ;; esac
+[ -d "$LOCK_DIR" ] || fail "unlock cleared the lock while the upload was still alive"
 wait_for_gone "$ORPHAN" || fail "the orphaned upload never finished"
 ORPHAN=""
-rm -rf "$LOCK_DIR"
-ok "a put that is killed leaves the lock, and every other run, blocked until an operator clears it"
+out="$(tenant unlock 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "unlock exited $rc once no upload could still be running: $out"
+case "$out" in *"lock cleared"*) ;; *) fail "unlock did not report clearing the lock: $out" ;; esac
+[ ! -d "$LOCK_DIR" ] || fail "unlock left the lock directory behind"
+# And the re-sync the recovery calls for goes through, leaving no marker behind it.
+out="$(tenant sync 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "the re-sync after unlock exited $rc: $out"
+case "$out" in *"done. Secrets take effect"*) ;; *) fail "the re-sync did not report a confirmed upload: $out" ;; esac
+[ ! -e "$LOCK_DIR/upload.confirmed" ] || fail "the re-sync left its confirmation behind"
+[ ! -d "$LOCK_DIR" ] || fail "the re-sync left its lock behind"
+ok "a killed put reports an UNKNOWN outcome and keeps the lock; unlock refuses while the upload lives, then clears it and the re-sync goes through"
 
 # (g2) an upload that ends 0 WITHOUT wrangler's success line is not a success: the exit code of
 # the launcher is not evidence, and the lock stays.
 out="$(env "${TENANT_ENV[@]}" SHIM_NO_SUCCESS=1 bash "$TENANT" sync 2>&1)"; rc=$?
 [ "$rc" != 0 ] || fail "a sync with no success line reported success: $out"
 case "$out" in *"upload NOT confirmed"*) ;; *) fail "the missing success line was not reported: $out" ;; esac
+case "$out" in *"outcome of the upload is UNKNOWN"*) ;; *) fail "the missing success line was not reported as an unknown outcome: $out" ;; esac
 case "$out" in *"lock retained at"*) ;; *) fail "the lock was not retained without a success line: $out" ;; esac
 [ -e "$LOCK_DIR/upload.pending" ] || fail "the unconfirmed upload left no marker under the lock"
-rm -rf "$LOCK_DIR"
-ok "an exit 0 without wrangler's success line is refused and keeps the lock"
+[ ! -e "$LOCK_DIR/upload.confirmed" ] || fail "an upload with no success line left a confirmation behind"
+out="$(tenant unlock 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "unlock exited $rc once the unconfirmed upload was gone: $out"
+[ ! -d "$LOCK_DIR" ] || fail "unlock left the lock directory behind"
+ok "an exit 0 without wrangler's success line is refused, keeps the lock, and unlock clears it"
 
 # (g3) if the upload cannot be recorded under the lock, nothing is uploaded at all.
 out="$(printf '{"acme":{}}' | env PATH="$SHIM:$PATH" MARKER="$WORK/marker-nolock" MARKER_BODY="$WORK/body-nolock" \
@@ -292,5 +324,77 @@ grep -q "an interrupt arrived after the put completed" "$WORK/sync-put-term.log"
 body_says "$MARKER_BODY" disabled || fail "the upload did not carry the map: $(cat "$MARKER_BODY")"
 [ ! -d "$LOCK_DIR" ] || fail "the lock survived a confirmed upload"
 ok "an interrupt aimed at the put stage still lets the upload finish, and the lock is released"
+
+# (g6) an interrupt that arrives before the map has finished coming down the pipe is deferred
+# too. The handlers go on first thing, ahead of stdin: installed any later, a TERM in that
+# window would kill the put stage outright — no upload started, no marker, and an exit code
+# upstream that looks like an interrupt over an upload that never existed.
+mkdir -p "$WORK/lock-early"
+( sleep 2; printf '{"acme":{}}' ) | env PATH="$SHIM:$PATH" \
+    MARKER="$WORK/marker-early" MARKER_BODY="$WORK/body-early" SHIM_SLEEP=1 \
+    TENANT_LOCK_DIR="$WORK/lock-early" node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck \
+    > "$WORK/early.log" 2>&1 &
+BG=$!
+sleep 0.5
+kill -0 "$BG" 2>/dev/null || fail "the put stage was gone before its input arrived: $(cat "$WORK/early.log")"
+kill -TERM "$BG" || fail "could not signal the put stage (pid $BG)"
+wait "$BG"; rc=$?
+BG=""
+[ "$rc" = 143 ] || fail "the put stage exited $rc after a TERM that arrived before its input, expected 143: $(cat "$WORK/early.log")"
+grep -q "received; the upload in flight runs to completion first" "$WORK/early.log" \
+  || fail "the early interrupt was not deferred: $(cat "$WORK/early.log")"
+[ -e "$WORK/marker-early" ] || fail "the upload never started after the early interrupt: $(cat "$WORK/early.log")"
+[ "$(tail -n 1 "$WORK/marker-early")" = "done" ] || fail "the upload did not finish: $(cat "$WORK/marker-early")"
+[ -e "$WORK/lock-early/upload.confirmed" ] || fail "the completed upload was not recorded as confirmed"
+[ ! -e "$WORK/lock-early/upload.pending" ] || fail "a confirmed upload left its pending marker behind"
+ok "a TERM that lands before the map does is deferred, and the upload still runs and is confirmed"
+
+# (g7) wrangler's log level is pinned on the child alongside its log sanitizing. At warn, error
+# or none wrangler uploads and lands the secret exactly as before — the only thing that changes
+# is that the success line is suppressed, so an inherited WRANGLER_LOG would turn every good
+# upload into an unconfirmed one and keep the lock over it.
+ENVPIN="$WORK/envpin"
+mkdir -p "$ENVPIN"
+printf '#!/bin/sh\necho "SANITIZE=$WRANGLER_LOG_SANITIZE WRITE_LOGS=$WRANGLER_WRITE_LOGS LOG=$WRANGLER_LOG"\necho "Success! Uploaded secret TENANTS"\n' > "$ENVPIN/npx"
+chmod +x "$ENVPIN/npx"
+out="$(printf '{"acme":{}}' | env PATH="$ENVPIN:$PATH" WRANGLER_LOG_SANITIZE=false WRANGLER_WRITE_LOGS=true \
+  WRANGLER_LOG=none node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "the put stage exited $rc against the environment stand-in: $out"
+case "$out" in *"SANITIZE=true WRITE_LOGS=false LOG=log"*) ;; *) fail "wrangler's environment was not pinned: $out" ;; esac
+ok "wrangler's log sanitizing and its log level are pinned on the child whatever the operator's shell sets"
+
+# (g8) the success line is matched over everything that arrives, not just the last bytes of it.
+# wrangler writes its own notices right behind the confirmation, and output that carries both in
+# ONE write is what a short tail window silently drops: a landed upload reported as unconfirmed,
+# with the lock kept over it and a re-sync asked for that was never needed.
+COALESCE="$WORK/coalesce"
+mkdir -p "$COALESCE" "$WORK/lock-coalesce"
+cat > "$COALESCE/npx" <<'SHIM_COALESCE'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '\xe2\x9c\xa8 Success! Uploaded secret TENANTS\n%s\n' "$(head -c 600 /dev/zero | tr '\0' x)"
+exit 0
+SHIM_COALESCE
+chmod +x "$COALESCE/npx"
+out="$(printf '{"acme":{}}' | env PATH="$COALESCE:$PATH" TENANT_LOCK_DIR="$WORK/lock-coalesce" \
+  node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "a success line with 600 bytes behind it in one write exited $rc: $out"
+[ -e "$WORK/lock-coalesce/upload.confirmed" ] || fail "the coalesced confirmation was not recorded"
+ok "a success line coalesced into one write with 600 bytes behind it is still read as confirmation"
+
+# (g9) the third outcome, and the only one that may claim the live map is untouched: the
+# pipeline refuses before the put stage starts an upload at all. Nothing is recorded under the
+# lock, so the previous map is provably still the live one and the sync says exactly that.
+printf '%s\n' '{"org_id":"badkey","status":"active","trustedOperators":["not-a-key"]}' > "$TENANTS_DIR/badkey.json"
+out="$(tenant sync 2>&1)"; rc=$?
+rm -f "$TENANTS_DIR/badkey.json"
+[ "$rc" != 0 ] || fail "a sync the validator refused reported success: $out"
+case "$out" in *"NOT updated"*) ;; *) fail "the refusal did not report the map as unchanged: $out" ;; esac
+case "$out" in *"STILL ACCEPTED"*) ;; *) fail "the refusal did not say the previous map is still live: $out" ;; esac
+case "$out" in *"outcome of the upload is UNKNOWN"*) fail "a refusal that started no upload was reported as an unknown outcome: $out" ;; *) ;; esac
+[ ! -e "$LOCK_DIR/upload.pending" ] || fail "a refusal that started no upload left a marker under the lock"
+[ ! -e "$LOCK_DIR/upload.confirmed" ] || fail "a refusal that started no upload left a confirmation under the lock"
+[ ! -d "$LOCK_DIR" ] || fail "the lock was not released after a refusal that started no upload"
+ok "a validator refusal starts no upload, leaves no marker, and reports the previous map as still accepted"
 
 echo "tenant-lock-check: all checks passed"

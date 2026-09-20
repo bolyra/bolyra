@@ -58,12 +58,18 @@ loader by `test/tenants-check.spec.ts` — and refuses to push anything that
 would fail. `wrangler secret put` is write-only (the live map cannot be read
 back), so the keychain items plus the registry files **are** the authoritative
 copy. Back the keychain up; lose it and the only recovery is re-keying every
-tenant. Every command except `show` holds a per-environment lock for its whole
-run, so two operators cannot interleave a quarantine and a sync. An interrupt
-takes effect only after the in-flight put has finished, and the lock is
-released only once wrangler confirms the upload. A lock that is kept names its
-own directory: run `tenant.sh sync --dry-run` to see what is live, then `sync`,
-then remove that directory by hand.
+tenant. Every command except `show` and `unlock` holds a per-environment
+lock for its whole run, so two operators cannot interleave a quarantine and
+a sync. An interrupt takes effect only after the in-flight put has finished.
+The lock is released only when wrangler confirms the upload; otherwise it
+stays, and the outcome of that upload is unknown (the secret is write-only).
+Recovery: `tenant.sh unlock` (it refuses while the recorded upload process
+is still alive), then `tenant.sh sync` to re-put the intended map, then
+confirm on the Worker: `/health` reports `tenants: "ok"` and one request
+with a tenant's verifier token verifies. A `SIGKILL` of the put stage in
+the instant between starting wrangler and handing it the map can leave
+wrangler uploading an EMPTY map: every tenant then fails closed (500) until
+that re-sync.
 
 **Seeded fixture key.** `tenant.sh add … --with-fixture-key` trusts the partner's
 key(s) **and** the repo conformance fixture key; without the flag only the keys
