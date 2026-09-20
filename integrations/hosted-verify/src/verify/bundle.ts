@@ -260,8 +260,8 @@ const BINDING_V2_KEYS = new Set([
  * is `invalid_bundle`.
  *
  * Exported because the credential-registration route validates the SAME
- * binding shape: one validator, so the digest a registration derives and the
- * digest the verify path derives can never disagree on canonical form.
+ * binding shape: one validator, so a registration and the verify path cannot
+ * disagree on the binding's canonical form.
  */
 export function parseBinding(raw: unknown): Binding {
   if (

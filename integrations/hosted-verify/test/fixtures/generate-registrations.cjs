@@ -18,6 +18,7 @@ const lp = (b) => { const l = Buffer.alloc(4); l.writeUInt32BE(b.length, 0); ret
 const be32 = (big) => Buffer.from(big.toString(16).padStart(64, '0'), 'hex');
 const credentialId = (K, B) => createHash('sha256').update(Buffer.concat([ID_DST, lp(Buffer.from(K, 'utf8')), lp(be32(B))])).digest('hex');
 const FIXTURE_KEY = '15617329766995256858590222302430068383949745072531974464084158078905448850943:20201653676552407165606319978171745645181779505176156736762229713293662347780';
+// NOT a secret — a deterministic test-only scalar, mirrors test/tenants-fixture.ts.
 const ORG_B_SCALAR = 0x6f7267622d746573742d6f6e6c792d6f70657261746f722d6b65792d30310000n;
 (async () => {
   const keyOf = async (priv) => { const p = await sdk.derivePublicKey(priv); const x = Array.isArray(p) ? p[0] : p.x, y = Array.isArray(p) ? p[1] : p.y; return { x: String(x), y: String(y) }; };
@@ -31,13 +32,18 @@ const ORG_B_SCALAR = 0x6f7267622d746573742d6f6e6c792d6f70657261746f722d6b65792d3
     return [name, { body: { version: 1, binding, signature: { R8, S }, operator_pubkey: pub }, credential_id: credentialId(`${pub.x}:${pub.y}`, d), binding_digest_hex: d.toString(16).padStart(64, '0') }];
   };
   const base = { agent_name: 'reg-agent', project_key: 'api.merchant.example', program: 'mpp', model: 'opus-4.1', capabilities: ['fetch_inbox'], expiry: 4102444800 };
-  const out = Object.fromEntries(await Promise.all([
+  const entries = await Promise.all([
     mk('valid', base, 42n, k42),
     mk('valid2', { ...base, agent_name: 'reg-agent-2' }, 42n, k42),
     mk('expired', { ...base, agent_name: 'reg-agent-expired', expiry: 1600000000 }, 42n, k42),
     mk('untrusted', base, 43n, k43),
     mk('orgB', { ...base, agent_name: 'reg-agent-b' }, ORG_B_SCALAR, kB),
     mk('injection', { ...base, agent_name: "'); DROP TABLE credentials;--" }, 42n, k42),
-  ]));
+  ]);
+  const out = Object.fromEntries(entries);
+  // A structurally valid body whose signature is over a DIFFERENT binding: valid2's
+  // binding with valid's signature and key. Its id is what valid2's would be — it
+  // must never be stored, so the expected id is only for the negative assertion.
+  out.badSig = { body: { ...out.valid2.body, signature: out.valid.body.signature }, credential_id: out.valid2.credential_id, binding_digest_hex: out.valid2.binding_digest_hex };
   console.log(JSON.stringify(out, null, 2));
 })().catch((e) => { console.error('ERR', e); process.exit(1); });

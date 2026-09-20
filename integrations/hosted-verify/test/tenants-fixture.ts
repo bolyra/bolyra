@@ -20,8 +20,9 @@ export const TOKENS = {
 /**
  * A real BabyJubjub public key: @bolyra/sdk `derivePublicKey(scalar)` with the
  * bigint scalar 0x6f7267622d746573742d6f6e6c792d6f70657261746f722d6b65792d30310000n.
- * It is trusted ONLY by org-b and never signs anything: it exists so org-b
- * can be "a tenant that does not trust the fixture operator".
+ * It is trusted ONLY by org-b: it exists so org-b can be "a tenant that does
+ * not trust the fixture operator". Its scalar also signs the org-b entry in
+ * test/fixtures/registrations.json.
  */
 export const ORG_B_OPERATOR_KEY =
   '5780309220095950943441710225201277741264578273614958887521755782153302045110:' +
