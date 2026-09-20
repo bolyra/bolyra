@@ -45,7 +45,7 @@ export function decodeReceipt(header: string): SignedReceipt {
 export function cloneWithBundle(fixture: { bundle: string } & Record<string, unknown>): {
   request: Record<string, unknown>;
   bundle: Record<string, unknown>;
-  commit: () => Record<string, unknown>;
+  commit: () => { bundle: string } & Record<string, unknown>;
 } {
   const request = structuredClone(fixture) as Record<string, unknown>;
   const bundle = JSON.parse(fixture.bundle) as Record<string, unknown>;
@@ -54,7 +54,7 @@ export function cloneWithBundle(fixture: { bundle: string } & Record<string, unk
     bundle,
     commit() {
       request.bundle = JSON.stringify(bundle);
-      return request;
+      return request as { bundle: string } & Record<string, unknown>;
     },
   };
 }

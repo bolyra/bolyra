@@ -209,13 +209,37 @@ describe('ordering: classical checks come first', () => {
 });
 
 describe('the credential id is a pure function of the signed binding', () => {
-  it('re-encoding the bundle (raw JSON vs base64url) does not change the id or the decision', async () => {
+  /** base64url (RFC 4648 §5, unpadded) of a UTF-8 string — the other transport encoding the bundle parser accepts. */
+  function base64url(text: string): string {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  it('re-encoding the bundle (raw JSON vs base64url) changes neither the id nor the decision, before and after revocation', async () => {
     const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
-    const { commit } = cloneWithBundle(allowAgentOnly);
-    const rawJson = commit(); // bundle re-serialized as raw JSON text
-    const res = await postVerify(rawJson);
-    expect((await verdictOf(res)).verdict).toBe('allow');
-    expect(res.headers.get('x-bolyra-credential-id')).toBe(id);
+    const rawJson = cloneWithBundle(allowAgentOnly).commit(); // bundle re-serialized as raw JSON text
+    const encoded = { ...rawJson, bundle: base64url(rawJson.bundle) };
+    expect(encoded.bundle).not.toBe(rawJson.bundle);
+    expect(encoded.bundle.startsWith('{')).toBe(false);
+
+    for (const req of [rawJson, encoded]) {
+      const res = await postVerify(req);
+      expect((await verdictOf(res)).verdict).toBe('allow');
+      expect(res.headers.get('x-bolyra-credential-id')).toBe(id);
+    }
     expect(canonicalize(fixtureBundle.binding)).toBe(JSON.stringify(((await (await getCredential(id)).json()) as { binding: unknown }).binding));
+
+    expect((await postRevoke(id)).status).toBe(204);
+    for (const req of [rawJson, encoded]) {
+      const res = await postVerify(req);
+      const v = await verdictOf(res);
+      expect(res.status).toBe(200);
+      expect(v.verdict).toBe('deny');
+      expect(v.code).toBe('untrusted_root');
+      expect(v.detail).toEqual({ reason: 'credential_not_active', credential_id: id });
+      expect(res.headers.get('x-bolyra-credential-id')).toBeNull();
+    }
   });
 });

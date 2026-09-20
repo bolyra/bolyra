@@ -161,9 +161,8 @@ registered — that is the design-partner conversation.
 - **`x-bolyra-credential-id`** — on an `allow`, the credential id of the
   presented binding (the same value `POST /v1/credentials` returned). Unsigned
   operational correlation only: it is not an authorization input, it is not
-  in the signed receipt, and it is not a CORS-exposed header. Receipts issued
-  before a signed attribution field exists can never acquire signed provenance
-  retroactively, so treat this header as correlation, never as evidence.
+  in the signed receipt, and it is not a CORS-exposed header. The receipt does
+  not attest to it, so treat this header as correlation, never as evidence.
 
 ### Replay protection: host nonce mode only (and its classical limit)
 
