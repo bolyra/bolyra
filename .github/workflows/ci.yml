@@ -187,6 +187,20 @@ jobs:
         working-directory: integrations/hosted-verify
       - run: npx vitest run
         working-directory: integrations/hosted-verify
+      # The provisioning script and its validator must stay runnable on a plain Linux
+      # shell (no keychain here): syntax, both mjs modules parse, the usage path, the
+      # empty-map guard in tenants-put.mjs (it must refuse without starting wrangler),
+      # an empty registry, and the validator CLI on the documented dev example.
+      - name: Provisioning script and validator
+        working-directory: integrations/hosted-verify
+        run: |
+          bash -n pilot/tenant.sh
+          node --check pilot/tenants-assemble.mjs && node --check pilot/tenants-put.mjs
+          bash pilot/tenant.sh >/dev/null 2>&1 && exit 1 || test $? -eq 2
+          ! printf '' | node pilot/tenants-put.mjs --env=ci
+          TENANTS_DIR="$(mktemp -d)" bash pilot/tenant.sh show
+          sed -n 's/^TENANTS=//p' .dev.vars.example | node pilot/tenants-check.mjs
+          ! printf '{}' | node pilot/tenants-check.mjs
 
   payment-protocols-tests:
     name: Payment Protocols — typecheck & test

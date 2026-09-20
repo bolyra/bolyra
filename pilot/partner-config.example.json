@@ -1,22 +1,19 @@
 {
-  "$comment": "Pilot partner record — copy to pilot/partners/<label>.json (gitignored). Manual, file-based; this file IS the partner registry, read by humans only. NO secrets in this file, ever: the tokens live in the Worker's TENANTS secret and are only referenced here.",
+  "$comment": "Tenant record — created by integrations/hosted-verify/pilot/tenant.sh add as pilot/tenants/<org_id>.json (gitignored); fill in the human fields by hand. This file IS the tenant registry, read by tenant.sh sync and by humans. NO secrets in this file, ever: the two tokens live in the macOS keychain (service bolyra-hosted-verify, accounts tenant-<org_id>-admin / -verifier) and reach the Worker only through the TENANTS secret.",
 
-  "label": "acme",
+  "org_id": "acme",
   "status": "active",
 
-  "$status_values": "active (tenant entry live in TENANTS) | disabled (entry kept, \"disabled\": true — every authenticated route returns 500 internal_error (/health stays 200), which the partner cannot distinguish from a config defect) | revoked (entry deleted from TENANTS)",
+  "$status_values": "active (entry live in TENANTS) | disabled (entry kept with \"disabled\": true — served on no route: /v1/verify answers 500 internal_error, the registry routes 503 tenant_disabled; the partner cannot tell the 500 from a defect, so tell them) | removed (tokens deleted, entry dropped from TENANTS; this file and the tenant's Durable Object with its credential history are kept)",
 
   "displayName": "Acme Agents, Inc. (design partner)",
   "contact": "eng-lead@example.com",
 
-  "tokenRef": "wrangler secret TENANTS, entry \"acme\" — admin_token + verifier_token",
-
-  "audience": "https://bolyra-hosted-verify.<account>.workers.dev",
-
   "trustedOperators": [
-    "<operator-pubkey-x-decimal>:<operator-pubkey-y-decimal>"
+    "<operator-pubkey-x-decimal>:<operator-pubkey-y-decimal>",
+    "15617329766995256858590222302430068383949745072531974464084158078905448850943:20201653676552407165606319978171745645181779505176156736762229713293662347780"
   ],
-  "$trustedOperators_note": "The partner's BabyJubjub operator public key(s), as x:y decimal pairs. Add the key to the tenant's trusted_operators in TENANTS — that list is the trust anchor the Worker applies to this tenant's requests; this file is the per-partner record of which keys are theirs.",
+  "$trustedOperators_note": "The tenant's BabyJubjub operator public key(s) as x:y decimal pairs — tenant.sh sync writes exactly this list into the tenant's trusted_operators. The second entry is the repo conformance fixture key that `add --with-fixture-key` seeds (preview-only; edit it out and re-sync once the tenant's own key has passed the smoke test). Trust is necessary, not sufficient: an allow also needs the signed binding registered under this tenant and not revoked.",
 
   "tierCaps": {
     "maxTier": "medium",
