@@ -149,8 +149,10 @@ function isValidTier(value: unknown): value is FinancialTier {
 /**
  * Mint the one-time nullifier carried in `publicSignals[1]`: a uniformly
  * random NONZERO BN254 scalar-field element, by rejection sampling over 32
- * random bytes (values `>= p` or `== 0` are discarded and redrawn — well under
- * half of the draws, so the loop terminates almost immediately).
+ * random bytes (values `>= p` or `== 0` are discarded and redrawn). p is about
+ * 2^253.6, so a draw is accepted with probability p/2^256 ≈ 0.19: roughly 81%
+ * of draws are rejected and about 5.3 iterations are expected per nullifier —
+ * a handful of `randomBytes` calls, still negligible next to the signature.
  *
  * Why it must be fresh per issuance: a hosted verifier returns this signal as
  * the nonce in `consume_nonces` (issuer_key = operator key, retained until the

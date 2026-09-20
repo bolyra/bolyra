@@ -104,12 +104,21 @@ test('standing mandate: two fresh presentations of the SAME binding through one 
   const { mppx, state, handler } = buildApp(gated);
 
   // Same binding, minted twice = two presentations of one standing mandate.
-  const first = await handler(await requestWith({ payment: await paymentHeader(mppx), bundle: await makeBundle() }));
+  const firstBundle = await makeBundle();
+  const first = await handler(await requestWith({ payment: await paymentHeader(mppx), bundle: firstBundle }));
   assert.equal(first.status, 200);
   assert.equal(state.counter, 1);
   const second = await handler(await requestWith({ payment: await paymentHeader(mppx), bundle: await makeBundle() }));
   assert.equal(second.status, 200, 'a second fresh presentation of the same standing mandate allows');
   assert.equal(state.counter, 2);
+
+  // Re-presenting the FIRST bundle unmodified is a replay: the gate reserved its nullifier on the
+  // first allow (it reserved each distinct nullifier, not nothing), so the same string denies.
+  await assert.rejects(
+    handler(await requestWith({ payment: await paymentHeader(mppx), bundle: firstBundle })),
+    (e: unknown) => e instanceof BolyraDeniedError && e.verdict.code === 'nonce_replayed',
+  );
+  assert.equal(state.counter, 2, 'the replayed presentation never reached the protected action');
 
   // An unrelated mandate from the SAME operator (different agent binding) is not blocked either.
   const other = await makeBundle({ binding: { agent_name: 'auditor-bot' } });
@@ -117,10 +126,12 @@ test('standing mandate: two fresh presentations of the SAME binding through one 
   assert.equal(third.status, 200, 'an unrelated mandate from the same operator still allows');
   assert.equal(state.counter, 3);
 
-  // The stub derived a DIFFERENT nullifier from each presented bundle (no fixed nonce in play).
-  assert.equal(stub.calls.length, 3);
+  // The stub derived a DIFFERENT nullifier from each fresh presentation (no fixed nonce in play);
+  // the replayed call reached the verifier too (the gate, not the stub, denied it) and repeats the first.
+  assert.equal(stub.calls.length, 4);
   const nullifiers = stub.calls.map((c) => JSON.parse((c.body as { bundle: string }).bundle).agent.envelope.publicSignals[1] as string);
-  assert.equal(new Set(nullifiers).size, 3, `expected 3 distinct nullifiers, got ${JSON.stringify(nullifiers)}`);
+  assert.equal(new Set(nullifiers).size, 3, `expected 3 distinct nullifiers across 4 calls, got ${JSON.stringify(nullifiers)}`);
+  assert.equal(nullifiers[2], nullifiers[0], 'the replay presented the first nullifier again');
 });
 
 test("discovery: enforce:'payment' + no Payment credential => 402, counter 0", async () => {
