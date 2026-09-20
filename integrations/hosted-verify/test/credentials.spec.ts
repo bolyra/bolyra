@@ -300,6 +300,20 @@ describe('failures behind the registry call are the documented 500 with an analy
     idFromName: (name: string) => env.TENANT.idFromName(name),
   } as unknown as typeof env.TENANT;
 
+  it('a missing registry binding is the documented 500 with a data point, not a bare exception', async () => {
+    const points: unknown[] = [];
+    const usage = { writeDataPoint: (p: unknown) => { points.push(p); } } as unknown as AnalyticsEngineDataset;
+    const e = { ...env, USAGE: usage } as Record<string, unknown>;
+    delete e.TENANT;
+    const res = await worker.fetch(
+      new Request(CREDENTIALS, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' }, body: JSON.stringify(F.valid.body) }),
+      e as unknown as typeof env,
+    );
+    expect(res.status).toBe(500);
+    expect(await body(res)).toEqual({ error: 'internal_error', message: 'registry storage failure' });
+    expect(points).toHaveLength(1);
+  });
+
   it.each([
     ['a rejecting RPC on register', throwing, 'POST', ''],
     ['a rejecting RPC on get', throwing, 'GET', `/${'a'.repeat(64)}`],
@@ -336,11 +350,11 @@ describe('wire grammar and canonical form', () => {
     }
   });
 
-  it('a negative coordinate is 403 untrusted_operator (never reaches the id derivation)', async () => {
+  it('a negative coordinate is 400 malformed_input — the decimal grammar rejects it before trust or id derivation', async () => {
     const neg = structuredClone(F.valid.body) as { operator_pubkey: { x: string } };
     neg.operator_pubkey.x = `-${neg.operator_pubkey.x}`;
     const res = await postRegister(neg);
-    expect(res.status).toBe(400); // '-' fails the decimal grammar first
+    expect(res.status).toBe(400);
     expect((await body(res)).error).toBe('malformed_input');
   });
 
