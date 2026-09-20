@@ -11,6 +11,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseBundle, tierCapability, type IssuedMandate } from '@bolyra/mpp';
 
+/**
+ * An error whose message is ours — a route, a status, a byte count — and therefore safe
+ * to print. Any other error's message may quote server- or environment-supplied text
+ * (Node quotes an invalid header value, for instance), so run.ts prints only these.
+ */
+export class DiagnosticError extends Error {
+  override readonly name = 'DiagnosticError' as const;
+}
+
 export interface HostedVerifier {
   url: string;
   adminToken: string;
@@ -42,7 +51,7 @@ async function jsonOf(res: Response): Promise<{ bytes: number; body: Record<stri
 export async function health(v: HostedVerifier): Promise<Health> {
   const res = await fetch(`${v.url}/health`);
   const { bytes, body } = await jsonOf(res);
-  if (res.status !== 200) throw new Error(`GET /health → HTTP ${res.status} (${bytes}-byte body withheld)`);
+  if (res.status !== 200) throw new DiagnosticError(`GET /health → HTTP ${res.status} (${bytes}-byte body withheld)`);
   return body as Health;
 }
 
@@ -78,12 +87,12 @@ export async function register(v: HostedVerifier, mandate: IssuedMandate): Promi
   const { bytes, body } = await jsonOf(res);
   if (res.status === 201 || res.status === 200) {
     if (typeof body.credential_id !== 'string' || !/^[0-9a-f]{64}$/.test(body.credential_id)) {
-      throw new Error(`POST /v1/credentials → HTTP ${res.status} without a credential_id`);
+      throw new DiagnosticError(`POST /v1/credentials → HTTP ${res.status} without a credential_id`);
     }
     return { status: res.status, credential_id: body.credential_id };
   }
   if (res.status === 409) return { status: 409, error: typeof body.error === 'string' ? body.error : undefined };
-  throw new Error(`POST /v1/credentials → HTTP ${res.status} (${bytes}-byte body withheld)`);
+  throw new DiagnosticError(`POST /v1/credentials → HTTP ${res.status} (${bytes}-byte body withheld)`);
 }
 
 export async function revoke(v: HostedVerifier, credentialId: string): Promise<number> {
@@ -91,7 +100,7 @@ export async function revoke(v: HostedVerifier, credentialId: string): Promise<n
     method: 'POST',
     headers: { authorization: `Bearer ${v.adminToken}` },
   });
-  if (res.status !== 204) throw new Error(`POST /v1/credentials/{id}/revoke → HTTP ${res.status} (${Buffer.byteLength(await res.text())}-byte body withheld)`);
+  if (res.status !== 204) throw new DiagnosticError(`POST /v1/credentials/{id}/revoke → HTTP ${res.status} (${Buffer.byteLength(await res.text())}-byte body withheld)`);
   return res.status;
 }
 
@@ -129,7 +138,7 @@ export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise
     body: JSON.stringify(body),
   });
   const { bytes, body: verdict } = await jsonOf(res);
-  if (Object.keys(verdict).length === 0) throw new Error(`POST /v1/verify → HTTP ${res.status} with a non-JSON body (${bytes} bytes withheld)`);
+  if (Object.keys(verdict).length === 0) throw new DiagnosticError(`POST /v1/verify → HTTP ${res.status} with a non-JSON body (${bytes} bytes withheld)`);
   return {
     status: res.status,
     verdict,
