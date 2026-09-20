@@ -6,7 +6,7 @@ week", using only existing pieces: the hosted-verify preview
 `receipt verify-chain`), `@bolyra/mpp`, and the pilot docs in `docs/pilot/`.
 
 **Hard scope:** this is a pilot harness, not a hosted platform. No dashboard,
-no billing, no self-serve signup, no tenant model, no SLA. See
+no billing, no self-serve signup, no tenant self-service, no SLA. See
 [Out of scope](#out-of-scope--waits-for-a-real-pilot).
 
 Partner-facing integration doc: [`INTEGRATION.md`](INTEGRATION.md).
@@ -18,11 +18,11 @@ Commercials + success criteria: `docs/pilot/design-partner-brief.md` and
 | Thing | Where |
 |---|---|
 | Hosted verify Worker | `integrations/hosted-verify/` → `https://bolyra-hosted-verify.<account>.workers.dev` (workers.dev preview only) |
-| Partner bearer tokens | macOS keychain, service `bolyra-hosted-verify`, account `partner-token-<label>` (legacy shared token: account `preview-token`) |
-| Live token map | wrangler secret `PARTNER_TOKENS` (JSON label→token; **replaced whole** on every put — only ever update it via `partner-token.sh sync`) |
+| Tenant tokens | wrangler secret `TENANTS`, two per tenant: `verifier_token` (`POST /v1/verify`) and `admin_token` (tenant administration) |
+| Live tenant map | wrangler secret `TENANTS` (JSON `org_id` → tokens, `trusted_operators`, `disabled`; **replaced whole** on every put — always edit your complete copy and re-put it) |
 | Partner registry | `pilot/partners/<label>.json` (gitignored; template `pilot/partner-config.example.json`) |
 | Policy record | `pilot/partners/<label>.policy.json` (template `pilot/policy-config.example.json`) |
-| Trust anchor | `TRUSTED_OPERATORS` var in `integrations/hosted-verify/wrangler.jsonc` — changing it requires `npm run deploy` |
+| Trust anchor | each tenant's `trusted_operators` list inside the `TENANTS` secret — changing it takes effect on the next request, no redeploy |
 | Usage data | Analytics Engine dataset `bolyra_hosted_verify_usage` (counts + labels only, never payloads) |
 | CF analytics token | keychain service `bolyra-hosted-verify`, account `cf-analytics-token` |
 | Receipts | `X-Bolyra-Receipt` response header (hosted, signed, unchained) / gateway-shield receipt logs (signed, hash-chained) |
@@ -40,8 +40,13 @@ curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq .status
 ```bash
 cd integrations/hosted-verify
 
-# 1. Mint a labeled token (keychain) + registry file + push PARTNER_TOKENS:
-./pilot/partner-token.sh add <label>
+# 1. Add the tenant to the TENANTS map: pick an org_id, generate two tokens
+#    (`openssl rand -hex 32` each), add
+#      "<org_id>": {"admin_token": "…", "verifier_token": "…",
+#                   "trusted_operators": []}
+#    to your complete copy of the map, then push it (the put REPLACES the
+#    whole map — anything you leave out is revoked):
+npx wrangler secret put TENANTS
 
 # 2. Fill in the registry + policy records (contacts, operator keys, tier cap):
 #      pilot/partners/<label>.json          (from pilot/partner-config.example.json)
@@ -49,21 +54,22 @@ cd integrations/hosted-verify
 
 # 3. Pin the partner's operator key(s) — REQUIRED before their own
 #    presentations verify (without this they can only run the fixture examples):
-#    append their x:y decimal pair(s) to TRUSTED_OPERATORS in wrangler.jsonc, then
-npm test && npm run deploy
+#    add their x:y decimal pair(s) to that tenant's trusted_operators and
+#    re-put the whole map — no redeploy needed:
+npx wrangler secret put TENANTS
 
-# 4. Send the partner: the base URL, their token (secure channel — read it with
-#    the command partner-token.sh printed), and pilot/INTEGRATION.md.
+# 4. Send the partner: the base URL, their verifier token (secure channel —
+#    from your own copy of the TENANTS map), and pilot/INTEGRATION.md.
 
 # 5. Smoke it as them:
-TOKEN=$(security find-generic-password -s bolyra-hosted-verify -a partner-token-<label> -w)
+TOKEN=<their verifier token>
 curl -s -X POST https://bolyra-hosted-verify.<account>.workers.dev/v1/verify \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   --data @examples/request.allow.json | jq .verdict     # → "allow"
 
-# 6. Confirm attribution (row shows under their label):
+# 6. Confirm attribution (row shows under their <org_id>:<role> label):
 CF_API_TOKEN=$(security find-generic-password -s bolyra-hosted-verify -a cf-analytics-token -w) \
-  node pilot/usage-partner.mjs <label> 1
+  node pilot/usage-partner.mjs <org_id>:verifier 1
 ```
 
 Partner needs mandates / spend tiers (`@bolyra/mpp`)? Their credential's
@@ -75,36 +81,43 @@ cap in `tierCaps` in the registry file.
 
 ```bash
 cd integrations/hosted-verify
-./pilot/partner-token.sh rotate <label>   # mints new, pushes map — old token dead immediately
-# send the new token over a secure channel (command is printed)
+# Replace that tenant's verifier_token (or admin_token) in your copy of the
+# map and re-put the whole map — the old token dies the instant it lands:
+npx wrangler secret put TENANTS
+# send the new token over a secure channel
 ```
 
 ## 3. Disable / re-enable / revoke a partner
 
 ```bash
 cd integrations/hosted-verify
-./pilot/partner-token.sh disable <label>  # off the Worker, token kept in keychain
-./pilot/partner-token.sh enable <label>   # back on
-./pilot/partner-token.sh revoke <label>   # off the Worker AND deleted from keychain
-./pilot/partner-token.sh show             # sanity: labels, status, keychain presence
+# Each of these is an edit to your complete copy of the map followed by one
+# `npx wrangler secret put TENANTS` (the put REPLACES the whole map):
+#   quarantine  set "disabled": true on the tenant's entry — its tokens stop
+#               working on every route; entry, keys and label all stay
+#   re-enable   set "disabled": false (or drop the field)
+#   revoke      delete the tenant's entry from the map
+npx wrangler secret put TENANTS
+# sanity: the map parses (it does not list tenants):
+curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq .tenants
 ```
 
 Notes:
 - Secrets take effect immediately; no redeploy.
-- Revoking the **last** active partner pushes an effectively-empty map (the
-  reserved `unauthenticated` label) — but the legacy shared `PREVIEW_TOKEN`
-  is a separate secret and stays live until
-  `npx wrangler secret delete PREVIEW_TOKEN`.
-- Disabling a partner does **not** un-pin their operator keys. If trust itself
-  is the problem (not just the token), also remove their keys from
-  `TRUSTED_OPERATORS` in `wrangler.jsonc` and `npm run deploy`.
+- `wrangler secret put TENANTS` replaces the WHOLE map: always start from your
+  complete copy, or every tenant you left out is revoked by accident.
+- Removing the **last** tenant leaves a map that authenticates nobody: every
+  request is then `401`, recorded under the reserved `unauthenticated` label.
+- Quarantining a tenant does **not** un-pin their operator keys. If trust
+  itself is the problem (not just the token), also clear their keys from that
+  tenant's `trusted_operators` in the same put.
 
 ## 4. Check a partner's usage
 
 ```bash
 cd integrations/hosted-verify
 CF_API_TOKEN=$(security find-generic-password -s bolyra-hosted-verify -a cf-analytics-token -w) \
-  node pilot/usage-partner.mjs <label> [days]   # default 7
+  node pilot/usage-partner.mjs <org_id>:<role> [days]   # default 7
 # all partners at once: npm run usage  (scripts/usage.mjs)
 ```
 
@@ -150,7 +163,7 @@ Full registry: `spec/external-verifier-contract-v1.md` §9.
 
 | Code | HTTP | Likely cause in a pilot | Do |
 |---|---|---|---|
-| *(401 body `{"error":…}`)* | 401 | Missing/wrong bearer token | `partner-token.sh show`; re-send token; check they hit the right deployment |
+| *(401 body `{"error":…}`)* | 401 | Missing/wrong bearer token | Check the tenant's entry in `TENANTS`; re-send token; check they hit the right deployment |
 | `malformed_input` | 200 | Body not JSON, >1 MiB, or missing/ill-typed request field | Diff their request against `examples/request.allow.json` (spec §2.1: `version`, `bundle`, `request`, `now_unix`) |
 | `unsupported_version` | 200 | `version` ≠ 1, or obsolete v1 (five-field) binding | They must re-issue the binding (binding v2 includes `expiry`) |
 | `invalid_bundle` | 200 | `bundle` undecodable / structurally wrong | Regenerate the bundle with a current SDK |
@@ -164,7 +177,7 @@ Full registry: `spec/external-verifier-contract-v1.md` §9.
 | `expired` | 200 | `now_unix >= expiry` (strict — equality is expired) | Check their clock / `now_unix`; re-issue credential |
 | `nonce_missing` | 200 | No usable nullifier signal | Regenerate the bundle |
 | `nonce_replayed` | 200 | (local mode only — not hosted) | Hosted is host-mode: THEY must reserve `consume_nonces` before acting |
-| `internal_error` | 500 | Worker misconfig (e.g. no trusted operators) or bug | Fail-closed. `npx wrangler tail` in `integrations/hosted-verify/`; check `TRUSTED_OPERATORS` is set; check `/health` |
+| `internal_error` | 500 | Worker misconfig (an unset/malformed `TENANTS`, a quarantined tenant, or a tenant with no trusted operators) or bug | Fail-closed. `npx wrangler tail` in `integrations/hosted-verify/`; check `/health` reports `tenants: "ok"`; check that tenant's entry |
 | *(404/405 `{"error":…}`)* | 404/405 | Wrong path or method | `POST /v1/verify`, `GET /health` — nothing else exists |
 
 Live logs while a partner is testing:
@@ -177,7 +190,7 @@ cd integrations/hosted-verify && npx wrangler tail
 
 Deliberately not built until a paying pilot shapes the need: dashboard,
 billing/metering, self-serve signup, policy-builder UI, compliance portal,
-tenant model / per-partner operator scoping on the Worker, SSO/RBAC, SIEM
-export beyond JSONL, self-host installer, SLA/status page, hosted ZK flows.
+tenant self-service, SSO/RBAC, SIEM export beyond JSONL, self-host installer,
+SLA/status page, hosted ZK flows.
 If a pilot task seems to need one of these, the answer is a manual step in
 this runbook, not new product surface.

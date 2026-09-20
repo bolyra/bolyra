@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Per-partner usage report for the hosted verify preview — a pilot-scoped
+ * Per-tenant usage report for the hosted verify preview — a pilot-scoped
  * sibling of ../scripts/usage.mjs, over the SAME Analytics Engine dataset
- * (bolyra_hosted_verify_usage). One partner label, counts only.
+ * (bolyra_hosted_verify_usage). One tenant label (`<org_id>:<role>`), counts only.
  *
  *   CF_API_TOKEN=$(security find-generic-password -s bolyra-hosted-verify -a cf-analytics-token -w) \
- *     node pilot/usage-partner.mjs <label> [days]
+ *     node pilot/usage-partner.mjs <org_id>:<role> [days]
  *
  * Token scope: Account → Account Analytics → Read (nothing else).
  * Optional env overrides: CF_ACCOUNT_ID, USAGE_DATASET.
  *
- * Prints, for ONE partner token label over the window (default 7 days):
+ * Prints, for ONE tenant label over the window (default 7 days):
  * request counts by route, verdict breakdown (allow/deny/error), deny codes,
  * transport error codes, HTTP status codes, and p50/p95 verify latency.
  * The dataset stores labels and counts only — never tokens, bodies, proofs,
@@ -33,11 +33,12 @@ if (!TOKEN) {
   console.error('CF_API_TOKEN is required (scope: Account → Account Analytics → Read).');
   process.exit(1);
 }
-// The label is embedded in SQL — restrict it to the same charset
-// partner-token.sh enforces, so no quoting tricks are possible.
-if (!label || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(label)) {
-  console.error('usage: node pilot/usage-partner.mjs <label> [days]');
-  console.error('  <label> must match ^[a-z0-9][a-z0-9_-]{0,31}$ (e.g. theseus)');
+// The label is embedded in SQL — restrict it to the exact label grammar:
+// `<org_id>:<role>` where org_id is ^[a-z0-9][a-z0-9-]{1,62}$ and role is
+// admin or verifier. Anything else is rejected before any query is built.
+if (!label || !/^[a-z0-9][a-z0-9-]{1,62}:(admin|verifier)$/.test(label)) {
+  console.error('usage: node pilot/usage-partner.mjs <org_id>:<role> [days]');
+  console.error('  <org_id>:<role> e.g. acme:verifier  (role = admin | verifier)');
   process.exit(1);
 }
 const days = daysArg === undefined ? 7 : Number(daysArg);
@@ -47,11 +48,11 @@ if (!Number.isInteger(days) || days < 1 || days > 90) {
 }
 
 // Row schema (see ../README.md "Observability"):
-//   blob1 route · blob2 partner label · blob3 verdict · blob4 code
+//   blob1 route · blob2 tenant label (org_id:role) · blob3 verdict · blob4 code
 //   blob5 proof kind · blob6 request id · double1 latency_ms · double2 status
 const SQL_API = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/analytics_engine/sql`;
 const WINDOW = `timestamp > NOW() - INTERVAL '${days}' DAY`;
-const PARTNER = `blob2 = '${label}'`;
+const TENANT = `blob2 = '${label}'`;
 
 async function sql(query) {
   const res = await fetch(SQL_API, {
@@ -78,7 +79,7 @@ function section(title, rows) {
 const requestsByRoute = `
   SELECT blob1 AS route, sum(_sample_interval) AS requests
   FROM ${DATASET}
-  WHERE ${WINDOW} AND ${PARTNER}
+  WHERE ${WINDOW} AND ${TENANT}
   GROUP BY route
   ORDER BY requests DESC
   FORMAT JSON`;
@@ -86,7 +87,7 @@ const requestsByRoute = `
 const verdictBreakdown = `
   SELECT blob3 AS verdict, sum(_sample_interval) AS requests
   FROM ${DATASET}
-  WHERE ${WINDOW} AND ${PARTNER}
+  WHERE ${WINDOW} AND ${TENANT}
   GROUP BY verdict
   ORDER BY requests DESC
   FORMAT JSON`;
@@ -94,7 +95,7 @@ const verdictBreakdown = `
 const denyCodes = `
   SELECT blob4 AS code, sum(_sample_interval) AS requests
   FROM ${DATASET}
-  WHERE ${WINDOW} AND ${PARTNER} AND blob3 = 'deny'
+  WHERE ${WINDOW} AND ${TENANT} AND blob3 = 'deny'
   GROUP BY code
   ORDER BY requests DESC
   FORMAT JSON`;
@@ -102,7 +103,7 @@ const denyCodes = `
 const errorCodes = `
   SELECT blob4 AS code, sum(_sample_interval) AS requests
   FROM ${DATASET}
-  WHERE ${WINDOW} AND ${PARTNER} AND blob3 = 'error'
+  WHERE ${WINDOW} AND ${TENANT} AND blob3 = 'error'
   GROUP BY code
   ORDER BY requests DESC
   FORMAT JSON`;
@@ -110,7 +111,7 @@ const errorCodes = `
 const httpStatus = `
   SELECT double2 AS status, sum(_sample_interval) AS requests
   FROM ${DATASET}
-  WHERE ${WINDOW} AND ${PARTNER}
+  WHERE ${WINDOW} AND ${TENANT}
   GROUP BY status
   ORDER BY requests DESC
   FORMAT JSON`;
@@ -121,11 +122,11 @@ const latency = `
     quantileExactWeighted(0.95)(double1, _sample_interval) AS p95_ms,
     sum(_sample_interval) AS requests
   FROM ${DATASET}
-  WHERE ${WINDOW} AND ${PARTNER} AND blob1 = '/v1/verify'
+  WHERE ${WINDOW} AND ${TENANT} AND blob1 = '/v1/verify'
   FORMAT JSON`;
 
 try {
-  console.log(`Partner: ${label} — last ${days} day(s) — dataset ${DATASET}`);
+  console.log(`Tenant: ${label} — last ${days} day(s) — dataset ${DATASET}`);
   section('Requests by route', await sql(requestsByRoute));
   section('Verdict breakdown (allow/deny/error)', await sql(verdictBreakdown));
   section('Deny codes (spec §9)', await sql(denyCodes));

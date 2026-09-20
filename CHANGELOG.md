@@ -17,6 +17,16 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## hosted-verify (unreleased)
+
+### Changed (BREAKING)
+
+- `PREVIEW_TOKEN`, `PARTNER_TOKENS` and `TRUSTED_OPERATORS` are removed. One `TENANTS` secret replaces all three: a JSON object mapping an org id to that tenant's admin token, verifier token and trusted operator keys. Trust is now per tenant — an allow requires the credential's operator key to be in the *calling* tenant's `trusted_operators`. **Migration:** set `TENANTS` before deploying; every existing token stops working the instant it lands; afterwards `npx wrangler secret delete PREVIEW_TOKEN` and `npx wrangler secret delete PARTNER_TOKENS`.
+- A token with the wrong role is `403 {"error":"forbidden"}`. `POST /v1/verify` accepts a tenant's verifier token only; an admin token is rejected there.
+- Configuration defects are the 500 `internal_error` verdict (an unset or malformed `TENANTS`, or a tenant with no trusted operators). Consequence: a malformed request body sent to a deployment whose configuration is broken is now `500 internal_error`, where it used to be `200 malformed_input`.
+- Usage analytics attribute every request to `<org_id>:<role>` instead of a bare partner label; the reserved label `unauthenticated` is unchanged. Tokens are still never recorded.
+- `/health` reports `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses. It is a parseability signal, not per-tenant availability: a quarantined (`disabled`) tenant still reports `ok`.
+
 ## @bolyra/mpp 0.5.0 (2026-09-19)
 
 ### Changed (BREAKING)
