@@ -1,14 +1,19 @@
 import { SELF } from 'cloudflare:test';
+import { TOKENS } from './tenants-fixture';
 
-export const TOKEN = 'test-preview-token';
+export { ORGS, TOKENS, ORG_B_OPERATOR_KEY, buildTestTenants } from './tenants-fixture';
+
 export const BASE = 'https://hosted-verify.test';
 
-/** POST a body to /v1/verify. Objects are JSON-encoded; strings sent raw. */
+/**
+ * POST a body to /v1/verify as org-a's VERIFIER (the default caller). Objects
+ * are JSON-encoded; strings sent raw. `token: null` sends no Authorization.
+ */
 export async function postVerify(
   body: unknown,
   opts: { token?: string | null } = {},
 ): Promise<Response> {
-  const token = opts.token === undefined ? TOKEN : opts.token;
+  const token = opts.token === undefined ? TOKENS.A.verifier : opts.token;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token !== null) headers['authorization'] = `Bearer ${token}`;
   return SELF.fetch(`${BASE}/v1/verify`, {

@@ -3,6 +3,7 @@ import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { buildTestTenants } from './test/tenants-fixture';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -35,13 +36,10 @@ export default defineConfig({
       wrangler: { configPath: './wrangler.jsonc' },
       miniflare: {
         bindings: {
-          PREVIEW_TOKEN: 'test-preview-token',
-          // Labeled partner tokens (test-only values, NOT real secrets).
-          PARTNER_TOKENS: JSON.stringify({
-            theseus: 'theseus-test-token',
-            internal: 'internal-test-token',
-          }),
-          TRUSTED_OPERATORS: opKey,
+          // Three synthetic tenants (test-only tokens, NOT real secrets):
+          // org-a and org-c trust the conformance-fixture operator key,
+          // org-b trusts a second test-only key. See test/tenants-fixture.ts.
+          TENANTS: buildTestTenants(opKey),
           // Deterministic test signing key (NOT a real secret).
           RECEIPT_SIGNER_KEY:
             '0x0101010101010101010101010101010101010101010101010101010101010101',
