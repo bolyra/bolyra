@@ -165,6 +165,17 @@ describe('registration checks, in order', () => {
     expect(typeof b.message).toBe('string');
   });
 
+  it.each([
+    ['operator_pubkey', { ...F.valid.body, operator_pubkey: { ...(F.valid.body.operator_pubkey as object), extra: 1 } }],
+    ['signature', { ...F.valid.body, signature: { ...(F.valid.body.signature as object), extra: 1 } }],
+    ['signature.R8', { ...F.valid.body, signature: { ...(F.valid.body.signature as { R8: object; S: string }), R8: { ...(F.valid.body.signature as { R8: object }).R8, extra: 1 } } }],
+  ])('an unknown nested field in %s → 400 malformed_input', async (_name, payload) => {
+    const res = await postRegister(payload);
+    expect(res.status).toBe(400);
+    expect((await body(res)).error).toBe('malformed_input');
+    expect((await getCredential(F.valid.credential_id)).status).toBe(404);
+  });
+
   it('a body over 64 KiB → 400 malformed_input', async () => {
     const res = await postRegister({ ...F.valid.body, binding: { ...(F.valid.body.binding as object), agent_name: 'x'.repeat(70_000) } });
     expect(res.status).toBe(400);
@@ -191,6 +202,24 @@ describe('ids and methods', () => {
     await postRegister(F.valid.body);
     expect((await getCredential(id)).status).toBe(404);
     expect((await postRevoke(id)).status).toBe(404);
+  });
+
+  it('a malformed id is 404 for EVERY caller and method — before auth, role, quarantine or method are considered', async () => {
+    const bad = `${CREDENTIALS}/not-a-credential-id`;
+    for (const [headers, method] of [
+      [{}, 'GET'],
+      [{ authorization: 'Bearer wrong-token-000000000000000000000000' }, 'GET'],
+      [{ authorization: `Bearer ${TOKENS.A.verifier}` }, 'GET'],
+      [{ authorization: `Bearer ${TOKENS.A.admin}` }, 'POST'],
+      [{ authorization: `Bearer ${TOKENS.A.admin}` }, 'DELETE'],
+    ] as const) {
+      const res = await SELF.fetch(bad, { method, headers });
+      expect(res.status).toBe(404);
+      expect(await body(res)).toEqual({ error: 'not_found', message: 'no such credential' });
+    }
+    const e = { ...env, TENANTS: buildTestTenants(FIXTURE_OPERATOR_KEY, { disabled: [ORGS.A] }) };
+    const quarantined = await worker.fetch(new Request(bad, { headers: { authorization: `Bearer ${TOKENS.A.admin}` } }), e);
+    expect(quarantined.status).toBe(404);
   });
 
   it('unknown sub-path → 404 with the route list; wrong methods → 405 with allow', async () => {

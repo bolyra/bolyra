@@ -47,6 +47,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /** The wire grammar is decimal digits only — narrower than what `BigInt()` would accept. */
 const isDecimal = (v: string): boolean => /^[0-9]+$/.test(v);
 
+/** An object with exactly these keys — unknown nested fields are rejected like unknown top-level ones. */
+function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isPlainObject(value)) return false;
+  const present = Object.keys(value);
+  return present.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(value, k));
+}
+
 export function parseRegistration(body: unknown): ParseResult {
   if (!isPlainObject(body)) return { ok: false, message: 'request must be a JSON object' };
   for (const key of Object.keys(body)) {
@@ -68,6 +75,9 @@ export function parseRegistration(body: unknown): ParseResult {
     }
     throw e;
   }
+  if (!hasExactKeys(body.signature, ['R8', 'S']) || !hasExactKeys(body.signature.R8, ['x', 'y'])) {
+    return { ok: false, message: 'signature: missing or ill-typed fields' };
+  }
   let signature: BundleSignature;
   try {
     signature = parseSig(body.signature);
@@ -75,7 +85,12 @@ export function parseRegistration(body: unknown): ParseResult {
     if (isVerifyDenial(e)) return { ok: false, message: 'signature: missing or ill-typed fields' };
     throw e;
   }
-  if (!isPointDec(body.operator_pubkey) || !isDecimal(body.operator_pubkey.x) || !isDecimal(body.operator_pubkey.y)) {
+  if (
+    !hasExactKeys(body.operator_pubkey, ['x', 'y']) ||
+    !isPointDec(body.operator_pubkey) ||
+    !isDecimal(body.operator_pubkey.x) ||
+    !isDecimal(body.operator_pubkey.y)
+  ) {
     return { ok: false, message: 'operator_pubkey must be { x, y } decimal strings' };
   }
   if (!isDecimal(signature.R8.x) || !isDecimal(signature.R8.y) || !isDecimal(signature.S)) {
