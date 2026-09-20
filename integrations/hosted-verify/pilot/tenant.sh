@@ -40,15 +40,21 @@
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
-#   ./tenant.sh unlock                clear a retained lock once no upload can still be
-#                                     running (then sync)
+#   ./tenant.sh unlock [--force]      clear a retained lock once no upload can still be
+#                                     running (then sync); --force only after confirming with
+#                                     `pgrep -fl wrangler` that no wrangler process remains
 #   Every command except show and unlock takes a per-environment lock ($TENANTS_DIR/.lock); an
 #   interrupt (Ctrl-C/TERM) takes effect only after the in-flight put has finished, so a
-#   half-pushed map cannot be raced. The lock is released only when wrangler confirms the
-#   upload; otherwise it stays, and what is live is UNKNOWN — the secret is write-only, so no
-#   command can look it up and a dry run only re-validates the map that was INTENDED. Recover
-#   with unlock (it refuses while the recorded upload is still alive), then sync to re-put the
-#   intended map, then confirm on the Worker.
+#   half-pushed map cannot be raced. The lock carries an owner token that the put stage
+#   re-checks immediately before it starts an upload, so a run can never push under a lock
+#   that was cleared and re-taken underneath it, and the upload runs in its own process group
+#   so that what is still alive can be asked about afterwards. The lock is released only when
+#   wrangler confirms the upload; otherwise it stays, and what is live is UNKNOWN — the secret
+#   is write-only, so no command can look it up, a dry run only re-validates the map that was
+#   INTENDED, and whether an already-submitted request completed cannot be established from
+#   here at all. That is why the resolution is to re-sync: unlock (it refuses while the
+#   upload's process group is alive, and refuses without --force when that group was never
+#   recorded), then sync to re-put the intended map, then confirm on the Worker.
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -116,7 +122,10 @@ release_lock() {
   # The confirmation marker has reported what it had to report by the time the lock goes; it
   # must not outlive the lock it sits in, or a later run could read a stale confirmation as
   # the answer for its own upload.
-  rm -f "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid"
+  # `owner` is the lock's identity, so it goes with the lock and never before it: while the
+  # retain branch above holds the lock the token must stay readable, or a put stage still
+  # running under it would read a missing owner as a lock that is not its own.
+  rm -f "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid" "$LOCK_DIR/owner"
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
 on_signal() {  # $1 the signal name, INT or TERM
@@ -134,7 +143,7 @@ on_signal() {  # $1 the signal name, INT or TERM
 }
 acquire_lock() {
   mkdir -p "$TENANTS_DIR" || die "could not create the registry directory $TENANTS_DIR"
-  mkdir "$LOCK_DIR" 2>/dev/null || die "another tenant.sh is running for this environment (lock $LOCK_DIR); if none is, remove that directory and re-run"
+  mkdir "$LOCK_DIR" 2>/dev/null || die "another tenant.sh is running for this environment (lock $LOCK_DIR); if none is, run: pilot/tenant.sh unlock"
   LOCK_HELD=1
   # Installed only once the lock is ours. `die` exits, so every refusal path releases it too.
   trap 'release_lock' EXIT
@@ -145,9 +154,18 @@ acquire_lock() {
   trap 'on_signal INT' INT
   trap 'on_signal TERM' TERM
   echo "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+  # The lock's IDENTITY, not just its path. `unlock` can clear a retained lock and the next
+  # run then creates a fresh lock directory at exactly this path, so a stage that recognised
+  # the lock by path alone could write its marker — or start an upload — under somebody
+  # else's lock. The put stage compares this token against `owner` at startup and again in the
+  # instant before the upload exists, and refuses when it does not match. The token identifies
+  # a lock; it is not a credential and guards nothing but this directory.
+  LOCK_TOKEN="$(openssl rand -hex 16)" || die "could not generate a lock owner token (openssl)"
+  printf '%s\n' "$LOCK_TOKEN" > "$LOCK_DIR/owner" || die "could not record the lock owner in $LOCK_DIR"
   # The put stage records the upload in the lock directory before it starts one, so
   # release_lock can tell a confirmed upload from one that may still be in flight.
   export TENANT_LOCK_DIR="$LOCK_DIR"
+  export TENANT_LOCK_TOKEN="$LOCK_TOKEN"
 }
 
 # The repo conformance-fixture operator key (its private half is public). Seeded into a
@@ -368,37 +386,89 @@ cmd_sync() {
     exit "$rc"
   fi
   # No marker at all: the pipeline stopped before the put stage started an upload (keychain,
-  # assembly, or the validator refusing), so the live map is untouched and still the old one.
-  die "the TENANTS map was NOT updated; the previous map (including any token you just rotated or removed) is STILL ACCEPTED by the Worker. Fix the error and re-run: $0 sync"
+  # assembly, or the validator refusing). That is a fact about THIS RUN and it is the only
+  # thing that can be claimed here. What the Worker is serving is whatever the last upload put
+  # there, which may have been days ago or may be a map whose own outcome was never confirmed;
+  # `wrangler secret put` is write-only, so no command can check. Saying the previous map is
+  # "still accepted" would assert exactly that unreadable thing — and would be flatly wrong
+  # where the live secret is empty or was never configured.
+  die "this run started no upload and changed nothing; the map the Worker holds is whatever was pushed last. Fix the error and re-run: pilot/tenant.sh sync"
 }
 
-# Clear a lock that a previous run retained. Takes NO lock itself — the lock is exactly what
-# it is here to remove — and refuses while anything it can still see could be uploading.
+# The unlock mutex. `unlock` must not take the registry lock — the registry lock is exactly
+# what it is here to remove — but two unlocks running at once are their own race: both read a
+# lock that looks clearable, one pauses, the other clears it and a waiting `sync` takes a NEW
+# lock at the same path, and the one that paused then deletes that new owner's lock and the
+# evidence under it. This second, much shorter mutex closes that: it is held from before the
+# first check to after the directory is gone, so two unlocks serialise and a `sync` can only
+# acquire once the whole clearing has finished.
+UNLOCK_DIR="$TENANTS_DIR/.unlock"
+UNLOCK_HELD=0
+release_unlock() {
+  [ "$UNLOCK_HELD" = 1 ] || return 0
+  UNLOCK_HELD=0
+  rm -f "$UNLOCK_DIR/pid"
+  rmdir "$UNLOCK_DIR" 2>/dev/null || true
+}
+
+# Clear a lock that a previous run retained. Takes NO registry lock, and refuses while
+# anything it can still see could be uploading.
 cmd_unlock() {
-  local extra="${1:-}" p
-  [ -z "$extra" ] || die "unlock: unexpected extra argument '$extra'"
+  local force=0 p pgid putpid
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force) force=1 ;;
+      *) die "unlock: unknown argument '$1' (only --force is accepted)" ;;
+    esac
+    shift
+  done
+  # A lock cannot exist without its registry directory, so there is nothing to serialise
+  # against either.
+  if [ ! -d "$TENANTS_DIR" ]; then
+    echo "nothing to unlock: no lock directory at $LOCK_DIR"
+    return 0
+  fi
+  mkdir "$UNLOCK_DIR" 2>/dev/null || die "another unlock is running for this environment (mutex $UNLOCK_DIR, pid $(cat "$UNLOCK_DIR/pid" 2>/dev/null)); wait for it — it removes that directory on its way out"
+  UNLOCK_HELD=1
+  trap 'release_unlock' EXIT
+  echo "$$" > "$UNLOCK_DIR/pid" 2>/dev/null || true
   if [ ! -d "$LOCK_DIR" ]; then
     echo "nothing to unlock: no lock directory at $LOCK_DIR"
     return 0
   fi
   if [ -e "$LOCK_DIR/upload.pending" ]; then
-    # Both recorded pids: `pid` is the launcher the put stage started, `put` is the put stage
-    # itself. Either being alive means an upload can still be in flight, and clearing the lock
-    # under it is precisely the interleaving the lock exists to prevent.
-    for p in $(awk '/^(pid|put) /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null); do
-      if kill -0 "$p" 2>/dev/null; then
-        die "the upload (pid $p) is still running; wait for it to finish, then re-run unlock"
-      fi
-    done
-  else
-    # No upload was ever recorded, so the only thing that can hold this lock is another
-    # tenant.sh between acquiring it and starting a put.
-    p="$(cat "$LOCK_DIR/pid" 2>/dev/null)" || p=""
-    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
-      die "another tenant.sh (pid $p) holds the lock"
+    # `pgid` covers the WHOLE upload: the launcher, wrangler, and anything either started.
+    # A group id answers for all of them at once and stays valid while any member lives,
+    # which a launcher pid does not — kill the launcher and its uploader carries on talking
+    # to Cloudflare with nothing recorded still alive.
+    pgid="$(awk '/^pgid /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null)"
+    case "$pgid" in ''|*[!0-9]*) pgid="" ;; esac
+    if [ -n "$pgid" ] && kill -0 -- -"$pgid" 2>/dev/null; then
+      die "the upload's process group (pgid $pgid) is still alive; wait for it to finish, then re-run unlock"
+    fi
+    putpid="$(awk '/^put /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null)"
+    case "$putpid" in ''|*[!0-9]*) putpid="" ;; esac
+    if [ -n "$putpid" ] && kill -0 "$putpid" 2>/dev/null; then
+      die "the put stage (pid $putpid) is still alive; wait for it to finish, then re-run unlock"
+    fi
+    if [ -z "$pgid" ]; then
+      # The marker exists but the group was never written into it: either the put stage died
+      # between writing the marker and starting the upload, or the rewrite that records the
+      # group failed. An upload may therefore be running that nothing here can see, and an
+      # empty list of recorded pids is not permission to clear the lock — it is the one case
+      # where only a person can look.
+      [ "$force" = 1 ] || die "the upload's process group was never recorded; confirm no wrangler process is running (pgrep -fl wrangler), then run: pilot/tenant.sh unlock --force"
     fi
   fi
-  rm -f "$LOCK_DIR/upload.pending" "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid"
+  # Always, marker or no marker: a live tenant.sh holds this lock legitimately and is about to
+  # start an upload of its own. Skipping this check whenever a marker happened to exist is how
+  # a lock gets cleared out from under a run that is still working.
+  p="$(cat "$LOCK_DIR/pid" 2>/dev/null)" || p=""
+  case "$p" in ''|*[!0-9]*) p="" ;; esac
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+    die "another tenant.sh (pid $p) holds the lock"
+  fi
+  rm -f "$LOCK_DIR/upload.pending" "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/owner" "$LOCK_DIR/pid"
   rmdir "$LOCK_DIR" 2>/dev/null || die "could not remove the lock directory $LOCK_DIR"
   echo "lock cleared; the live map is UNKNOWN until you re-sync — run: pilot/tenant.sh sync, then confirm on the Worker"
 }
@@ -440,6 +510,6 @@ case "$cmd" in
   remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" ;;
   sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" ;;
   show)    cmd_show "${1:-}" ;;
-  unlock)  cmd_unlock "${1:-}" ;;
+  unlock)  cmd_unlock "$@" ;;
   *)       usage ;;
 esac

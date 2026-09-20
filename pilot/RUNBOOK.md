@@ -61,12 +61,21 @@ copy. Back the keychain up; lose it and the only recovery is re-keying every
 tenant. Every command except `show` and `unlock` holds a per-environment
 lock for its whole run, so two operators cannot interleave a quarantine and
 a sync. An interrupt takes effect only after the in-flight put has finished.
-The lock is released only when wrangler confirms the upload; otherwise it
-stays, and the outcome of that upload is unknown (the secret is write-only).
-Recovery: `tenant.sh unlock` (it refuses while the recorded upload process
-is still alive), then `tenant.sh sync` to re-put the intended map, then
-confirm on the Worker: `/health` reports `tenants: "ok"` and one request
-with a tenant's verifier token verifies. A `SIGKILL` of the put stage in
+The lock carries an owner token that the upload stage re-checks in the
+instant before it starts, so a run whose lock was cleared and re-taken
+underneath it pushes nothing; the upload itself runs in its own process
+group, which is what makes "is anything still uploading?" a question with an
+answer. The lock is released only when wrangler confirms the upload;
+otherwise it stays, and the outcome of that upload is unknown. Nothing local
+can settle it: the secret is write-only, so a request that was already
+submitted cannot be shown to have completed or not — which is exactly why
+the resolution is to push the intended map again rather than to investigate.
+Recovery: `tenant.sh unlock`, which refuses while the upload's process group
+is still alive, and refuses without `--force` when that group was never
+recorded at all — use `--force` only after `pgrep -fl wrangler` shows nothing
+remains. Then `tenant.sh sync` to re-put the intended map, then confirm on
+the Worker: `/health` reports `tenants: "ok"` and one request with a
+tenant's verifier token verifies. A `SIGKILL` of the put stage in
 the instant between starting wrangler and handing it the map can leave
 wrangler uploading an EMPTY map: every tenant then fails closed (500) until
 that re-sync.
