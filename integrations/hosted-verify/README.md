@@ -29,7 +29,27 @@ So an `allow` means, and only means:
 > `trusted_operators` list in the deployment's `TENANTS` secret) signed a
 > binding authorizing this exact `{agent_name, project_key, program, model,
 > capabilities, expiry}` (binding v2), the request matches that signed binding,
-> and the granted capabilities are a subset of it.
+> the granted capabilities are a subset of it, **and that signed binding is
+> ACTIVE in the tenant's managed credential registry** (registered with
+> `POST /v1/credentials` and not revoked).
+
+**Trust-policy amendment (managed registry).** For this verifier, the
+configured trusted-root source (spec §9, `untrusted_root`) is *active
+signer-binding membership in the tenant's registry*, in addition to
+operator-key membership. A credential that is not ACTIVE — never registered,
+or revoked — is outside the trusted-root source, so the verdict is
+`deny untrusted_root` with `detail: { "reason": "credential_not_active",
+"credential_id": "<hex>" }`. Revocation is trust-anchor removal. The EVC spec
+does not define a revocation mechanism; this is a documented verifier policy,
+permitted because `untrusted_root` is proof-system-agnostic and the deny
+schema is unchanged. The registry is consulted only after every classical
+check passes; a registry failure or a **2,000 ms** read deadline is the
+fail-closed `500` `internal_error` verdict, never an allow.
+
+**Rollout.** Register every binding a tenant expects to verify *before*
+deploying a build that reports `registry_enforced: true` on `/health`; once
+such a build has served a tenant, a build that verified without the registry
+must never be deployed again.
 
 The trust anchor is the **operator key set**, not the proof's Merkle root
 (which is unverified here and carries no weight). As of **binding v2** the signed
@@ -55,16 +75,27 @@ below verify against a local dev server.
 
 ## 5-minute quickstart
 
-You need the preview URL and your tenant's **verifier token** (issued per design partner at provisioning).
+You need the preview URL and your tenant's **verifier token** and **admin
+token** (both issued per design partner at provisioning).
 
 ```bash
 BASE=https://bolyra-hosted-verify.<account>.workers.dev   # preview URL
 TOKEN=<your verifier token>
+ADMIN=<your admin token>
 
 # 1. Health + capability disclosure (no auth):
 curl -s $BASE/health | jq
 
-# 2. Verify a known-good presentation (allow):
+# 2. Register the example's signed binding in your tenant's registry
+#    (admin token; idempotent — a second call returns 200 with the same id):
+curl -s -X POST $BASE/v1/credentials \
+  -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  --data @examples/registration.allow.json | jq
+
+# → { "credential_id": "<64 hex>", "status": "ACTIVE", "registered_at": … }
+
+# 3. Verify a known-good presentation of that binding (allow):
 curl -s -X POST $BASE/v1/verify \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -72,8 +103,9 @@ curl -s -X POST $BASE/v1/verify \
 
 # → { "verdict": "allow", "kind": "classical",
 #     "consume_nonces": [ { "issuer_key": "…", "nonce": "…", "retain_until": … } ] }
+#   (the response also carries x-bolyra-credential-id: <the id from step 2>)
 
-# 3. A presentation whose credential lacks the required scope (deny):
+# 4. A presentation whose credential lacks the required scope (deny):
 curl -s -X POST $BASE/v1/verify \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -82,11 +114,16 @@ curl -s -X POST $BASE/v1/verify \
 # → { "verdict": "deny", "kind": "classical", "code": "scope_exceeded", … }
 ```
 
-The two example request files are copies of the repo's conformance fixtures
-(`integrations/cli/test/fixtures/verify/`); the fixture operator key is seeded
-into every pilot tenant's `trusted_operators`, so the quickstart works as
-issued. To verify **your own** presentations, your operator public key must
-also be in that list — that is the design-partner conversation.
+Skip step 2 and step 3 answers `deny untrusted_root` with
+`detail.reason: "credential_not_active"` — an allow requires the signed binding
+to be ACTIVE in the calling tenant's registry, not just a trusted operator key.
+The example request files are copies of the repo's conformance fixtures
+(`integrations/cli/test/fixtures/verify/`, binding v2) and the registration
+file is that fixture's signed binding in the `POST /v1/credentials` shape; the
+fixture operator key is seeded into every pilot tenant's `trusted_operators`,
+so the quickstart works as issued. To verify **your own** presentations, your
+operator public key must be in that list *and* each signed binding must be
+registered — that is the design-partner conversation.
 
 ## API
 
@@ -115,6 +152,12 @@ also be in that list — that is the design-partner conversation.
 - **Fail-closed:** malformed JSON, non-object bodies, oversized bodies, wrong
   request version, undecodable bundles — every one is an explicit `deny` with
   a spec §9 code, never a silent allow.
+- **`x-bolyra-credential-id`** — on an `allow`, the credential id of the
+  presented binding (the same value `POST /v1/credentials` returned). Unsigned
+  operational correlation only: it is not an authorization input, it is not
+  in the signed receipt, and it is not a CORS-exposed header. Receipts issued
+  before a signed attribution field exists can never acquire signed provenance
+  retroactively, so treat this header as correlation, never as evidence.
 
 ### Replay protection: host nonce mode only (and its classical limit)
 
@@ -173,7 +216,7 @@ Unauthenticated. Returns service status, the **DESIGN PARTNER PREVIEW**
 label, `verifier_kind: "classical"`, `nonce_mode: "host"`, a `trust_model`
 sentence, and the live `checks_authenticated` / `checks_consistency_only` /
 `checks_not_performed` lists (the honest capability disclosure below,
-machine-readable). Also `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses; a quarantined (`disabled`) tenant still reports `ok` (this is parseability, not per-tenant availability).
+machine-readable). Also `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses; a quarantined (`disabled`) tenant still reports `ok` (this is parseability, not per-tenant availability). Also `registry: "durable-object"`, `credential_id_version: "v1"`, `registry_enforced: true` (emitted only by builds that consult the registry on `/v1/verify`), and the trust-policy amendment text under `trust_policy`.
 
 ### Signed receipts (`X-Bolyra-Receipt`)
 
@@ -207,6 +250,9 @@ operator-signed fact or a fail-closed gate:
    part of the operator-signed binding and pinned to the revealed credential
    expiry, so a presenter cannot re-anchor a later expiry. An obsolete
    five-field v1 binding is rejected `unsupported_version`.
+6. **Registry membership** — the verified signed binding is ACTIVE in the
+   calling tenant's managed credential registry (see the trust-policy
+   amendment above). Checked last; a registry failure fails closed.
 
 **Consistency-only (NOT operator-signed in `bvp/1`)** — these catch honest
 misconfiguration and are needed for internal coherence, but a holder of a
@@ -214,17 +260,17 @@ trusted operator key could self-assert any value here, so they do **not**
 soundly enforce the permission bitmask/scope; the zk-class `bolyra verify` CLI
 does (expiry, by contrast, IS signature-bound as of binding v2, item 5 above):
 
-6. Request schema + version (spec §2) and `bvp/1` structure + proof-envelope
+7. Request schema + version (spec §2) and `bvp/1` structure + proof-envelope
    shape (`@bolyra/sdk` `validateEnvelope`).
-7. Poseidon scope anchoring — the revealed preimage recomputes the
+8. Poseidon scope anchoring — the revealed preimage recomputes the
    *self-asserted* `scopeCommitment` public signal.
-8. Model-hash binding — `sha256(model) mod p` equals the revealed
+9. Model-hash binding — `sha256(model) mod p` equals the revealed
    `modelHash`.
-9. Capability → permission-bit mapping + cumulative-scope subset (over the
+10. Capability → permission-bit mapping + cumulative-scope subset (over the
    revealed bitmask).
-10. Strict expiry against caller-supplied `now_unix` (`now == expiry` is
+11. Strict expiry against caller-supplied `now_unix` (`now == expiry` is
    expired; over the **signature-bound** expiry, item 5).
-11. Nullifier presence + `consume_nonces` emission (host nonce mode).
+12. Nullifier presence + `consume_nonces` emission (host nonce mode).
 
 **Not** performed (zk-class territory — use the `bolyra verify` CLI):
 
@@ -255,6 +301,13 @@ Two layers, both configured in `wrangler.jsonc`:
    `USAGE`). The write happens after the verdict is decided and is
    fire-and-forget: **an Analytics Engine outage never affects verdicts**,
    and a missing binding is a no-op.
+3. **One structured log line per `/v1/verify` decision and per registry
+   request** (Workers Logs — as distinct from Analytics, whose table below
+   stores no credential ids):
+   `{ request_id, org_id, role, route, verdict, code, credential_id?, latency_ms }`
+   — `credential_id` on an allow and on registry requests that name one (a
+   hash of operator-signed data, not a secret). Never a request body, a bearer
+   token, or an IP.
 
 ### What is stored (the complete list)
 
