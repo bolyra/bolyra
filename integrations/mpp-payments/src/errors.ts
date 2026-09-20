@@ -35,3 +35,13 @@ export function isBolyraDeniedError(err: unknown): err is BolyraDeniedError {
     typeof (err as { verdict?: { code?: unknown } }).verdict?.code === 'string'
   );
 }
+
+/** Same pattern for the construction-time error: `instanceof`, then name + Error-like shape. */
+export function isBolyraGateConfigError(err: unknown): err is BolyraGateConfigError {
+  if (err instanceof BolyraGateConfigError) return true;
+  return (
+    typeof err === 'object' && err !== null &&
+    (err as { name?: unknown }).name === 'BolyraGateConfigError' &&
+    typeof (err as { message?: unknown }).message === 'string'
+  );
+}

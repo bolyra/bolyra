@@ -31,7 +31,7 @@ under `contracts/deployments/` and `circuits/build/`.
 
 ### Added
 
-- `handleDenials`, `sendDenial`, `BolyraDeniedError`, `BolyraGateConfigError`, `isBolyraDeniedError` exports.
+- `handleDenials`, `sendDenial`, `BolyraDeniedError`, `BolyraGateConfigError`, `isBolyraDeniedError`, `isBolyraGateConfigError` exports.
 - `test-integration/`: the gate driven through real `Mppx.create()` (mppx pinned 0.8.13), with an application-owned execution counter; runs in CI alongside `typecheck:integration`.
 - `MppxServerMethodLike` hook typing accepts a real mppx `Method.Server` under strict settings (method syntax; optional `realm`/`secretKey`/`credential`/`request` fields).
 - The shipped `demo` CLI and `examples/mandate-demo` migrated to the new contract.

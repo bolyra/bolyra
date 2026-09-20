@@ -1,10 +1,15 @@
+// Error recognition goes through the package's structural guards, never `instanceof`: this .mts
+// suite `import`s ../src/errors.js while src/gate.ts `require`s ./errors, and whether those resolve
+// to one class object depends on the loader (tsx on Node 20 yields two instances, so `instanceof`
+// is false even though the caught error is the right one; Node 22.12+/24 share the CJS cache). The
+// guards are also what a consumer with two hoisted copies of @bolyra/mpp relies on.
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildApp, paymentHeader, requestWith, serverMethod, gate,
   classicalGateOptions, stubVerifierFetch,
 } from './harness.mjs';
-import { BolyraDeniedError, BolyraGateConfigError } from '../src/errors.js';
+import { isBolyraDeniedError, isBolyraGateConfigError } from '../src/errors.js';
 import { handleDenials } from '../src/handle-denials.js';
 import { makeBundle, AUDIENCE, NOW_UNIX } from '../test/helpers.js';
 import { Challenge, Credential } from 'mppx';
@@ -68,7 +73,7 @@ for (const [name, mk, code, status] of denyCases) {
     const payment = await paymentHeader(mppx);
     const req = () => requestWith({ payment, bundle });
 
-    await assert.rejects(handler(await req()), (e: unknown) => e instanceof BolyraDeniedError && e.verdict.code === code);
+    await assert.rejects(handler(await req()), (e: unknown) => isBolyraDeniedError(e) && e.verdict.code === code);
     assert.equal(state.counter, 0, 'no side effect without handleDenials');
     if (stub) assert.equal(stub.calls.length, 1, 'one verifier call per request');
 
@@ -97,7 +102,7 @@ test('replay: an allow that consumes a nonce denies nonce_replayed on the second
   const bundle = await makeBundle();
   assert.equal((await handler(await requestWith({ payment: await paymentHeader(mppx), bundle }))).status, 200);
   await assert.rejects(handler(await requestWith({ payment: await paymentHeader(mppx), bundle })), (e: unknown) =>
-    e instanceof BolyraDeniedError && e.verdict.code === 'nonce_replayed');
+    isBolyraDeniedError(e) && e.verdict.code === 'nonce_replayed');
   assert.equal(state.counter, 1);
   assert.equal(stub.calls.length, 2, 'both presentations reached the verifier; the gate (not the stub) denied the replay');
   assert.deepEqual(Object.keys(stub.calls[0]!.body as object).sort(), ['bundle', 'now_unix', 'request', 'version']);
@@ -126,7 +131,7 @@ test('standing mandate: two fresh presentations of the SAME binding through one 
   // first allow (it reserved each distinct nullifier, not nothing), so the same string denies.
   await assert.rejects(
     handler(await requestWith({ payment: await paymentHeader(mppx), bundle: firstBundle })),
-    (e: unknown) => e instanceof BolyraDeniedError && e.verdict.code === 'nonce_replayed',
+    (e: unknown) => isBolyraDeniedError(e) && e.verdict.code === 'nonce_replayed',
   );
   assert.equal(state.counter, 2, 'the replayed presentation never reached the protected action');
 
@@ -164,7 +169,7 @@ test("handshake under enforce:'always' (host-nonce verifier): discovery reserves
   // 2. Pay with the credential minted from THAT 402's challenge, re-sending A => nonce_replayed.
   const payment = credentialFrom402(discovery);
   await assert.rejects(handler(await requestWith({ payment, bundle: bundleA })), (e: unknown) =>
-    e instanceof BolyraDeniedError && e.verdict.code === 'nonce_replayed' && e.response.status === 403);
+    isBolyraDeniedError(e) && e.verdict.code === 'nonce_replayed' && e.response.status === 403);
   assert.equal(state.counter, 0);
   assert.equal(stub.calls.length, 2, 'the replay reached the verifier; the gate (not the stub) denied it');
 
@@ -206,13 +211,13 @@ test("counterexample A: enforce:'payment' + original preflight returning 403 on 
   const gated = gate(serverMethod({ preflight: () => new Response('nope', { status: 403 }) }), await classicalGateOptions({ enforce: 'payment' }));
   const { state, handler } = buildApp(gated);
   await assert.rejects(handler(await requestWith({ bundle: null })), (e: unknown) =>
-    e instanceof BolyraDeniedError && e.verdict.code === 'internal_error' && e.response.status === 500);
+    isBolyraDeniedError(e) && e.verdict.code === 'internal_error' && e.response.status === 500);
   assert.equal(state.counter, 0);
 });
 
 test("counterexample B: enforce:'payment' + authorize hook => refused at construction", async () => {
   await assert.rejects(
     (async () => gate(serverMethod({ authorize: async () => undefined }), await classicalGateOptions({ enforce: 'payment' })))(),
-    (e: unknown) => e instanceof BolyraGateConfigError,
+    (e: unknown) => isBolyraGateConfigError(e),
   );
 });

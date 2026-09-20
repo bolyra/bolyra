@@ -74,5 +74,10 @@ export {
   type VerifierRequestContext,
 } from './types';
 
-export { BolyraDeniedError, BolyraGateConfigError, isBolyraDeniedError } from './errors';
+export {
+  BolyraDeniedError,
+  BolyraGateConfigError,
+  isBolyraDeniedError,
+  isBolyraGateConfigError,
+} from './errors';
 export { handleDenials, sendDenial, type DenialResponseWriter } from './handle-denials';
