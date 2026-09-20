@@ -9,8 +9,8 @@ declare global {
 }
 
 type EnvShape = Env & {
-  /** Injected by vitest.config.mts for test/wrangler-config.spec.ts (not a Worker binding). */
-  WRANGLER_CONFIG: string;
+  /** Injected by vitest.config.mts for test/wrangler-config.spec.ts (not a Worker binding, so it exists only under vitest). */
+  WRANGLER_CONFIG?: string;
 };
 
 export {};
