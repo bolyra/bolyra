@@ -24,7 +24,7 @@ import { Receipt } from 'mppx';
 import { issueMandate, type IssuedMandate } from '@bolyra/mpp';
 import { paidCall } from './client.js';
 import { AUDIENCE, MODEL, createServer } from './server.js';
-import { health, register, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
+import { DiagnosticError, health, register, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
 import { CLI_VERSION, PACKAGES } from './versions.js';
 
 /** The repo's documented test-only operator scalar; the placeholder tenant trusts its public key. */
@@ -44,6 +44,8 @@ const hosted: HostedVerifier = {
   adminToken: process.env.ADMIN_TOKEN ?? 'local-admin-token-000000000000000000',
   verifierToken: process.env.VERIFIER_TOKEN ?? 'local-verifier-token-0000000000000000',
 };
+/** A bearer token is printable ASCII without spaces; anything else would make a header library quote it in an error. */
+const TOKEN_SHAPE = /^[\x21-\x7e]{1,256}$/;
 
 // ─── What may be printed. Anything else a server sends back is withheld. ───────────────
 const WITHHELD = '<unexpected value withheld>';
@@ -89,6 +91,9 @@ function detailOf(verdict: { detail?: unknown } | undefined): { reason?: unknown
 }
 
 async function main(): Promise<void> {
+  if (!TOKEN_SHAPE.test(hosted.adminToken) || !TOKEN_SHAPE.test(hosted.verifierToken)) {
+    throw new DiagnosticError('ADMIN_TOKEN and VERIFIER_TOKEN must be printable ASCII without spaces (values withheld)');
+  }
   console.log(`managed revocation — @bolyra/mpp ${PACKAGES.mpp}, mppx ${PACKAGES.mppx}, @bolyra/cli ${CLI_VERSION}, verifier ${hosted.url}\n`);
 
   // 0. The verifier is a registry-enforcing build with a parsed tenant config and receipts on.
@@ -172,8 +177,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((e: unknown) => {
-  // Our own errors name a route, a status, and a byte count; a library error names itself.
-  // Neither carries server-supplied text.
-  console.error(e instanceof Error ? e.message : 'unexpected failure (details withheld)');
+  // Only our own diagnostics are printed: they name a route, a status, and a byte count.
+  // Any other error may quote server- or environment-supplied text, so only its class is shown.
+  console.error(e instanceof DiagnosticError ? e.message : `unexpected ${e instanceof Error ? e.name : typeof e} (details withheld)`);
   process.exitCode = 1;
 });
