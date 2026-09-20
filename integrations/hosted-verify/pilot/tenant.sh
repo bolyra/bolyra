@@ -40,21 +40,11 @@
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
-#   ./tenant.sh unlock [--force]      clear a retained lock once no upload can still be
-#                                     running (then sync); --force only after confirming with
-#                                     `pgrep -fl wrangler` that no wrangler process remains
-#   Every command except show and unlock takes a per-environment lock ($TENANTS_DIR/.lock); an
-#   interrupt (Ctrl-C/TERM) takes effect only after the in-flight put has finished, so a
-#   half-pushed map cannot be raced. The lock carries an owner token that the put stage
-#   re-checks immediately before it starts an upload, so a run can never push under a lock
-#   that was cleared and re-taken underneath it, and the upload runs in its own process group
-#   so that what is still alive can be asked about afterwards. The lock is released only when
-#   wrangler confirms the upload; otherwise it stays, and what is live is UNKNOWN — the secret
-#   is write-only, so no command can look it up, a dry run only re-validates the map that was
-#   INTENDED, and whether an already-submitted request completed cannot be established from
-#   here at all. That is why the resolution is to re-sync: unlock (it refuses while the
-#   upload's process group is alive, and refuses without --force when that group was never
-#   recorded), then sync to re-put the intended map, then confirm on the Worker.
+#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock) for its whole
+#   run. An interrupt (Ctrl-C/TERM aimed at the shell or the put stage) takes effect only
+#   after the in-flight put has finished. The lock is released only when wrangler confirms the
+#   upload or no upload was started; otherwise it stays and the outcome is unknown — there is
+#   no automatic unlock; see pilot/RUNBOOK.md, "Recovering a retained lock".
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -116,31 +106,14 @@ release_lock() {
   # pending name is the one honest answer to "could a put still be in flight, or have landed
   # unseen?" — keep the lock and say so.
   if [ -e "$LOCK_DIR/upload.pending" ]; then
-    echo "error: lock retained at $LOCK_DIR: the last upload was not confirmed complete (see $LOCK_DIR/upload.pending) and what is live is unknown; recover with: pilot/tenant.sh unlock, then pilot/tenant.sh sync" >&2
+    echo "error: lock retained at $LOCK_DIR: the last upload was not confirmed complete (see $LOCK_DIR/upload.pending) and what is live is unknown; see pilot/RUNBOOK.md, \"Recovering a retained lock\"" >&2
     return 0
   fi
   # The confirmation marker has reported what it had to report by the time the lock goes; it
   # must not outlive the lock it sits in, or a later run could read a stale confirmation as
   # the answer for its own upload.
-  # `owner` is the lock's identity, so it goes with the lock and never before it: while the
-  # retain branch above holds the lock the token must stay readable, or a put stage still
-  # running under it would read a missing owner as a lock that is not its own.
-  rm -f "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid" "$LOCK_DIR/owner"
+  rm -f "$LOCK_DIR/upload.confirmed"
   rmdir "$LOCK_DIR" 2>/dev/null || true
-}
-# True when the marker at $1 was NOT written under the lock that is there now. The put stage
-# stamps the lock's owner token into the first line of every marker it writes. Between its
-# startup check and that write there is a window — this shell dead, no marker yet to stop an
-# unlock — in which the lock can be cleared and re-taken at the same path, and the orphaned put
-# stage would then leave its stale marker in the new lock: tracking that names a run nobody
-# here is waiting for. A marker whose token is not the current lock's is that marker, and
-# neither the sync's report nor unlock's clearing may be based on it.
-marker_is_foreign() {  # $1 marker path
-  local m l
-  m="$(awk '/^owner /{print $2; exit}' "$1" 2>/dev/null)" || m=""
-  l="$(cat "$LOCK_DIR/owner" 2>/dev/null)" || l=""
-  [ -n "$m" ] && [ -n "$l" ] && [ "$m" = "$l" ] && return 1
-  return 0
 }
 on_signal() {  # $1 the signal name, INT or TERM
   # Bash defers a trapped signal that arrives while a FOREGROUND command is running until that
@@ -157,7 +130,10 @@ on_signal() {  # $1 the signal name, INT or TERM
 }
 acquire_lock() {
   mkdir -p "$TENANTS_DIR" || die "could not create the registry directory $TENANTS_DIR"
-  mkdir "$LOCK_DIR" 2>/dev/null || die "another tenant.sh is running for this environment (lock $LOCK_DIR); if none is, run: pilot/tenant.sh unlock"
+  # An existing lock blocks this run whatever its age: nothing local can tell a lock a live run
+  # is holding from one a previous run retained because an upload's outcome is unknown, and
+  # clearing either on a timer is how the interleaving the lock exists to prevent happens.
+  mkdir "$LOCK_DIR" 2>/dev/null || die "another tenant.sh is running for this environment, or a previous run left its lock because an upload's outcome is unknown (lock $LOCK_DIR); see pilot/RUNBOOK.md, \"Recovering a retained lock\""
   LOCK_HELD=1
   # Installed only once the lock is ours. `die` exits, so every refusal path releases it too.
   trap 'release_lock' EXIT
@@ -167,19 +143,9 @@ acquire_lock() {
   # finished and still leaves through the EXIT trap.
   trap 'on_signal INT' INT
   trap 'on_signal TERM' TERM
-  echo "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
-  # The lock's IDENTITY, not just its path. `unlock` can clear a retained lock and the next
-  # run then creates a fresh lock directory at exactly this path, so a stage that recognised
-  # the lock by path alone could write its marker — or start an upload — under somebody
-  # else's lock. The put stage compares this token against `owner` at startup and again in the
-  # instant before the upload exists, and refuses when it does not match. The token identifies
-  # a lock; it is not a credential and guards nothing but this directory.
-  LOCK_TOKEN="$(openssl rand -hex 16)" || die "could not generate a lock owner token (openssl)"
-  printf '%s\n' "$LOCK_TOKEN" > "$LOCK_DIR/owner" || die "could not record the lock owner in $LOCK_DIR"
   # The put stage records the upload in the lock directory before it starts one, so
   # release_lock can tell a confirmed upload from one that may still be in flight.
   export TENANT_LOCK_DIR="$LOCK_DIR"
-  export TENANT_LOCK_TOKEN="$LOCK_TOKEN"
 }
 
 # The repo conformance-fixture operator key (its private half is public). Seeded into a
@@ -388,22 +354,16 @@ cmd_sync() {
   # under the lock: upload.confirmed only after wrangler said the upload landed, upload.pending
   # for as long as that is unknown, and neither when it never started an upload at all.
   if [ -e "$LOCK_DIR/upload.confirmed" ]; then
+    # What is reported is what WRANGLER reported. Nothing here has observed the Worker, and
+    # nothing here can establish when the request took effect relative to any other.
     case "$rc" in
       130|143) echo "done (an interrupt arrived after the put completed); secrets take effect on the next request" >&2 ;;
       *)       echo "done. Secrets take effect on the next request (no redeploy)." >&2 ;;
     esac
     exit "$rc"
   fi
-  if [ -e "$LOCK_DIR/upload.pending" ] && marker_is_foreign "$LOCK_DIR/upload.pending"; then
-    # Not this run's marker: some earlier run's put stage outlived its shell and recorded
-    # itself here after this lock was taken. Nothing under it describes THIS sync, so it
-    # cannot be reported as this sync's outcome — and the lock stays until someone has looked.
-    echo "error: the upload marker under this lock belongs to another run (stale); the lock is retained — run: pilot/tenant.sh unlock" >&2
-    [ "$rc" != 0 ] || rc=1
-    exit "$rc"
-  fi
   if [ -e "$LOCK_DIR/upload.pending" ]; then
-    echo "error: the outcome of the upload is UNKNOWN — the intended map may or may not be live; the lock is retained. Recovery: pilot/tenant.sh unlock (refuses while the upload can still be running), then pilot/tenant.sh sync to re-put the intended map, then confirm on the Worker (/health tenants \"ok\" and one authenticated request)." >&2
+    echo "error: the outcome of the upload is UNKNOWN — the intended map may or may not be live; the lock is retained. Follow pilot/RUNBOOK.md, \"Recovering a retained lock\"." >&2
     [ "$rc" != 0 ] || rc=1
     exit "$rc"
   fi
@@ -415,92 +375,6 @@ cmd_sync() {
   # "still accepted" would assert exactly that unreadable thing — and would be flatly wrong
   # where the live secret is empty or was never configured.
   die "this run started no upload and changed nothing; the map the Worker holds is whatever was pushed last. Fix the error and re-run: pilot/tenant.sh sync"
-}
-
-# The unlock mutex. `unlock` must not take the registry lock — the registry lock is exactly
-# what it is here to remove — but two unlocks running at once are their own race: both read a
-# lock that looks clearable, one pauses, the other clears it and a waiting `sync` takes a NEW
-# lock at the same path, and the one that paused then deletes that new owner's lock and the
-# evidence under it. This second, much shorter mutex closes that: it is held from before the
-# first check to after the directory is gone, so two unlocks serialise and a `sync` can only
-# acquire once the whole clearing has finished.
-UNLOCK_DIR="$TENANTS_DIR/.unlock"
-UNLOCK_HELD=0
-release_unlock() {
-  [ "$UNLOCK_HELD" = 1 ] || return 0
-  UNLOCK_HELD=0
-  rm -f "$UNLOCK_DIR/pid"
-  rmdir "$UNLOCK_DIR" 2>/dev/null || true
-}
-
-# Clear a lock that a previous run retained. Takes NO registry lock, and refuses while
-# anything it can still see could be uploading.
-cmd_unlock() {
-  local force=0 foreign=0 p pgid putpid
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --force) force=1 ;;
-      *) die "unlock: unknown argument '$1' (only --force is accepted)" ;;
-    esac
-    shift
-  done
-  # A lock cannot exist without its registry directory, so there is nothing to serialise
-  # against either.
-  if [ ! -d "$TENANTS_DIR" ]; then
-    echo "nothing to unlock: no lock directory at $LOCK_DIR"
-    return 0
-  fi
-  mkdir "$UNLOCK_DIR" 2>/dev/null || die "another unlock is running for this environment (mutex $UNLOCK_DIR, pid $(cat "$UNLOCK_DIR/pid" 2>/dev/null)); wait for it — it removes that directory on its way out"
-  UNLOCK_HELD=1
-  trap 'release_unlock' EXIT
-  echo "$$" > "$UNLOCK_DIR/pid" 2>/dev/null || true
-  if [ ! -d "$LOCK_DIR" ]; then
-    echo "nothing to unlock: no lock directory at $LOCK_DIR"
-    return 0
-  fi
-  if [ -e "$LOCK_DIR/upload.pending" ]; then
-    foreign=0
-    marker_is_foreign "$LOCK_DIR/upload.pending" && foreign=1
-    # `pgid` covers the WHOLE upload: the launcher, wrangler, and anything either started.
-    # A group id answers for all of them at once and stays valid while any member lives,
-    # which a launcher pid does not — kill the launcher and its uploader carries on talking
-    # to Cloudflare with nothing recorded still alive.
-    pgid="$(awk '/^pgid /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null)"
-    case "$pgid" in ''|*[!0-9]*) pgid="" ;; esac
-    if [ -n "$pgid" ] && kill -0 -- -"$pgid" 2>/dev/null; then
-      die "the upload's process group (pgid $pgid) is still alive; wait for it to finish, then re-run unlock"
-    fi
-    putpid="$(awk '/^put /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null)"
-    case "$putpid" in ''|*[!0-9]*) putpid="" ;; esac
-    if [ -n "$putpid" ] && kill -0 "$putpid" 2>/dev/null; then
-      die "the put stage (pid $putpid) is still alive; wait for it to finish, then re-run unlock"
-    fi
-    if [ "$foreign" = 1 ]; then
-      # A marker stamped with a different token than the lock it sits in. Whatever it records
-      # belongs to a run this lock knows nothing about, so its pids prove nothing either way
-      # about whether an upload is in flight — the same position as tracking that was never
-      # completed, and the same answer.
-      [ "$force" = 1 ] || die "the upload marker under this lock belongs to another run (marker owner does not match $LOCK_DIR/owner); confirm no wrangler process is running (pgrep -fl wrangler), then run: pilot/tenant.sh unlock --force"
-    elif [ -z "$pgid" ]; then
-      # The marker exists but the group was never written into it: either the put stage died
-      # between writing the marker and starting the upload, or the rewrite that records the
-      # group failed. An upload may therefore be running that nothing here can see, and an
-      # empty list of recorded pids is not permission to clear the lock — it is the one case
-      # where only a person can look.
-      [ "$force" = 1 ] || die "the upload's process group was never recorded; confirm no wrangler process is running (pgrep -fl wrangler), then run: pilot/tenant.sh unlock --force"
-    fi
-  fi
-  # Always, marker or no marker: a live tenant.sh holds this lock legitimately and is about to
-  # start an upload of its own. Skipping this check whenever a marker happened to exist is how
-  # a lock gets cleared out from under a run that is still working.
-  p="$(cat "$LOCK_DIR/pid" 2>/dev/null)" || p=""
-  case "$p" in ''|*[!0-9]*) p="" ;; esac
-  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
-    die "another tenant.sh (pid $p) holds the lock"
-  fi
-  rm -f "$LOCK_DIR/upload.pending" "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/owner" "$LOCK_DIR/pid"
-  rmdir "$LOCK_DIR" 2>/dev/null || die "could not remove the lock directory $LOCK_DIR"
-  echo "lock cleared; the live map is UNKNOWN until you re-sync — run: pilot/tenant.sh sync, then confirm on the Worker"
 }
 
 cmd_show() {
@@ -528,10 +402,9 @@ cmd="${1:-}"
 if [ $# -gt 0 ]; then shift; fi
 # One positional past what each subcommand uses, so an unexpected extra argument is seen
 # and refused rather than silently ignored.
-# Every command but `show` and `unlock` mutates or assembles the map, so each takes the lock
-# first — `sync --dry-run` included: it reads the registry and the keychain, and is only worth
-# reporting if nothing was rewriting them underneath. `show` is read-only and never waits;
-# `unlock` exists to remove a lock, so taking one would be a deadlock against itself.
+# Every command but `show` mutates or assembles the map, so each takes the lock first —
+# `sync --dry-run` included: it reads the registry and the keychain, and is only worth
+# reporting if nothing was rewriting them underneath. `show` is read-only and never waits.
 case "$cmd" in
   add)     acquire_lock; cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
   rotate)  acquire_lock; cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
@@ -540,6 +413,5 @@ case "$cmd" in
   remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" ;;
   sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" ;;
   show)    cmd_show "${1:-}" ;;
-  unlock)  cmd_unlock "$@" ;;
   *)       usage ;;
 esac
