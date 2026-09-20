@@ -23,21 +23,26 @@ export interface Health {
   tenants?: unknown;
 }
 
-/** Read a JSON body, or an empty object when the response is not JSON (reported with the status by the caller). */
-async function jsonOf(res: Response): Promise<{ text: string; body: Record<string, unknown> }> {
+/**
+ * Read a JSON body, or an empty object when the response is not JSON. Only the byte count
+ * is handed back for error messages: a response body is never printed, so a proxy or a
+ * misconfigured URL that echoes request headers cannot put a bearer token on stderr.
+ */
+async function jsonOf(res: Response): Promise<{ bytes: number; body: Record<string, unknown> }> {
   const text = await res.text();
+  const bytes = Buffer.byteLength(text);
   try {
     const parsed: unknown = JSON.parse(text);
-    return { text, body: typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {} };
+    return { bytes, body: typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {} };
   } catch {
-    return { text, body: {} };
+    return { bytes, body: {} };
   }
 }
 
 export async function health(v: HostedVerifier): Promise<Health> {
   const res = await fetch(`${v.url}/health`);
-  const { text, body } = await jsonOf(res);
-  if (res.status !== 200) throw new Error(`GET /health → HTTP ${res.status}: ${text.slice(0, 200)}`);
+  const { bytes, body } = await jsonOf(res);
+  if (res.status !== 200) throw new Error(`GET /health → HTTP ${res.status} (${bytes}-byte body withheld)`);
   return body as Health;
 }
 
@@ -70,7 +75,7 @@ export async function register(v: HostedVerifier, mandate: IssuedMandate): Promi
     headers: { authorization: `Bearer ${v.adminToken}`, 'content-type': 'application/json' },
     body: JSON.stringify(registrationOf(mandate)),
   });
-  const { text, body } = await jsonOf(res);
+  const { bytes, body } = await jsonOf(res);
   if (res.status === 201 || res.status === 200) {
     if (typeof body.credential_id !== 'string' || !/^[0-9a-f]{64}$/.test(body.credential_id)) {
       throw new Error(`POST /v1/credentials → HTTP ${res.status} without a credential_id`);
@@ -78,7 +83,7 @@ export async function register(v: HostedVerifier, mandate: IssuedMandate): Promi
     return { status: res.status, credential_id: body.credential_id };
   }
   if (res.status === 409) return { status: 409, error: typeof body.error === 'string' ? body.error : undefined };
-  throw new Error(`POST /v1/credentials → HTTP ${res.status}: ${text.slice(0, 200)}`);
+  throw new Error(`POST /v1/credentials → HTTP ${res.status} (${bytes}-byte body withheld)`);
 }
 
 export async function revoke(v: HostedVerifier, credentialId: string): Promise<number> {
@@ -86,7 +91,7 @@ export async function revoke(v: HostedVerifier, credentialId: string): Promise<n
     method: 'POST',
     headers: { authorization: `Bearer ${v.adminToken}` },
   });
-  if (res.status !== 204) throw new Error(`POST /v1/credentials/{id}/revoke → HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (res.status !== 204) throw new Error(`POST /v1/credentials/{id}/revoke → HTTP ${res.status} (${Buffer.byteLength(await res.text())}-byte body withheld)`);
   return res.status;
 }
 
@@ -98,11 +103,12 @@ export interface VerifyOutcome {
 }
 
 /**
- * Present a mandate to `POST /v1/verify` with the gate's CHARGE-stage request shape — the
- * mandate's own identity fields plus its tier capability — keeping the response headers.
- * (The gate's preflight stage sends the same fields with no granted capabilities; the
- * charge stage carries the amount's tier, which for this example's $25 charge is the
- * mandate's `small`.)
+ * Present a mandate to `POST /v1/verify` with the request shape the gate sends on every
+ * gated request — the mandate's identity fields plus the capability the charge requires
+ * (for this example's $25 charge, the mandate's `small` tier) — keeping the response
+ * headers. The gate sends this on the discovery request too (the unit test asserts the
+ * capability there); within a request, the payment `verify` hook consumes the decision
+ * the preflight stashed rather than asking the verifier again.
  */
 export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise<VerifyOutcome> {
   const body = {
@@ -122,8 +128,8 @@ export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise
     headers: { authorization: `Bearer ${v.verifierToken}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const { text, body: verdict } = await jsonOf(res);
-  if (Object.keys(verdict).length === 0) throw new Error(`POST /v1/verify → HTTP ${res.status} with a non-JSON body: ${text.slice(0, 200)}`);
+  const { bytes, body: verdict } = await jsonOf(res);
+  if (Object.keys(verdict).length === 0) throw new Error(`POST /v1/verify → HTTP ${res.status} with a non-JSON body (${bytes} bytes withheld)`);
   return {
     status: res.status,
     verdict,
