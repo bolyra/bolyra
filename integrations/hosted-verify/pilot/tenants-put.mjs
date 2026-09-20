@@ -5,7 +5,7 @@
 // anywhere. Extra arguments (`--env=staging`, or `--env=` for production) are passed
 // through to wrangler.
 import { spawn } from 'node:child_process';
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 // wrangler's own confirmation, and the ONLY thing that counts as one. The process spawned
@@ -19,6 +19,23 @@ const SUCCESS_LINE = /Success! Uploaded secret TENANTS/;
 // turn into an uncaught EPIPE on top of wrangler's own output.
 process.stdout.on('error', () => {});
 process.stderr.on('error', () => {});
+
+// An interrupt is DEFERRED here exactly as it is in tenant.sh: recorded, reported once, and
+// acted on only after the upload has finished. Forwarding it to the launcher would be worse
+// than useless — the launcher converts its child's signal death into exit 0, so a forwarded
+// interrupt reads as a clean upload while the map that reached Cloudflare is unknown.
+// Installed FIRST, before a byte of the map has been read: until a handler is attached the
+// default disposition applies, so a TERM that arrives while the map is still on its way down
+// the pipe kills this stage outright — no marker, no upload, and a shell upstream left to
+// explain an exit code for something that never started.
+let interrupted = null;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    if (interrupted !== null) return;
+    interrupted = sig;
+    process.stderr.write(`tenants-put: ${sig} received; the upload in flight runs to completion first\n`);
+  });
+}
 
 const chunks = [];
 process.stdin.on('data', (d) => chunks.push(d));
@@ -42,23 +59,10 @@ process.stdin.on('end', () => {
     process.exit(1);
   }
 
-  // An interrupt is DEFERRED here exactly as it is in tenant.sh: recorded, reported once, and
-  // acted on only after the upload has finished. Forwarding it to the launcher would be worse
-  // than useless — the launcher converts its child's signal death into exit 0, so a forwarded
-  // interrupt reads as a clean upload while the map that reached Cloudflare is unknown.
-  let interrupted = null;
-  for (const sig of ['SIGINT', 'SIGTERM']) {
-    process.on(sig, () => {
-      if (interrupted !== null) return;
-      interrupted = sig;
-      process.stderr.write(`tenants-put: ${sig} received; the upload in flight runs to completion first\n`);
-    });
-  }
-
   // tenant.sh exports TENANT_LOCK_DIR for as long as it holds the per-environment lock, and
   // release_lock refuses to release the lock while this marker is there. It is written BEFORE
-  // wrangler starts and removed only on a confirmed upload, so every way this process can die
-  // between the two — including SIGKILL — leaves the lock held. A lock released while an
+  // wrangler starts and renamed to upload.confirmed only on a confirmed upload, so every way
+  // this process can die between the two — including SIGKILL — leaves the lock held. A lock released while an
   // upload is still in flight is exactly the interleaving the lock exists to prevent: a second
   // operator's sync lands first and this older map overwrites it, silently undoing a
   // quarantine. If the marker cannot be written, the upload does not start at all.
@@ -66,6 +70,13 @@ process.stdin.on('end', () => {
   // semantics below exist only under tenant.sh.
   const pendingFile = process.env.TENANT_LOCK_DIR
     ? path.join(process.env.TENANT_LOCK_DIR, 'upload.pending')
+    : undefined;
+  // The same marker under its confirmed name. tenant.sh reads which of the two names exists to
+  // decide what to tell the operator, because neither an exit code nor the live secret can:
+  // the launcher reports a signalled child as exit 0, a confirmation lost with the terminal
+  // looks exactly like a failure, and `wrangler secret put` is write-only.
+  const confirmedFile = process.env.TENANT_LOCK_DIR
+    ? path.join(process.env.TENANT_LOCK_DIR, 'upload.confirmed')
     : undefined;
   if (pendingFile !== undefined) {
     try {
@@ -79,7 +90,7 @@ process.stdin.on('end', () => {
   // The map goes to wrangler on stdin, so wrangler's own logging decides whether the secret
   // ever reaches disk. WRANGLER_LOG_SANITIZE=false or WRANGLER_WRITE_LOGS=true in the
   // operator's shell would be inherited here and write the full token map into wrangler's
-  // debug log; the three are pinned on the child so the environment cannot opt into that.
+  // debug log; they are pinned on the child so the environment cannot opt into that.
   // Both output streams are piped rather than inherited so the success line can be read on
   // the way past; every chunk is passed through unchanged.
   const child = spawn('npx', ['--no-install', 'wrangler', 'secret', 'put', 'TENANTS', ...process.argv.slice(2)], {
@@ -89,6 +100,11 @@ process.stdin.on('end', () => {
       WRANGLER_LOG_SANITIZE: 'true',
       WRANGLER_WRITE_LOGS: 'false',
       WRANGLER_SEND_METRICS: 'false',
+      // The confirmation protocol below needs wrangler's success line, and every level above
+      // `log` suppresses it: at warn/error/none the upload still happens and still lands, and
+      // the only thing an inherited WRANGLER_LOG changes is that this stage can no longer tell
+      // that it did. Pinned, not read.
+      WRANGLER_LOG: 'log',
     },
   });
   child.on('error', (e) => {
@@ -118,12 +134,17 @@ process.stdin.on('end', () => {
 
   let sawSuccessLine = false;
   const passThrough = (sink) => {
-    // A chunk boundary can fall inside the success line, so each stream keeps a short tail.
+    // A chunk boundary can fall inside the success line, so each stream keeps a short tail of
+    // what came before. The match is made over the tail AND the whole chunk: searching only
+    // the last bytes of the pair would miss a success line that a single write already carried
+    // past — wrangler's debug/metrics notices follow it in the same write, and a confirmation
+    // that scrolled out of a 256-byte window would retain the lock over a good upload.
     let tail = '';
     return (chunk) => {
       if (!sawSuccessLine) {
-        tail = (tail + chunk.toString('utf8')).slice(-256);
-        if (SUCCESS_LINE.test(tail)) sawSuccessLine = true;
+        const text = tail + chunk.toString('utf8');
+        if (SUCCESS_LINE.test(text)) sawSuccessLine = true;
+        tail = text.slice(-256);
       }
       // Read the confirmation off the chunk BEFORE passing it on: a reader that has already
       // gone must not cost us wrangler's own answer.
@@ -141,12 +162,18 @@ process.stdin.on('end', () => {
   // the success line is read off those pipes. By `close` both have ended.
   child.on('close', (code, signal) => {
     if (code === 0 && signal === null && sawSuccessLine) {
-      // Confirmed: no upload is in flight any more, so release_lock is free to release.
+      // Confirmed: no upload is in flight any more, so release_lock is free to release. The
+      // marker is RENAMED rather than removed — same directory, so the rename is atomic and
+      // there is no instant in which neither name exists — and that rename is the only record
+      // tenant.sh has that this upload landed. A confirmation that cannot be recorded is
+      // reported as unknown: an unnecessary re-sync costs a minute, while claiming a map is
+      // live when nothing can show it is sends an operator away from a quarantine that isn't.
       if (pendingFile !== undefined) {
         try {
-          unlinkSync(pendingFile);
-        } catch {
-          // Already removed, or the lock directory is gone; nothing to undo.
+          renameSync(pendingFile, confirmedFile);
+        } catch (err) {
+          process.stderr.write(`tenants-put: the upload was confirmed but could not be recorded (${err.code ?? err}); treating the outcome as unknown\n`);
+          process.exit(1);
         }
       }
       if (interrupted !== null) {
@@ -156,9 +183,10 @@ process.stdin.on('end', () => {
       }
       process.exit(0);
     }
-    // Not confirmed: the marker stays, so the lock stays with it. What reached Cloudflare is
-    // unknown from here — only a dry run against the registry can say.
-    process.stderr.write(`tenants-put: upload NOT confirmed (exit ${code}, signal ${signal}, success line ${sawSuccessLine ? 'seen' : 'not seen'}); the lock is retained — check with: pilot/tenant.sh sync --dry-run, then re-run sync once the state is known\n`);
+    // Not confirmed: the marker stays under its pending name, so the lock stays with it. What
+    // reached Cloudflare is unknown from here and nothing can look it up — the secret is
+    // write-only, and a dry run would only re-validate the map this run INTENDED to push.
+    process.stderr.write(`tenants-put: upload NOT confirmed (exit ${code}, signal ${signal}, success line ${sawSuccessLine ? 'seen' : 'not seen'}); the lock is retained and what is live is unknown — recover with: pilot/tenant.sh unlock, then pilot/tenant.sh sync\n`);
     process.exit(code === 0 || code === null || code === undefined ? 1 : code);
   });
 });

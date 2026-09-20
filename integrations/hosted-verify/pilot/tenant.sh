@@ -40,11 +40,15 @@
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
-#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock); an interrupt
-#   (Ctrl-C/TERM) takes effect only after the in-flight put has finished, so a half-pushed map
-#   cannot be raced. The lock is released only when wrangler confirms the upload; otherwise it
-#   stays and names its own directory — run sync --dry-run, then sync, then remove that
-#   directory by hand once you know what was pushed.
+#   ./tenant.sh unlock                clear a retained lock once no upload can still be
+#                                     running (then sync)
+#   Every command except show and unlock takes a per-environment lock ($TENANTS_DIR/.lock); an
+#   interrupt (Ctrl-C/TERM) takes effect only after the in-flight put has finished, so a
+#   half-pushed map cannot be raced. The lock is released only when wrangler confirms the
+#   upload; otherwise it stays, and what is live is UNKNOWN — the secret is write-only, so no
+#   command can look it up and a dry run only re-validates the map that was INTENDED. Recover
+#   with unlock (it refuses while the recorded upload is still alive), then sync to re-put the
+#   intended map, then confirm on the Worker.
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -101,14 +105,18 @@ release_lock() {
   # talking to the API leaves the put running with no one to wait for it. Releasing the lock
   # then is exactly the interleaving the lock exists to prevent — a second operator's sync
   # would land FIRST and this one's older map would overwrite it, silently undoing a
-  # quarantine. The put stage writes upload.pending BEFORE wrangler starts and removes it only
-  # once wrangler has confirmed the upload, so the marker being there is the one honest answer
-  # to "could a put still be in flight, or have landed unseen?" — keep the lock and say so.
+  # quarantine. The put stage writes upload.pending BEFORE wrangler starts and renames it to
+  # upload.confirmed only once wrangler has confirmed the upload, so a marker still under its
+  # pending name is the one honest answer to "could a put still be in flight, or have landed
+  # unseen?" — keep the lock and say so.
   if [ -e "$LOCK_DIR/upload.pending" ]; then
-    echo "error: lock retained at $LOCK_DIR: the last upload was not confirmed complete (see $LOCK_DIR/upload.pending); check with: pilot/tenant.sh sync --dry-run, then re-run sync and remove that directory by hand once the pushed state is known" >&2
+    echo "error: lock retained at $LOCK_DIR: the last upload was not confirmed complete (see $LOCK_DIR/upload.pending) and what is live is unknown; recover with: pilot/tenant.sh unlock, then pilot/tenant.sh sync" >&2
     return 0
   fi
-  rm -f "$LOCK_DIR/pid"
+  # The confirmation marker has reported what it had to report by the time the lock goes; it
+  # must not outlive the lock it sits in, or a later run could read a stale confirmation as
+  # the answer for its own upload.
+  rm -f "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid"
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
 on_signal() {  # $1 the signal name, INT or TERM
@@ -116,7 +124,7 @@ on_signal() {  # $1 the signal name, INT or TERM
   # command returns, and the last stage of the sync pipeline does not return until wrangler has
   # exited. So by the time this body runs the in-flight put has either landed or failed, with
   # the lock held for all of it — an interrupt cannot leave a half-pushed map open to a race.
-  echo "error: interrupted by SIG$1 after the in-flight command finished; run: pilot/tenant.sh sync --dry-run to see the state that was pushed" >&2
+  echo "error: interrupted by SIG$1 after the in-flight command finished; whether the upload it was running was confirmed is reported above" >&2
   # Exit with the conventional 128+signal code, and through the EXIT trap, so release_lock
   # still runs and still applies the retain rule above.
   case "$1" in
@@ -340,18 +348,59 @@ cmd_sync() {
   local rc=0
   tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
       | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${WRANGLER_ENV[@]}") || rc=$?
-  case "$rc" in
-    0) ;;
-    # The put stage defers an interrupt the same way this shell does, so 130/143 from it means
-    # the upload FINISHED and was confirmed, and only then did the deferred signal take effect.
-    # Reporting that as a failure would send an operator looking for a map that did land.
-    130|143)
-      echo "done (an interrupt arrived after the put completed); secrets take effect on the next request" >&2
-      exit "$rc" ;;
-    *)
-      die "the TENANTS map was NOT updated; the previous map (including any token you just rotated or removed) is STILL ACCEPTED by the Worker. Fix the error and re-run: $0 sync" ;;
-  esac
-  echo "done. Secrets take effect on the next request (no redeploy)." >&2
+  # What happened to the upload is read from what the put stage RECORDED, never from $rc. An
+  # exit code cannot tell these three apart: the launcher reports a signalled child as exit 0,
+  # a 130/143 can equally be a TERM that arrived before any uploader existed, and a
+  # confirmation lost with the terminal looks exactly like a failure. Nothing can be looked up
+  # afterwards either — `wrangler secret put` is write-only. So the put stage leaves a marker
+  # under the lock: upload.confirmed only after wrangler said the upload landed, upload.pending
+  # for as long as that is unknown, and neither when it never started an upload at all.
+  if [ -e "$LOCK_DIR/upload.confirmed" ]; then
+    case "$rc" in
+      130|143) echo "done (an interrupt arrived after the put completed); secrets take effect on the next request" >&2 ;;
+      *)       echo "done. Secrets take effect on the next request (no redeploy)." >&2 ;;
+    esac
+    exit "$rc"
+  fi
+  if [ -e "$LOCK_DIR/upload.pending" ]; then
+    echo "error: the outcome of the upload is UNKNOWN — the intended map may or may not be live; the lock is retained. Recovery: pilot/tenant.sh unlock (refuses while the upload can still be running), then pilot/tenant.sh sync to re-put the intended map, then confirm on the Worker (/health tenants \"ok\" and one authenticated request)." >&2
+    [ "$rc" != 0 ] || rc=1
+    exit "$rc"
+  fi
+  # No marker at all: the pipeline stopped before the put stage started an upload (keychain,
+  # assembly, or the validator refusing), so the live map is untouched and still the old one.
+  die "the TENANTS map was NOT updated; the previous map (including any token you just rotated or removed) is STILL ACCEPTED by the Worker. Fix the error and re-run: $0 sync"
+}
+
+# Clear a lock that a previous run retained. Takes NO lock itself — the lock is exactly what
+# it is here to remove — and refuses while anything it can still see could be uploading.
+cmd_unlock() {
+  local extra="${1:-}" p
+  [ -z "$extra" ] || die "unlock: unexpected extra argument '$extra'"
+  if [ ! -d "$LOCK_DIR" ]; then
+    echo "nothing to unlock: no lock directory at $LOCK_DIR"
+    return 0
+  fi
+  if [ -e "$LOCK_DIR/upload.pending" ]; then
+    # Both recorded pids: `pid` is the launcher the put stage started, `put` is the put stage
+    # itself. Either being alive means an upload can still be in flight, and clearing the lock
+    # under it is precisely the interleaving the lock exists to prevent.
+    for p in $(awk '/^(pid|put) /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null); do
+      if kill -0 "$p" 2>/dev/null; then
+        die "the upload (pid $p) is still running; wait for it to finish, then re-run unlock"
+      fi
+    done
+  else
+    # No upload was ever recorded, so the only thing that can hold this lock is another
+    # tenant.sh between acquiring it and starting a put.
+    p="$(cat "$LOCK_DIR/pid" 2>/dev/null)" || p=""
+    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+      die "another tenant.sh (pid $p) holds the lock"
+    fi
+  fi
+  rm -f "$LOCK_DIR/upload.pending" "$LOCK_DIR/upload.confirmed" "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR" 2>/dev/null || die "could not remove the lock directory $LOCK_DIR"
+  echo "lock cleared; the live map is UNKNOWN until you re-sync — run: pilot/tenant.sh sync, then confirm on the Worker"
 }
 
 cmd_show() {
@@ -379,9 +428,10 @@ cmd="${1:-}"
 if [ $# -gt 0 ]; then shift; fi
 # One positional past what each subcommand uses, so an unexpected extra argument is seen
 # and refused rather than silently ignored.
-# Every command but `show` mutates or assembles the map, so each takes the lock first —
-# `sync --dry-run` included: it reads the registry and the keychain, and is only worth
-# reporting if nothing was rewriting them underneath. `show` is read-only and never waits.
+# Every command but `show` and `unlock` mutates or assembles the map, so each takes the lock
+# first — `sync --dry-run` included: it reads the registry and the keychain, and is only worth
+# reporting if nothing was rewriting them underneath. `show` is read-only and never waits;
+# `unlock` exists to remove a lock, so taking one would be a deadlock against itself.
 case "$cmd" in
   add)     acquire_lock; cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
   rotate)  acquire_lock; cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
@@ -390,5 +440,6 @@ case "$cmd" in
   remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" ;;
   sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" ;;
   show)    cmd_show "${1:-}" ;;
+  unlock)  cmd_unlock "${1:-}" ;;
   *)       usage ;;
 esac
