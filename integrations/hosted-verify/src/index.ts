@@ -272,7 +272,7 @@ async function handleVerify(
     return { verdict, response: verdictResponse(verdict, undefined, env) };
   }
 
-  const verdict = verifyClassical(body, trustedOperators, capabilityMap);
+  const { verdict } = verifyClassical(body, trustedOperators, capabilityMap);
   return { verdict, response: verdictResponse(verdict, body, env) };
 }
 

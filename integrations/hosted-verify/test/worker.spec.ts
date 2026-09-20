@@ -13,6 +13,7 @@ import worker from '../src/index';
 import { bindingDigest } from '../src/verify/binding';
 import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
+import { verifyClassical } from '../src/verify/core';
 import { VerifyDenial } from '../src/verify/verdict';
 import { postVerify, cloneWithBundle, BASE, TOKENS, ORGS, buildTestTenants } from './helpers';
 import { validateVerdictSchema } from './verdict-schema';
@@ -342,6 +343,35 @@ describe('classical pipeline', () => {
       expect.objectContaining({ code: 'unknown_capability' }) as Error,
     );
     expect(new VerifyDenial('unknown_capability', 'x').toVerdict().kind).toBe('classical');
+  });
+
+  it('verifyClassical exposes the verified binding and operator on allow, and nothing on deny (unit)', () => {
+    const trusted = new Set([FIXTURE_OPERATOR_KEY]);
+    const ok = verifyClassical(allowAgentOnly, trusted, DEFAULT_CAPABILITY_MAP);
+    expect(ok.verdict.verdict).toBe('allow');
+    expect(ok.verified).toBeDefined();
+    const bundle = JSON.parse(allowAgentOnly.bundle) as {
+      binding: Record<string, unknown>;
+      agent: { credential: { operator_pubkey: { x: string; y: string } } };
+    };
+    expect(ok.verified!.binding).toEqual(bundle.binding);
+    expect(ok.verified!.operator).toEqual({
+      x: BigInt(bundle.agent.credential.operator_pubkey.x),
+      y: BigInt(bundle.agent.credential.operator_pubkey.y),
+    });
+
+    const denied = verifyClassical({ ...allowAgentOnly, version: 2 }, trusted, DEFAULT_CAPABILITY_MAP);
+    expect(denied.verdict.verdict).toBe('deny');
+    expect(denied.verified).toBeUndefined();
+  });
+
+  it('a request denied AFTER the operator was checked still exposes nothing (unit)', () => {
+    const req = structuredClone(allowAgentOnly) as typeof allowAgentOnly;
+    req.request.granted_capabilities = ['fetch_inbox', 'broadcast'];
+    const denied = verifyClassical(req, new Set([FIXTURE_OPERATOR_KEY]), DEFAULT_CAPABILITY_MAP);
+    expect(denied.verdict.verdict).toBe('deny');
+    expect((denied.verdict as { code: string }).code).toBe('request_mismatch');
+    expect(denied.verified).toBeUndefined();
   });
 });
 
