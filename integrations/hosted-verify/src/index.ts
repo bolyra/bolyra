@@ -20,8 +20,9 @@
  *                    ▼
  *              resolveAuth(token) ──none──► 401 { error: "unauthorized" }
  *                    │
- *                    ├── role ≠ verifier ──► 403 { error: "forbidden" }
  *                    ├── tenant.disabled ─► 500 deny internal_error
+ *                    │                        (quarantine outranks role)
+ *                    ├── role ≠ verifier ──► 403 { error: "forbidden" }
  *                    └── ok ──► verifyClassical(body, tenant.trusted_operators, capabilityMap)
  *
  * HTTP mapping of the CLI exit-code semantics (§7.1): every decision-level

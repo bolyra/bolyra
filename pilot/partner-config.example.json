@@ -1,22 +1,22 @@
 {
-  "$comment": "Pilot partner record — copy to pilot/partners/<label>.json (gitignored). Manual, file-based; this file IS the partner registry that integrations/hosted-verify/pilot/partner-token.sh reads. NO secrets in this file, ever: the token lives in the macOS keychain and is only referenced here.",
+  "$comment": "Pilot partner record — copy to pilot/partners/<label>.json (gitignored). Manual, file-based; this file IS the partner registry, read by humans only. NO secrets in this file, ever: the tokens live in the Worker's TENANTS secret and are only referenced here.",
 
   "label": "acme",
   "status": "active",
 
-  "$status_values": "active (token pushed to the Worker) | disabled (token kept in keychain, removed from Worker) | revoked (token deleted everywhere)",
+  "$status_values": "active (tenant entry live in TENANTS) | disabled (entry kept, \"disabled\": true — tokens rejected on every route) | revoked (entry deleted from TENANTS)",
 
   "displayName": "Acme Agents, Inc. (design partner)",
   "contact": "eng-lead@example.com",
 
-  "tokenRef": "keychain service=bolyra-hosted-verify account=partner-token-acme",
+  "tokenRef": "wrangler secret TENANTS, entry \"acme\" — admin_token + verifier_token",
 
   "audience": "https://bolyra-hosted-verify.<account>.workers.dev",
 
   "trustedOperators": [
     "<operator-pubkey-x-decimal>:<operator-pubkey-y-decimal>"
   ],
-  "$trustedOperators_note": "The partner's BabyJubjub operator public key(s), as x:y decimal pairs. These must ALSO be appended to TRUSTED_OPERATORS in integrations/hosted-verify/wrangler.jsonc and deployed — the deployment var is the single global trust anchor; this file is the per-partner record of which keys are theirs. Per-partner operator scoping on the Worker waits for a real pilot to shape.",
+  "$trustedOperators_note": "The partner's BabyJubjub operator public key(s), as x:y decimal pairs. Add the key to the tenant's trusted_operators in TENANTS — that list is the trust anchor the Worker applies to this tenant's requests; this file is the per-partner record of which keys are theirs.",
 
   "tierCaps": {
     "maxTier": "medium",

@@ -3,8 +3,7 @@
 > ## ⚠️ DESIGN PARTNER PREVIEW
 >
 > This is a **preview for design partners** — not a production service. No
-> SLA, no uptime guarantee, no billing, named bearer tokens (one label per
-> design partner), and the deployment may be reset at any time. It exists so a host team can try the
+> SLA, no uptime guarantee, no billing, per-tenant admin and verifier tokens, and the deployment may be reset at any time. It exists so a host team can try the
 > [External Verifier Contract v1](../../spec/external-verifier-contract-v1.md)
 > over HTTP in five minutes, before wiring up the `bolyra verify` CLI.
 
@@ -26,8 +25,9 @@ value there. The one cryptographically load-bearing fact in a proof-less bundle
 is the operator's EdDSA-Poseidon signature over the request binding (spec §4).
 So an `allow` means, and only means:
 
-> A configured **trusted operator** (`TRUSTED_OPERATORS`) signed a binding
-> authorizing this exact `{agent_name, project_key, program, model,
+> An operator the calling tenant configured as **trusted** (the tenant's
+> `trusted_operators` list in the deployment's `TENANTS` secret) signed a
+> binding authorizing this exact `{agent_name, project_key, program, model,
 > capabilities, expiry}` (binding v2), the request matches that signed binding,
 > and the granted capabilities are a subset of it.
 
@@ -50,12 +50,11 @@ fails until it exists. `npm test` (vitest in the workers pool) does not need it.
 
 ## 5-minute quickstart
 
-You need the preview URL and bearer token (ask Viswa — issued per design
-partner).
+You need the preview URL and your tenant's **verifier token** (issued per design partner at provisioning).
 
 ```bash
 BASE=https://bolyra-hosted-verify.<account>.workers.dev   # preview URL
-TOKEN=<your preview token>
+TOKEN=<your verifier token>
 
 # 1. Health + capability disclosure (no auth):
 curl -s $BASE/health | jq
@@ -82,20 +81,19 @@ The two example request files are copies of the repo's conformance fixtures
 (`integrations/cli/test/fixtures/verify/`); the preview deployment trusts the
 fixture operator key so the quickstart works out of the box. To verify **your
 own** presentations, your operator public key must be pinned in the
-deployment's `TRUSTED_OPERATORS` — that is the design-partner conversation.
+tenant's `trusted_operators` — that is the design-partner conversation.
 
 ## API
 
 ### `POST /v1/verify`
 
-- **Auth:** `Authorization: Bearer <token>` — anything else is `401`. Tokens
-  are **labeled bearer tokens**: the deployment's `PARTNER_TOKENS` secret is a
-  JSON object mapping a partner label to its token (e.g.
-  `{"theseus":"…","internal":"…"}`), each compared in constant time. The
-  legacy `PREVIEW_TOKEN` secret keeps working as label `preview`. Labels
-  attribute usage analytics (below) — this is **not** multi-tenant admin, just
-  named tokens. Auth failures are recorded under the reserved label
-  `unauthenticated`.
+- **Auth:** `Authorization: Bearer <verifier token>` — anything else is `401`.
+  Every design partner is a **tenant** in the deployment's `TENANTS` secret with
+  two tokens: a *verifier* token (this route) and an *admin* token (tenant
+  administration routes, added separately). Tokens are compared in constant
+  time; an admin token on this route is `403 {"error":"forbidden"}`. Usage
+  analytics attribute requests to `<org_id>:<role>` — never to token values.
+  Auth failures are recorded under the reserved label `unauthenticated`.
 - **Body:** one spec §2.1 request object (`version`, `bundle`, `request`,
   `now_unix`), capped at **1 MiB** (the spec §6 stdin bound). The optional
   extension field `kind` may be set to `"classical"`; any other value (e.g.
@@ -138,7 +136,7 @@ Unauthenticated. Returns service status, the **DESIGN PARTNER PREVIEW**
 label, `verifier_kind: "classical"`, `nonce_mode: "host"`, a `trust_model`
 sentence, and the live `checks_authenticated` / `checks_consistency_only` /
 `checks_not_performed` lists (the honest capability disclosure below,
-machine-readable).
+machine-readable). Also `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses; a quarantined (`disabled`) tenant still reports `ok` (this is parseability, not per-tenant availability).
 
 ### Signed receipts (`X-Bolyra-Receipt`)
 
@@ -160,7 +158,7 @@ verifyReceipt(receipt); // → true, signer recoverable from the signature
 operator-signed fact or a fail-closed gate:
 
 1. **Trusted-operator gate** — the credential's operator key must be in the
-   configured `TRUSTED_OPERATORS` set (no operators configured = fail closed,
+   calling tenant's `trusted_operators` list (an empty list = fail closed,
    spec §12).
 2. **BabyJubjub EdDSA-Poseidon binding signature** (spec §4) — the operator's
    signature over the canonical request binding, against that trusted operator
@@ -227,18 +225,18 @@ Two layers, both configured in `wrangler.jsonc`:
 | --------- | ------------- | ------------------------------------------------------------- |
 | timestamp | (implicit)    | write time                                                    |
 | `blob1`   | route         | `/v1/verify`, `/health`, or `other` (raw paths are never stored) |
-| `blob2`   | partner label | the token's label, `preview`, or `unauthenticated`             |
+| `blob2`   | tenant label  | `<org_id>:<role>`, or `unauthenticated`                       |
 | `blob3`   | verdict       | `allow` / `deny` / `error` (transport-level 401/404/405)       |
 | `blob4`   | code          | deny code (spec §9), transport-error code, or empty on allow   |
 | `blob5`   | proof kind    | `classical` for verdict responses, empty otherwise             |
 | `blob6`   | request id    | the `cf-ray` id (or a random UUID)                             |
 | `double1` | latency_ms    | request handling time                                          |
 | `double2` | HTTP status   | response status code                                           |
-| `index1`  | partner label | same as `blob2` (query/sampling index)                         |
+| `index1`  | tenant label  | same as `blob2` (query/sampling index)                        |
 
 **We store nothing else — explicitly no request bodies, no proofs, no
-credentials, no bearer tokens, no IPs.** Partner attribution is by token
-*label* only; the raw token never leaves the auth comparison.
+credentials, no bearer tokens, no IPs.** Tenant attribution is by
+`<org_id>:<role>` only; the raw token never leaves the auth comparison.
 
 ### Querying usage
 
@@ -272,26 +270,22 @@ carries `consume_nonces` because this preview is host-mode only.
 npm install
 npm test && npm run typecheck
 npx wrangler login                      # founder account
-npx wrangler secret put PREVIEW_TOKEN   # legacy shared token (label "preview")
-npx wrangler secret put PARTNER_TOKENS  # JSON: {"<label>":"<token>", …}
+npx wrangler secret put TENANTS             # JSON: {"<org_id>": {"admin_token": "…", "verifier_token": "…", "trusted_operators": ["x:y", …]}}
 npx wrangler secret put RECEIPT_SIGNER_KEY  # optional: 0x-hex secp256k1 key
 npm run deploy                          # workers.dev subdomain ONLY
 ```
 
-`PARTNER_TOKENS` labels are what usage analytics attribute requests to — use
-one label per design partner (e.g. `{"theseus":"…","internal":"…"}`). The
-reserved label `unauthenticated` is ignored if configured.
+`TENANTS` is the only auth configuration: one entry per design partner
+(`org_id` = lowercase, 2–63 chars), two tokens per entry (32–256 characters of
+`[A-Za-z0-9._~+/-]`, e.g. `openssl rand -hex 32`; a value that appears twice
+anywhere grants nothing), and that tenant's trusted operator keys. Usage analytics attribute requests to
+`<org_id>:<role>`. The reserved label `unauthenticated` is never a tenant.
 
-Config lives in `wrangler.jsonc`: `TRUSTED_OPERATORS` (comma-separated `x:y`
-decimal operator-key pairs — the deployed default is the repo fixture operator
-key), `CAPABILITY_MAP` (optional JSON, merged over the built-in default),
-`RECEIPT_ISSUER` / `RECEIPT_KEY_ID`. Deploys go to the workers.dev preview
-subdomain only — no custom domains, no routes on bolyra.ai.
+Config lives in `wrangler.jsonc`: `CAPABILITY_MAP` (optional JSON, merged over the built-in default) and `RECEIPT_ISSUER` / `RECEIPT_KEY_ID`; trusted operator keys are per tenant in `TENANTS`. Deploys go to the workers.dev preview subdomain only — no custom domains, no routes on bolyra.ai.
 
 ## Deliberately out of scope
 
 No SLA, no billing, no dashboard (usage is a query script over Analytics
-Engine, see [Observability](#observability)), no multi-tenant admin (labeled
-tokens are just named bearer tokens), no zk proving/verification, no custom
+Engine, see [Observability](#observability)), no tenant self-service (tenants are provisioned by the maintainer), no zk proving/verification, no custom
 policy UI, no customer-managed keys, no status page. If the preview is
 useful, those conversations come after.
