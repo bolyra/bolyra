@@ -20,8 +20,7 @@
  *                    ▼
  *              resolveAuth(token) ──none──► 401 { error: "unauthorized" }
  *                    │
- *                    ├── tenant.disabled ─► 500 deny internal_error
- *                    │                        (quarantine outranks role)
+ *                    ├── tenant.disabled ─► 500 deny internal_error (quarantine outranks role)
  *                    ├── role ≠ verifier ──► 403 { error: "forbidden" }
  *                    └── ok ──► verifyClassical(body, tenant.trusted_operators, capabilityMap)
  *
@@ -177,16 +176,21 @@ type Gate =
   | { kind: 'unauthenticated' }
   | { kind: 'forbidden'; auth: AuthResult }
   | { kind: 'disabled'; auth: AuthResult }
-  | { kind: 'ok'; auth: AuthResult };
+  | { kind: 'ok'; auth: AuthResult; capabilityMap: CapabilityMap };
 
 /**
- * auth → quarantine → role, in that order. The tenant map is re-parsed per
- * request (≤ 4 KiB; a rotated secret takes effect on the next request).
+ * configuration → auth → quarantine → role, in that order. BOTH configuration
+ * inputs are validated before any auth outcome, so a configuration defect is
+ * the 500 verdict for every caller — never a 401/403 that hides an outage.
+ * The tenant map is re-parsed per request (≤ 4 KiB; a rotated secret takes
+ * effect on the next request).
  */
 function authorize(request: Request, env: Env, required: Role): Gate {
   let tenants: Map<string, TenantConfig>;
+  let capabilityMap: CapabilityMap;
   try {
     tenants = loadTenants(env.TENANTS);
+    capabilityMap = loadCapabilityMap(env.CAPABILITY_MAP);
   } catch (e) {
     return { kind: 'config_error', verdict: configErrorVerdict(e) };
   }
@@ -196,23 +200,16 @@ function authorize(request: Request, env: Env, required: Role): Gate {
   // its tokens is presented.
   if (auth.disabled) return { kind: 'disabled', auth };
   if (auth.role !== required) return { kind: 'forbidden', auth };
-  return { kind: 'ok', auth };
+  return { kind: 'ok', auth, capabilityMap };
 }
 
+/** Configuration was validated by `authorize` before the body is read. */
 async function handleVerify(
   request: Request,
   trustedOperators: ReadonlySet<string>,
+  capabilityMap: CapabilityMap,
   env: Env,
 ): Promise<{ verdict: Verdict; response: Response }> {
-  // Configuration first: a defect must not depend on what the body says.
-  let capabilityMap: CapabilityMap;
-  try {
-    capabilityMap = loadCapabilityMap(env.CAPABILITY_MAP);
-  } catch (e) {
-    const verdict = configErrorVerdict(e);
-    return { verdict, response: verdictResponse(verdict, undefined, env) };
-  }
-
   const text = await readBodyCapped(request);
   if (text === null) {
     const verdict = deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`);
@@ -357,7 +354,12 @@ export default {
           }
           case 'ok': {
             label = tenantLabel(gate.auth);
-            const { verdict, response: verdictRes } = await handleVerify(request, gate.auth.trusted_operators, env);
+            const { verdict, response: verdictRes } = await handleVerify(
+              request,
+              gate.auth.trusted_operators,
+              gate.capabilityMap,
+              env,
+            );
             response = verdictRes;
             outcome = verdict.verdict;
             code = verdict.verdict === 'deny' ? verdict.code : '';

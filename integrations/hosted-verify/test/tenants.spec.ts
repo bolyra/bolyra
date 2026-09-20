@@ -115,7 +115,42 @@ describe('loadTenants', () => {
     }
     expect(caught).toBeInstanceOf(VerifyDenial);
     expect((caught as VerifyDenial).message).toContain('unknown tenant field');
-    expect((caught as VerifyDenial).detail).toEqual({ org_id: 'org-x', field: 'Disabled' });
+    // The key text is never logged: it may be a secret pasted into the wrong place.
+    expect((caught as VerifyDenial).detail).toEqual({ org_id: 'org-x' });
+  });
+
+  it('never puts a rejected org_id or key text into the defect detail', () => {
+    // Token-shaped (mixed case, `=` padding) so it fails the org_id charset AND is not a legal key.
+    const secretish = 'AccidentallyAToken000000000000000000000000=';
+    for (const raw of [
+      JSON.stringify({ [secretish]: { admin_token: tok('x-admin'), verifier_token: tok('x-verifier'), trusted_operators: ['1:2'] } }),
+      withTenant({ [secretish]: true }),
+    ]) {
+      let caught: unknown;
+      try {
+        loadTenants(raw);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(VerifyDenial);
+      expect(JSON.stringify((caught as VerifyDenial).detail ?? {})).not.toContain(secretish);
+      expect((caught as VerifyDenial).message).not.toContain(secretish);
+    }
+  });
+
+  it.each([
+    ['a duplicate `disabled` member (last one would win)', `{"org-x":{"admin_token":"${tok('x-admin')}","verifier_token":"${tok('x-verifier')}","trusted_operators":["1:2"],"disabled":true,"disabled":false}}`],
+    ['a duplicate token member (shadowed value would escape the duplicate check)', `{"org-x":{"admin_token":"${tok('x-admin')}","admin_token":"${tok('x-admin2')}","verifier_token":"${tok('x-verifier')}","trusted_operators":["1:2"]}}`],
+    ['a duplicate org_id at the top level', `{"org-x":{"admin_token":"${tok('x-admin')}","verifier_token":"${tok('x-verifier')}","trusted_operators":["1:2"]},"org-x":{"admin_token":"${tok('y-admin')}","verifier_token":"${tok('y-verifier')}","trusted_operators":["1:2"]}}`],
+  ])('rejects %s', (_name, raw) => {
+    expectInternalError(() => loadTenants(raw), 'duplicate key');
+  });
+
+  it('the duplicate-key scan is not fooled by colons or braces inside string values', () => {
+    // A value that looks like a key, an escaped quote, and ":" inside an array element.
+    const raw = `{"org-x":{"admin_token":"${tok('x-admin')}","verifier_token":"${tok('x-verifier')}","trusted_operators":["1:2"]},"org-y":{"admin_token":"${tok('y-admin')}","verifier_token":"${tok('y-verifier')}","trusted_operators":["3:4"]}}`;
+    expect(loadTenants(raw).size).toBe(2);
+    expect(loadTenants(withTenant({ disabled: false }, 'org-z')).size).toBe(1);
   });
 
   it.each([
