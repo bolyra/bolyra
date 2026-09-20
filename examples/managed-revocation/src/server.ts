@@ -23,7 +23,10 @@ export const CHARGE_AMOUNT = '25';
 export interface ServerState {
   /** The protected side effect: incremented only after the gate allowed AND mppx accepted payment. */
   counter: number;
-  /** The last verdict the gate denied with, as thrown in-process (its `detail` never reaches the HTTP body). */
+  /**
+   * The verdict the gate denied the CURRENT request with, cleared at the start of every
+   * request; its `detail` never reaches the HTTP body. `undefined` after an allow.
+   */
   lastDenial: DenyVerdict | undefined;
 }
 
@@ -42,6 +45,11 @@ export const chargeMethod = Method.from({
   },
 });
 
+/**
+ * Build the gated server. `verifier.url` is the hosted verifier's origin — `/v1/verify`
+ * is appended here (a trailing slash is tolerated) — and `verifier.token` is the tenant's
+ * verifier token, sent as a bearer on every decision.
+ */
 export function createServer(verifier: { url: string; token: string }): GatedServer {
   const method = Method.toServer(chargeMethod, {
     async verify({ credential }) {
@@ -55,15 +63,17 @@ export function createServer(verifier: { url: string; token: string }): GatedSer
     },
   });
 
+  const verifyUrl = `${verifier.url.replace(/\/+$/, '')}/v1/verify`;
   const gated = bolyraGate(method, {
     audience: AUDIENCE,
     model: MODEL,
-    verifier: { kind: 'url', url: `${verifier.url}/v1/verify`, token: verifier.token },
+    verifier: { kind: 'url', url: verifyUrl, token: verifier.token },
   });
 
   const mppx = Mppx.create({
     methods: [gated],
     realm: AUDIENCE,
+    // Demo only — a real deployment reads its key from the environment (>= 32 bytes).
     secretKey: 'example-secret-key-example-secret-key-32',
   });
 
@@ -78,8 +88,12 @@ export function createServer(verifier: { url: string; token: string }): GatedSer
 
   // handleDenials turns the gate's thrown BolyraDeniedError into its Problem Details
   // response; the wrapper in between records the verdict so run.ts can show the
-  // structured `detail` the HTTP body does not carry.
+  // structured `detail` the HTTP body does not carry. Only denials thrown from the
+  // gate's preflight stage arrive here — a denial from its verify hook is re-issued by
+  // mppx as a 402 and never reaches this wrapper — which is why the preflight-stage
+  // decision is the one worth recording.
   const handler = handleDenials(async (request: Request): Promise<Response> => {
+    state.lastDenial = undefined;
     try {
       return await action(request);
     } catch (e) {
