@@ -35,6 +35,7 @@ under `contracts/deployments/` and `circuits/build/`.
 #### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
 
 - A managed credential registry per tenant (a SQLite-backed Durable Object named by `org_id`) and three admin-token routes: `POST /v1/credentials` registers an operator-signed binding (checks: trusted operator → signature → expiry; `201`, or `200` with the original `registered_at`, or `409` once revoked), `GET /v1/credentials/{id}` returns the record with its history, `POST /v1/credentials/{id}/revoke` is idempotent (`204`). `credential_id` is derived from the canonical operator key id and the signed binding — never from a presentation. Revoked records are retained indefinitely; a quarantined tenant gets `503 tenant_disabled` on these routes. `/health` reports `registry` and `credential_id_version`. The README's storage disclosure now states exactly what the registry persists.
+- `examples/managed-revocation/` — the runnable revocation demonstration: issue a spend mandate with the published `@bolyra/mpp@0.5.0`, register it with the hosted verifier, spend through an mppx gate (real 402→pay handshake, two fresh presentations per paid action), revoke, and the next fresh presentation is denied `untrusted_root` / `credential_not_active` before the paid action runs; an independent credential under the same operator still allows. Runs in CI against `wrangler dev` (job `managed-revocation-example`, Node 22) with a generated `.dev.vars` that is never printed.
 
 ### Fixed
 
