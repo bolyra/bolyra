@@ -53,7 +53,7 @@
 set -euo pipefail
 
 die() { echo "error: $*" >&2; exit 1; }
-usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { awk 'NR>1 && /^set -euo pipefail/{exit} NR>1' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -102,12 +102,17 @@ kc_has() { have_security && security find-generic-password -s "$KEYCHAIN_SERVICE
 kc_get() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" -w; }
 kc_put() {  # $1 org, $2 role, $3 token — -U updates in place
   # No token may reach an xtrace log; restore tracing on the way out.
-  local _xt rc=0
+  local _xt rc=0 err
   case "$-" in *x*) _xt=1; set +x ;; *) _xt=0 ;; esac
   # -w LAST and the token on stdin: as `-w <token>` it would sit in argv, where `ps` sees it.
   # `security` reads the password TWICE in this mode — a single line stores an EMPTY password.
-  printf '%s\n%s\n' "$3" "$3" | security add-generic-password -U -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" \
-    -j "bolyra hosted-verify tenant token: $1 ($2)" -w >/dev/null || rc=$?
+  # With the token on stdin, `security` prints its interactive retype prompt to stderr even
+  # though nothing is actually waiting on a terminal; captured here and shown only on failure
+  # so a real keychain error is never lost in that noise. `err` holds prompt/error text only —
+  # never the token, which never touches stderr.
+  err="$(printf '%s\n%s\n' "$3" "$3" | security add-generic-password -U -s "$KEYCHAIN_SERVICE" \
+      -a "$(kc_account "$1" "$2")" -j "bolyra hosted-verify tenant token: $1 ($2)" -w 2>&1 >/dev/null)" || rc=$?
+  if [ "$rc" != 0 ]; then printf '%s\n' "$err" >&2; fi
   if [ "$_xt" = 1 ]; then set -x; fi
   return "$rc"
 }
@@ -153,7 +158,7 @@ cmd_add() {
   esac
   [ -z "$extra" ] || die "add: unexpected extra argument '$extra'"
   require_org "$org"; require_keys "$keys"; require_security
-  [ ! -e "$(registry_file "$org")" ] || die "tenant '$org' already has a registry file: $(registry_file "$org")"
+  [ ! -e "$(registry_file "$org")" ] || die "tenant '$org' already has a registry file at $(registry_file "$org") (to re-mint its tokens: rotate $org admin|verifier; to change keys: edit trustedOperators and sync)"
   local list="$keys"
   [ "$flag" != "--with-fixture-key" ] || list="$keys,$FIXTURE_KEY"
   mkdir -p "$TENANTS_DIR"
