@@ -27,7 +27,7 @@ under `contracts/deployments/` and `circuits/build/`.
 - The stashed authorization decision is consumed one-use: a second `verify` against the same captured request fails closed; a failed payment rail means the client retries with a fresh presentation.
 - A receipt sink failure (throw or Promise) now denies the request `internal_error` on every path instead of escaping; on the allow path this consumes the presentation's nonce.
 - `issueMandate` now mints a fresh, random nullifier (`publicSignals[1]`) per issuance. Previously it was a constant, which made every standing mandate single-use against a hosted verifier that reserves the nullifier. Presentations minted by 0.4.0 keep working; re-issue rather than re-present.
-- `mppx` peer dependency is pinned exactly to `0.8.13`, the version the real-mppx action-counter suite runs against; the range widens only when that suite passes on a newer mppx.
+- `mppx` peer dependency is pinned exactly to `0.8.13`, the version the real-mppx action-counter suite runs against; the range widens only when that suite passes on a newer mppx. Consequence: with npm 7+, a consumer whose tree already resolves a different `mppx` version gets an `ERESOLVE` install failure (optional peers are validated when present); pnpm/yarn warn. Escape hatch at the consumer's own risk: `--legacy-peer-deps`.
 
 ### Added
 

@@ -284,10 +284,13 @@ Checked (classical):
   enforcement use the zk-class verifier (`bolyra verify`).
 - replay: a spend mandate is a *standing* authorization, reusable within tier
   and expiry by design; per-payment idempotency is MPP's challenge binding.
-  (External verifiers in host nonce mode DO make presentations one-shot —
-  the gate reserves their `consume_nonces` before acting. The default
+  Replay protection in classical mode is **cooperative**: the binding
+  signature does not cover the nullifier (`publicSignals[1]`), so a presenter
+  can rewrite it and re-present. External verifiers in host nonce mode make
+  UNMODIFIED re-sends one-shot — the gate reserves their `consume_nonces`
+  before acting — but nothing binds the nullifier to the proof. The default
   reservation store is in-memory and per-process: it does not survive
-  restarts or span instances — inject `nonceStore` for that.)
+  restarts or span instances — inject `nonceStore` for that.
 - dynamic pricing: the tier check reads the **route's configured amount** at
   preflight time, before any method `request` hook runs. For standard methods
   mppx pins the economic request fields across calls (stable binding), so the
