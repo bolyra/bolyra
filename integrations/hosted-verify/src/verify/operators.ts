@@ -15,36 +15,37 @@
  * configured issuer AND the binding signature to verify against it. An
  * attacker cannot forge a binding signature for a key they do not hold.
  *
- * `TRUSTED_OPERATORS` is a comma-separated list of `x:y` decimal public-key
- * coordinate pairs. NO configured issuer is fail-closed (`internal_error`) —
- * never "all operators trusted".
+ * The trusted set is PER TENANT: each tenant's `trusted_operators` list in
+ * the `TENANTS` secret (src/tenants.ts) holds `x:y` decimal public-key
+ * coordinate pairs. An EMPTY list is fail-closed (`internal_error`) — never
+ * "all operators trusted".
  */
 
 import { VerifyDenial } from './verdict';
 
-/** Canonical `x:y` form of a public-key coordinate pair. */
+/** Canonical `x:y` form of a public-key coordinate pair (no leading zeros). */
 export function operatorKeyId(x: bigint, y: bigint): string {
   return `${x.toString()}:${y.toString()}`;
 }
 
-/** Parse `TRUSTED_OPERATORS` into a set of canonical `x:y` decimal pairs. */
-export function loadTrustedOperators(envValue: string | undefined): Set<string> {
-  const entries = (envValue ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-
+/**
+ * Canonicalize a tenant's `trusted_operators` entries into a set of
+ * `operatorKeyId` strings. Each key id identifies exactly one immutable
+ * public key: an entry written with leading zeros canonicalizes to the same
+ * id as one written without (`"0123:0456"` → `"123:456"`).
+ */
+export function loadTrustedOperators(entries: readonly string[]): Set<string> {
   if (entries.length === 0) {
-    throw new VerifyDenial('internal_error', 'no trusted operator source configured');
+    throw new VerifyDenial('internal_error', 'no trusted operator configured');
   }
 
   const operators = new Set<string>();
   for (const entry of entries) {
-    const parts = entry.split(':');
+    const parts = entry.trim().split(':');
     if (parts.length !== 2 || !/^[0-9]+$/.test(parts[0]!) || !/^[0-9]+$/.test(parts[1]!)) {
       throw new VerifyDenial(
         'internal_error',
-        'TRUSTED_OPERATORS entry must be an "x:y" decimal coordinate pair',
+        'trusted operator entry must be an "x:y" decimal coordinate pair',
       );
     }
     operators.add(operatorKeyId(BigInt(parts[0]!), BigInt(parts[1]!)));

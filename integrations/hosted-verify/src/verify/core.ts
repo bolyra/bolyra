@@ -15,8 +15,8 @@
  * means: **a configured trusted operator signed a binding authorizing this
  * exact {agent_name, project_key, program, model, capabilities, expiry}, the
  * request matches that signed binding, and the granted capabilities are a
- * subset of it.** The trust anchor is the operator key set
- * (`TRUSTED_OPERATORS`), NOT the proof's Merkle root (which is unverified here
+ * subset of it.** The trust anchor is the tenant's operator key set
+ * (`trusted_operators` in the `TENANTS` secret), NOT the proof's Merkle root (which is unverified here
  * and carries no weight).
  *
  * BINDING v2 — EXPIRY IS SIGNATURE-BOUND. The signed binding includes `expiry`
@@ -45,10 +45,10 @@
  */
 
 import { parseBundle } from './bundle';
-import { loadTrustedOperators, assertTrustedOperator } from './operators';
+import { assertTrustedOperator } from './operators';
 import { assertScopeAnchored, assertSubset, assertNotExpired } from './scope';
 import { verifyBindingSig, checkRequestBinding, checkModelBinding } from './binding';
-import { loadCapabilityMap, requiredBits } from './capabilities';
+import { requiredBits, type CapabilityMap } from './capabilities';
 import {
   allow,
   deny,
@@ -57,12 +57,6 @@ import {
   type ConsumeNonce,
   type Verdict,
 } from './verdict';
-
-/** Environment the pipeline reads (a subset of the Worker `Env`). */
-export interface VerifyEnv {
-  TRUSTED_OPERATORS?: string;
-  CAPABILITY_MAP?: string;
-}
 
 export interface VerifierRequestContext {
   agent_name: string;
@@ -90,7 +84,7 @@ export interface VerifierRequest {
  * signed-by-the-operator fact or a fail-closed gate). Surfaced on /health.
  */
 export const CHECKS_AUTHENTICATED = [
-  'trusted-operator gate: credential operator key ∈ configured TRUSTED_OPERATORS (fail-closed if unset)',
+  "trusted-operator gate: credential operator key ∈ the tenant's configured trusted operators (fail-closed if none)",
   'BabyJubjub EdDSA-Poseidon binding signature over the request binding, against that operator key (spec §4, binding v2)',
   'byte-literal request↔binding match (agent_name/project_key/program/model)',
   'granted_capabilities ⊆ operator-signed capabilities',
@@ -172,9 +166,15 @@ function validateRequest(request: unknown): asserts request is VerifierRequest {
 /**
  * Run the classical verification pipeline. Never throws: every failure path
  * resolves to a `deny` verdict (spec §7 — decision-level outcomes are
- * verdicts, not errors).
+ * verdicts, not errors). Configuration is the CALLER's problem: it hands in
+ * the tenant's canonical trusted-operator set and the effective capability
+ * map, both already validated (a defect there is the caller's 500).
  */
-export function verifyClassical(body: unknown, env: VerifyEnv): Verdict {
+export function verifyClassical(
+  body: unknown,
+  trustedOperators: Set<string>,
+  capabilityMap: CapabilityMap,
+): Verdict {
   try {
     // 1. Request shape + version (cheapest, no crypto).
     validateRequest(body);
@@ -223,10 +223,9 @@ export function verifyClassical(body: unknown, env: VerifyEnv): Verdict {
     // 5. TRUST ANCHOR: the operator key MUST be a configured trusted issuer,
     //    and the binding signature MUST verify against it. Together these are
     //    the classical authorization — an attacker cannot sign a binding for a
-    //    trusted key they do not hold. Fail closed when no issuer is
-    //    configured.
-    const operators = loadTrustedOperators(env.TRUSTED_OPERATORS);
-    assertTrustedOperator(operators, operatorPubkey.x, operatorPubkey.y);
+    //    trusted key they do not hold. Fail closed when the tenant has no
+    //    issuer (enforced at load).
+    assertTrustedOperator(trustedOperators, operatorPubkey.x, operatorPubkey.y);
     verifyBindingSig(
       bundle.binding,
       { R8: { x: BigInt(bundle.sig.R8.x), y: BigInt(bundle.sig.R8.y) }, S: BigInt(bundle.sig.S) },
@@ -264,7 +263,6 @@ export function verifyClassical(body: unknown, env: VerifyEnv): Verdict {
     );
 
     // 8. Capability → scope subset over the revealed bitmask (consistency).
-    const capabilityMap = loadCapabilityMap(env.CAPABILITY_MAP);
     const required = requiredBits(capabilityMap, request.request.granted_capabilities);
     const effectiveScope = BigInt(cred.permission_bitmask);
     const effectiveExpiry = BigInt(cred.expiry);
