@@ -46,6 +46,7 @@ describe('register', () => {
       credential_id: ID_A,
       status: 'ACTIVE',
       operator_key: '1:2',
+      binding_digest_hex: '0'.repeat(63) + '1',
       binding_json: input(ID_A).binding_json,
       registered_at: NOW,
       revoked_at: null,
@@ -69,6 +70,30 @@ describe('register', () => {
     expect(await r.register(input(ID_A, { expiry: NOW }))).toEqual({ outcome: 'expired' });
     expect(await r.register(input(ID_A, { expiry: NOW - 1 }))).toEqual({ outcome: 'expired' });
     expect(await r.status(ID_A)).toBe('ABSENT');
+  });
+
+  it('same id with a DIFFERENT key or digest → mismatch; the stored row is untouched', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    expect(await r.register(input(ID_A, { operator_key: '9:9' }))).toEqual({ outcome: 'mismatch' });
+    expect(await r.register(input(ID_A, { binding_digest_hex: 'f'.repeat(64) }))).toEqual({ outcome: 'mismatch' });
+    const got = await r.get(ID_A);
+    expect(got.outcome === 'found' && got.record.operator_key).toBe('1:2');
+    expect(got.outcome === 'found' && got.record.history).toHaveLength(1);
+  });
+
+  it.each([
+    ['a non-string credential_id', { credential_id: 12345 as unknown as string }],
+    ['an object as binding_json', { binding_json: { a: 1 } as unknown as string }],
+    ['a NaN now', { now: Number.NaN }],
+    ['a fractional now', { now: NOW + 0.5 }],
+    ['a negative expiry', { expiry: -1 }],
+  ])('%s → invalid_input, nothing stored', async (_name, overrides) => {
+    const r = registry(ORGS.A);
+    expect(await r.register(input(ID_A, overrides))).toEqual({ outcome: 'invalid_input' });
+    expect(await r.status(ID_A)).toBe('ABSENT');
+    expect(await r.status(12345 as unknown as string)).toBe('invalid_input');
+    expect(await r.revoke(ID_A, Number.NaN, 'r')).toBe('invalid_input');
   });
 
   it('REVOKED → revoked (terminal), row untouched', async () => {
@@ -97,6 +122,18 @@ describe('revoke / status / get', () => {
       { event: 'registered', ts: NOW, request_id: 'req-1' },
       { event: 'revoked', ts: NOW + 10, request_id: 'req-r1' },
     ]);
+  });
+
+  it('a revocation clocked BEFORE the registration is recorded at the registration time; history stays in insertion order', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    expect(await r.revoke(ID_A, NOW - 5000, 'req-early')).toBe('revoked');
+    const got = await r.get(ID_A);
+    expect(got.outcome).toBe('found');
+    if (got.outcome !== 'found') return;
+    expect(got.record.revoked_at).toBe(NOW);
+    expect(got.record.history.map((h) => h.event)).toEqual(['registered', 'revoked']);
+    expect(got.record.history[1]!.ts).toBe(NOW);
   });
 
   it('absent → revoke absent, status ABSENT, get absent (never a tombstone)', async () => {
@@ -200,6 +237,7 @@ describe('durability contracts', () => {
     expect(await registry(ORGS.B).status(ID_A)).toBe('ACTIVE');
     expect(await registry(ORGS.C).status(ID_A)).toBe('ABSENT');
     const ids = await listDurableObjectIds(env.TENANT);
-    expect(ids).toHaveLength(3);
+    const expected = [ORGS.A, ORGS.B, ORGS.C].map((o) => env.TENANT.idFromName(o).toString()).sort();
+    expect(ids.map((i) => i.toString()).sort()).toEqual(expected);
   });
 });

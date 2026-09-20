@@ -11,24 +11,31 @@
  * Lifecycle (the caller has already authenticated the tenant, checked trust
  * membership and the signature, and computed the id):
  *
- *   register:  expired ─► { expired }           (re-checked here with the caller's `now`)
- *              absent  ─► { created }  + history 'registered'
- *              ACTIVE  ─► { unchanged } (original registered_at; no new row)
- *              REVOKED ─► { revoked }   (terminal; nothing is replaced)
+ *   register:  expired  ─► { expired }          (re-checked here with the caller's `now`)
+ *              absent   ─► { created }  + history 'registered'
+ *              ACTIVE, same key + digest ─► { unchanged } (original registered_at; no new row)
+ *              ACTIVE/REVOKED, DIFFERENT key or digest ─► { mismatch }  (an id-derivation
+ *                          defect or a collision; never silently kept, never overwritten)
+ *              REVOKED  ─► { revoked }   (terminal; nothing is replaced)
  *   revoke:    absent ─► 'absent'   ACTIVE ─► 'revoked' + history   REVOKED ─► 'unchanged'
  *
- * Two rules this class lives by:
+ * A credential row and its 'registered' event are created in the same
+ * transaction, so a history row without a credential row cannot exist.
+ *
+ * Rules this class lives by:
  *   1. Every mutation is ONE `transactionSync` with no `await` inside. The
  *      object's input gate only covers storage operations, so a method that
  *      awaited between a read and a write would interleave with other calls;
  *      synchronous methods run to completion one after another.
- *   2. Storage failures are RETURNED (`storage_error`), never thrown across the
- *      RPC boundary: a throw inside the object is reported as an unhandled
- *      rejection by the runtime even when the caller handles it. The caller
- *      maps `storage_error` to a fail-closed 500.
- *
- * Every SQL statement binds its parameters with `?`; no value is ever
- * interpolated into SQL text.
+ *   2. Nothing is thrown across the RPC boundary — a throw inside the object is
+ *      reported as an unhandled rejection by the runtime even when the caller
+ *      handles it. Storage failures are RETURNED (`storage_error`), a schema
+ *      failure at construction is remembered and returned by every method, and
+ *      ill-typed inputs are RETURNED (`invalid_input`): TypeScript types do not
+ *      survive the RPC boundary, so the object validates for itself.
+ *   3. Every SQL statement binds its parameters with `?`; no value is ever
+ *      interpolated into SQL text. History is ordered by insertion (`rowid`),
+ *      never by the caller-supplied timestamp.
  */
 
 import { DurableObject } from 'cloudflare:workers';
@@ -50,11 +57,13 @@ export type RegisterResult =
   | { outcome: 'created' | 'unchanged'; registered_at: number }
   | { outcome: 'revoked' }
   | { outcome: 'expired' }
+  | { outcome: 'mismatch' }
+  | { outcome: 'invalid_input' }
   | { outcome: 'storage_error' };
 
-export type RevokeResult = 'revoked' | 'unchanged' | 'absent' | 'storage_error';
+export type RevokeResult = 'revoked' | 'unchanged' | 'absent' | 'invalid_input' | 'storage_error';
 
-export type StatusResult = Status | 'storage_error';
+export type StatusResult = Status | 'invalid_input' | 'storage_error';
 
 // `type` aliases, not interfaces: `sql.exec<T>` requires an implicit index
 // signature, which TypeScript gives to aliases and mapped types only.
@@ -68,6 +77,7 @@ export interface CredentialRecord {
   credential_id: string;
   status: Exclude<Status, 'ABSENT'>;
   operator_key: string;
+  binding_digest_hex: string;
   binding_json: string;
   registered_at: number;
   revoked_at: number | null;
@@ -77,6 +87,7 @@ export interface CredentialRecord {
 export type GetResult =
   | { outcome: 'found'; record: CredentialRecord }
   | { outcome: 'absent' }
+  | { outcome: 'invalid_input' }
   | { outcome: 'storage_error' };
 
 const SCHEMA = `
@@ -102,34 +113,69 @@ type CredentialRow = {
   credential_id: string;
   status: 'ACTIVE' | 'REVOKED';
   operator_key: string;
+  binding_digest: string;
   binding_json: string;
   registered_at: number;
   revoked_at: number | null;
 };
 
-function logStorageError(operation: string, e: unknown): void {
-  // SQLite messages name tables/columns, never row values.
-  console.error(`registry storage error (${operation}):`, e instanceof Error ? e.message : String(e));
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+const isUnixSeconds = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+
+function validRegisterInput(input: unknown): input is RegisterInput {
+  if (typeof input !== 'object' || input === null) return false;
+  const i = input as Record<string, unknown>;
+  return (
+    isNonEmptyString(i.credential_id) &&
+    isNonEmptyString(i.operator_key) &&
+    isNonEmptyString(i.binding_digest_hex) &&
+    typeof i.binding_json === 'string' &&
+    isUnixSeconds(i.expiry) &&
+    isUnixSeconds(i.now) &&
+    typeof i.request_id === 'string'
+  );
+}
+
+/** SQLite messages name tables, columns and constraints — never bound values (verified). */
+function logStorageError(operation: string, requestId: string | undefined, e: unknown): void {
+  console.error(
+    `hosted-verify registry storage error (${operation}):`,
+    e instanceof Error ? (e.stack ?? e.message) : String(e),
+    { request_id: requestId ?? '' },
+  );
 }
 
 export class TenantRegistry extends DurableObject<Env> {
+  /** Set when the schema could not be created; every method then returns `storage_error`. */
+  #schemaError: unknown = undefined;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // Synchronous and idempotent: the schema exists before any request runs.
-    this.ctx.storage.sql.exec(SCHEMA);
+    try {
+      this.ctx.storage.sql.exec(SCHEMA);
+    } catch (e) {
+      this.#schemaError = e;
+      logStorageError('schema', undefined, e);
+    }
   }
 
   register(input: RegisterInput): RegisterResult {
+    if (this.#schemaError !== undefined) return { outcome: 'storage_error' };
+    if (!validRegisterInput(input)) return { outcome: 'invalid_input' };
+    if (input.expiry <= input.now) return { outcome: 'expired' };
     try {
       return this.ctx.storage.transactionSync((): RegisterResult => {
-        if (input.expiry <= input.now) return { outcome: 'expired' };
         const existing = this.ctx.storage.sql
-          .exec<Pick<CredentialRow, 'status' | 'registered_at'>>(
-            'SELECT status, registered_at FROM credentials WHERE credential_id = ?',
+          .exec<Pick<CredentialRow, 'status' | 'registered_at' | 'operator_key' | 'binding_digest'>>(
+            'SELECT status, registered_at, operator_key, binding_digest FROM credentials WHERE credential_id = ?',
             input.credential_id,
           )
           .toArray()[0];
         if (existing !== undefined) {
+          if (existing.operator_key !== input.operator_key || existing.binding_digest !== input.binding_digest_hex) {
+            return { outcome: 'mismatch' };
+          }
           return existing.status === 'REVOKED'
             ? { outcome: 'revoked' }
             : { outcome: 'unchanged', registered_at: existing.registered_at };
@@ -153,71 +199,86 @@ export class TenantRegistry extends DurableObject<Env> {
         return { outcome: 'created', registered_at: input.now };
       });
     } catch (e) {
-      logStorageError('register', e);
+      logStorageError('register', input.request_id, e);
       return { outcome: 'storage_error' };
     }
   }
 
   status(credential_id: string): StatusResult {
+    if (this.#schemaError !== undefined) return 'storage_error';
+    if (!isNonEmptyString(credential_id)) return 'invalid_input';
     try {
       const row = this.ctx.storage.sql
         .exec<Pick<CredentialRow, 'status'>>('SELECT status FROM credentials WHERE credential_id = ?', credential_id)
         .toArray()[0];
       return row === undefined ? 'ABSENT' : row.status;
     } catch (e) {
-      logStorageError('status', e);
+      logStorageError('status', undefined, e);
       return 'storage_error';
     }
   }
 
   revoke(credential_id: string, now: number, request_id: string): RevokeResult {
+    if (this.#schemaError !== undefined) return 'storage_error';
+    if (!isNonEmptyString(credential_id) || !isUnixSeconds(now) || typeof request_id !== 'string') {
+      return 'invalid_input';
+    }
     try {
       return this.ctx.storage.transactionSync((): RevokeResult => {
         const row = this.ctx.storage.sql
-          .exec<Pick<CredentialRow, 'status'>>('SELECT status FROM credentials WHERE credential_id = ?', credential_id)
+          .exec<Pick<CredentialRow, 'status' | 'registered_at'>>(
+            'SELECT status, registered_at FROM credentials WHERE credential_id = ?',
+            credential_id,
+          )
           .toArray()[0];
         if (row === undefined) return 'absent';
         if (row.status === 'REVOKED') return 'unchanged';
+        // Clocks differ between the colo that registered and the one revoking:
+        // never record a revocation earlier than the registration it ends.
+        const revokedAt = Math.max(now, row.registered_at);
         this.ctx.storage.sql.exec(
           'UPDATE credentials SET status = ?, revoked_at = ? WHERE credential_id = ?',
           'REVOKED',
-          now,
+          revokedAt,
           credential_id,
         );
         this.ctx.storage.sql.exec(
           'INSERT INTO history (credential_id, event, ts, request_id) VALUES (?, ?, ?, ?)',
           credential_id,
           'revoked',
-          now,
+          revokedAt,
           request_id,
         );
         return 'revoked';
       });
     } catch (e) {
-      logStorageError('revoke', e);
+      logStorageError('revoke', request_id, e);
       return 'storage_error';
     }
   }
 
   get(credential_id: string): GetResult {
+    if (this.#schemaError !== undefined) return { outcome: 'storage_error' };
+    if (!isNonEmptyString(credential_id)) return { outcome: 'invalid_input' };
     try {
       const row = this.ctx.storage.sql
         .exec<CredentialRow>(
-          'SELECT credential_id, status, operator_key, binding_json, registered_at, revoked_at FROM credentials WHERE credential_id = ?',
+          'SELECT credential_id, status, operator_key, binding_digest, binding_json, registered_at, revoked_at FROM credentials WHERE credential_id = ?',
           credential_id,
         )
         .toArray()[0];
       if (row === undefined) return { outcome: 'absent' };
       const history = this.ctx.storage.sql
         .exec<HistoryEvent>(
-          'SELECT event, ts, request_id FROM history WHERE credential_id = ? ORDER BY ts ASC, event ASC',
+          'SELECT event, ts, request_id FROM history WHERE credential_id = ? ORDER BY rowid ASC',
           credential_id,
         )
         .toArray()
         .map((h) => ({ event: h.event, ts: h.ts, request_id: h.request_id }));
-      return { outcome: 'found', record: { ...row, history } };
+      const { binding_digest, ...rest } = row;
+      return { outcome: 'found', record: { ...rest, binding_digest_hex: binding_digest, history } };
     } catch (e) {
-      logStorageError('get', e);
+      logStorageError('get', undefined, e);
       return { outcome: 'storage_error' };
     }
   }
