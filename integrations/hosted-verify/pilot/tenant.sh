@@ -4,7 +4,7 @@
 #
 # Thin wrapper over existing mechanisms — no new infra:
 #   * the two bearer tokens per tenant live in the macOS keychain
-#       service: bolyra-hosted-verify   (bolyra-hosted-verify-staging when HOSTED_VERIFY_ENV=staging)
+#       service: bolyra-hosted-verify   (bolyra-hosted-verify-<env> when HOSTED_VERIFY_ENV is set)
 #       account: tenant-<org_id>-admin / tenant-<org_id>-verifier
 #   * the tenant registry is pilot/tenants/<org_id>.json at the repo root (one file per
 #     tenant; template pilot/partner-config.example.json). Files contain NO secrets — the
@@ -18,10 +18,11 @@
 # always go through `sync`, which includes every tenant whose status is active or disabled.
 #
 # Usage:
-#   ./tenant.sh add <org_id> <x:y>[,<x:y>...] [--no-fixture-key]
+#   ./tenant.sh add <org_id> <x:y>[,<x:y>...] [--with-fixture-key]
 #                                     mint both tokens, store them, create the registry file
-#                                     trusting the given keys (plus the repo fixture key
-#                                     unless --no-fixture-key), then sync
+#                                     trusting ONLY the keys given, then sync; seeds the repo
+#                                     conformance fixture key only with --with-fixture-key
+#                                     (preview-only: its private half is public)
 #   ./tenant.sh rotate <org_id> admin|verifier
 #                                     mint a NEW token for that role, then sync
 #   ./tenant.sh disable <org_id>      quarantine — the entry stays with "disabled": true and
@@ -41,9 +42,9 @@
 #   ./tenant.sh show                  list tenants, status, keychain presence
 #
 # Environment:
-#   HOSTED_VERIFY_ENV=staging   target the staging Worker (`--env=staging`; keychain
-#                               service bolyra-hosted-verify-staging; registry directory
-#                               pilot/tenants-staging)
+#   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
+#                               service bolyra-hosted-verify-<name>; registry directory
+#                               pilot/tenants-<name>); must match ^[a-z][a-z0-9-]{0,31}$
 #   TENANTS_DIR=<dir>           override the registry directory
 #
 # Tokens are NEVER printed by this script. To hand a token to a partner over a secure
@@ -51,11 +52,17 @@
 #   security find-generic-password -s bolyra-hosted-verify -a tenant-<org_id>-verifier -w
 set -euo pipefail
 
+die() { echo "error: $*" >&2; exit 1; }
+usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$WORKER_DIR/../.." && pwd)"
 ENV_NAME="${HOSTED_VERIFY_ENV:-}"
 if [ -n "$ENV_NAME" ]; then
+  # The name becomes a keychain service, a directory, and a wrangler `--env=` — validate it
+  # here rather than discover it as a mis-targeted push or a stray directory.
+  [[ "$ENV_NAME" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || die "HOSTED_VERIFY_ENV must match ^[a-z][a-z0-9-]{0,31}\$ (got '$ENV_NAME')"
   KEYCHAIN_SERVICE="bolyra-hosted-verify-$ENV_NAME"
   TENANTS_DIR="${TENANTS_DIR:-$REPO_ROOT/pilot/tenants-$ENV_NAME}"
   WRANGLER_ENV=("--env=$ENV_NAME")
@@ -67,13 +74,10 @@ else
   # wrangler does not warn about an unspecified environment.
   WRANGLER_ENV=("--env=")
 fi
-# The repo conformance-fixture operator key (its private half is public). Seeded into
-# preview tenants so the quickstart and examples/managed-revocation verify before the
-# partner's own key issues anything. Preview-only; never in a real deployment.
+# The repo conformance-fixture operator key (its private half is public). Seeded into a
+# preview tenant ONLY on --with-fixture-key, so the quickstart and examples/managed-revocation
+# verify before the partner's own key issues anything. Preview-only; never in a real deployment.
 FIXTURE_KEY="15617329766995256858590222302430068383949745072531974464084158078905448850943:20201653676552407165606319978171745645181779505176156736762229713293662347780"
-
-die() { echo "error: $*" >&2; exit 1; }
-usage() { sed -n '2,51p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 require_org() {
   [[ "$1" =~ ^[a-z0-9][a-z0-9-]{1,62}$ ]] || die "org_id '$1' must match ^[a-z0-9][a-z0-9-]{1,62}$"
@@ -82,6 +86,10 @@ require_org() {
 require_keys() {  # comma-separated x:y decimal pairs
   local key _keys
   [ -n "$1" ] || die "at least one operator key (x:y) is required"
+  # Match the WHOLE list in one anchored test before anything is created: a per-entry loop
+  # misses a trailing comma (bash 3.2 `read -a` drops a trailing empty field), and a
+  # half-provisioned tenant blocks every later sync.
+  [[ "$1" =~ ^[0-9]+:[0-9]+(,[0-9]+:[0-9]+)*$ ]] || die "operator keys must be comma-separated x:y decimal pairs with no empty entries (got '$1')"
   IFS=',' read -r -a _keys <<< "$1"
   for key in "${_keys[@]}"; do
     [[ "$key" =~ ^[0-9]+:[0-9]+$ ]] || die "operator key '$key' must be an x:y decimal pair"
@@ -93,51 +101,87 @@ kc_account() { echo "tenant-$1-$2"; }
 kc_has() { have_security && security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null 2>&1; }
 kc_get() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" -w; }
 kc_put() {  # $1 org, $2 role, $3 token — -U updates in place
-  security add-generic-password -U -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" -w "$3" \
-    -j "bolyra hosted-verify tenant token: $1 ($2)" >/dev/null
+  # No token may reach an xtrace log; restore tracing on the way out.
+  local _xt rc=0
+  case "$-" in *x*) _xt=1; set +x ;; *) _xt=0 ;; esac
+  # -w LAST and the token on stdin: as `-w <token>` it would sit in argv, where `ps` sees it.
+  # `security` reads the password TWICE in this mode — a single line stores an EMPTY password.
+  printf '%s\n%s\n' "$3" "$3" | security add-generic-password -U -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" \
+    -j "bolyra hosted-verify tenant token: $1 ($2)" -w >/dev/null || rc=$?
+  if [ "$_xt" = 1 ]; then set -x; fi
+  return "$rc"
+}
+kc_put_minted() {  # $1 org, $2 role — mint a fresh token and store it
+  # The guard has to sit OUT here, not only inside kc_put: under `bash -x` the caller traces
+  # both the `t=$(mint)` assignment and the kc_put call line itself before the callee's own
+  # guard can run.
+  local _xt rc=0 t
+  case "$-" in *x*) _xt=1; set +x ;; *) _xt=0 ;; esac
+  t="$(mint)" && kc_put "$1" "$2" "$t" || rc=$?
+  unset t
+  if [ "$_xt" = 1 ]; then set -x; fi
+  return "$rc"
 }
 kc_delete() { security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null 2>&1 || true; }
 mint() { openssl rand -hex 32; }
 
 registry_file() { echo "$TENANTS_DIR/$1.json"; }
 reg_field() {  # $1 org, $2 field → the field as a string (empty when absent)
-  node -e 'const fs=require("fs");const f=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const v=f[process.argv[2]];process.stdout.write(v===undefined?"":(typeof v==="string"?v:JSON.stringify(v)))' "$(registry_file "$1")" "$2"
+  node -e '
+const fs=require("fs");const p=process.argv[1];const raw=fs.readFileSync(p,"utf8");
+let f;try{f=JSON.parse(raw)}catch(e){process.stderr.write("tenant.sh: "+p+": not valid JSON\n");process.exit(1)}
+const v=f[process.argv[2]];process.stdout.write(v===undefined?"":(typeof v==="string"?v:JSON.stringify(v)))' "$(registry_file "$1")" "$2"
 }
 reg_set_status() {  # $1 org, $2 status — preserves every other field
-  node -e 'const fs=require("fs");const p=process.argv[1];const f=JSON.parse(fs.readFileSync(p,"utf8"));f.status=process.argv[2];f.updated=new Date().toISOString().slice(0,10);fs.writeFileSync(p,JSON.stringify(f,null,2)+"\n")' "$(registry_file "$1")" "$2"
+  # Written to a sibling temp file and renamed over the target: a crash or a full disk
+  # mid-write must never leave a truncated registry file that fails the next sync.
+  node -e '
+const fs=require("fs");const p=process.argv[1];const raw=fs.readFileSync(p,"utf8");
+let f;try{f=JSON.parse(raw)}catch(e){process.stderr.write("tenant.sh: "+p+": not valid JSON\n");process.exit(1)}
+f.status=process.argv[2];f.updated=new Date().toISOString().slice(0,10);
+const tmp=p+".tmp."+process.pid;fs.writeFileSync(tmp,JSON.stringify(f,null,2)+"\n");fs.renameSync(tmp,p)' "$(registry_file "$1")" "$2"
 }
 require_registry() { [ -f "$(registry_file "$1")" ] || die "no registry file for '$1' at $(registry_file "$1") (run: add)"; }
 
 cmd_add() {
-  local org="${1:-}" keys="${2:-}" flag="${3:-}"
+  local org="${1:-}" keys="${2:-}" flag="${3:-}" extra="${4:-}"
   [ -n "$org" ] && [ -n "$keys" ] || usage
+  # Opt in to the fixture key; a misspelling must not silently trust a key nobody asked for.
+  case "$flag" in
+    "" | --with-fixture-key) ;;
+    *) die "add: unknown argument '$flag' (only --with-fixture-key is accepted)" ;;
+  esac
+  [ -z "$extra" ] || die "add: unexpected extra argument '$extra'"
   require_org "$org"; require_keys "$keys"; require_security
   [ ! -e "$(registry_file "$org")" ] || die "tenant '$org' already has a registry file: $(registry_file "$org")"
   local list="$keys"
-  [ "$flag" = "--no-fixture-key" ] || list="$keys,$FIXTURE_KEY"
+  [ "$flag" != "--with-fixture-key" ] || list="$keys,$FIXTURE_KEY"
   mkdir -p "$TENANTS_DIR"
-  node -e 'const fs=require("fs");const [p,org,list]=process.argv.slice(1);const f={org_id:org,status:"active",displayName:"",contact:"",trustedOperators:list.split(","),tierCaps:{maxTier:"medium"},created:new Date().toISOString().slice(0,10),notes:""};fs.writeFileSync(p,JSON.stringify(f,null,2)+"\n")' "$(registry_file "$org")" "$org" "$list"
-  local t
-  t="$(mint)"; kc_put "$org" admin "$t"
-  t="$(mint)"; kc_put "$org" verifier "$t"
-  unset t
+  node -e '
+const fs=require("fs");const [p,org,list]=process.argv.slice(1);
+const f={org_id:org,status:"active",displayName:"",contact:"",trustedOperators:list.split(","),tierCaps:{maxTier:"medium"},created:new Date().toISOString().slice(0,10),notes:""};
+const tmp=p+".tmp."+process.pid;fs.writeFileSync(tmp,JSON.stringify(f,null,2)+"\n");fs.renameSync(tmp,p)' "$(registry_file "$org")" "$org" "$list"
+  kc_put_minted "$org" admin
+  kc_put_minted "$org" verifier
   echo "tenant '$org': registry file $(registry_file "$org"); tokens stored (keychain service $KEYCHAIN_SERVICE, accounts $(kc_account "$org" admin) / $(kc_account "$org" verifier))"
   cmd_sync
 }
 
 cmd_rotate() {
-  local org="${1:-}" role="${2:-}"
+  local org="${1:-}" role="${2:-}" extra="${3:-}"
   [ -n "$org" ] || usage
   case "$role" in admin|verifier) ;; *) usage ;; esac
+  [ -z "$extra" ] || die "rotate: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"; require_security
-  local t
-  t="$(mint)"; kc_put "$org" "$role" "$t"; unset t
+  kc_put_minted "$org" "$role"
   echo "tenant '$org': new $role token stored; the old one dies when the sync lands"
   cmd_sync
 }
 
 cmd_disable() {
-  local org="${1:-}"; [ -n "$org" ] || usage
+  local org="${1:-}" extra="${2:-}"
+  [ -n "$org" ] || usage
+  [ -z "$extra" ] || die "disable: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"
   reg_set_status "$org" disabled
   echo "tenant '$org': quarantined (served on no route until enable); tell them it is deliberate"
@@ -145,8 +189,9 @@ cmd_disable() {
 }
 
 cmd_enable() {
-  local org="${1:-}" flag="${2:-}"
+  local org="${1:-}" flag="${2:-}" extra="${3:-}"
   [ -n "$org" ] || usage
+  [ -z "$extra" ] || die "enable: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"
   [ "$flag" = "--keys-retired" ] || die "enable refuses without --keys-retired: a quarantine usually exists because a key or a token was in question; confirm you retired or re-issued it (rotate / edit trustedOperators) before lifting it"
   reg_set_status "$org" active
@@ -155,7 +200,9 @@ cmd_enable() {
 }
 
 cmd_remove() {
-  local org="${1:-}"; [ -n "$org" ] || usage
+  local org="${1:-}" extra="${2:-}"
+  [ -n "$org" ] || usage
+  [ -z "$extra" ] || die "remove: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"; require_security
   reg_set_status "$org" removed
   kc_delete "$org" admin; kc_delete "$org" verifier
@@ -165,9 +212,15 @@ cmd_remove() {
 
 # Print "<org> <role> <token>" for every active/disabled tenant — consumed on a pipe only.
 tokens_for_sync() {
-  local f org status role
+  local f b org status role token _xt
+  # No token may reach an xtrace log; restore tracing on the way out.
+  case "$-" in *x*) _xt=1; set +x ;; *) _xt=0 ;; esac
   for f in "$TENANTS_DIR"/*.json; do
     [ -e "$f" ] || die "no tenant registry files in $TENANTS_DIR — never push an empty map (the Worker rejects {}); add a tenant, or quarantine the remaining ones instead"
+    # A directory named x.json, or an AppleDouble ._x.json, must not block every sync.
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    case "$b" in .*) continue ;; esac
     case "$f" in *.policy.json) continue ;; esac
     org="$(basename "$f" .json)"; require_org "$org"
     status="$(reg_field "$org" status)"
@@ -178,16 +231,29 @@ tokens_for_sync() {
     esac
     for role in admin verifier; do
       kc_has "$org" "$role" || die "no keychain token for '$org' ($role): run rotate $org $role"
-      printf '%s %s %s\n' "$org" "$role" "$(kc_get "$org" "$role")"
+      # Capture first: a failing $(kc_get …) inside printf does not trip set -e, and the
+      # tenant would silently sync with an empty token.
+      token="$(kc_get "$org" "$role")" || die "could not read the $role token for '$org' from the keychain (denied or locked?)"
+      [ -n "$token" ] || die "the keychain returned an empty $role token for '$org'"
+      printf '%s %s %s\n' "$org" "$role" "$token"
     done
   done
+  if [ "$_xt" = 1 ]; then set -x; fi
+  return 0
 }
 
 cmd_sync() {
-  local dry="${1:-}"
+  local arg="${1:-}" extra="${2:-}" dry=0
+  # Parse positively: anything that is not exactly --dry-run must refuse, never push live.
+  case "$arg" in
+    "") ;;
+    --dry-run) dry=1 ;;
+    *) die "sync: unknown argument '$arg' (only --dry-run is accepted)" ;;
+  esac
+  [ -z "$extra" ] || die "sync: unexpected extra argument '$extra'"
   require_security
   echo "assembling TENANTS from $TENANTS_DIR (tokens from keychain service $KEYCHAIN_SERVICE)…" >&2
-  if [ "$dry" = "--dry-run" ]; then
+  if [ "$dry" = 1 ]; then
     tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs"
     echo "(dry run: not pushing)" >&2
     return 0
@@ -206,10 +272,14 @@ cmd_sync() {
 }
 
 cmd_show() {
-  local f org status a v
+  local extra="${1:-}" f b org status a v
+  [ -z "$extra" ] || die "show: unexpected extra argument '$extra'"
   printf '%-24s %-10s %-8s %s\n' "org_id" "status" "admin" "verifier"
   for f in "$TENANTS_DIR"/*.json; do
     [ -e "$f" ] || { echo "(no tenants in $TENANTS_DIR)"; return 0; }
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    case "$b" in .*) continue ;; esac
     case "$f" in *.policy.json) continue ;; esac
     org="$(basename "$f" .json)"
     status="$(reg_field "$org" status)"
@@ -222,13 +292,17 @@ cmd_show() {
   done
 }
 
-case "${1:-}" in
-  add)     cmd_add "${2:-}" "${3:-}" "${4:-}" ;;
-  rotate)  cmd_rotate "${2:-}" "${3:-}" ;;
-  disable) cmd_disable "${2:-}" ;;
-  enable)  cmd_enable "${2:-}" "${3:-}" ;;
-  remove)  cmd_remove "${2:-}" ;;
-  sync)    cmd_sync "${2:-}" ;;
-  show)    cmd_show ;;
+cmd="${1:-}"
+if [ $# -gt 0 ]; then shift; fi
+# One positional past what each subcommand uses, so an unexpected extra argument is seen
+# and refused rather than silently ignored.
+case "$cmd" in
+  add)     cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
+  rotate)  cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
+  disable) cmd_disable "${1:-}" "${2:-}" ;;
+  enable)  cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
+  remove)  cmd_remove "${1:-}" "${2:-}" ;;
+  sync)    cmd_sync "${1:-}" "${2:-}" ;;
+  show)    cmd_show "${1:-}" ;;
   *)       usage ;;
 esac

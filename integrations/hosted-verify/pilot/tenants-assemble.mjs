@@ -2,7 +2,7 @@
 // directory given as argv[2] whose status is active or disabled, tokens read from stdin
 // as lines "<org_id> <admin|verifier> <token>". The map is written to stdout and nowhere
 // else; nothing is logged. Registry files hold no secrets.
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const dir = process.argv[2];
@@ -29,10 +29,29 @@ process.stdin.on('end', () => {
     tokens.set(`${org} ${role}`, token);
   }
   const map = {};
-  const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.endsWith('.policy.json')).sort();
+  // A dot-file (an AppleDouble ._acme.json copied off a USB stick) and anything that is not
+  // a regular file (a directory named x.json) are not registry records — skipping them keeps
+  // one stray entry from blocking every tenant's sync.
+  const files = readdirSync(dir)
+    .filter((f) => !f.startsWith('.') && f.endsWith('.json') && !f.endsWith('.policy.json'))
+    .filter((f) => {
+      try {
+        return statSync(path.join(dir, f)).isFile();
+      } catch {
+        return false;
+      }
+    })
+    .sort();
   for (const f of files) {
     const org = path.basename(f, '.json');
-    const record = JSON.parse(readFileSync(path.join(dir, f), 'utf8'));
+    let record;
+    try {
+      record = JSON.parse(readFileSync(path.join(dir, f), 'utf8'));
+    } catch {
+      // Name the file. A Node stack trace here tells an operator nothing they can act on.
+      process.stderr.write(`tenants-assemble: ${f}: not valid JSON\n`);
+      process.exit(1);
+    }
     if (record.org_id !== org) {
       process.stderr.write(`tenants-assemble: ${f}: org_id must equal the file name\n`);
       process.exit(1);
@@ -48,7 +67,16 @@ process.stdin.on('end', () => {
       process.stderr.write(`tenants-assemble: ${org}: missing a token for admin or verifier\n`);
       process.exit(1);
     }
-    const entry = { admin_token: admin, verifier_token: verifier, trusted_operators: record.trustedOperators };
+    if (!Array.isArray(record.trustedOperators)) {
+      // Refuse rather than pass it through: the validator would reject it downstream with a
+      // message about the map, not about the file an operator has to fix.
+      process.stderr.write(`tenants-assemble: ${f}: trustedOperators must be an array\n`);
+      process.exit(1);
+    }
+    // Dedupe, first-seen order preserved: a repeated key grants nothing and spends the
+    // 4096-byte TENANTS budget that every other tenant shares.
+    const trusted = [...new Set(record.trustedOperators)];
+    const entry = { admin_token: admin, verifier_token: verifier, trusted_operators: trusted };
     if (record.status === 'disabled') entry.disabled = true;
     map[org] = entry;
   }
