@@ -5,7 +5,7 @@
 // anywhere. Extra arguments (`--env=staging`, or `--env=` for production) are passed
 // through to wrangler.
 import { spawn } from 'node:child_process';
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 // wrangler's own confirmation, and the ONLY thing that counts as one. The process spawned
@@ -37,119 +37,28 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-// tenant.sh exports TENANT_LOCK_DIR and TENANT_LOCK_TOKEN for as long as it holds the
-// per-environment lock. The token is the lock's IDENTITY, and the path alone is not: `unlock`
-// can clear a retained lock and the next `sync` then creates a fresh lock directory at that
-// same path. A stage that checked only the path could write its marker — or start an upload —
-// under a lock belonging to somebody else's run, which is precisely the interleaving the lock
-// exists to prevent. So every write under the lock is made only while `owner` still carries
-// OUR token, and the check is repeated immediately before the upload starts.
-// Without TENANT_LOCK_DIR (direct CLI use, CI) there is no lock and no marker: the lock
-// semantics below exist only under tenant.sh.
+// tenant.sh exports TENANT_LOCK_DIR for as long as it holds the per-environment lock.
+// Without it (direct CLI use, CI) there is no lock and no marker: the marker semantics below
+// exist only under tenant.sh.
 const lockDir = process.env.TENANT_LOCK_DIR;
-const lockToken = process.env.TENANT_LOCK_TOKEN;
-// The marker that holds the lock. It is written BEFORE anything else happens — before a byte
-// of the map has been read — and renamed to upload.confirmed only on a confirmed upload, so
-// every way this process can die, including SIGKILL, leaves the lock held. A lock released
-// while an upload is still in flight lets a second operator's sync land first and this older
-// map overwrite it, silently undoing a quarantine. If the marker cannot be written, nothing
-// starts at all.
+// The marker that holds the lock. It is published BEFORE wrangler is started and renamed to
+// upload.confirmed only once wrangler has confirmed the upload, so every way this process can
+// die from that instant on — including SIGKILL — leaves the lock held. A lock released while
+// an upload is still in flight lets a second operator's sync land first and this older map
+// overwrite it, silently undoing a quarantine. If the marker cannot be written, no upload is
+// started at all.
 const pendingFile = lockDir === undefined ? undefined : path.join(lockDir, 'upload.pending');
 // The same marker under its confirmed name. tenant.sh reads which of the two names exists to
 // decide what to tell the operator, because neither an exit code nor the live secret can:
 // the launcher reports a signalled child as exit 0, a confirmation lost with the terminal
 // looks exactly like a failure, and `wrangler secret put` is write-only.
 const confirmedFile = lockDir === undefined ? undefined : path.join(lockDir, 'upload.confirmed');
-const ownerFile = lockDir === undefined ? undefined : path.join(lockDir, 'owner');
-
-const ownsLock = () => {
-  if (lockDir === undefined || !lockToken) return false;
-  try {
-    return readFileSync(ownerFile, 'utf8').trim() === lockToken;
-  } catch {
-    // No owner file, or no lock directory at all: whatever is at that path is not ours.
-    return false;
-  }
-};
-
-// Every marker carries the token of the lock it was written under, on its first line. Reading
-// `owner` once at startup is not enough on its own: between that read and the marker write
-// there is a window in which an `unlock` can clear the lock (this shell is dead, and no marker
-// exists yet to stop it) and a fresh `sync` can take a replacement at the same path — and this
-// stage, already past its check, would then drop a stale `starting` marker into somebody
-// else's lock, clobbering their tracking or leaving their `unlock` demanding --force. Stamping
-// the token INTO the marker makes that marker recognisably not the new lock's, from either
-// side: this stage refuses to overwrite one it does not own, and tenant.sh reads a marker
-// whose owner does not match the lock's as foreign.
-const MARKER_OWNER_LINE = /^owner (\S+)/m;
-const markerOwner = (file) => {
-  try {
-    const m = MARKER_OWNER_LINE.exec(readFileSync(file, 'utf8'));
-    return m === null ? undefined : m[1];
-  } catch (err) {
-    // Unreadable is not "someone else's": the caller decides, and an error that is not simply
-    // a missing file is reported as what it is.
-    return err.code === 'ENOENT' ? undefined : err;
-  }
-};
-const marker = (extra) => `owner ${lockToken}\nstarting\nput ${process.pid}\n${extra}`;
-
-// A refusal that starts no upload must leave the lock exactly as it found it, so that the
-// sync upstream can say — and only then — that this run changed nothing. The marker written
-// at startup is removed, but ONLY while `owner` still names this run: under a replacement
-// lock that marker belongs to its new owner and is not ours to delete. If it cannot be
-// removed the outcome is merely reported as unknown, which costs a re-sync and never a wrong
-// answer.
-const clearPendingOnRefusal = () => {
-  if (pendingFile === undefined || !ownsLock()) return;
-  // Both halves have to agree before anything is deleted: the lock must still be ours AND the
-  // marker under it must be the one this run wrote. A marker stamped with another token is
-  // another run's tracking, and removing it is the very damage this is here to prevent.
-  if (markerOwner(pendingFile) !== lockToken) return;
-  try {
-    unlinkSync(pendingFile);
-  } catch {
-    // Nothing to do: an unremovable marker keeps the lock and reads as UNKNOWN.
-  }
-};
-
-if (lockDir !== undefined) {
-  if (!ownsLock()) {
-    process.stderr.write('tenants-put: the lock is not held by this run (owner mismatch); nothing was started\n');
-    process.exit(1);
-  }
-  try {
-    // Exclusive create. A marker that is already there was put there by a run that is not
-    // this one — or by this one, twice — and either way the honest move is to start nothing:
-    // overwriting it would erase whatever tracking `unlock` would have used.
-    writeFileSync(pendingFile, marker(''), { flag: 'wx' });
-  } catch (err) {
-    if (err.code !== 'EEXIST') {
-      process.stderr.write(`tenants-put: cannot record the upload under the lock (${err.code ?? err}); wrangler was NOT started and the live map was NOT changed\n`);
-      process.exit(1);
-    }
-    const existing = markerOwner(pendingFile);
-    if (existing !== undefined && typeof existing !== 'string') {
-      // Something is in the way that cannot even be read — a directory, most often. It is not
-      // a marker, and it is not ours to move aside.
-      process.stderr.write(`tenants-put: cannot record the upload under the lock (${existing.code ?? existing}); wrangler was NOT started and the live map was NOT changed\n`);
-      process.exit(1);
-    }
-    if (existing === lockToken) {
-      process.stderr.write('tenants-put: an upload is already recorded under this lock; nothing was started\n');
-      process.exit(1);
-    }
-    process.stderr.write('tenants-put: the lock is held by another run (marker owner mismatch); nothing was started\n');
-    process.exit(1);
-  }
-}
 
 const chunks = [];
 process.stdin.on('data', (d) => chunks.push(d));
 process.stdin.on('end', () => {
   const body = Buffer.concat(chunks);
   if (body.length === 0) {
-    clearPendingOnRefusal();
     process.stderr.write('tenants-put: nothing validated upstream; wrangler was NOT started and the live map was NOT changed\n');
     process.exit(1);
   }
@@ -163,19 +72,22 @@ process.stdin.on('end', () => {
     parsed = undefined;
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
-    clearPendingOnRefusal();
     process.stderr.write('tenants-put: refusing to push a map that is not a non-empty JSON object; wrangler was NOT started and the live map was NOT changed\n');
     process.exit(1);
   }
 
-  // The lock can have been cleared by `unlock` and re-taken by another run in the time this
-  // stage spent reading the map. That replacement is a DIFFERENT lock at the same path, and
-  // starting an upload under it would put this run's map on the wire beside the other run's.
-  // Re-checked here, at the last instant before the upload exists. Nothing is removed: under
-  // a replacement lock every file belongs to its owner.
-  if (lockDir !== undefined && !ownsLock()) {
-    process.stderr.write('tenants-put: the lock changed hands before the upload started (owner mismatch); wrangler was NOT started and the live map was NOT changed\n');
-    process.exit(1);
+  // Published BEFORE the uploader exists, and never after it: a marker written afterwards
+  // would leave a window in which an upload is in flight with nothing under the lock to say
+  // so, and that window is exactly where a released lock lets a second operator's sync be
+  // overtaken. A marker that cannot be written is therefore a reason to start nothing — the
+  // refusal costs a re-run, while an unrecorded upload costs a silently undone quarantine.
+  if (pendingFile !== undefined) {
+    try {
+      writeFileSync(pendingFile, 'starting\n');
+    } catch (err) {
+      process.stderr.write(`tenants-put: cannot record the upload under the lock (${err.code ?? err}); wrangler was NOT started and the live map was NOT changed\n`);
+      process.exit(1);
+    }
   }
 
   // The map goes to wrangler on stdin, so wrangler's own logging decides whether the secret
@@ -187,14 +99,11 @@ process.stdin.on('end', () => {
   const child = spawn('npx', ['--no-install', 'wrangler', 'secret', 'put', 'TENANTS', ...process.argv.slice(2)], {
     stdio: ['pipe', 'pipe', 'pipe'],
     // A NEW process group (setsid), whose id is child.pid: the launcher, wrangler, and every
-    // descendant either of them starts belong to it. That is what makes the upload
-    // observable afterwards — `unlock` asks `kill -0 -- -<pgid>` and gets one answer for the
-    // whole tree, instead of reading a launcher pid that dies first and leaves its uploader
-    // running unseen. The trade-off is deliberate and is the behaviour we want: a Ctrl-C in
-    // the operator's terminal goes to the terminal's foreground process group, so it no
-    // longer reaches the uploader either — a `secret put` that is already on the wire must
-    // not be cut in half, and this stage already defers its own interrupts until the upload
-    // has finished.
+    // descendant either of them starts belong to it. The trade-off is deliberate and is the
+    // behaviour we want: a Ctrl-C in the operator's terminal goes to the terminal's
+    // foreground process group, so it no longer reaches the uploader — a `secret put` that is
+    // already on the wire must not be cut in half, and this stage already defers its own
+    // interrupts until the upload has finished.
     detached: true,
     env: {
       ...process.env,
@@ -219,33 +128,6 @@ process.stdin.on('end', () => {
     process.stderr.write(`tenants-put: could not send the map to wrangler (${e.code ?? 'error'}); wrangler's own error is above\n`);
   });
   child.stdin.end(body);
-  if (pendingFile !== undefined) {
-    // `pgid` is what `unlock` needs and the only thing that covers the whole upload: the
-    // launcher can exit long before the process actually talking to Cloudflare does, and a
-    // group id stays valid for as long as ANY member of it is alive. `put` is this process,
-    // the one that still has to confirm the upload; an operator reading a leftover marker
-    // wants the group. The `owner` and `starting` lines are kept, so a marker written before
-    // the spawn and one written after it read the same way.
-    //
-    // The marker is re-read first. If it no longer carries this run's token the lock was
-    // cleared and re-taken while the map was on its way down the pipe, and the marker now
-    // there belongs to whoever took it: overwriting it would destroy their tracking. The
-    // upload has already started, so this is not a reason to stop — it is a reason to say
-    // that nothing can now prove it finished, which is exactly what `unlock` then refuses on.
-    const owned = markerOwner(pendingFile) === lockToken;
-    let recorded = false;
-    if (owned) {
-      try {
-        writeFileSync(pendingFile, marker(`pgid ${child.pid}\n`));
-        recorded = true;
-      } catch {
-        recorded = false;
-      }
-    }
-    if (!recorded) {
-      process.stderr.write('tenants-put: the upload\'s process group could not be recorded; unlock will refuse until an operator confirms no wrangler process remains\n');
-    }
-  }
 
   let sawSuccessLine = false;
   const passThrough = (sink) => {
@@ -283,6 +165,8 @@ process.stdin.on('end', () => {
       // tenant.sh has that this upload landed. A confirmation that cannot be recorded is
       // reported as unknown: an unnecessary re-sync costs a minute, while claiming a map is
       // live when nothing can show it is sends an operator away from a quarantine that isn't.
+      // What is confirmed is what WRANGLER REPORTED — this stage has not observed the Worker,
+      // and says nothing about when the request took effect relative to any other.
       if (pendingFile !== undefined) {
         try {
           renameSync(pendingFile, confirmedFile);
@@ -301,7 +185,7 @@ process.stdin.on('end', () => {
     // Not confirmed: the marker stays under its pending name, so the lock stays with it. What
     // reached Cloudflare is unknown from here and nothing can look it up — the secret is
     // write-only, and a dry run would only re-validate the map this run INTENDED to push.
-    process.stderr.write(`tenants-put: upload NOT confirmed (exit ${code}, signal ${signal}, success line ${sawSuccessLine ? 'seen' : 'not seen'}); the lock is retained and what is live is unknown — recover with: pilot/tenant.sh unlock (it refuses while the upload's process group is still alive), then pilot/tenant.sh sync\n`);
+    process.stderr.write(`tenants-put: upload NOT confirmed (exit ${code}, signal ${signal}, success line ${sawSuccessLine ? 'seen' : 'not seen'}); the lock is retained and what is live is unknown — see pilot/RUNBOOK.md, "Recovering a retained lock"\n`);
     process.exit(code === 0 || code === null || code === undefined ? 1 : code);
   });
 });

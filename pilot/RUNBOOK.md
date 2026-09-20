@@ -58,29 +58,42 @@ loader by `test/tenants-check.spec.ts` — and refuses to push anything that
 would fail. `wrangler secret put` is write-only (the live map cannot be read
 back), so the keychain items plus the registry files **are** the authoritative
 copy. Back the keychain up; lose it and the only recovery is re-keying every
-tenant. Every command except `show` and `unlock` holds a per-environment
-lock for its whole run, so two operators cannot interleave a quarantine and
-a sync. An interrupt takes effect only after the in-flight put has finished.
-The lock carries an owner token that the upload stage re-checks in the
-instant before it starts, so a run whose lock was cleared and re-taken
-underneath it pushes nothing; the upload itself runs in its own process
-group, which is what makes "is anything still uploading?" a question with an
-answer. The lock is released only when wrangler confirms the upload;
-otherwise it stays, and the outcome of that upload is unknown. Nothing local
-can settle it: the secret is write-only, so a request that was already
-submitted cannot be shown to have completed or not — which is exactly why
-the resolution is to push the intended map again rather than to investigate.
-Recovery: `tenant.sh unlock`, which refuses while the upload's process group
-is still alive, and refuses without `--force` when that group was never
-recorded at all — use `--force` only after `pgrep -fl wrangler` shows nothing
-remains. Then `tenant.sh sync` to re-put the intended map, then confirm on
-the Worker: `/health` reports `tenants: "ok"` and one request with a
-tenant's verifier token verifies. A `SIGKILL` of the put stage in
-the instant between starting wrangler and handing it the map can leave
-wrangler uploading an EMPTY map: every tenant then fails closed (500) until
-that re-sync.
+tenant. Every command except `show` holds a per-environment lock for its
+whole run, so two operators cannot interleave a quarantine and a sync; an
+interrupt takes effect only after the in-flight put has finished.
 
-**Seeded fixture key.** `tenant.sh add … --with-fixture-key` trusts the partner's
+### Recovering a retained lock
+
+A retained per-environment lock means "outcome unknown"; TENANTS is
+write-only and cannot be read back. There is no automatic unlock or
+stale-lock removal.
+
+Before removing the lock, ensure no tenant.sh or tenants-put.mjs invocation
+remains running or can launch another uploader, and prevent concurrent
+invocations throughout recovery. Run `pgrep -fl wrangler`, inspect any
+matches, and confirm that no Wrangler uploader remains on this machine; if
+you cannot establish local quiescence, leave the lock in place.
+
+Once local quiescence is established, remove only the retained lock
+directory for the affected environment, then run `sync` for that same
+environment to re-put the intended, validated, nonempty map. Removing the
+lock does not cancel or roll back any request. Local process checks cannot
+establish completion or ordering of an already-submitted request, and an
+earlier request may take effect after the recovery sync. A SIGKILL before
+stdin is delivered can leave an empty secret, causing verification to fail
+closed until a successful re-sync restores the intended map.
+
+After sync, check the affected Worker's `/health` endpoint and the expected
+authenticated behaviour, including successful authentication for intended
+active tenants and rejection for quarantined or removed tenants. A healthy
+`/health` response alone does not verify the tenant configuration. Failed
+behavioural checks mean recovery has not been verified; passing checks
+establish behaviour at the time checked and do not prove that an earlier
+submitted request cannot take effect later.
+
+### Seeded fixture key
+
+`tenant.sh add … --with-fixture-key` trusts the partner's
 key(s) **and** the repo conformance fixture key; without the flag only the keys
 you give are trusted. Seed it deliberately during onboarding: the fixture key is
 what makes the quickstart in `integrations/hosted-verify/` and
