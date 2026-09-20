@@ -7,6 +7,16 @@ import {
 import { BolyraDeniedError, BolyraGateConfigError } from '../src/errors.js';
 import { handleDenials } from '../src/handle-denials.js';
 import { makeBundle, AUDIENCE, NOW_UNIX } from '../test/helpers.js';
+import { Challenge, Credential } from 'mppx';
+import { testCharge } from './harness.mjs';
+
+/** What a client does with a 402: parse the WWW-Authenticate challenge and mint the Payment credential from it. */
+function credentialFrom402(res: Response): string {
+  const challenge = Challenge.fromResponse(res, { methods: [testCharge] });
+  const credential = Credential.from({ challenge, payload: { token: 'ok' } });
+  assert.equal(credential.challenge.id, challenge.id, 'the credential is minted from THIS 402\'s challenge');
+  return Credential.serialize(credential);
+}
 
 // stubVerifierFetch returns { verifier, calls, restore }; every test that stubs must restore.
 let restoreFetch: (() => void) | undefined;
@@ -132,6 +142,56 @@ test('standing mandate: two fresh presentations of the SAME binding through one 
   const nullifiers = stub.calls.map((c) => JSON.parse((c.body as { bundle: string }).bundle).agent.envelope.publicSignals[1] as string);
   assert.equal(new Set(nullifiers).size, 3, `expected 3 distinct nullifiers across 4 calls, got ${JSON.stringify(nullifiers)}`);
   assert.equal(nullifiers[2], nullifiers[0], 'the replay presented the first nullifier again');
+});
+
+test("handshake under enforce:'always' (host-nonce verifier): discovery reserves bundle A's nullifier; paying with A replays; paying with fresh B allows", async () => {
+  // The discovery attempt (no Payment credential yet) already runs the gate: allow, nullifier
+  // reserved, THEN mppx issues the 402. The payment retry is a second gated attempt and needs a
+  // fresh presentation; re-sending A is an unmodified re-send and denies nonce_replayed.
+  const stub = stubVerifierFetch({ allowFromBundle: true });
+  restoreFetch = stub.restore;
+  const gated = gate(serverMethod(), await classicalGateOptions({ verifier: stub.verifier }));
+  const { state, handler } = buildApp(gated);
+  const bundleA = await makeBundle();
+
+  // 1. Discovery with A and no Authorization header => 402 via result.challenge; gate ran once.
+  const discovery = await handler(await requestWith({ bundle: bundleA }));
+  assert.equal(discovery.status, 402);
+  assert.equal(state.lastResultStatus, 402);
+  assert.equal(state.counter, 0);
+  assert.equal(stub.calls.length, 1, "the discovery attempt ran the gate (nullifier A reserved)");
+
+  // 2. Pay with the credential minted from THAT 402's challenge, re-sending A => nonce_replayed.
+  const payment = credentialFrom402(discovery);
+  await assert.rejects(handler(await requestWith({ payment, bundle: bundleA })), (e: unknown) =>
+    e instanceof BolyraDeniedError && e.verdict.code === 'nonce_replayed' && e.response.status === 403);
+  assert.equal(state.counter, 0);
+  assert.equal(stub.calls.length, 2, 'the replay reached the verifier; the gate (not the stub) denied it');
+
+  // 3. Same credential, fresh presentation B => 200, the action runs once.
+  const paid = await handler(await requestWith({ payment, bundle: await makeBundle() }));
+  assert.equal(paid.status, 200);
+  assert.equal(state.counter, 1);
+  assert.equal(stub.calls.length, 3);
+});
+
+test("handshake under enforce:'payment': discovery with bundle A skips the gate (zero verifier calls); paying with A allows", async () => {
+  const stub = stubVerifierFetch({ allowFromBundle: true });
+  restoreFetch = stub.restore;
+  const gated = gate(serverMethod(), await classicalGateOptions({ verifier: stub.verifier, enforce: 'payment' }));
+  const { state, handler } = buildApp(gated);
+  const bundleA = await makeBundle();
+
+  const discovery = await handler(await requestWith({ bundle: bundleA }));
+  assert.equal(discovery.status, 402);
+  assert.equal(state.counter, 0);
+  assert.equal(stub.calls.length, 0, 'ungated discovery: the verifier was never consulted');
+
+  // The gate first runs on the credentialed attempt, so A's nullifier is fresh here.
+  const paid = await handler(await requestWith({ payment: credentialFrom402(discovery), bundle: bundleA }));
+  assert.equal(paid.status, 200);
+  assert.equal(state.counter, 1);
+  assert.equal(stub.calls.length, 1);
 });
 
 test("discovery: enforce:'payment' + no Payment credential => 402, counter 0", async () => {
