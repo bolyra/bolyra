@@ -47,6 +47,11 @@ import { deny, isVerifyDenial, type DenyVerdict, type Verdict } from './verify/v
 import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
 
+import type { TenantRegistry } from './registry';
+
+// Durable Object classes must be exported from the Worker's main module.
+export { TenantRegistry } from './registry';
+
 export interface Env {
   /**
    * Secret. JSON object: org_id → { admin_token, verifier_token,
@@ -60,6 +65,8 @@ export interface Env {
   RECEIPT_KEY_ID?: string;
   /** Workers Analytics Engine dataset for usage data points (optional). */
   USAGE?: AnalyticsEngineDataset;
+  /** The per-tenant credential registry (src/registry.ts); one object per org_id. */
+  TENANT: DurableObjectNamespace<TenantRegistry>;
 }
 
 /** Request-body bound — mirrors the spec §6 1 MiB stdin bound. */
