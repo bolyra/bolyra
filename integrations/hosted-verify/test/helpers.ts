@@ -40,3 +40,34 @@ export function cloneWithBundle(fixture: { bundle: string } & Record<string, unk
     },
   };
 }
+
+/** Registry routes, as a tenant ADMIN (org-a by default). */
+export const CREDENTIALS = `${BASE}/v1/credentials`;
+
+function adminHeaders(token: string | null): Record<string, string> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (token !== null) headers['authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+export async function postRegister(body: unknown, opts: { token?: string | null; headers?: Record<string, string> } = {}): Promise<Response> {
+  const token = opts.token === undefined ? TOKENS.A.admin : opts.token;
+  return SELF.fetch(CREDENTIALS, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), ...(opts.headers ?? {}) },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+export async function getCredential(id: string, opts: { token?: string | null } = {}): Promise<Response> {
+  const token = opts.token === undefined ? TOKENS.A.admin : opts.token;
+  return SELF.fetch(`${CREDENTIALS}/${id}`, { method: 'GET', headers: adminHeaders(token) });
+}
+
+export async function postRevoke(id: string, opts: { token?: string | null; headers?: Record<string, string> } = {}): Promise<Response> {
+  const token = opts.token === undefined ? TOKENS.A.admin : opts.token;
+  return SELF.fetch(`${CREDENTIALS}/${id}/revoke`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), ...(opts.headers ?? {}) },
+  });
+}
