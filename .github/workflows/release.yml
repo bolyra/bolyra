@@ -160,6 +160,15 @@ jobs:
             echo "(no test script — skipping)"
           fi
 
+      # @bolyra/mpp's real-mppx integration suite (node --test + tsx, driven
+      # through Mppx.create() with the pinned mppx peer) is the proof that the
+      # gate denies before the protected action runs. jest alone never sees
+      # that path, so the artifact is not publishable until this is green.
+      - name: Integration test (mpp only)
+        if: steps.tag.outputs.pkg == 'mpp'
+        working-directory: ${{ steps.tag.outputs.dir }}
+        run: npm run test:integration
+
       - name: Publish with provenance
         working-directory: ${{ steps.tag.outputs.dir }}
         run: npm publish --provenance --access public
