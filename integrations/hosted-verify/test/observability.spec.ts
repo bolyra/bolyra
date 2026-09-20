@@ -226,7 +226,7 @@ describe('Analytics Engine usage data point', () => {
       e,
     );
     expect(res.status).toBe(201);
-    expect(points[0]!.blobs!.slice(0, 5)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'allow', '', '']);
+    expect(points[0]!.blobs!.slice(0, 5)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'ok', '', '']);
     const get = await worker.fetch(
       new Request(`${BASE}/v1/credentials/${valid.credential_id}`, { headers: { authorization: `Bearer ${TOKENS.A.admin}` } }),
       e,
