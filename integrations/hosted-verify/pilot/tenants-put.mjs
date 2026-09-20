@@ -104,10 +104,15 @@ process.stdin.on('end', () => {
   child.stdin.end(body);
   if (pendingFile !== undefined) {
     try {
-      writeFileSync(pendingFile, `pid ${child.pid}\n`);
+      // Both pids, one per line: `pid` is the launcher this started, `put` is this process —
+      // the one that still has to confirm the upload. An operator reading a leftover marker
+      // wants the first; anything that has to signal the upload wants the second, and reading
+      // it here is the only way to get it right (a name matched against a process list picks
+      // up ancestors and bystanders that merely mention this file).
+      writeFileSync(pendingFile, `pid ${child.pid}\nput ${process.pid}\n`);
     } catch {
       // Best effort: the marker written before the spawn is what holds the lock; naming the
-      // pid only makes the leftover easier to read.
+      // pids only makes the leftover easier to read and to act on.
     }
   }
 

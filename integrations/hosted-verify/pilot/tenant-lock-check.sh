@@ -54,11 +54,15 @@ wait_for_file() {  # $1 path — poll for up to 5 s
   done
   return 0
 }
-# The put stage and the upload it started, found by their own argv — the check has to reach
-# INTO a running sync to kill or signal one of them.
-put_pid()  { pgrep -f 'tenants-put\.mjs' 2>/dev/null | head -n 1; }
-shim_pid() { pgrep -f 'secret put TENANTS' 2>/dev/null | head -n 1; }
-wait_for_put() {  # echo the pid of the running put stage — poll for up to 5 s
+# The check has to reach INTO a running sync to kill or signal one of its processes, so it
+# needs their pids. Each process writes its OWN: the put stage puts `put <pid>` in the marker
+# under the lock, the upload stand-in writes its $$ beside the marker. Matching a name against
+# a process list cannot do this — any ancestor or bystander whose command line happens to
+# mention these files matches too, and the signal lands on the wrong process (in a container
+# the `sh -c` at pid 1 matched first, ignored the kill, and the check passed vacuously).
+put_pid()  { awk '/^put /{print $2}' "$LOCK_DIR/upload.pending" 2>/dev/null; }
+shim_pid() { cat "$MARKER.pid" 2>/dev/null; }
+wait_for_put() {  # echo the pid the put stage recorded for itself — poll for up to 5 s
   local i=0 p=""
   while [ -z "$p" ]; do
     p="$(put_pid)"
@@ -68,6 +72,10 @@ wait_for_put() {  # echo the pid of the running put stage — poll for up to 5 s
     sleep 0.1
   done
   printf '%s' "$p"
+}
+require_live() {  # $1 pid, $2 what it is — nothing is signalled on a guess
+  [ -n "$1" ] || fail "could not determine the $2 pid"
+  kill -0 "$1" 2>/dev/null || fail "could not determine the $2 pid: $1 is not a live process"
 }
 wait_for_gone() {  # $1 pid — poll for up to 20 s
   local i=0
@@ -126,14 +134,16 @@ SHIM_SECURITY
 
 # A fake `npx`, shaped like the real launcher: it records its argv, drains the map off stdin
 # into $MARKER_BODY (so the check can assert WHAT was uploaded), stays busy long enough to be
-# observed mid-flight, and IGNORES INT/TERM the way the launcher swallows its child's signal
-# death. Only a non-empty JSON object earns wrangler's success line — the one thing the put
+# observed mid-flight, records its own pid beside the marker (the check signals nothing it has
+# not been told the pid of), and IGNORES INT/TERM the way the launcher swallows its child's
+# signal death. Only a non-empty JSON object earns wrangler's success line — the one thing the put
 # stage accepts as confirmation. SHIM_NO_SUCCESS=1 exits 0 without printing it.
 cat > "$SHIM/npx" <<'SHIM_NPX'
 #!/usr/bin/env bash
 : "${MARKER:?tenant-lock-check: MARKER must be set}"
 : "${MARKER_BODY:?tenant-lock-check: MARKER_BODY must be set}"
 trap '' INT TERM
+printf '%s\n' "$$" > "$MARKER.pid"
 printf 'npx %s\n' "$*" >> "$MARKER"
 cat > "$MARKER_BODY"
 sleep "${SHIM_SLEEP:-3}"
@@ -218,12 +228,15 @@ ok "show reports acme as disabled"
 
 # (g1) the owner's own lock is retained when the put stage dies without confirming: the upload
 # it started is orphaned, not cancelled, and may already have been accepted.
+rm -f "$MARKER.pid"
 env "${TENANT_ENV[@]}" SHIM_SLEEP=6 bash "$TENANT" sync > "$WORK/sync-kill.log" 2>&1 &
 BG=$!
-wait_for_file "$LOCK_DIR/upload.pending" || fail "the put stage never recorded its upload: $(cat "$WORK/sync-kill.log")"
-put="$(wait_for_put)" || fail "the put stage was not running: $(cat "$WORK/sync-kill.log")"
+put="$(wait_for_put)" || fail "could not determine the put pid: nothing was recorded under the lock: $(cat "$WORK/sync-kill.log")"
+require_live "$put" put
+wait_for_file "$MARKER.pid" || fail "could not determine the upload pid: the upload recorded none"
 ORPHAN="$(shim_pid)"
-kill -9 "$put" || fail "could not kill the put stage"
+require_live "$ORPHAN" upload
+kill -9 "$put" || fail "could not kill the put stage (pid $put)"
 wait "$BG"; rc=$?
 BG=""
 [ "$rc" != 0 ] || fail "a sync whose put was killed reported success: $(cat "$WORK/sync-kill.log")"
@@ -234,7 +247,7 @@ grep -q "lock retained at" "$WORK/sync-kill.log" || fail "the lock was not retai
 out="$(tenant disable acme 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "disable against a retained lock exited $rc, expected 1: $out"
 case "$out" in *"another tenant.sh is running"*) ;; *) fail "disable was refused for the wrong reason: $out" ;; esac
-[ -z "$ORPHAN" ] || wait_for_gone "$ORPHAN" || fail "the orphaned upload never finished"
+wait_for_gone "$ORPHAN" || fail "the orphaned upload never finished"
 ORPHAN=""
 rm -rf "$LOCK_DIR"
 ok "a put that is killed leaves the lock, and every other run, blocked until an operator clears it"
@@ -265,9 +278,9 @@ ok "the map the disable pushed carries the quarantine"
 # is confirmed, and only then does the run exit 143 — with the lock released.
 env "${TENANT_ENV[@]}" SHIM_SLEEP=6 bash "$TENANT" sync > "$WORK/sync-put-term.log" 2>&1 &
 BG=$!
-wait_for_file "$LOCK_DIR/upload.pending" || fail "the put stage never recorded its upload: $(cat "$WORK/sync-put-term.log")"
-put="$(wait_for_put)" || fail "the put stage was not running: $(cat "$WORK/sync-put-term.log")"
-kill -TERM "$put" || fail "could not signal the put stage"
+put="$(wait_for_put)" || fail "could not determine the put pid: nothing was recorded under the lock: $(cat "$WORK/sync-put-term.log")"
+require_live "$put" put
+kill -TERM "$put" || fail "could not signal the put stage (pid $put)"
 wait "$BG"; rc=$?
 BG=""
 [ "$rc" = 143 ] || fail "the sync exited $rc after its put was TERMed, expected 143: $(cat "$WORK/sync-put-term.log")"
