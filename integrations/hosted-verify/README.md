@@ -3,7 +3,7 @@
 > ## ⚠️ DESIGN PARTNER PREVIEW
 >
 > This is a **preview for design partners** — not a production service. No
-> SLA, no uptime guarantee, no billing, per-tenant admin and verifier tokens, and the deployment may be reset at any time. It exists so a host team can try the
+> SLA, no uptime guarantee, no billing, per-tenant admin and verifier tokens, and the deployment may be reset at any time — a reset clears the managed credential registry, so every binding must be registered again before it will verify. It exists so a host team can try the
 > [External Verifier Contract v1](../../spec/external-verifier-contract-v1.md)
 > over HTTP in five minutes, before wiring up the `bolyra verify` CLI.
 
@@ -51,8 +51,9 @@ deploying a build that reports `registry_enforced: true` on `/health`; once
 such a build has served a tenant, a build that verified without the registry
 must never be deployed again.
 
-The trust anchor is the **operator key set**, not the proof's Merkle root
-(which is unverified here and carries no weight). As of **binding v2** the signed
+The trust anchor is the **operator key set plus the tenant's registry** (the
+amendment above), not the proof's Merkle root (which is unverified here and
+carries no weight). As of **binding v2** the signed
 binding includes `expiry` (pinned equal to the revealed credential expiry), so a
 presenter cannot re-anchor a later expiry — the obsolete five-field v1 binding is
 rejected `unsupported_version`. The scope-bitmask remains checked against the
@@ -71,9 +72,9 @@ fails until it exists. `npm test` (vitest in the workers pool) does not need it.
 `npx wrangler dev` needs a `TENANTS` value: `cp .dev.vars.example .dev.vars`.
 That file defines one local tenant with placeholder tokens (not secrets) whose
 `trusted_operators` is the repo fixture operator key. The local registry starts
-empty, so run quickstart step 2 (register `examples/registration.allow.json`
-with the local admin token) before the example requests below verify against
-a local dev server.
+empty, so run quickstart step 2 against `http://localhost:8787` with the admin
+token from `.dev.vars` (register `examples/registration.allow.json`) before the
+example requests below verify against a local dev server.
 
 ## 5-minute quickstart
 
@@ -89,7 +90,8 @@ ADMIN=<your admin token>
 curl -s $BASE/health | jq
 
 # 2. Register the example's signed binding in your tenant's registry
-#    (admin token; idempotent — a second call returns 200 with the same id):
+#    (admin token; idempotent while ACTIVE — a second call returns 200 with the
+#     same id, and 409 once the credential has been revoked):
 curl -s -X POST $BASE/v1/credentials \
   -H "Authorization: Bearer $ADMIN" \
   -H "Content-Type: application/json" \
@@ -116,7 +118,7 @@ curl -s -X POST $BASE/v1/verify \
 # → { "verdict": "deny", "kind": "classical", "code": "scope_exceeded", … }
 ```
 
-Skip step 2 and step 3 answers `deny untrusted_root` with
+Without step 2, step 3 answers `deny untrusted_root` with
 `detail.reason: "credential_not_active"` — an allow requires the signed binding
 to be ACTIVE in the calling tenant's registry, not just a trusted operator key.
 The example request files are copies of the repo's conformance fixtures
@@ -148,7 +150,9 @@ registered — that is the design-partner conversation.
   - `200` — a decision was produced: `allow` **or** any policy/crypto `deny`.
     Branch on the verdict, not the status.
   - `500` + `deny code=internal_error` — the verifier could not produce a
-    trustworthy verdict (e.g. no trusted roots configured). Fail closed.
+    trustworthy verdict (e.g. no trusted roots configured, or the tenant's
+    credential registry was unreachable inside the 2,000 ms deadline). Fail
+    closed.
   - `401` / `404` / `405` — transport-level errors *before* the contract;
     the body is `{ "error": … }`, not a verdict.
 - **Fail-closed:** malformed JSON, non-object bodies, oversized bodies, wrong
@@ -297,19 +301,23 @@ Two layers, both configured in `wrangler.jsonc`:
 
 1. **Workers Logs** — `observability.enabled: true`,
    `head_sampling_rate: 1` (every invocation, no sampling). Structured
-   invocation logs, queryable in the Cloudflare dashboard.
+   invocation logs, queryable in the Cloudflare dashboard. The Worker adds one
+   line per **authenticated** `/v1/verify` decision and per **authenticated**
+   registry request:
+   `{ request_id, org_id, role, route, verdict, code, credential_id?, latency_ms }`
+   — `credential_id` on an allow and on registry requests that name one (a
+   hash of operator-signed data, not a secret). Never a request body, a bearer
+   token, or an IP. A `401`, a wrong-role `403`, a quarantined tenant and a
+   `TENANTS` configuration defect are decided before this line is reached, so
+   they carry no decision line. The Analytics data point below records all
+   four; a configuration defect additionally logs at `error` level and a
+   quarantined tenant at `warn`, a deliberate split so an alert on
+   configuration errors never fires on parked-tenant traffic.
 2. **Workers Analytics Engine** — the Worker writes **exactly one data point
    per request** to the `bolyra_hosted_verify_usage` dataset (binding
    `USAGE`). The write happens after the verdict is decided and is
    fire-and-forget: **an Analytics Engine outage never affects verdicts**,
-   and a missing binding is a no-op.
-3. **One structured log line per `/v1/verify` decision and per registry
-   request** (Workers Logs — as distinct from Analytics, whose table below
-   stores no credential ids):
-   `{ request_id, org_id, role, route, verdict, code, credential_id?, latency_ms }`
-   — `credential_id` on an allow and on registry requests that name one (a
-   hash of operator-signed data, not a secret). Never a request body, a bearer
-   token, or an IP.
+   and a missing binding is a no-op. Its table below stores no credential ids.
 
 ### What is stored (the complete list)
 

@@ -52,6 +52,9 @@
   //                         the credential's operator key to be in THAT list
   //                         AND the binding signature to verify against it
   //                         (see src/tenants.ts and src/verify/core.ts).
+  //                         An allow additionally requires the signed binding
+  //                         to be ACTIVE in the tenant's managed credential
+  //                         registry.
   //                         Unset or malformed ⇒ fail closed (500 verdict).
   //                         Usage analytics record `org_id:role`, never tokens.
   //   RECEIPT_SIGNER_KEY  — optional secp256k1 private key (0x-hex) for signed
