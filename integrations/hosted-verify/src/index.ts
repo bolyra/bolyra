@@ -47,6 +47,7 @@
 
 import {
   verifyClassical,
+  type VerifiedClassical,
   CHECKS_AUTHENTICATED,
   CHECKS_CONSISTENCY,
   CHECKS_NOT_PERFORMED,
@@ -87,6 +88,14 @@ const MAX_BODY_BYTES = 1_048_576;
 
 /** Request-body bound for a registration (a binding plus a signature is well under 4 KiB). */
 const MAX_REGISTRATION_BYTES = 65_536;
+
+/**
+ * The registry read on the verify path is raced against this deadline. An
+ * `AbortSignal` cannot cancel a Durable Object RPC, so the race is the only
+ * bound; on expiry the verdict is the fail-closed 500 and the orphaned RPC's
+ * eventual settlement is ignored.
+ */
+export const REGISTRY_DEADLINE_MS = 2_000;
 
 const PREVIEW_HEADERS: Record<string, string> = {
   'content-type': 'application/json; charset=utf-8',
@@ -251,13 +260,74 @@ function registryFor(env: Env, auth: AuthResult): DurableObjectStub<TenantRegist
   return env.TENANT.get(env.TENANT.idFromName(auth.org_id));
 }
 
-/** Configuration was validated by `authorize` before the body is read. */
+/** Result of the registry membership check that follows the classical checks. */
+type Membership =
+  | { kind: 'active'; credential_id: string }
+  | { kind: 'not_active'; credential_id: string }
+  | { kind: 'unavailable'; message: 'registry unavailable' | 'registry timeout' };
+
+/**
+ * Race the registry read against the deadline. The timer is cleared as soon
+ * as either side settles; a late rejection of the orphaned RPC is swallowed.
+ */
+async function readMembership(
+  registry: DurableObjectStub<TenantRegistry>,
+  credential_id: string,
+): Promise<Membership> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), REGISTRY_DEADLINE_MS);
+  });
+  const read = registry.status(credential_id);
+  read.catch(() => {}); // never an unhandled rejection after the deadline wins
+  try {
+    const outcome = await Promise.race([read, deadline]);
+    if (outcome === 'timeout') return { kind: 'unavailable', message: 'registry timeout' };
+    switch (outcome) {
+      case 'ACTIVE':
+        return { kind: 'active', credential_id };
+      case 'REVOKED':
+      case 'ABSENT':
+        return { kind: 'not_active', credential_id };
+      case 'invalid_input':
+      case 'storage_error':
+        return { kind: 'unavailable', message: 'registry unavailable' };
+    }
+    return unknownStatus(outcome);
+  } catch {
+    return { kind: 'unavailable', message: 'registry unavailable' };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/** A status the declared union does not name (a rolling deploy): fail closed. */
+function unknownStatus(outcome: never): Membership {
+  const value: unknown = outcome;
+  console.error('hosted-verify registry returned an unknown status:', { shape: typeof value });
+  return { kind: 'unavailable', message: 'registry unavailable' };
+}
+
+/** What a decision needs to report: the verdict, the response, and (on allow) the credential id. */
+interface Decision {
+  verdict: Verdict;
+  response: Response;
+  credential_id?: string;
+}
+
+/**
+ * The verify decision: classical checks FIRST, in their existing order, then —
+ * only for a presentation every classical check accepted — the registry read.
+ * Registry-first would let invalid bundles probe registry state; both orders
+ * fail closed because a lookup failure never allows. The credential id is
+ * derived from the VERIFIED binding and the VERIFIED operator key.
+ */
 async function handleVerify(
   request: Request,
-  trustedOperators: ReadonlySet<string>,
+  auth: AuthResult,
   capabilityMap: CapabilityMap,
   env: Env,
-): Promise<{ verdict: Verdict; response: Response }> {
+): Promise<Decision> {
   const text = await readBodyCapped(request, MAX_BODY_BYTES);
   if (text === null) {
     const verdict = deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`);
@@ -272,14 +342,55 @@ async function handleVerify(
     return { verdict, response: verdictResponse(verdict, undefined, env) };
   }
 
-  const { verdict } = verifyClassical(body, trustedOperators, capabilityMap);
-  return { verdict, response: verdictResponse(verdict, body, env) };
+  const classical = verifyClassical(body, auth.trusted_operators, capabilityMap);
+  if (classical.verified === undefined) {
+    return { verdict: classical.verdict, response: verdictResponse(classical.verdict, body, env) };
+  }
+
+  const membership = await membershipOf(env, auth, classical.verified);
+  switch (membership.kind) {
+    case 'active': {
+      const verdict = classical.verdict;
+      const response = verdictResponse(verdict, body, env);
+      // Unsigned operational correlation — never an authorization input.
+      response.headers.set('x-bolyra-credential-id', membership.credential_id);
+      return { verdict, response, credential_id: membership.credential_id };
+    }
+    case 'not_active': {
+      // One verifier-visible reason for revoked and never-registered alike;
+      // revoked-vs-unregistered is admin-only. The id is derivable from the
+      // bundle the verifier already holds, so exposing it reveals nothing new.
+      const verdict = deny('untrusted_root', 'the presented binding is not an active credential in this tenant\'s registry', {
+        reason: 'credential_not_active',
+        credential_id: membership.credential_id,
+      });
+      return { verdict, response: verdictResponse(verdict, body, env) };
+    }
+    case 'unavailable': {
+      console.error('hosted-verify registry read failed:', { org_id: auth.org_id, message: membership.message });
+      const verdict = deny('internal_error', membership.message);
+      return { verdict, response: verdictResponse(verdict, undefined, env) };
+    }
+  }
+}
+
+/** Derive the id from what was verified, obtain the stub from the auth result only, read. */
+async function membershipOf(env: Env, auth: AuthResult, verified: VerifiedClassical): Promise<Membership> {
+  const id = credentialId(verified.operator, bindingDigest(verified.binding));
+  try {
+    return await readMembership(registryFor(env, auth), id);
+  } catch {
+    // A missing or unapplied binding fails here, not as a bare exception.
+    return { kind: 'unavailable', message: 'registry unavailable' };
+  }
 }
 
 /** A registry-route outcome: the response plus the code recorded in analytics ('' on success). */
 interface RouteOutcome {
   response: Response;
   code: string;
+  /** The credential the route created or affirmed (register only); ids from the path are logged by the caller. */
+  credential_id?: string;
 }
 
 function fail(status: number, code: RegistryErrorCode, message: string): RouteOutcome {
@@ -370,9 +481,9 @@ async function handleRegister(
   });
   switch (result.outcome) {
     case 'created':
-      return { response: json(201, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '' };
+      return { response: json(201, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '', credential_id: id };
     case 'unchanged':
-      return { response: json(200, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '' };
+      return { response: json(200, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '', credential_id: id };
     case 'revoked':
       return fail(409, 'credential_revoked', 'this credential was revoked; revocation is terminal');
     case 'expired':
@@ -457,12 +568,22 @@ function handleHealth(env: Env): Response {
     tenants,
     registry: 'durable-object',
     credential_id_version: CREDENTIAL_ID_VERSION,
+    // Emitted only by builds that consult the registry on /v1/verify: the
+    // mechanical guard a deployment procedure and a runnable check assert on.
+    registry_enforced: true,
     receipts_enabled: env.RECEIPT_SIGNER_KEY !== undefined && env.RECEIPT_SIGNER_KEY !== '',
     trust_model:
       'an allow means an operator the calling tenant configured as trusted signed a binding ' +
-      'authorizing this exact request. The proof itself is NOT verified — the Merkle root and ' +
-      'all public signals are unverified. Sound scope/expiry enforcement requires the zk-class ' +
-      '`bolyra verify` CLI.',
+      'authorizing this exact request AND that signed binding is ACTIVE in the tenant\'s managed ' +
+      'registry. The proof itself is NOT verified — the Merkle root and all public signals are ' +
+      'unverified. Sound scope/expiry enforcement requires the zk-class `bolyra verify` CLI.',
+    trust_policy:
+      'For this verifier, the configured trusted-root source (spec §9, untrusted_root) is ' +
+      'active signer-binding membership in the tenant\'s registry, in addition to operator-key ' +
+      'membership. A credential that is not ACTIVE in the registry is outside the trusted-root ' +
+      'source, and revocation is trust-anchor removal. The registry does not define revocation; ' +
+      'this is a documented verifier policy, permitted because untrusted_root is ' +
+      'proof-system-agnostic and the deny schema is unchanged.',
     checks_authenticated: CHECKS_AUTHENTICATED,
     checks_consistency_only: CHECKS_CONSISTENCY,
     checks_not_performed: CHECKS_NOT_PERFORMED,
@@ -572,16 +693,22 @@ export default {
           }
           case 'ok': {
             label = tenantLabel(gate.auth);
-            const { verdict, response: verdictRes } = await handleVerify(
-              request,
-              gate.auth.trusted_operators,
-              gate.capabilityMap,
-              env,
-            );
-            response = verdictRes;
-            outcome = verdict.verdict;
-            code = verdict.verdict === 'deny' ? verdict.code : '';
-            kind = verdict.kind;
+            const decision = await handleVerify(request, gate.auth, gate.capabilityMap, env);
+            response = decision.response;
+            outcome = decision.verdict.verdict;
+            code = decision.verdict.verdict === 'deny' ? decision.verdict.code : '';
+            kind = decision.verdict.kind;
+            // One structured line per decision (Workers Logs). Never a body, token or IP.
+            console.info('hosted-verify decision', {
+              request_id: requestId,
+              org_id: gate.auth.org_id,
+              role: gate.auth.role,
+              route,
+              verdict: outcome,
+              code,
+              ...(decision.credential_id !== undefined ? { credential_id: decision.credential_id } : {}),
+              latency_ms: Date.now() - start,
+            });
             break;
           }
         }
@@ -656,6 +783,17 @@ export default {
             response = result.response;
             code = result.code;
             outcome = response.status < 300 ? 'ok' : 'error';
+            // One structured line per registry request (Workers Logs). Never a body, token or IP.
+            console.info('hosted-verify registry request', {
+              request_id: requestId,
+              org_id: gate.auth.org_id,
+              role: gate.auth.role,
+              route,
+              verdict: outcome,
+              code,
+              ...((result.credential_id ?? id) !== undefined ? { credential_id: result.credential_id ?? id } : {}),
+              latency_ms: Date.now() - start,
+            });
             break;
           }
         }
