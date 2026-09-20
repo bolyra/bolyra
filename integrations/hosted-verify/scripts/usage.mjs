@@ -11,7 +11,7 @@
  *   CF_ACCOUNT_ID   (default: the bolyra founder account)
  *   USAGE_DATASET   (default: bolyra_hosted_verify_usage)
  *
- * Prints: last 24h/7d requests by partner label, verdict breakdown,
+ * Prints: last 24h/7d requests by tenant label (<org_id>:<role>), verdict breakdown,
  * top deny codes, and p50/p95 verify latency — all from the one-row-per-
  * request data points the Worker writes (labels only; never tokens, bodies,
  * proofs, credentials, or IPs).
@@ -27,7 +27,7 @@ if (!TOKEN) {
 }
 
 // Row schema (see README "Observability"):
-//   blob1 route · blob2 partner label · blob3 verdict · blob4 code
+//   blob1 route · blob2 tenant label (org_id:role) · blob3 verdict · blob4 code
 //   blob5 proof kind · blob6 request id · double1 latency_ms · double2 status
 const SQL_API = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/analytics_engine/sql`;
 
@@ -53,20 +53,20 @@ function section(title, rows) {
   }
 }
 
-const requestsByPartner = (interval) => `
-  SELECT blob2 AS partner, sum(_sample_interval) AS requests
+const requestsByTenant = (interval) => `
+  SELECT blob2 AS tenant, sum(_sample_interval) AS requests
   FROM ${DATASET}
   WHERE timestamp > NOW() - INTERVAL ${interval}
-  GROUP BY partner
+  GROUP BY tenant
   ORDER BY requests DESC
   FORMAT JSON`;
 
 const verdictBreakdown = `
-  SELECT blob2 AS partner, blob3 AS verdict, sum(_sample_interval) AS requests
+  SELECT blob2 AS tenant, blob3 AS verdict, sum(_sample_interval) AS requests
   FROM ${DATASET}
   WHERE timestamp > NOW() - INTERVAL '7' DAY
-  GROUP BY partner, verdict
-  ORDER BY partner, requests DESC
+  GROUP BY tenant, verdict
+  ORDER BY tenant, requests DESC
   FORMAT JSON`;
 
 const topDenyCodes = `
@@ -80,22 +80,22 @@ const topDenyCodes = `
 
 const latency = `
   SELECT
-    blob2 AS partner,
+    blob2 AS tenant,
     quantileExactWeighted(0.5)(double1, _sample_interval) AS p50_ms,
     quantileExactWeighted(0.95)(double1, _sample_interval) AS p95_ms,
     sum(_sample_interval) AS requests
   FROM ${DATASET}
   WHERE timestamp > NOW() - INTERVAL '7' DAY AND blob1 = '/v1/verify'
-  GROUP BY partner
-  ORDER BY partner
+  GROUP BY tenant
+  ORDER BY tenant
   FORMAT JSON`;
 
 try {
-  section('Requests by partner — last 24h', await sql(requestsByPartner("'1' DAY")));
-  section('Requests by partner — last 7d', await sql(requestsByPartner("'7' DAY")));
-  section('Verdict breakdown by partner — last 7d', await sql(verdictBreakdown));
+  section('Requests by tenant — last 24h', await sql(requestsByTenant("'1' DAY")));
+  section('Requests by tenant — last 7d', await sql(requestsByTenant("'7' DAY")));
+  section('Verdict breakdown by tenant — last 7d', await sql(verdictBreakdown));
   section('Top deny codes — last 7d', await sql(topDenyCodes));
-  section('Verify latency (p50/p95 ms) by partner — last 7d', await sql(latency));
+  section('Verify latency (p50/p95 ms) by tenant — last 7d', await sql(latency));
 } catch (err) {
   console.error(String(err instanceof Error ? err.message : err));
   process.exit(1);

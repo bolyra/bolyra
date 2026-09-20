@@ -35,7 +35,7 @@ log="$(mktemp "${TMPDIR:-/tmp}/hosted-verify-dev.XXXXXX")"
 keep_log=0
 (
   cd "$worker"
-  exec env WRANGLER_SEND_METRICS=false npx --no-install wrangler dev --ip 127.0.0.1 --port "$port" </dev/null >"$log" 2>&1
+  exec env WRANGLER_SEND_METRICS=false npx --no-install wrangler dev --env="" --ip 127.0.0.1 --port "$port" </dev/null >"$log" 2>&1
 ) &
 worker_pid=$!
 

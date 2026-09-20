@@ -380,21 +380,30 @@ carries `consume_nonces` because this preview is host-mode only.
 ## Deploy (maintainers)
 
 ```bash
-npm install
+npm ci
 npm test && npm run typecheck
-npx wrangler login                      # founder account
-npx wrangler secret put TENANTS             # JSON: {"<org_id>": {"admin_token": "…", "verifier_token": "…", "trusted_operators": ["x:y", …]}}
-npx wrangler secret put RECEIPT_SIGNER_KEY  # optional: 0x-hex secp256k1 key
-npm run deploy                          # workers.dev subdomain ONLY
+npx wrangler login                                   # founder account
+npx wrangler secret put RECEIPT_SIGNER_KEY --env staging   # a 0x-hex secp256k1 key; receipts and /.well-known/bolyra-signers.json need it
+npm run deploy:staging                               # bolyra-hosted-verify-staging; note the printed Current Version ID
+# provision staging tenants with pilot/tenant.sh add … --with-fixture-key (HOSTED_VERIFY_ENV=staging),
+# run examples/managed-revocation against it (20/20), THEN:
+npx wrangler secret put RECEIPT_SIGNER_KEY           # production, if not yet set
+npm run deploy:prod                                  # workers.dev subdomain ONLY (a bare `npm run deploy` refuses); note the Current Version ID — the rollback floor
 ```
 
 `TENANTS` is the only auth configuration: one entry per design partner
 (`org_id` = lowercase, 2–63 chars), two tokens per entry (32–256 characters of
-`[A-Za-z0-9._~+/-]`, e.g. `openssl rand -hex 32`; a value that appears twice
-anywhere grants nothing), and that tenant's trusted operator keys. Usage analytics attribute requests to
+`[A-Za-z0-9._~+/-]`; a value that appears twice anywhere grants nothing), and
+that tenant's trusted operator keys. It is written only by
+`pilot/tenant.sh sync`, which assembles it from keychain-held tokens and the
+tenant records and refuses a map the Worker would reject (the rules live in
+`pilot/tenants-check.mjs`, proven against the loader by
+`test/tenants-check.spec.ts`). Usage analytics attribute requests to
 `<org_id>:<role>`. The reserved label `unauthenticated` is never a tenant.
+The operator procedure — onboarding, rotation, quarantine, the staging gate,
+the cutover, and the rollback floor — is `pilot/RUNBOOK.md` at the repo root.
 
-Config lives in `wrangler.jsonc`: `CAPABILITY_MAP` (optional JSON, merged over the built-in default) and `RECEIPT_ISSUER` / `RECEIPT_KEY_ID`; trusted operator keys are per tenant in `TENANTS`. Deploys go to the workers.dev preview subdomain only — no custom domains, no routes on bolyra.ai.
+Config lives in `wrangler.jsonc`: `CAPABILITY_MAP` (the mpp spend-mandate vocabulary, merged over the built-in default; global, pinned by `test/wrangler-config.spec.ts`) and `RECEIPT_ISSUER` / `RECEIPT_KEY_ID`, each declared again under `env.staging` because Wrangler environments do not inherit `vars`, `durable_objects`, or `analytics_engine_datasets`; trusted operator keys are per tenant in `TENANTS`. Deploys go to the workers.dev preview subdomain only — no custom domains, no routes on bolyra.ai.
 
 ## Deliberately out of scope
 
