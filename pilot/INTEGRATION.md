@@ -51,13 +51,15 @@ decision handling.
 
 You'll receive from us: the base URL; **two** bearer tokens — a *verifier*
 token for `POST /v1/verify` and an *admin* token for the registry routes —
-labelled with your org id (usage is attributed to `<org_id>:<role>`; we never
-log request bodies, proofs, credentials, tokens, IPs, or credential ids —
-counts and latency only); confirmation that **your operator public key is
-pinned** for your tenant; and the capability vocabulary the deployment carries
-(`mpp:financial:small|medium|unlimited` plus the messaging default). Until your
-key is pinned, only bindings signed by the repo's fixture key can be
-registered — and nothing verifies until it is registered.
+labelled with your org id (usage analytics record only `<org_id>:<role>`,
+counts and latency — never request bodies, proofs, credentials, tokens, or
+IPs; our per-request server log additionally records the request id and, on
+an allow, the registered credential id); confirmation that **your operator
+public key is pinned** for your tenant; and the capability vocabulary the
+deployment carries (`mpp:financial:small|medium|unlimited` plus the messaging
+default). Until your key is pinned, only bindings signed by the repo's fixture
+key (if we seeded it for your tenant) can be registered — and nothing verifies
+until it is registered.
 
 ### Curl test
 
@@ -173,7 +175,7 @@ flags/artifacts during integration week.
 
 ## Verifying your receipts (your independent audit trail)
 
-Every hosted response (allow **and** deny) carries an `X-Bolyra-Receipt`
+Every `/v1/verify` response (allow **and** deny) carries an `X-Bolyra-Receipt`
 header when receipts are on: a base64url-encoded ES256K-signed receipt over
 the decision. Verify one receipt yourself, offline, against the signer set we
 publish:
