@@ -495,9 +495,13 @@ describe('entry module', () => {
   it('exports only what the Workers runtime accepts: handlers, classes, and functions', async () => {
     // workerd refuses to start a Worker whose entry module has any other named export
     // ("not of type 'function or ExportedHandler'"); the vitest pool does not enforce
-    // this, so a plain constant exported here breaks `wrangler dev` and every deploy
-    // while the suite stays green.
+    // this, so a plain constant exported here breaks `wrangler dev` and is rejected
+    // when the runtime instantiates a deploy while the suite stays green.
     const entry = (await import('../src/index')) as Record<string, unknown>;
+    // The default export must be a real ExportedHandler, not merely an object: workerd
+    // instantiates `export default {}` and then 500s every request with "Handler does not
+    // export a fetch() function". This also keeps the loop below from passing vacuously.
+    expect(typeof (entry.default as { fetch?: unknown } | undefined)?.fetch).toBe('function');
     for (const [name, value] of Object.entries(entry)) {
       const accepted = typeof value === 'function' || (name === 'default' && typeof value === 'object' && value !== null);
       expect(accepted, `export "${name}" is a ${typeof value}`).toBe(true);
