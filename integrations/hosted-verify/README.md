@@ -48,6 +48,11 @@ Cloudflare runtime globals (`ExecutionContext`, `AnalyticsEngineDataset`, …) c
 generated, gitignored `worker-configuration.d.ts`, so a plain `tsc --noEmit` on a fresh clone
 fails until it exists. `npm test` (vitest in the workers pool) does not need it.
 
+`npx wrangler dev` needs a `TENANTS` value: `cp .dev.vars.example .dev.vars`.
+That file defines one local tenant with placeholder tokens (not secrets) whose
+`trusted_operators` is the repo fixture operator key, so the example requests
+below verify against a local dev server.
+
 ## 5-minute quickstart
 
 You need the preview URL and your tenant's **verifier token** (issued per design partner at provisioning).
@@ -78,10 +83,10 @@ curl -s -X POST $BASE/v1/verify \
 ```
 
 The two example request files are copies of the repo's conformance fixtures
-(`integrations/cli/test/fixtures/verify/`); the preview deployment trusts the
-fixture operator key so the quickstart works out of the box. To verify **your
-own** presentations, your operator public key must be pinned in the
-tenant's `trusted_operators` — that is the design-partner conversation.
+(`integrations/cli/test/fixtures/verify/`); the fixture operator key is seeded
+into every pilot tenant's `trusted_operators`, so the quickstart works as
+issued. To verify **your own** presentations, your operator public key must
+also be in that list — that is the design-partner conversation.
 
 ## API
 
@@ -90,7 +95,7 @@ tenant's `trusted_operators` — that is the design-partner conversation.
 - **Auth:** `Authorization: Bearer <verifier token>` — anything else is `401`.
   Every design partner is a **tenant** in the deployment's `TENANTS` secret with
   two tokens: a *verifier* token (this route) and an *admin* token (tenant
-  administration routes, added separately). Tokens are compared in constant
+  administration routes). Tokens are compared in constant
   time; an admin token on this route is `403 {"error":"forbidden"}`. Usage
   analytics attribute requests to `<org_id>:<role>` — never to token values.
   Auth failures are recorded under the reserved label `unauthenticated`.
@@ -244,7 +249,7 @@ credentials, no bearer tokens, no IPs.** Tenant attribution is by
 CF_API_TOKEN=<token> npm run usage    # or: node scripts/usage.mjs
 ```
 
-Prints last-24h/7d requests by partner label, the verdict breakdown, top deny
+Prints last-24h/7d requests by tenant label, the verdict breakdown, top deny
 codes, and p50/p95 verify latency, via the [Analytics Engine SQL
 API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/).
 The API token needs exactly one scope: **Account → Account Analytics → Read**
