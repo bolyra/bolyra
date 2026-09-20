@@ -12,9 +12,9 @@ export const ORGS = { A: 'org-a', B: 'org-b', C: 'org-c' } as const;
 
 /** Test-only token values (NOT real secrets). */
 export const TOKENS = {
-  A: { admin: 'org-a-admin-test-token', verifier: 'org-a-verifier-test-token' },
-  B: { admin: 'org-b-admin-test-token', verifier: 'org-b-verifier-test-token' },
-  C: { admin: 'org-c-admin-test-token', verifier: 'org-c-verifier-test-token' },
+  A: { admin: 'org-a-admin-test-token-0000000000', verifier: 'org-a-verifier-test-token-0000000' },
+  B: { admin: 'org-b-admin-test-token-0000000000', verifier: 'org-b-verifier-test-token-0000000' },
+  C: { admin: 'org-c-admin-test-token-0000000000', verifier: 'org-c-verifier-test-token-0000000' },
 } as const;
 
 /**
