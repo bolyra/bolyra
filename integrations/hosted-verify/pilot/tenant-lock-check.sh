@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 #
 # tenant-lock-check.sh — prove that tenant.sh keeps its per-environment lock until the
-# in-flight `wrangler secret put` has finished, so an interrupted run cannot be overtaken.
+# `wrangler secret put` it started has been CONFIRMED finished, so an interrupted, crashed or
+# killed run cannot be overtaken.
 #
 # The failure this guards: an operator TERMs a sync that is paused inside the upload. If the
 # EXIT trap released the lock there, a second operator's `disable` + `sync` would land FIRST
 # and the interrupted run's OLDER (still active) map would overwrite it — the quarantine
-# silently undone.
+# silently undone. The same applies when the put stage is killed outright: the upload may
+# already have been accepted, so the lock must stay until someone has looked.
 #
 # Self-contained and offline: shims for `security`, `npx` and `wrangler` go FIRST on PATH, so
 # no keychain item is read or written on any machine, no network call is made, and wrangler is
-# never reached. The registry lives in a temp directory under HOSTED_VERIFY_ENV=lockcheck.
+# never reached. The `npx` shim behaves like the real launcher: it reads the map off stdin,
+# takes its time, IGNORES interrupts, and prints wrangler's own success line only when what it
+# received is a non-empty JSON object. The registry lives in a temp directory under
+# HOSTED_VERIFY_ENV=lockcheck.
 # Runs on Linux and macOS; bash 3.2 (no flock, no associative arrays, no `wait -n`).
 #
 #   bash pilot/tenant-lock-check.sh          (SHIM_SLEEP=<seconds> widens the timing window)
@@ -25,13 +30,13 @@ SHIM="$WORK/bin"
 TENANTS_DIR="$WORK/tenants"
 LOCK_DIR="$TENANTS_DIR/.lock"
 MARKER="$WORK/marker"
+MARKER_BODY="$WORK/marker-body"
 BG=""
-SLEEPER=""
-PUT=""
+ORPHAN=""
 
 cleanup() {
   # Nothing here may outlive the check: a stray shim sleep would look like a live upload.
-  for p in "$BG" "$SLEEPER" "$PUT"; do
+  for p in "$BG" "$ORPHAN"; do
     [ -z "$p" ] || kill -9 "$p" 2>/dev/null || true
   done
   rm -rf "$WORK"
@@ -42,12 +47,46 @@ ok()   { echo "ok: $*"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 wait_for_file() {  # $1 path — poll for up to 5 s
   local i=0
-  while [ ! -f "$1" ]; do
+  while [ ! -e "$1" ]; do
     i=$((i + 1))
     [ "$i" -le 50 ] || return 1
     sleep 0.1
   done
   return 0
+}
+# The put stage and the upload it started, found by their own argv — the check has to reach
+# INTO a running sync to kill or signal one of them.
+put_pid()  { pgrep -f 'tenants-put\.mjs' 2>/dev/null | head -n 1; }
+shim_pid() { pgrep -f 'secret put TENANTS' 2>/dev/null | head -n 1; }
+wait_for_put() {  # echo the pid of the running put stage — poll for up to 5 s
+  local i=0 p=""
+  while [ -z "$p" ]; do
+    p="$(put_pid)"
+    [ -z "$p" ] || break
+    i=$((i + 1))
+    [ "$i" -le 50 ] || return 1
+    sleep 0.1
+  done
+  printf '%s' "$p"
+}
+wait_for_gone() {  # $1 pid — poll for up to 20 s
+  local i=0
+  while kill -0 "$1" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -le 200 ] || return 1
+    sleep 0.1
+  done
+  return 0
+}
+body_says() {  # $1 body file, $2 "active" | "disabled" — what the upload actually carried
+  node -e '
+const fs=require("fs");const [p,want]=process.argv.slice(1);
+let m;try{m=JSON.parse(fs.readFileSync(p,"utf8"))}catch(e){process.stderr.write("body is not JSON: "+e.message+"\n");process.exit(1)}
+const t=m&&m.acme;
+if(!t){process.stderr.write("body has no acme entry\n");process.exit(1)}
+const disabled=t.disabled===true;
+if(want==="disabled"&&!disabled){process.stderr.write("body does not quarantine acme\n");process.exit(1)}
+if(want==="active"&&disabled){process.stderr.write("body quarantines acme\n");process.exit(1)}' "$1" "$2"
 }
 
 mkdir -p "$SHIM" "$TENANTS_DIR"
@@ -85,15 +124,29 @@ esac
 exit 1
 SHIM_SECURITY
 
-# A fake `npx`: records its argv, then stays busy long enough for the check to observe an
-# upload that is still in flight. Its TERM handler is what proves the interrupt reached the
-# child — and, like bash itself, it only runs once the foreground sleep has returned.
+# A fake `npx`, shaped like the real launcher: it records its argv, drains the map off stdin
+# into $MARKER_BODY (so the check can assert WHAT was uploaded), stays busy long enough to be
+# observed mid-flight, and IGNORES INT/TERM the way the launcher swallows its child's signal
+# death. Only a non-empty JSON object earns wrangler's success line — the one thing the put
+# stage accepts as confirmation. SHIM_NO_SUCCESS=1 exits 0 without printing it.
 cat > "$SHIM/npx" <<'SHIM_NPX'
 #!/usr/bin/env bash
 : "${MARKER:?tenant-lock-check: MARKER must be set}"
+: "${MARKER_BODY:?tenant-lock-check: MARKER_BODY must be set}"
+trap '' INT TERM
 printf 'npx %s\n' "$*" >> "$MARKER"
-trap 'printf "term\n" >> "$MARKER"; exit 143' TERM
+cat > "$MARKER_BODY"
 sleep "${SHIM_SLEEP:-3}"
+if ! node -e '
+const fs=require("fs");let m;
+try{m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"))}catch(e){process.exit(1)}
+if(typeof m!=="object"||m===null||Array.isArray(m)||Object.keys(m).length===0)process.exit(1)' "$MARKER_BODY"; then
+  echo "shim: bad body" >&2
+  exit 1
+fi
+if [ "${SHIM_NO_SUCCESS:-0}" != 1 ]; then
+  printf '\xe2\x9c\xa8 Success! Uploaded secret TENANTS\n'
+fi
 printf 'done\n' >> "$MARKER"
 exit 0
 SHIM_NPX
@@ -111,7 +164,7 @@ printf '%s\n' '{"org_id":"acme","status":"active","trustedOperators":["1:2"]}' >
 
 # Every tenant.sh call in this check runs with the shims first on PATH and with the temp
 # registry; nothing reads the operator's own environment.
-TENANT_ENV=(PATH="$SHIM:$PATH" HOSTED_VERIFY_ENV=lockcheck TENANTS_DIR="$TENANTS_DIR" MARKER="$MARKER" SHIM_SLEEP="$SHIM_SLEEP")
+TENANT_ENV=(PATH="$SHIM:$PATH" HOSTED_VERIFY_ENV=lockcheck TENANTS_DIR="$TENANTS_DIR" MARKER="$MARKER" MARKER_BODY="$MARKER_BODY" SHIM_SLEEP="$SHIM_SLEEP")
 tenant() { env "${TENANT_ENV[@]}" bash "$TENANT" "$@"; }
 
 # (a) a dry run validates and stops short of the upload.
@@ -144,7 +197,8 @@ BG=""
 [ "$rc" = 143 ] || fail "the interrupted sync exited $rc, expected 143"
 [ "$(tail -n 1 "$MARKER")" = "done" ] || fail "the in-flight upload did not finish: $(cat "$MARKER")"
 grep -q "interrupted by SIGTERM" "$WORK/sync.log" || fail "the interrupt was not reported: $(cat "$WORK/sync.log")"
-[ ! -d "$LOCK_DIR" ] || fail "the lock survived a finished upload"
+body_says "$MARKER_BODY" active || fail "the upload did not carry the active map: $(cat "$MARKER_BODY")"
+[ ! -d "$LOCK_DIR" ] || fail "the lock survived a confirmed upload"
 ok "the interrupt lands after the put completes and the lock is then released"
 
 # (e) with the lock gone, the quarantine goes through — on its own, not racing anyone.
@@ -152,6 +206,8 @@ out="$(tenant disable acme 2>&1)"; rc=$?
 [ "$rc" = 0 ] || fail "disable exited $rc: $out"
 [ "$(grep -c '^npx ' "$MARKER")" = 2 ] || fail "disable did not push its own map"
 grep -q '"status": "disabled"' "$TENANTS_DIR/acme.json" || fail "the registry was not quarantined"
+# Kept for (g4): later checks run their own uploads over the same body file.
+cp "$MARKER_BODY" "$WORK/body-after-disable"
 ok "disable succeeds once the lock is free and pushes its own map"
 
 # (f) and the quarantine is what an operator sees.
@@ -160,40 +216,68 @@ out="$(tenant show 2>&1)"; rc=$?
 echo "$out" | grep -qE '^acme[[:space:]]+disabled' || fail "show does not report acme as disabled: $out"
 ok "show reports acme as disabled"
 
-# (g) a lock whose upload pid is still alive is nobody else's to take or to clear.
-sleep 30 &
-SLEEPER=$!
-mkdir -p "$LOCK_DIR"
-echo "$SLEEPER" > "$LOCK_DIR/upload.pid"
-out="$(tenant sync --dry-run 2>&1)"; rc=$?
-[ "$rc" = 1 ] || fail "sync --dry-run against a held lock exited $rc, expected 1: $out"
-[ -d "$LOCK_DIR" ] || fail "a refused run removed a lock it did not create"
-[ -f "$LOCK_DIR/upload.pid" ] || fail "a refused run cleared another run's upload pid"
-kill "$SLEEPER" 2>/dev/null || true
-wait "$SLEEPER" 2>/dev/null
-SLEEPER=""
+# (g1) the owner's own lock is retained when the put stage dies without confirming: the upload
+# it started is orphaned, not cancelled, and may already have been accepted.
+env "${TENANT_ENV[@]}" SHIM_SLEEP=6 bash "$TENANT" sync > "$WORK/sync-kill.log" 2>&1 &
+BG=$!
+wait_for_file "$LOCK_DIR/upload.pending" || fail "the put stage never recorded its upload: $(cat "$WORK/sync-kill.log")"
+put="$(wait_for_put)" || fail "the put stage was not running: $(cat "$WORK/sync-kill.log")"
+ORPHAN="$(shim_pid)"
+kill -9 "$put" || fail "could not kill the put stage"
+wait "$BG"; rc=$?
+BG=""
+[ "$rc" != 0 ] || fail "a sync whose put was killed reported success: $(cat "$WORK/sync-kill.log")"
+grep -q "was NOT updated" "$WORK/sync-kill.log" || fail "the killed put was not reported: $(cat "$WORK/sync-kill.log")"
+grep -q "lock retained at" "$WORK/sync-kill.log" || fail "the lock was not retained: $(cat "$WORK/sync-kill.log")"
+[ -d "$LOCK_DIR" ] || fail "the lock was released after the put was killed"
+[ -e "$LOCK_DIR/upload.pending" ] || fail "the unconfirmed upload left no marker under the lock"
 out="$(tenant disable acme 2>&1)"; rc=$?
-[ "$rc" = 1 ] || fail "disable against a leftover lock exited $rc, expected 1: $out"
+[ "$rc" = 1 ] || fail "disable against a retained lock exited $rc, expected 1: $out"
+case "$out" in *"another tenant.sh is running"*) ;; *) fail "disable was refused for the wrong reason: $out" ;; esac
+[ -z "$ORPHAN" ] || wait_for_gone "$ORPHAN" || fail "the orphaned upload never finished"
+ORPHAN=""
 rm -rf "$LOCK_DIR"
-ok "a lock left behind by an uncertain upload blocks every other run until it is cleared"
+ok "a put that is killed leaves the lock, and every other run, blocked until an operator clears it"
 
-# (h) the same rule from inside the put stage: the upload pid is recorded while wrangler runs,
-# an interrupt is forwarded to it, and the pid file is cleared only once the child is gone.
-MARKER_PUT="$WORK/marker-put"
-LOCK_PUT="$WORK/lock-put"
-mkdir -p "$LOCK_PUT"
-printf '{"acme":{}}' | env PATH="$SHIM:$PATH" MARKER="$MARKER_PUT" SHIM_SLEEP="$SHIM_SLEEP" TENANT_LOCK_DIR="$LOCK_PUT" \
-  node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck > "$WORK/put.log" 2>&1 &
-PUT=$!
-wait_for_file "$LOCK_PUT/upload.pid" || fail "the put stage never recorded its upload pid: $(cat "$WORK/put.log")"
-upload_pid="$(cat "$LOCK_PUT/upload.pid")"
-kill -0 "$upload_pid" 2>/dev/null || fail "the recorded upload pid $upload_pid is not a live process"
-kill -TERM "$PUT" || fail "could not signal the put stage"
-wait "$PUT"; rc=$?
-PUT=""
-[ "$rc" != 0 ] || fail "the put stage reported success after an interrupt"
-grep -qx 'term' "$MARKER_PUT" || fail "the interrupt did not reach the upload child: $(cat "$MARKER_PUT")"
-[ ! -f "$LOCK_PUT/upload.pid" ] || fail "the upload pid file survived the upload"
-ok "the put stage tracks its upload pid, forwards the interrupt, and clears the pid when done"
+# (g2) an upload that ends 0 WITHOUT wrangler's success line is not a success: the exit code of
+# the launcher is not evidence, and the lock stays.
+out="$(env "${TENANT_ENV[@]}" SHIM_NO_SUCCESS=1 bash "$TENANT" sync 2>&1)"; rc=$?
+[ "$rc" != 0 ] || fail "a sync with no success line reported success: $out"
+case "$out" in *"upload NOT confirmed"*) ;; *) fail "the missing success line was not reported: $out" ;; esac
+case "$out" in *"lock retained at"*) ;; *) fail "the lock was not retained without a success line: $out" ;; esac
+[ -e "$LOCK_DIR/upload.pending" ] || fail "the unconfirmed upload left no marker under the lock"
+rm -rf "$LOCK_DIR"
+ok "an exit 0 without wrangler's success line is refused and keeps the lock"
+
+# (g3) if the upload cannot be recorded under the lock, nothing is uploaded at all.
+out="$(printf '{"acme":{}}' | env PATH="$SHIM:$PATH" MARKER="$WORK/marker-nolock" MARKER_BODY="$WORK/body-nolock" \
+  TENANT_LOCK_DIR=/nonexistent/dir node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "the put stage exited $rc with an unusable lock directory, expected 1: $out"
+case "$out" in *"cannot record the upload under the lock"*) ;; *) fail "the unusable lock directory was not reported: $out" ;; esac
+[ ! -e "$WORK/marker-nolock" ] || fail "the upload started even though it could not be recorded"
+ok "an upload that cannot be recorded under the lock is never started"
+
+# (g4) what the operator asked for is what went up: the quarantine reached the upload body.
+body_says "$WORK/body-after-disable" disabled || fail "the pushed map did not quarantine acme: $(cat "$WORK/body-after-disable")"
+ok "the map the disable pushed carries the quarantine"
+
+# (g5) an interrupt aimed at the put stage itself is deferred there too: the upload finishes,
+# is confirmed, and only then does the run exit 143 — with the lock released.
+env "${TENANT_ENV[@]}" SHIM_SLEEP=6 bash "$TENANT" sync > "$WORK/sync-put-term.log" 2>&1 &
+BG=$!
+wait_for_file "$LOCK_DIR/upload.pending" || fail "the put stage never recorded its upload: $(cat "$WORK/sync-put-term.log")"
+put="$(wait_for_put)" || fail "the put stage was not running: $(cat "$WORK/sync-put-term.log")"
+kill -TERM "$put" || fail "could not signal the put stage"
+wait "$BG"; rc=$?
+BG=""
+[ "$rc" = 143 ] || fail "the sync exited $rc after its put was TERMed, expected 143: $(cat "$WORK/sync-put-term.log")"
+grep -q "received; the upload in flight runs to completion first" "$WORK/sync-put-term.log" \
+  || fail "the put stage did not defer the interrupt: $(cat "$WORK/sync-put-term.log")"
+grep -q "an interrupt arrived after the put completed" "$WORK/sync-put-term.log" \
+  || fail "the completed upload was not reported as completed: $(cat "$WORK/sync-put-term.log")"
+[ "$(tail -n 1 "$MARKER")" = "done" ] || fail "the interrupted upload did not finish: $(cat "$MARKER")"
+body_says "$MARKER_BODY" disabled || fail "the upload did not carry the map: $(cat "$MARKER_BODY")"
+[ ! -d "$LOCK_DIR" ] || fail "the lock survived a confirmed upload"
+ok "an interrupt aimed at the put stage still lets the upload finish, and the lock is released"
 
 echo "tenant-lock-check: all checks passed"

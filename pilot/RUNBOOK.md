@@ -60,8 +60,10 @@ back), so the keychain items plus the registry files **are** the authoritative
 copy. Back the keychain up; lose it and the only recovery is re-keying every
 tenant. Every command except `show` holds a per-environment lock for its whole
 run, so two operators cannot interleave a quarantine and a sync. An interrupt
-takes effect only after the in-flight put has finished; if a lock survives a
-crash it names its directory.
+takes effect only after the in-flight put has finished, and the lock is
+released only once wrangler confirms the upload. A lock that is kept names its
+own directory: run `tenant.sh sync --dry-run` to see what is live, then `sync`,
+then remove that directory by hand.
 
 **Seeded fixture key.** `tenant.sh add … --with-fixture-key` trusts the partner's
 key(s) **and** the repo conformance fixture key; without the flag only the keys

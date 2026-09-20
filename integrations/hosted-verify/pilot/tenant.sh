@@ -40,9 +40,11 @@
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
-#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock); a stale lock
-#   names itself; an interrupt (Ctrl-C/TERM) takes effect only after the in-flight put has
-#   finished, so a half-pushed map cannot be raced.
+#   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock); an interrupt
+#   (Ctrl-C/TERM) takes effect only after the in-flight put has finished, so a half-pushed map
+#   cannot be raced. The lock is released only when wrangler confirms the upload; otherwise it
+#   stays and names its own directory — run sync --dry-run, then sync, then remove that
+#   directory by hand once you know what was pushed.
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -99,14 +101,13 @@ release_lock() {
   # talking to the API leaves the put running with no one to wait for it. Releasing the lock
   # then is exactly the interleaving the lock exists to prevent — a second operator's sync
   # would land FIRST and this one's older map would overwrite it, silently undoing a
-  # quarantine. So when the recorded upload pid is still alive, keep the lock and say so.
-  local _upload=""
-  [ ! -f "$LOCK_DIR/upload.pid" ] || _upload="$(cat "$LOCK_DIR/upload.pid" 2>/dev/null || true)"
-  if [ -n "$_upload" ] && kill -0 "$_upload" 2>/dev/null; then
-    echo "error: lock retained at $LOCK_DIR: the upload (pid $_upload) may still be running; when it is gone, remove that directory and run: pilot/tenant.sh sync --dry-run" >&2
+  # quarantine. The put stage writes upload.pending BEFORE wrangler starts and removes it only
+  # once wrangler has confirmed the upload, so the marker being there is the one honest answer
+  # to "could a put still be in flight, or have landed unseen?" — keep the lock and say so.
+  if [ -e "$LOCK_DIR/upload.pending" ]; then
+    echo "error: lock retained at $LOCK_DIR: the last upload was not confirmed complete (see $LOCK_DIR/upload.pending); check with: pilot/tenant.sh sync --dry-run, then re-run sync and remove that directory by hand once the pushed state is known" >&2
     return 0
   fi
-  rm -f "$LOCK_DIR/upload.pid"
   rm -f "$LOCK_DIR/pid"
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
@@ -136,8 +137,8 @@ acquire_lock() {
   trap 'on_signal INT' INT
   trap 'on_signal TERM' TERM
   echo "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
-  # The put stage records wrangler's pid in the lock directory, so release_lock can tell an
-  # upload that has finished from one that may still be in flight.
+  # The put stage records the upload in the lock directory before it starts one, so
+  # release_lock can tell a confirmed upload from one that may still be in flight.
   export TENANT_LOCK_DIR="$LOCK_DIR"
 }
 
@@ -336,10 +337,20 @@ cmd_sync() {
   # put an EMPTY TENANTS (every tenant fails closed). tenants-put.mjs starts wrangler only
   # after a non-empty validated map has arrived. pipefail is set, so a failure anywhere
   # (keychain, assembly, validation, guard, wrangler) is loud.
-  if ! tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
-      | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${WRANGLER_ENV[@]}"); then
-    die "the TENANTS map was NOT updated; the previous map (including any token you just rotated or removed) is STILL ACCEPTED by the Worker. Fix the error and re-run: $0 sync"
-  fi
+  local rc=0
+  tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
+      | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${WRANGLER_ENV[@]}") || rc=$?
+  case "$rc" in
+    0) ;;
+    # The put stage defers an interrupt the same way this shell does, so 130/143 from it means
+    # the upload FINISHED and was confirmed, and only then did the deferred signal take effect.
+    # Reporting that as a failure would send an operator looking for a map that did land.
+    130|143)
+      echo "done (an interrupt arrived after the put completed); secrets take effect on the next request" >&2
+      exit "$rc" ;;
+    *)
+      die "the TENANTS map was NOT updated; the previous map (including any token you just rotated or removed) is STILL ACCEPTED by the Worker. Fix the error and re-run: $0 sync" ;;
+  esac
   echo "done. Secrets take effect on the next request (no redeploy)." >&2
 }
 
