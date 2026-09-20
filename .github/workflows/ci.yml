@@ -197,10 +197,10 @@ jobs:
           bash -n pilot/tenant.sh
           node --check pilot/tenants-assemble.mjs && node --check pilot/tenants-put.mjs
           bash pilot/tenant.sh >/dev/null 2>&1 && exit 1 || test $? -eq 2
-          ! printf '' | node pilot/tenants-put.mjs --env=ci
+          printf '' | node pilot/tenants-put.mjs --env=ci && exit 1 || test $? -eq 1
           TENANTS_DIR="$(mktemp -d)" bash pilot/tenant.sh show
           sed -n 's/^TENANTS=//p' .dev.vars.example | node pilot/tenants-check.mjs
-          ! printf '{}' | node pilot/tenants-check.mjs
+          printf '{}' | node pilot/tenants-check.mjs && exit 1 || test $? -eq 1
 
   payment-protocols-tests:
     name: Payment Protocols — typecheck & test

@@ -383,21 +383,22 @@ carries `consume_nonces` because this preview is host-mode only.
 npm ci
 npm test && npm run typecheck
 npx wrangler login                                   # founder account
+npm run deploy:staging                               # deploy FIRST: a secret put against a Worker that does not
+                                                     # exist yet creates a stub Worker; note the printed Current Version ID
 npx wrangler secret put RECEIPT_SIGNER_KEY --env staging   # a 0x-hex secp256k1 key; receipts and /.well-known/bolyra-signers.json need it
-npm run deploy:staging                               # bolyra-hosted-verify-staging; note the printed Current Version ID
 # provision staging tenants with pilot/tenant.sh add … --with-fixture-key (HOSTED_VERIFY_ENV=staging),
 # run examples/managed-revocation against it (20/20), THEN:
-npx wrangler secret put RECEIPT_SIGNER_KEY           # production, if not yet set
 npm run deploy:prod                                  # workers.dev subdomain ONLY (a bare `npm run deploy` refuses); note the Current Version ID — the rollback floor
+npx wrangler secret put RECEIPT_SIGNER_KEY --env=    # production, if not yet set; --env= pins production even if CLOUDFLARE_ENV is set
 ```
 
 `TENANTS` is the only auth configuration: one entry per design partner
 (`org_id` = lowercase, 2–63 chars), two tokens per entry (32–256 characters of
-`[A-Za-z0-9._~+/-]`; a value that appears twice anywhere grants nothing), and
-that tenant's trusted operator keys. It is written only by
-`pilot/tenant.sh sync`, which assembles it from keychain-held tokens and the
-tenant records and refuses a map the Worker would reject (the rules live in
-`pilot/tenants-check.mjs`, proven against the loader by
+`[A-Za-z0-9._~+/-]`; a value that appears twice anywhere is a defect that
+fails every tenant closed), and that tenant's trusted operator keys. It is
+written only by `pilot/tenant.sh sync`, which assembles it from keychain-held
+tokens and the tenant records and refuses a map the Worker would reject (the
+rules live in `pilot/tenants-check.mjs`, proven against the loader by
 `test/tenants-check.spec.ts`). Usage analytics attribute requests to
 `<org_id>:<role>`. The reserved label `unauthenticated` is never a tenant.
 The operator procedure — onboarding, rotation, quarantine, the staging gate,

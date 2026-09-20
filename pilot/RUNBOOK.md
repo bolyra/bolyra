@@ -129,7 +129,7 @@ curl -s -X POST $BASE/v1/verify -H "Authorization: Bearer $TOKEN" -H "Content-Ty
 #    credential still allows (20 checks; exits non-zero on any miss):
 (cd ../../examples/managed-revocation && npm ci && VERIFY_URL=$BASE ADMIN_TOKEN=$ADMIN VERIFIER_TOKEN=$TOKEN npm run demo)
 
-# 7. Confirm attribution (rows under their <org_id>:verifier and <org_id>:admin labels):
+# 7. Confirm attribution (rows under their <org_id>:verifier label; repeat with :admin for the registry calls):
 CF_API_TOKEN=$(security find-generic-password -s bolyra-hosted-verify -a cf-analytics-token -w) \
   node pilot/usage-partner.mjs <org_id>:verifier 1
 ```
@@ -165,12 +165,15 @@ pilot/tenant.sh enable <org_id> --keys-retired
 
 # remove — deletes both tokens from the keychain and the entry from the map. The registry
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
-# nothing about a removed tenant is served, and re-adding the same org_id later resumes
-# that same registry (revoked credentials stay revoked):
+# nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
+# because the file exists: set "status": "active" in the registry file by hand, then
+# `rotate <org_id> admin` and `rotate <org_id> verifier` to re-mint both tokens; the
+# Durable Object resumes as it was — revoked credentials stay revoked:
 pilot/tenant.sh remove <org_id>
 
 # revoke ONE credential (not the tenant): the partner does this with their admin token,
 # or you do it for them. Terminal — a revoked binding can never be re-registered:
+# BASE and ADMIN as in step 1.5 (their base URL and admin token).
 curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/<credential_id>/revoke \
   -H "Authorization: Bearer $ADMIN"                              # → 204 (204 again if already revoked)
 
@@ -264,7 +267,7 @@ Full registry: `spec/external-verifier-contract-v1.md` §9.
 | `expired` | 200 | `now_unix >= expiry` (strict — equality is expired) | Check their clock / `now_unix`; re-issue the credential |
 | `nonce_missing` | 200 | No usable nullifier signal | Regenerate the bundle |
 | `nonce_replayed` | 200 | (local mode only — not hosted) | Hosted is host-mode: THEY reserve `consume_nonces` before acting; `@bolyra/mpp`'s gate does this |
-| `internal_error` | 500 | Fail-closed: `TENANTS` or `CAPABILITY_MAP` unset/malformed (every tenant), a quarantined tenant, a registry RPC failure or its 2,000 ms deadline, a missing `TENANT` Durable Object binding (a deploy from an environment that did not redeclare it), or a bug | `npx wrangler tail --env=`; `/health` → `tenants` must be `"ok"`; `tenant.sh sync --dry-run` validates the map; check the deploy came from `wrangler.jsonc` with the `TENANT` binding |
+| `internal_error` | 500 | Fail-closed: `TENANTS` unset or malformed, or `CAPABILITY_MAP` malformed (every tenant; an *unset* `CAPABILITY_MAP` is not a defect — it falls back to the messaging default and mpp capabilities then deny `unknown_capability`), a quarantined tenant, a registry RPC failure or its 2,000 ms deadline, a missing `TENANT` Durable Object binding (a deploy from an environment that did not redeclare it), or a bug | `npx wrangler tail --env=`; `/health` → `tenants` must be `"ok"`; `tenant.sh sync --dry-run` validates the map; check the deploy came from `wrangler.jsonc` with the `TENANT` binding |
 | *(409 `{"error":"credential_revoked"}`)* | 409 | Re-registering a revoked binding | Terminal by design; the partner must issue a new binding |
 | *(404 `{"error":"not_found"}`)* | 404 | Unknown credential id, a malformed id (not 64 lowercase hex), a wrong path, or **another tenant's** credential (never 403 — tenants cannot probe each other) | Routes: `GET /health`, `POST /v1/verify`, `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `GET /.well-known/bolyra-signers.json` |
 
