@@ -1,5 +1,5 @@
 import { BolyraDeniedError, BolyraGateConfigError, isBolyraDeniedError } from '../src/errors';
-import { handleDenials } from '../src/handle-denials';
+import { handleDenials, sendDenial } from '../src/handle-denials';
 import { deny } from '../src/types';
 import { denyResponse } from '../src/deny';
 
@@ -99,4 +99,59 @@ test('BolyraGateConfigError is a named Error', () => {
   expect(e.name).toBe('BolyraGateConfigError');
   expect(e).toBeInstanceOf(Error);
   expect(e.message).toBe('bad hooks');
+});
+
+describe('sendDenial (Express-style res)', () => {
+  function resSpy() {
+    const writes: Array<[string, unknown[]]> = [];
+    const res = {
+      status: (code: number) => { writes.push(['status', [code]]); return res; },
+      setHeader: (name: string, value: string) => { writes.push(['setHeader', [name, value]]); return res; },
+      end: (body?: string) => { writes.push(['end', [body]]); return res; },
+    };
+    return { res, writes };
+  }
+
+  test('a denial writes status 401 + application/problem+json body exactly once and returns true', async () => {
+    const verdict = deny('missing_authorization', 'no header');
+    const err = new BolyraDeniedError(verdict, denyResponse(verdict));
+    const { res, writes } = resSpy();
+    expect(await sendDenial(err, res)).toBe(true);
+    expect(writes.map(([m]) => m)).toEqual(['status', 'setHeader', 'end']);
+    expect(writes[0]).toEqual(['status', [401]]);
+    expect(writes[1]).toEqual(['setHeader', ['content-type', 'application/problem+json']]);
+    const body = JSON.parse(writes[2]![1][0] as string);
+    expect(body).toMatchObject({ status: 401, code: 'missing_authorization' });
+    expect(writes.filter(([m]) => m === 'end')).toHaveLength(1);
+  });
+
+  test('a plain-Node-shaped res (statusCode property, no status()) gets statusCode assigned', async () => {
+    const verdict = deny('scope_exceeded', 'over tier');
+    const err = new BolyraDeniedError(verdict, denyResponse(verdict));
+    const writes: Array<[string, unknown[]]> = [];
+    const res = {
+      statusCode: 200,
+      setHeader: (name: string, value: string) => { writes.push(['setHeader', [name, value]]); },
+      end: (body?: string) => { writes.push(['end', [body]]); },
+    };
+    expect(await sendDenial(err, res)).toBe(true);
+    expect(res.statusCode).toBe(403);
+    expect(writes.map(([m]) => m)).toEqual(['setHeader', 'end']);
+    expect(JSON.parse(writes[1]![1][0] as string)).toMatchObject({ status: 403, code: 'scope_exceeded' });
+  });
+
+  test('headersSent: true returns false with zero writes (the response is already committed)', async () => {
+    const verdict = deny('missing_authorization', 'no header');
+    const err = new BolyraDeniedError(verdict, denyResponse(verdict));
+    const { res, writes } = resSpy();
+    expect(await sendDenial(err, { ...res, headersSent: true })).toBe(false);
+    expect(writes).toEqual([]);
+  });
+
+  test('a non-denial returns false with no writes', async () => {
+    const { res, writes } = resSpy();
+    expect(await sendDenial(new Error('boom'), res)).toBe(false);
+    expect(await sendDenial(undefined, res)).toBe(false);
+    expect(writes).toEqual([]);
+  });
 });

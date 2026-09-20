@@ -75,4 +75,4 @@ export {
 } from './types';
 
 export { BolyraDeniedError, BolyraGateConfigError, isBolyraDeniedError } from './errors';
-export { handleDenials } from './handle-denials';
+export { handleDenials, sendDenial, type DenialResponseWriter } from './handle-denials';

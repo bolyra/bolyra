@@ -95,6 +95,30 @@ export const handler = handleDenials(async (request: Request) => {
 })
 ```
 
+`handleDenials` is for frameworks that consume a *returned* `Response` (Next
+App Router, Cloudflare Workers, Hono, Bun). An Express/Node handler must write
+to `res`, and a returned `Response` does not complete the request — use mppx's
+own Express middleware and `sendDenial(err, res)` in an error middleware:
+
+```ts
+import { payment } from 'mppx/express'
+import { sendDenial } from '@bolyra/mpp'
+
+app.post('/paid', payment(mppx.charge, { amount: '25' }), (req, res) => {
+  // ...the protected action (only reached on an allow + verified payment)...
+  res.json({ ok: true })
+})
+
+app.use(async (err, req, res, next) => {
+  if (await sendDenial(err, res)) return // status + application/problem+json written
+  next(err)
+})
+```
+
+Under `mppx/express` a preflight denial rejects the middleware's promise, and
+Express >= 5 forwards async rejections to error middleware (Express 4 needs an
+async wrapper).
+
 > **Why it throws.** mppx maps any non-402 `Response` returned from a method
 > `preflight` to an outer `{ status: 200, withReceipt }`, so a *returned* denial
 > reaches your handler as success and the action runs before the client sees
@@ -131,7 +155,7 @@ ES256K-signed, hash-chained authorization receipt reference — giving the
 - **`onReceipt` is synchronous.** A sink that returns a Promise is treated as a failure and the request is denied (an async sink's rejection could otherwise never fail the decision); do your I/O in a queue the sink hands off to synchronously.
 - **Where a denial surfaces depends on the stage.** A `preflight` denial propagates out of `mppx.charge(...)(request)` (this is what `handleDenials` catches). A denial thrown from `verify` — a missing or already-consumed decision — is caught by mppx itself, logged as `mppx: internal verification error`, and re-issued as a 402 challenge; the Bolyra Problem Details are not recoverable there. Both are fail-closed.
 - A failed `originalVerify` is not retryable against the same captured request: the decision is consumed one-use; the client re-runs the request **with a fresh presentation** (a fresh authorization decision; in host-nonce mode the original presentation's nonce was already reserved on the allow, so re-sending it would deny `nonce_replayed`).
-- **One bundle = one presentation.** Issue a fresh presentation per action (`issueMandate` / `bolyra mandate issue`; the signer is local and cheap) rather than re-sending one. Each issuance mints a fresh random nullifier (`publicSignals[1]`); a hosted verifier hands that nullifier back for the gate to reserve before acting, so the same bundle presented twice denies `nonce_replayed` while a re-issued one does not. Classical-mode replay protection is **cooperative**: the nullifier is host-reserved, not proof-bound — an in-process `{ kind: 'classical' }` verifier reserves nothing (see "What is and isn't checked").
+- **One bundle = one presentation.** Issue a fresh presentation per gated HTTP attempt — including the payment retry after a 402 challenge under `enforce: 'always'`, because the discovery attempt already ran the gate and reserved its nullifier; only `enforce: 'payment'` skips the gate on discovery (`issueMandate` / `bolyra mandate issue`; the signer is local and cheap) — rather than re-sending one. Each issuance mints a fresh random nullifier (`publicSignals[1]`); a hosted verifier hands that nullifier back for the gate to reserve before acting, so the same bundle presented twice denies `nonce_replayed` while a re-issued one does not. Classical-mode replay protection is **cooperative**: the nullifier is host-reserved, not proof-bound — an in-process `{ kind: 'classical' }` verifier reserves nothing (see "What is and isn't checked").
 - Tested scope: single-method HTTP `Request` charge handlers at mppx 0.8.13. `compose` intents, non-`Request` transports, and per-item streaming authorization are not established.
 
 ### Issuing the mandate (operator side)
