@@ -13,14 +13,19 @@
  *   - An Analytics Engine outage never affects the verdict (fail-tolerant).
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { SELF, env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 
 import worker, { type Env } from '../src/index';
-import { postVerify, BASE, TOKENS, ORGS } from './helpers';
+import { postVerify, getCredential, BASE, TOKENS, ORGS, registerFixture, fixtureRegistration } from './helpers';
 
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
 import registrations from './fixtures/registrations.json';
+
+beforeAll(async () => {
+  await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+  await registerFixture(fixtureRegistration(allowAgentOnly), 'C');
+});
 
 interface DataPoint {
   blobs?: string[];

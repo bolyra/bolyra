@@ -9,6 +9,8 @@ import { bindingDigest, verifyBindingSig } from '../src/verify/binding';
 import { parseBinding, parseSig } from '../src/verify/bundle';
 import { credentialId } from '../src/credential-id';
 import registrations from './fixtures/registrations.json';
+import { env } from 'cloudflare:test';
+import mandate from './fixtures/mandate.json';
 
 type Fixture = {
   body: { version: number; binding: unknown; signature: unknown; operator_pubkey: { x: string; y: string } };
@@ -45,5 +47,14 @@ describe('registration fixtures', () => {
     expect(F.badSig!.body.binding).toEqual(F.valid2!.body.binding);
     expect(F.badSig!.body.signature).toEqual(F.valid!.body.signature);
     expect(F.badSig!.credential_id).toBe(F.valid2!.credential_id);
+  });
+
+  it('the deployment capability map is the mpp mandate vocabulary, verbatim', () => {
+    expect(JSON.parse(env.CAPABILITY_MAP!)).toEqual(mandate.capability_map);
+    expect(Object.keys(mandate.capability_map).sort()).toEqual([
+      'mpp:financial:medium',
+      'mpp:financial:small',
+      'mpp:financial:unlimited',
+    ]);
   });
 });

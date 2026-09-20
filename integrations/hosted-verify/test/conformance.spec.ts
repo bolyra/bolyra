@@ -10,8 +10,8 @@
  * `consume_nonces` for the caller to reserve.
  */
 
-import { describe, expect, it } from 'vitest';
-import { postVerify } from './helpers';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { postVerify, registerFixture, fixtureRegistration } from './helpers';
 import { validateVerdictSchema, effectiveKind } from './verdict-schema';
 
 import vectorsFile from '../../../spec/test-vectors.json';
@@ -41,6 +41,12 @@ const FIXTURES: Record<string, unknown> = {
   'deny-scope-exceeded': denyScopeExceeded,
   'deny-model-mismatch': denyModelMismatch,
 };
+
+// The allow vectors present the allow-agent-only fixture; the deny vectors are
+// denied before the registry is consulted, so only one registration is needed.
+beforeAll(async () => {
+  await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+});
 
 const vectors = (vectorsFile as { vectors: Vector[] }).vectors.filter(
   (v) => v.type === 'external_verifier',
