@@ -111,9 +111,24 @@ has passed step 5, edit the fixture key out of `trustedOperators` and re-sync.
 cd integrations/hosted-verify && npm ci && npx wrangler login  # founder account
 # macOS keychain + openssl are assumed (tenant.sh). Confirm the Worker is live and enforcing:
 curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status, tenants, registry_enforced, receipts_enabled}'
-# Cloudflare notification (once, in the dashboard): Notifications → add "Workers — error rate"
-# for this Worker, email to the founder. A configuration defect 500s every tenant at once;
-# this is the only alarm that would fire.
+# Alarm: .github/workflows/hosted-verify-health.yml probes /health every 15 minutes (best effort)
+# and fails the run unless status/tenants are "ok" and registry_enforced is true. GitHub sends
+# scheduled-run failure notifications to the account that last edited the `cron` line in the
+# workflow file (not whoever last touched the file); a manual dispatch notifies the dispatcher.
+# That account needs "Actions: failed workflows only" (or all) email notifications enabled in its
+# GitHub notification settings. Verify the scheduled route once at setup: set the repository
+# variable HOSTED_VERIFY_HEALTH_URL to the production URL with `/nope` appended, wait for the next
+# scheduled run (≤15 minutes) to fail, confirm the failure email arrived, restore the variable to
+# the real `/health` URL, and confirm the following scheduled run passes. A manual dispatch
+# (url=…/nope) tests the workflow logic but not the scheduled notification route. While a real
+# failure is being fixed, the probe fails every 15 minutes (up to 96 runs a day); disable the
+# workflow from the Actions tab during remediation if the noise matters. The probed URL is the
+# HOSTED_VERIFY_HEALTH_URL repository variable. Cloudflare offers no per-Worker error-rate
+# notification on this account (the only Workers type, "Workers Observability: Real-Time Issue",
+# could not be enabled). A TENANTS defect (unset or invalid) or the Worker being down trips this
+# probe. A malformed CAPABILITY_MAP does NOT: /health stays green while every authenticated request
+# answers 500 — that one shows only in `npx wrangler tail --env=` or a failed authenticated request
+# (the example). `registry_enforced` is a build marker, not a registry liveness check.
 ```
 
 ## 1. Onboard a partner
