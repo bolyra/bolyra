@@ -41,6 +41,12 @@ under `contracts/deployments/` and `circuits/build/`.
 
 - The runnable revocation demonstration: issue a spend mandate with the published `@bolyra/mpp@0.5.0`, register it with the hosted verifier, spend through an mppx gate (real 402→pay handshake, two fresh presentations per paid action), revoke, and the next fresh presentation is denied `untrusted_root` / `credential_not_active` before the paid action runs; an independent credential under the same operator still allows. Runs in CI against `wrangler dev` (job `managed-revocation-example`, Node 22) with a generated `.dev.vars` that is never printed.
 
+### Changed
+
+#### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)
+
+- Production receipt key id is `preview-2` (signer key rotated at the registry cutover; `/.well-known/bolyra-signers.json` publishes the new key). Staging is `staging-1`.
+
 ### Fixed
 
 #### Hosted verify endpoint (`integrations/hosted-verify` — private, not published)

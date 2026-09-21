@@ -203,6 +203,7 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # to re-mint both tokens first — a removed tenant is skipped by sync, so both pass
 # cleanly — then set "status": "active" in the registry file by hand and run `sync`;
 # the Durable Object resumes as it was — revoked credentials stay revoked:
+# The last tenant cannot be removed: the Worker rejects an empty map, so sync refuses it and the previous map stays live — quarantine it with disable instead, and remove it once another tenant exists.
 pilot/tenant.sh remove <org_id>
 
 # revoke ONE credential (not the tenant): the partner does this with their admin token,
@@ -357,6 +358,7 @@ npm run deploy:staging                                        # note the printed
 npx wrangler secret put RECEIPT_SIGNER_KEY --env staging      # a fresh 0x-hex secp256k1 key
 HOSTED_VERIFY_ENV=staging pilot/tenant.sh add <org_id> <x:y> --with-fixture-key  # staging keychain + <repo root>/pilot/tenants-staging/; the example below signs with the fixture key
 curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '{tenants, registry_enforced, receipts_enabled}'
+# A secret put takes a few seconds to reach every isolate: /health can still say tenants "invalid" right after the put; re-check after ~10 s before reading anything into it.
 
 # The gate for production: the example must pass against staging.
 (cd ../../examples/managed-revocation && npm ci && \
@@ -390,8 +392,8 @@ as unverified until the floor is restored.
 
 | Environment | Version id | Deployed (UTC) | Commit | Example run |
 |---|---|---|---|---|
-| staging | *(not yet deployed)* | — | — | — |
-| production | *(not yet deployed — the floor is unset)* | — | — | — |
+| staging | 1c4eaa83-2b5f-4c98-9f41-9f4e980bcf32 | 2026-09-21 | e7cb720 | 20/20 (2026-09-21, tenant bolyra-staging, fixture key) |
+| production | **4a4e83fc-6e53-4287-8f92-c5d03a6fbc6f — the rollback floor** | 2026-09-21 | e7cb720 | 20/20 (2026-09-21, tenant bolyra-smoke, fixture key; quarantined afterwards) |
 
 ## Out of scope — waits for a real pilot
 
