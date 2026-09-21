@@ -131,7 +131,7 @@ export function buildReceiptHeader(
   try {
     const config = {
       issuer: env.RECEIPT_ISSUER ?? 'bolyra-hosted-verify-preview',
-      keyId: env.RECEIPT_KEY_ID ?? 'preview-1',
+      keyId: env.RECEIPT_KEY_ID ?? 'preview-2',
       privateKey,
     };
     const payload = createAuthReceipt(buildInput(verdict, body), config);
@@ -161,7 +161,7 @@ export function buildSignerDiscoveryDoc(env: ReceiptEnv): object | undefined {
   if (privateKey === undefined || privateKey === '') return undefined;
   const config = {
     issuer: env.RECEIPT_ISSUER ?? 'bolyra-hosted-verify-preview',
-    keyId: env.RECEIPT_KEY_ID ?? 'preview-1',
+    keyId: env.RECEIPT_KEY_ID ?? 'preview-2',
     privateKey,
   };
   let signer = signerAddressCache.get(privateKey);
