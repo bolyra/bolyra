@@ -3,7 +3,7 @@
   "start_date": "2026-06-30",
   "cadence": "weekly",
   "current_week": 12,
-  "status": "paused",
+  "status": "suspended",
   "paused_date": "2026-07-27",
   "paused_reason": "The week-4 scan produced FALSE data and an unsafe recommended action. Verified against live `gh` on 2026-07-27: xpaysh/awesome-x402 #649 was MERGED 2026-07-17, but the scan reported it stale and drafted a 'FINAL CHANCE ... closing' comment for it. Posting that would have put a closing threat on a merged PR. The scan also claimed 'zero follow-ups have been sent', contradicted by saneGuy bump comments on #1016, #22, #91 and #453. Root cause is stated in the scan's own note: GitHub MCP is scoped to bolyra/bolyra, so external PR state was INFERRED from opening dates rather than checked. This repeats the lesson already recorded in tasks/lessons.md (2026-07-14, robinhood#20): sweep merged/closed states, not just open.",
   "unpause_requirements": [
@@ -162,5 +162,7 @@
       "review_comments_responded": 0,
       "notes": "SUSPENSION REAFFIRMED (3rd consecutive). Loop still paused — GitHub MCP scope constraint unchanged, 9 open PRs left untouched per standing founder decision. No builder sessions confirmed from weeks 5-11. 5 new targets identified in the CLI-agent / autonomous-agent / security-agent / Go tier (first time this tier appears in the backlog): (1) google-gemini/gemini-cli ~107106★ — first CLI-tier target; TypeScript MCP client+server; pre-tool authorization hook. (2) Significant-Gravitas/AutoGPT ~187471★ — highest-star target in 12 weeks of scanning; Python; BolyraCredential plugin type. (3) agentscope-ai/agentscope ~32099★ — Alibaba multi-agent+MCP; Python; BolyraServiceAuth ServiceToolkit contrib. (4) vxcontrol/pentagi ~24813★ — first Go-tier target; offensive security agent; most security-aligned fit yet; BolyraMandate gate before tool dispatch. (5) microsoft/agent-framework ~13673★ — Microsoft unified Python+.NET agent framework (distinct from semantic-kernel in week 7); BolyraAgentMiddleware + BolyraKernelPlugin. Total repos identified across 12 weeks: 60, Path B targets: 40. FORMAL RECOMMENDATION: if no builder session is opened before week 13, the loop should be formally suspended by the founder."
     }
-  ]
+  ],
+  "suspended_date": "2026-09-21",
+  "suspension_reason": "Formal suspension after the week-12 scan's own recommendation: 12 consecutive scan weeks, 0 builder sessions, 60 targets identified; the scanner's recent 'targets' were unsolicited integration PRs into large frameworks, the class ruled out on 2026-07-27 (only real bug-fix PRs tied to a maintainer-visible problem), and each run committed to the public repo. The scheduled routine bolyra-pr-outreach-monitor (Mondays 11:00 UTC) is disabled. The nine open PRs stay untouched per the 2026-07-27 founder decision. Bug-fix PRs are sourced from open issues in repositories with merged Bolyra fixes, with maintainer agreement on scope before coding."
 }
