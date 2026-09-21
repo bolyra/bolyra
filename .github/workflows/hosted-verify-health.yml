@@ -1,0 +1,65 @@
+name: Hosted verify — production health probe
+
+on:
+  # GitHub scheduling is best effort — a run can slip past the 15-minute mark.
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'override the probed URL for a controlled failure test; leave empty for production'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-verify-health
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe /health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe production /health
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          CONFIGURED_URL: ${{ vars.HOSTED_VERIFY_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+
+          # HOSTED_VERIFY_HEALTH_URL (and the dispatch override) is a repository variable, not a
+          # secret, and is echoed/logged as plain text below — it must never be set to a value that
+          # carries a credential (e.g. a query-string token).
+          URL="${INPUT_URL}"
+          if [ -z "$URL" ]; then
+            URL="${CONFIGURED_URL}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "::error::HOSTED_VERIFY_HEALTH_URL repository variable is not set"
+            exit 1
+          fi
+
+          set +e
+          code=$(curl -sS --fail-with-body --max-time 20 --retry 2 --retry-delay 5 -o body.json -w '%{http_code}' "$URL")
+          curl_status=$?
+          set -e
+          if [ "$curl_status" -ne 0 ]; then
+            echo "::error::health probe: request failed (curl exit $curl_status)"
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::error::health probe: HTTP $code"
+            exit 1
+          fi
+
+          if ! jq -e -s 'length == 1 and (.[0]|type) == "object" and .[0].status == "ok" and .[0].tenants == "ok" and .[0].registry_enforced == true' body.json > /dev/null; then
+            echo "::error::health probe: assertions failed"
+            jq -r -s 'if length==1 and (.[0]|type)=="object" then "single_object=true status_ok=\(.[0].status=="ok") tenants_ok=\(.[0].tenants=="ok") registry_enforced=\(.[0].registry_enforced==true)" else "single_object=false" end' body.json
+            exit 1
+          fi
+
+          echo "health ok: status=ok tenants=ok registry_enforced=true"
