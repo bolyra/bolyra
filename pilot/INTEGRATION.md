@@ -61,6 +61,64 @@ plus the messaging default). Until your key is pinned, only bindings signed
 by the repo's fixture key (if we seeded it for your tenant) can be registered
 — and nothing verifies until it is registered.
 
+## Try managed revocation in ten minutes
+
+**Step 0 — the ask.** Send your operator's BabyJubjub **public key**,
+corresponding to the private key you use with `bolyra mandate issue` or the
+SDK, to hello@bolyra.ai as an `x:y` decimal pair. With the Bolyra CLI
+installed, `bolyra key generate --out operator.key` creates the private key
+and writes decimal-string `x`/`y` coordinates to `operator.key.pub`; send
+only the `.pub` contents and retain the private key locally. We reply same
+day, over a secure channel, with the base URL and two bearer tokens — admin,
+verifier. The ten minutes start once you have those.
+
+### 1. Run the example
+
+```bash
+git clone https://github.com/bolyra/bolyra
+cd bolyra/examples/managed-revocation && npm ci
+VERIFY_URL='<base URL>' ADMIN_TOKEN='<admin token>' VERIFIER_TOKEN='<verifier token>' npm run demo
+```
+
+Node 22+. Your pilot is configured for the example's signing key, MPP
+capabilities, and receipt checks; expect `20/20 checks passed`.
+
+**Read once — load-bearing.** The example signs its bindings with the
+repository's conformance fixture key, whose private half is public. To make
+it pass, we seed that key into your trial tenant alongside your own (that's
+what `--with-fixture-key` means on our side). An allow from a fixture-signed
+binding proves transport, your tokens, and the registry — not who signed.
+Ask us to remove the fixture key from your tenant before anything real runs
+on it.
+
+### 2. Register a binding signed by your own key
+
+```bash
+bolyra mandate issue \
+  --operator-key '/absolute/path/to/operator.key' \
+  --agent '<agent-name>' --audience '<project-key>' --model '<model>' \
+  --tier small --expiry 30d --encoding json --out mandate.json
+```
+
+Replace the placeholders with your values and use the private key
+corresponding to the public key you sent. From `mandate.json`, create the
+registration body with `version: 1`, `binding` from `.binding`, `signature`
+from `.sig`, and `operator_pubkey` from `.agent.credential.operator_pubkey`.
+Create a separate verification request with `version: 1`, the presentation
+serialized as the `bundle` string, matching request identity fields,
+`granted_capabilities: ["mpp:financial:small"]`, and current Unix seconds in
+`now_unix`. Substitute these files in curl steps 2 and 3, and use step 2's
+returned ID in step 5; capture response headers separately to inspect
+`x-bolyra-credential-id`.
+
+Expect: step 2 → `201` + `credential_id`; step 3 → allow with
+`x-bolyra-credential-id`; step 5 revoke → `204`, verify again → `deny
+untrusted_root`/`credential_not_active`; re-register → `409
+credential_revoked`.
+
+When it works, there's nothing to send us. From here: the rest of this
+guide, or `bolyra verify` for the zk-class path.
+
 ### Curl test
 
 ```bash
