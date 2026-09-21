@@ -1,0 +1,209 @@
+{
+  "week": 12,
+  "date": "2026-09-21",
+  "loop_status": "paused",
+  "path_b_active": true,
+
+  "tooling_constraint": "GitHub MCP remains scoped to bolyra/bolyra. External PR live-state cannot be queried via pull_request_read on foreign repos. All external PR statuses carry forward from last live verification (2026-07-27, 56 days ago). No state writes to prs.json this cycle — same discipline as weeks 4-11. Suspension recommendation from week 10 still stands and is again reaffirmed.",
+
+  "path_b_progress_check": {
+    "note": "Weeks 5-11 identified 35 Path B targets with builder notes and injection points. No new prs.json entries recorded — 0 builder sessions confirmed across 7 Path B weeks. Cumulative total: 55 targets identified across 11 weeks, 0 Path B PRs opened. Weeks 10 and 11 both explicitly fired the suspension recommendation. That condition persists: 12 consecutive scan weeks, 0 external PRs opened, 0 follow-ups sent.",
+    "week11_priority_status": "unknown — vercel/ai, langchain-ai/langchain, camel-ai/camel, langgenius/dify, and browser-use/browser-use remain the top 5 by merge probability. No action confirmed in prs.json.",
+    "action_gap": "12 consecutive scan weeks, 0 Path B PRs opened. Additional targets are identified this week but the bottleneck is builder-session activation, not target intelligence.",
+    "suspension_status": "ACTIVE RECOMMENDATION — week 10 first fired; weeks 11 and 12 reaffirm. 12 consecutive scan weeks, 0 external outreach. The target pipeline is exhaustively built. Continued scanning produces no new actionable signal above what is already documented across 60 targets."
+  },
+
+  "pr_status_summary": [
+    {
+      "id": 1,
+      "repo": "firecrawl/firecrawl",
+      "pr_number": 3902,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision 2026-07-27: leave all 9 open PRs alone"
+    },
+    {
+      "id": 2,
+      "repo": "edgeandnode/ampersend-sdk",
+      "pr_number": 142,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 3,
+      "repo": "xpaysh/awesome-x402",
+      "pr_number": 649,
+      "status": "merged",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "MERGED",
+      "action_needed": "none — terminal state"
+    },
+    {
+      "id": 4,
+      "repo": "jordo1138/fastapi-x402",
+      "pr_number": 3,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 5,
+      "repo": "crewAIInc/crewAI",
+      "pr_number": 6382,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 6,
+      "repo": "google/adk-python-community",
+      "pr_number": 165,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 7,
+      "repo": "Open-Agent-Tools/open-stocks-mcp",
+      "pr_number": 1016,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 8,
+      "repo": "stripe/ai",
+      "pr_number": 453,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 9,
+      "repo": "alpacahq/alpaca-mcp-server",
+      "pr_number": 91,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    },
+    {
+      "id": 10,
+      "repo": "GeLi2001/shopify-mcp",
+      "pr_number": 22,
+      "status": "stale",
+      "last_verified": "2026-07-27",
+      "days_since_verified": 56,
+      "verified_state": "OPEN",
+      "action_needed": "none — founder decision"
+    }
+  ],
+
+  "new_targets": [
+    {
+      "repo": "google-gemini/gemini-cli",
+      "approx_stars": 107106,
+      "language": "TypeScript",
+      "why": "gemini-cli (107,106★) is Google's open-source Gemini CLI agent — an MCP client and server in a single terminal binary used by developers daily. Tool dispatch (MCP tool calls + built-in tools like shell, file read/write, web fetch) fires under the user's OAuth credential with no per-invocation identity mandate. This is the first CLI-tier agent in the target pipeline. Bolyra's EVC verifier as an optional pre-tool hook gates which mandates authorize which tool classes, turning the CLI into an identity-bound execution environment for agentic sessions. Highest-visibility merge opportunity in the CLI tier.",
+      "gap": "gemini-cli's tool dispatch (packages/core/src/core/tool_executor.ts or equivalent) calls registered tools after LLM selection with no caller-identity check. An optional BolyraAuthMiddleware in the tool execution path — evaluated before each tool invocation — adds per-action mandate binding. Non-breaking: absent the middleware, behavior is unchanged. A contrib packages/bolyra/ directory keeps it self-contained.",
+      "anchor_issue": "Search google-gemini/gemini-cli issues for 'authorization', 'tool permission', 'access control', or 'identity'. At 838 open issues with an active contributor community there is almost certainly demand for per-tool or per-session authorization. Google Gemini team actively reviews external contributions — active maintainer (updated 2026-09-21).",
+      "pr_type": "targeted contrib — optional pre-tool authorization hook in the tool executor + BolyraAuthMiddleware helper in packages/bolyra/. TypeScript strict. Non-breaking.",
+      "priority": 1,
+      "builder_notes": "Entry point: study packages/core/src/core/ and the tool execution pipeline. gemini-cli uses pnpm workspaces, TypeScript strict, Vitest. Run pnpm test before submitting. The fact that gemini-cli is both an MCP client and server makes the Bolyra integration doubly compelling: it gates both built-in tools and MCP server tools in a single hook. CONTRIBUTING.md exists."
+    },
+    {
+      "repo": "Significant-Gravitas/AutoGPT",
+      "approx_stars": 187471,
+      "language": "Python",
+      "why": "AutoGPT (187,471★) is the original autonomous agent and has the highest star count of any target identified across 12 weeks of scanning. The platform ships a plugin/skill ecosystem where agents dispatch web search, file write, shell execution, and external API calls with no per-agent identity mandate. AutoGPT's enterprise positioning and the Platform (autogpt.net) make it the highest-reach target in the pipeline. A BolyraCredential plugin type — registered in autogpts/autogpt/autogpt/plugins/ using the existing PluginType pattern — adds mandate-bound authorization to any AutoGPT task execution without touching core agent logic.",
+      "gap": "AutoGPT's command/plugin execution (autogpts/autogpt/autogpt/agents/ and autogpts/autogpt/autogpt/commands/) dispatches registered commands after LLM instruction with no per-command identity gate. An optional bolyra_mandate field in the AgentSettings configuration and a pre-command hook in the command registry closes the gap. BolyraPlugin registered in plugins/ is the non-breaking extension point.",
+      "anchor_issue": "Search Significant-Gravitas/AutoGPT issues for 'authorization', 'permission', 'identity', or 'mandate'. At 585 open issues with an enterprise-oriented maintainer team, demand for per-task identity binding is highly likely. The platform is actively maintained (updated 2026-09-21).",
+      "pr_type": "targeted contrib — optional BolyraPlugin in autogpts/autogpt/autogpts/autogpt/plugins/ + optional bolyra_mandate config field. Python 3.11+. Non-breaking: disabled by default.",
+      "priority": 2,
+      "builder_notes": "Entry point: study autogpts/autogpt/ — specifically commands/, agents/, and plugins/. AutoGPT uses Poetry, Python 3.11+, black/isort/mypy. Run make check-code before submitting. The AutoGPT Platform (hosted product) means a merged integration PR here has downstream reach to the hosted user base — high-visibility beyond stars alone. CONTRIBUTING.md exists and the team actively reviews external contributions."
+    },
+    {
+      "repo": "agentscope-ai/agentscope",
+      "approx_stars": 32099,
+      "language": "Python",
+      "why": "AgentScope (32,099★) is Alibaba's open-source multi-agent framework — it ships MCP support, service tool dispatch, memory, multi-modal, and real-time voice agents, with an active research and enterprise user base. The ServiceToolkit — which is how agents call external functions, web APIs, and MCP tools — dispatches calls with no per-agent caller identity. AgentScope's explicit goal of 'agents you can see, understand and trust' aligns directly with Bolyra's mandate model: adding an optional pre_service_call authorization hook turns that claim from aspiration to proof.",
+      "gap": "AgentScope's ServiceToolkit.run() (agentscope/service/service_toolkit.py) dispatches registered service functions after LLM request with no identity verification. An optional BolyraServiceAuth contrib wrapper in agentscope/contrib/bolyra/ that wraps ServiceToolkit and verifies a Bolyra mandate before each call closes the gap without changing core code.",
+      "anchor_issue": "Search agentscope-ai/agentscope issues for 'authorization', 'permission', 'access control', or 'identity'. At 396 open issues with an active research+enterprise contributor community (updated 2026-09-21), authorization demand is highly likely, especially for multi-agent delegation scenarios where a sub-agent's tool calls should be bounded by the parent's mandate.",
+      "pr_type": "targeted contrib — BolyraServiceAuth wrapper in agentscope/contrib/bolyra/ + optional pre-call hook. Python 3.10+. Non-breaking.",
+      "priority": 3,
+      "builder_notes": "Entry point: study agentscope/service/service_toolkit.py and existing contrib/ patterns. AgentScope uses Python 3.10+, ruff, pytest. Run python -m pytest tests/ before submitting. The multi-agent delegation use case — where a sub-agent's service calls are bounded by the orchestrator's Bolyra mandate — is a compelling demo aligned with AgentScope's architecture. CONTRIBUTING.md exists."
+    },
+    {
+      "repo": "vxcontrol/pentagi",
+      "approx_stars": 24813,
+      "language": "Go",
+      "why": "pentagi (24,813★) is a fully autonomous AI pentesting agent — it dispatches offensive security tools (port scanning, exploit execution, credential testing, vulnerability analysis) through a multi-agent pipeline with no per-session identity mandate. This is the most security-aligned Bolyra fit in 12 weeks of scanning: pentesting agents operating without identity binding ARE the threat model Bolyra was designed to prevent. A BolyraMandate gate before offensive tool execution adds the authorization layer that distinguishes authorized red-team runs from unauthorized use — a compliance and legal necessity for enterprise adoption. First Go-tier target in the pipeline.",
+      "gap": "pentagi's tool dispatch pipeline (internal/providers/ or internal/tasks/ in Go) fires offensive tool functions after LLM planning with no caller-identity or authorization-scope check. An optional bolyra_mandate configuration field on the PentestSession type and a pre-tool middleware in the provider pipeline closes the gap. Non-breaking: without the field, behavior is unchanged.",
+      "anchor_issue": "Search vxcontrol/pentagi issues for 'authorization', 'audit', 'identity', or 'scope'. At 71 open issues with an active security-researcher community, authorization boundary and audit-trail demand is very likely — enterprise security teams need provable scope for penetration testing engagements.",
+      "pr_type": "targeted contrib — BolyraMandate middleware in a contrib/bolyra/ directory + optional bolyra_mandate field on the session config. Go 1.21+. Non-breaking.",
+      "priority": 4,
+      "builder_notes": "Entry point: study the tool provider and task execution pipeline in internal/providers/ or internal/tasks/. pentagi uses Go modules, golangci-lint. Run make lint and go test ./... before submitting. The audit-trail angle — every offensive tool call linked to a Bolyra mandate that identifies the authorized operator, expiry, and scope — is the primary value proposition for enterprise red-team workflows. This would be Bolyra's first Go integration PR."
+    },
+    {
+      "repo": "microsoft/agent-framework",
+      "approx_stars": 13673,
+      "language": "Python / .NET",
+      "why": "microsoft/agent-framework (13,673★) is Microsoft's newer unified agentic orchestration framework for Python and .NET — distinct from semantic-kernel (covered week 7), it provides ChatCompletionAgent, multi-agent workflows, and orchestration patterns for production deployments. As a Microsoft-branded agent framework with Python and .NET support, a Bolyra integration here would be the highest-credibility enterprise signal in the pipeline: Microsoft's own deployment framework with an identity-bound authorization layer. Tool dispatch in ChatCompletionAgent runs with no per-invocation mandate check.",
+      "gap": "ChatCompletionAgent's tool execution (python/packages/autogen-agentchat/ or dotnet/src/Microsoft.SemanticKernel.Agents.*) dispatches functions after LLM selection with no caller-identity gate. An optional BolyraAgentMiddleware for Python and a BolyraKernelPlugin for .NET add mandate verification at tool dispatch. Both follow the existing AgentChatMiddleware / KernelPlugin patterns in the framework.",
+      "anchor_issue": "Search microsoft/agent-framework issues for 'authorization', 'tool permission', or 'identity'. At 616 open issues with an active Microsoft engineering team (updated 2026-09-21), enterprise authorization demand is very high — this is a Microsoft-backed framework targeting production enterprise deployments.",
+      "pr_type": "targeted contrib — BolyraAgentMiddleware for Python in python/packages/autogen-ext/autogen_ext/contrib/bolyra/ + BolyraKernelPlugin for .NET in dotnet/src/. Both non-breaking.",
+      "priority": 5,
+      "builder_notes": "Entry point: study the Python package structure (python/packages/autogen-agentchat/) and existing middleware patterns (autogen-ext). Python 3.11+, pyproject.toml, mypy, pytest. For .NET: dotnet/src/ with C# nullable reference types. The dual Python+.NET scope makes this a larger PR — recommend starting with Python only and noting .NET in the PR description as future work. CONTRIBUTING.md exists with a Microsoft CLA requirement."
+    }
+  ],
+
+  "follow_ups_drafted": [],
+  "follow_ups_note": "Zero follow-ups drafted. Founder decision 2026-07-27 is standing: the 9 open PRs are left alone — no bumps, no closes, no 'final chance' language, no action of any kind.",
+
+  "path_b_execution_state": {
+    "cumulative_targets_identified": 60,
+    "path_b_targets_total": 40,
+    "weeks_since_last_outreach_action": "12+",
+    "suspension_recommendation_fires": true,
+    "suspension_status": "REAFFIRMED (3rd consecutive) — weeks 10, 11, and 12 all fire the suspension recommendation. 12 consecutive scan weeks, 0 external outreach actions. The target pipeline spans every major tier: AI gateways, enterprise frameworks, MCP infrastructure, browser/computer-use agents, LLM app platforms, CLI agents, observability SDKs, multi-agent swarms, autonomous coding agents, security agents, and x402 infrastructure. No further scan will produce actionable new signal.",
+    "recommended_restart_condition": "Resume the weekly scan when: (1) at least one Path B PR has been opened, AND (2) that PR has either been merged or is in active review.",
+    "top_five_by_merge_probability": [
+      "vercel/ai (week 9 #1) — TypeScript, optional toolAuthorizationHandler, non-breaking, Vercel engineers responsive",
+      "langchain-ai/langchain (week 8 #2) — 2-file diff, non-breaking BaseTool.run() guard, widest downstream reach",
+      "camel-ai/camel (week 9 #2) — BolyraAuthToolkit contrib, zero core change, active maintainers",
+      "langgenius/dify (week 11 #1) — 155k★, MCP+tools+skills, BolyraAuthProvider credential type, 2-3 file diff",
+      "browser-use/browser-use (week 11 #2) — 114k★, highest-risk action class, optional pre-action callback, Python"
+    ],
+    "new_this_week_notable": "google-gemini/gemini-cli (107k★) — first CLI-tier target; Significant-Gravitas/AutoGPT (187k★) — highest-star target in 12 weeks; vxcontrol/pentagi — first Go-tier target and most security-aligned fit yet",
+    "recommended_immediate_action": "Pick ONE target — vercel/ai or langchain for proven reach, gemini-cli or AutoGPT for maximum headline signal — and open a builder session before week 13. If no builder session is opened before week 13 fires, the loop should be formally suspended by the founder."
+  },
+
+  "scorecard_snapshot": {
+    "prs_opened": 10,
+    "prs_merged": 1,
+    "prs_closed": 0,
+    "prs_stale": 9,
+    "review_comments_responded": 0,
+    "new_repos_identified": 60,
+    "path": "B",
+    "path_b_targets_identified": 40,
+    "weeks_since_last_outreach_action": "12+"
+  }
+}
