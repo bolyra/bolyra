@@ -62,6 +62,15 @@ still requires the zk-class [`bolyra verify`](../cli/) CLI. The live
 [`/health`](#get-health) response spells out exactly which checks are
 signature-authenticated vs. consistency-only.
 
+The runnable proof of the behaviour above is
+[`examples/managed-revocation`](../../examples/managed-revocation/README.md):
+against a deployment that trusts the example's operator key, carries the mpp
+capability vocabulary, and has receipts enabled (its README lists the
+prerequisites), it runs register → allow → allow → revoke → deny → an
+independent credential still allows, 20 checks in all. `GET /health` reports
+`registry_enforced: true`; when a signer key is configured,
+`/.well-known/bolyra-signers.json` publishes the signer address.
+
 ## Developing
 
 Node **22+** (wrangler's requirement). `npm run typecheck` runs `wrangler types` first: the
