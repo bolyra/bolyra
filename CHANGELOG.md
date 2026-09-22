@@ -17,7 +17,9 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
-## Unreleased — `@bolyra/mpp` 0.6.0: bounded nonce retention, honest spend-mandate naming
+## @bolyra/mpp 0.6.0 (2026-09-22)
+
+Bounded nonce retention, honest spend-mandate naming.
 
 ### Changed (BREAKING)
 
