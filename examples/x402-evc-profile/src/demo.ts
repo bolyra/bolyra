@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     audience: AUDIENCE,
     model: 'demo-model',
     program: 'x402',
-    maxUsd: '99',
+    coversAmountUsd: '99',
     expiry: Math.floor(Date.now() / 1000) + 3600,
   });
   console.log(`[operator] issued mandate: tier=${mandate.tier} payee=${mandate.audience}`);

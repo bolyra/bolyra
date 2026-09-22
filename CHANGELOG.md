@@ -17,6 +17,92 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## Unreleased — `@bolyra/mpp` 0.6.0: bounded nonce retention, honest spend-mandate naming
+
+### Changed (BREAKING)
+
+#### `@bolyra/mpp`
+
+- `IssueMandateInput.maxUsd` is removed and replaced by `coversAmountUsd`. The old
+  name asserted a ceiling the value never had: it selects a **tier**, so
+  `maxUsd: 25` authorized any amount under $100 and `maxUsd: 100` authorized any
+  amount under $10,000. Passing `maxUsd` now throws `MandateIssueError` naming the
+  replacement rather than silently authorizing a bucket.
+- `IssuedMandate` gains `authorizedMaxUsd` (the tier's exclusive USD ceiling, or
+  `null` for `unlimited`) and `authorizedRange` (the same in words). Read these for
+  what was actually authorized; the amount you passed in is only a tier selector.
+- `bolyra mandate issue` renames `--max-usd` to `--covers-amount`. The old flag
+  exits 2 with the migration message. The summary now prints an `authorizes:` line.
+
+### Migration
+
+- Replace `maxUsd:` with `coversAmountUsd:` in every `issueMandate` call.
+- Replace `--max-usd` with `--covers-amount` in every `bolyra mandate issue` invocation.
+- Where you meant a real ceiling, pass `tier` directly instead of an amount.
+- Read `authorizedMaxUsd` (not your input amount) wherever you log or display the limit.
+- **Release ordering — `@bolyra/cli` is NOT releasable from this commit.** Its source
+  now calls `coversAmountUsd`, but its dependency range is still `@bolyra/mpp ^0.4.0`
+  and its committed lockfile resolves 0.4.0. The range cannot be bumped here because
+  `scripts/verify-lockfiles.sh` runs a clean `npm ci` on every committed lockfile and
+  `0.6.0` is not published yet. Publish `@bolyra/mpp` 0.6.0 first, then bump the CLI's
+  range and regenerate its lockfile in a follow-up, then release the CLI. CI is
+  unaffected: the CLI's `tsconfig` paths and its jest `moduleNameMapper` both resolve
+  `@bolyra/mpp` to the workspace package, so the job typechecks and tests against
+  0.6.0 regardless of the published range in `package.json`.
+
+### Fixed
+
+#### `@bolyra/mpp`
+
+- The reserve-before-act nonce store's cleanup is no longer quadratic.
+  `NonceStore.evict()` previously walked the entire retained map on every
+  `reserve()` while `retain_until` was the raw credential expiry (every shipped
+  fixture expires in 2100), so nothing was ever evicted: 10,000 retained
+  reservations cost 49,995,000 cleanup iterations. Sweeping is now amortized against
+  a bounded per-call budget AND resumes from a persistent cursor, so long-lived
+  entries at the front can no longer hide expired ones behind them. A lookup whose
+  retention has elapsed is treated as free, so a lagging sweep can never produce a
+  false `nonce_replayed`.
+- The store **honours `retain_until` exactly as stated** and never silently shortens
+  it: EVC §3.2 makes retaining through that instant a host obligation, and quietly
+  retaining less would surface as a replay being accepted. The new
+  `maxRetentionSeconds` option instead REFUSES a requirement the store will not
+  honour (`NonceRetentionTooLongError`, fail closed). It is unset by default, because
+  a verifier deployed before this release still emits the raw credential expiry and
+  defaulting to refusal would fail every request against it.
+- The memory bound is therefore the capacity ceiling: at `DEFAULT_MAX_ENTRIES`
+  (1,000,000 live) the store refuses new reservations rather than evicting live ones,
+  because evicting a live reservation re-opens the replay it exists to prevent. A
+  full sweep can run at most once per distinct clock value, so repeated refusals at
+  capacity cannot be used to trigger repeated full scans. The gate reports the
+  refusal as a fail-closed `internal_error`, never as `nonce_replayed` — the
+  presentation was not reused. This path mattered because `enforce: 'always'`
+  reserves on the 402 discovery request, **before** payment, so an unpaid caller
+  could drive reservations.
+- The gate no longer echoes an injected nonce store's raw exception text in the
+  denial detail, which reaches the HTTP response; a Redis or SQL client puts
+  connection and query information in `message`. Our own refusals keep their
+  operator-facing text; anything else is logged and reported generically.
+
+#### Verifier cores (`bolyra verify` and hosted-verify)
+
+- Both verifiers now clamp the `retain_until` they emit to at most 30 days past the
+  caller's clock, instead of asking a host to retain a nonce until the credential
+  expires. EVC constrains what a host **must** retain, never what a verifier **may**
+  ask for, so a bounded statement is conformant. The clamp is a ceiling, not a
+  floor: a credential expiring inside the window keeps its own expiry.
+- Stated plainly, because it is a real reduction in guarantee: once a reservation
+  ages out at 30 days, **the same unmodified presentation can be presented again**
+  and will be accepted, establishing another 30-day reservation, repeatedly until the
+  credential itself expires. Host mode previously protected a presentation for the
+  credential's whole life. Lifetime protection now requires a credential expiry
+  inside the retention window, enforced presentation freshness, or a durable store
+  configured for longer retention — pointing a durable store at the newly shortened
+  `retain_until` does not restore it. Local nonce mode has always had this same
+  30-day bound; host mode now agrees with it.
+- The `MAX_NONCE_TTL` constant's "spec §5.2" citation was wrong — §5.2 is the
+  single-object stdout parse rule — and is corrected.
+
 ## Unreleased — hosted verify endpoint
 
 ### Changed (BREAKING)

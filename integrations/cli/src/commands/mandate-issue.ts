@@ -39,9 +39,11 @@ Flags:
   --audience <id>         Payee / project key the mandate is valid for (required)
   --model <name>          Model identifier the credential binds to (required)
   --tier <tier>           Financial tier: small (<$100), medium (<$10k),
-                          or unlimited. Provide this OR --max-usd.
-  --max-usd <amount>      Max USD spend; mapped to the smallest covering tier.
-                          Provide this OR --tier.
+                          or unlimited. Provide this OR --covers-amount.
+  --covers-amount <usd>   An amount the mandate must cover; selects the smallest
+                          tier that covers it. NOT a spending limit: the mandate
+                          authorizes the whole tier, so 25 authorizes up to $100.
+                          Provide this OR --tier. (Renamed from --max-usd in 0.6.0.)
   --expiry <duration>     Duration (30d, 1y, 8h) or Unix timestamp (required).
                           Signature-bound in binding v2 (pinned to the credential
                           expiry), so a presenter cannot re-anchor a later expiry.
@@ -76,6 +78,8 @@ export async function run(args: string[]): Promise<void> {
         audience: { type: 'string' },
         model: { type: 'string' },
         tier: { type: 'string' },
+        'covers-amount': { type: 'string' },
+        // Accepted only to fail with the migration message below.
         'max-usd': { type: 'string' },
         expiry: { type: 'string' },
         program: { type: 'string' },
@@ -112,10 +116,22 @@ export async function run(args: string[]): Promise<void> {
     }
   }
 
+  if (values['max-usd'] !== undefined) {
+    console.error(
+      'Error: --max-usd was removed in 0.6.0 because it never enforced its own value.\n' +
+        '  Cause: it selects a TIER, so --max-usd 25 authorized anything under $100 and\n' +
+        '         --max-usd 100 authorized anything under $10,000.\n' +
+        '  Fix:   pass --tier small|medium|unlimited for an exact authorization, or\n' +
+        '         --covers-amount <usd> to keep selecting the smallest covering tier.',
+    );
+    process.exitCode = 2;
+    return;
+  }
+
   const hasTier = values.tier !== undefined;
-  const hasMaxUsd = values['max-usd'] !== undefined;
-  if (hasTier === hasMaxUsd) {
-    console.error('Error: provide exactly one of --tier or --max-usd');
+  const hasAmount = values['covers-amount'] !== undefined;
+  if (hasTier === hasAmount) {
+    console.error('Error: provide exactly one of --tier or --covers-amount');
     process.exitCode = 2;
     return;
   }
@@ -155,7 +171,9 @@ export async function run(args: string[]): Promise<void> {
       audience: values.audience as string,
       model: values.model as string,
       program: values.program,
-      ...(hasTier ? { tier: values.tier as FinancialTier } : { maxUsd: values['max-usd'] }),
+      ...(hasTier
+        ? { tier: values.tier as FinancialTier }
+        : { coversAmountUsd: values['covers-amount'] }),
       expiry,
       nonce: values.nonce,
       encoding,
@@ -178,6 +196,7 @@ export async function run(args: string[]): Promise<void> {
         `  model:        ${mandate.model}`,
         `  program:      ${mandate.program}`,
         `  tier:         ${mandate.tier}`,
+        `  authorizes:   ${mandate.authorizedRange}`,
         `  capabilities: ${mandate.capabilities.join(', ')}`,
         `  expiry:       ${mandate.expiry} (${new Date(mandate.expiry * 1000).toISOString()})`,
         `  nonce:        ${mandate.nonce}`,

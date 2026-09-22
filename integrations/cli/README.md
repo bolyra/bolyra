@@ -164,10 +164,12 @@ bolyra mandate issue \
 # stdout: the bvp/1 presentation (base64url) — pipe it straight into a header.
 # stderr: a human-readable summary + the operator public key to trust in the gate.
 
-# Amount-first alternative: map a max USD spend to the smallest covering tier.
+# Amount-first alternative: select the smallest tier that COVERS an amount.
+# Not a spending limit — the mandate authorizes the whole tier.
 bolyra mandate issue --operator-key operator.key --agent shopper-bot \
-  --audience api.merchant.example --model opus-4.1 --max-usd 5000 --expiry 30d
-# $5000 -> medium tier (covers small + medium spends)
+  --audience api.merchant.example --model opus-4.1 --covers-amount 5000 --expiry 30d
+# $5000 -> medium tier, which authorizes any amount under $10,000.
+# The summary prints an `authorizes:` line with that range.
 ```
 
 Tiers are cumulative: `small` (< $100), `medium` (< $10,000, covers small),
