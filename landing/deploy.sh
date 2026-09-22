@@ -60,6 +60,15 @@ preflight_version "@bolyra/gateway" "@bolyra/gateway@"
 preflight_version "@bolyra/gateway" "npm v"
 preflight_version "@bolyra/sdk"     "TS SDK at v"
 preflight_version "@bolyra/cli"     "@bolyra/cli@"
+preflight_version "@bolyra/mpp"     "@bolyra/mpp@"
+
+# Same exact-pin rule as @bolyra/evc-conformance below: preflight_version only
+# proves the page CONTAINS the latest, so a page carrying both an old and a new
+# @bolyra/mpp pin, or "0.6.0-rc.1" while latest is "0.6.0", would still pass.
+MPP_PINS=$(grep -oE '@bolyra/mpp@[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?' "$INDEX" | sed 's|^@bolyra/mpp@||' | sort -u || true)
+MPP_LATEST=$(npm view "@bolyra/mpp" version 2>/dev/null | tr -d '[:space:]') || { echo "ERROR: npm view @bolyra/mpp failed" >&2; exit 1; }
+[ "$MPP_PINS" = "$MPP_LATEST" ] || { echo "ERROR: landing/index.html must pin exactly @bolyra/mpp@$MPP_LATEST (found: '$(echo "$MPP_PINS" | tr '\n' ' ')')" >&2; exit 1; }
+echo "OK: local page pins exactly @bolyra/mpp@$MPP_LATEST"
 preflight_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
 # preflight_version only proves the page CONTAINS the latest. Also require that
 # it pins exactly one @bolyra/evc-conformance version and that the pin IS the

@@ -240,6 +240,10 @@ guard_version "@bolyra/gateway" "@bolyra/gateway@"
 guard_version "@bolyra/gateway" "npm v"
 guard_version "@bolyra/sdk"     "TS SDK at v"
 guard_version "@bolyra/cli"     "@bolyra/cli@"
+# @bolyra/mpp is advertised with a pinned version but nothing verified it,
+# which is the same blind spot the stale SDK/PP pins had: the page can claim
+# a version that is no longer what `npm install` gives a reader.
+guard_version "@bolyra/mpp"     "@bolyra/mpp@"
 
 guard_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
 
