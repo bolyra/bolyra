@@ -96,6 +96,35 @@ export function requiredTierForUsdAmount(amount: string | number): FinancialTier
 }
 
 /**
+ * The EXCLUSIVE upper bound a tier authorizes, in whole USD — or `null` for
+ * `unlimited`, which has none.
+ *
+ * This exists because the amount a caller supplies and the amount a credential
+ * ends up authorizing are NOT the same number. Tiers are buckets: asking for
+ * $25 selects `small`, and `small` authorizes anything under $100. Callers that
+ * reason about "how much did I just authorize" must read this, never the amount
+ * they passed in.
+ */
+export function tierCeilingUsd(tier: FinancialTier): number | null {
+  switch (tier) {
+    case 'small':
+      return 100;
+    case 'medium':
+      return 10_000;
+    default:
+      return null;
+  }
+}
+
+/** Human-readable authorized range for a tier, e.g. `"any amount under $100"`. */
+export function describeTierAuthorization(tier: FinancialTier): string {
+  const ceiling = tierCeilingUsd(tier);
+  return ceiling === null
+    ? 'any amount (no ceiling)'
+    : `any amount under $${ceiling.toLocaleString('en-US')}`;
+}
+
+/**
  * Resolve capability tokens to the Permission bits they require, using the
  * built-in MPP map. Unknown capabilities fail CLOSED with
  * `unknown_capability` (spec §9), mirroring the reference verifier.

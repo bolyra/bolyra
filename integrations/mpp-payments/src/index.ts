@@ -37,7 +37,14 @@ export type {
 
 export { denyProblem, denyResponse, DENY_STATUS, type DenyProblem } from './deny';
 export { runCommandVerifier, callUrlVerifier, validateVerdict } from './evc';
-export { NonceStore } from './nonces';
+export {
+  NonceStore,
+  NonceStoreCapacityError,
+  NonceRetentionTooLongError,
+  MAX_NONCE_RETENTION_SECONDS,
+  DEFAULT_MAX_ENTRIES,
+  type NonceStoreOptions,
+} from './nonces';
 export {
   createGateReceiptSigner,
   buildDecisionReceiptInput,

@@ -59,6 +59,17 @@ import {
   type ConsumeNonce,
 } from './verdict';
 
+/**
+ * Upper bound on the retention this verifier asks a host to honour, in seconds
+ * (30 days).
+ *
+ * MUST match `MAX_NONCE_RETENTION_SECONDS` in `@bolyra/cli`'s verifier core and
+ * in `@bolyra/mpp`'s nonce store, which clamp the same way. This is an
+ * implementation policy, NOT an EVC requirement — the contract says what a host
+ * must retain, never what a verifier may ask for.
+ */
+export const MAX_NONCE_RETENTION_SECONDS = 30 * 86_400;
+
 export interface VerifierRequestContext {
   agent_name: string;
   project_key: string;
@@ -298,11 +309,26 @@ export function verifyClassical(
     if (nullifier === undefined || nullifier === '0') {
       throw new VerifyDenial('nonce_missing', 'proof lacks a usable nullifier');
     }
+    //     `retain_until` is CLAMPED to at most MAX_NONCE_RETENTION_SECONDS past
+    //     the caller's clock. Emitting the raw expiry asks the host to retain
+    //     the nonce until the credential dies, and a binding may be issued with
+    //     an expiry decades out (every fixture in this repo used 2100-01-01),
+    //     which turns the host's replay store into an unbounded, never-pruned
+    //     structure. EVC constrains what a host MUST retain, never what a
+    //     verifier MAY ask for, so a shorter statement is conformant.
+    //
+    //     The cost is stated plainly: a credential that outlives the window is
+    //     replay-protected only within it. Local nonce mode has always applied
+    //     the same bound.
+    const retainUntil = Math.min(
+      Number(effectiveExpiry),
+      request.now_unix + MAX_NONCE_RETENTION_SECONDS,
+    );
     const consumeNonces: ConsumeNonce[] = [
       {
         issuer_key: `${cred.operator_pubkey.x}:${cred.operator_pubkey.y}`,
         nonce: nullifier,
-        retain_until: Number(effectiveExpiry),
+        retain_until: retainUntil,
       },
     ];
     return {

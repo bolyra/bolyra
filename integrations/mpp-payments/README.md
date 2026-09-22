@@ -27,15 +27,56 @@ Into an existing mppx server:
 npm install @bolyra/mpp
 ```
 
-Starting fresh? Install both:
+Starting fresh? Install both, pinned to the supported pair:
 
 ```bash
-npm install @bolyra/mpp mppx
+npm install @bolyra/mpp mppx@0.8.13
 ```
 
 `mppx` is an optional peer dependency — this package never imports it at
-runtime; it wraps the method objects you already build with mppx. The test
-suite runs against real mppx (0.8.13, the lockfile pin).
+runtime; it wraps the method objects you already build with mppx. The peer
+range is **exactly `0.8.13`**, so an unpinned `npm install ... mppx` can fail
+with `ERESOLVE`; the command above avoids it.
+
+### Supported versions
+
+| | Version |
+|---|---|
+| `@bolyra/mpp` | 0.6.0 |
+| `mppx` (peer) | exactly 0.8.13 |
+| `@bolyra/cli` | requires `@bolyra/mpp` ^0.6.0 |
+| Node | 20, 22 and 24 are exercised in CI |
+
+### Spend mandates authorize a TIER, not an amount
+
+`issueMandate` takes either `tier` or `coversAmountUsd`. The second one selects
+the smallest tier that covers the amount, and the credential then authorizes
+that whole tier — so `coversAmountUsd: 25` authorizes any amount under $100.
+Read `authorizedMaxUsd` / `authorizedRange` on the result for the ceiling you
+actually got, and prefer `tier` when you want the authorization to equal the
+input. (`maxUsd` was removed in 0.6.0; it named a ceiling it never enforced.)
+
+Nothing accumulates across requests: a mandate bounds each request, not a
+running total. A succession of separately-permitted $99 charges is not capped
+at $99.
+
+### Replay retention is bounded
+
+A host-mode verifier tells the gate how long to retain each consumed nonce, and
+the gate honours that exactly — EVC §3.2 makes it an obligation, so the store
+never silently retains for less. Bolyra's own verifiers now bound what they ask
+for to 30 days, which is what keeps a long-lived credential from turning the
+replay store into an unbounded structure.
+
+The tradeoff, stated: once a reservation ages out, the same unmodified
+presentation is accepted again and reserves afresh, repeatedly until the
+credential expires. If you need protection for the credential's whole life,
+issue credentials that expire inside the retention window.
+
+Set `maxRetentionSeconds` to refuse a verifier's requirement you do not want to
+honour; it fails closed rather than pretending. At `maxEntries` the store
+refuses new reservations and the gate denies `internal_error` rather than
+evicting a live reservation.
 
 ## Quickstart
 

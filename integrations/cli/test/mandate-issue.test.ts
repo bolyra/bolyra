@@ -109,7 +109,7 @@ describe('bolyra mandate issue', () => {
     expect(verdict).toMatchObject({ verdict: 'allow' });
   });
 
-  it('maps --max-usd to the covering tier (allow)', async () => {
+  it('maps --covers-amount to the covering tier (allow)', async () => {
     const presentation = await issueToFile([
       '--agent',
       AGENT,
@@ -117,7 +117,7 @@ describe('bolyra mandate issue', () => {
       AUDIENCE,
       '--model',
       MODEL,
-      '--max-usd',
+      '--covers-amount',
       '5000',
       '--expiry',
       String(FAR_FUTURE),
@@ -224,7 +224,7 @@ describe('bolyra mandate issue', () => {
       expect(process.exitCode).toBe(2);
     });
 
-    it('exits 2 when neither --tier nor --max-usd is given', async () => {
+    it('exits 2 when neither --tier nor --covers-amount is given', async () => {
       const cap = muteConsole();
       try {
         await run([
@@ -245,7 +245,7 @@ describe('bolyra mandate issue', () => {
       expect(process.exitCode).toBe(2);
     });
 
-    it('exits 2 when BOTH --tier and --max-usd are given', async () => {
+    it('exits 2 when BOTH --tier and --covers-amount are given', async () => {
       const cap = muteConsole();
       try {
         await run([
@@ -259,7 +259,7 @@ describe('bolyra mandate issue', () => {
           MODEL,
           '--tier',
           'small',
-          '--max-usd',
+          '--covers-amount',
           '50',
           '--expiry',
           String(FAR_FUTURE),
@@ -268,6 +268,32 @@ describe('bolyra mandate issue', () => {
         cap.restore();
       }
       expect(process.exitCode).toBe(2);
+    });
+
+    it('exits 2 on the removed --max-usd flag, naming the replacement', async () => {
+      const cap = muteConsole();
+      try {
+        await run([
+          '--operator-key',
+          keyFile,
+          '--agent',
+          AGENT,
+          '--audience',
+          AUDIENCE,
+          '--model',
+          MODEL,
+          '--max-usd',
+          '25',
+          '--expiry',
+          String(FAR_FUTURE),
+        ]);
+      } finally {
+        cap.restore();
+      }
+      expect(process.exitCode).toBe(2);
+      const stderr = cap.errors.join('\n');
+      expect(stderr).toMatch(/removed in 0\.6\.0/);
+      expect(stderr).toMatch(/--covers-amount/);
     });
 
     it('exits non-zero on an invalid tier', async () => {

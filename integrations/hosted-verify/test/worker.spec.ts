@@ -12,7 +12,7 @@ import worker from '../src/index';
 import { bindingDigest } from '../src/verify/binding';
 import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
-import { verifyClassical } from '../src/verify/core';
+import { verifyClassical, MAX_NONCE_RETENTION_SECONDS } from '../src/verify/core';
 import { VerifyDenial } from '../src/verify/verdict';
 import {
   postVerify,
@@ -252,7 +252,32 @@ describe('classical pipeline', () => {
     expect(nonces[0]!.issuer_key).toBe(
       `${bundle.agent.credential.operator_pubkey.x}:${bundle.agent.credential.operator_pubkey.y}`,
     );
-    expect(nonces[0]!.retain_until).toBe(bundle.agent.credential.expiry);
+    // `retain_until` is CLAMPED, not the raw credential expiry. This fixture
+    // expires in 2100, and asking a host to retain a nonce for ~75 years makes
+    // its replay store unbounded. The verifier states a bounded retention
+    // instead — EVC constrains what a host must retain, never what a verifier
+    // may ask for.
+    const clamped = allowAgentOnly.now_unix + MAX_NONCE_RETENTION_SECONDS;
+    expect(nonces[0]!.retain_until).toBe(clamped);
+    expect(nonces[0]!.retain_until).toBeLessThan(bundle.agent.credential.expiry);
+  });
+
+  it('retain_until is the credential expiry when that is inside the window', async () => {
+    // The clamp is a ceiling, not a floor. Move the caller's clock to just
+    // inside the fixture's expiry — no re-signing needed, since the binding
+    // signs the expiry, not the clock — and the credential's own expiry
+    // becomes the smaller of the two. Nothing is ever retained past the life
+    // of the credential it protects.
+    const bundle = JSON.parse(allowAgentOnly.bundle) as {
+      agent: { credential: { expiry: number } };
+    };
+    const expiry = bundle.agent.credential.expiry;
+    const res = await postVerify({ ...allowAgentOnly, now_unix: expiry - 600 });
+    expect(res.status).toBe(200);
+    const v = await verdictOf(res);
+    expect(v.verdict).toBe('allow');
+    const nonces = v.consume_nonces as Array<Record<string, unknown>>;
+    expect(nonces[0]!.retain_until).toBe(expiry);
   });
 
   it('inflated permission bitmask → deny invalid_proof (scope anchor, F2)', async () => {

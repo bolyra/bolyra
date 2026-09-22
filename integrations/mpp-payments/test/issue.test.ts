@@ -127,7 +127,7 @@ describe('issueMandate', () => {
     expect(verdict).toMatchObject({ verdict: 'deny', code: 'request_mismatch' });
   });
 
-  test('maps a max USD amount to the smallest covering tier', async () => {
+  test('maps a covered amount to the smallest covering tier', async () => {
     const cases: Array<[string | number, string]> = [
       [50, 'small'],
       ['99.99', 'small'],
@@ -136,17 +136,54 @@ describe('issueMandate', () => {
       [10000, 'unlimited'],
       [50000, 'unlimited'],
     ];
-    for (const [maxUsd, tier] of cases) {
+    for (const [coversAmountUsd, tier] of cases) {
       const mandate = await issueMandate({
         operatorPrivateKey: OPERATOR_PRIV,
         agentName: AGENT,
         audience: AUDIENCE,
         model: MODEL,
-        maxUsd,
+        coversAmountUsd,
         expiry: EXPIRY,
       });
       expect(mandate.tier).toBe(tier);
     }
+  });
+
+  // The defect this rename exists for: the amount supplied is NOT the amount
+  // authorized. Asserting the gap explicitly stops it being re-hidden.
+  test('reports the tier ceiling, not the supplied amount', async () => {
+    const cases: Array<[string | number, number | null, string]> = [
+      [25, 100, 'any amount under $100'],
+      [99, 100, 'any amount under $100'],
+      [100, 10_000, 'any amount under $10,000'],
+      [9_999, 10_000, 'any amount under $10,000'],
+      [10_000, null, 'any amount (no ceiling)'],
+    ];
+    for (const [coversAmountUsd, ceiling, range] of cases) {
+      const mandate = await issueMandate({
+        operatorPrivateKey: OPERATOR_PRIV,
+        agentName: AGENT,
+        audience: AUDIENCE,
+        model: MODEL,
+        coversAmountUsd,
+        expiry: EXPIRY,
+      });
+      expect(mandate.authorizedMaxUsd).toBe(ceiling);
+      expect(mandate.authorizedRange).toBe(range);
+    }
+  });
+
+  test('rejects the removed maxUsd field with a migration message', async () => {
+    await expect(
+      issueMandate({
+        operatorPrivateKey: OPERATOR_PRIV,
+        agentName: AGENT,
+        audience: AUDIENCE,
+        model: MODEL,
+        maxUsd: 25,
+        expiry: EXPIRY,
+      } as never),
+    ).rejects.toThrow(/removed in 0\.6\.0.*coversAmountUsd/s);
   });
 
   test('an expired mandate is denied at or after expiry', async () => {
@@ -305,13 +342,15 @@ describe('issueMandate', () => {
       expiry: EXPIRY,
     };
 
-    test('rejects neither tier nor maxUsd', async () => {
-      await expect(issueMandate({ ...base } as never)).rejects.toThrow(/tier|maxUsd/i);
+    test('rejects neither tier nor coversAmountUsd', async () => {
+      await expect(issueMandate({ ...base } as never)).rejects.toThrow(
+        /tier|coversAmountUsd/i,
+      );
     });
 
-    test('rejects both tier and maxUsd', async () => {
+    test('rejects both tier and coversAmountUsd', async () => {
       await expect(
-        issueMandate({ ...base, tier: 'small', maxUsd: 50 } as never),
+        issueMandate({ ...base, tier: 'small', coversAmountUsd: 50 } as never),
       ).rejects.toThrow(/both|exactly one/i);
     });
 
@@ -321,9 +360,9 @@ describe('issueMandate', () => {
       ).rejects.toThrow(/tier/i);
     });
 
-    test('rejects a non-decimal maxUsd', async () => {
+    test('rejects a non-decimal coversAmountUsd', async () => {
       await expect(
-        issueMandate({ ...base, maxUsd: '-5' } as never),
+        issueMandate({ ...base, coversAmountUsd: '-5' } as never),
       ).rejects.toThrow();
     });
 

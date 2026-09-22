@@ -108,8 +108,28 @@ export interface VerifyFlags {
   verbose?: boolean;
 }
 
-/** Max retention for a burned nonce: 30 days (spec §5.2). */
+/**
+ * Max retention for a burned nonce: 30 days.
+ *
+ * This is an implementation policy, not an EVC requirement. (It was previously
+ * annotated "spec §5.2"; §5.2 is the single-object stdout parse rule and says
+ * nothing about retention. EVC §3.2/§7.3 constrain what a HOST must retain,
+ * never what a verifier may ask for, so a bounded statement is conformant.)
+ *
+ * Applied in BOTH nonce modes, so the two agree:
+ *   - local mode caps the TTL of the nullifier this verifier burns itself;
+ *   - host mode caps the `retain_until` it asks the host to honour.
+ *
+ * MUST match `MAX_NONCE_RETENTION_SECONDS` in hosted-verify's verifier core and
+ * in `@bolyra/mpp`'s nonce store.
+ *
+ * The tradeoff, stated: a credential that outlives this window is
+ * replay-protected only within it.
+ */
 const MAX_NONCE_TTL = 30 * 86400;
+
+/** Alias documenting the host-mode use of the same bound. */
+export const MAX_NONCE_RETENTION_SECONDS = MAX_NONCE_TTL;
 
 /**
  * Retention TTL (seconds) for a burned nonce: the time until the credential
@@ -328,7 +348,13 @@ export async function verify(request: VerifierRequest, flags: VerifyFlags): Prom
       // expiry, reserve-before-act (spec §7.3). Human-backed bundles carry a
       // second entry for the human nullifier.
       const issuerKey = `${cred.operator_pubkey.x}:${cred.operator_pubkey.y}`;
-      const retainUntil = Number(effectiveExpiry);
+      // Clamp to the same bound local mode uses. Emitting the raw expiry asks
+      // the host to retain the nonce until the credential dies, which for a
+      // long-lived binding is an unbounded, never-pruned store on the host.
+      const retainUntil = Math.min(
+        Number(effectiveExpiry),
+        request.now_unix + MAX_NONCE_RETENTION_SECONDS,
+      );
       const consumeNonces = [buildConsumeNonce(nullifier, issuerKey, retainUntil)];
       if (humanNonceKey !== undefined) {
         consumeNonces.push(buildConsumeNonce(humanNonceKey, issuerKey, retainUntil));

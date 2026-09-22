@@ -51,7 +51,13 @@ import {
 import { randomBytes } from 'node:crypto';
 import { bindingDigest, hashModel } from './classical';
 import type { BindingClaim } from './bundle';
-import { MPP_CAPABILITY_MAP, requiredTierForUsdAmount, tierCapability } from './tiers';
+import {
+  MPP_CAPABILITY_MAP,
+  requiredTierForUsdAmount,
+  tierCapability,
+  tierCeilingUsd,
+  describeTierAuthorization,
+} from './tiers';
 import { AUDIENCE_IDENTIFIER_PATTERN, type FinancialTier } from './types';
 
 /** Thrown on any invalid issuance input. Fail closed: no mandate is emitted. */
@@ -68,7 +74,7 @@ const TIER_ORDER: readonly FinancialTier[] = ['small', 'medium', 'unlimited'];
 /** How the issued presentation is serialized for transport. */
 export type MandateEncoding = 'base64url' | 'json';
 
-/** Inputs to {@link issueMandate}. Provide exactly one of `tier` / `maxUsd`. */
+/** Inputs to {@link issueMandate}. Provide exactly one of `tier` / `coversAmountUsd`. */
 export interface IssueMandateInput {
   /**
    * Operator EdDSA private key: a Baby Jubjub scalar (bigint) or its 32-byte
@@ -84,14 +90,27 @@ export interface IssueMandateInput {
   model: string;
   /** Binding `program` discriminator. Default `"mpp"`. */
   program?: string;
-  /** Financial tier to delegate. Provide this OR `maxUsd`, not both. */
+  /**
+   * Financial tier to delegate. Provide this OR `coversAmountUsd`, not both.
+   * PREFER this: it is the only input whose value is the authorization.
+   */
   tier?: FinancialTier;
   /**
-   * Maximum USD spend to authorize; mapped to the smallest tier that covers it
-   * (`< $100` → small, `< $10,000` → medium, otherwise unlimited). Provide this
-   * OR `tier`, not both.
+   * An amount the credential must be able to cover, used only to SELECT a tier.
+   *
+   * **This is not a spending limit, and the authorized ceiling is almost never
+   * the number you pass.** Tiers are buckets, so this selects the smallest tier
+   * that covers the amount and the credential then authorizes that whole
+   * bucket: `25` selects `small`, which authorizes anything under $100; `100`
+   * selects `medium`, which authorizes anything under $10,000.
+   *
+   * Read {@link IssuedMandate.authorizedMaxUsd} for what was actually
+   * authorized. Provide this OR `tier`, not both.
+   *
+   * Renamed from `maxUsd` in 0.6.0 — the old name asserted a ceiling the value
+   * never had.
    */
-  maxUsd?: string | number;
+  coversAmountUsd?: string | number;
   /**
    * Credential expiry, unix seconds. Must be a positive integer. Binding v2
    * signs this value into the binding (pinned equal to the credential expiry),
@@ -119,6 +138,15 @@ export interface IssuedMandate {
   presentation: string;
   /** The resolved financial tier. */
   tier: FinancialTier;
+  /**
+   * The EXCLUSIVE USD ceiling this mandate actually authorizes, or `null` for
+   * `unlimited`. This is the tier's bound, NOT the amount passed as
+   * `coversAmountUsd` — issuing with `coversAmountUsd: 25` reports `100` here,
+   * because that is what a verifier will allow.
+   */
+  authorizedMaxUsd: number | null;
+  /** The same ceiling in words, e.g. `"any amount under $100"`. */
+  authorizedRange: string;
   /** The cumulative capability tokens signed into the binding. */
   capabilities: string[];
   /** The operator public key clients configure as a trusted issuer. */
@@ -306,11 +334,24 @@ export async function issueMandate(input: IssueMandateInput): Promise<IssuedMand
     throw new MandateIssueError('operatorPrivateKey scalar must be positive');
   }
 
-  // Exactly one of tier / maxUsd.
+  // `maxUsd` was renamed in 0.6.0. Silently accepting it would keep
+  // authorizing a tier ceiling under a name that claims to be the ceiling, so
+  // refuse with the migration spelled out rather than guessing the intent.
+  if ((input as { maxUsd?: unknown }).maxUsd !== undefined) {
+    throw new MandateIssueError(
+      '`maxUsd` was removed in 0.6.0 because it never enforced its own value: it selects a ' +
+        'TIER, so maxUsd 25 authorized anything under $100 and maxUsd 100 authorized anything ' +
+        'under $10,000. Fix: pass `tier` directly (small | medium | unlimited), or rename the ' +
+        'field to `coversAmountUsd` to keep the old bucket-selection behaviour and read ' +
+        '`authorizedMaxUsd` on the result for the ceiling you actually got.',
+    );
+  }
+
+  // Exactly one of tier / coversAmountUsd.
   const hasTier = input.tier !== undefined;
-  const hasMaxUsd = input.maxUsd !== undefined;
-  if (hasTier === hasMaxUsd) {
-    throw new MandateIssueError('provide exactly one of `tier` or `maxUsd`');
+  const hasAmount = input.coversAmountUsd !== undefined;
+  if (hasTier === hasAmount) {
+    throw new MandateIssueError('provide exactly one of `tier` or `coversAmountUsd`');
   }
 
   let tier: FinancialTier;
@@ -323,10 +364,10 @@ export async function issueMandate(input: IssueMandateInput): Promise<IssuedMand
     tier = input.tier;
   } else {
     try {
-      tier = requiredTierForUsdAmount(input.maxUsd as string | number);
+      tier = requiredTierForUsdAmount(input.coversAmountUsd as string | number);
     } catch (err) {
       throw new MandateIssueError(
-        `invalid maxUsd: ${err instanceof Error ? err.message : String(err)}`,
+        `invalid coversAmountUsd: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -371,6 +412,8 @@ export async function issueMandate(input: IssueMandateInput): Promise<IssuedMand
   return {
     presentation,
     tier,
+    authorizedMaxUsd: tierCeilingUsd(tier),
+    authorizedRange: describeTierAuthorization(tier),
     capabilities,
     operatorPublicKey: { x: operatorPub.x.toString(), y: operatorPub.y.toString() },
     agentName,

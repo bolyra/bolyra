@@ -46,7 +46,7 @@ import { verifyClassical } from './classical';
 import { denyResponse } from './deny';
 import { BolyraDeniedError, BolyraGateConfigError } from './errors';
 import { callUrlVerifier, runCommandVerifier } from './evc';
-import { NonceStore } from './nonces';
+import { NonceStore, NonceStoreCapacityError, NonceRetentionTooLongError } from './nonces';
 import {
   buildDecisionInstance,
   buildDecisionReceiptInput,
@@ -427,9 +427,32 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       //    nonce; a reservation conflict means the presentation was replayed.
       //    The reservation timestamp is the SAME sampled decision instant —
       //    one clock read per decision, no drift under injected clocks.
+      //
+      //    A store that is FULL is a different outcome from a replay: the
+      //    presentation was not reused, the host simply cannot take
+      //    responsibility for it. Denying `nonce_replayed` there would blame
+      //    the caller for a host condition and send them to debug the wrong
+      //    thing, so a capacity refusal (or any store fault) fails closed as
+      //    `internal_error` instead. Either way, no allow escapes.
       const consumeNonces = outcome.verdict.consume_nonces;
       if (consumeNonces !== undefined && consumeNonces.length > 0) {
-        if (!(await nonceStore.reserve(consumeNonces, Math.floor(decisionMs / 1000)))) {
+        let reserved: boolean;
+        try {
+          reserved = await nonceStore.reserve(consumeNonces, Math.floor(decisionMs / 1000));
+        } catch (err) {
+          // Our own store's refusals carry a message written for an operator
+          // and safe to surface. An INJECTED store's exception is not: a Redis
+          // or SQL client puts connection strings and query text in `message`,
+          // and this string reaches the HTTP response. Log the detail, return
+          // a generic one.
+          const ours =
+            err instanceof NonceStoreCapacityError || err instanceof NonceRetentionTooLongError;
+          if (!ours) console.error('bolyra gate: nonce store fault', err);
+          return denyWith(
+            deny('internal_error', ours ? (err as Error).message : 'nonce reservation failed'),
+          );
+        }
+        if (!reserved) {
           return denyWith(deny('nonce_replayed', 'authorization presentation was already used'));
         }
       }
