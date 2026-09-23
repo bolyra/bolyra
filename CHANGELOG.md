@@ -161,7 +161,68 @@ Bounded nonce retention, honest spend-mandate naming.
 - `MppxServerMethodLike` hook typing accepts a real mppx `Method.Server` under strict settings (method syntax; optional `realm`/`secretKey`/`credential`/`request` fields).
 - The shipped `demo` CLI and `examples/mandate-demo` migrated to the new contract.
 
-## @bolyra/evc-conformance 0.6.0 (UNRELEASED)
+## @bolyra/evc-conformance 0.7.0
+
+### Added
+
+- **`verifier_config_fault` class** (vector set **0.10.0 → 0.11.0**, 125 → 126
+  vectors), one vector: `verifier-config-fault-internal-error-exits-non-zero`.
+
+  §7.1 and the §9 registry row bind `internal_error` to a **non-zero exit**, and
+  it is the only code in the registry that does. `verifier_envelope` could not
+  test that rule, so a verifier could violate §7.1 on every `internal_error`
+  path and still score 11/11 — and one real external verifier did.
+
+  The assertion was never missing; the runner already flagged a deny with
+  `code=internal_error` at exit 0. What was missing is an **input that reaches
+  it**. The only such probe was `null` on stdin (added in 0.6.0), which worked
+  by accident of `typeof null === 'object'`; once implementers classify `null`
+  correctly it is gone.
+
+  No *request* portably induces `internal_error` in a correct verifier — a
+  request that does is almost always a misclassification the implementer should
+  fix. That is an empirical finding, not a proof of impossibility. The portable
+  inducer is a **config fault**: corrupt the verifier's own trust configuration,
+  then send a request it would otherwise answer. Mechanism contributed by
+  `stillmarcus24` on `stillmarcus24/x402-authority-verifier-kit#1`.
+
+  Setup is implementation-specific and supplied by env (`VERIFIER_FAULT_CMD`,
+  `VERIFIER_FAULT_UNDO_CMD`, `VERIFIER_VALID_REQUEST`); the suite cannot supply
+  a valid request, because the trust check runs after root recovery and the
+  bundle is opaque per spec.
+
+  Deliberately **not** failures: missing hooks SKIP, and a deny carrying some
+  other code SKIPs — nothing obliges every verifier to classify a config fault
+  as `internal_error`, so it is neither a failure nor exercised coverage. An
+  `allow` under the fault always FAILS: a trust source that is present but
+  unusable must never silently disable trust enforcement.
+
+  Red-green through the package entry point against two commits of one real
+  external verifier: `660902f6` FAILS (the corrupt store silently became "not
+  enforced" and the request was allowed) and `1aa9d88` PASSES (`deny
+  code=internal_error`, exit 1). At `660902f6` the fail-open **masks** the
+  exit-code path, so that red run does not itself exercise `internal_error` at
+  exit 0; that defect is separately supported by source review at that pin.
+
+### Fixed
+
+- **An explicitly selected vector now runs through `bin.js`.** The launcher
+  prepends `--type` for its two default modes and the runner ANDs that with
+  `--vector`, so selecting a vector outside the default class matched nothing
+  and **exited 0** — a vendored vector no implementer could run, reporting
+  success while testing nothing. An explicit `--vector` now stands the injected
+  `--type` down. Both default modes are unchanged: `--verifier` still selects
+  exactly the 11 `verifier_envelope` vectors, and a regression in `npm test`
+  asserts that count so it cannot silently move.
+- `verifier_config_fault` added to the vendoring filter; without it the vector
+  would have lived in `spec/` and never shipped.
+
+### Note
+
+Previous entries for 0.2.0 and 0.6.0 were marked `(UNRELEASED)` although both
+are live on npm with attestations. Corrected here.
+
+## @bolyra/evc-conformance 0.6.0
 
 ### Added
 
@@ -216,7 +277,7 @@ Bounded nonce retention, honest spend-mandate naming.
   gaps (non-object stdin classified `unsupported_version`; missing REQUIRED
   `bundle` classified `invalid_bundle`), queued for an upstream report.
 
-## @bolyra/evc-conformance 0.2.0 (UNRELEASED)
+## @bolyra/evc-conformance 0.2.0
 
 **Release gate:** held until `khandrew1/mcp-use-evc-example` (an independent
 external host implementation) is harness-green on vector set 0.5.0 — do not
