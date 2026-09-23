@@ -51,3 +51,32 @@ the reference implementation, not your host.
 If your host goes green, open an issue on
 [bolyra/bolyra](https://github.com/bolyra/bolyra) — we would like to know,
 and we will list it.
+
+## Testing §7.1 (`internal_error` must exit non-zero)
+
+`--verifier` runs the 11 domain-agnostic `verifier_envelope` vectors. Those cannot
+reach §7.1's exit-code rule: no *request* portably induces `internal_error` in a
+correct verifier, so a verifier can violate §7.1 on every `internal_error` path and
+still score 11/11.
+
+The inducer is a **config fault** — corrupt the verifier's own trust configuration,
+then send a request it would otherwise answer. Select that vector explicitly and
+supply the implementation-specific setup:
+
+```sh
+VERIFIER_FAULT_CMD="<corrupt your trust config>" \
+VERIFIER_FAULT_UNDO_CMD="<restore it>" \
+VERIFIER_VALID_REQUEST=./a-request-your-verifier-allows.json \
+npx @bolyra/evc-conformance --verifier "<your verifier>" \
+  --vector verifier-config-fault-internal-error-exits-non-zero
+```
+
+The suite cannot supply `VERIFIER_VALID_REQUEST`: the trust check runs after root
+recovery, so the request must carry a chain that actually verifies, and the bundle is
+opaque per spec. Each implementation supplies its own.
+
+**Not failures:** missing hooks SKIP, and a deny carrying a code other than
+`internal_error` SKIPs — nothing obliges every verifier to classify a config fault
+that way, so it is neither a failure nor exercised §7.1 coverage. An `allow` under the
+fault always fails: a trust source that is present but unusable must never silently
+disable trust enforcement.
