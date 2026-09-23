@@ -1,7 +1,7 @@
 {
-  "version": "0.10.0",
-  "note": "host_behavior + verifier_envelope subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
-  "source_sha256": "9b64d82334480ebd07520e8a7426f26a96e101acc7d5281c1b08674cab459bc5",
+  "version": "0.11.0",
+  "note": "host_behavior + verifier_envelope + verifier_config_fault subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit",
+  "source_sha256": "c269e60b1ff8b03cb7ae53dfffc76b5cdc7409fd4cc6dfa12864d8e6d8dd6c84",
   "vectors": [
     {
       "id": "host-allow-well-behaved",
@@ -587,6 +587,20 @@
         "result": "PASS",
         "verdict": "deny",
         "code": "unsupported_version"
+      }
+    },
+    {
+      "id": "verifier-config-fault-internal-error-exits-non-zero",
+      "description": "§7.1 + the §9 registry row: `internal_error` is emitted as a deny AND with a non-zero exit code, and it is the only code that sets one. No REQUEST portably induces `internal_error` in a correct verifier — a request that does is almost always a misclassification the implementer should fix. The portable inducer is a CONFIG FAULT: corrupt the verifier's own trust configuration, then send a request it would otherwise answer. This vector asserts only the two portable things: the fault yields deny code=`internal_error`, and the exit status is non-zero. Setup is implementation-specific (VERIFIER_FAULT_CMD, VERIFIER_FAULT_UNDO_CMD, VERIFIER_VALID_REQUEST); absent hooks SKIP, and a deny carrying a different code SKIPs too, because nothing obliges every verifier to classify a config fault as `internal_error`. An `allow` under the fault is a fail-open and always fails.",
+      "type": "verifier_config_fault",
+      "inputs": {
+        "timeout_ms": 15000
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "internal_error",
+        "exit": "non-zero"
       }
     }
   ]

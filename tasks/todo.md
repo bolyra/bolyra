@@ -52,3 +52,80 @@ https://datatracker.ietf.org/submit/ — then push branch + PR + merge.
 
 ## Review (operator trial)
 Hours spent: subagent-executed; founder hours ≈ 0 of the 20h cap. Deviations from spec: Task 7b hardening added after the chunk 2 quality review (host publishes a result on internal error so the run cannot hang; `committedBytes` read from the file via `statSync`; timeout/network_error pinned by tests); `gateway-config.ts` sets `receipts.issuer/keyId` because `createGatewayReceiptSigner` reads them; scan needles narrowed to substituted values (spec §3.3 updated to match); README/example/.gitignore hardened after the final review (URL path is recorded in receipts; `trial.yaml` ignored). Anything cut to stay under the cap: nothing; executed by subagents.
+
+## §7.1 conformance coverage repair — SCHEDULED 2026-09-27 (Codex ruling 2026-09-22, scope corrected 2026-09-23)
+
+**Window: 2026-09-27, first evening maintenance slot after the 9/26 gate outcome is
+recorded. CAP: 4h total across 9/27-9/28, INCLUDING setup, documentation and
+validation. Ranked FIRST in the maintenance backlog** (ahead of the release-workflow
+registry-verify backoff and the remaining autoplan tasks). Stop at the cap and record
+any remaining gap. **No suite engineering before 2026-09-26 21:00 ET.**
+
+**The gap.** `verifier_envelope` cannot exercise §7.1's `internal_error` non-zero-exit
+rule. The assertion ALREADY EXISTS at `spec/conformance-runner.js:587-589`; what is
+missing is an input that reaches it. The old `null`-stdin probe worked by accident of
+`typeof null === 'object'` and stopped working once implementers classified `null`
+correctly.
+
+**The inducer (contributed by stillmarcus24, 2026-09-23, issue #1 comments
+`5797541484` + `5797726846`).** A *request* will not get there — the request cases he
+investigated all turned out to be misclassifications he had to fix. The inducer is a
+**config fault**: corrupt the verifier's own trust store, then send an otherwise valid
+request. Verified by him on a clean clone at `1aa9d88`: `mkdir -p state && printf
+'{ not json' > state/trusted-issuers.json` gives `deny internal_error` at **exit 1**;
+remove the file and the same request returns `allow` at exit 0. **`mkdir -p` is
+required — `state/` is gitignored, so a cold clone has no store to corrupt** (his own
+correction, 11 min later).
+
+**What does NOT generalize:** the request must carry a chain that actually verifies,
+because the trust check runs after root recovery. The bundle is opaque per spec, so
+each implementation supplies its own valid request. The vector asserts only the two
+portable things: the config fault induces `internal_error`, and the exit is non-zero.
+
+### Scope (Codex REJECTED "two mandatory vectors")
+- [ ] **REQUIRED:** repair the §7.1 coverage gap with a configuration-fault fixture,
+      implementation-specific setup where necessary.
+- [ ] **OPTIONAL, same cap, only after the required repair:** a trust-configuration
+      corruption *security diagnostic*. It must reproduce the authorization
+      distinction: a cryptographically valid request that a healthy restrictive trust
+      store DENIES must not become ALLOWED after corruption. **Not a required
+      conformance vector** — making it one would import a normative rule the spec does
+      not yet state.
+- [ ] Controls, classification decisions, red/green proof, validation — all inside the cap.
+- [ ] Deliver, then reply on issue #1 with the runnable vector (see below).
+
+### Narrowing that must hold in the implementation (Codex, 2026-09-23)
+- A config fault is a demonstrated inducer **for his implementation**. Nothing
+  establishes that every verifier must label it `internal_error`. **Another verifier's
+  different rejection must NOT automatically count as a failure**, and such a rejection
+  does not count as exercised §7.1 coverage either.
+- "No request vector will ever get there" is HIS finding about HIS investigated cases,
+  not a proof of impossibility. Do not encode it as one.
+- "§7.1 fixed at `1aa9d88`" holds for the pin and paths checked, nothing broader.
+- "Our suite covers §7.1" stays FALSE until this repair actually runs.
+
+### Reply to stillmarcus24 — goes WITH the vector, not before
+Codex: nothing supplied requires an earlier comment; his own instruction ("send the
+§7.1 vector when it runs") supports that timing. In the delivery comment: brief
+acknowledgment and accurate attribution for the inducer and for his correction to his
+own recipe. **No effusive praise, no new promise, no expanded deliverable. Do not work
+past the cap to have something satisfying to send him** — gratitude is harmless,
+repayment through extra work is the risk.
+
+### Two spec findings — RECORDED, DEFERRED, no work authorized
+Standards cap is spent; "cheap documentation" is still scope and this evidence does not
+justify a cap exception.
+1. **Present-but-unusable trust source belongs in the fail-closed requirements**
+   (Codex: yes, it does). Failure to load or validate a *configured* trust source must
+   not silently disable trust enforcement. `external-verifier-contract-v1.md:709`
+   currently covers only the ABSENT case; every "unparseable" clause in the contract is
+   about stdout, never the verifier's own trust store. Required behavior and error
+   classification need explicit treatment BEFORE this becomes a portable conformance
+   assertion. Do not draft a broader trust-policy redesign.
+2. **`process.exit()` footgun beside the §7.1 MUST.** Mandating a non-zero exit pushes
+   implementers toward `process.exit(1)`, which can abandon a pending async stdout
+   write to a pipe and truncate the very verdict §5.1 requires be complete. The
+   requirements are compatible (complete stdout AND non-zero exit is achievable, via
+   `process.exitCode`); what is missing is implementation guidance. His measurement:
+   node v22.22.1, `process.exit()` capped at 1 MiB where `process.exitCode` wrote all
+   5,000,055 bytes — **that version and workload, not a universal limit.**

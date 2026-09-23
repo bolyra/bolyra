@@ -128,6 +128,7 @@ for (const candidate of [...CANDIDATE_MODULE_PATHS].reverse()) {
 const NON_CRYPTO_TYPES = new Set([
     'external_verifier',
     'verifier_envelope',
+    'verifier_config_fault',
     'host_behavior',
     'session_token',
     'receipt_binding',
@@ -323,6 +324,8 @@ async function runVector(vector, crypto) {
             return runExternalVerifierVector(vector);
         case 'verifier_envelope':
             return runVerifierEnvelopeVector(vector);
+        case 'verifier_config_fault':
+            return runVerifierConfigFaultVector(vector);
         case 'host_behavior':
             return runHostBehaviorVector(vector);
         case 'receipt_binding':
@@ -522,6 +525,105 @@ function validClosedVerdict(v) {
         return null;
     }
     return `verdict must be allow or deny, got ${JSON.stringify(v.verdict)}`;
+}
+
+/**
+ * verifier_config_fault (§7.1 + the §9 registry row binding `internal_error` to a
+ * non-zero exit).
+ *
+ * Why this class exists: no REQUEST can portably induce `internal_error` in a
+ * correct verifier -- a request that does is almost always a misclassification the
+ * implementer should fix instead. The inducer is a CONFIG FAULT: corrupt the
+ * verifier's own trust configuration, then send a request that would otherwise be
+ * answered. (Mechanism contributed by stillmarcus24 on
+ * stillmarcus24/x402-authority-verifier-kit#1, 2026-09-23.)
+ *
+ * Setup is necessarily implementation-specific, so it is supplied by env:
+ *   VERIFIER_FAULT_CMD       shell command that corrupts the verifier's trust config
+ *   VERIFIER_FAULT_UNDO_CMD  shell command that restores it (run in a finally)
+ *   VERIFIER_VALID_REQUEST   path to a request that reaches the trust check when healthy
+ *
+ * Any of these missing => SKIP. An implementation that cannot express a config
+ * fault is not thereby non-conforming.
+ *
+ * A deny carrying some code OTHER than `internal_error` also SKIPs: nothing in the
+ * contract obliges every verifier to classify a config fault this way, so such a
+ * rejection is neither a failure nor exercised §7.1 coverage.
+ */
+function runVerifierConfigFaultVector(vector) {
+    const timeout = (vector.inputs || {}).timeout_ms || 15000;
+    const cmd = process.env.VERIFIER_CMD;
+    const faultCmd = process.env.VERIFIER_FAULT_CMD;
+    const undoCmd = process.env.VERIFIER_FAULT_UNDO_CMD;
+    const reqPath = process.env.VERIFIER_VALID_REQUEST;
+
+    if (!cmd) {
+        return { skipped: true, reason: 'no VERIFIER_CMD/--verifier' };
+    }
+    if (!faultCmd || !reqPath) {
+        return {
+            skipped: true,
+            reason: 'needs VERIFIER_FAULT_CMD + VERIFIER_VALID_REQUEST (implementation-specific '
+                + 'config-fault setup); absence is not a conformance failure',
+        };
+    }
+    if (!fs.existsSync(reqPath)) {
+        return { skipped: true, reason: `VERIFIER_VALID_REQUEST not found at ${reqPath}` };
+    }
+    const request = fs.readFileSync(reqPath, 'utf-8');
+    const sh = (c) => spawnSync('/bin/sh', ['-c', c], { encoding: 'utf-8', timeout });
+
+    if (undoCmd) sh(undoCmd);
+    const fault = sh(faultCmd);
+    if (fault.status !== 0) {
+        return { pass: false, reason: `VERIFIER_FAULT_CMD exited ${fault.status}; cannot induce the fault` };
+    }
+
+    try {
+        const res = spawnSync('/bin/sh', ['-c', cmd], {
+            input: request, encoding: 'utf-8', timeout,
+            killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024,
+        });
+        if (res.error) return { pass: false, reason: `spawn failed: ${res.error.message}` };
+        if (res.signal) return { pass: false, reason: `verifier killed by signal ${res.signal}` };
+
+        let verdict;
+        try {
+            verdict = JSON.parse(res.stdout);
+        } catch (e) {
+            return {
+                pass: false,
+                reason: `stdout is not exactly one JSON object (§5.1): ${JSON.stringify(String(res.stdout || '').slice(0, 160))}`,
+            };
+        }
+        const schemaErr = validClosedVerdict(verdict);
+        if (schemaErr) return { pass: false, reason: `verdict fails the closed §3.4 schema: ${schemaErr}` };
+
+        if (verdict.verdict === 'allow') {
+            return {
+                pass: false,
+                reason: 'FAIL-OPEN: a corrupt trust configuration produced an allow. A trust source that is '
+                    + 'present but unusable must never silently disable trust enforcement.',
+            };
+        }
+        if (verdict.code !== 'internal_error') {
+            return {
+                skipped: true,
+                reason: `the config fault produced deny code=${verdict.code}, not internal_error; `
+                    + 'this implementation classifies it differently, so §7.1 exit coverage is not exercised '
+                    + '(not a failure)',
+            };
+        }
+        if (res.status === 0) {
+            return {
+                pass: false,
+                reason: '§7.1: deny code=internal_error must accompany a non-zero exit, but the verifier exited 0',
+            };
+        }
+        return { pass: true };
+    } finally {
+        if (undoCmd) sh(undoCmd);
+    }
 }
 
 function runVerifierEnvelopeVector(vector) {

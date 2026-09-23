@@ -1,5 +1,5 @@
 {
-  "version": "0.10.0",
+  "version": "0.11.0",
   "vectors": [
     {
       "id": "valid-handshake-basic",
@@ -2079,6 +2079,20 @@
         "result": "PASS",
         "verdict": "deny",
         "code": "unsupported_version"
+      }
+    },
+    {
+      "id": "verifier-config-fault-internal-error-exits-non-zero",
+      "description": "\u00a77.1 + the \u00a79 registry row: `internal_error` is emitted as a deny AND with a non-zero exit code, and it is the only code that sets one. No REQUEST portably induces `internal_error` in a correct verifier \u2014 a request that does is almost always a misclassification the implementer should fix. The portable inducer is a CONFIG FAULT: corrupt the verifier's own trust configuration, then send a request it would otherwise answer. This vector asserts only the two portable things: the fault yields deny code=`internal_error`, and the exit status is non-zero. Setup is implementation-specific (VERIFIER_FAULT_CMD, VERIFIER_FAULT_UNDO_CMD, VERIFIER_VALID_REQUEST); absent hooks SKIP, and a deny carrying a different code SKIPs too, because nothing obliges every verifier to classify a config fault as `internal_error`. An `allow` under the fault is a fail-open and always fails.",
+      "type": "verifier_config_fault",
+      "inputs": {
+        "timeout_ms": 15000
+      },
+      "expected": {
+        "result": "PASS",
+        "verdict": "deny",
+        "code": "internal_error",
+        "exit": "non-zero"
       }
     }
   ]
