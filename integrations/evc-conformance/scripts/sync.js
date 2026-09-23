@@ -36,13 +36,14 @@ function listFiles(dir, base = dir) {
 
 function buildTrimmedVectors() {
   const src = JSON.parse(fs.readFileSync(path.join(SPEC, 'test-vectors.json'), 'utf-8'));
-  const host = src.vectors.filter((v) => v.type === 'host_behavior' || v.type === 'verifier_envelope');
+  const VENDORED_TYPES = new Set(['host_behavior', 'verifier_envelope', 'verifier_config_fault']);
+  const host = src.vectors.filter((v) => VENDORED_TYPES.has(v.type));
   return Buffer.from(
     JSON.stringify(
       {
         version: src.version,
         note:
-          'host_behavior + verifier_envelope subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit',
+          'host_behavior + verifier_envelope + verifier_config_fault subset vendored from spec/test-vectors.json - regenerate with npm run sync, never edit',
         source_sha256: sha(fs.readFileSync(path.join(SPEC, 'test-vectors.json'))),
         vectors: host,
       },
@@ -77,6 +78,7 @@ function buildManifest(entries) {
     version: vectors.version,
     host_behavior_count: byType('host_behavior'),
     verifier_envelope_count: byType('verifier_envelope'),
+    verifier_config_fault_count: byType('verifier_config_fault'),
     total_count: vectors.vectors.length,
     source_sha256: vectors.source_sha256,
   };
@@ -133,7 +135,7 @@ function main() {
   fs.writeFileSync(MANIFEST, buildManifest(entries));
   const vectors = JSON.parse(buildTrimmedVectors().toString());
   console.log(
-    `synced ${entries.length} files from spec/ (vector set v${vectors.version}, ${vectors.vectors.length} host_behavior + verifier_envelope vectors)`,
+    `synced ${entries.length} files from spec/ (vector set v${vectors.version}, ${vectors.vectors.length} host_behavior + verifier_envelope + verifier_config_fault vectors)`,
   );
 }
 

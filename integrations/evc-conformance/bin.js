@@ -51,9 +51,15 @@ if (process.env.VERIFIER_CMD !== undefined && process.env.VERIFIER_CMD === '') {
 }
 const verifierMode = !args.includes('--host') && (args.includes('--verifier') || !!process.env.VERIFIER_CMD);
 const type = verifierMode ? 'verifier_envelope' : 'host_behavior';
+// An explicit --vector selects across EVERY vendored class, so the injected
+// --type must stand down: the two are ANDed by the runner, and a vector outside
+// the default class otherwise selected zero tests and exited 0 -- a vendored
+// vector nobody could run. Default modes are unchanged.
+const selectsExplicitVector = args.includes('--vector');
+const modeArgs = selectsExplicitVector ? [] : ['--type', type];
 const res = spawnSync(
   process.execPath,
-  [runner, '--type', type, ...args],
+  [runner, ...modeArgs, ...args],
   { stdio: 'inherit' },
 );
 process.exit(res.status === null ? 1 : res.status);
