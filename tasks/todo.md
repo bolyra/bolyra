@@ -83,16 +83,26 @@ each implementation supplies its own valid request. The vector asserts only the 
 portable things: the config fault induces `internal_error`, and the exit is non-zero.
 
 ### Scope (Codex REJECTED "two mandatory vectors")
-- [ ] **REQUIRED:** repair the §7.1 coverage gap with a configuration-fault fixture,
-      implementation-specific setup where necessary.
-- [ ] **OPTIONAL, same cap, only after the required repair:** a trust-configuration
+- [x] **REQUIRED — DONE 2026-09-23, commit `6aad395a` on branch `evc-71-config-fault-coverage`.**
+      `verifier_config_fault` class + vector; set 0.10.0 -> 0.11.0. Added to `NON_CRYPTO_TYPES`
+      (the runner test caught that it otherwise dragged in circomlibjs) and to the sync filter
+      (without it the vector would live in `spec/` and never ship to implementers).
+      **Real red/green, not stubs:** `660902f6` FAILS (fail-open), `1aa9d88` PASSES.
+      Envelope 11/11 unchanged, package 30/30, sync:check clean, green in a node:20 container.
+- [ ] **OPTIONAL, NOT DONE — now eligible** (required repair is complete and validated).
+      NOTE: the shipped vector already catches the fail-open, but with a request the healthy store
+      ALLOWS. The diagnostic Codex specified is sharper and still missing: a request the healthy
+      restrictive store DENIES (`untrusted_root`) must not flip to `allow` after corruption.
+      Original wording: a trust-configuration
       corruption *security diagnostic*. It must reproduce the authorization
       distinction: a cryptographically valid request that a healthy restrictive trust
       store DENIES must not become ALLOWED after corruption. **Not a required
       conformance vector** — making it one would import a normative rule the spec does
       not yet state.
-- [ ] Controls, classification decisions, red/green proof, validation — all inside the cap.
-- [ ] Deliver, then reply on issue #1 with the runnable vector (see below).
+- [x] Controls, classification, red/green, validation — done inside the cap.
+- [ ] **Deliver:** push branch + PR, then release `@bolyra/evc-conformance` so the vector is
+      actually runnable by an implementer (a vector he cannot `npx` is not delivered), THEN the
+      reply on issue #1. **Reply needs an explicit founder go** (Codex 2026-09-23).
 
 ### Narrowing that must hold in the implementation (Codex, 2026-09-23)
 - A config fault is a demonstrated inducer **for his implementation**. Nothing
