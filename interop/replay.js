@@ -74,11 +74,12 @@ function sha256File(p) {
 // the execution happens — not in whichever consumer happens to branch on kind.
 // (Design doc §"submission-check" specifies these same shapes; submission-check.js
 // will reuse this rather than restate it.)
-const KINDS = new Set(['bolyra-suite', 'external-suite']);
+const KINDS = new Set(['bolyra-suite', 'bolyra-suite-verifier', 'external-suite']);
 // The lookaheads reject a "." or ".." owner/repo segment while still allowing
 // names like ".github" and "r.git". Shared with the page generator: one regex.
 const REPO_RE = /^https:\/\/github\.com\/(?!\.\.?\/)[A-Za-z0-9_.-]+\/(?!\.\.?$)[A-Za-z0-9_.-]+$/;
 const ADAPTER_RE = /^adapters\/[A-Za-z0-9._-]+\.ts$/;
+const ADAPTER_CJS_RE = /^adapters\/[A-Za-z0-9._-]+\.cjs$/;
 
 // An ABSENT kind defaults; a SUPPLIED empty/null/0 kind is an error everywhere,
 // so every consumer branches on the same value. One definition, no `||`.
@@ -148,6 +149,55 @@ function validateClaim(c) {
       // Required: the page prints it as fact and the replay compares it, so an
       // omitted count would render as a claim nobody checked.
       errors.push('run.expect.scoped_out must be a non-negative integer');
+    }
+    return errors;
+  }
+
+  if (kind === 'bolyra-suite-verifier') {
+    // Bolyra-suite conformance on the VERIFIER side. The host kind drives a
+    // tsx HUT adapter; a verifier is spawned directly so that its stdout and
+    // its EXIT STATUS both reach the runner unaltered -- §7.1 coverage is an
+    // assertion about the exit status, so any wrapper that swallowed it would
+    // silently invalidate the claim.
+    for (const k of ['id', 'implementer', 'suite', 'verifier', 'expected']) {
+      if (!c[k]) errors.push(`missing field ${k}`);
+    }
+    if (c.adapter || c.adapter_sha256) {
+      errors.push('a verifier claim must not carry adapter/adapter_sha256: adapter is the host kind, verifier is this one');
+    }
+    if (c.suite && !/^[0-9a-f]{40}$/.test(c.suite.commit || '')) {
+      errors.push('suite.commit must be a full 40-hex sha');
+    }
+    if (c.suite && !/^[0-9a-f]{64}$/.test(c.suite.test_vectors_sha256 || '')) {
+      errors.push('suite.test_vectors_sha256 must be a full sha256 hex digest');
+    }
+    if (c.suite && !Array.isArray(c.suite.runner_args)) {
+      errors.push('suite.runner_args must be an argv array (it selects the claimed coverage)');
+    }
+    const v = c.verifier || {};
+    if (!Array.isArray(v.command) || !v.command.length) {
+      errors.push('verifier.command must be a non-empty argv array');
+    } else if (v.command[0] !== 'node') {
+      // Spawned without a shell, argv[0] resolved inside the pinned checkout.
+      errors.push(`verifier.command[0] must be node, got ${JSON.stringify(v.command[0])}`);
+    }
+    if (!c.expected || badCount(c.expected.pass) || badCount(c.expected.fail) || badCount(c.expected.skip)) {
+      errors.push('expected must carry non-negative numeric pass, fail and skip counts');
+    }
+    if (v.fault !== undefined) {
+      // A config-fault claim asserts §7.1 coverage, so the fault SETUP is part
+      // of the claim and must replay too. The request builder derives a valid
+      // request from the implementer's OWN pinned corpus rather than from a
+      // blob we authored, and is digest-pinned like the host adapter.
+      const f = v.fault || {};
+      if (typeof f.induce !== 'string' || !f.induce) errors.push('verifier.fault.induce must be a non-empty shell command');
+      if (typeof f.undo !== 'string' || !f.undo) errors.push('verifier.fault.undo must be a non-empty shell command');
+      if (!ADAPTER_CJS_RE.test(f.request_builder || '')) {
+        errors.push('verifier.fault.request_builder must be adapters/<name>.cjs');
+      }
+      if (!/^[0-9a-f]{64}$/.test(f.request_builder_sha256 || '')) {
+        errors.push('verifier.fault.request_builder_sha256 must be a full sha256 hex digest');
+      }
     }
     return errors;
   }
@@ -380,7 +430,9 @@ function replayClaim(c, keep) {
 
     // 2. Our suite at its pin.
     const tar = path.join(work, 'suite.tar');
-    fs.writeFileSync(tar, execFileSync('git', ['-C', ROOT, 'archive', c.suite.commit, 'spec']));
+    // See the verifier path: stream with `-o` rather than buffering, or a suite
+    // pin whose spec/ exceeds 1 MiB fails with ENOBUFS.
+    execFileSync('git', ['-C', ROOT, 'archive', '-o', tar, c.suite.commit, 'spec']);
     sh('tar', ['-x', '-f', tar, '-C', suiteDir]);
 
     // 3. Re-verify the digest on the materialized tree (defense in depth).
@@ -416,6 +468,99 @@ function replayClaim(c, keep) {
       process.execPath,
       [runner, ...c.suite.runner_args, '--json', '--host', `${shellQuote(tsx)} ${shellQuote(adapter)}`],
       { cwd: suiteDir, encoding: 'utf8', env: { ...process.env, EVC_IMPL_DIR: implDir } }
+    );
+    const got = validateRunnerOutput(run, c);
+    console.log(`result: ${got.pass} passed, ${got.fail} failed, ${got.skip} skipped`);
+    console.log(`REPLAY OK: published claim reproduces (${got.pass}/${c.expected.pass})`);
+    return true;
+  } finally {
+    if (keep) console.log(`workdir kept: ${work}`);
+    else fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Replay a bolyra-suite-verifier claim: our pinned suite driving the
+ * implementer's verifier at its pinned commit.
+ *
+ * Mirrors replayClaim (host) rather than replayExternalSuite (container): the
+ * suite is materialized from `git archive` at suite.commit and the digest is
+ * re-verified on the materialized tree. Like the host path, third-party code
+ * runs locally; that is the existing posture for bolyra-suite claims and is
+ * deliberately not changed here.
+ *
+ * The verifier is spawned by the runner through `sh -c` so its stdout AND exit
+ * status both arrive unaltered. That matters specifically for §7.1 coverage,
+ * which is an assertion about the exit status.
+ */
+function replayVerifierClaim(c, keep) {
+  console.log(`claim: ${c.claim_text} (verified ${c.verified_on})`);
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'evc-replay-vfy-'));
+  const implDir = path.join(work, 'implementer');
+  const suiteDir = path.join(work, 'suite');
+  fs.mkdirSync(implDir);
+  fs.mkdirSync(suiteDir);
+  try {
+    // 1. Implementer at its pin.
+    console.log(`cloning ${c.implementer.repo} @ ${c.implementer.commit.slice(0, 12)}…`);
+    sh('git', ['-C', implDir, 'init', '-q']);
+    sh('git', ['-C', implDir, 'remote', 'add', 'origin', c.implementer.repo]);
+    sh('git', ['-C', implDir, 'fetch', '-q', '--depth', '1', 'origin', c.implementer.commit]);
+    sh('git', ['-C', implDir, 'checkout', '-q', 'FETCH_HEAD']);
+    const head = sh('git', ['-C', implDir, 'rev-parse', 'HEAD']).trim();
+    if (head !== c.implementer.commit) throw new Error(`checked-out HEAD ${head} != pinned commit`);
+
+    if (c.verifier.requires_zero_dependencies) {
+      const pkg = JSON.parse(fs.readFileSync(path.join(implDir, 'package.json'), 'utf8'));
+      const deps = Object.keys(pkg.dependencies || {}).concat(Object.keys(pkg.devDependencies || {}));
+      if (deps.length) throw new Error(`claim requires zero dependencies but package.json declares: ${deps.join(', ')}`);
+    }
+
+    // 2. Our suite at its pin, digest re-verified on the materialized tree.
+    // `archive -o` streams to the file. Buffering it through execFileSync's
+    // 1 MiB default maxBuffer threw ENOBUFS once spec/ outgrew that, which is a
+    // latent failure for ANY newer suite pin, not just this claim's.
+    const tar = path.join(work, 'suite.tar');
+    execFileSync('git', ['-C', ROOT, 'archive', '-o', tar, c.suite.commit, 'spec']);
+    sh('tar', ['-x', '-f', tar, '-C', suiteDir]);
+    const materialized = crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(path.join(suiteDir, 'spec', 'test-vectors.json')))
+      .digest('hex');
+    if (materialized !== c.suite.test_vectors_sha256) {
+      throw new Error(`materialized suite digest mismatch: ${materialized}`);
+    }
+
+    // 3. Config-fault setup, when the claim asserts §7.1 coverage. The request
+    //    is derived from the implementer's OWN pinned corpus by a digest-pinned
+    //    builder, so no request blob we authored enters the evidence.
+    const env = { ...process.env };
+    const fault = c.verifier.fault;
+    if (fault) {
+      const builder = path.join(__dirname, fault.request_builder);
+      if (sha256File(builder) !== fault.request_builder_sha256) {
+        throw new Error(`request-builder digest mismatch at run time: ${fault.request_builder}`);
+      }
+      const reqPath = path.join(work, 'valid-request.json');
+      const built = spawnSync(process.execPath, [builder, implDir, reqPath], { encoding: 'utf8' });
+      if (built.status !== 0) {
+        throw new Error(`request builder failed:\n${(built.stderr || '').slice(-2000)}`);
+      }
+      const expand = (cmd) => cmd.split('{{impl}}').join(implDir);
+      env.VERIFIER_FAULT_CMD = expand(fault.induce);
+      env.VERIFIER_FAULT_UNDO_CMD = expand(fault.undo);
+      env.VERIFIER_VALID_REQUEST = reqPath;
+      console.log(`config fault armed: ${env.VERIFIER_FAULT_CMD}`);
+    }
+
+    // 4. Run the pinned runner against the implementer's verifier.
+    const runner = path.join(suiteDir, 'spec', 'conformance-runner.js');
+    const verifierCmd = `cd ${shellQuote(implDir)} && ${c.verifier.command.map(shellQuote).join(' ')}`;
+    console.log('running pinned conformance suite against implementer verifier…');
+    const run = spawnSync(
+      process.execPath,
+      [runner, ...c.suite.runner_args, '--json', '--verifier', verifierCmd],
+      { cwd: suiteDir, encoding: 'utf8', env }
     );
     const got = validateRunnerOutput(run, c);
     console.log(`result: ${got.pass} passed, ${got.fail} failed, ${got.skip} skipped`);
@@ -497,7 +642,10 @@ function main() {
   let ok = 0;
   for (const c of claims) {
     try {
-      const replay = kindOf(c) === 'external-suite' ? replayExternalSuite : replayClaim;
+      const k = kindOf(c);
+      const replay = k === 'external-suite' ? replayExternalSuite
+        : k === 'bolyra-suite-verifier' ? replayVerifierClaim
+        : replayClaim;
       if (replay(c, flag('--keep'))) ok += 1;
     } catch (e) {
       fail(`${c.id}: ${e.message}`);
@@ -507,6 +655,6 @@ function main() {
   if (ok !== claims.length) process.exitCode = 1;
 }
 
-module.exports = { validateRunnerOutput, validateClaim, validateExternalSuiteOutput, shellQuote, kindOf, KINDS, REPO_RE };
+module.exports = { validateRunnerOutput, validateClaim, replayVerifierClaim, validateExternalSuiteOutput, shellQuote, kindOf, KINDS, REPO_RE };
 
 if (require.main === module) main();

@@ -4,7 +4,7 @@
     {
       "id": "mcp-use-evc-example@17642a5/host_behavior@0.5.0",
       "published_in": [
-        "spec/IMPLEMENTER.md \u00a79 (Independent implementations)",
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
         "draft-kondoju-evc-01 and -02, Implementation Status: mcp-use-evc-example"
       ],
       "claim_text": "27/27 host_behavior vectors, vector set 0.5.0, at pinned commit 17642a5",
@@ -44,7 +44,7 @@
       "id": "x402-authority-verifier-kit@35e209d/own-corpus",
       "kind": "external-suite",
       "published_in": [
-        "spec/IMPLEMENTER.md \u00a79 (Independent implementations)",
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
         "bolyra.ai conformance section"
       ],
       "claim_text": "39/39 of the kit's own pinned corpus (StillOS own-corpus reproduction; NOT Bolyra-suite conformance)",
@@ -68,6 +68,120 @@
           "scoped_out": 9
         }
       }
+    },
+    {
+      "id": "x402-authority-verifier-kit@660902f6/verifier_envelope@0.10.0",
+      "kind": "bolyra-suite-verifier",
+      "published_in": [
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
+        "bolyra.ai conformance section"
+      ],
+      "claim_text": "11/11 verifier_envelope vectors, vector set 0.10.0, at pinned commit 660902f6 (Bolyra-suite, wire-envelope coverage only). This pin ALSO fails closed incorrectly on a corrupt trust store: a present-but-unparseable trusted-issuers file collapsed into the absent sentinel and the same signed request became an allow. Separately, internal_error at this pin exits 0, which §7.1 forbids; that finding is source review, not an executed result, because the fail-open masks the exit path. Both are FIXED at 1aa9d88. Not full EVC conformance.",
+      "verified_on": "2026-09-22",
+      "implementer": {
+        "repo": "https://github.com/stillmarcus24/x402-authority-verifier-kit",
+        "commit": "660902f6e8371b302db41f200072bf8c41cc7b7d"
+      },
+      "suite": {
+        "commit": "87f352c87aa90270c0ac1b377dd2286158ad4f5d",
+        "vector_set": "0.10.0",
+        "test_vectors_sha256": "9b64d82334480ebd07520e8a7426f26a96e101acc7d5281c1b08674cab459bc5",
+        "runner_args": [
+          "--type",
+          "verifier_envelope"
+        ]
+      },
+      "verifier": {
+        "command": [
+          "node",
+          "verifier/evc_verifier.cjs"
+        ],
+        "requires_zero_dependencies": true
+      },
+      "expected": {
+        "pass": 11,
+        "fail": 0,
+        "skip": 0
+      },
+      "scope": "Boundary under test: verifier/evc_verifier.cjs spawned per vector, stdout and exit status unaltered. Wire-envelope semantics only; no bundle semantics, and no §7.1 exit coverage in this class at this vector set."
+    },
+    {
+      "id": "x402-authority-verifier-kit@1aa9d88/verifier_envelope@0.11.0",
+      "kind": "bolyra-suite-verifier",
+      "published_in": [
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
+        "bolyra.ai conformance section"
+      ],
+      "claim_text": "11/11 verifier_envelope vectors, vector set 0.11.0, at pinned commit 1aa9d88 (Bolyra-suite, wire-envelope coverage only). Not full EVC conformance.",
+      "verified_on": "2026-09-23",
+      "implementer": {
+        "repo": "https://github.com/stillmarcus24/x402-authority-verifier-kit",
+        "commit": "1aa9d880774040ea1662709eb3b5a1c0a5e207eb"
+      },
+      "suite": {
+        "commit": "b64f0ea4a63ba62c154768d311dd7277bcd99430",
+        "vector_set": "0.11.0",
+        "test_vectors_sha256": "c269e60b1ff8b03cb7ae53dfffc76b5cdc7409fd4cc6dfa12864d8e6d8dd6c84",
+        "runner_args": [
+          "--type",
+          "verifier_envelope"
+        ]
+      },
+      "verifier": {
+        "command": [
+          "node",
+          "verifier/evc_verifier.cjs"
+        ],
+        "requires_zero_dependencies": true
+      },
+      "expected": {
+        "pass": 11,
+        "fail": 0,
+        "skip": 0
+      },
+      "scope": "Boundary under test: verifier/evc_verifier.cjs spawned per vector, stdout and exit status unaltered. Wire-envelope semantics only."
+    },
+    {
+      "id": "x402-authority-verifier-kit@1aa9d88/verifier_config_fault@0.11.0",
+      "kind": "bolyra-suite-verifier",
+      "published_in": [
+        "spec/IMPLEMENTER.md §9 (Independent implementations)",
+        "bolyra.ai conformance section"
+      ],
+      "claim_text": "§7.1 config-fault coverage PASSES at pinned commit 1aa9d88, vector set 0.11.0: a corrupt trust store yields deny code=internal_error with a non-zero exit, and does not fail open. §7.1 fixed on the tested path. Not full EVC conformance.",
+      "verified_on": "2026-09-23",
+      "implementer": {
+        "repo": "https://github.com/stillmarcus24/x402-authority-verifier-kit",
+        "commit": "1aa9d880774040ea1662709eb3b5a1c0a5e207eb"
+      },
+      "suite": {
+        "commit": "b64f0ea4a63ba62c154768d311dd7277bcd99430",
+        "vector_set": "0.11.0",
+        "test_vectors_sha256": "c269e60b1ff8b03cb7ae53dfffc76b5cdc7409fd4cc6dfa12864d8e6d8dd6c84",
+        "runner_args": [
+          "--vector",
+          "verifier-config-fault-internal-error-exits-non-zero"
+        ]
+      },
+      "verifier": {
+        "command": [
+          "node",
+          "verifier/evc_verifier.cjs"
+        ],
+        "requires_zero_dependencies": true,
+        "fault": {
+          "induce": "mkdir -p {{impl}}/state && printf '{ not json' > {{impl}}/state/trusted-issuers.json",
+          "undo": "rm -f {{impl}}/state/trusted-issuers.json",
+          "request_builder": "adapters/stillos-evc-request.cjs",
+          "request_builder_sha256": "450034cc9f797ea7c6d45bd8548da1633d5d125d818795b0e62ff024905600c4"
+        }
+      },
+      "expected": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "scope": "Boundary under test: verifier/evc_verifier.cjs under a corrupted trust store, with a valid request derived from the kit's OWN pinned corpus by the digest-pinned builder. Asserts the fail-open prohibition and, for an internal_error verdict, a non-zero exit."
     }
   ]
 }

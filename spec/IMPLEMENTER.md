@@ -181,6 +181,17 @@ want"; x402#3220 comment 5595422481, "Yes, go ahead and list it."
 |---|---|---|---|
 | [`khandrew1/mcp-use-evc-example`](https://github.com/khandrew1/mcp-use-evc-example) | Host — TypeScript, behind mcp-use's `mcp:tools/call` middleware | commit `17642a5`, 2026-08-26 | 27/27 `host_behavior`, vector set 0.5.0 |
 | [`stillmarcus24/x402-authority-verifier-kit`](https://github.com/stillmarcus24/x402-authority-verifier-kit) | Verifier — Node, zero-dependency, x402 authorization-evidence profile | commit `35e209d`, 2026-09-09 | 39/39 of its own pinned corpus, reproduced by the EVC authors in a network-isolated run; direct probes with non-JSON stdin returned a single deny verdict on stdout and exited 0 |
+| [`stillmarcus24/x402-authority-verifier-kit`](https://github.com/stillmarcus24/x402-authority-verifier-kit) | Verifier — Node, zero-dependency, x402 authorization-evidence profile | commit `660902f6`, 2026-09-22 | 11/11 `verifier_envelope`, vector set 0.10.0 (wire-envelope coverage only). **This pin also fails open on a corrupt trust store**: a present-but-unparseable trusted-issuers file collapsed into the absent sentinel, so the same signed request became an `allow`. Separately its `internal_error` exits 0, which §7.1 forbids; that one is source review, not an executed result, because the fail-open masks the exit path. Both FIXED at `1aa9d88`. Not full EVC conformance. |
+| [`stillmarcus24/x402-authority-verifier-kit`](https://github.com/stillmarcus24/x402-authority-verifier-kit) | Verifier — Node, zero-dependency, x402 authorization-evidence profile | commit `1aa9d88`, 2026-09-23 | 11/11 `verifier_envelope`, vector set 0.11.0 (wire-envelope coverage only). Not full EVC conformance. |
+| [`stillmarcus24/x402-authority-verifier-kit`](https://github.com/stillmarcus24/x402-authority-verifier-kit) | Verifier — Node, zero-dependency, x402 authorization-evidence profile | commit `1aa9d88`, 2026-09-23 | §7.1 config-fault coverage PASSES, vector set 0.11.0: a corrupt trust store yields `deny code=internal_error` with a non-zero exit and does not fail open. §7.1 fixed on the tested path. Not full EVC conformance. |
+
+The three `x402-authority-verifier-kit` rows after the first are **Bolyra-suite**
+results on the verifier side, replayable from `interop/claims.json` via
+`interop/replay.js`. The `35e209d` row is different in kind and is left exactly as
+recorded: an own-corpus reproduction, never Bolyra-suite conformance. Its
+author-reported 0.5.0 result is not restated here, because we did not execute it.
+Each row is a claim at the pin it was verified at; a later fix does not rewrite an
+earlier measurement.
 
 Per the first repo's own framing: EVC is an independent third-party contract
 and is not part of MCP or mcp-use. Listing here records conformance of the

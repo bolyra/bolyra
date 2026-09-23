@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 const REGISTRY_PATH = path.join(ROOT, 'interop', 'claims.json');
 const OUT_PATH = path.join(__dirname, 'conformance.html');
 
-const KINDS = new Set(['bolyra-suite', 'external-suite']);
+const KINDS = new Set(['bolyra-suite', 'bolyra-suite-verifier', 'external-suite']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SHA40 = /^[0-9a-f]{40}$/;
 
@@ -51,7 +51,13 @@ function coveredClasses(c) {
   const args = (c.suite && Array.isArray(c.suite.runner_args)) ? c.suite.runner_args : [];
   const types = [];
   for (let i = 0; i + 1 < args.length; i++) if (args[i] === '--type') types.push(args[i + 1]);
-  return types.length ? types.join(', ') : 'Not specified';
+  // A claim may select ONE vector instead of a whole class (config-fault
+  // coverage is a single vector). Render what was actually selected, never a
+  // class the run did not cover.
+  const vectors = [];
+  for (let i = 0; i + 1 < args.length; i++) if (args[i] === '--vector') vectors.push(args[i + 1]);
+  const parts = types.concat(vectors.map((v) => `single vector: ${v}`));
+  return parts.length ? parts.join(', ') : 'Not specified';
 }
 
 const EXTERNAL_QUALIFIER =
@@ -72,13 +78,23 @@ function renderClaim(c) {
   row('Implementer', `<a href="${esc(repo)}">${esc(repo.replace('https://github.com/', ''))}</a>`);
   row('Implementation commit', `<a href="${esc(repo)}/commit/${esc(commit)}"><code>${esc(commit)}</code></a>`);
   row('Kind', esc(kind));
-  if (kind === 'bolyra-suite') {
+  if (kind === 'bolyra-suite' || kind === 'bolyra-suite-verifier') {
     row('Suite commit', `<a href="https://github.com/bolyra/bolyra/commit/${esc(c.suite.commit)}"><code>${esc(c.suite.commit)}</code></a>`);
     row('Vector set', esc(c.suite.vector_set || 'Not specified'));
     row('test-vectors.json sha256', `<code>${esc(c.suite.test_vectors_sha256)}</code>`);
     row('Covered classes', esc(coveredClasses(c)));
     row('Runner arguments', `<code>${esc(JSON.stringify(c.suite.runner_args || []))}</code>`);
-    row('Adapter', `<code>${esc(c.adapter)}</code> (sha256 <code>${esc(c.adapter_sha256)}</code>)`);
+    if (kind === 'bolyra-suite-verifier') {
+      row('Verifier', `<code>${esc(JSON.stringify(c.verifier.command))}</code>, spawned in the pinned checkout (stdout and exit status unaltered)`);
+      const f = c.verifier.fault;
+      if (f) {
+        row('Config fault induced', `<code>${esc(f.induce)}</code>`);
+        row('Fault undone by', `<code>${esc(f.undo)}</code>`);
+        row('Valid request built by', `<code>${esc(f.request_builder)}</code> (sha256 <code>${esc(f.request_builder_sha256)}</code>), from the implementer's own pinned corpus`);
+      }
+    } else {
+      row('Adapter', `<code>${esc(c.adapter)}</code> (sha256 <code>${esc(c.adapter_sha256)}</code>)`);
+    }
     row('Expected', esc(`${c.expected.pass} pass / ${c.expected.fail} fail / ${c.expected.skip} skip`));
   } else {
     row('Covered classes', esc(coveredClasses(c)));
