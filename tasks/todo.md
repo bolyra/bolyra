@@ -139,3 +139,18 @@ justify a cap exception.
    `process.exitCode`); what is missing is implementation guidance. His measurement:
    node v22.22.1, `process.exit()` capped at 1 MiB where `process.exitCode` wrote all
    5,000,055 bytes — **that version and workload, not a universal limit.**
+
+## Backlog fixes (2026-09-24, founder: "lets fix the backlog items"; plan Codex-APPROVED after 5 review passes)
+Plan: ~/.claude/plans/eager-discovering-babbage.md · order ruled by Codex: C1 → A1 → B → A2 → D1 → D2 → E → OPS
+- [ ] PR-C1 E9 (CI boots wrangler dev in hosted-verify-tests; 3 exact assertions) + E10 (@bolyra/mpp devDep; digest agreement from the installed package; example asserts the Worker's id in-process)
+- [ ] PR-A1 schema_meta + E5 E7 E8 E17 E18 T6 E14 E11
+- [ ] PR-B E2 E13 T10 E15 E16 E19
+- [ ] PR-A2 E6
+- [ ] PR-D1 T8 TD-1 TD-2 engines → publish @bolyra/mpp 0.7.0 (founder go)
+- [ ] PR-D2 example migration to 0.7.0
+- [ ] PR-E T3 T4 T7 spec wording
+- [ ] OPS migrate tenant records → staging → canary + prod deploy (go) → strict health → bolyra-smoke removal (go)
+Deferred by ruling: release backoff widen, T9 keychain seam, E19 overlap, T6 docs links.
+
+## Review (backlog fixes)
+(fill per PR)
