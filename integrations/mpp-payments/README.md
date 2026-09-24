@@ -185,9 +185,11 @@ in the `X-Bolyra-Authorization` header on every request. A denial is thrown as
 When the verifier's deny carries `detail.reason` / `detail.credential_id` (the
 hosted verifier's registry deny does), they are copied into the body as
 `reason` and `credential_id` — e.g. `"reason": "credential_not_active"`.
-`reason` is an identifier (`/^[a-z_]{1,64}$/`); free-text validator messages
-are not surfaced (they stay on `BolyraDeniedError.verdict.detail` in-process).
-`credential_id` is copied when it is a string. No other `detail` member reaches
+`reason` is an identifier (`/^[a-z][a-z0-9_]{0,63}$/`, e.g. `tier_2_exceeded`);
+free-text validator messages are not surfaced (they stay on
+`BolyraDeniedError.verdict.detail` in-process). `credential_id` is copied when
+it is a string of at most 256 characters (longer values are dropped, so a
+misbehaving verifier cannot reflect a huge value). No other `detail` member reaches
 the HTTP body.
 
 On allow, the mppx receipt (and therefore the `Payment-Receipt` header) gains
@@ -314,6 +316,9 @@ verify route; only a bare origin is rewritten. `https://verify.example` and
 (a query string is kept); any other path — including `/custom/` with its
 trailing slash — and any query string are used byte-for-byte. A `url` that is
 not an absolute URL is a `TypeError` at `bolyraGate()` construction.
+`normalizeVerifierUrl(url)` is exported as a helper for pre-validating a
+configured URL: it returns the exact endpoint the gate will POST to, or
+throws `TypeError`.
 
 To call a hosted verifier directly, `callUrlVerifierWithEvidence(config,
 request)` returns `{ verdict, status?, credentialId?, receipt? }`: the same
@@ -337,21 +342,26 @@ verifier is never an allow.
 ```ts
 bolyraGate(method, {
   audience, verifier,
-  onDecision: (d) => metrics.record(d.outcome, d.code, d.reason),
+  onDecision: (d) => {
+    if (d.outcome === 'deny') metrics.deny(d.code, d.status, d.reason)
+    else metrics.allow(d.credentialId)
+  },
 })
 ```
 
-`Decision` is `{ outcome: 'allow' | 'deny', code?, status?, reason?,
-credentialId?, receipt?, request }`:
+`Decision` is a discriminated union — narrow on `outcome`:
+`AllowDecision { outcome: 'allow', credentialId?, receipt?, request }` |
+`DenyDecision { outcome: 'deny', code, status, reason?, credentialId?, request }`.
 
-- **deny** — `code` is the final denial code and `status` the HTTP status it
-  maps to (`DENY_STATUS[code]`); `reason` comes from the verifier's
-  `detail.reason` — `reason` is an identifier; free-text validator messages
-  are not surfaced — and `credentialId` from `detail.credential_id` when it
-  is a string.
+- **deny** — `code` (required) is the final denial code and `status`
+  (required) the HTTP status it maps to (`DENY_STATUS[code]`); `reason` comes
+  from the verifier's `detail.reason` — `reason` is an identifier; free-text
+  validator messages are not surfaced — and `credentialId` from
+  `detail.credential_id` when it is a string of at most 256 characters.
 - **allow** — no `code` or `status`; with a `url` verifier, `credentialId` and
   `receipt` are the raw `x-bolyra-credential-id` / `x-bolyra-receipt` response
-  headers (absent in `classical`/`command` mode). This `receipt` is the hosted
+  headers (absent in `classical`/`command` mode; a `credentialId` over 256
+  characters is dropped). This `receipt` is the hosted
   verifier's, distinct from the gate's own signed decision receipt
   (`onReceipt`, `bolyraAuthorization.receipt`).
 - `request` is the request context the gate built (`agent_name`,
@@ -362,7 +372,14 @@ The contract:
 - **Exactly once per gate invocation** (one `preflight` run), **after the final
   decision** — after nonce reservation and after the `onReceipt` sink's
   outcome. A sink failure that turns an allow into a 500 is reported as
-  `deny` / `internal_error` / 500; a replay as `nonce_replayed` / 403.
+  `deny` / `internal_error` / 500; a replay as `nonce_replayed` / 403. A
+  fault inside the gate's own denial path (e.g. the receipt signer throwing)
+  is still exactly one `deny` / `internal_error` / 500 Decision, thrown as
+  `BolyraDeniedError`.
+- **On allow, the order is: stash the decision → report → your method's own
+  `preflight`.** If the method's own preflight throws after an allow
+  Decision, the Decision stands (it reports the Bolyra decision, not the
+  method's).
 - **Observer failures never affect authorization.** A throw, a rejected
   Promise, or a broken thenable is logged with `console.error` (itself
   guarded) and contained; the verdict and response are unchanged and no

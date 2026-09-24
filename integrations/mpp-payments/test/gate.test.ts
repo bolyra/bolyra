@@ -12,6 +12,7 @@ import { BolyraDeniedError, BolyraGateConfigError } from '../src/errors';
 import { bolyraGate, BOLYRA_AUTHORIZATION_HEADER } from '../src/gate';
 import type { BolyraGateOptions, OperatorKey } from '../src/types';
 import { AUDIENCE, EXPIRY, NOW_UNIX, makeBundle, operatorKey } from './helpers';
+import * as receiptsModule from '../src/receipts';
 
 /** A minimal mock mppx server method (the shape `Method.toServer` returns). */
 function mockMethod() {
@@ -787,6 +788,53 @@ describe('onDecision (TD-2)', () => {
     expect(problem).not.toHaveProperty('reason');
     expect(onDecision.mock.calls[0][0]).toMatchObject({ outcome: 'deny', code: 'invalid_proof' });
     expect(onDecision.mock.calls[0][0]).not.toHaveProperty('reason');
+  });
+
+  test('decide() itself throwing (receipt signer throws inside denyWith) → one deny/internal_error/500 Decision and a BolyraDeniedError', async () => {
+    const real = receiptsModule.createGateReceiptSigner;
+    jest.spyOn(receiptsModule, 'createGateReceiptSigner').mockImplementation((config) => ({
+      ...real(config),
+      sign: () => { throw new Error('signer exploded'); },
+    }));
+    const onDecision = jest.fn();
+    const { method, verifySpy } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    for (const bundle of [undefined, await makeBundle()]) {
+      let caught: unknown;
+      try {
+        await drivePreflight(wrapped, requestWithBundle(bundle), { amount: '25' }, { credential: {} });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(BolyraDeniedError);
+      const err = caught as BolyraDeniedError;
+      expect(err.verdict).toMatchObject({ code: 'internal_error', message: 'authorization gate failed' });
+      expect(err.response.status).toBe(500);
+    }
+    expect(verifySpy).not.toHaveBeenCalled();
+    expect(onDecision).toHaveBeenCalledTimes(2);
+    for (const [d] of onDecision.mock.calls) {
+      expect(d).toEqual({
+        outcome: 'deny', code: 'internal_error', status: 500,
+        request: { agent_name: '', project_key: AUDIENCE, program: 'mpp', model: '', granted_capabilities: [] },
+      });
+    }
+  });
+
+  test('Decision.credentialId is capped at 256 chars on both allow (header) and deny (detail)', async () => {
+    const onDecision = jest.fn();
+    const long = 'c'.repeat(257);
+    stubVerifier({ verdict: 'allow', kind: 'classical' }, { 'x-bolyra-credential-id': long });
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, verifier: { kind: 'url', url: 'https://verify.example' } }));
+    await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    stubVerifier({ verdict: 'deny', kind: 'classical', code: 'untrusted_root', message: 'x', detail: { credential_id: long, reason: 'tier_2_exceeded' } });
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(await readProblem(denied!)).not.toHaveProperty('credential_id');
+    expect(onDecision).toHaveBeenCalledTimes(2);
+    expect(onDecision.mock.calls[0][0]).not.toHaveProperty('credentialId');
+    expect(onDecision.mock.calls[1][0]).not.toHaveProperty('credentialId');
+    expect(onDecision.mock.calls[1][0].reason).toBe('tier_2_exceeded');
   });
 
   test('missing_authorization deny: one Decision, 401, no reason', async () => {

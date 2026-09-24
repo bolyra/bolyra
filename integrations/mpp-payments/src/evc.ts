@@ -237,6 +237,9 @@ const DEFAULT_VERIFY_PATH = '/v1/verify';
  * `/`) becomes `/v1/verify`, keeping any query string. Every other URL,
  * including a custom path with a trailing slash and any query, is returned
  * byte-for-byte. Throws `TypeError` when `url` is not an absolute URL.
+ *
+ * Exported as a helper for pre-validating a configured verifier URL (e.g. at
+ * startup, or to log the exact endpoint the gate will POST to).
  */
 export function normalizeVerifierUrl(url: string): string {
   const parsed = new URL(url);
@@ -249,8 +252,11 @@ export function normalizeVerifierUrl(url: string): string {
 export interface UrlVerifierConfig {
   /** Verifier origin (→ `/v1/verify`) or full verify-route URL; see {@link normalizeVerifierUrl}. */
   url: string;
+  /** Bearer token sent as `Authorization: Bearer <token>`. */
   token?: string;
+  /** Host-owned timeout. Default 10 000 ms. */
   timeoutMs?: number;
+  /** Cap on the verdict response body; overflow fails closed. Default 1 MiB. */
   maxBodyBytes?: number;
 }
 

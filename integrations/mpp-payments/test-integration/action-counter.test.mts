@@ -11,6 +11,7 @@ import {
 } from './harness.mjs';
 import { isBolyraDeniedError, isBolyraGateConfigError } from '../src/errors.js';
 import { handleDenials } from '../src/handle-denials.js';
+import type { Decision, DenyCode } from '../src/types.js';
 import { makeBundle, AUDIENCE, NOW_UNIX } from '../test/helpers.js';
 import { Challenge, Credential } from 'mppx';
 import { testCharge } from './harness.mjs';
@@ -276,4 +277,22 @@ test('onDecision under real mppx: a throwing observer and a throwing logger chan
   } finally {
     console.error = originalError;
   }
+});
+
+test('Decision is a discriminated union: consumers narrow on outcome (compile-time contract)', () => {
+  const describe = (d: Decision): string => {
+    if (d.outcome === 'deny') {
+      const code: DenyCode = d.code; // required on deny
+      const status: number = d.status; // required on deny
+      return `${code}/${status}/${d.reason ?? ''}`;
+    }
+    // @ts-expect-error — an allow Decision has no `code`
+    void d.code;
+    // @ts-expect-error — an allow Decision has no `status`
+    void d.status;
+    return `allow/${d.credentialId ?? ''}/${d.receipt ?? ''}`;
+  };
+  const request = { agent_name: '', project_key: 'p', program: 'mpp', model: '', granted_capabilities: [] };
+  assert.equal(describe({ outcome: 'deny', code: 'expired', status: 403, request }), 'expired/403/');
+  assert.equal(describe({ outcome: 'allow', receipt: 'r', request }), 'allow//r');
 });

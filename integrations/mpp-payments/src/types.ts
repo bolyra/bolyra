@@ -11,6 +11,7 @@
  */
 
 import type { SignedReceipt } from '@bolyra/receipts';
+import type { UrlVerifierConfig } from './evc';
 
 /** The spec §9 denial taxonomy — exactly these 15 codes. */
 export type EvcDenyCode =
@@ -150,14 +151,7 @@ export type VerifierConfig =
    * POST the spec §2.1 request to a hosted verifier endpoint that returns one
    * spec §3.4 verdict (e.g. the Bolyra hosted-verify design-partner preview).
    */
-  | {
-      kind: 'url';
-      url: string;
-      token?: string;
-      timeoutMs?: number;
-      /** Cap on the verdict response body; overflow fails closed. Default 1 MiB. */
-      maxBodyBytes?: number;
-    };
+  | ({ kind: 'url' } & UrlVerifierConfig);
 
 /**
  * Reserve-before-act nonce storage (EVC v1 §7.3) for verifiers in host nonce
@@ -308,29 +302,41 @@ export interface GateDecision {
   };
 }
 
-/**
- * The gate's final decision for one gate invocation, as reported to
- * {@link BolyraGateOptions.onDecision}.
- */
-export interface Decision {
-  outcome: 'allow' | 'deny';
-  /** Deny only: the final denial code (after sink-failure latching). */
-  code?: DenyCode;
-  /** Deny only: `verdict.detail.reason`, when identifier-shaped (`/^[a-z_]{1,64}$/`); free text is not surfaced. */
-  reason?: string;
-  /**
-   * Allow: the raw `x-bolyra-credential-id` header from a `url` verifier.
-   * Deny: `verdict.detail.credential_id`, when a string. Absent otherwise.
-   */
-  credentialId?: string;
-  /**
-   * Allow only: the raw `x-bolyra-receipt` header from a `url` verifier
-   * (not decoded or verified). Distinct from the gate's own signed decision
-   * receipt (`onReceipt` / `bolyraAuthorization.receipt`).
-   */
-  receipt?: string;
-  /** Deny only: the HTTP status the denial maps to (`DENY_STATUS[code]`). */
-  status?: number;
+/** The request context every Decision carries (a copy). */
+interface DecisionBase {
   /** The spec §2.1 request context the gate built for this decision. */
   request: VerifierRequestContext;
 }
+
+/** An allow Decision: the gate authorized this invocation. */
+export interface AllowDecision extends DecisionBase {
+  outcome: 'allow';
+  /** The raw `x-bolyra-credential-id` header from a `url` verifier (≤ 256 chars). Absent otherwise. */
+  credentialId?: string;
+  /**
+   * The raw `x-bolyra-receipt` header from a `url` verifier (not decoded or
+   * verified). Distinct from the gate's own signed decision receipt
+   * (`onReceipt` / `bolyraAuthorization.receipt`).
+   */
+  receipt?: string;
+}
+
+/** A deny Decision: the gate refused this invocation. */
+export interface DenyDecision extends DecisionBase {
+  outcome: 'deny';
+  /** The final denial code (after sink-failure latching). */
+  code: DenyCode;
+  /** The HTTP status the denial maps to (`DENY_STATUS[code]`). */
+  status: number;
+  /** `verdict.detail.reason`, when identifier-shaped (`/^[a-z][a-z0-9_]{0,63}$/`); free text is not surfaced. */
+  reason?: string;
+  /** `verdict.detail.credential_id`, when a string of ≤ 256 chars. */
+  credentialId?: string;
+}
+
+/**
+ * The gate's final decision for one gate invocation, as reported to
+ * {@link BolyraGateOptions.onDecision}. A discriminated union: narrow on
+ * `outcome`.
+ */
+export type Decision = AllowDecision | DenyDecision;

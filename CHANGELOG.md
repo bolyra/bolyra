@@ -41,25 +41,34 @@ Decision evidence for the application, and a verifier-URL convention.
 
 - `onDecision` gate option: an observer called exactly once per gate
   invocation, after the final decision (after nonce reservation and the
-  `onReceipt` sink's outcome), with a `Decision` —
-  `{ outcome, code?, status?, reason?, credentialId?, receipt?, request }`.
+  `onReceipt` sink's outcome), with a `Decision`. `Decision` is a
+  discriminated union — `AllowDecision { outcome: 'allow', credentialId?,
+  receipt?, request }` | `DenyDecision { outcome: 'deny', code, status,
+  reason?, credentialId?, request }` — so consumers narrow on `outcome`.
   Observer throws, rejections, and broken thenables are logged and contained;
   they never change the verdict or response. Credential-less discovery under
   `enforce: 'payment'` and the `verify` hook do not report; under
   `enforce: 'always'` a 402→pay pair reports twice (discovery is its own gate
-  invocation). `Decision` is exported.
+  invocation). A fault inside the gate's own denial path (e.g. the receipt
+  signer throwing) is reported once as `deny` / `internal_error` and thrown as
+  `BolyraDeniedError`. `Decision`, `AllowDecision` and `DenyDecision` are
+  exported.
 - `callUrlVerifierWithEvidence(config, request)` returns
   `{ verdict, status?, credentialId?, receipt? }` — the verifier's HTTP status
   and the raw `x-bolyra-credential-id` / `x-bolyra-receipt` headers alongside
   the unchanged fail-closed verdict. `callUrlVerifier` keeps its return shape.
-  `UrlVerifierConfig` and `UrlVerifierEvidence` types are exported.
+  `UrlVerifierConfig` and `UrlVerifierEvidence` types are exported, as is
+  `normalizeVerifierUrl(url)`, a helper for pre-validating a configured
+  verifier URL. The `url` verifier variant is now typed as
+  `{ kind: 'url' } & UrlVerifierConfig` (same four fields).
 - `DenyProblem.reason` and `DenyProblem.credential_id`: copied from the deny
   verdict's `detail.reason` / `detail.credential_id` (e.g.
   `credential_not_active` from a hosted-registry deny). `reason` is an
-  identifier (`/^[a-z_]{1,64}$/`); free-text validator messages are not
+  identifier (`/^[a-z][a-z0-9_]{0,63}$/`, e.g. `tier_2_exceeded`); free-text validator messages are not
   surfaced — in the Problem Details body or in `Decision.reason` — and stay
-  on `BolyraDeniedError.verdict.detail` in-process. `credential_id` is copied
-  when it is a string. No other `detail` member reaches the body. `denyProblem` /
+  on `BolyraDeniedError.verdict.detail` in-process. `credential_id` (and
+  `Decision.credentialId`) is copied when it is a string of at most 256
+  characters; longer values are dropped. No other `detail` member reaches the body. `denyProblem` /
   `denyResponse` accept the verdict's `detail` (`DenyProblemInput`); existing
   `{ code, message }` callers are unaffected.
 

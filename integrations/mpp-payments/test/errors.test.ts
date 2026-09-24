@@ -236,15 +236,28 @@ describe('denyProblem: reason is an identifier (T8 hardening)', () => {
     expect(new BolyraDeniedError(verdict, denyResponse(verdict)).verdict.detail?.reason).toBe('Invalid circuit.name: x');
   });
 
-  test.each(['Credential_not_active', 'credential-not-active', 'a'.repeat(65), '', 'has space'])(
+  test.each(['Credential_not_active', 'credential-not-active', 'a'.repeat(65), '', 'has space', '2fa_failed', '_leading_underscore'])(
     'non-identifier reason %p is dropped', (reason) => {
       expect('reason' in denyProblem(deny('untrusted_root', 'x', { reason }))).toBe(false);
     },
   );
 
+  test('identifiers with digits after the first char pass (tier_2_exceeded)', () => {
+    expect(denyProblem(deny('scope_exceeded', 'x', { reason: 'tier_2_exceeded' })).reason).toBe('tier_2_exceeded');
+  });
+
   test('identifier reasons pass through (credential_not_active, 64 chars)', () => {
     expect(denyProblem(deny('untrusted_root', 'x', { reason: 'credential_not_active' })).reason).toBe('credential_not_active');
     expect(denyProblem(deny('untrusted_root', 'x', { reason: 'a'.repeat(64) })).reason).toBe('a'.repeat(64));
+  });
+
+  test('credential_id is capped at 256 chars: 64-hex and 256 pass, 257 is dropped', async () => {
+    const hex = 'ab'.repeat(32);
+    expect(denyProblem(deny('untrusted_root', 'x', { credential_id: hex })).credential_id).toBe(hex);
+    expect(denyProblem(deny('untrusted_root', 'x', { credential_id: 'c'.repeat(256) })).credential_id).toBe('c'.repeat(256));
+    const long = deny('untrusted_root', 'x', { credential_id: 'c'.repeat(257) });
+    expect('credential_id' in denyProblem(long)).toBe(false);
+    expect(await denyResponse(long).json()).not.toHaveProperty('credential_id');
   });
 
   test('credential_id keeps the plain string rule', () => {
