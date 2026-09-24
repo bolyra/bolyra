@@ -325,7 +325,9 @@ request)` returns `{ verdict, status?, credentialId?, receipt? }`: the same
 fail-closed verdict as `callUrlVerifier` (which still returns only the
 verdict), the verifier's HTTP `status` (absent when no response arrived), and
 the raw `x-bolyra-credential-id` / `x-bolyra-receipt` response headers
-(absent when not sent; not decoded or verified). The same URL rule applies.
+(absent when not sent; not decoded, not verified, and unbounded: the 256-character
+cap applies only to `Decision.credentialId` and the HTTP error body). The same URL
+rule applies.
 
 Both external modes speak the
 [External Verifier Contract v1](https://github.com/bolyra/bolyra/blob/main/spec/external-verifier-contract-v1.md)
