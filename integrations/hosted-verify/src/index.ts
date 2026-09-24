@@ -73,7 +73,7 @@ import { operatorKeyId } from './verify/operators';
 import { canonicalize } from '@bolyra/receipts';
 import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
-import { TIMEOUT, withRegistryDeadline } from './deadlines';
+import { BODY_READ_DEADLINE_MS, TIMEOUT, withDeadline, withRegistryDeadline } from './deadlines';
 import { cachedProbeRegistry } from './health-probe';
 import { credentialId, CREDENTIAL_ID_PATTERN, CREDENTIAL_ID_VERSION } from './credential-id';
 import { parseRegistration, type RegistryErrorCode } from './routes/credentials';
@@ -167,26 +167,59 @@ function requestIdFrom(request: Request): string {
 }
 
 /**
- * Read the request body with a hard byte cap. Returns the decoded text, or
- * null when the body exceeds the bound (a fail-closed `malformed_input`).
+ * The outcome of reading a request body. Every failure is a value, never a throw, so the
+ * caller always reaches its verdict (and its analytics point):
+ *   too_large     over the byte cap (declared or streamed)
+ *   stream_error  the body stream errored (client reset, malformed chunked encoding)
+ *   stall         the body did not finish within BODY_READ_DEADLINE_MS
  */
-async function readBodyCapped(request: Request, maxBytes: number): Promise<string | null> {
+type BodyRead = { kind: 'ok'; text: string } | { kind: 'too_large' } | { kind: 'stream_error' } | { kind: 'stall' };
+
+/** The wire message for a body stream that errored; never the error's own text. */
+const BODY_STREAM_ERROR_MESSAGE = 'request body could not be read';
+const BODY_STALL_MESSAGE = 'request body stalled';
+
+/** `reader.cancel()` is best-effort: a cancel that throws or rejects changes nothing. */
+function cancelQuietly(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  try {
+    reader.cancel().catch(() => {});
+  } catch {
+    // best-effort
+  }
+}
+
+/** Read the request body with a hard byte cap and a deadline (`BodyRead`). */
+async function readBodyCapped(request: Request, maxBytes: number): Promise<BodyRead> {
   const declared = request.headers.get('content-length');
-  if (declared !== null && Number(declared) > maxBytes) return null;
+  if (declared !== null && Number(declared) > maxBytes) return { kind: 'too_large' };
 
   const reader = request.body?.getReader();
-  if (reader === undefined) return '';
+  if (reader === undefined) return { kind: 'ok', text: '' };
+  const outcome = await withDeadline(drainCapped(reader, maxBytes), BODY_READ_DEADLINE_MS);
+  if (outcome === TIMEOUT) {
+    cancelQuietly(reader); // settles the pending read; the orphaned drain's result is ignored
+    return { kind: 'stall' };
+  }
+  return outcome;
+}
+
+/** The read loop behind `readBodyCapped`. Never rejects. */
+async function drainCapped(reader: ReadableStreamDefaultReader<Uint8Array>, maxBytes: number): Promise<BodyRead> {
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      return null;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        cancelQuietly(reader);
+        return { kind: 'too_large' };
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch {
+    return { kind: 'stream_error' };
   }
   const merged = new Uint8Array(total);
   let offset = 0;
@@ -194,7 +227,7 @@ async function readBodyCapped(request: Request, maxBytes: number): Promise<strin
     merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder('utf-8').decode(merged);
+  return { kind: 'ok', text: new TextDecoder('utf-8').decode(merged) };
 }
 
 /** The one wire message for every fail-closed configuration or quarantine 500. */
@@ -336,15 +369,20 @@ async function handleVerify(
   capabilityMap: CapabilityMap,
   env: Env,
 ): Promise<Decision> {
-  const text = await readBodyCapped(request, MAX_BODY_BYTES);
-  if (text === null) {
-    const verdict = deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`);
+  const read = await readBodyCapped(request, MAX_BODY_BYTES);
+  if (read.kind !== 'ok') {
+    const verdict =
+      read.kind === 'too_large'
+        ? deny('malformed_input', `request body exceeds the ${MAX_BODY_BYTES}-byte bound`)
+        : read.kind === 'stream_error'
+          ? deny('malformed_input', BODY_STREAM_ERROR_MESSAGE)
+          : deny('internal_error', BODY_STALL_MESSAGE); // no trustworthy input to judge: the §7.1 500
     return { verdict, response: verdictResponse(verdict, undefined, env) };
   }
 
   let body: unknown;
   try {
-    body = JSON.parse(text);
+    body = JSON.parse(read.text);
   } catch {
     const verdict = deny('malformed_input', 'request body is not valid JSON');
     return { verdict, response: verdictResponse(verdict, undefined, env) };
@@ -439,13 +477,18 @@ async function handleRegister(
   registry: DurableObjectStub<TenantRegistry>,
   requestId: string,
 ): Promise<RouteOutcome> {
-  const text = await readBodyCapped(request, MAX_REGISTRATION_BYTES);
-  if (text === null) {
-    return fail(400, 'malformed_input', `request body exceeds the ${MAX_REGISTRATION_BYTES}-byte bound`);
+  const read = await readBodyCapped(request, MAX_REGISTRATION_BYTES);
+  switch (read.kind) {
+    case 'too_large':
+      return fail(400, 'malformed_input', `request body exceeds the ${MAX_REGISTRATION_BYTES}-byte bound`);
+    case 'stream_error':
+      return fail(400, 'malformed_input', BODY_STREAM_ERROR_MESSAGE);
+    case 'stall':
+      return fail(500, 'internal_error', BODY_STALL_MESSAGE);
   }
   let raw: unknown;
   try {
-    raw = JSON.parse(text);
+    raw = JSON.parse(read.text);
   } catch {
     return fail(400, 'malformed_input', 'request body is not valid JSON');
   }

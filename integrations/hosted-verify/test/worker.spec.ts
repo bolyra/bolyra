@@ -9,7 +9,7 @@ import { SELF, env, createExecutionContext } from 'cloudflare:test';
 import { verifyReceipt } from '@bolyra/receipts';
 
 import worker, { type Env } from '../src/index';
-import { REGISTRY_DEADLINE_MS } from '../src/deadlines';
+import { BODY_READ_DEADLINE_MS, REGISTRY_DEADLINE_MS } from '../src/deadlines';
 import { cachedProbeRegistry, resetHealthProbeCache } from '../src/health-probe';
 import { ORG_ID_PATTERN } from '../src/tenants';
 import { bindingDigest } from '../src/verify/binding';
@@ -445,6 +445,106 @@ describe('fail-closed input handling', () => {
     bundle.bvp = 2;
     const v = await verdictOf(await postVerify(commit()));
     expect(v.code).toBe('unsupported_version');
+  });
+});
+
+/** A POST /v1/verify whose body is the given stream (no content-length: the reader loop decides). */
+function streamingVerify(body: ReadableStream<Uint8Array>): Request {
+  return new Request(`${BASE}/v1/verify`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${TOKENS.A.verifier}`, 'content-type': 'application/json' },
+    body,
+    duplex: 'half',
+  } as RequestInit);
+}
+
+/** Env with a capturing USAGE binding, plus the decision log lines. */
+function observed(): { env: Env; points: Array<{ blobs?: string[]; doubles?: number[] }> } {
+  const points: Array<{ blobs?: string[]; doubles?: number[] }> = [];
+  const usage = { writeDataPoint: (p: { blobs?: string[]; doubles?: number[] }) => { points.push(p); } } as unknown as AnalyticsEngineDataset;
+  return { env: { ...(env as Env), USAGE: usage }, points };
+}
+
+describe('body-stream failures stay inside the verdict boundary (E7)', () => {
+  it('a body stream that errors → 200 deny malformed_input, with its analytics point and decision line', async () => {
+    const { env: e, points } = observed();
+    const lines: unknown[][] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => { lines.push(args); });
+    let res: Response;
+    try {
+      res = await worker.fetch(streamingVerify(new ReadableStream({ pull: () => Promise.reject(new Error('connection reset')) })), e);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(200);
+    const v = await verdictOf(res);
+    expect(v.verdict).toBe('deny');
+    expect(v.code).toBe('malformed_input');
+    expect(v.message).toBe('request body could not be read');
+    expect(JSON.stringify(v)).not.toContain('connection reset');
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 5)).toEqual(['/v1/verify', `${ORGS.A}:verifier`, 'deny', 'malformed_input', 'classical']);
+    expect(points[0]!.doubles![1]).toBe(200);
+    const decision = lines.find((l) => l[0] === 'hosted-verify decision') as [string, Record<string, unknown>] | undefined;
+    expect(decision?.[1].code).toBe('malformed_input');
+  });
+
+  it('a streamed body over the cap (no content-length) → deny malformed_input "exceeds", stream cancelled', async () => {
+    let cancelled = false;
+    const chunk = new Uint8Array(256 * 1024);
+    const { env: e, points } = observed();
+    const res = await worker.fetch(
+      streamingVerify(new ReadableStream({ pull: (c) => c.enqueue(chunk), cancel: () => { cancelled = true; } })),
+      e,
+    );
+    expect(res.status).toBe(200);
+    const v = await verdictOf(res);
+    expect(v.code).toBe('malformed_input');
+    expect(v.message).toContain('exceeds');
+    expect(cancelled).toBe(true);
+    expect(points[0]!.blobs!.slice(2, 4)).toEqual(['deny', 'malformed_input']);
+  });
+
+  it('a cancel() that rejects on overflow is best-effort: still deny malformed_input', async () => {
+    const chunk = new Uint8Array(512 * 1024);
+    const res = await worker.fetch(
+      streamingVerify(new ReadableStream({ pull: (c) => c.enqueue(chunk), cancel: () => Promise.reject(new Error('cancel failed')) })),
+      env as Env,
+    );
+    expect(res.status).toBe(200);
+    expect((await verdictOf(res)).code).toBe('malformed_input');
+  });
+
+  it(`a body that never arrives → 500 deny internal_error "request body stalled" at ${BODY_READ_DEADLINE_MS} ms; no timer left`, async () => {
+    vi.useFakeTimers();
+    try {
+      const { env: e, points } = observed();
+      const pending = worker.fetch(streamingVerify(new ReadableStream({ pull: () => new Promise<void>(() => {}) })), e);
+      await vi.advanceTimersByTimeAsync(BODY_READ_DEADLINE_MS + 1);
+      const res = await pending;
+      expect(res.status).toBe(500);
+      const v = await verdictOf(res);
+      expect(v.code).toBe('internal_error');
+      expect(v.message).toBe('request body stalled');
+      expect(points).toHaveLength(1);
+      expect(points[0]!.blobs!.slice(2, 4)).toEqual(['deny', 'internal_error']);
+      expect(points[0]!.doubles![1]).toBe(500);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a normal request leaves no body-read timer behind', async () => {
+    vi.useFakeTimers();
+    try {
+      const res = await worker.fetch(verifyReq(TOKENS.A.verifier), env as Env);
+      expect(res.status).toBe(200);
+      expect((await verdictOf(res)).verdict).toBe('allow');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
