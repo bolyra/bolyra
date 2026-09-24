@@ -17,6 +17,37 @@ function tenant(overrides: Record<string, unknown> = {}): Record<string, unknown
   return { admin_token: ADMIN, verifier_token: VERIFIER, trusted_operators: [KEY], ...overrides };
 }
 
+/**
+ * A valid map of EXACTLY `bytes` bytes, built inside the grammars (no whitespace padding): the
+ * fewest tenants whose tokens (32–256 characters each) can add up to the size. Every token is a
+ * distinct letter repeated, so the repeated-token rule never fires.
+ */
+function sizedMap(bytes: number): string {
+  const letter = (i: number) => String.fromCharCode(97 + i);
+  const build = (lengths: number[]) => {
+    const map: Record<string, unknown> = {};
+    for (let i = 0; i < lengths.length / 2; i += 1) map[`org-${letter(i)}`] = tenant({ admin_token: letter(2 * i).repeat(lengths[2 * i] ?? 32), verifier_token: letter(2 * i + 1).repeat(lengths[2 * i + 1] ?? 32) });
+    return JSON.stringify(map);
+  };
+  for (let count = 1; count <= 12; count += 1) {
+    // Every token starts at the 32-character minimum and grows one character per byte, up to
+    // 256, in order — so every size between this count's minimum and maximum is reachable.
+    const lengths = new Array(2 * count).fill(32);
+    let extra = bytes - build(lengths).length;
+    if (extra < 0) break;
+    for (let t = 0; t < lengths.length && extra > 0; t += 1) {
+      const grow = Math.min(extra, 256 - 32);
+      lengths[t] += grow;
+      extra -= grow;
+    }
+    if (extra === 0) {
+      const raw = build(lengths);
+      if (raw.length === bytes) return raw;
+    }
+  }
+  throw new Error(`no map of exactly ${bytes} bytes`);
+}
+
 const cases: Array<{ name: string; raw: string | undefined }> = [
   { name: 'one valid tenant', raw: JSON.stringify({ acme: tenant() }) },
   { name: 'two valid tenants, distinct tokens', raw: JSON.stringify({ acme: tenant(), beta: tenant({ admin_token: 'c'.repeat(40), verifier_token: 'd'.repeat(40) }) }) },
@@ -68,6 +99,10 @@ const cases: Array<{ name: string; raw: string | undefined }> = [
   { name: 'tenant entry is null', raw: JSON.stringify({ acme: null }) },
   { name: 'a token pasted in as a field name', raw: JSON.stringify({ acme: { ...tenant(), [ADMIN]: 1 } }) },
   { name: 'just under the byte bound', raw: JSON.stringify({ acme: tenant() }).padEnd(4095, ' ') },
+  { name: 'a map of 3276 bytes (under the warning line)', raw: sizedMap(3276) },
+  { name: 'a map of 3277 bytes (at the warning line)', raw: sizedMap(3277) },
+  { name: 'a map of 4095 bytes built from tokens', raw: sizedMap(4095) },
+  { name: 'a map of 4096 bytes built from tokens', raw: sizedMap(4096) },
 ];
 
 describe('pilot/tenants-check agrees with the Worker loader', () => {
@@ -106,6 +141,35 @@ describe('pilot/tenants-check agrees with the Worker loader', () => {
     expect(result.errors[0]).toContain('tenant "acme"');
     expect(result.errors[0]).toContain('admin_token');
     expect(result.errors[0]).not.toContain('short');
+  });
+
+  describe('warns before the 4096-byte ceiling (80% = 3277 bytes)', () => {
+    it('3276 bytes: accepted, no warning', () => {
+      const result = checkTenants(sizedMap(3276));
+      expect(result.bytes).toBe(3276);
+      expect(result.ok).toBe(true);
+      expect(result.warnings).toEqual([]);
+    });
+    it('3277 bytes: accepted, with the growth warning', () => {
+      const result = checkTenants(sizedMap(3277));
+      expect(result.bytes).toBe(3277);
+      expect(result.ok).toBe(true);
+      expect(result.warnings).toEqual(['warning: 3277/4096 bytes (819 left) — plan tenant growth or raise the ceiling']);
+    });
+    it('4095 bytes: accepted, warning says 1 left', () => {
+      const result = checkTenants(sizedMap(4095));
+      expect(result.ok).toBe(true);
+      expect(result.warnings).toEqual(['warning: 4095/4096 bytes (1 left) — plan tenant growth or raise the ceiling']);
+    });
+    it('4096 bytes: the existing hard error, and no warning on top of it', () => {
+      const result = checkTenants(sizedMap(4096));
+      expect(result.ok).toBe(false);
+      expect(result.errors).toEqual(['serialized size must be under 4096 bytes (is 4096)']);
+      expect(result.warnings).toEqual([]);
+    });
+    it('a small map carries no warning', () => {
+      expect(checkTenants(JSON.stringify({ acme: tenant() })).warnings).toEqual([]);
+    });
   });
 
   it('exports exactly what the type sidecar declares, and the scanner decodes keys', () => {

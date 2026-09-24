@@ -6,6 +6,7 @@
 //
 // CLI (used by tenant.sh):
 //   node tenants-check.mjs < map.json           validate; print "ok: <n> tenants, <b> bytes"
+//                                               (plus a warning at >= 80% of the ceiling)
 //   node tenants-check.mjs --pass < map.json    same, then copy the validated map to stdout
 //                                               so it can be piped on (into wrangler secret
 //                                               put). The byte count reported is the count
@@ -16,6 +17,9 @@
 export const ORG_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/;
 export const TOKEN_PATTERN = /^[A-Za-z0-9._~+\/-]{32,256}$/;
 export const MAX_TENANTS_BYTES = 4096;
+// Warn from 80% of the ceiling (3277 bytes) up to it: one more tenant is roughly 300–750
+// bytes, so this is the last point at which growth can be planned rather than hit.
+const WARN_TENANTS_BYTES = Math.ceil(MAX_TENANTS_BYTES * 0.8);
 const TENANT_FIELDS = ['admin_token', 'verifier_token', 'trusted_operators', 'disabled'];
 const OPERATOR_KEY = /^[0-9]+:[0-9]+$/;
 
@@ -56,22 +60,30 @@ export function hasDuplicateKey(text) {
   return false;
 }
 
-/** @returns {{ ok: boolean, errors: string[], bytes: number, orgs: string[] }} */
+/**
+ * `warnings` never affect `ok`: they flag a map the Worker accepts today but that is close to
+ * a limit (the size ceiling). They carry byte counts only.
+ * @returns {{ ok: boolean, errors: string[], warnings: string[], bytes: number, orgs: string[] }}
+ */
 export function checkTenants(raw) {
   const errors = [];
+  const warnings = [];
   const orgs = [];
-  if (raw === undefined || raw === '') return { ok: false, errors: ['TENANTS is not configured (empty)'], bytes: 0, orgs };
+  if (raw === undefined || raw === '') return { ok: false, errors: ['TENANTS is not configured (empty)'], warnings, bytes: 0, orgs };
   const bytes = new TextEncoder().encode(raw).byteLength;
   if (bytes >= MAX_TENANTS_BYTES) errors.push(`serialized size must be under ${MAX_TENANTS_BYTES} bytes (is ${bytes})`);
+  else if (bytes >= WARN_TENANTS_BYTES) {
+    warnings.push(`warning: ${bytes}/${MAX_TENANTS_BYTES} bytes (${MAX_TENANTS_BYTES - bytes} left) — plan tenant growth or raise the ceiling`);
+  }
   if (hasDuplicateKey(raw)) errors.push('a JSON object repeats a key');
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { ok: false, errors: [...errors, 'not valid JSON'], bytes, orgs };
+    return { ok: false, errors: [...errors, 'not valid JSON'], warnings, bytes, orgs };
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return { ok: false, errors: [...errors, 'must be a JSON object keyed by org_id'], bytes, orgs };
+    return { ok: false, errors: [...errors, 'must be a JSON object keyed by org_id'], warnings, bytes, orgs };
   }
   const entries = Object.entries(parsed);
   if (entries.length === 0) errors.push('no tenants configured (the Worker rejects an empty map)');
@@ -109,7 +121,7 @@ export function checkTenants(raw) {
     if ('disabled' in value && typeof value.disabled !== 'boolean') errors.push(`${where}: disabled must be a boolean`);
     if (validOrg) orgs.push(orgId);
   }
-  return { ok: errors.length === 0, errors, bytes, orgs };
+  return { ok: errors.length === 0, errors, warnings, bytes, orgs };
 }
 
 // CLI entry (only when run directly under Node; the module is also imported by the tests).
@@ -142,6 +154,7 @@ if (typeof process !== 'undefined' && process.argv?.[1] && /tenants-check\.mjs$/
       process.stderr.write('tenants-check: REFUSED — this map would fail every tenant closed; nothing was pushed\n');
       process.exit(1);
     }
+    for (const w of result.warnings) process.stderr.write(`tenants-check: ${w}\n`);
     process.stderr.write(`tenants-check: ok: ${result.orgs.length} tenant(s) [${result.orgs.join(', ')}], ${result.bytes} bytes\n`);
     if (pass) process.stdout.write(raw);
   });
