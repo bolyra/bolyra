@@ -33,6 +33,7 @@ export type RegistryErrorCode =
   | 'binding_signature_invalid'
   | 'binding_expired'
   | 'credential_revoked'
+  | 'history_conflict'
   | 'not_found'
   | 'method_not_allowed'
   | 'tenant_disabled'

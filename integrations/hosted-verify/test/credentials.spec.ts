@@ -4,12 +4,25 @@
  * bodies, id handling, cross-tenant isolation, quarantine, configuration
  * defects. Storage isolation is per file, so every test starts with reset().
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELF, env, reset, runInDurableObject } from 'cloudflare:test';
 
 import { canonicalize } from '@bolyra/receipts';
 import worker from '../src/index';
-import { BASE, CREDENTIALS, ORGS, TOKENS, buildTestTenants, getCredential, postRegister, postRevoke } from './helpers';
+import {
+  BASE,
+  CREDENTIALS,
+  ORGS,
+  TOKENS,
+  buildTestTenants,
+  fixtureRegistration,
+  getCredential,
+  postRegister,
+  postRepairHistory,
+  postRevoke,
+  postVerify,
+  registerFixture,
+} from './helpers';
 import registrations from './fixtures/registrations.json';
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
 
@@ -107,6 +120,106 @@ describe('lifecycle over HTTP', () => {
     const history = g.history as Array<{ event: string; request_id: string }>;
     expect(history[0]!.request_id).toBe('0123456789abcdef-SJC');
     expect(history[1]!.request_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
+
+describe('durable revocation over HTTP: an audit-row failure never un-revokes', () => {
+  const tenantA = () => env.TENANT.get(env.TENANT.idFromName(ORGS.A));
+
+  async function seedRevokedEvent(id: string, ts: number, request_id: string): Promise<void> {
+    await runInDurableObject(tenantA(), (_i, state) => {
+      state.storage.sql.exec("INSERT INTO history (credential_id, event, ts, request_id) VALUES (?, 'revoked', ?, ?)", id, ts, request_id);
+    });
+  }
+
+  it('a normal revoke is exactly 204 with no audit header; repair-history on it → 200 clean', async () => {
+    await postRegister(F.valid.body);
+    const rev = await postRevoke(F.valid.credential_id);
+    expect(rev.status).toBe(204);
+    expect(rev.headers.get('x-bolyra-audit')).toBeNull();
+    expect(rev.headers.get('cache-control')).toBe('no-store');
+    const rep = await postRepairHistory(F.valid.credential_id);
+    expect(rep.status).toBe(200);
+    expect(await body(rep)).toEqual({ credential_id: F.valid.credential_id, audit: 'clean' });
+  });
+
+  it('history write fails → 204 + x-bolyra-audit on every retry, the credential denies, repair-history → 409 history_conflict', async () => {
+    const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+    expect((await body(await postVerify(allowAgentOnly))).verdict).toBe('allow');
+    await seedRevokedEvent(id, 1, 'seed');
+    for (let i = 0; i < 2; i++) {
+      const rev = await postRevoke(id);
+      expect(rev.status).toBe(204);
+      expect(await rev.text()).toBe('');
+      expect(rev.headers.get('x-bolyra-audit')).toBe('history_write_failed');
+      expect(rev.headers.get('cache-control')).toBe('no-store');
+      expect(rev.headers.get('x-bolyra-preview')).toBe('design-partner-preview');
+    }
+    const v = await body(await postVerify(allowAgentOnly));
+    expect(v.verdict).toBe('deny');
+    expect((v.detail as { reason: string }).reason).toBe('credential_not_active');
+    const g = await body(await getCredential(id));
+    expect(g.status).toBe('REVOKED');
+    expect(g.pending_history).toBe(true);
+    const rep = await postRepairHistory(id);
+    expect(rep.status).toBe(409);
+    expect((await body(rep)).error).toBe('history_conflict');
+  });
+
+  it('once the foreign row is gone, repair-history → 200 repaired and the audit row carries the first revocation', async () => {
+    const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+    await seedRevokedEvent(id, 1, 'seed');
+    const rev = await postRevoke(id, { headers: { 'cf-ray': '0123456789abcdef-SJC' } });
+    expect(rev.headers.get('x-bolyra-audit')).toBe('history_write_failed');
+    await runInDurableObject(tenantA(), (_i, state) => {
+      state.storage.sql.exec("DELETE FROM history WHERE credential_id = ? AND event = 'revoked'", id);
+    });
+    const rep = await postRepairHistory(id);
+    expect(rep.status).toBe(200);
+    expect(await body(rep)).toEqual({ credential_id: id, audit: 'repaired' });
+    const g = await body(await getCredential(id));
+    expect(g.pending_history).toBe(false);
+    const history = g.history as Array<{ event: string; request_id: string }>;
+    expect(history.map((h) => [h.event, h.request_id])).toEqual([
+      ['registered', expect.any(String)],
+      ['revoked', '0123456789abcdef-SJC'],
+    ]);
+    expect((await postRevoke(id)).headers.get('x-bolyra-audit')).toBeNull();
+  });
+
+  it('the failure is visible in the request log and the analytics code, never as a non-204', async () => {
+    const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+    await seedRevokedEvent(id, 1, 'seed');
+    const points: Array<{ blobs?: string[] }> = [];
+    const usage = { writeDataPoint: (p: { blobs?: string[] }) => { points.push(p); } } as unknown as AnalyticsEngineDataset;
+    const lines: unknown[][] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => { lines.push(args); });
+    let res: Response;
+    try {
+      res = await worker.fetch(
+        new Request(`${CREDENTIALS}/${id}/revoke`, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.admin}` } }),
+        { ...env, USAGE: usage },
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(204);
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'ok', 'revoke_history_failed']);
+    const logged = lines.find((l) => l[0] === 'hosted-verify registry request')?.[1] as Record<string, unknown> | undefined;
+    expect(logged?.code).toBe('revoke_history_failed');
+    expect(logged?.credential_id).toBe(id);
+  });
+
+  it('repair-history: unknown id → 404; no token → 401; verifier → 403', async () => {
+    const unknown = await postRepairHistory(F.valid2.credential_id);
+    expect(unknown.status).toBe(404);
+    expect((await body(unknown)).error).toBe('not_found');
+    const anon = await postRepairHistory(F.valid.credential_id, { token: null });
+    expect(anon.status).toBe(401);
+    const verifier = await postRepairHistory(F.valid.credential_id, { token: TOKENS.A.verifier });
+    expect(verifier.status).toBe(403);
+    expect(await body(verifier)).toEqual({ error: 'forbidden' });
   });
 });
 
@@ -234,6 +347,11 @@ describe('ids and methods', () => {
     const m3 = await SELF.fetch(`${CREDENTIALS}/${F.valid.credential_id}/revoke`, { method: 'GET', headers: h });
     expect(m3.status).toBe(405);
     expect(m3.headers.get('allow')).toBe('POST');
+    const m4 = await SELF.fetch(`${CREDENTIALS}/${F.valid.credential_id}/repair-history`, { method: 'GET', headers: h });
+    expect(m4.status).toBe(405);
+    expect(m4.headers.get('allow')).toBe('POST');
+    const unknown = await body(await SELF.fetch(`${BASE}/nope`, { headers: h }));
+    expect(unknown.routes).toContain('POST /v1/credentials/{id}/repair-history');
   });
 });
 
@@ -249,6 +367,7 @@ describe('auth, roles, tenants', () => {
       await postRegister(F.valid.body, { token: TOKENS.A.verifier }),
       await getCredential(F.valid.credential_id, { token: TOKENS.A.verifier }),
       await postRevoke(F.valid.credential_id, { token: TOKENS.A.verifier }),
+      await postRepairHistory(F.valid.credential_id, { token: TOKENS.A.verifier }),
     ]) {
       expect(res.status).toBe(403);
       expect(await body(res)).toEqual({ error: 'forbidden' });
@@ -315,6 +434,7 @@ describe('failures behind the registry call are the documented 500 with an analy
       register: async () => { throw new Error('Durable Object reset because its code was updated'); },
       get: async () => { throw new Error('Network connection lost.'); },
       revoke: async () => { throw new Error('Network connection lost.'); },
+      repairHistory: async () => { throw new Error('Network connection lost.'); },
       status: async () => { throw new Error('Network connection lost.'); },
     }),
     idFromName: (name: string) => env.TENANT.idFromName(name),
@@ -324,6 +444,7 @@ describe('failures behind the registry call are the documented 500 with an analy
       register: async () => ({ outcome: 'something_new' }),
       get: async () => ({ outcome: 'found', record: { credential_id: 'x', status: 'ACTIVE', operator_key: '1:2', binding_digest_hex: '0', binding_json: 'NOT JSON', registered_at: 1, revoked_at: null, history: [] } }),
       revoke: async () => 'something_new',
+      repairHistory: async () => 'something_new',
       status: async () => 'ACTIVE',
     }),
     idFromName: (name: string) => env.TENANT.idFromName(name),
@@ -350,6 +471,8 @@ describe('failures behind the registry call are the documented 500 with an analy
     ['an outcome outside the union on register', alien, 'POST', ''],
     ['stored text that is not JSON on get', alien, 'GET', `/${'a'.repeat(64)}`],
     ['an outcome outside the union on revoke', alien, 'POST', `/${'a'.repeat(64)}/revoke`],
+    ['a rejecting RPC on repair-history', throwing, 'POST', `/${'a'.repeat(64)}/repair-history`],
+    ['an outcome outside the union on repair-history', alien, 'POST', `/${'a'.repeat(64)}/repair-history`],
   ] as const)('%s → 500 internal_error, one data point recorded', async (_name, tenant, method, suffix) => {
     const points: Array<{ blobs?: string[] }> = [];
     const usage = { writeDataPoint: (p: { blobs?: string[] }) => { points.push(p); } } as unknown as AnalyticsEngineDataset;

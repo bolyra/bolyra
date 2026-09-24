@@ -147,6 +147,7 @@ describe('schema versioning', () => {
     expect(await again.revoke(ID_A, NOW + 1, 'r')).toBe('storage_error');
     expect(await again.get(ID_A)).toEqual({ outcome: 'storage_error' });
     expect(await again.register(input(ID_B))).toEqual({ outcome: 'storage_error' });
+    expect(await again.repairHistory(ID_A)).toBe('storage_error');
     expect(await versionOf(again)).toEqual([99]);
   });
 

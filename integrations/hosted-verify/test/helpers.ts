@@ -90,6 +90,11 @@ export async function postRevoke(id: string, opts: { token?: string | null; head
   });
 }
 
+export async function postRepairHistory(id: string, opts: { token?: string | null } = {}): Promise<Response> {
+  const token = opts.token === undefined ? TOKENS.A.admin : opts.token;
+  return SELF.fetch(`${CREDENTIALS}/${id}/repair-history`, { method: 'POST', headers: adminHeaders(token) });
+}
+
 /** The registration body `registerFixture` posts to `/v1/credentials`. */
 export interface FixtureRegistration {
   version: number;
