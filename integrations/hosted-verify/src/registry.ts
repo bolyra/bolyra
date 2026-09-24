@@ -23,6 +23,9 @@
  *              ACTIVE/REVOKED, DIFFERENT key or digest ─► { mismatch }  (an id-derivation
  *                          defect or a collision; never silently kept, never overwritten)
  *              REVOKED  ─► { revoked }   (terminal; nothing is replaced)
+ *              absent, tenant already holds MAX_ACTIVE_CREDENTIALS ACTIVE rows
+ *                       ─► { quota_exceeded }  (nothing stored; checked AFTER the
+ *                          existing-record arms, so the three above never hit the cap)
  *   revoke:    absent ─► 'absent'   ACTIVE ─► 'revoked' + history   REVOKED ─► 'unchanged' (pending ─► repair first)
  *              ACTIVE, history write fails ─► 'revoked_history_failed' (still REVOKED; see below)
  *              REVOKED, pending, repair finds a conflict ─► 'revoked_history_conflict'
@@ -73,9 +76,18 @@ export interface RegisterInput {
   request_id: string;
 }
 
+/**
+ * Per-tenant cap on ACTIVE credentials. Only revocation frees a slot: a row
+ * whose binding has expired but was never revoked is still ACTIVE and still
+ * counts (no reclamation). REVOKED rows never count. The count and the insert
+ * are one transaction, so two registrations at cap-1 cannot both succeed.
+ */
+export const MAX_ACTIVE_CREDENTIALS = 1000;
+
 export type RegisterResult =
   | { outcome: 'created' | 'unchanged'; registered_at: number }
   | { outcome: 'revoked' }
+  | { outcome: 'quota_exceeded' }
   | { outcome: 'expired' }
   | { outcome: 'mismatch' }
   | { outcome: 'invalid_input' }
@@ -283,6 +295,10 @@ export class TenantRegistry extends DurableObject<Env> {
             ? { outcome: 'revoked' }
             : { outcome: 'unchanged', registered_at: existing.registered_at };
         }
+        const active = this.ctx.storage.sql
+          .exec<{ n: number }>("SELECT count(*) AS n FROM credentials WHERE status = 'ACTIVE'")
+          .one().n;
+        if (active >= MAX_ACTIVE_CREDENTIALS) return { outcome: 'quota_exceeded' };
         this.ctx.storage.sql.exec(
           'INSERT INTO credentials (credential_id, operator_key, binding_digest, binding_json, status, registered_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, NULL)',
           input.credential_id,

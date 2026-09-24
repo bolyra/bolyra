@@ -10,6 +10,7 @@ import { SELF, env, reset, runInDurableObject } from 'cloudflare:test';
 import { canonicalize } from '@bolyra/receipts';
 import { BODY_READ_DEADLINE_MS } from '../src/deadlines';
 import worker from '../src/index';
+import { MAX_ACTIVE_CREDENTIALS } from '../src/registry';
 import {
   BASE,
   CREDENTIALS,
@@ -23,6 +24,7 @@ import {
   postRevoke,
   postVerify,
   registerFixture,
+  seedCredentials,
 } from './helpers';
 import registrations from './fixtures/registrations.json';
 import allowAgentOnly from '../../cli/test/fixtures/verify/allow-agent-only/request.json';
@@ -346,6 +348,40 @@ describe('registration checks, in order', () => {
     expect((g.binding as { agent_name: string }).agent_name).toBe("'); DROP TABLE credentials;--");
     // The tables survived: a second registration still works.
     expect((await postRegister(F.valid.body)).status).toBe(201);
+  });
+});
+
+describe('per-tenant limits (E6)', () => {
+  const tenant = (org: string) => env.TENANT.get(env.TENANT.idFromName(org));
+
+  async function registerWithPoints(payload: unknown, org: 'A' | 'B' = 'A'): Promise<{ res: Response; points: Array<{ blobs?: string[] }> }> {
+    const points: Array<{ blobs?: string[] }> = [];
+    const usage = { writeDataPoint: (p: { blobs?: string[] }) => { points.push(p); } } as unknown as AnalyticsEngineDataset;
+    const res = await worker.fetch(
+      new Request(CREDENTIALS, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKENS[org].admin}`, 'content-type': 'application/json' },
+        body: typeof payload === 'string' ? payload : JSON.stringify(payload),
+      }),
+      { ...env, USAGE: usage },
+    );
+    return { res, points };
+  }
+
+  it(`a tenant at ${MAX_ACTIVE_CREDENTIALS} ACTIVE credentials → 429 quota_exceeded, no Retry-After, nothing stored; another tenant is unaffected`, async () => {
+    await seedCredentials(tenant(ORGS.A), MAX_ACTIVE_CREDENTIALS);
+    const { res, points } = await registerWithPoints(F.valid.body);
+    expect(res.status).toBe(429);
+    expect(res.headers.get('retry-after')).toBeNull();
+    expect(await body(res)).toEqual({
+      error: 'quota_exceeded',
+      message: `this tenant has reached its active credential limit (${MAX_ACTIVE_CREDENTIALS}); revoke credentials before registering more`,
+    });
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'error', 'quota_exceeded']);
+    expect((await getCredential(F.valid.credential_id)).status).toBe(404);
+
+    expect((await postRegister(F.orgB.body, { token: TOKENS.B.admin })).status).toBe(201);
   });
 });
 

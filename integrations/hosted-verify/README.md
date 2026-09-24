@@ -245,6 +245,19 @@ The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of 
 A registry storage failure is `500 internal_error`; a quarantined tenant gets
 `503 tenant_disabled` on these routes.
 
+#### Limits
+
+- **1,000 ACTIVE credentials per tenant.** A registration that would create a
+  new credential beyond that is `429 quota_exceeded` (`{ "error": "quota_exceeded",
+  "message": "this tenant has reached its active credential limit (1000); revoke
+  credentials before registering more" }`), with no `Retry-After`: time frees
+  nothing, only revoking a credential does. REVOKED credentials never count. A
+  credential whose binding has expired but was never revoked is still ACTIVE and
+  still counts until it is revoked (there is no automatic reclamation). The cap
+  is checked after the existing-record checks, so re-registering a binding that
+  is already ACTIVE still answers `200` with its id at the cap, and a revoked one
+  still answers `409`.
+
 ### `GET /health`
 
 Unauthenticated. Returns service status, the **DESIGN PARTNER PREVIEW**

@@ -37,6 +37,7 @@ export type RegistryErrorCode =
   | 'not_found'
   | 'method_not_allowed'
   | 'tenant_disabled'
+  | 'quota_exceeded'
   | 'internal_error';
 
 const FIELDS: ReadonlySet<string> = new Set(['version', 'binding', 'signature', 'operator_pubkey']);

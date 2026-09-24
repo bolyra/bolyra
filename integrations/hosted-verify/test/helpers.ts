@@ -1,4 +1,4 @@
-import { SELF } from 'cloudflare:test';
+import { SELF, runInDurableObject } from 'cloudflare:test';
 import type { SignedReceipt } from '@bolyra/receipts';
 import { TOKENS } from './tenants-fixture';
 
@@ -137,4 +137,36 @@ export function fixtureRegistration(fixture: { bundle: string }): FixtureRegistr
     signature: { R8: { x: b.sig.R8.x, y: b.sig.R8.y }, S: b.sig.S },
     operator_pubkey: { x: b.agent.credential.operator_pubkey.x, y: b.agent.credential.operator_pubkey.y },
   };
+}
+
+/**
+ * Seed `count` credential rows with `status` straight into a tenant's registry
+ * (no signing, no RPC): fixture-shaped values, ids `<prefix>` + a 64-hex-char
+ * counter so seeds never collide with the fixtures' ids. One callback, one
+ * statement per row.
+ */
+export async function seedCredentials(
+  stub: DurableObjectStub,
+  count: number,
+  opts: { status?: 'ACTIVE' | 'REVOKED'; prefix?: string; now?: number } = {},
+): Promise<string[]> {
+  const status = opts.status ?? 'ACTIVE';
+  const prefix = opts.prefix ?? 'e';
+  const now = opts.now ?? 1_800_000_000;
+  const ids = Array.from({ length: count }, (_, i) => prefix + i.toString(16).padStart(64 - prefix.length, '0'));
+  await runInDurableObject(stub, (_instance, state) => {
+    for (const id of ids) {
+      state.storage.sql.exec(
+        'INSERT INTO credentials (credential_id, operator_key, binding_digest, binding_json, status, registered_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        id,
+        '1:2',
+        '0'.repeat(64),
+        '{"seed":true}',
+        status,
+        now,
+        status === 'REVOKED' ? now : null,
+      );
+    }
+  });
+  return ids;
 }
