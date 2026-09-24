@@ -11,6 +11,8 @@
  *                     ACTIVE in the tenant's registry.
  *   GET  /health      Unauthenticated status + preview labeling + the exact
  *                     list of checks this preview does / does not perform.
+ *                     Probes TENANTS, CAPABILITY_MAP and the registry; 503
+ *                     `status: "degraded"` when any of them fails.
  *
  *   POST /v1/credentials               Admin-token auth. Register an operator-signed
  *   GET  /v1/credentials/{id}          binding in the tenant's managed credential
@@ -23,8 +25,9 @@
  * an admin token, a verifier token and that tenant's trusted operator keys.
  * Tenant and role derive exclusively from which token matched; no route
  * accepts an org id from the request, and the ONLY code path that obtains a
- * registry stub is `registryFor(env, auth)` below — authenticated routing is
- * the isolation control.
+ * tenant's registry stub is `registryFor(env, auth)` below — authenticated
+ * routing is the isolation control. (`/health` probes one constant, non-tenant
+ * object, `__health__`; see `probeRegistry`.)
  *
  *   request ──► loadTenants(TENANTS) + loadCapabilityMap ──defect──► 500
  *                    │                     (verify: deny internal_error verdict;
@@ -262,9 +265,66 @@ function authorize(request: Request, env: Env, required: Role): Gate {
   return { kind: 'ok', auth, capabilityMap };
 }
 
-/** The ONLY way a registry stub is obtained: from a resolved authentication result. */
+/**
+ * The ONLY way a TENANT's registry stub is obtained: from a resolved authentication result.
+ * The one other stub path is `/health`'s liveness probe (`probeRegistry`), which names the
+ * constant `HEALTH_PROBE_ID` — never anything from the request.
+ */
 function registryFor(env: Env, auth: AuthResult): DurableObjectStub<TenantRegistry> {
   return env.TENANT.get(env.TENANT.idFromName(auth.org_id));
+}
+
+/**
+ * The object `/health` probes. It can never be a tenant's registry: `ORG_ID_PATTERN`
+ * (src/tenants.ts) forbids `_`, so no configured org id can name it (worker.spec.ts pins this).
+ */
+const HEALTH_PROBE_ID = '__health__';
+/** A well-formed credential id that is never registered: the probe reads, and expects ABSENT. */
+const HEALTH_PROBE_CREDENTIAL = '0'.repeat(64);
+
+/**
+ * Race a registry read against `REGISTRY_DEADLINE_MS`. The timer is cleared as soon as
+ * either side settles; a late rejection of the orphaned RPC is swallowed. A rejection
+ * that wins the race propagates to the caller. Shared by the verify path and `/health`
+ * so the two deadlines cannot drift.
+ */
+async function withRegistryDeadline<T>(read: Promise<T>): Promise<T | typeof TIMEOUT> {
+  read.catch(() => {}); // never an unhandled rejection after the deadline wins
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof TIMEOUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMEOUT), REGISTRY_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([read, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * `/health`'s registry liveness probe: one status read of a constant id on the
+ * constant `HEALTH_PROBE_ID` object, under the verify path's deadline. Liveness only —
+ * `registry_enforced` stays the build marker, since a live object is not proof of enforcement.
+ */
+async function probeRegistry(env: Env): Promise<'ok' | 'unavailable' | 'timeout'> {
+  try {
+    const outcome = await withRegistryDeadline(
+      env.TENANT.get(env.TENANT.idFromName(HEALTH_PROBE_ID)).status(HEALTH_PROBE_CREDENTIAL),
+    );
+    if (outcome === TIMEOUT) return 'timeout';
+    switch (outcome) {
+      case 'ABSENT':
+      case 'ACTIVE':
+      case 'REVOKED':
+        return 'ok';
+      case 'invalid_input':
+      case 'storage_error':
+        return 'unavailable';
+    }
+    return 'unavailable'; // a status the declared union does not name
+  } catch {
+    return 'unavailable';
+  }
 }
 
 /** Result of the registry membership check that follows the classical checks. */
@@ -273,22 +333,14 @@ type Membership =
   | { kind: 'not_active'; credential_id: string }
   | { kind: 'unavailable'; message: 'registry unavailable' | 'registry timeout' };
 
-/**
- * Race the registry read against the deadline. The timer is cleared as soon
- * as either side settles; a late rejection of the orphaned RPC is swallowed.
- */
+/** Race the registry read against the deadline (`withRegistryDeadline`) and classify it. */
 async function readMembership(
   registry: DurableObjectStub<TenantRegistry>,
   credential_id: string,
 ): Promise<Membership> {
   const read = registry.status(credential_id);
-  read.catch(() => {}); // never an unhandled rejection after the deadline wins
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<typeof TIMEOUT>((resolve) => {
-    timer = setTimeout(() => resolve(TIMEOUT), REGISTRY_DEADLINE_MS);
-  });
   try {
-    const outcome = await Promise.race([read, deadline]);
+    const outcome = await withRegistryDeadline(read);
     if (outcome === TIMEOUT) return { kind: 'unavailable', message: 'registry timeout' };
     switch (outcome) {
       case 'ACTIVE':
@@ -303,8 +355,6 @@ async function readMembership(
     return unknownStatus(outcome);
   } catch {
     return { kind: 'unavailable', message: 'registry unavailable' };
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -593,24 +643,36 @@ async function handleRepairHistory(registry: DurableObjectStub<TenantRegistry>, 
 /** `/v1/credentials`, `/v1/credentials/{id}`, `…/{id}/revoke`, `…/{id}/repair-history` — nothing else. */
 const CREDENTIALS_ROUTE = /^\/v1\/credentials(?:\/([^/]+)(\/revoke|\/repair-history)?)?$/;
 
-function handleHealth(env: Env): Response {
-  // /health is the diagnostic surface: a broken TENANTS is REPORTED here at
-  // 200, never thrown (the authenticated routes are the ones that fail closed).
+async function handleHealth(env: Env): Promise<Response> {
+  // /health is the diagnostic surface: a broken TENANTS or CAPABILITY_MAP, or an
+  // unreachable registry, is REPORTED here, never thrown (the authenticated routes are
+  // the ones that fail closed). A degraded service answers 503 so a probe that checks
+  // only the HTTP status cannot mistake it for healthy.
   let tenants: 'ok' | 'invalid' = 'ok';
   try {
     loadTenants(env.TENANTS);
   } catch {
     tenants = 'invalid';
   }
-  return json(200, {
-    status: 'ok',
+  let capability_map: 'ok' | 'invalid' = 'ok';
+  try {
+    loadCapabilityMap(env.CAPABILITY_MAP);
+  } catch {
+    capability_map = 'invalid';
+  }
+  const registry = await probeRegistry(env);
+  const healthy = tenants === 'ok' && capability_map === 'ok' && registry === 'ok';
+  return json(healthy ? 200 : 503, {
+    status: healthy ? 'ok' : 'degraded',
     service: 'bolyra-hosted-verify',
     phase: 'DESIGN PARTNER PREVIEW — not a production service, no SLA',
     contract: 'external-verifier-contract-v1 (spec/external-verifier-contract-v1.md)',
     verifier_kind: 'classical',
     nonce_mode: 'host',
     tenants,
-    registry: 'durable-object',
+    capability_map,
+    registry,
+    registry_kind: 'durable-object',
     credential_id_version: CREDENTIAL_ID_VERSION,
     // Build marker: true for every build that consults the registry on /v1/verify.
     // worker.spec.ts asserts it; a deploy check can assert it against the live URL.
@@ -697,8 +759,12 @@ export default {
         code = 'method_not_allowed';
         response = errorJson(405, 'method_not_allowed', undefined, { allow: 'GET' });
       } else {
-        outcome = 'allow';
-        response = handleHealth(env);
+        response = await handleHealth(env);
+        if (response.ok) {
+          outcome = 'allow';
+        } else {
+          code = 'degraded';
+        }
       }
     } else if (url.pathname === '/v1/verify') {
       route = '/v1/verify';

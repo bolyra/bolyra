@@ -110,7 +110,7 @@ has passed step 5, edit the fixture key out of `trustedOperators` and re-sync.
 ```bash
 cd integrations/hosted-verify && npm ci && npx wrangler login  # founder account
 # macOS keychain + openssl are assumed (tenant.sh). Confirm the Worker is live and enforcing:
-curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status, tenants, registry_enforced, receipts_enabled}'
+curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status, tenants, capability_map, registry, registry_enforced, receipts_enabled}'
 # Alarm: .github/workflows/hosted-verify-health.yml probes /health every 15 minutes (best effort)
 # and fails the run unless status/tenants are "ok" and registry_enforced is true. GitHub sends
 # scheduled-run failure notifications to the account that last edited the `cron` line in the
@@ -126,9 +126,11 @@ curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status,
 # HOSTED_VERIFY_HEALTH_URL repository variable. Cloudflare offers no per-Worker error-rate
 # notification on this account (the only Workers type, "Workers Observability: Real-Time Issue",
 # could not be enabled). A TENANTS defect (unset or invalid) or the Worker being down trips this
-# probe. A malformed CAPABILITY_MAP does NOT: /health stays green while every authenticated request
-# answers 500 — that one shows only in `npx wrangler tail --env=` or a failed authenticated request
-# (the example). `registry_enforced` is a build marker, not a registry liveness check.
+# probe. `/health` also probes the registry Durable Object (a status read under the 2 s verify
+# deadline) and parses CAPABILITY_MAP, and answers 503 `status: "degraded"` (with `registry:
+# "unavailable"|"timeout"` or `capability_map: "invalid"`) when either fails, so on a build that
+# emits those fields a registry outage or a malformed CAPABILITY_MAP trips the probe too.
+# `registry_enforced` is a build marker, not a registry liveness check (`registry` is the liveness).
 ```
 
 ## 1. Onboard a partner

@@ -56,10 +56,14 @@ jobs:
             exit 1
           fi
 
-          if ! jq -e -s 'length == 1 and (.[0]|type) == "object" and .[0].status == "ok" and .[0].tenants == "ok" and .[0].registry_enforced == true' body.json > /dev/null; then
+          # TEMPORARY soft form until the build that emits registry/capability_map is deployed (the OPS
+          # step flips both to strict `== "ok"`): the old build reports registry:"durable-object" and no
+          # registry_kind, so registry is checked only when registry_kind is present; an absent
+          # capability_map passes.
+          if ! jq -e -s 'length == 1 and (.[0]|type) == "object" and .[0].status == "ok" and .[0].tenants == "ok" and .[0].registry_enforced == true and (if (.[0]|has("registry_kind")) then .[0].registry == "ok" else true end) and ((.[0].capability_map // "ok") == "ok")' body.json > /dev/null; then
             echo "::error::health probe: assertions failed"
-            jq -r -s 'if length==1 and (.[0]|type)=="object" then "single_object=true status_ok=\(.[0].status=="ok") tenants_ok=\(.[0].tenants=="ok") registry_enforced=\(.[0].registry_enforced==true)" else "single_object=false" end' body.json
+            jq -r -s 'if length==1 and (.[0]|type)=="object" then "single_object=true status_ok=\(.[0].status=="ok") tenants_ok=\(.[0].tenants=="ok") registry_enforced=\(.[0].registry_enforced==true) registry_ok=\(if (.[0]|has("registry_kind")) then .[0].registry=="ok" else "n/a" end) capability_map_ok=\((.[0].capability_map // "ok")=="ok")" else "single_object=false" end' body.json
             exit 1
           fi
 
-          echo "health ok: status=ok tenants=ok registry_enforced=true"
+          echo "health ok: status=ok tenants=ok registry_enforced=true registry/capability_map ok or not yet emitted (soft)"
