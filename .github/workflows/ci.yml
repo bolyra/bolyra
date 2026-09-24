@@ -203,6 +203,7 @@ jobs:
       # allow with the same credential id after it.
       - name: Boot the Worker under wrangler dev and smoke it
         working-directory: integrations/hosted-verify
+        timeout-minutes: 5
         run: npm run smoke:dev
       # The provisioning script and its validator must stay runnable on a plain Linux
       # shell (no keychain here): syntax, both mjs modules parse, the usage path, the
