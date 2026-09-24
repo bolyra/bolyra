@@ -187,6 +187,15 @@ jobs:
         working-directory: integrations/hosted-verify
       - run: npx vitest run
         working-directory: integrations/hosted-verify
+      # The workers pool does not enforce workerd's entry-module rules: on 2026-09-20 main
+      # was undeployable across two merged PRs (src/index.ts exported a plain constant and
+      # workerd refused the module) while the suite ran green. So boot the real Worker
+      # under `wrangler dev` (fresh state dir, placeholder tenant) and prove 401 without
+      # auth, deny untrusted_root/credential_not_active before registration, and 201 then
+      # allow with the same credential id after it.
+      - name: Boot the Worker under wrangler dev and smoke it
+        working-directory: integrations/hosted-verify
+        run: npm run smoke:dev
       # The provisioning script and its validator must stay runnable on a plain Linux
       # shell (no keychain here): syntax, both mjs modules parse, the usage path, the
       # empty-map guard in tenants-put.mjs (it must refuse without starting wrangler),
