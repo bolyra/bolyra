@@ -218,8 +218,10 @@ jobs:
       # shell (no keychain here): syntax, both mjs modules parse, the usage path, the
       # empty-stdin guard in tenants-put.mjs (it must refuse without starting wrangler),
       # the EMPTY map `{}` (E13: valid, the validator only warns; tenants-put refuses it
-      # without --allow-empty and pushes it with the flag), an empty registry, and the
-      # validator CLI on the documented dev example. The stand-in below prints wrangler's
+      # without --allow-empty and pushes it with the flag), an empty registry, `init` writing
+      # the .initialized marker and a mutating command refusing a registry without it (E2;
+      # sync dies there, before the keychain), and the validator CLI on the documented dev
+      # example. The stand-in below prints wrangler's
       # own success line because tenants-put.mjs reports success only when it has seen one.
       - name: Provisioning script and validator
         working-directory: integrations/hosted-verify
@@ -234,6 +236,8 @@ jobs:
           printf '{}' | node pilot/tenants-put.mjs --env=ci && exit 1 || test $? -eq 1
           printf '{}' | PATH="$d:$PATH" node pilot/tenants-put.mjs --env=ci --allow-empty | grep -q 'Success'
           TENANTS_DIR="$(mktemp -d)" bash pilot/tenant.sh show
+          d2="$(mktemp -d)"; TENANTS_DIR="$d2" bash pilot/tenant.sh init && test -f "$d2/.initialized"
+          d3="$(mktemp -d)"; out="$(TENANTS_DIR="$d3" bash pilot/tenant.sh sync 2>&1)" && exit 1 || grep -q 'not initialized' <<<"$out"
           sed -n 's/^TENANTS=//p' .dev.vars.example | node pilot/tenants-check.mjs
           out="$(printf '{}' | node pilot/tenants-check.mjs 2>&1)" && grep -q 'empty map: every request will be denied' <<<"$out"
           bash -n pilot/tenant-lock-check.sh

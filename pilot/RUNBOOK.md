@@ -21,8 +21,9 @@ Commercials + success criteria: `docs/pilot/design-partner-brief.md` and
 | Staging Worker | `bolyra-hosted-verify-staging.<account>.workers.dev` — `wrangler … --env staging`; its own secrets, its own Durable Object namespace, its own analytics dataset (`bolyra_hosted_verify_usage_staging`); configured as `env.staging` in `wrangler.jsonc` |
 | Tenant tokens | macOS keychain, service `bolyra-hosted-verify` (`-staging` for staging), accounts `tenant-<org_id>-admin` and `tenant-<org_id>-verifier`; written and read only by `integrations/hosted-verify/pilot/tenant.sh` |
 | Live tenant map | wrangler secret `TENANTS` (JSON `org_id` → tokens, `trusted_operators`, `disabled`; **replaced whole** on every put) — only ever written by `tenant.sh sync`, which validates the map first |
-| Tenant registry | `pilot/tenants/<org_id>.json` (gitignored; template `pilot/partner-config.example.json`; no secrets — org id, status, operator keys, contacts) |
-| Policy record | `pilot/tenants/<org_id>.policy.json` (template `pilot/policy-config.example.json`) |
+| Tenant registry | `$HOME/.bolyra/tenants-production/<org_id>.json` (staging: `$HOME/.bolyra/tenants-staging/`; `TENANTS_DIR` overrides) — **off the git checkout**, usable only once initialized (see [Initializing or migrating the registry](#initializing-or-migrating-the-registry)); template `pilot/partner-config.example.json`; no secrets — org id, status, operator keys, contacts. The old in-checkout `pilot/tenants/` and `pilot/tenants-staging/` are the legacy location (still gitignored) |
+| Policy record | `$HOME/.bolyra/tenants-production/<org_id>.policy.json` beside the tenant record (template `pilot/policy-config.example.json`) |
+| Registry lock | `$HOME/.bolyra/tenants-<env>/.lock` (`<env>` = `production` or `staging`; `$TENANTS_DIR/.lock` under an override) |
 | Trust anchor | each tenant's `trusted_operators` **plus** that tenant's managed credential registry: an allow needs a trusted key **and** a registered, unrevoked binding |
 | Managed credential registry | one SQLite Durable Object per tenant (`TENANT` binding, class `TenantRegistry`), reachable only through `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `POST /v1/credentials/{id}/repair-history` with the tenant's **admin** token. Persists the signed binding, operator key, credential id, status, and timestamps; never presentations, proofs, nonces, tokens, or IPs. Revoked records are kept forever |
 | Capability map | `CAPABILITY_MAP` var in `wrangler.jsonc` (both environments): `@bolyra/mpp`'s `mpp:financial:*` vocabulary merged over the built-in messaging default. Global, not per tenant; a change needs a deploy (`wrangler deploy` re-sets vars from the file) |
@@ -63,9 +64,73 @@ loader by `test/tenants-check.spec.ts` — and refuses to push anything that
 would fail. `wrangler secret put` is write-only (the live map cannot be read
 back), so the keychain items plus the registry files **are** the authoritative
 copy. Back the keychain up; lose it and the only recovery is re-keying every
-tenant. Every command except `show` holds a per-environment lock for its
-whole run, so two operators cannot interleave a quarantine and a sync; an
-interrupt takes effect only after the in-flight put has finished.
+tenant. Every command except `show` holds a per-environment lock
+(`$HOME/.bolyra/tenants-<env>/.lock`) for its whole run, so two operators — or
+two git worktrees — cannot interleave a quarantine and a sync; an interrupt
+takes effect only after the in-flight put has finished.
+
+### Initializing or migrating the registry
+
+The registry is one directory per environment, **outside** any git checkout:
+`$HOME/.bolyra/tenants-production` and `$HOME/.bolyra/tenants-staging`
+(`TENANTS_DIR=<dir>` overrides it; the lock is always `<dir>/.lock`). It used
+to live in the checkout (`pilot/tenants`, `pilot/tenants-<env>`), where a
+removed worktree took the real records with it and two worktrees took two
+different locks while writing the one Worker.
+
+Nothing mutates a registry until it carries the `.initialized` marker: `add`,
+`rotate`, `disable`, `enable`, `remove` and `sync` (dry runs included) refuse
+with `registry <dir> is not initialized` and create nothing. `show` works
+either way and says which. There are exactly two ways to initialize one:
+
+```bash
+cd integrations/hosted-verify
+
+# A NEW environment (no records anywhere yet): writes the marker into an empty directory.
+pilot/tenant.sh init
+HOSTED_VERIFY_ENV=staging pilot/tenant.sh init
+
+# EXISTING records (the legacy checkout location, or a backup): copies every <org_id>.json and
+# <org_id>.policy.json into <registry>/.candidate/, validates the COMPLETE candidate (each
+# status; both keychain tokens of every active/disabled record; the assembled map through the
+# same validator as `sync --dry-run`), then renames each file into the registry and writes the
+# marker LAST. --from must be an absolute path. The source is never modified.
+pilot/tenant.sh migrate --from /absolute/path/to/old/tenants
+pilot/tenant.sh show                      # confirm; THEN delete the source by hand
+```
+
+Both take the lock. Both refuse a registry that is already initialized, and
+one that holds records or a `.candidate/` without the marker — `init` cannot
+bless a partial migration and `migrate` never merges. A migrate whose
+validation fails commits nothing (no records, no marker, the candidate
+removed) and names the source file to fix.
+
+**Interrupted migrate.** Only a SIGKILL (or a crash) can stop a migrate
+between its first rename and the marker; Ctrl-C/TERM during the commit is
+deferred until it has finished. What it leaves is records (and possibly a
+`.candidate/`) without a marker. Every command — `init` and `migrate`
+included — then refuses with `has records but no marker: it looks like an
+interrupted migrate`; there is no automatic repair. If the lock was retained,
+remove it first as in "Recovering a retained lock" (no migrate can be
+running). Then delete the partially migrated `*.json` files and `.candidate/`
+from the NEW registry directory (never the source — it was not touched) and
+re-run the same `migrate --from`.
+
+**One-time move of the founder's existing records (do this BEFORE any other
+provisioning mutation).** Until then the real production and staging records
+are still in the founder's checkout, under `pilot/tenants` and
+`pilot/tenants-staging`, and every mutating command refuses the new, empty
+default location:
+
+```bash
+cd ~/Projects/bolyra/integrations/hosted-verify
+pilot/tenant.sh migrate --from ~/Projects/bolyra/pilot/tenants
+HOSTED_VERIFY_ENV=staging pilot/tenant.sh migrate --from ~/Projects/bolyra/pilot/tenants-staging
+pilot/tenant.sh show && HOSTED_VERIFY_ENV=staging pilot/tenant.sh show
+# every tenant listed with its status and both tokens "yes"; then delete the two old
+# directories by hand. Do NOT `init` either environment instead: that would start an empty
+# registry beside the real records, and the next sync would push a map without them.
+```
 
 ### Recovering a retained lock
 
@@ -80,7 +145,9 @@ matches, and confirm that no Wrangler uploader remains on this machine; if
 you cannot establish local quiescence, leave the lock in place.
 
 Once local quiescence is established, remove only the retained lock
-directory for the affected environment, then run `sync` for that same
+directory for the affected environment — `$HOME/.bolyra/tenants-<env>/.lock`
+(`<env>` = `production` or `staging`; `$TENANTS_DIR/.lock` under an override;
+the refusal message prints the exact path) — then run `sync` for that same
 environment to re-put the intended, validated map (add `--allow-empty` only
 when the intended map is the deliberate empty one, every record removed). Removing the
 lock does not cancel or roll back any request. Local process checks cannot
@@ -167,9 +234,9 @@ cd integrations/hosted-verify
 pilot/tenant.sh add <org_id> <their-x>:<their-y>[,<second-x>:<second-y>] --with-fixture-key
 
 # 2. Fill in the human fields of the registry + policy records (contacts, tier cap) — these
-#    live at the REPO ROOT, not under integrations/hosted-verify:
-#      <repo root>/pilot/tenants/<org_id>.json          (created by add; template <repo root>/pilot/partner-config.example.json)
-#      <repo root>/pilot/tenants/<org_id>.policy.json   (copy <repo root>/pilot/policy-config.example.json)
+#    live OFF the checkout, in the registry directory (`pilot/tenant.sh show` prints it):
+#      $HOME/.bolyra/tenants-production/<org_id>.json          (created by add; template <repo root>/pilot/partner-config.example.json)
+#      $HOME/.bolyra/tenants-production/<org_id>.policy.json   (copy <repo root>/pilot/policy-config.example.json)
 
 # 3. A second key later, or a re-issued one: edit trustedOperators in the registry file
 #    and re-sync — takes effect on the next request, no redeploy. Never empty the list;
@@ -354,7 +421,7 @@ One export per source (chained and unchained receipts must not share a file).
 Run these from the **repo root** (`pilot/scripts/` lives there).
 
 Always pass `--signer` with the expected receipt-signer address from the
-pilot's policy record (`pilot/tenants/<org_id>.policy.json` →
+pilot's policy record (`$HOME/.bolyra/tenants-production/<org_id>.policy.json` →
 `receipts.signer`; the live value is at
 `https://bolyra-hosted-verify.<account>.workers.dev/.well-known/bolyra-signers.json`) —
 that is what proves the receipts were signed by *your* key, not just
@@ -468,7 +535,7 @@ npm ci && npm test && npm run typecheck
 # create a stub Worker (non-interactively it answers its own prompt with yes).
 npm run deploy:staging                                        # deploys, then verifies it (see "Post-deploy verification"); note the Current Version ID
 npx wrangler secret put RECEIPT_SIGNER_KEY --env staging      # a fresh 0x-hex secp256k1 key
-HOSTED_VERIFY_ENV=staging pilot/tenant.sh add <org_id> <x:y> --with-fixture-key  # staging keychain + <repo root>/pilot/tenants-staging/; the example below signs with the fixture key
+HOSTED_VERIFY_ENV=staging pilot/tenant.sh add <org_id> <x:y> --with-fixture-key  # staging keychain + $HOME/.bolyra/tenants-staging/ (initialized or migrated first); the example below signs with the fixture key
 curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '{status, tenants, capability_map, registry, registry_enforced, receipts_enabled}'
 # A secret put takes a few seconds to reach every isolate: /health can still say tenants "invalid" right after the put; re-check after ~10 s before reading anything into it.
 

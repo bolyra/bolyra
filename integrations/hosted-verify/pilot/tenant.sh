@@ -6,9 +6,13 @@
 #   * the two bearer tokens per tenant live in the macOS keychain
 #       service: bolyra-hosted-verify   (bolyra-hosted-verify-<env> when HOSTED_VERIFY_ENV is set)
 #       account: tenant-<org_id>-admin / tenant-<org_id>-verifier
-#   * the tenant registry is pilot/tenants/<org_id>.json at the repo root (one file per
-#     tenant; template pilot/partner-config.example.json). Files contain NO secrets — the
-#     org id, status, the tenant's trusted operator keys, and human contact fields.
+#   * the tenant registry is $TENANTS_DIR/<org_id>.json, OFF the git checkout: by default
+#     $HOME/.bolyra/tenants-production, or $HOME/.bolyra/tenants-<env> under HOSTED_VERIFY_ENV
+#     (one file per tenant; template pilot/partner-config.example.json at the repo root).
+#     Files contain NO secrets — the org id, status, the tenant's trusted operator keys, and
+#     human contact fields. A registry is usable only once it is initialized (the
+#     $TENANTS_DIR/.initialized marker, written by `init` or `migrate`); every command that
+#     changes it refuses until then.
 #   * the Worker reads the TENANTS wrangler secret: one JSON object mapping org_id to
 #     { admin_token, verifier_token, trusted_operators, disabled }. `sync` assembles it
 #     from the registry + keychain, validates it with tenants-check.mjs (the rules the
@@ -18,6 +22,18 @@
 # always go through `sync`, which includes every tenant whose status is active or disabled.
 #
 # Usage:
+#   ./tenant.sh init                  initialize an EMPTY registry for a new environment
+#                                     (refuses one that holds records, a .candidate/, or is
+#                                     already initialized)
+#   ./tenant.sh migrate --from <absolute dir>
+#                                     bring an existing registry (e.g. the legacy checkout
+#                                     directory pilot/tenants) into $TENANTS_DIR: copies every
+#                                     <org_id>.json and *.policy.json into .candidate/,
+#                                     validates the whole candidate (status, both keychain
+#                                     tokens of every active/disabled record, the assembled
+#                                     map), then renames each file in and writes the marker
+#                                     LAST. Refuses a destination with records or a marker;
+#                                     never modifies the source (delete it by hand afterwards)
 #   ./tenant.sh add <org_id> <x:y>[,<x:y>...] [--with-fixture-key]
 #                                     mint both tokens, store them, create the registry file
 #                                     trusting ONLY the keys given, then sync; seeds the repo
@@ -55,7 +71,8 @@
 #                                     When every record is removed the map is {} and sync
 #                                     refuses unless --allow-empty is given; a directory with
 #                                     NO record files is always refused
-#   ./tenant.sh show                  list tenants, status, keychain presence
+#   ./tenant.sh show                  the registry directory and whether it is initialized;
+#                                     tenants, status, keychain presence
 #   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock) for its whole
 #   run. An interrupt (Ctrl-C/TERM aimed at the shell or the put stage) takes effect only
 #   after the in-flight put has finished; one that reaches the put stage before it has
@@ -66,8 +83,9 @@
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
 #                               service bolyra-hosted-verify-<name>; registry directory
-#                               pilot/tenants-<name>); must match ^[a-z][a-z0-9-]{0,31}$
-#   TENANTS_DIR=<dir>           override the registry directory
+#                               $HOME/.bolyra/tenants-<name>); must match ^[a-z][a-z0-9-]{0,31}$
+#                               and must not be `production` (production is the default: unset)
+#   TENANTS_DIR=<dir>           override the registry directory (the lock is <dir>/.lock)
 #
 # Tokens are NEVER printed by this script. To hand a token to a partner over a secure
 # channel, run (yourself, deliberately):
@@ -79,22 +97,30 @@ usage() { awk 'NR>1 && /^set -euo pipefail/{exit} NR>1' "$0" | sed 's/^# \{0,1\}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$WORKER_DIR/../.." && pwd)"
 ENV_NAME="${HOSTED_VERIFY_ENV:-}"
 if [ -n "$ENV_NAME" ]; then
   # The name becomes a keychain service, a directory, and a wrangler `--env=` — validate it
   # here rather than discover it as a mis-targeted push or a stray directory.
   [[ "$ENV_NAME" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || die "HOSTED_VERIFY_ENV must match ^[a-z][a-z0-9-]{0,31}\$ (got '$ENV_NAME')"
+  # The production registry is tenants-production; a named environment called "production"
+  # would share its directory and lock while writing a different Worker and keychain service.
+  [ "$ENV_NAME" != production ] || die "HOSTED_VERIFY_ENV=production is not a named environment: production is the default; leave HOSTED_VERIFY_ENV unset"
   KEYCHAIN_SERVICE="bolyra-hosted-verify-$ENV_NAME"
-  TENANTS_DIR="${TENANTS_DIR:-$REPO_ROOT/pilot/tenants-$ENV_NAME}"
   WRANGLER_ENV=("--env=$ENV_NAME")
 else
   KEYCHAIN_SERVICE="bolyra-hosted-verify"
-  TENANTS_DIR="${TENANTS_DIR:-$REPO_ROOT/pilot/tenants}"
   # Production is the top-level environment. Named explicitly (`--env=`) so that a
   # CLOUDFLARE_ENV in the shell can never redirect a production sync to staging, and
   # wrangler does not warn about an unspecified environment.
   WRANGLER_ENV=("--env=")
+fi
+# The registry lives OFF the git checkout (E2). Derived from the checkout, it followed whichever
+# worktree ran the script: a removed worktree took the real records with it, and two worktrees
+# took two different locks while writing the one Worker. One directory per environment under
+# $HOME, overridable, and never created implicitly — see `init` / `migrate`.
+if [ -z "${TENANTS_DIR:-}" ]; then
+  [ -n "${HOME:-}" ] || die "HOME is not set; set TENANTS_DIR to the registry directory"
+  TENANTS_DIR="$HOME/.bolyra/tenants-${ENV_NAME:-production}"
 fi
 # The lock path is exported to the put stage, which runs after `cd "$WORKER_DIR"` — a relative
 # TENANTS_DIR would resolve there instead of here, so make it absolute before anything uses it.
@@ -110,6 +136,18 @@ esac
 # which flock (not on macOS) and lockfile helpers are not.
 LOCK_DIR="$TENANTS_DIR/.lock"
 LOCK_HELD=0
+# The registry is usable only with this marker: written by `init` (a new, empty environment) or
+# LAST by `migrate` (after every record has been committed). Records without it are an
+# interrupted migrate, which nothing repairs automatically.
+MARKER_FILE="$TENANTS_DIR/.initialized"
+# `migrate` assembles the complete candidate here, INSIDE the registry directory, so that its
+# commit is a same-filesystem rename per file (the directory itself — and the lock in it — is
+# never replaced).
+CANDIDATE_DIR="$TENANTS_DIR/.candidate"
+# The .candidate/ this run created, removed on the way out (release_lock) while it is still
+# only a candidate. Cleared the moment the commit starts: a half-committed candidate is the
+# evidence the interrupted-migrate instruction relies on.
+MIGRATE_CLEANUP=""
 # INTERRUPTED records the first INT/TERM this run received (0 = none). CRITICAL=1 marks a
 # section that must finish its local bookkeeping before the run may exit — `remove` between
 # changing the registry and acting on the upload's outcome — so a signal there is recorded and
@@ -121,6 +159,7 @@ CRITICAL=0
 REMOVE_BACKUP=""
 release_lock() {
   [ -z "$REMOVE_BACKUP" ] || rm -f "$REMOVE_BACKUP"
+  [ -z "$MIGRATE_CLEANUP" ] || rm -rf "$MIGRATE_CLEANUP"
   # Only ever remove a lock this process created — a failed acquire must leave the holder's.
   [ "$LOCK_HELD" = 1 ] || return 0
   LOCK_HELD=0
@@ -171,8 +210,15 @@ deferred_exit() {  # the exit a signal inside a CRITICAL section was owed; a no-
     *)   exit 143 ;;
   esac
 }
+# acquire_lock [create] — only `init` and `migrate` may create the registry directory; for every
+# other command an absent directory is an uninitialized registry, refused before anything —
+# the lock included — is created.
 acquire_lock() {
-  mkdir -p "$TENANTS_DIR" || die "could not create the registry directory $TENANTS_DIR"
+  if [ "${1:-}" = create ]; then
+    mkdir -p "$TENANTS_DIR" || die "could not create the registry directory $TENANTS_DIR"
+  elif [ ! -d "$TENANTS_DIR" ]; then
+    die "$(uninitialized_msg -)"
+  fi
   # An existing lock blocks this run whatever its age: nothing local can tell a lock a live run
   # is holding from one a previous run retained because an upload's outcome is unknown, and
   # clearing either on a timer is how the interleaving the lock exists to prevent happens.
@@ -189,6 +235,31 @@ acquire_lock() {
   # The put stage records the upload in the lock directory before it starts one, so
   # release_lock can tell a confirmed upload from one that may still be in flight.
   export TENANT_LOCK_DIR="$LOCK_DIR"
+}
+
+# has_registry_content — does the directory hold anything a migrate commits (any non-dot *.json
+# regular file: a record or a policy file) or a .candidate/? Names only; never a token.
+has_registry_content() {
+  local f b
+  [ ! -e "$CANDIDATE_DIR" ] || return 0
+  for f in "$TENANTS_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    case "$b" in .*) continue ;; esac
+    return 0
+  done
+  return 1
+}
+uninitialized_msg() {  # $1 the command, named only when the directory holds records
+  if has_registry_content; then
+    echo "$1: $TENANTS_DIR has records but no marker: it looks like an interrupted migrate; delete them and re-run migrate, or move them aside (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+  else
+    echo "registry $TENANTS_DIR is not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>' to bring existing records over"
+  fi
+}
+# Checked with the lock HELD, so a concurrent init or migrate cannot interleave with the check.
+require_initialized() {  # $1 the command
+  [ -f "$MARKER_FILE" ] || die "$(uninitialized_msg "$1")"
 }
 
 # The repo conformance-fixture operator key (its private half is public). Seeded into a
@@ -293,7 +364,6 @@ cmd_add() {
   [ ! -e "$(registry_file "$org")" ] || die "tenant '$org' already has a registry file at $(registry_file "$org") (to re-mint its tokens: rotate $org admin|verifier; to change keys: edit trustedOperators and sync)"
   local list="$keys"
   [ "$flag" != "--with-fixture-key" ] || list="$keys,$FIXTURE_KEY"
-  mkdir -p "$TENANTS_DIR"
   node -e '
 const fs=require("fs");const [p,org,list]=process.argv.slice(1);
 const f={org_id:org,status:"active",displayName:"",contact:"",trustedOperators:list.split(","),tierCaps:{maxTier:"medium"},created:new Date().toISOString().slice(0,10),notes:""};
@@ -641,6 +711,14 @@ cmd_sync() {
 cmd_show() {
   local extra="${1:-}" orgs org status a v
   [ -z "$extra" ] || die "show: unexpected extra argument '$extra'"
+  # Read-only and lock-free, so it works on an uninitialized registry — and says so.
+  if [ -f "$MARKER_FILE" ]; then
+    echo "registry: $TENANTS_DIR (initialized)"
+  elif has_registry_content; then
+    echo "registry: $TENANTS_DIR (not initialized: has records but no marker, an interrupted migrate; see pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+  else
+    echo "registry: $TENANTS_DIR (not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>')"
+  fi
   printf '%-24s %-10s %-8s %s\n' "org_id" "status" "admin" "verifier"
   orgs="$(registry_orgs)"
   [ -n "$orgs" ] || { echo "(no tenants in $TENANTS_DIR)"; return 0; }
@@ -656,6 +734,108 @@ cmd_show() {
   done 3<<< "$orgs"
 }
 
+cmd_init() {
+  local extra="${1:-}"
+  [ -z "$extra" ] || die "init: unexpected extra argument '$extra'"
+  acquire_lock create
+  [ ! -f "$MARKER_FILE" ] || die "init: $TENANTS_DIR is already initialized"
+  # Records without the marker are a migrate that did not finish: blessing them would make a
+  # partial registry look complete. Only an empty directory (the lock aside) is initialized.
+  if has_registry_content; then die "$(uninitialized_msg init)"; fi
+  : > "$MARKER_FILE" || die "init: could not write $MARKER_FILE"
+  echo "registry $TENANTS_DIR initialized (no tenants yet; add one with: pilot/tenant.sh add <org_id> <x:y>)"
+}
+
+# migrate_validate <source dir> — validate the COMPLETE candidate in $CANDIDATE_DIR before any of
+# it is committed: every record's name and status, both keychain tokens of every active or
+# disabled record (presence only), then the assembled map through the same assembler and
+# validator `sync --dry-run` uses (tokens stream through the pipe; none enters a variable here,
+# none is printed). Returns 1 with the reason on stderr, naming the SOURCE file.
+migrate_validate() {
+  local src="$1" dest="$TENANTS_DIR" orgs org status role rc=0
+  TENANTS_DIR="$CANDIDATE_DIR"
+  orgs="$(registry_orgs)"
+  while IFS= read -r org <&3; do
+    [ -n "$org" ] || continue
+    if ! [[ "$org" =~ ^[a-z0-9][a-z0-9-]{1,62}$ ]] || [ "$org" = unauthenticated ]; then
+      echo "error: migrate: $src/$org.json: the file name is not a valid org id" >&2; rc=1; break
+    fi
+    if ! status="$(reg_field "$org" status)"; then
+      echo "error: migrate: $src/$org.json: not valid JSON" >&2; rc=1; break
+    fi
+    case "$status" in
+      removed) continue ;;
+      active|disabled) ;;
+      *) echo "error: migrate: $src/$org.json: status must be active, disabled, or removed" >&2; rc=1; break ;;
+    esac
+    require_security
+    for role in admin verifier; do
+      if ! kc_has "$org" "$role"; then
+        echo "error: migrate: $src/$org.json: no keychain token for '$org' ($role) in keychain service $KEYCHAIN_SERVICE; an active or disabled tenant needs both tokens before its record can be migrated" >&2
+        rc=1; break 2
+      fi
+    done
+  done 3<<< "$orgs"
+  if [ "$rc" = 0 ]; then
+    echo "validating the candidate map (tokens from keychain service $KEYCHAIN_SERVICE)…" >&2
+    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$CANDIDATE_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" >&2 || rc=1
+  fi
+  TENANTS_DIR="$dest"
+  return "$rc"
+}
+
+cmd_migrate() {
+  local flag="${1:-}" from="${2:-}" extra="${3:-}" f b n_rec=0 n_pol=0
+  [ "$flag" = --from ] && [ -n "$from" ] || die "migrate: usage: tenant.sh migrate --from <absolute path of the existing registry directory>"
+  [ -z "$extra" ] || die "migrate: unexpected extra argument '$extra'"
+  case "$from" in
+    /*) ;;
+    *) die "migrate: --from must be an absolute path (got '$from')" ;;
+  esac
+  [ -d "$from" ] || die "migrate: --from $from is not a directory"
+  # Decided before the lock: taking it would create .lock inside the source.
+  if [ -d "$TENANTS_DIR" ] && [ "$(cd "$from" && pwd -P)" = "$(cd "$TENANTS_DIR" && pwd -P)" ]; then
+    die "migrate: --from $from is the destination registry ($TENANTS_DIR); point TENANTS_DIR / HOSTED_VERIFY_ENV at the new location"
+  fi
+  acquire_lock create
+  # Never a merge: the destination is empty (its lock aside) and uninitialized, or nothing moves.
+  [ ! -f "$MARKER_FILE" ] || die "migrate: $TENANTS_DIR is already initialized; migrate never merges into a registry"
+  if has_registry_content; then die "$(uninitialized_msg migrate)"; fi
+  mkdir "$CANDIDATE_DIR" || die "migrate: could not create $CANDIDATE_DIR"
+  MIGRATE_CLEANUP="$CANDIDATE_DIR"
+  # The same filter as registry_orgs and the assembler (regular, non-dot *.json), policy files
+  # included. The source is only ever read.
+  for f in "$from"/*.json; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    case "$b" in .*) continue ;; esac
+    cp -p "$f" "$CANDIDATE_DIR/$b" || die "migrate: could not copy $f; nothing was committed"
+    case "$b" in
+      *.policy.json) n_pol=$((n_pol + 1)) ;;
+      *) n_rec=$((n_rec + 1)) ;;
+    esac
+  done
+  [ "$n_rec" != 0 ] || die "migrate: $from holds no record files (<org_id>.json); nothing to migrate — for a new environment run: pilot/tenant.sh init"
+  migrate_validate "$from" || die "migrate: the candidate failed validation (above); nothing was committed — $TENANTS_DIR has no records and no marker, and $from is untouched"
+  # Commit: one same-filesystem rename per file, then the marker LAST, so a run stopped anywhere
+  # in between leaves records without a marker — refused by every command until resolved by
+  # hand. Signals are deferred to the end of this section; only a SIGKILL can split it.
+  MIGRATE_CLEANUP=""
+  CRITICAL=1
+  for f in "$CANDIDATE_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    [ ! -e "$TENANTS_DIR/$b" ] || die "migrate: $TENANTS_DIR/$b already exists; refusing to overwrite it. The registry has records but no marker (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+    mv "$f" "$TENANTS_DIR/$b" || die "migrate: could not move $b into $TENANTS_DIR. The registry has records but no marker (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+  done
+  : > "$MARKER_FILE" || die "migrate: every file was committed but $MARKER_FILE could not be written; the registry has records but no marker"
+  rmdir "$CANDIDATE_DIR" 2>/dev/null || echo "warning: could not remove $CANDIDATE_DIR (it should be empty); remove it by hand" >&2
+  CRITICAL=0
+  echo "migrated $n_rec records and $n_pol policy files from $from into $TENANTS_DIR; the registry is initialized"
+  echo "the source was left untouched: once pilot/tenant.sh show (same HOSTED_VERIFY_ENV / TENANTS_DIR) confirms the new location, delete $from by hand"
+  deferred_exit
+}
+
 cmd="${1:-}"
 if [ $# -gt 0 ]; then shift; fi
 # One positional past what each subcommand uses, so an unexpected extra argument is seen
@@ -663,13 +843,17 @@ if [ $# -gt 0 ]; then shift; fi
 # Every command but `show` mutates or assembles the map, so each takes the lock first —
 # `sync --dry-run` included: it reads the registry and the keychain, and is only worth
 # reporting if nothing was rewriting them underneath. `show` is read-only and never waits.
+# A mutating command checks the .initialized marker with the lock HELD (acquire_lock never
+# creates the directory for these), so a concurrent init or migrate cannot interleave with it.
 case "$cmd" in
-  add)     acquire_lock; cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
-  rotate)  acquire_lock; cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
-  disable) acquire_lock; cmd_disable "${1:-}" "${2:-}" ;;
-  enable)  acquire_lock; cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
-  remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" "${3:-}" ;;
-  sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" "${3:-}" ;;
+  add)     acquire_lock; require_initialized add;     cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
+  rotate)  acquire_lock; require_initialized rotate;  cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
+  disable) acquire_lock; require_initialized disable; cmd_disable "${1:-}" "${2:-}" ;;
+  enable)  acquire_lock; require_initialized enable;  cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
+  remove)  acquire_lock; require_initialized remove;  cmd_remove "${1:-}" "${2:-}" "${3:-}" ;;
+  sync)    acquire_lock; require_initialized sync;    cmd_sync "${1:-}" "${2:-}" "${3:-}" ;;
+  init)    cmd_init "${1:-}" ;;
+  migrate) cmd_migrate "${1:-}" "${2:-}" "${3:-}" ;;
   show)    cmd_show "${1:-}" ;;
   *)       usage ;;
 esac
