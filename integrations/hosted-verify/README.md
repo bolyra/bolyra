@@ -386,6 +386,12 @@ schema (the `kind` self-description cases). One documented divergence on the
 HTTP vectors: `nonce_mode: "local"` produces the same verdict, but the allow
 carries `consume_nonces` because this preview is host-mode only.
 
+`npm run test:agreement` (plain `node --test`, since the workers pool cannot load it)
+re-derives every committed fixture's binding digest and the capability map with the
+installed, exactly pinned `@bolyra/mpp` devDependency, so a drift between this Worker and
+the package operators issue mandates with fails a test instead of denying every real
+registration as "not registered". CI runs it in the `hosted-verify-tests` job after vitest.
+
 ## Deploy (maintainers)
 
 ```bash

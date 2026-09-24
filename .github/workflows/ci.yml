@@ -187,6 +187,14 @@ jobs:
         working-directory: integrations/hosted-verify
       - run: npx vitest run
         working-directory: integrations/hosted-verify
+      # E10: the binding digest (and so every credential id) is implemented twice, here and
+      # in @bolyra/mpp; the vitest fixtures pin only this Worker's side. Re-derive the
+      # committed digests and capability map from the INSTALLED package (plain Node: the
+      # workers pool cannot load it) so a drift fails CI instead of denying every real
+      # registration as "not registered".
+      - name: Installed @bolyra/mpp agrees on the binding digest and capability map
+        working-directory: integrations/hosted-verify
+        run: npm run test:agreement
       # The workers pool does not enforce workerd's entry-module rules: on 2026-09-20 main
       # was undeployable across two merged PRs (src/index.ts exported a plain constant and
       # workerd refused the module) while the suite ran green. So boot the real Worker
