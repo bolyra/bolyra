@@ -9,7 +9,7 @@
     "deploy": "echo 'deploy: choose the target explicitly — npm run deploy:staging or npm run deploy:prod' >&2 && exit 1",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:prod": "wrangler deploy --env=\"\"",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:agreement",
     "smoke:dev": "bash scripts/with-worker.sh node scripts/smoke-dev.mjs",
     "typecheck": "wrangler types && tsc --noEmit",
     "usage": "node scripts/usage.mjs",
