@@ -265,5 +265,5 @@ contains hosted (unchained) receipts, the command we send includes
 ## Questions / stuck
 
 Viswa Kondoju — kondojuviswanadha@gmail.com. Include the request id
-(`cf-ray` header) for hosted issues; we can see per-request outcome codes
+(the `x-bolyra-request-id` response header) for hosted issues; we can see per-request outcome codes
 and latency (never your payloads).
