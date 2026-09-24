@@ -503,7 +503,7 @@ export function parseScalar(value, account) {
  * @param {(line: string) => void} deps.printErr
  * @param {(account: string) => string | null} deps.readSecret null when the account is absent
  * @param {(org: string) => { adminToken: string, verifierToken: string, scalar: bigint }} deps.devVarsSecrets
- * @param {{ append(line: string): void, remove(line: string): void }} deps.log
+ * @param {{ append(id: string, line: string): void, remove(id: string): void }} deps.log the per-canary pending store (scripts/lib/pending-store.mjs)
  * @param {(scalar: bigint) => (agentName: string, expiry: number) => Promise<unknown>} deps.makeIssuer
  * @param {() => number} deps.now
  * @param {(ms: number) => Promise<void>} deps.sleep
