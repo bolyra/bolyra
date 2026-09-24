@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELF, env, reset, runInDurableObject } from 'cloudflare:test';
 
 import { canonicalize } from '@bolyra/receipts';
+import { BODY_READ_DEADLINE_MS } from '../src/deadlines';
 import worker from '../src/index';
 import {
   BASE,
@@ -548,6 +549,56 @@ describe('wire grammar and canonical form', () => {
     expect((await body(exact)).message).toBe('request carries an unexpected field'); // read fully, then rejected by shape
     const over = await postRegister(pad(65_537 - overhead));
     expect((await body(over)).message).toContain('exceeds');
+  });
+});
+
+describe('registration body-stream failures (E7)', () => {
+  function streamingRegister(body: ReadableStream<Uint8Array>): Request {
+    return new Request(CREDENTIALS, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+  }
+  function usageCapture(): { e: typeof env; points: Array<{ blobs?: string[]; doubles?: number[] }> } {
+    const points: Array<{ blobs?: string[]; doubles?: number[] }> = [];
+    const usage = { writeDataPoint: (p: { blobs?: string[]; doubles?: number[] }) => { points.push(p); } } as unknown as AnalyticsEngineDataset;
+    return { e: { ...env, USAGE: usage }, points };
+  }
+
+  it('a body stream that errors → 400 malformed_input with its analytics point and request line', async () => {
+    const { e, points } = usageCapture();
+    const lines: unknown[][] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => { lines.push(args); });
+    let res: Response;
+    try {
+      res = await worker.fetch(streamingRegister(new ReadableStream({ pull: () => Promise.reject(new Error('connection reset')) })), e);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(400);
+    expect(await body(res)).toEqual({ error: 'malformed_input', message: 'request body could not be read' });
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'error', 'malformed_input']);
+    expect(points[0]!.doubles![1]).toBe(400);
+    expect(lines.some((l) => l[0] === 'hosted-verify registry request' && (l[1] as { code: string }).code === 'malformed_input')).toBe(true);
+  });
+
+  it(`a body that never arrives → 500 internal_error "request body stalled" at ${BODY_READ_DEADLINE_MS} ms`, async () => {
+    vi.useFakeTimers();
+    try {
+      const { e, points } = usageCapture();
+      const pending = worker.fetch(streamingRegister(new ReadableStream({ pull: () => new Promise<void>(() => {}) })), e);
+      await vi.advanceTimersByTimeAsync(BODY_READ_DEADLINE_MS + 1);
+      const res = await pending;
+      expect(res.status).toBe(500);
+      expect(await body(res)).toEqual({ error: 'internal_error', message: 'request body stalled' });
+      expect(points[0]!.blobs!.slice(2, 4)).toEqual(['error', 'internal_error']);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
