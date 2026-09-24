@@ -4,11 +4,13 @@
  * and env fail-closed behavior.
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { SELF, env, createExecutionContext } from 'cloudflare:test';
 import { verifyReceipt } from '@bolyra/receipts';
 
-import worker from '../src/index';
+import worker, { type Env } from '../src/index';
+import { REGISTRY_DEADLINE_MS } from '../src/deadlines';
+import { ORG_ID_PATTERN } from '../src/tenants';
 import { bindingDigest } from '../src/verify/binding';
 import type { Binding } from '../src/verify/bundle';
 import { requiredBits, DEFAULT_CAPABILITY_MAP } from '../src/verify/capabilities';
@@ -88,7 +90,9 @@ describe('routing + auth', () => {
     expect(body.verifier_kind).toBe('classical');
     expect(body.nonce_mode).toBe('host');
     expect(body.tenants).toBe('ok');
-    expect(body.registry).toBe('durable-object');
+    expect(body.registry).toBe('ok');
+    expect(body.registry_kind).toBe('durable-object');
+    expect(body.capability_map).toBe('ok');
     expect(body.registry_enforced).toBe(true);
     expect(String(body.trust_policy)).toContain('ACTIVE');
     expect(String(body.trust_model)).toContain('registry');
@@ -100,10 +104,15 @@ describe('routing + auth', () => {
     expect(JSON.stringify(body)).not.toMatch(LEGACY_NAMES);
   });
 
-  it('GET /health reports tenants:"invalid" at 200 when TENANTS is malformed', async () => {
+  // Deliberately changed from 200 (E5): a degraded service answers 503 so a probe
+  // cannot mistake it for healthy. Still reported, never thrown.
+  it('GET /health reports tenants:"invalid" as 503 degraded when TENANTS is malformed', async () => {
     const res = await worker.fetch(new Request(`${BASE}/health`), { ...env, TENANTS: '{not json' });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { tenants: string }).tenants).toBe('invalid');
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.status).toBe('degraded');
+    expect(body.tenants).toBe('invalid');
+    expect(body.registry_enforced).toBe(true);
   });
 
   it('unknown route → 404; wrong methods → 405', async () => {
@@ -163,6 +172,121 @@ describe('routing + auth', () => {
     const res = await worker.fetch(new Request(`${BASE}/health`), e);
     expect(res.status).toBe(200);
     expect(((await res.json()) as { tenants: string }).tenants).toBe('ok');
+  });
+});
+
+describe('/health probes the registry and the capability map (E5)', () => {
+  type Probe = { names: string[]; ids: string[] };
+  /** A fake TENANT namespace recording what the probe asked for; `status` is the behavior under test. */
+  function fakeTenant(status: (id: string) => Promise<unknown>): { ns: typeof env.TENANT; probe: Probe } {
+    const probe: Probe = { names: [], ids: [] };
+    const ns = {
+      idFromName: (n: string) => {
+        probe.names.push(n);
+        return env.TENANT.idFromName(n);
+      },
+      get: () => ({
+        status: (id: string) => {
+          probe.ids.push(id);
+          return status(id);
+        },
+      }),
+    } as unknown as typeof env.TENANT;
+    return { ns, probe };
+  }
+  const health = (e: Env) => worker.fetch(new Request(`${BASE}/health`), e);
+  const bodyOf = async (res: Response) => (await res.json()) as Record<string, unknown>;
+
+  it('healthy → 200 with every component ok and the build marker intact', async () => {
+    const res = await health(env);
+    expect(res.status).toBe(200);
+    const body = await bodyOf(res);
+    expect(body).toMatchObject({
+      status: 'ok',
+      tenants: 'ok',
+      capability_map: 'ok',
+      registry: 'ok',
+      registry_kind: 'durable-object',
+      registry_enforced: true,
+    });
+  });
+
+  it('the probe names only the constant __health__ object and the all-zero credential id', async () => {
+    const { ns, probe } = fakeTenant(async () => 'ABSENT');
+    const res = await health({ ...env, TENANT: ns });
+    expect(res.status).toBe(200);
+    expect((await bodyOf(res)).registry).toBe('ok');
+    expect(probe.names).toEqual(['__health__']);
+    expect(probe.ids).toEqual(['0'.repeat(64)]);
+  });
+
+  it('__health__ can never be a tenant org id (ORG_ID_PATTERN forbids "_")', () => {
+    expect(ORG_ID_PATTERN.test('__health__')).toBe(false);
+  });
+
+  it('a registry RPC that throws → 503 degraded, registry "unavailable"', async () => {
+    const { ns } = fakeTenant(async () => {
+      throw new Error('Network connection lost.');
+    });
+    const res = await health({ ...env, TENANT: ns });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.status).toBe('degraded');
+    expect(body.registry).toBe('unavailable');
+    expect(body.registry_kind).toBe('durable-object');
+    expect(body.registry_enforced).toBe(true);
+  });
+
+  it.each(['storage_error', 'invalid_input', 'something_new'])('a registry answering %s → 503 registry "unavailable"', async (answer) => {
+    const { ns } = fakeTenant(async () => answer);
+    const res = await health({ ...env, TENANT: ns });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.status).toBe('degraded');
+    expect(body.registry).toBe('unavailable');
+  });
+
+  it.each(['ABSENT', 'ACTIVE', 'REVOKED'])('a registry answering %s → registry "ok"', async (answer) => {
+    const { ns } = fakeTenant(async () => answer);
+    const res = await health({ ...env, TENANT: ns });
+    expect(res.status).toBe(200);
+    expect((await bodyOf(res)).registry).toBe('ok');
+  });
+
+  it(`a registry read that never resolves → 503 registry "timeout" at the ${REGISTRY_DEADLINE_MS} ms deadline`, async () => {
+    vi.useFakeTimers();
+    try {
+      const { ns } = fakeTenant(() => new Promise<never>(() => {}));
+      const pending = health({ ...env, TENANT: ns });
+      await vi.advanceTimersByTimeAsync(REGISTRY_DEADLINE_MS + 1);
+      const res = await pending;
+      expect(res.status).toBe(503);
+      const body = await bodyOf(res);
+      expect(body.status).toBe('degraded');
+      expect(body.registry).toBe('timeout');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a malformed CAPABILITY_MAP → 503 degraded, capability_map "invalid"', async () => {
+    const res = await health({ ...env, CAPABILITY_MAP: '{bad' });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.status).toBe('degraded');
+    expect(body.capability_map).toBe('invalid');
+    expect(body.tenants).toBe('ok');
+    expect(body.registry).toBe('ok');
+  });
+
+  it('a malformed TENANTS → 503 degraded, tenants "invalid", the other components still ok', async () => {
+    const res = await health({ ...env, TENANTS: '{not json' });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.status).toBe('degraded');
+    expect(body.tenants).toBe('invalid');
+    expect(body.capability_map).toBe('ok');
+    expect(body.registry).toBe('ok');
   });
 });
 

@@ -238,7 +238,7 @@ except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
   credential stays revoked. `404` if absent.
 
 The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the request's `cf-ray` id (or a UUID when absent).
-`/health` reports `registry: "durable-object"` and `credential_id_version: "v1"`.
+`/health` reports `registry_kind: "durable-object"`, the registry liveness probe result under `registry`, and `credential_id_version: "v1"`.
 A registry storage failure is `500 internal_error`; a quarantined tenant gets
 `503 tenant_disabled` on these routes.
 
@@ -248,7 +248,14 @@ Unauthenticated. Returns service status, the **DESIGN PARTNER PREVIEW**
 label, `verifier_kind: "classical"`, `nonce_mode: "host"`, a `trust_model`
 sentence, and the live `checks_authenticated` / `checks_consistency_only` /
 `checks_not_performed` lists (the honest capability disclosure below,
-machine-readable). Also `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses; a quarantined (`disabled`) tenant still reports `ok` (this is parseability, not per-tenant availability). Also `registry: "durable-object"`, `credential_id_version: "v1"`, `registry_enforced: true` (emitted only by builds that consult the registry on `/v1/verify`), and the trust-policy amendment text under `trust_policy`.
+machine-readable). Component checks:
+
+- `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses; a quarantined (`disabled`) tenant still reports `ok` (this is parseability, not per-tenant availability).
+- `capability_map: "ok" | "invalid"` — whether `CAPABILITY_MAP` parses (a malformed map fails every authenticated request closed).
+- `registry: "ok" | "unavailable" | "timeout"` — a liveness probe: one status read against a dedicated `__health__` registry object (never a tenant's; `_` cannot appear in an org id) under the same 2,000 ms deadline as `/v1/verify`. A thrown RPC or a storage/input error is `unavailable`; the deadline is `timeout`. `registry_kind: "durable-object"` names the backend.
+- `status: "ok" | "degraded"` — `ok` only when all three components are `ok`. A degraded service answers **HTTP 503** with the same body (still reported, never thrown), so a probe that checks only the status code cannot mistake it for healthy.
+
+Also `credential_id_version: "v1"`, `registry_enforced: true` (a build marker, emitted only by builds that consult the registry on `/v1/verify` — not a liveness check), and the trust-policy amendment text under `trust_policy`.
 
 ### Signed receipts (`X-Bolyra-Receipt`)
 

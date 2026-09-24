@@ -177,6 +177,15 @@ describe('Analytics Engine usage data point', () => {
     expect(points[1]!.doubles![1]).toBe(404);
   });
 
+  it('a degraded /health (503) is recorded as an error with code "degraded", not an allow', async () => {
+    const { env: e, points } = usageEnv({ TENANTS: '{not json' });
+    const res = await worker.fetch(new Request(`${BASE}/health`), e);
+    expect(res.status).toBe(503);
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/health', 'unauthenticated', 'error', 'degraded']);
+    expect(points[0]!.doubles![1]).toBe(503);
+  });
+
   it('never stores tokens, bodies, proofs, or credentials', async () => {
     const { env: e, points } = usageEnv();
     await worker.fetch(verifyRequest(TOKENS.A.verifier), e);
