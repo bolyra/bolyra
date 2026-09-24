@@ -233,6 +233,7 @@ To **roll to a new expiry**: issue the new binding, register it, switch the
 agent to the new presentation, and only then revoke the old id.
 
 ```bash
+unset NEW_ID HTTP   # no id from an earlier, interrupted renewal may reach the revoke below
 cd "$(mktemp -d)"   # keep mandate.json and registration.json out of the checkout
 BASE=https://bolyra-hosted-verify.<account>.workers.dev
 ADMIN=<your admin token>
@@ -267,12 +268,14 @@ allow under the new id (the response's `x-bolyra-credential-id` equals
 are ACTIVE and both verify; the old one also stops on its own at its expiry.
 
 ```bash
-# 3. Revoke the old id (204) — only with a registered NEW_ID, in the same shell:
-if [ -n "$NEW_ID" ] && [ "$NEW_ID" != "$OLD_ID" ]; then
+# 3. Revoke the old id (204) — only in the same shell and directory as the registration
+#    above, and only if its response (resp.json here) registered this NEW_ID as ACTIVE:
+if [ -n "${NEW_ID:-}" ] && [ "$NEW_ID" != "$OLD_ID" ] &&
+   jq -e --arg id "$NEW_ID" '.credential_id == $id and .status == "ACTIVE"' resp.json >/dev/null 2>&1; then
   curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$OLD_ID/revoke \
     -H "Authorization: Bearer $ADMIN"
 else
-  echo "no new credential registered in this shell — not revoking $OLD_ID" >&2
+  echo "no new credential registered in this shell and directory — not revoking $OLD_ID" >&2
 fi
 ```
 

@@ -158,6 +158,11 @@ export function checkDoc(docPath, markdown, routes) {
     let cloned = false;
     // Files the block itself writes (`> f`, `--out f`, `-o f`) need not pre-exist.
     const written = new Set();
+    // A `raw:<name>` entry is valid only in the directory it was written in: drop them all
+    // on every directory change (any cd, modellable or not, and a subshell exit).
+    const forgetRaw = () => {
+      for (const w of [...written]) if (w.startsWith('raw:')) written.delete(w);
+    };
     // Join backslash continuations so a flag and its value sit on one logical line,
     // remembering the physical line each logical line starts on.
     const logical = [];
@@ -171,6 +176,7 @@ export function checkDoc(docPath, markdown, routes) {
       for (const cmd of commands(line)) {
         if (cmd.close) {
           if (saved !== undefined) cwd = saved;
+          forgetRaw();
           saved = undefined;
           continue;
         }
@@ -183,6 +189,7 @@ export function checkDoc(docPath, markdown, routes) {
         }
         const cd = /^cd\s+(.+)$/.exec(text);
         if (cd) {
+          forgetRaw();
           const target = cdTarget(cd[1], cwd, cloned);
           if (target === null) {
             cwd = null; // unknown until the next modellable cd
@@ -359,4 +366,13 @@ test('a --data ref inside $( … ) ends at the closing parenthesis', () => {
   const problems = checkDoc('synthetic.md', doc, routes).problems;
   assert.equal(problems.length, 1, problems.join('\n'));
   assert.match(problems[0], /@nope\.json resolves to integrations\/hosted-verify\/nope\.json/);
+});
+
+test('a written-file exemption does not survive a directory change', () => {
+  const unknownToUnknown = block('cd "$(mktemp -d)"', 'jq . a.json > reg.json', 'cd "$(mktemp -d)"', 'curl --data @reg.json $BASE/v1/credentials');
+  assert.equal(checkDoc('synthetic.md', unknownToUnknown, routes).counts.skipped, 1);
+  const knownToUnknown = block(TOP, 'jq . a.json > reg.json', 'cd "$(mktemp -d)"', 'curl --data @reg.json $BASE/v1/credentials');
+  assert.equal(checkDoc('synthetic.md', knownToUnknown, routes).counts.skipped, 1);
+  const unknownToKnown = block('cd "$(mktemp -d)"', 'jq . a.json > reg.json', TOP, 'curl --data @reg.json $BASE/v1/credentials');
+  assert.match(checkDoc('synthetic.md', unknownToKnown, routes).problems.join('\n'), /@reg\.json resolves to integrations\/hosted-verify\/reg\.json/);
 });
