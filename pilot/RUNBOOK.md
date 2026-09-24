@@ -48,8 +48,13 @@ until a valid map is put. Defects:
   outside `[A-Za-z0-9._~+/-]`;
 - the same token value used twice anywhere in the map (it then grants nothing);
 - an `org_id` outside `^[a-z0-9][a-z0-9-]{1,62}$`;
-- an empty map (`{}`), invalid JSON, a repeated JSON key, or a serialized map
-  of 4,096 bytes or more.
+- a missing (unset or empty) secret, invalid JSON, a repeated JSON key, or a
+  serialized map of 4,096 bytes or more.
+
+An empty **map** (`{}`) is NOT a defect: it is what removing the last tenant
+leaves (see "Removing the last tenant" in section 3). It loads as zero tenants,
+so every authenticated request is `401` and `/health` stays `200` with
+`tenants: "ok"`, `tenant_count: 0`.
 
 That is why the map is never edited by hand: `tenant.sh sync` rebuilds it from
 the registry files and the keychain, runs it through
@@ -76,7 +81,8 @@ you cannot establish local quiescence, leave the lock in place.
 
 Once local quiescence is established, remove only the retained lock
 directory for the affected environment, then run `sync` for that same
-environment to re-put the intended, validated, nonempty map. Removing the
+environment to re-put the intended, validated map (add `--allow-empty` only
+when the intended map is the deliberate empty one, every record removed). Removing the
 lock does not cancel or roll back any request. Local process checks cannot
 establish completion or ordering of an already-submitted request, and an
 earlier request may take effect after the recovery sync. A SIGKILL before
@@ -244,8 +250,16 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # to re-mint both tokens first — a removed tenant is skipped by sync, so both pass
 # cleanly — then set "status": "active" in the registry file by hand and run `sync`;
 # the Durable Object resumes as it was — revoked credentials stay revoked:
-# The last tenant cannot be removed: the Worker rejects an empty map, so sync refuses it and the previous map stays live — quarantine it with disable instead, and remove it once another tenant exists.
 pilot/tenant.sh remove <org_id>
+
+# the LAST tenant (no other record is active or disabled — a quarantined tenant still
+# occupies the map) is refused without --last: its removal pushes the EMPTY map {}, and
+# every request is then denied (401). Everything above about confirmation, tokens and
+# unknown outcomes applies unchanged:
+pilot/tenant.sh remove <org_id> --last
+
+# re-push the empty map on purpose (every record is removed; plain sync refuses it):
+pilot/tenant.sh sync --allow-empty
 
 # revoke ONE credential (not the tenant): the partner does this with their admin token,
 # or you do it for them. Terminal — a revoked binding can never be re-registered:
@@ -253,8 +267,8 @@ pilot/tenant.sh remove <org_id>
 curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/<credential_id>/revoke \
   -H "Authorization: Bearer $ADMIN"                              # → 204 (204 again if already revoked)
 
-# sanity after any change: the map parses (it does not list tenants):
-curl -s $BASE/health | jq .tenants                              # → "ok"
+# sanity after any change: the map parses, and how many tenants it holds (it does not list them):
+curl -s $BASE/health | jq '{tenants, tenant_count}'            # → {"tenants":"ok","tenant_count":<n>}
 ```
 
 ### Recovering a revocation whose audit row failed
@@ -297,10 +311,19 @@ Notes:
 - Secrets take effect on the next request; no redeploy.
 - `sync` replaces the WHOLE map from the registry directory: a file you delete
   by hand is a tenant you revoked by accident — use `remove`.
-- Removing the **last** tenant would leave `{}`, which the loader rejects
-  (every request `500`, `/health` `tenants: "invalid"`, not `401`), so `sync`
-  refuses to push an empty map. To stand the deployment down with no active
-  partners, quarantine the remaining tenants instead.
+- **Removing the last tenant** leaves the empty map `{}`. That is valid
+  configuration, not a defect: every authenticated request is denied with `401`
+  (no bearer resolves to a tenant) and `/health` answers `200` with
+  `tenants: "ok"` and `tenant_count: 0`. Because it denies everyone, every
+  step that can produce it asks for a deliberate flag: `remove <org_id>
+  --last` (refused without it, before anything changes), `sync --allow-empty`
+  (a plain `sync` over an all-removed registry refuses and uploads nothing),
+  and `tenants-put.mjs --allow-empty` (the put stage refuses `{}` on its own
+  without it). Active **and** disabled records count as tenants. A registry
+  directory with **no** record files is refused whatever the flags say; that
+  is a wrong `TENANTS_DIR` / `HOSTED_VERIFY_ENV` far more often than intent.
+  Bring a tenant back with `add` (a new org) or the `rotate` + `"status":
+  "active"` + `sync` path above (a removed one).
 - Quarantining does **not** un-pin operator keys or revoke credentials, and
   that is fine: a quarantined tenant is served on no route. If trust in a key is
   the problem, edit it out of `trustedOperators` **and** revoke the credentials
