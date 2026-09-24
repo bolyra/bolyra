@@ -52,15 +52,24 @@ let cached: { at: number; result: Promise<RegistryHealth> } | undefined;
  * per 10 s, and the signal may be up to 10 s stale. A failed result (`unavailable` /
  * `timeout`) is dropped as soon as it settles, so the next call re-probes.
  */
-export function cachedProbeRegistry(ns: DurableObjectNamespace<TenantRegistry>): Promise<RegistryHealth> {
+export function cachedProbeRegistry(
+  ns: DurableObjectNamespace<TenantRegistry>,
+  probe: (ns: DurableObjectNamespace<TenantRegistry>) => Promise<RegistryHealth> = probeRegistry, // injectable for tests only
+): Promise<RegistryHealth> {
   const now = Date.now();
   if (cached !== undefined && now - cached.at < HEALTH_PROBE_TTL_MS) return cached.result;
-  const entry = { at: now, result: probeRegistry(ns) };
+  const entry = { at: now, result: probe(ns) };
   cached = entry;
   // Registered before any caller awaits `result`, so a failure is evicted before it is reported.
-  void entry.result.then((r) => {
-    if (r !== 'ok' && cached === entry) cached = undefined;
-  });
+  // A rejection (probeRegistry catches today; a future probe might not) is evicted too.
+  void entry.result.then(
+    (r) => {
+      if (r !== 'ok' && cached === entry) cached = undefined;
+    },
+    () => {
+      if (cached === entry) cached = undefined;
+    },
+  );
   return entry.result;
 }
 

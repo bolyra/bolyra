@@ -43,20 +43,25 @@ jobs:
             exit 1
           fi
 
-          # One-line diagnostic of a /health body: closed enums (anything else prints "other")
-          # and the version id (only when id-shaped). Never fails the step itself.
+          # One-line diagnostic of a /health body: closed enums (anything else prints "other";
+          # a missing field prints "absent") and the version id (only when id-shaped). Never
+          # fails the step itself.
           diag() {
             [ -s body.json ] || return 0
+            if ! jq -e -s . body.json > /dev/null 2>&1; then
+              echo "diagnostic: body is not JSON"
+              return 0
+            fi
             jq -r -s '
-              def enum($allowed): if (. as $v | $allowed | index([$v])) then . else "other" end;
+              def enum($allowed): if . == null then "absent" elif (. as $v | $allowed | index([$v])) then . else "other" end;
               if length == 1 and (.[0] | type) == "object" then
                 .[0]
                 | "diagnostic: status=\(.status | enum(["ok", "degraded"]))"
                   + " tenants=\(.tenants | enum(["ok", "invalid"]))"
-                  + " capability_map=\(.capability_map | enum(["ok", "invalid", null]))"
-                  + " registry=\(.registry | enum(["ok", "unavailable", "timeout", "durable-object", null]))"
-                  + " registry_kind=\(.registry_kind | enum(["durable-object", null]))"
-                  + " version_id=\(.version.id? // "n/a" | if type == "string" and test("^[A-Za-z0-9-]{1,64}$") then . else "n/a" end)"
+                  + " capability_map=\(.capability_map | enum(["ok", "invalid"]))"
+                  + " registry=\(.registry | enum(["ok", "unavailable", "timeout", "durable-object"]))"
+                  + " registry_kind=\(.registry_kind | enum(["durable-object"]))"
+                  + " version_id=\((.version.id? // null) | if . == null then "absent" elif type == "string" and test("^[A-Za-z0-9-]{1,64}$") then . else "other" end)"
               else
                 "diagnostic: body is not a single JSON object"
               end
