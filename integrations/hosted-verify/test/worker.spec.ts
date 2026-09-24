@@ -10,7 +10,7 @@ import { verifyReceipt } from '@bolyra/receipts';
 
 import worker, { type Env } from '../src/index';
 import { REGISTRY_DEADLINE_MS } from '../src/deadlines';
-import { resetHealthProbeCache } from '../src/health-probe';
+import { cachedProbeRegistry, resetHealthProbeCache } from '../src/health-probe';
 import { ORG_ID_PATTERN } from '../src/tenants';
 import { bindingDigest } from '../src/verify/binding';
 import type { Binding } from '../src/verify/bundle';
@@ -114,6 +114,9 @@ describe('routing + auth', () => {
     expect(body.status).toBe('degraded');
     expect(body.tenants).toBe('invalid');
     expect(body.registry_enforced).toBe(true);
+    // The components are independent: a bad TENANTS does not mark the others down.
+    expect(body.capability_map).toBe('ok');
+    expect(body.registry).toBe('ok');
   });
 
   it('unknown route → 404; wrong methods → 405', async () => {
@@ -297,9 +300,10 @@ describe('/health probes the registry and the capability map (E5)', () => {
   it('a fast probe leaves no deadline timer behind', async () => {
     vi.useFakeTimers();
     try {
-      const { ns } = fakeTenant(async () => 'ABSENT');
+      const { ns, probe } = fakeTenant(async () => 'ABSENT');
       const res = await health({ ...env, TENANT: ns });
       expect(res.status).toBe(200);
+      expect(probe.ids).toHaveLength(1);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
@@ -343,6 +347,20 @@ describe('/health probes the registry and the capability map (E5)', () => {
       expect(res.status).toBe(200);
       expect((await bodyOf(res)).registry).toBe('ok');
       expect(probe.ids).toHaveLength(2);
+    });
+
+    it('a probe that REJECTS is evicted, not cached for the isolate lifetime', async () => {
+      // probeRegistry catches everything today; the injected probe stands in for a future one that does not.
+      const { ns } = fakeTenant(async () => 'ABSENT');
+      const failing = cachedProbeRegistry(ns, () => Promise.reject(new Error('probe bug')));
+      await expect(failing).rejects.toThrow('probe bug');
+      let calls = 0;
+      const next = await cachedProbeRegistry(ns, async () => {
+        calls++;
+        return 'ok';
+      });
+      expect(next).toBe('ok');
+      expect(calls).toBe(1);
     });
 
     it('a timed-out probe is not served from cache either', async () => {
