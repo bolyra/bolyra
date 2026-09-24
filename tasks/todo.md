@@ -143,12 +143,12 @@ justify a cap exception.
 ## Backlog fixes (2026-09-24, founder: "lets fix the backlog items"; plan Codex-APPROVED after 5 review passes)
 Plan: ~/.claude/plans/eager-discovering-babbage.md · order ruled by Codex: C1 → A1 → B → A2 → D1 → D2 → E → OPS
 - [x] PR-C1 (MERGED #183, main `4cf75f91`) E9 (CI boots wrangler dev in hosted-verify-tests; five exact checks: health, 401, unregistered deny, register 201, allow) + E10 (@bolyra/mpp devDep; digest agreement from the installed package; example asserts the Worker's id in-process)
-- [ ] PR-A1 schema_meta + E5 E7 E8 E17 E18 T6 E14 E11
-- [ ] PR-B E2 E13 T10 E15 E16 E19
-- [ ] PR-A2 E6
-- [ ] PR-D1 T8 TD-1 TD-2 engines → publish @bolyra/mpp 0.7.0 (founder go)
+- [x] PR-A1 (MERGED #184) schema_meta + E5 E7 E8 E17 E18 T6 E14 E11
+- [x] PR-B (MERGED #187) E2 E13 T10 E15 E16 E19 — OPS: founder must run the two `tenant.sh migrate --from` commands before any tenant mutation
+- [x] PR-A2 (MERGED #185) E6
+- [x] PR-D1 (MERGED #186) T8 TD-1 TD-2 engines — [ ] publish @bolyra/mpp 0.7.0 (FOUNDER GO; unpublished)
 - [ ] PR-D2 example migration to 0.7.0
-- [ ] PR-E T3 T4 T7 spec wording
+- [ ] PR-E T3 T4 T7 spec wording (in review)
 - [ ] OPS migrate tenant records → staging → canary + prod deploy (go) → strict health → bolyra-smoke removal (go)
 Deferred by ruling: release backoff widen, T9 keychain seam, E19 overlap, T6 docs links.
 
