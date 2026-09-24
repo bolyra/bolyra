@@ -761,6 +761,7 @@ becomes the new floor (recorded at the OPS step, in the table below).
 |---|---|---|---|---|
 | staging | 1c4eaa83-2b5f-4c98-9f41-9f4e980bcf32 | 2026-09-21 | e7cb720 | 20/20 (2026-09-21, tenant bolyra-staging, fixture key) |
 | production | **4a4e83fc-6e53-4287-8f92-c5d03a6fbc6f — the rollback floor** | 2026-09-21 | e7cb720 | 20/20 (2026-09-21, tenant bolyra-smoke, fixture key; quarantined afterwards) |
+| production | e38b3190-4203-432d-aa71-18d69b512c68 | 2026-09-21 | 4cef2454 | receipt key id preview-2; floor unchanged |
 
 ## Out of scope — waits for a real pilot
 

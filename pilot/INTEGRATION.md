@@ -27,15 +27,21 @@ decision handling.
 Before asking us for anything, run the hosted verifier yourself: the same
 Worker, under `wrangler dev`, with the repo's placeholder tenant and its
 conformance-fixture operator key (public — this proves the mechanics, not who
-signed). Prerequisites: curl, jq, Node 22+, bash and `lsof` (macOS or Linux).
+signed). Prerequisites: Node 22+, bash and `lsof` (macOS or Linux), and a
+checkout of this repo (`git clone https://github.com/bolyra/bolyra`); curl
+and jq for the curl steps later on.
 
 ```bash
-git clone https://github.com/bolyra/bolyra && cd bolyra
 cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
 npm ci
-npm run smoke:dev     # boot, health, unregistered → deny, register → allow, stop
-npm run verify:dev    # the post-deploy check: auth boundary + a canary ABSENT → ACTIVE → REVOKED
+npm run smoke:dev
 ```
+
+`smoke:dev` boots the Worker with an empty registry, checks health, shows an
+unregistered binding denied, registers it, shows it allowed, and stops the
+Worker. `npm run verify:dev` then runs the post-deploy check against a local
+Worker: the auth boundary plus a canary credential taken ABSENT → ACTIVE →
+REVOKED.
 
 The step-by-step version — start the Worker, then register, verify, revoke
 and see the deny with curl — is [The same flow by
@@ -211,6 +217,7 @@ instance), issue with the absolute Unix-seconds form of `--expiry` and keep
 the value:
 
 ```bash
+cd "$(mktemp -d)"   # keep mandate.json and registration.json out of the checkout
 EXPIRY=$(( $(date +%s) + 30*24*3600 ))   # record this once, next to the credential_id
 bolyra mandate issue \
   --operator-key '/absolute/path/to/operator.key' \
@@ -226,11 +233,19 @@ To **roll to a new expiry**: issue the new binding, register it, switch the
 agent to the new presentation, then revoke the old id.
 
 ```bash
+cd "$(mktemp -d)"   # keep mandate.json and registration.json out of the checkout
 BASE=https://bolyra-hosted-verify.<account>.workers.dev
 ADMIN=<your admin token>
 OLD_ID=<the credential_id you are replacing>
 
-# 1. Register the new binding (mandate.json from the issue above); 201 + the new id:
+# 1. Issue the new binding with a new absolute expiry (record it next to the new id):
+EXPIRY=$(( $(date +%s) + 30*24*3600 ))
+bolyra mandate issue \
+  --operator-key '/absolute/path/to/operator.key' \
+  --agent '<agent-name>' --audience '<project-key>' --model '<model>' \
+  --tier small --expiry "$EXPIRY" --encoding json --out mandate.json
+
+# 2. Register it; 201 + the new id:
 jq '{version: 1, binding, signature: .sig, operator_pubkey: .agent.credential.operator_pubkey}' \
   mandate.json > registration.json
 NEW_ID=$(curl -s -X POST $BASE/v1/credentials \
@@ -238,12 +253,12 @@ NEW_ID=$(curl -s -X POST $BASE/v1/credentials \
   --data @registration.json | jq -r .credential_id)
 echo "$NEW_ID"
 
-# 2. Switch the agent to the new presentation, then revoke the old id (204):
+# 3. Switch the agent to the new presentation, then revoke the old id (204):
 curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$OLD_ID/revoke \
   -H "Authorization: Bearer $ADMIN"
 ```
 
-Until step 2, both credentials are ACTIVE and both verify; the old one also
+Until step 3, both credentials are ACTIVE and both verify; the old one also
 stops on its own at its expiry. A registration is refused with `400
 binding_expired` once the binding's expiry has passed, so renew before it.
 
