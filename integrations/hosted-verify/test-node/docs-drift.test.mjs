@@ -10,6 +10,12 @@
 //       block's current directory;
 // and every `cd` lands on a directory that exists. Nothing is executed.
 //
+// A `cd` this checker cannot model (`$VAR`, `~`, `"$(mktemp -d)"`, `-`) makes the current
+// directory UNKNOWN: the relative checks (a, c) are skipped until the next modellable `cd`
+// rather than run against a stale directory. Quoting is not parsed as shell: text inside
+// quotes in a fenced block (a URL in "…", a --data argument in '…') is checked like any
+// other text, with the quote characters themselves stripped from route tokens.
+//
 // Plain `node --test` (npm run test:agreement), not the vitest workers pool: this reads
 // repo files at test time, which the workerd sandbox cannot.
 import { test } from 'node:test';
@@ -54,10 +60,12 @@ export function workerRoutes(indexSource) {
   return new Set(routes);
 }
 
-/** Normalise a path seen in a doc to route-table form: an id segment becomes {id}. */
+/** Normalise a path seen in a doc to route-table form: quotes and any query string go, an id segment becomes {id}. */
 function normaliseRoute(path) {
   return path
-    .replace(/[)"'`,.;]+$/, '')
+    .replace(/["']/g, '')
+    .replace(/\?.*$/, '')
+    .replace(/[)`,.;]+$/, '')
     .replace(/^(\/v1\/credentials\/)(\$\{?\w+\}?|<[^>]*>|\{id\}|[0-9a-f]{64})(?=\/|$)/, '$1{id}');
 }
 
@@ -75,12 +83,17 @@ function cdTarget(arg, cwd, cloned) {
   const top = /^\$\(git rev-parse --show-toplevel\)(\/.*)?$/.exec(a.replace(/"/g, ''));
   if (top) return join(ROOT, top[1] ?? '');
   if (a.includes('$') || a.startsWith('~') || a === '-') return null;
+  if (cwd === null && !a.startsWith('/')) return null; // relative to an unknown directory
   // `git clone …/bolyra` then `cd bolyra/…`: the clone is this checkout.
   if (cloned && (a === 'bolyra' || a.startsWith('bolyra/'))) return join(ROOT, a.slice('bolyra'.length));
   return resolve(cwd, a);
 }
 
-/** Split a shell line into simple commands on && / || / ; / |, tracking one level of ( subshell ). */
+/**
+ * Split a shell line into simple commands on && / || / ; / |, tracking ( subshell ) depth.
+ * `$( … )` and `$(( … ))` are command/arithmetic substitutions, copied into the current
+ * command whole (balanced parentheses) so they never open or close a subshell.
+ */
 function commands(line) {
   const out = [];
   const code = line.replace(/(^|\s)#.*$/, ''); // strip trailing comments
@@ -92,12 +105,22 @@ function commands(line) {
   };
   for (let i = 0; i < code.length; i++) {
     const c = code[i];
-    if (c === '(' && code[i - 1] !== '$') {
+    if (c === '$' && code[i + 1] === '(') {
+      let j = i + 1;
+      for (let open = 0; j < code.length; j++) {
+        if (code[j] === '(') open++;
+        else if (code[j] === ')' && --open === 0) break;
+      }
+      cur += code.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === '(') {
       flush();
       depth++;
       continue;
     }
-    if (c === ')' && depth > 0 && !cur.includes('$(')) {
+    if (c === ')' && depth > 0) {
       flush();
       depth--;
       out.push({ text: '', subshell: false, close: true });
@@ -125,7 +148,7 @@ export function checkDoc(docPath, markdown, routes) {
   let cwd = ROOT; // one reader's shell for the whole doc: a cd carries into later blocks
   for (const block of shellBlocks(markdown)) {
     counts.blocks++;
-    let saved = null; // cwd outside the current ( subshell )
+    let saved; // cwd outside the current ( subshell ); undefined when not in one (cwd itself may be null)
     let cloned = false;
     // Files the block itself writes (`> f`, `--out f`, `-o f`) need not pre-exist.
     const written = new Set();
@@ -141,23 +164,29 @@ export function checkDoc(docPath, markdown, routes) {
       const where = `${docPath}:${at}`;
       for (const cmd of commands(line)) {
         if (cmd.close) {
-          if (saved !== null) cwd = saved;
-          saved = null;
+          if (saved !== undefined) cwd = saved;
+          saved = undefined;
           continue;
         }
-        if (cmd.subshell && saved === null) saved = cwd;
+        if (cmd.subshell && saved === undefined) saved = cwd;
         const text = cmd.text;
         if (/^git clone\b/.test(text)) cloned = true;
-        for (const w of text.matchAll(/(?:>\s*|--out\s+|-o\s+)([\w./-]+)/g)) written.add(resolve(cwd, w[1]));
+        if (cwd !== null) {
+          for (const w of text.matchAll(/(?:>\s*|--out\s+|-o\s+)([\w./-]+)/g)) written.add(resolve(cwd, w[1]));
+        }
         const cd = /^cd\s+(.+)$/.exec(text);
         if (cd) {
           const target = cdTarget(cd[1], cwd, cloned);
-          if (target === null) continue;
+          if (target === null) {
+            cwd = null; // unknown until the next modellable cd
+            continue;
+          }
           if (!existsSync(target) || !statSync(target).isDirectory()) {
             problems.push(`${where}: cd ${cd[1].trim()} → ${relative(ROOT, target) || '.'} is not a directory`);
           } else cwd = target;
           continue;
         }
+        if (cwd === null) continue; // relative checks need a known directory
         for (const d of text.matchAll(/(?:--data(?:-binary|-raw)?|-d)\s+@([^\s'"]+)/g)) {
           counts.dataRefs++;
           if (d[1].includes('$')) continue;
@@ -176,7 +205,7 @@ export function checkDoc(docPath, markdown, routes) {
         }
       }
       // Routes: anywhere on the line, comments included (a comment naming a route is a claim too).
-      for (const r of line.matchAll(/(?:\$\{?BASE\}?|https?:\/\/[^\s/'"]+|\s|^)(\/v1\/[^\s'"|]*|\/health\b|\/\.well-known\/[^\s'"|]*)/g)) {
+      for (const r of line.matchAll(/(?:\$\{?BASE\}?|https?:\/\/[^\s/'"]+|\s|^)(\/v1\/[^\s|]*|\/health\b|\/\.well-known\/[^\s|]*)/g)) {
         counts.routeRefs++;
         const route = normaliseRoute(r[1]);
         if (!routes.has(route)) problems.push(`${where}: ${r[1]} (as ${route}) is not in the Worker's routes list`);
@@ -198,7 +227,15 @@ test('the checker catches the drift classes it claims to (self-test)', () => {
     '```',
   ].join('\n');
   const { problems } = checkDoc('synthetic.md', bad, routes);
-  assert.equal(problems.length, 4, problems.join('\n'));
+  const all = problems.join('\n');
+  for (const [cls, needle] of [
+    ['missing @file', '@examples/registration.allow.json resolves to examples/registration.allow.json'],
+    ['unknown route', "/v1/nope (as /v1/nope) is not in the Worker's routes list"],
+    ['missing npm script', 'npm run no-such-script — no such script'],
+    ['missing cd target', 'cd no/such/dir → no/such/dir is not a directory'],
+  ]) {
+    assert.ok(all.includes(needle), `${cls} not reported; got:\n${all}`);
+  }
   const good = [
     '```bash',
     'cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"',
@@ -220,3 +257,48 @@ for (const doc of DOCS) {
     assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
   });
 }
+
+const block = (...lines) => ['```bash', ...lines, '```'].join('\n');
+const TOP = 'cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"';
+
+test('route tokens: shell quotes and query strings are not part of the route', () => {
+  const doc = block(
+    TOP,
+    'curl -s -X POST $BASE/v1/credentials/"$ID"/revoke',
+    "curl -s -X POST \"$BASE/v1/credentials/$ID/repair-history\"",
+    "curl -s '$BASE/v1/verify?trace=1'",
+    'curl -s $BASE/health?x=1',
+  );
+  assert.deepEqual(checkDoc('synthetic.md', doc, routes).problems, []);
+  // …while a wrong route inside quotes is still caught.
+  const bad = block(TOP, 'curl -s -X POST "$BASE/v1/credentials/$ID/unrevoke"');
+  assert.match(checkDoc('synthetic.md', bad, routes).problems.join('\n'), /unrevoke/);
+});
+
+test('an unmodellable cd suspends relative checks until the next modellable cd', () => {
+  const doc = [
+    block(TOP, 'cd "$(mktemp -d)"   # scratch', 'npm run not-a-script', 'curl --data @nowhere.json $BASE/v1/verify'),
+    // the reader's shell is still in the temp dir in the next block
+    block('curl --data @still-nowhere.json $BASE/v1/verify', 'cd ~/somewhere', 'npm run also-not'),
+    block(TOP, 'curl --data @missing-after-cd.json $BASE/v1/verify'),
+  ].join('\n\n');
+  const problems = checkDoc('synthetic.md', doc, routes).problems;
+  assert.equal(problems.length, 1, problems.join('\n'));
+  assert.match(problems[0], /@missing-after-cd\.json/);
+  for (const arg of ['"$DIR"', '~', '"$(mktemp -d)"', '$HOME/x']) {
+    const p = checkDoc('synthetic.md', block(TOP, `cd ${arg}`, 'npm run nope'), routes).problems;
+    assert.deepEqual(p, [], `cd ${arg}`);
+  }
+});
+
+test('$(( arithmetic )) does not open a subshell', () => {
+  const doc = block(
+    'EXPIRY=$(( $(date +%s) + 30*24*3600 )) && ' + TOP,
+    '(cd ../cli && npm run build)',
+    'npm run smoke:dev',
+  );
+  assert.deepEqual(checkDoc('synthetic.md', doc, routes).problems, []);
+  // a subshell entered while the directory is unknown still restores on exit
+  const nested = block('cd "$(mktemp -d)"', '(' + TOP + ' && npm run smoke:dev)', 'npm run not-checked-here');
+  assert.deepEqual(checkDoc('synthetic.md', nested, routes).problems, []);
+});
