@@ -247,8 +247,9 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
 # nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
 # because the file exists: run `rotate <org_id> admin` and `rotate <org_id> verifier`
-# to re-mint both tokens first — a removed tenant is skipped by sync, so both pass
-# cleanly — then set "status": "active" in the registry file by hand and run `sync`;
+# to re-mint both tokens first — for a removed tenant rotate stores the token and SKIPS
+# the sync (the map would not change; it says so and exits 0), which also works when every
+# tenant is removed — then set "status": "active" in the registry file by hand and run `sync`;
 # the Durable Object resumes as it was — revoked credentials stay revoked:
 pilot/tenant.sh remove <org_id>
 
@@ -322,8 +323,13 @@ Notes:
   without it). Active **and** disabled records count as tenants. A registry
   directory with **no** record files is refused whatever the flags say; that
   is a wrong `TENANTS_DIR` / `HOSTED_VERIFY_ENV` far more often than intent.
-  Bring a tenant back with `add` (a new org) or the `rotate` + `"status":
-  "active"` + `sync` path above (a removed one).
+  A removal can also end with `--last` given for a tenant that turns out not
+  to be the last one: that is noted and runs a plain sync (the map stays
+  non-empty). Bring a tenant back with `add` (a new org) or, for a removed
+  one, the path above: `rotate <org_id> admin` and `rotate <org_id> verifier`
+  store fresh tokens and skip the sync (the tenant is removed, so the map would
+  not change — this holds even when every tenant is removed), then set
+  `"status": "active"` and run `sync`.
 - Quarantining does **not** un-pin operator keys or revoke credentials, and
   that is fine: a quarantined tenant is served on no route. If trust in a key is
   the problem, edit it out of `trustedOperators` **and** revoke the credentials

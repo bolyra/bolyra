@@ -1,4 +1,4 @@
-// Start `wrangler secret put TENANTS` only once a non-empty validated map has arrived on
+// Start `wrangler secret put TENANTS` only once a validated map has arrived on
 // stdin. `wrangler secret put` has no empty-value guard, so it must not be the last stage
 // of the assembly pipeline: on a validator refusal it would read EOF and put an empty
 // secret, which fails EVERY tenant closed. The map is held in memory and never written
@@ -35,6 +35,7 @@ process.stderr.on('error', () => {});
 // the pipe kills this stage outright — no report, and a shell upstream left to explain an exit
 // code for something that never started.
 const EX_TEMPFAIL = 75;
+// Our flag, not wrangler's: `wrangler secret put` has none by this name; if it ever gains one, rename ours.
 const ALLOW_EMPTY = '--allow-empty';
 const allowEmpty = process.argv.slice(2).includes(ALLOW_EMPTY);
 const wranglerArgs = process.argv.slice(2).filter((a) => a !== ALLOW_EMPTY);
