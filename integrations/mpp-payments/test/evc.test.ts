@@ -291,6 +291,16 @@ describe('normalizeVerifierUrl (TD-1)', () => {
     expect(() => normalizeVerifierUrl('not a url')).toThrow();
   });
 
+  test.each([
+    'https://verify.example ',
+    'https://verify.example/ ',
+    ' https://verify.example',
+    '\thttps://verify.example/v1/verify',
+    'https://verify.example/v1/verify\n',
+  ])('leading/trailing whitespace is refused, never trimmed: %p', (url) => {
+    expect(() => normalizeVerifierUrl(url)).toThrow(TypeError);
+  });
+
   test('a URL without a scheme://authority form throws (no ambiguous path portion)', () => {
     expect(() => normalizeVerifierUrl('https:verify.example')).toThrow(TypeError);
   });
@@ -317,6 +327,16 @@ describe('normalizeVerifierUrl (TD-1)', () => {
       await callUrlVerifierWithEvidence({ url }, REQUEST);
       expect((spy.mock.calls[0] as unknown[])[0]).toBe(expected);
     });
+
+    test.each(['https://verify.example ', 'https://verify.example/ '])(
+      'whitespace-padded %p fails closed (deny internal_error) without fetching',
+      async (url) => {
+        const spy = spyFetch();
+        const evidence = await callUrlVerifierWithEvidence({ url }, REQUEST);
+        expect(evidence.verdict).toMatchObject({ verdict: 'deny', code: 'internal_error' });
+        expect(spy).not.toHaveBeenCalled();
+      },
+    );
 
     test('an invalid URL fails closed without fetching', async () => {
       const spy = spyFetch();

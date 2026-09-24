@@ -317,7 +317,8 @@ verify route; only a bare origin is rewritten. `https://verify.example` and
 wrote it, so dot segments (`/..`, `/%2e`, `/custom/..`) are not roots. Any
 other path — including `/custom/` with its trailing slash — and any query
 string are used byte-for-byte. A `url` that is not an absolute
-`scheme://authority` URL is a `TypeError` at `bolyraGate()` construction.
+`scheme://authority` URL, or has leading or trailing whitespace (never
+trimmed), is a `TypeError` at `bolyraGate()` construction.
 `normalizeVerifierUrl(url)` is exported as a helper for pre-validating a
 configured URL: it returns the exact endpoint the gate will POST to, or
 throws `TypeError`.

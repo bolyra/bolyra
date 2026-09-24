@@ -238,12 +238,18 @@ const DEFAULT_VERIFY_PATH = '/v1/verify';
  * any query string and fragment. Dot segments such as `/..` or `/%2e` are
  * not roots. Every other URL, including a custom path with a trailing slash
  * and any query, is returned byte-for-byte. Throws `TypeError` when `url` is
- * not an absolute `scheme://authority` URL.
+ * not an absolute `scheme://authority` URL or has leading/trailing whitespace
+ * (never trimmed).
  *
  * Exported as a helper for pre-validating a configured verifier URL (e.g. at
  * startup, or to log the exact endpoint the gate will POST to).
  */
 export function normalizeVerifierUrl(url: string): string {
+  // URL parsing silently trims surrounding whitespace, which would make the
+  // string-as-written root check below disagree with the endpoint used.
+  if (/^\s|\s$/.test(url)) {
+    throw new TypeError('verifier url must not have leading or trailing whitespace');
+  }
   const parsed = new URL(url); // validation only: URL parsing collapses dot segments
   // Rewrite eligibility comes from the ORIGINAL string's path portion (after
   // the authority, before `?` / `#`), never from `parsed.pathname`:

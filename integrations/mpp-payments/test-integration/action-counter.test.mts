@@ -301,7 +301,20 @@ test('BOUNDARY (documented): an already-rejected native Promise with a tampered 
   const { spawnSync } = await import('node:child_process');
   const { fileURLToPath } = await import('node:url');
   const script = fileURLToPath(new URL('./boundary-tampered-promise.mts', import.meta.url));
-  const out = spawnSync(process.execPath, ['--import', 'tsx', script], { encoding: 'utf8', cwd: fileURLToPath(new URL('..', import.meta.url)) });
-  assert.equal(out.status, 0, out.stderr);
+  // Hermetic child: bounded by a timeout, and the unhandled-rejection mode is
+  // pinned so an inherited NODE_OPTIONS (e.g. --unhandled-rejections=strict)
+  // cannot turn the observed rejection into a crash. The fixture makes no
+  // network calls (the classical verifier runs in-process).
+  const out = spawnSync(process.execPath, ['--import', 'tsx', script], {
+    encoding: 'utf8',
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    timeout: 30_000,
+    killSignal: 'SIGKILL',
+    env: { ...process.env, NODE_OPTIONS: '--unhandled-rejections=throw' },
+  });
+  const tail = `stderr tail: ${(out.stderr ?? '').slice(-2000)}`;
+  assert.equal(out.error, undefined, `spawn failed (${String(out.error)}); ${tail}`);
+  assert.equal(out.signal, null, `fixture killed by ${String(out.signal)} (timeout?); ${tail}`);
+  assert.equal(out.status, 0, `fixture exited ${String(out.status)}; ${tail}`);
   assert.deepEqual(JSON.parse(out.stdout.trim()), { allowStatus: 200, counter: 1, unhandled: 1 });
 });
