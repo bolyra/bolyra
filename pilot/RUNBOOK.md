@@ -112,7 +112,9 @@ cd integrations/hosted-verify && npm ci && npx wrangler login  # founder account
 # macOS keychain + openssl are assumed (tenant.sh). Confirm the Worker is live and enforcing:
 curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status, tenants, capability_map, registry, registry_enforced, receipts_enabled}'
 # Alarm: .github/workflows/hosted-verify-health.yml probes /health every 15 minutes (best effort)
-# and fails the run unless status/tenants are "ok" and registry_enforced is true. GitHub sends
+# and fails the run on any non-200 (a degraded Worker answers 503 `status: "degraded"`; the run
+# prints a one-line diagnostic of the failing component) or unless status/tenants are "ok" and
+# registry_enforced is true. GitHub sends
 # scheduled-run failure notifications to the account that last edited the `cron` line in the
 # workflow file (not whoever last touched the file); a manual dispatch notifies the dispatcher.
 # That account needs "Actions: failed workflows only" (or all) email notifications enabled in its
@@ -129,7 +131,10 @@ curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status,
 # probe. `/health` also probes the registry Durable Object (a status read under the 2 s verify
 # deadline) and parses CAPABILITY_MAP, and answers 503 `status: "degraded"` (with `registry:
 # "unavailable"|"timeout"` or `capability_map: "invalid"`) when either fails, so on a build that
-# emits those fields a registry outage or a malformed CAPABILITY_MAP trips the probe too.
+# emits those fields a registry outage or a malformed CAPABILITY_MAP trips the probe too. The
+# registry probe runs at most once per Worker isolate per 10 s (single-flight, healthy results
+# cached; failures are re-probed on the next call), so a /health flood cannot amplify onto the
+# `__health__` object beyond that, and the registry signal may be up to 10 s stale.
 # `registry_enforced` is a build marker, not a registry liveness check (`registry` is the liveness).
 ```
 
@@ -352,7 +357,7 @@ Full registry: `spec/external-verifier-contract-v1.md` §9.
 | `expired` | 200 | `now_unix >= expiry` (strict — equality is expired) | Check their clock / `now_unix`; re-issue the credential |
 | `nonce_missing` | 200 | No usable nullifier signal | Regenerate the bundle |
 | `nonce_replayed` | 200 | (local mode only — not hosted) | Hosted is host-mode: THEY reserve `consume_nonces` before acting; `@bolyra/mpp`'s gate does this |
-| `internal_error` | 500 | Fail-closed: `TENANTS` unset or malformed, or `CAPABILITY_MAP` malformed (every tenant; an *unset* `CAPABILITY_MAP` is not a defect — it falls back to the messaging default and mpp capabilities then deny `unknown_capability`), a quarantined tenant, a registry RPC failure or its 2,000 ms deadline, a missing `TENANT` Durable Object binding (a deploy from an environment that did not redeclare it), or a bug | `npx wrangler tail --env=`; `/health` → `tenants` must be `"ok"`; `tenant.sh sync --dry-run` validates the map; check the deploy came from `wrangler.jsonc` with the `TENANT` binding |
+| `internal_error` | 500 | Fail-closed: `TENANTS` unset or malformed, or `CAPABILITY_MAP` malformed (every tenant; an *unset* `CAPABILITY_MAP` is not a defect — it falls back to the messaging default and mpp capabilities then deny `unknown_capability`), a quarantined tenant, a registry RPC failure or its 2,000 ms deadline, a missing `TENANT` Durable Object binding (a deploy from an environment that did not redeclare it), or a bug | `npx wrangler tail --env=`; `/health` → `tenants`, `capability_map` and `registry` must all be `"ok"` (`registry: "unavailable"`/`"timeout"` = registry outage or missing `TENANT` binding); `tenant.sh sync --dry-run` validates the map; check the deploy came from `wrangler.jsonc` with the `TENANT` binding |
 | *(409 `{"error":"credential_revoked"}`)* | 409 | Re-registering a revoked binding | Terminal by design; the partner must issue a new binding |
 | *(409 `{"error":"history_conflict"}`)* | 409 | `repair-history` found a different `revoked` event already recorded for the credential, or its recovery metadata is itself incomplete (the log shows `stored: null`) | Needs a human look — see "Recovering a revocation whose audit row failed" in step 3. The credential is revoked either way |
 | *(404 `{"error":"not_found"}`)* | 404 | Unknown credential id, a malformed id (not 64 lowercase hex), a wrong path, or **another tenant's** credential (never 403 — tenants cannot probe each other) | Routes: `GET /health`, `POST /v1/verify`, `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `POST /v1/credentials/{id}/repair-history`, `GET /.well-known/bolyra-signers.json` |

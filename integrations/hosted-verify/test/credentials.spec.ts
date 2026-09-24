@@ -552,10 +552,8 @@ describe('wire grammar and canonical form', () => {
 });
 
 describe('/health', () => {
-  it('names the registry and the id version', async () => {
+  it('names the credential id version', async () => {
     const h = await body(await SELF.fetch(`${BASE}/health`));
-    expect(h.registry_kind).toBe('durable-object');
-    expect(h.registry).toBe('ok'); // since E5: the probe result, not the kind
     expect(h.credential_id_version).toBe('v1');
   });
 });

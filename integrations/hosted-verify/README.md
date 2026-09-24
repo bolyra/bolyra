@@ -252,7 +252,7 @@ machine-readable). Component checks:
 
 - `tenants: "ok" | "invalid"` — whether the `TENANTS` secret parses; a quarantined (`disabled`) tenant still reports `ok` (this is parseability, not per-tenant availability).
 - `capability_map: "ok" | "invalid"` — whether `CAPABILITY_MAP` parses (a malformed map fails every authenticated request closed).
-- `registry: "ok" | "unavailable" | "timeout"` — a liveness probe: one status read against a dedicated `__health__` registry object (never a tenant's; `_` cannot appear in an org id) under the same 2,000 ms deadline as `/v1/verify`. A thrown RPC or a storage/input error is `unavailable`; the deadline is `timeout`. `registry_kind: "durable-object"` names the backend.
+- `registry: "ok" | "unavailable" | "timeout"` — a liveness probe: one status read against a dedicated `__health__` registry object (never a tenant's; `_` cannot appear in an org id) under the same 2,000 ms deadline as `/v1/verify`. A thrown RPC or a storage/input error is `unavailable`; the deadline is `timeout`. `registry_kind: "durable-object"` names the backend. The probe runs at most once per Worker isolate per 10 s: concurrent calls share one in-flight probe and a healthy result is reused for 10 s (a failed one is re-probed on the next call), so an unauthenticated flood cannot amplify onto the `__health__` object beyond that, and the `registry` signal may be up to 10 s stale.
 - `status: "ok" | "degraded"` — `ok` only when all three components are `ok`. A degraded service answers **HTTP 503** with the same body (still reported, never thrown), so a probe that checks only the status code cannot mistake it for healthy.
 
 Also `version: { "id", "tag", "timestamp"? } | null` — the deployed Worker version from the `version_metadata` binding (`CF_VERSION_METADATA` in `wrangler.jsonc`, production and staging), so a deploy check can confirm which build is live; `null` when the binding is absent (some local runs). It is informational and never affects `status`.
@@ -361,7 +361,7 @@ Two layers, both configured in `wrangler.jsonc`:
 | timestamp | (implicit)    | write time                                                    |
 | `blob1`   | route         | `/v1/verify`, `/v1/credentials`, `/health`, `/.well-known/bolyra-signers.json`, or `other` (raw paths and ids are never stored) |
 | `blob2`   | tenant label  | `<org_id>:<role>`, or `unauthenticated`                       |
-| `blob3`   | verdict       | `allow` / `deny` (verifier verdicts), `ok` (a successful registry route), `error` (any other non-2xx) |
+| `blob3`   | verdict       | `allow` / `deny` (verifier verdicts), `ok` (a successful resource route: registry routes and a healthy `/health`), `error` (any other non-2xx, including a degraded `/health` with code `degraded`) |
 | `blob4`   | code          | deny code (spec §9), transport-error code, or empty on success |
 | `blob5`   | proof kind    | `classical` for verdict responses, empty otherwise             |
 | `blob6`   | request id    | the `cf-ray` id (or a random UUID)                             |
