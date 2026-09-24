@@ -2,8 +2,9 @@
 // the pool cannot load @bolyra/mpp (node:crypto, Buffer, its own nested @bolyra/receipts).
 //
 // The binding digest and the capability map are implemented twice: in this Worker
-// (src/verify/binding.ts, src/verify/scope.ts) and in the published @bolyra/mpp that
-// operators issue mandates with. test/fixtures/*.json pin this Worker's side
+// (src/verify/binding.ts; the CAPABILITY_MAP var that src/verify/capabilities.ts reads)
+// and in the published @bolyra/mpp that operators issue mandates with.
+// test/fixtures/*.json pin this Worker's side
 // (test/fixtures.spec.ts); these tests pin the INSTALLED @bolyra/mpp to the same committed
 // values, so a drift in either package fails a test instead of turning every real
 // registration into "not registered".

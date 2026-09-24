@@ -9,9 +9,13 @@
  *   K     = UTF8("x:y"), decimal coordinates without leading zeros
  *   B     = the binding digest as 32 bytes big-endian
  *
- * Two copies can drift. What keeps them honest is the runtime check in run.ts: the id
- * the Worker returns on registration must equal the one computed here (`same id`), and
- * test/credential-id.test.ts pins this copy to the Worker's committed fixtures.
+ * The layout exists in THREE copies: this file, integrations/hosted-verify/src/credential-id.ts,
+ * and integrations/hosted-verify/test/fixtures/generate-registrations.cjs. The Worker
+ * parameterises the DST on CREDENTIAL_ID_VERSION; this mirror (like the generator)
+ * hardcodes v1, so a version bump must touch this file and the generator too. What catches
+ * a miss: the runtime check in run.ts (the id the Worker returns on registration must equal
+ * the one computed here, `same id`) and test/credential-id.test.ts, which pins this copy to
+ * the Worker's committed fixtures.
  */
 import { createHash } from 'node:crypto';
 

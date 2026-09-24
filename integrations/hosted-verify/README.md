@@ -76,7 +76,8 @@ independent credential still allows, 21 checks in all. `GET /health` reports
 Node **22+** (wrangler's requirement). `npm run typecheck` runs `wrangler types` first: the
 Cloudflare runtime globals (`ExecutionContext`, `AnalyticsEngineDataset`, …) come from the
 generated, gitignored `worker-configuration.d.ts`, so a plain `tsc --noEmit` on a fresh clone
-fails until it exists. `npm test` (vitest in the workers pool) does not need it.
+fails until it exists. `npm test` (vitest in the workers pool, then `npm run test:agreement`
+under plain Node) does not need it.
 
 `npx wrangler dev` needs a `TENANTS` value: `cp .dev.vars.example .dev.vars`.
 That file defines one local tenant with placeholder tokens (not secrets) whose
@@ -377,7 +378,8 @@ The API token needs exactly one scope: **Account → Account Analytics → Read*
 
 `npm test` runs the spec's `external_verifier` vectors
 (`spec/test-vectors.json`) against the Worker in workerd (via
-`@cloudflare/vitest-pool-workers`), plus HTTP-surface and fail-closed tests.
+`@cloudflare/vitest-pool-workers`), plus HTTP-surface and fail-closed tests, then
+`npm run test:agreement` (below).
 Of the 10 `external_verifier` vectors, **5 are driven end-to-end over HTTP**
 against the Worker (`allow-agent-only`, `allow-host-nonce`, `deny-malformed-
 input`, `deny-scope-exceeded`, `deny-model-mismatch`) and **5 are
@@ -389,8 +391,9 @@ carries `consume_nonces` because this preview is host-mode only.
 `npm run test:agreement` (plain `node --test`, since the workers pool cannot load it)
 re-derives every committed fixture's binding digest and the capability map with the
 installed, exactly pinned `@bolyra/mpp` devDependency, so a drift between this Worker and
-the package operators issue mandates with fails a test instead of denying every real
-registration as "not registered". CI runs it in the `hosted-verify-tests` job after vitest.
+`@bolyra/mpp`, the package operators issue mandates with, fails a test instead of denying
+every real registration as "not registered". `npm test` runs it after vitest; CI runs it as
+its own step in the `hosted-verify-tests` job.
 
 ## Deploy (maintainers)
 

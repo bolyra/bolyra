@@ -102,5 +102,9 @@ Worker.
 ## Tests
 
 ```bash
-npm test   # typecheck + test/server.test.ts (4 cases against a stubbed verifier) + test/versions.test.ts (pins, incl. the installed @bolyra/mpp)
+npm test   # typecheck + test/server.test.ts (4 cases against a stubbed verifier) + test/versions.test.ts (pins, incl. the installed @bolyra/mpp) + test/credential-id.test.ts
 ```
+
+`test/credential-id.test.ts` checks `src/credential-id.ts` against every committed
+credential id in `integrations/hosted-verify/test/fixtures/registrations.json`, read from
+the repo checkout: unlike `npm run demo`, `npm test` needs the repo checkout.
