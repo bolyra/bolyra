@@ -144,6 +144,11 @@ export function fixtureRegistration(fixture: { bundle: string }): FixtureRegistr
  * (no signing, no RPC): fixture-shaped values, ids `<prefix>` + a 64-hex-char
  * counter so seeds never collide with the fixtures' ids. One callback, one
  * statement per row.
+ *
+ * Two gaps, by design: seeds have NO 'registered' history row, and their
+ * `binding_json` is not a parseable Binding — a seed exists only to occupy
+ * rows (the cap tests) and must never be presented to /v1/verify or read back
+ * as a real credential.
  */
 export async function seedCredentials(
   stub: DurableObjectStub,

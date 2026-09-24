@@ -419,6 +419,15 @@ describe('per-tenant limits (E6)', () => {
     expect((await body(res)).error).toBe('binding_signature_invalid');
   });
 
+  it('the bound precedes the trust check: an UNTRUSTED operator with an oversized binding → 413, not 403', async () => {
+    expect((await postRegister(F.untrusted.body)).status).toBe(403); // the unpadded body is untrusted
+    const binding = F.untrusted.body.binding as Record<string, unknown>;
+    const padded = { ...F.untrusted.body, binding: { ...binding, agent_name: 'x'.repeat(MAX_BINDING_JSON_BYTES + 1) } };
+    const res = await postRegister(padded);
+    expect(res.status).toBe(413);
+    expect((await body(res)).error).toBe('payload_too_large');
+  });
+
   it('the bound counts UTF-8 bytes, not characters: 3-byte characters under the length limit but over the byte limit → 413', async () => {
     const payload = paddedBody(MAX_BINDING_JSON_BYTES + 3, '€');
     const canonical = canonicalize(payload.binding);

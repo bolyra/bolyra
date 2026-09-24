@@ -385,8 +385,9 @@ latency_ms`. `request_id` is the server-generated UUID the caller sees as the
 `x-bolyra-request-id` response header (search the tail for it); `cf_ray` is the
 edge ray id, present only when well-formed. A registry write that fails with `registry storage failure` means
 the tenant's Durable Object could not persist: check the Workers dashboard →
-Durable Objects → storage and errors for `TenantRegistry`. The registry is
-tiny (a few KiB per credential), so a storage error is an outage, not a quota.
+Durable Objects → storage and errors for `TenantRegistry`. A `registry storage
+failure` is an outage, never the credential cap: the cap is the separate
+`429 quota_exceeded` in the table above.
 
 ## 7. Deploy: staging first, then the managed cutover
 
