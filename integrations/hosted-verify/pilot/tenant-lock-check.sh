@@ -23,8 +23,8 @@
 # a launcher that ignores interrupts, and a separate uploader that drains the map off stdin,
 # takes its time, and can OUTLIVE the launcher. wrangler's success line is printed only when
 # what arrived is a JSON object (`{}` included: whether an empty map may go up at all is the
-# put stage's decision, under --allow-empty, and the E13 checks below assert it). The registry lives in a temp directory under
-# HOSTED_VERIFY_ENV=lockcheck.
+# put stage's decision, under --allow-empty, and the E13 checks below assert it). The
+# registry lives in a temp directory under HOSTED_VERIFY_ENV=lockcheck.
 # Runs on Linux and macOS; bash 3.2 (no flock, no associative arrays, no `wait -n`).
 #
 #   bash pilot/tenant-lock-check.sh          (SHIM_SLEEP=<seconds> widens the timing window)
@@ -705,14 +705,17 @@ grep -q -- '--allow-empty' "$WORK/marker-u2" && fail "(u2) --allow-empty leaked 
 ok "(u2) --allow-empty lets {} through; wrangler gets --env but never --allow-empty"
 
 # (e5) a DISABLED tenant counts: with acme disabled and beta active, removing beta leaves a
-# non-empty map (acme quarantined) and needs no --last.
+# non-empty map (acme quarantined), so it is not the last tenant. Removing it plain is covered
+# by (r2b)-(r7); here --last is given anyway: it is noted and NOT turned into --allow-empty.
 reset_beta
 [ "$(status_of acme)" = disabled ] || fail "(e5) precondition: acme should be disabled here (is $(status_of acme))"
-out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e5" MARKER_BODY="$WORK/body-e5" SHIM_SLEEP=0 bash "$TENANT" remove beta 2>&1)"; rc=$?
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e5" MARKER_BODY="$WORK/body-e5" SHIM_SLEEP=0 bash "$TENANT" remove beta --last 2>&1)"; rc=$?
 [ "$rc" = 0 ] || fail "(e5) removing beta beside a disabled acme exited $rc: $out"
+case "$out" in *"note: --last given, but 'beta' is not the last tenant; the map stays non-empty"*) ;; *) fail "(e5) a --last on a non-last tenant was not noted: $out" ;; esac
+grep -q -- '--allow-empty' "$WORK/marker-e5" && fail "(e5) --allow-empty reached the put stage for a non-empty map: $(cat "$WORK/marker-e5")"
 [ "$(status_of beta)" = removed ] || fail "(e5) beta is not removed: $out"
 body_says "$WORK/body-e5" disabled || fail "(e5) the upload did not keep the disabled acme: $(cat "$WORK/body-e5")"
-ok "(e5) a disabled tenant occupies the map: removing the other one needs no --last"
+ok "(e5) a disabled tenant occupies the map: beta is not the last one, and a --last on it is noted, not forwarded"
 
 # (e1) acme is now the only record that is active or disabled. Without --last its removal is
 # refused before anything changes: status untouched, tokens kept, no upload, lock released.
@@ -761,13 +764,45 @@ out="$(tenant sync --allow-empty --bogus 2>&1)"; rc=$?
 [ "$rc" != 0 ] || fail "(e4) sync with an unknown argument beside --allow-empty exited 0: $out"
 ok "(e4) sync --allow-empty uploads exactly {} (confirmed); --dry-run beside it pushes nothing; unknown flags still refuse"
 
+# (e6) bringing a removed tenant back after `remove --last` (the RUNBOOK path): rotate stores
+# the new token and SKIPS the sync — the tenant is removed, so the map would not change, and
+# an all-removed registry would refuse the sync anyway. Then status=active plus sync brings it back.
+[ "$(status_of acme)" = removed ] && [ "$(status_of beta)" = removed ] || fail "(e6) precondition: every record should be removed here"
+for role in admin verifier; do
+  out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e6" bash "$TENANT" rotate acme "$role" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] || fail "(e6) rotate acme $role on a removed tenant exited $rc: $out"
+  case "$out" in *"tenant is removed; the map is unchanged — set status active and run sync to bring it back"*) ;; *) fail "(e6) rotate did not say the sync was skipped: $out" ;; esac
+  case "$out" in *"changed nothing"*|*"--allow-empty"*) fail "(e6) rotate reported a refused sync: $out" ;; *) ;; esac
+  [ -e "$KEYCHAIN/tenant-acme-$role" ] || fail "(e6) rotate acme $role stored no token"
+  [ ! -e "$WORK/marker-e6" ] || fail "(e6) rotate on a removed tenant reached the uploader: $out"
+  [ ! -d "$LOCK_DIR" ] || fail "(e6) rotate left its lock behind: $out"
+done
+node -e 'const fs=require("fs");const p=process.argv[1];const f=JSON.parse(fs.readFileSync(p,"utf8"));f.status="active";fs.writeFileSync(p,JSON.stringify(f,null,2)+"\n")' "$TENANTS_DIR/acme.json"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e6s" MARKER_BODY="$WORK/body-e6" SHIM_SLEEP=0 bash "$TENANT" sync 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(e6) the sync that brings acme back exited $rc: $out"
+body_says "$WORK/body-e6" active || fail "(e6) the upload did not carry acme active: $(cat "$WORK/body-e6")"
+[ "$(node -e 'process.stdout.write(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))).join(","))' "$WORK/body-e6")" = acme ] \
+  || fail "(e6) the upload did not carry exactly acme: $(cat "$WORK/body-e6")"
+ok "(e6) rotate on a removed tenant stores the token and skips the sync; status=active plus sync brings it back"
+
 # (e0) a directory with NO record files is still refused, --allow-empty or not: that is a wrong
 # TENANTS_DIR / HOSTED_VERIFY_ENV far more often than a deliberate empty map.
-mkdir -p "$WORK/tenants-empty"
+# The directory holds only what is NOT a record — the same decoys the assembler's own test
+# uses — and the shell and tenants-assemble.mjs must both see zero records in it.
+mkdir -p "$WORK/tenants-empty/dir.json"
+printf 'not json' > "$WORK/tenants-empty/.hidden.json"
+printf 'not json' > "$WORK/tenants-empty/x.policy.json"
+printf 'ignored' > "$WORK/tenants-empty/notes.txt"
 out="$(env "${TENANT_ENV[@]}" TENANTS_DIR="$WORK/tenants-empty" MARKER="$WORK/marker-e0" bash "$TENANT" sync --allow-empty 2>&1)"; rc=$?
 [ "$rc" != 0 ] || fail "(e0) sync --allow-empty over a directory with no record files exited 0: $out"
 case "$out" in *"no tenant registry files"*) ;; *) fail "(e0) the refusal did not name the missing record files: $out" ;; esac
 [ ! -e "$WORK/marker-e0" ] || fail "(e0) an empty registry directory reached the uploader: $out"
-ok "(e0) a registry directory with no record files is refused even with --allow-empty"
+out="$(env "${TENANT_ENV[@]}" TENANTS_DIR="$WORK/tenants-empty" bash "$TENANT" show 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(e0) show over the decoys exited $rc: $out"
+case "$out" in *"(no tenants in "*) ;; *) fail "(e0) show did not report zero tenants over the decoys: $out" ;; esac
+out="$(printf '' | node "$SCRIPT_DIR/tenants-assemble.mjs" "$WORK/tenants-empty" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(e0) the assembler exited $rc over the decoys, expected 1: $out"
+case "$out" in *"no registry record files"*) ;; *) fail "(e0) the assembler did not refuse the decoys as zero records: $out" ;; esac
+ok "(e0) decoys only (dotfile, *.policy.json, a directory, a .txt): shell and assembler agree there are no records; refused even with --allow-empty"
 
 echo "tenant-lock-check: all checks passed"
