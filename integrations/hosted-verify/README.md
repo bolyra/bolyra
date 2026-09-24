@@ -152,7 +152,7 @@ tenant](#request-a-trial-tenant-hosted-preview-quickstart).
 
 ## Developing
 
-Node **22+** (wrangler's requirement). `npm run typecheck` runs `wrangler types` first: the
+Node **22+** (wrangler's requirement; pinned by `.nvmrc` and `engines`). `npm run typecheck` runs `wrangler types` first: the
 Cloudflare runtime globals (`ExecutionContext`, `AnalyticsEngineDataset`, …) come from the
 generated, gitignored `worker-configuration.d.ts`, so a plain `tsc --noEmit` on a fresh clone
 fails until it exists. `npm test` (vitest in the workers pool, then `npm run test:agreement`
