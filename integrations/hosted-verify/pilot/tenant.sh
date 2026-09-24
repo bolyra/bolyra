@@ -39,10 +39,15 @@
 #                                     trusting ONLY the keys given, then sync; seeds the repo
 #                                     conformance fixture key only with --with-fixture-key
 #                                     (preview-only: its private half is public)
-#   ./tenant.sh rotate <org_id> admin|verifier
+#   ./tenant.sh rotate <org_id> admin|verifier --confirm
 #                                     mint a NEW token for that role, then sync (a REMOVED
 #                                     tenant: store it and skip the sync — the map would not
-#                                     change; set status active and sync to bring it back)
+#                                     change; set status active and sync to bring it back).
+#                                     There is NO overlap window (one token per role): from
+#                                     that sync on, the partner's requests under the old
+#                                     token are 401 until they deploy the new one — so it
+#                                     refuses without --confirm, which records that the
+#                                     switch-over has been scheduled with the partner
 #   ./tenant.sh disable <org_id>      quarantine — the entry stays with "disabled": true and
 #                                     the tenant is served on NO route (verify: 500
 #                                     internal_error verdict; registry routes: 503
@@ -361,7 +366,7 @@ cmd_add() {
   esac
   [ -z "$extra" ] || die "add: unexpected extra argument '$extra'"
   require_org "$org"; require_keys "$keys"; require_security
-  [ ! -e "$(registry_file "$org")" ] || die "tenant '$org' already has a registry file at $(registry_file "$org") (to re-mint its tokens: rotate $org admin|verifier; to change keys: edit trustedOperators and sync)"
+  [ ! -e "$(registry_file "$org")" ] || die "tenant '$org' already has a registry file at $(registry_file "$org") (to re-mint its tokens: rotate $org admin|verifier --confirm; to change keys: edit trustedOperators and sync)"
   local list="$keys"
   [ "$flag" != "--with-fixture-key" ] || list="$keys,$FIXTURE_KEY"
   node -e '
@@ -375,14 +380,24 @@ const tmp=p+".tmp."+process.pid;fs.writeFileSync(tmp,JSON.stringify(f,null,2)+"\
 }
 
 cmd_rotate() {
-  local org="${1:-}" role="${2:-}" extra="${3:-}"
+  local org="${1:-}" role="${2:-}" flag="${3:-}" extra="${4:-}" impact
   [ -n "$org" ] || usage
   case "$role" in admin|verifier) ;; *) usage ;; esac
   [ -z "$extra" ] || die "rotate: unexpected extra argument '$extra'"
+  # E19: the Worker holds ONE token per role, so a rotation has no overlap window — the old
+  # token stops working the moment the sync lands. Refused, before anything changes, until the
+  # operator confirms the partner has been scheduled to deploy the new one.
+  impact="requests under the $role token return 401 from the next sync until the partner deploys the new token"
+  case "$flag" in
+    --confirm) ;;
+    "") die "rotate: $impact; re-run with --confirm after scheduling it with them" ;;
+    *) die "rotate: unknown argument '$flag' (only --confirm is accepted)" ;;
+  esac
   require_org "$org"; require_registry "$org"; require_security
   local status
   status="$(reg_field "$org" status)" || die "rotate: could not read $(registry_file "$org")"
   kc_put_minted "$org" "$role"
+  echo "warning: $impact" >&2
   # A removed tenant is not in the map, so a sync would change nothing — and after
   # `remove --last` an all-removed registry would refuse it and blame a flag rotate does not
   # take. This is the RUNBOOK's bring-it-back path: re-mint, then set status active and sync.
@@ -570,7 +585,7 @@ tokens_for_sync() {
       *) die "$(registry_file "$org"): status must be active, disabled, or removed" ;;
     esac
     for role in admin verifier; do
-      kc_has "$org" "$role" || die "no keychain token for '$org' ($role): run rotate $org $role"
+      kc_has "$org" "$role" || die "no keychain token for '$org' ($role): run rotate $org $role --confirm"
       # Capture first: a failing $(kc_get …) inside printf does not trip set -e, and the
       # tenant would silently sync with an empty token.
       token="$(kc_get "$org" "$role")" || die "could not read the $role token for '$org' from the keychain (denied or locked?)"
@@ -847,7 +862,7 @@ if [ $# -gt 0 ]; then shift; fi
 # creates the directory for these), so a concurrent init or migrate cannot interleave with it.
 case "$cmd" in
   add)     acquire_lock; require_initialized add;     cmd_add "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
-  rotate)  acquire_lock; require_initialized rotate;  cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
+  rotate)  acquire_lock; require_initialized rotate;  cmd_rotate "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
   disable) acquire_lock; require_initialized disable; cmd_disable "${1:-}" "${2:-}" ;;
   enable)  acquire_lock; require_initialized enable;  cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
   remove)  acquire_lock; require_initialized remove;  cmd_remove "${1:-}" "${2:-}" "${3:-}" ;;
