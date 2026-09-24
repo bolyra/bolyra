@@ -290,6 +290,34 @@ describe('/health probes the registry and the capability map (E5)', () => {
   });
 });
 
+describe('/health reports the deployed version (E14)', () => {
+  const healthBody = async (e: Env) =>
+    (await (await worker.fetch(new Request(`${BASE}/health`), e)).json()) as Record<string, unknown>;
+
+  it('echoes the version_metadata binding as { id, tag, timestamp }', async () => {
+    const body = await healthBody({ ...env, CF_VERSION_METADATA: { id: 'test-version', tag: 'v-tag', timestamp: '2026-09-24T00:00:00Z' } });
+    expect(body.version).toEqual({ id: 'test-version', tag: 'v-tag', timestamp: '2026-09-24T00:00:00Z' });
+  });
+
+  it('omits an absent timestamp rather than inventing one', async () => {
+    const body = await healthBody({ ...env, CF_VERSION_METADATA: { id: 'test-version', tag: '' } });
+    expect(body.version).toEqual({ id: 'test-version', tag: '' });
+  });
+
+  it('reports version: null when the binding is absent (some local runs)', async () => {
+    const { CF_VERSION_METADATA: _bound, ...unbound } = env;
+    const body = await healthBody(unbound);
+    expect(body.version).toBeNull();
+    expect(body.status).toBe('ok'); // a missing version is informational, never a degradation
+  });
+
+  it('the wrangler.jsonc binding reaches the Worker (the pool provides it)', async () => {
+    const body = (await (await SELF.fetch(`${BASE}/health`)).json()) as { version: { id: unknown } | null };
+    expect(body.version).not.toBeNull();
+    expect(typeof body.version!.id).toBe('string');
+  });
+});
+
 describe('fail-closed input handling', () => {
   it('truncated JSON body → deny malformed_input (spec §13.5)', async () => {
     const res = await postVerify('{"version":1,"bun');

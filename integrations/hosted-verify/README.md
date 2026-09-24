@@ -255,6 +255,8 @@ machine-readable). Component checks:
 - `registry: "ok" | "unavailable" | "timeout"` — a liveness probe: one status read against a dedicated `__health__` registry object (never a tenant's; `_` cannot appear in an org id) under the same 2,000 ms deadline as `/v1/verify`. A thrown RPC or a storage/input error is `unavailable`; the deadline is `timeout`. `registry_kind: "durable-object"` names the backend.
 - `status: "ok" | "degraded"` — `ok` only when all three components are `ok`. A degraded service answers **HTTP 503** with the same body (still reported, never thrown), so a probe that checks only the status code cannot mistake it for healthy.
 
+Also `version: { "id", "tag", "timestamp"? } | null` — the deployed Worker version from the `version_metadata` binding (`CF_VERSION_METADATA` in `wrangler.jsonc`, production and staging), so a deploy check can confirm which build is live; `null` when the binding is absent (some local runs). It is informational and never affects `status`.
+
 Also `credential_id_version: "v1"`, `registry_enforced: true` (a build marker, emitted only by builds that consult the registry on `/v1/verify` — not a liveness check), and the trust-policy amendment text under `trust_policy`.
 
 ### Signed receipts (`X-Bolyra-Receipt`)
