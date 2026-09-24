@@ -80,10 +80,13 @@ function fail(check, expected, observed) {
   process.exit(1);
 }
 
+/** Per-request deadline: the wrapper's 90 s readiness bound covers boot only, not a request that stalls afterwards. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function get(route) {
   let res;
   try {
-    res = await fetch(`${url}${route}`);
+    res = await fetch(`${url}${route}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   } catch (e) {
     return { status: `no response (${e?.cause?.code ?? e?.cause?.errors?.[0]?.code ?? e?.name ?? 'error'})`, json: undefined };
   }
@@ -101,7 +104,7 @@ async function post(route, token, body) {
   if (token !== undefined) headers.authorization = `Bearer ${token}`;
   let res;
   try {
-    res = await fetch(`${url}${route}`, { method: 'POST', headers, body });
+    res = await fetch(`${url}${route}`, { method: 'POST', headers, body, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   } catch (e) {
     return { status: `no response (${e?.cause?.code ?? e?.cause?.errors?.[0]?.code ?? e?.name ?? 'error'})`, json: undefined, headers: new Headers() };
   }
