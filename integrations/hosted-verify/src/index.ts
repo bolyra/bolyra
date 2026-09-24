@@ -548,6 +548,10 @@ async function handleRevoke(
       // Consumers keep their 204 contract; the header and the logged code carry
       // the gap to the operator (pilot/RUNBOOK.md: repair-history).
       return { response: revoked({ 'x-bolyra-audit': 'history_write_failed' }), code: 'revoke_history_failed' };
+    case 'revoked_history_conflict':
+      // A retry met a revoked event that is not ours (or unusable metadata): still
+      // revoked, still 204; a human compares the rows (pilot/RUNBOOK.md).
+      return { response: revoked({ 'x-bolyra-audit': 'history_conflict' }), code: 'revoke_history_conflict' };
     case 'absent':
       return fail(404, 'not_found', 'no such credential');
     case 'invalid_input':
@@ -800,14 +804,20 @@ export default {
               // Inside the guard: a missing or unapplied TENANT Durable Object binding fails here,
               // not as a bare exception.
               const registry = registryFor(env, gate.auth);
-              result =
-                id === undefined
-                  ? await handleRegister(request, gate.auth, registry, requestId)
-                  : action === '/revoke'
-                    ? await handleRevoke(registry, id, requestId)
-                    : action === '/repair-history'
-                      ? await handleRepairHistory(registry, id)
-                      : await handleGet(registry, id);
+              if (id === undefined) {
+                result = await handleRegister(request, gate.auth, registry, requestId);
+              } else {
+                switch (action) {
+                  case '/revoke':
+                    result = await handleRevoke(registry, id, requestId);
+                    break;
+                  case '/repair-history':
+                    result = await handleRepairHistory(registry, id);
+                    break;
+                  default:
+                    result = await handleGet(registry, id);
+                }
+              }
             } catch (e) {
               // The object itself never throws, but the RPC transport can (the
               // object was reset or evicted mid-call, a connection was lost), an

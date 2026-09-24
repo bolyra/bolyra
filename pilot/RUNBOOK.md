@@ -249,12 +249,20 @@ curl -s -X POST $BASE/v1/credentials/<credential_id>/repair-history \
 # → 409 {"error":"history_conflict",…}          see below
 ```
 
+The two audit headers ask for different things:
+- `x-bolyra-audit: history_write_failed` (code `revoke_history_failed`): the first
+  write failed → retry the revoke or run `repair-history`.
+- `x-bolyra-audit: history_conflict` (code `revoke_history_conflict`): a retry
+  found rows that do not agree → a human looks at the rows; retrying will not help.
+
 A retry of the same `revoke` also attempts the repair (and answers a plain `204`
 once it succeeds). `history_conflict` means a **different** `revoked` event is
 already recorded for that credential (its `ts` or `request_id` does not match the
-metadata). The repair never overwrites it or clears the metadata: the Worker logs
-`hosted-verify history conflict` with both values — compare them and decide by
-hand. The credential stays revoked whatever you decide.
+metadata), or the stored recovery metadata is itself incomplete (null ts / request
+id): the log shows `stored: null`; fix the row by hand. The repair never overwrites
+a stored event or clears the metadata: the Worker logs `hosted-verify history
+conflict` with both values — compare them and decide by hand. The credential stays
+revoked whatever you decide.
 
 Notes:
 - Secrets take effect on the next request; no redeploy.
@@ -344,7 +352,7 @@ Full registry: `spec/external-verifier-contract-v1.md` §9.
 | `nonce_replayed` | 200 | (local mode only — not hosted) | Hosted is host-mode: THEY reserve `consume_nonces` before acting; `@bolyra/mpp`'s gate does this |
 | `internal_error` | 500 | Fail-closed: `TENANTS` unset or malformed, or `CAPABILITY_MAP` malformed (every tenant; an *unset* `CAPABILITY_MAP` is not a defect — it falls back to the messaging default and mpp capabilities then deny `unknown_capability`), a quarantined tenant, a registry RPC failure or its 2,000 ms deadline, a missing `TENANT` Durable Object binding (a deploy from an environment that did not redeclare it), or a bug | `npx wrangler tail --env=`; `/health` → `tenants` must be `"ok"`; `tenant.sh sync --dry-run` validates the map; check the deploy came from `wrangler.jsonc` with the `TENANT` binding |
 | *(409 `{"error":"credential_revoked"}`)* | 409 | Re-registering a revoked binding | Terminal by design; the partner must issue a new binding |
-| *(409 `{"error":"history_conflict"}`)* | 409 | `repair-history` found a different `revoked` event already recorded for the credential | Needs a human look — see "Recovering a revocation whose audit row failed" in step 3. The credential is revoked either way |
+| *(409 `{"error":"history_conflict"}`)* | 409 | `repair-history` found a different `revoked` event already recorded for the credential, or its recovery metadata is itself incomplete (the log shows `stored: null`) | Needs a human look — see "Recovering a revocation whose audit row failed" in step 3. The credential is revoked either way |
 | *(404 `{"error":"not_found"}`)* | 404 | Unknown credential id, a malformed id (not 64 lowercase hex), a wrong path, or **another tenant's** credential (never 403 — tenants cannot probe each other) | Routes: `GET /health`, `POST /v1/verify`, `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `POST /v1/credentials/{id}/repair-history`, `GET /.well-known/bolyra-signers.json` |
 
 `/health` reports `tenants: "invalid"` → the map on the Worker is defective and
@@ -430,6 +438,17 @@ bindings while tenants hold registrations is a storage-incident-class event.
 If a rollback below the floor is ever unavoidable: quarantine every tenant
 first (`tenant.sh disable …` for each), deploy, and treat every registration
 as unverified until the floor is restored.
+
+**Rolling back to the floor across the schema_meta change.** The floor build
+(`4a4e83fc`, commit e7cb720) pre-dates `schema_meta` and ignores it. It runs
+safely on a v2 database: every statement it issues names its columns, and the
+added `pending_history` column defaults to 0. It cannot see or repair a
+revocation whose audit row is still owed (`pending_history = 1`): it answers
+such a revoke `204` with no header. That metadata is left untouched. Before
+rolling back, list the credential ids that logged `revoke_history_failed` (or
+`revoke_history_conflict`). After restoring this build or a newer one, run
+`repair-history` for each (step 3). Once this build is deployed, its version id
+becomes the new floor (recorded at the OPS step, in the table below).
 
 | Environment | Version id | Deployed (UTC) | Commit | Example run |
 |---|---|---|---|---|
