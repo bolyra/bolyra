@@ -231,6 +231,12 @@ bolyra mandate issue \
 # stderr: a summary + the operator public key to list in `trustedOperators` above.
 ```
 
+A relative `--expiry 30d` is recomputed from the clock on every issue, and
+`expiry` is signed, so each run mints a distinct binding. Against a hosted
+verifier's credential registry that is a new `credential_id` to register; pass
+an absolute Unix timestamp to re-issue the same binding — see
+[Renewal](../../pilot/INTEGRATION.md#renewal).
+
 The operator public key printed on stderr is exactly what you configure as a
 `trustedOperators` entry in the gate. **This is issuance, not key management or
 a wallet:** the operator key is one you already hold; `bolyra mandate issue`

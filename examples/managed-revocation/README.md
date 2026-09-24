@@ -58,6 +58,12 @@ non-zero without them.
 
 The run exits non-zero if any row comes out differently.
 
+Row 1's second presentation maps to the same id because the run computes its
+absolute expiry once and reuses it: `expiry` is inside the signed binding, so
+a re-issue with a relative `--expiry 30d` is a new binding and a new id that
+must be registered on its own — see
+[Renewal](../../pilot/INTEGRATION.md#renewal).
+
 ## Two evidence sources
 
 - **`[gate]`** — what the published `@bolyra/mpp` gate proves on its own: the
