@@ -252,6 +252,19 @@ export interface BolyraGateOptions {
    */
   onReceipt?: (receipt: SignedReceipt) => void;
   /**
+   * Observer for the gate's final decision. Called EXACTLY ONCE per gate
+   * invocation (per preflight run), after the decision is settled — after
+   * nonce reservation and after the receipt sink's outcome, so a sink failure
+   * that turns an allow into a 500 is reported as that deny. Never called
+   * for credential-less discovery under `enforce: 'payment'` (no Bolyra
+   * decision is made) and never from the `verify` hook.
+   *
+   * Observation only: a throw, a rejected Promise, or a broken thenable is
+   * logged and contained — it never changes the verdict or the response.
+   * The Decision is a copy; mutating it changes nothing.
+   */
+  onDecision?: (decision: Decision) => void | Promise<void>;
+  /**
    * Clock override (unix seconds). Tests only. Mutually exclusive with
    * `nowMs` — pass exactly one clock; receipts built from this clock carry
    * `.000Z` decision timestamps.
@@ -293,4 +306,31 @@ export interface GateDecision {
     keyId: string;
     seq: number | undefined;
   };
+}
+
+/**
+ * The gate's final decision for one gate invocation, as reported to
+ * {@link BolyraGateOptions.onDecision}.
+ */
+export interface Decision {
+  outcome: 'allow' | 'deny';
+  /** Deny only: the final denial code (after sink-failure latching). */
+  code?: DenyCode;
+  /** Deny only: `verdict.detail.reason`, when the verifier sent it as a string. */
+  reason?: string;
+  /**
+   * Allow: the raw `x-bolyra-credential-id` header from a `url` verifier.
+   * Deny: `verdict.detail.credential_id`, when a string. Absent otherwise.
+   */
+  credentialId?: string;
+  /**
+   * Allow only: the raw `x-bolyra-receipt` header from a `url` verifier
+   * (not decoded or verified). Distinct from the gate's own signed decision
+   * receipt (`onReceipt` / `bolyraAuthorization.receipt`).
+   */
+  receipt?: string;
+  /** Deny only: the HTTP status the denial maps to (`DENY_STATUS[code]`). */
+  status?: number;
+  /** The spec §2.1 request context the gate built for this decision. */
+  request: VerifierRequestContext;
 }

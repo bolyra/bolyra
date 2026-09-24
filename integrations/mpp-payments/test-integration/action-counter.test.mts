@@ -221,3 +221,59 @@ test("counterexample B: enforce:'payment' + authorize hook => refused at constru
     (e: unknown) => isBolyraGateConfigError(e),
   );
 });
+
+test("onDecision under real mppx, enforce:'always': discovery reports allow, paid retry reports allow — exactly one Decision per HTTP request", async () => {
+  const stub = stubVerifierFetch({ allowFromBundle: true });
+  restoreFetch = stub.restore;
+  const decisions: Array<{ outcome: string; code?: string; status?: number }> = [];
+  const gated = gate(serverMethod(), await classicalGateOptions({ verifier: stub.verifier, onDecision: (d) => { decisions.push(d); } }));
+  const { state, handler } = buildApp(gated);
+
+  const discovery = await handler(await requestWith({ bundle: await makeBundle() }));
+  assert.equal(discovery.status, 402);
+  assert.equal(decisions.length, 1, 'the discovery request is its own gate invocation');
+
+  const paid = await handler(await requestWith({ payment: credentialFrom402(discovery), bundle: await makeBundle() }));
+  assert.equal(paid.status, 200);
+  assert.equal(state.counter, 1);
+  assert.deepEqual(decisions.map((d) => d.outcome), ['allow', 'allow'], 'mppx presenting the paid request twice to the gate (preflight + verify) still reports once');
+});
+
+test("onDecision under real mppx, enforce:'payment': discovery reports nothing, paid request reports once", async () => {
+  const stub = stubVerifierFetch({ allowFromBundle: true });
+  restoreFetch = stub.restore;
+  const decisions: Array<{ outcome: string }> = [];
+  const gated = gate(serverMethod(), await classicalGateOptions({ verifier: stub.verifier, enforce: 'payment', onDecision: (d) => { decisions.push(d); } }));
+  const { state, handler } = buildApp(gated);
+  const discovery = await handler(await requestWith({ bundle: await makeBundle() }));
+  assert.equal(discovery.status, 402);
+  assert.equal(decisions.length, 0);
+  const paid = await handler(await requestWith({ payment: credentialFrom402(discovery), bundle: await makeBundle() }));
+  assert.equal(paid.status, 200);
+  assert.equal(state.counter, 1);
+  assert.deepEqual(decisions.map((d) => d.outcome), ['allow']);
+});
+
+test('onDecision under real mppx: a throwing observer and a throwing logger change nothing (the deny keeps its code, status, reason, credential_id)', async () => {
+  const stub = stubVerifierFetch({ status: 200, body: { verdict: 'deny', kind: 'classical', code: 'untrusted_root', message: 'not active', detail: { reason: 'credential_not_active', credential_id: 'ab'.repeat(32) } } });
+  restoreFetch = stub.restore;
+  const originalError = console.error;
+  console.error = () => { throw new Error('logger down'); };
+  let seen: { code?: string; reason?: string; credentialId?: string } | undefined;
+  try {
+    const gated = gate(serverMethod(), await classicalGateOptions({ verifier: stub.verifier, onDecision: (d) => { seen = d; throw new Error('observer threw'); } }));
+    const { mppx, state, handler } = buildApp(gated);
+    const res = await handleDenials(handler)(await requestWith({ payment: await paymentHeader(mppx) }));
+    assert.equal(res.status, 401);
+    const body = await res.json() as { code: string; reason?: string; credential_id?: string };
+    assert.equal(body.code, 'untrusted_root');
+    assert.equal(body.reason, 'credential_not_active');
+    assert.equal(body.credential_id, 'ab'.repeat(32));
+    assert.equal(state.counter, 0);
+    assert.equal(seen?.code, 'untrusted_root');
+    assert.equal(seen?.reason, 'credential_not_active');
+    assert.equal(seen?.credentialId, 'ab'.repeat(32));
+  } finally {
+    console.error = originalError;
+  }
+});
