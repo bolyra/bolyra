@@ -235,7 +235,7 @@ jobs:
           printf '{}' | PATH="$d:$PATH" node pilot/tenants-put.mjs --env=ci --allow-empty | grep -q 'Success'
           TENANTS_DIR="$(mktemp -d)" bash pilot/tenant.sh show
           sed -n 's/^TENANTS=//p' .dev.vars.example | node pilot/tenants-check.mjs
-          printf '{}' | node pilot/tenants-check.mjs 2>&1 | grep 'empty map: every request will be denied' >/dev/null
+          out="$(printf '{}' | node pilot/tenants-check.mjs 2>&1)" && grep -q 'empty map: every request will be denied' <<<"$out"
           bash -n pilot/tenant-lock-check.sh
           bash pilot/tenant-lock-check.sh
 
