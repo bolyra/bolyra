@@ -17,6 +17,49 @@ released together as a cohort:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/mpp 0.7.0 (unreleased)
+
+Decision evidence for the application, and a verifier-URL convention.
+
+### Changed (compatibility)
+
+#### `@bolyra/mpp`
+
+- `engines.node` is now `>=20` (was `>=18`). Node 18 is end-of-life and was
+  never exercised in CI; 20, 22 and 24 are.
+- A `url` verifier whose `url` is a bare origin (`https://verify.example` or
+  `https://verify.example/`, with or without a query) is now POSTed to
+  `/v1/verify` on that origin; previously it was POSTed to the root. Every
+  other URL, including a custom path with a trailing slash and any query
+  string, is used byte-for-byte. A `url` that is not an absolute URL is now a
+  `TypeError` at `bolyraGate()` construction (it previously failed closed as
+  `internal_error` on every request).
+
+### Added
+
+#### `@bolyra/mpp`
+
+- `onDecision` gate option: an observer called exactly once per gate
+  invocation, after the final decision (after nonce reservation and the
+  `onReceipt` sink's outcome), with a `Decision` —
+  `{ outcome, code?, status?, reason?, credentialId?, receipt?, request }`.
+  Observer throws, rejections, and broken thenables are logged and contained;
+  they never change the verdict or response. Credential-less discovery under
+  `enforce: 'payment'` and the `verify` hook do not report; under
+  `enforce: 'always'` a 402→pay pair reports twice (discovery is its own gate
+  invocation). `Decision` is exported.
+- `callUrlVerifierWithEvidence(config, request)` returns
+  `{ verdict, status?, credentialId?, receipt? }` — the verifier's HTTP status
+  and the raw `x-bolyra-credential-id` / `x-bolyra-receipt` headers alongside
+  the unchanged fail-closed verdict. `callUrlVerifier` keeps its return shape.
+  `UrlVerifierConfig` and `UrlVerifierEvidence` types are exported.
+- `DenyProblem.reason` and `DenyProblem.credential_id`: copied from the deny
+  verdict's `detail.reason` / `detail.credential_id` when they are strings
+  (e.g. `credential_not_active` from a hosted-registry deny). No other
+  `detail` member reaches the Problem Details body. `denyProblem` /
+  `denyResponse` accept the verdict's `detail` (`DenyProblemInput`); existing
+  `{ code, message }` callers are unaffected.
+
 ## @bolyra/mpp 0.6.0 (2026-09-22)
 
 Bounded nonce retention, honest spend-mandate naming.
