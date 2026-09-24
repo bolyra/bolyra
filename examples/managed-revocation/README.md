@@ -13,7 +13,7 @@ locally and is not revocation evidence.
 ## Run it
 
 ```bash
-# from the repo root
+cd "$(git rev-parse --show-toplevel)"
 # 1. the hosted verifier (built from this repo — it is not published)
 cd integrations/hosted-verify && npm ci --no-audit --no-fund && cd ../..
 # 2. the example (published @bolyra/mpp 0.5.0 + mppx 0.8.13 from the registry)

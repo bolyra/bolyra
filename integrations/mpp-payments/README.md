@@ -483,6 +483,7 @@ allowed $25 spend and a denied $500 spend — lives in
 build the CLI first:
 
 ```bash
+cd "$(git rev-parse --show-toplevel)/integrations/mpp-payments"   # in a checkout of this repo
 (cd ../cli && npm install && npm run build)   # once: build the CLI the demo calls
 cd examples/mandate-demo && npm install && npm run demo
 ```

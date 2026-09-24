@@ -22,6 +22,27 @@ decision handling.
 | Replay | host nonce mode (you reserve nonces) | local or host mode |
 | Status | **design-partner preview** — no SLA, may be reset | your infrastructure, your uptime |
 
+## Try it in two commands (no credentials)
+
+Before asking us for anything, run the hosted verifier yourself: the same
+Worker, under `wrangler dev`, with the repo's placeholder tenant and its
+conformance-fixture operator key (public — this proves the mechanics, not who
+signed). Prerequisites: curl, jq, Node 22+, bash and `lsof` (macOS or Linux).
+
+```bash
+git clone https://github.com/bolyra/bolyra && cd bolyra
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
+npm ci
+npm run smoke:dev     # boot, health, unregistered → deny, register → allow, stop
+npm run verify:dev    # the post-deploy check: auth boundary + a canary ABSENT → ACTIVE → REVOKED
+```
+
+The step-by-step version — start the Worker, then register, verify, revoke
+and see the deny with curl — is [The same flow by
+hand](../integrations/hosted-verify/README.md#the-same-flow-by-hand) in the
+hosted-verify README; it uses the same `examples/` files as the curl test
+below. When that works, request a trial tenant.
+
 ## A. Hosted endpoint
 
 > **Preview honesty (read once, it's load-bearing):** the hosted endpoint is a
@@ -61,7 +82,7 @@ plus the messaging default). Until your key is pinned, only bindings signed
 by the repo's fixture key (if we seeded it for your tenant) can be registered
 — and nothing verifies until it is registered.
 
-## Try managed revocation in ten minutes
+## Request a trial tenant
 
 **Step 0 — the ask.** Send your operator's BabyJubjub **public key**,
 corresponding to the private key you use with `bolyra mandate issue` or the
@@ -70,13 +91,14 @@ installed, `bolyra key generate --out operator.key` creates the private key
 and writes decimal-string `x`/`y` coordinates to `operator.key.pub`; send
 only the `.pub` contents and retain the private key locally. We reply same
 day, over a secure channel, with the base URL and two bearer tokens — admin,
-verifier. The ten minutes start once you have those.
+verifier. The rest of this section takes about ten minutes once you have
+those.
 
 ### 1. Run the example
 
 ```bash
-git clone https://github.com/bolyra/bolyra
-cd bolyra/examples/managed-revocation && npm ci
+# in the checkout from "Try it in two commands" (or: git clone https://github.com/bolyra/bolyra && cd bolyra)
+cd "$(git rev-parse --show-toplevel)/examples/managed-revocation" && npm ci
 VERIFY_URL='<base URL>' ADMIN_TOKEN='<admin token>' VERIFIER_TOKEN='<verifier token>' npm run demo
 ```
 
@@ -107,9 +129,9 @@ from `.sig`, and `operator_pubkey` from `.agent.credential.operator_pubkey`.
 Create a separate verification request with `version: 1`, the presentation
 serialized as the `bundle` string, matching request identity fields,
 `granted_capabilities: ["mpp:financial:small"]`, and current Unix seconds in
-`now_unix`. Substitute these files in curl steps 2 and 3, and use step 2's
-returned ID in step 5; capture response headers separately to inspect
-`x-bolyra-credential-id`.
+`now_unix`. Substitute these files in curl steps 2 and 3 (step 2 keeps the
+returned id in `$ID` for step 5); capture response headers separately to
+inspect `x-bolyra-credential-id`.
 
 Expect: step 2 → `201` + `credential_id`; step 3 → allow with
 `x-bolyra-credential-id`; step 5 revoke → `204`, verify again → `deny
@@ -121,31 +143,36 @@ guide, or `bolyra verify` for the zk-class path.
 
 ### Curl test
 
+Prerequisites: curl, jq, and a checkout of this repo (the example files).
+
 ```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
 BASE=https://bolyra-hosted-verify.<account>.workers.dev
 ADMIN=<your admin token>; TOKEN=<your verifier token>
 
 # 1. Health + capability disclosure (no auth):
 curl -s $BASE/health | jq
 
-# 2. Register the fixture binding (admin token; 201, then 200 with the same id on repeat):
-curl -s -X POST $BASE/v1/credentials \
+# 2. Register the fixture binding (admin token; 201, then 200 with the same id on repeat)
+#    and keep its id:
+ID=$(curl -s -X POST $BASE/v1/credentials \
   -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
-  --data @integrations/hosted-verify/examples/registration.allow.json | jq
+  --data @examples/registration.allow.json | jq -r .credential_id)
+echo "$ID"
 
 # 3. Known-good presentation of that binding (verifier token) → allow:
 curl -s -X POST $BASE/v1/verify \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  --data @integrations/hosted-verify/examples/request.allow.json | jq
+  --data @examples/request.allow.json | jq
 
 # 4. Insufficient scope (fixture) → deny scope_exceeded:
 curl -s -X POST $BASE/v1/verify \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  --data @integrations/hosted-verify/examples/request.deny-scope.json | jq
+  --data @examples/request.deny-scope.json | jq
 
 # 5. Revoke it (admin token; 204, idempotent) — step 3 now answers
 #    deny untrusted_root with detail.reason "credential_not_active":
-curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/<credential_id from step 2>/revoke \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$ID/revoke \
   -H "Authorization: Bearer $ADMIN"
 ```
 
