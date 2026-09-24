@@ -27,12 +27,18 @@
 # registry lives in a temp directory under HOSTED_VERIFY_ENV=lockcheck.
 # Runs on Linux and macOS; bash 3.2 (no flock, no associative arrays, no `wait -n`).
 #
-#   bash pilot/tenant-lock-check.sh          (SHIM_SLEEP=<seconds> widens the timing window)
+#   bash pilot/tenant-lock-check.sh          (SHIM_SLEEP=<seconds> widens the timing windows,
+#                                             m8's migrate window included; SHIM_MV_SLEEP sets that one)
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TENANT="$SCRIPT_DIR/tenant.sh"
 SHIM_SLEEP="${SHIM_SLEEP:-3}"
+# m8's commit window scales with SHIM_SLEEP (2 s at the default 3; never below 2) unless set.
+case "$SHIM_SLEEP" in
+  *[!0-9]*|"") SHIM_MV_SLEEP="${SHIM_MV_SLEEP:-2}" ;;
+  *) SHIM_MV_SLEEP="${SHIM_MV_SLEEP:-$(( SHIM_SLEEP * 2 / 3 > 2 ? SHIM_SLEEP * 2 / 3 : 2 ))}" ;;
+esac
 
 WORK="$(mktemp -d)"
 SHIM="$WORK/bin"
@@ -482,6 +488,14 @@ ok "a validator refusal starts no upload, leaves the uploader untouched, and say
 # confirmed. A second tenant, beta, is the one removed — acme stays, so the map is never empty.
 status_of() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status))' "$TENANTS_DIR/$1.json"; }
 kc_count() { local n=0; [ ! -e "$KEYCHAIN/tenant-$1-admin" ] || n=$((n + 1)); [ ! -e "$KEYCHAIN/tenant-$1-verifier" ] || n=$((n + 1)); echo "$n"; }
+adds_count() { if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi; }   # tokens stored so far
+shim_token() { if command -v shasum >/dev/null 2>&1; then printf '%s' "$1" | shasum -a 256 | cut -c1-64; else printf '%s' "$1" | sha256sum | cut -c1-64; fi; }   # the fake keychain's token for an account
+tenant_at() {  # $1 registry directory, then the tenant.sh arguments
+  local d="$1"; shift
+  env "${TENANT_ENV[@]}" TENANTS_DIR="$d" bash "$TENANT" "$@"
+}
+snapshot() { rm -rf "$2"; cp -Rp "$1" "$2"; }   # $1 dir → $2 copy, for `diff -r` afterwards
+json_count() { local n=0 f; for f in "$1"/*.json; do [ ! -f "$f" ] || n=$((n + 1)); done; echo "$n"; }
 reset_beta() {
   printf '%s\n' '{"org_id":"beta","status":"active","trustedOperators":["3:4"],"updated":"2000-01-01"}' > "$TENANTS_DIR/beta.json"
   cp "$TENANTS_DIR/beta.json" "$WORK/beta.before"
@@ -784,7 +798,7 @@ ROTATE_WARN="requests under the admin token return 401 from the next sync until 
 
 # (k1) E19: rotate refuses without --confirm — the old token dies at the next sync, so the partner
 # has to be scheduled first. Nothing is stored, nothing is uploaded, the lock is released.
-adds_before="$(if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi)"
+adds_before="$(adds_count)"
 for args in "rotate acme admin" "rotate acme admin --confirmed" "rotate acme admin --confirm extra"; do
   out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-k1" bash "$TENANT" $args 2>&1)"; rc=$?
   [ "$rc" != 0 ] || fail "(k1) $args exited 0: $out"
@@ -794,14 +808,21 @@ done
 out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-k1" bash "$TENANT" rotate acme admin 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "(k1) rotate without --confirm exited $rc, expected 1: $out"
 case "$out" in *"rotate: $ROTATE_WARN; re-run with --confirm after scheduling it with them"*) ;; *) fail "(k1) rotate without --confirm did not name the partner impact: $out" ;; esac
-[ "$(if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi)" = "$adds_before" ] \
-  || fail "(k1) a refused rotate stored a token"
-ok "(k1) rotate without --confirm (or with a misspelled flag or an extra argument) is refused: nothing stored, nothing uploaded"
+[ "$(adds_count)" = "$adds_before" ] || fail "(k1) a refused rotate stored a token"
+# The target is validated before the flag: a mistyped org is reported as such, not as a 401 impact.
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-k1" bash "$TENANT" rotate acmee admin 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(k1) rotate of an unknown org exited $rc, expected 1: $out"
+case "$out" in *"no registry file for 'acmee'"*) ;; *) fail "(k1) rotate of an unknown org did not say it has no registry file: $out" ;; esac
+case "$out" in *"return 401"*) fail "(k1) rotate of an unknown org reported a partner impact: $out" ;; *) ;; esac
+[ "$(adds_count)" = "$adds_before" ] || fail "(k1) a rotate of an unknown org stored a token"
+ok "(k1) rotate without --confirm (or with a misspelled flag or an extra argument) is refused: nothing stored, nothing uploaded; an unknown org is named as such first"
 
 for role in admin verifier; do
   out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e6" bash "$TENANT" rotate acme "$role" --confirm 2>&1)"; rc=$?
   [ "$rc" = 0 ] || fail "(e6) rotate acme $role on a removed tenant exited $rc: $out"
-  case "$out" in *"requests under the $role token return 401 from the next sync until the partner deploys the new token"*) ;; *) fail "(e6) rotate did not repeat the partner impact: $out" ;; esac
+  # A removed tenant has no live token: no partner impact is claimed.
+  case "$out" in *"tenant is removed; no live token is affected"*) ;; *) fail "(e6) rotate on a removed tenant did not say no live token is affected: $out" ;; esac
+  case "$out" in *"return 401"*) fail "(e6) rotate on a removed tenant claimed a partner impact: $out" ;; *) ;; esac
   case "$out" in *"tenant is removed; the map is unchanged — set status active and run sync to bring it back"*) ;; *) fail "(e6) rotate did not say the sync was skipped: $out" ;; esac
   case "$out" in *"changed nothing"*|*"--allow-empty"*) fail "(e6) rotate reported a refused sync: $out" ;; *) ;; esac
   [ -e "$KEYCHAIN/tenant-acme-$role" ] || fail "(e6) rotate acme $role stored no token"
@@ -852,14 +873,6 @@ ok "(e0) decoys only (dotfile, *.policy.json, a directory, a .txt): shell and as
 # it has been initialized (`init`) or had its records brought over (`migrate --from`).
 NOT_INIT="is not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>' to bring existing records over"
 NO_MARKER="has records but no marker"
-tenant_at() {  # $1 registry directory, then the tenant.sh arguments
-  local d="$1"; shift
-  env "${TENANT_ENV[@]}" TENANTS_DIR="$d" bash "$TENANT" "$@"
-}
-snapshot() { rm -rf "$2"; cp -Rp "$1" "$2"; }   # $1 dir → $2 copy, for `diff -r` afterwards
-json_count() { local n=0 f; for f in "$1"/*.json; do [ ! -f "$f" ] || n=$((n + 1)); done; echo "$n"; }
-adds_count() { if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi; }
-shim_token() { if command -v shasum >/dev/null 2>&1; then printf '%s' "$1" | shasum -a 256 | cut -c1-64; else printf '%s' "$1" | sha256sum | cut -c1-64; fi; }
 
 # (m1) the default path: no TENANTS_DIR → $HOME/.bolyra/tenants-production, or -<env> with
 # HOSTED_VERIFY_ENV. `show` works without the marker, says so, and creates nothing.
@@ -871,8 +884,11 @@ case "$out" in *"not initialized"*) ;; *) fail "(m1) show did not say the regist
 out="$(env -u TENANTS_DIR PATH="$SHIM:$PATH" SHIM_KEYCHAIN="$KEYCHAIN" HOME="$WORK/home" HOSTED_VERIFY_ENV=staging bash "$TENANT" show 2>&1)"; rc=$?
 [ "$rc" = 0 ] || fail "(m1) staging show under a temp HOME exited $rc: $out"
 case "$out" in *"$WORK/home/.bolyra/tenants-staging"*) ;; *) fail "(m1) show did not resolve the staging default under HOME: $out" ;; esac
+out="$(env -u TENANTS_DIR PATH="$SHIM:$PATH" SHIM_KEYCHAIN="$KEYCHAIN" HOME="$WORK/home" HOSTED_VERIFY_ENV=production bash "$TENANT" show 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m1) HOSTED_VERIFY_ENV=production show exited $rc, expected 1: $out"
+case "$out" in *"leave HOSTED_VERIFY_ENV unset"*) ;; *) fail "(m1) the production refusal did not say to leave HOSTED_VERIFY_ENV unset: $out" ;; esac
 [ ! -e "$WORK/home/.bolyra" ] || fail "(m1) show created the registry directory"
-ok "(m1) the registry defaults to \$HOME/.bolyra/tenants-production (-staging under HOSTED_VERIFY_ENV=staging); show reports it uninitialized and creates nothing"
+ok "(m1) the registry defaults to \$HOME/.bolyra/tenants-production (-staging under HOSTED_VERIFY_ENV=staging); show reports it uninitialized and creates nothing; HOSTED_VERIFY_ENV=production is refused"
 
 # (m2) a mutating command against an uninitialized registry is refused with the instruction:
 # nothing is created — an absent directory stays absent, an empty one stays empty (the lock
@@ -1042,7 +1058,7 @@ ok "(m7) a migrate killed between renames leaves records without a marker; add/s
 # refused as another tenant.sh running, and the migrate then completes.
 DEST8="$WORK/m8-dest"
 rm -f "$KEYCHAIN.mv-slowed"
-env "${TENANT_ENV[@]}" PATH="$MVSHIM:$SHIM:$PATH" TENANTS_DIR="$DEST8" SHIM_MV_SLEEP=2 \
+env "${TENANT_ENV[@]}" PATH="$MVSHIM:$SHIM:$PATH" TENANTS_DIR="$DEST8" SHIM_MV_SLEEP="$SHIM_MV_SLEEP" \
   bash "$TENANT" migrate --from "$SRC" > "$WORK/m8.log" 2>&1 &
 BG=$!
 wait_for_file "$KEYCHAIN.mv-slowed" || fail "(m8) the commit never started: $(cat "$WORK/m8.log")"
