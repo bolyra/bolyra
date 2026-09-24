@@ -262,9 +262,13 @@ A registry storage failure is `500 internal_error`; a quarantined tenant gets
   nothing, only revoking a credential does. REVOKED credentials never count. A
   credential whose binding has expired but was never revoked is still ACTIVE and
   still counts until it is revoked (there is no automatic reclamation). The cap
-  is checked after the existing-record checks, so re-registering a binding that
-  is already ACTIVE still answers `200` with its id at the cap, and a revoked one
-  still answers `409`.
+  is checked after the existing-record checks, so a re-registration that passes
+  the preceding registration checks (size bound, trust, signature, expiry) still
+  answers `200` with its id at the cap when the binding is already ACTIVE, and
+  `409` when it was revoked. Those preceding checks run first even for an
+  existing record: a previously accepted binding whose canonical form is over
+  16,384 bytes now receives `413` on re-registration, and an expired binding
+  still receives `400 binding_expired`.
 
 ### `GET /health`
 

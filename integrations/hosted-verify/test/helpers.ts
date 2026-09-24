@@ -153,11 +153,17 @@ export function fixtureRegistration(fixture: { bundle: string }): FixtureRegistr
 export async function seedCredentials(
   stub: DurableObjectStub,
   count: number,
-  opts: { status?: 'ACTIVE' | 'REVOKED'; prefix?: string; now?: number } = {},
+  opts: { status?: 'ACTIVE' | 'REVOKED'; prefix?: string; now?: number; expiry?: number } = {},
 ): Promise<string[]> {
   const status = opts.status ?? 'ACTIVE';
   const prefix = opts.prefix ?? 'e';
   const now = opts.now ?? 1_800_000_000;
+  // With `expiry`, each row stores a binding-shaped canonical (key-sorted) JSON
+  // carrying that expiry; it is still never presented anywhere.
+  const bindingJson =
+    opts.expiry === undefined
+      ? '{"seed":true}'
+      : JSON.stringify({ agent_name: 'seed', capabilities: [], expiry: opts.expiry, model: 'seed', program: 'seed', project_key: 'seed' });
   const ids = Array.from({ length: count }, (_, i) => prefix + i.toString(16).padStart(64 - prefix.length, '0'));
   await runInDurableObject(stub, (_instance, state) => {
     for (const id of ids) {
@@ -166,7 +172,7 @@ export async function seedCredentials(
         id,
         '1:2',
         '0'.repeat(64),
-        '{"seed":true}',
+        bindingJson,
         status,
         now,
         status === 'REVOKED' ? now : null,
