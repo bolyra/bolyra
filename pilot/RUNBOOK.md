@@ -528,8 +528,9 @@ deleted). Rotate the canary org id (`tenant.sh add bolyra-canary-2 …`, then up
 
 **Right after a deploy.** A new version can take a few seconds to reach every
 isolate. When a version id is expected (`--version` or `--from-wrangler`), the script
-first polls `/health` every 5 s, up to 12 times (about 60 s), until `version.id`
-matches. Each miss prints `--  waiting for version <id> (n/12)`. If the version never
+first polls `/health` every 5 s, up to 12 times (about 60 s once the host answers; each
+poll gives up after 5 s, so a host that never answers costs about 2 min), until
+`version.id` matches. Each miss prints `--  waiting for version <id> (n/12)`. If the version never
 appears, the run fails on the `/health version.id` mismatch, and no canary is written.
 During propagation, `/health` and `/v1/verify` can be served by different isolates.
 A match therefore means at least one isolate reports the new version, not that every
