@@ -84,6 +84,19 @@ export interface RegisterInput {
  */
 export const MAX_ACTIVE_CREDENTIALS = 1000;
 
+/**
+ * Bound on a stored binding: the UTF-8 byte length of the canonical binding
+ * JSON (bytes, never string length — a 3-byte character is 3 bytes).
+ */
+export const MAX_BINDING_JSON_BYTES = 16_384;
+
+const utf8 = new TextEncoder();
+
+/** UTF-8 byte length of `s`. */
+export function utf8ByteLength(s: string): number {
+  return utf8.encode(s).byteLength;
+}
+
 export type RegisterResult =
   | { outcome: 'created' | 'unchanged'; registered_at: number }
   | { outcome: 'revoked' }
@@ -218,6 +231,10 @@ function validRegisterInput(input: unknown): input is RegisterInput {
     isNonEmptyString(i.operator_key) &&
     isNonEmptyString(i.binding_digest_hex) &&
     typeof i.binding_json === 'string' &&
+    // Belt and braces: the route answers an oversized binding 413 before it
+    // ever calls the object, so this `invalid_input` (which the route maps to
+    // 500) is unreachable over HTTP. It guards the object against any other caller.
+    utf8ByteLength(i.binding_json) <= MAX_BINDING_JSON_BYTES &&
     isUnixSeconds(i.expiry) &&
     isUnixSeconds(i.now) &&
     typeof i.request_id === 'string'

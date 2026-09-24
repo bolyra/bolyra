@@ -77,7 +77,7 @@ import { BODY_READ_DEADLINE_MS, TIMEOUT, withDeadline, withRegistryDeadline } fr
 import { cachedProbeRegistry } from './health-probe';
 import { credentialId, CREDENTIAL_ID_PATTERN, CREDENTIAL_ID_VERSION } from './credential-id';
 import { parseRegistration, type RegistryErrorCode } from './routes/credentials';
-import { MAX_ACTIVE_CREDENTIALS, type TenantRegistry } from './registry';
+import { MAX_ACTIVE_CREDENTIALS, MAX_BINDING_JSON_BYTES, utf8ByteLength, type TenantRegistry } from './registry';
 
 // Durable Object classes must be exported from the Worker's main module.
 export { TenantRegistry } from './registry';
@@ -477,7 +477,8 @@ function nowUnix(): number {
 
 /**
  * POST /v1/credentials — checks in order, all fail-closed:
- *   parse → trust membership (403) → signature (400) → expiry (400) → id → RPC.
+ *   parse → canonical binding ≤ MAX_BINDING_JSON_BYTES (413) → trust membership (403) →
+ *   signature (400) → expiry (400) → id → RPC (a full tenant is 429).
  * Trust membership is a separate assertion from the signature check:
  * `verifyBindingSig` only proves a signature against the key the caller supplied.
  */
@@ -505,6 +506,11 @@ async function handleRegister(
   const parsed = parseRegistration(raw);
   if (!parsed.ok) return fail(400, 'malformed_input', parsed.message);
   const { binding, signature, operator_pubkey } = parsed.value;
+  // The stored form is bounded in UTF-8 bytes, checked before any crypto work.
+  const bindingJson = canonicalize(binding);
+  if (utf8ByteLength(bindingJson) > MAX_BINDING_JSON_BYTES) {
+    return fail(413, 'payload_too_large', `the canonical binding exceeds the ${MAX_BINDING_JSON_BYTES}-byte bound`);
+  }
 
   let pub: { x: bigint; y: bigint };
   let sig: { R8: { x: bigint; y: bigint }; S: bigint };
@@ -539,7 +545,7 @@ async function handleRegister(
     credential_id: id,
     operator_key: keyId,
     binding_digest_hex: digest.toString(16).padStart(64, '0'),
-    binding_json: canonicalize(binding),
+    binding_json: bindingJson,
     expiry: binding.expiry,
     now,
     request_id: requestId,
