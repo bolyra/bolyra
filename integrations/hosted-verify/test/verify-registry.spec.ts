@@ -197,6 +197,62 @@ describe('ordering: classical checks come first', () => {
     }
   });
 
+  it('25 concurrent reads that all miss the deadline → 25 timeout verdicts; their LATE rejections are all absorbed, no timer left', async () => {
+    const N = 25;
+    const rejects: Array<(e: Error) => void> = [];
+    const contended = {
+      get: () => ({
+        status: () =>
+          new Promise<never>((_resolve, reject) => {
+            rejects.push(reject);
+          }),
+      }),
+      idFromName: (n: string) => env.TENANT.idFromName(n),
+    } as unknown as typeof env.TENANT;
+
+    // Both observers fire in the workers pool (probed: a deliberately unobserved derived
+    // promise on the read makes this test fail with 2 × 25 'late failure' events).
+    const unhandled: unknown[] = [];
+    const onWorkerEvent = (event: Event) => unhandled.push((event as PromiseRejectionEvent).reason);
+    const onProcess = (reason: unknown) => unhandled.push(reason);
+    self.addEventListener('unhandledrejection', onWorkerEvent);
+    process.on('unhandledRejection', onProcess);
+    vi.useFakeTimers();
+    try {
+      const pending = Array.from({ length: N }, () =>
+        worker.fetch(
+          new Request(`${BASE}/v1/verify`, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.verifier}`, 'content-type': 'application/json' }, body: JSON.stringify(allowAgentOnly) }),
+          { ...env, TENANT: contended },
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(REGISTRY_DEADLINE_MS + 1);
+      const responses = await Promise.all(pending);
+      expect(rejects).toHaveLength(N); // every request reached the registry read
+      for (const res of responses) {
+        expect(res.status).toBe(500);
+        const v = await verdictOf(res);
+        expect(v.code).toBe('internal_error');
+        expect(v.message).toBe('registry timeout');
+      }
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Now the orphaned RPCs fail — explicitly, after the verdicts were sent.
+      for (const reject of rejects) reject(new Error('late failure'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    try {
+      // Give the runtime a real macrotask turn to dispatch any unhandled-rejection event.
+      await new Promise((r) => setTimeout(r, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      self.removeEventListener('unhandledrejection', onWorkerEvent);
+      process.off('unhandledRejection', onProcess);
+    }
+  });
+
   it("the object's own storage_error result → 500, never an allow", async () => {
     await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
     const failing = { get: () => ({ status: async () => 'storage_error' }), idFromName: (n: string) => env.TENANT.idFromName(n) } as unknown as typeof env.TENANT;
