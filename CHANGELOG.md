@@ -16,6 +16,8 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 - `@bolyra/gateway` (npm — MCP auth gateway: reverse proxy that verifies agent credentials)
 - `@bolyra/shield` (npm — stdio MCP auth proxy with per-tool permissions)
 - `@bolyra/delegation` (npm — verifiable delegated authority for agent actions)
+- `@bolyra/ai` (npm — Vercel AI SDK integration)
+- `@bolyra/circuits` (npm — compiled circuit artifacts)
 - `@bolyra/mpp` (npm — MPP authorization gate)
 - `@bolyra/cli` (npm — `bolyra` CLI: verify, mandate issue, receipt verify)
 - `@bolyra/receipts` (npm — signed, hash-chained decision receipts)

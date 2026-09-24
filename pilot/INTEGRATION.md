@@ -27,9 +27,9 @@ decision handling.
 Before asking us for anything, run the hosted verifier yourself: the same
 Worker, under `wrangler dev`, with the repo's placeholder tenant and its
 conformance-fixture operator key (public — this proves the mechanics, not who
-signed). Prerequisites: Node 22+, bash and `lsof` (macOS or Linux), and a
-checkout of this repo (`git clone https://github.com/bolyra/bolyra`); curl
-and jq for the curl steps later on.
+signed). Prerequisites: Node 22+, bash, curl and `lsof` (macOS or Linux),
+and a checkout of this repo (`git clone https://github.com/bolyra/bolyra`);
+jq for the curl steps later on.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
@@ -230,7 +230,7 @@ The same key, fields, and `$EXPIRY` give the same binding and the same
 ACTIVE), or `409 credential_revoked` if it was revoked.
 
 To **roll to a new expiry**: issue the new binding, register it, switch the
-agent to the new presentation, then revoke the old id.
+agent to the new presentation, and only then revoke the old id.
 
 ```bash
 cd "$(mktemp -d)"   # keep mandate.json and registration.json out of the checkout
@@ -245,22 +245,39 @@ bolyra mandate issue \
   --agent '<agent-name>' --audience '<project-key>' --model '<model>' \
   --tier small --expiry "$EXPIRY" --encoding json --out mandate.json
 
-# 2. Register it; 201 + the new id:
+# 2. Register it. Accept only 201/200 with a 64-hex credential_id and status ACTIVE;
+#    anything else (429 quota_exceeded, 403 untrusted_operator, …) leaves NEW_ID empty.
 jq '{version: 1, binding, signature: .sig, operator_pubkey: .agent.credential.operator_pubkey}' \
   mandate.json > registration.json
-NEW_ID=$(curl -s -X POST $BASE/v1/credentials \
+HTTP=$(curl -sS -o resp.json -w '%{http_code}' -X POST $BASE/v1/credentials \
   -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
-  --data @registration.json | jq -r .credential_id)
-echo "$NEW_ID"
-
-# 3. Switch the agent to the new presentation, then revoke the old id (204):
-curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$OLD_ID/revoke \
-  -H "Authorization: Bearer $ADMIN"
+  --data @registration.json)
+if { [ "$HTTP" = 201 ] || [ "$HTTP" = 200 ]; } &&
+   jq -e '(.credential_id | test("^[0-9a-f]{64}$")) and .status == "ACTIVE"' resp.json >/dev/null; then
+  NEW_ID=$(jq -r .credential_id resp.json); echo "registered: $NEW_ID"
+else
+  NEW_ID=; echo "registration FAILED (HTTP $HTTP): $(jq -r '.error // .' resp.json 2>/dev/null) — do not revoke $OLD_ID" >&2
+fi
 ```
 
-Until step 3, both credentials are ACTIVE and both verify; the old one also
-stops on its own at its expiry. A registration is refused with `400
-binding_expired` once the binding's expiry has passed, so renew before it.
+**Switch the agent before revoking.** `mandate.json` IS the new
+presentation: copy it to where the agent reads its presentation, verify one
+allow under the new id (the response's `x-bolyra-credential-id` equals
+`$NEW_ID`), and only then run the next block. Until it runs, both credentials
+are ACTIVE and both verify; the old one also stops on its own at its expiry.
+
+```bash
+# 3. Revoke the old id (204) — only with a registered NEW_ID, in the same shell:
+if [ -n "$NEW_ID" ] && [ "$NEW_ID" != "$OLD_ID" ]; then
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$OLD_ID/revoke \
+    -H "Authorization: Bearer $ADMIN"
+else
+  echo "no new credential registered in this shell — not revoking $OLD_ID" >&2
+fi
+```
+
+A registration is refused with `400 binding_expired` once the binding's
+expiry has passed, so renew before it.
 
 ### Handling responses — the rules that matter
 
