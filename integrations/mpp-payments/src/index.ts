@@ -42,7 +42,14 @@ export {
   type DenyProblem,
   type DenyProblemInput,
 } from './deny';
-export { runCommandVerifier, callUrlVerifier, validateVerdict } from './evc';
+export {
+  runCommandVerifier,
+  callUrlVerifier,
+  callUrlVerifierWithEvidence,
+  validateVerdict,
+  type UrlVerifierConfig,
+  type UrlVerifierEvidence,
+} from './evc';
 export {
   NonceStore,
   NonceStoreCapacityError,

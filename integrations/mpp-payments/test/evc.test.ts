@@ -4,7 +4,12 @@
  * URL mode (transport faults, invalid verdicts).
  */
 
-import { runCommandVerifier, callUrlVerifier, validateVerdict } from '../src/evc';
+import {
+  runCommandVerifier,
+  callUrlVerifier,
+  callUrlVerifierWithEvidence,
+  validateVerdict,
+} from '../src/evc';
 import type { VerifierRequest } from '../src/types';
 
 const REQUEST: VerifierRequest = {
@@ -152,6 +157,89 @@ describe('callUrlVerifier', () => {
       REQUEST,
     );
     expect(verdict).toMatchObject({ verdict: 'deny', code: 'internal_error' });
+  });
+});
+
+describe('callUrlVerifierWithEvidence', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+  const ID = 'ab'.repeat(32);
+
+  function stubFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
+    global.fetch = jest.fn(async () =>
+      new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json', ...headers },
+      }),
+    ) as unknown as typeof fetch;
+  }
+
+  test('allow: returns the verdict, HTTP status, and the raw credential-id / receipt headers', async () => {
+    stubFetch(200, { verdict: 'allow', kind: 'classical' }, {
+      'x-bolyra-credential-id': ID,
+      'x-bolyra-receipt': 'eyJhbGciOiJFUzI1NksifQ.e30.c2ln',
+    });
+    const evidence = await callUrlVerifierWithEvidence({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(evidence).toEqual({
+      verdict: { verdict: 'allow', kind: 'classical' },
+      status: 200,
+      credentialId: ID,
+      receipt: 'eyJhbGciOiJFUzI1NksifQ.e30.c2ln',
+    });
+  });
+
+  test('headers absent: credentialId / receipt are absent (not undefined-valued)', async () => {
+    stubFetch(200, { verdict: 'allow' });
+    const evidence = await callUrlVerifierWithEvidence({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(evidence).toEqual({ verdict: { verdict: 'allow' }, status: 200 });
+    expect('credentialId' in evidence).toBe(false);
+    expect('receipt' in evidence).toBe(false);
+  });
+
+  test('a 200 deny keeps its detail and reports status 200', async () => {
+    stubFetch(200, {
+      verdict: 'deny', code: 'untrusted_root', message: 'not active',
+      detail: { reason: 'credential_not_active', credential_id: ID },
+    });
+    const evidence = await callUrlVerifierWithEvidence({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(evidence.status).toBe(200);
+    expect(evidence.verdict).toEqual({
+      verdict: 'deny', code: 'untrusted_root', message: 'not active',
+      detail: { reason: 'credential_not_active', credential_id: ID },
+    });
+  });
+
+  test.each([401, 404, 429, 503])('non-2xx status %i fails closed and reports the status', async (status) => {
+    stubFetch(status, { error: 'nope' });
+    const evidence = await callUrlVerifierWithEvidence({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(evidence.status).toBe(status);
+    expect(evidence.verdict).toMatchObject({ verdict: 'deny', code: 'internal_error' });
+  });
+
+  test('a 500 deny internal_error is honored with status 500', async () => {
+    stubFetch(500, { verdict: 'deny', code: 'internal_error', message: 'storage unavailable' });
+    const evidence = await callUrlVerifierWithEvidence({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(evidence).toEqual({
+      verdict: { verdict: 'deny', code: 'internal_error', message: 'storage unavailable' },
+      status: 500,
+    });
+  });
+
+  test('no HTTP response (unreachable): status is absent, verdict fails closed', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as typeof fetch;
+    const evidence = await callUrlVerifierWithEvidence({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(evidence.verdict).toMatchObject({ verdict: 'deny', code: 'internal_error' });
+    expect('status' in evidence).toBe(false);
+  });
+
+  test('callUrlVerifier returns exactly the bare verdict (shape preserved)', async () => {
+    stubFetch(200, { verdict: 'allow', kind: 'classical' }, { 'x-bolyra-credential-id': ID });
+    const verdict = await callUrlVerifier({ url: 'https://verify.example/v1/verify' }, REQUEST);
+    expect(verdict).toEqual({ verdict: 'allow', kind: 'classical' });
   });
 });
 
