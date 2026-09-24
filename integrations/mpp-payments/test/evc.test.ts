@@ -268,6 +268,15 @@ describe('normalizeVerifierUrl (TD-1)', () => {
     'https://VERIFY.example:8443/Custom?b=2&a=1',
     'https://[::1]:8787/custom/',
     'https://verify.example/custom#frag',
+    // Dot segments are NOT roots: URL parsing would collapse them to '/', but
+    // eligibility is decided on the original string's path portion.
+    'https://verify.example/custom/..',
+    'https://verify.example/%2e',
+    'https://verify.example/./',
+    'https://verify.example/..',
+    'https://verify.example/..?x=1',
+    // Backslash paths are not roots either (WHATWG reads '\\' as '/').
+    'https://verify.example\\custom',
   ])('every other path is preserved byte-for-byte: %s', (input) => {
     expect(normalizeVerifierUrl(input)).toBe(input);
   });
@@ -280,6 +289,10 @@ describe('normalizeVerifierUrl (TD-1)', () => {
 
   test('an invalid URL throws', () => {
     expect(() => normalizeVerifierUrl('not a url')).toThrow();
+  });
+
+  test('a URL without a scheme://authority form throws (no ambiguous path portion)', () => {
+    expect(() => normalizeVerifierUrl('https:verify.example')).toThrow(TypeError);
   });
 
   describe('inside callUrlVerifierWithEvidence (direct callers)', () => {

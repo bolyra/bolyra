@@ -45,7 +45,7 @@ with `ERESOLVE`; the command above avoids it.
 | `@bolyra/mpp` | 0.7.0 |
 | `mppx` (peer) | exactly 0.8.13 |
 | `@bolyra/cli` | requires `@bolyra/mpp` ^0.6.0, which excludes 0.7.0 on 0.x semver; the CLI's range gets its own bump after 0.7.0 is published (follow-up) |
-| Node | `>=20` (`engines`; 18 dropped in 0.7.0); 20, 22 and 24 are exercised in CI |
+| Node | `>=20` (`engines`; 18 dropped in 0.7.0); CI runs Node 20, release validation Node 22; Node 24 is exercised only locally |
 
 ### Spend mandates authorize a TIER, not an amount
 
@@ -313,9 +313,11 @@ verifier: { kind: 'url', url: 'https://…/v1/verify', token: process.env.BOLYRA
 `verifier.url` is the verifier's origin, or a full URL to your verifier's
 verify route; only a bare origin is rewritten. `https://verify.example` and
 `https://verify.example/` are POSTed to `https://verify.example/v1/verify`
-(a query string is kept); any other path — including `/custom/` with its
-trailing slash — and any query string are used byte-for-byte. A `url` that is
-not an absolute URL is a `TypeError` at `bolyraGate()` construction.
+(a query string and fragment are kept). The root check reads the path as you
+wrote it, so dot segments (`/..`, `/%2e`, `/custom/..`) are not roots. Any
+other path — including `/custom/` with its trailing slash — and any query
+string are used byte-for-byte. A `url` that is not an absolute
+`scheme://authority` URL is a `TypeError` at `bolyraGate()` construction.
 `normalizeVerifierUrl(url)` is exported as a helper for pre-validating a
 configured URL: it returns the exact endpoint the gate will POST to, or
 throws `TypeError`.
@@ -382,10 +384,14 @@ The contract:
   `preflight`.** If the method's own preflight throws after an allow
   Decision, the Decision stands (it reports the Bolyra decision, not the
   method's).
-- **Observer failures never affect authorization.** A throw, a rejected
-  Promise, or a broken thenable is logged with `console.error` (itself
-  guarded) and contained; the verdict and response are unchanged and no
-  unhandled rejection is raised. The callback is not awaited.
+- **Observer failures never affect authorization.** A throwing `onDecision`
+  getter, a throw, a rejected Promise, or a broken thenable is logged with
+  `console.error` (itself guarded) and contained; the verdict and response
+  are unchanged and no unhandled rejection is raised. The callback is not
+  awaited. Boundary: tampered native Promise internals are outside the
+  guarantee — an already-rejected native Promise whose `constructor` getter
+  throws leaves its own rejection unhandled (authorization is still
+  unaffected).
 - **Credential-less discovery under `enforce: 'payment'` produces no
   Decision**, because no Bolyra decision was made. The two credential-less
   refusals in that mode (an `authorize` hook attached after construction, a

@@ -233,17 +233,29 @@ const DEFAULT_VERIFY_PATH = '/v1/verify';
 
 /**
  * Verifier URL convention: `url` is the verifier's origin, or a full URL to
- * its verify route. ONLY a bare origin is rewritten — a root path (`''` or
- * `/`) becomes `/v1/verify`, keeping any query string. Every other URL,
- * including a custom path with a trailing slash and any query, is returned
- * byte-for-byte. Throws `TypeError` when `url` is not an absolute URL.
+ * its verify route. ONLY a bare origin is rewritten: when the path portion
+ * of the string AS WRITTEN is `''` or `/`, it becomes `/v1/verify`, keeping
+ * any query string and fragment. Dot segments such as `/..` or `/%2e` are
+ * not roots. Every other URL, including a custom path with a trailing slash
+ * and any query, is returned byte-for-byte. Throws `TypeError` when `url` is
+ * not an absolute `scheme://authority` URL.
  *
  * Exported as a helper for pre-validating a configured verifier URL (e.g. at
  * startup, or to log the exact endpoint the gate will POST to).
  */
 export function normalizeVerifierUrl(url: string): string {
-  const parsed = new URL(url);
-  if (parsed.pathname !== '' && parsed.pathname !== '/') return url;
+  const parsed = new URL(url); // validation only: URL parsing collapses dot segments
+  // Rewrite eligibility comes from the ORIGINAL string's path portion (after
+  // the authority, before `?` / `#`), never from `parsed.pathname`:
+  // `/custom/..` and `/%2e` parse to `/` but are not bare origins.
+  const authority = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/\\?#]*/.exec(url);
+  if (authority === null) {
+    throw new TypeError('verifier url must have the form scheme://authority[/path]');
+  }
+  const rest = url.slice(authority[0].length);
+  const pathEnd = rest.search(/[?#]/);
+  const path = pathEnd === -1 ? rest : rest.slice(0, pathEnd);
+  if (path !== '' && path !== '/') return url;
   parsed.pathname = DEFAULT_VERIFY_PATH;
   return parsed.href;
 }
