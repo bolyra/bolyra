@@ -555,7 +555,8 @@ do_sync() {
   # disk or a shell variable. `wrangler secret put` has NO empty-value guard, so it must
   # never be the last stage of this pipeline: on a validator refusal it would read EOF and
   # put an EMPTY TENANTS (every tenant fails closed). tenants-put.mjs starts wrangler only
-  # after a validated map has arrived — and an empty one ({}) only with --allow-empty. pipefail is set, so a failure anywhere
+  # after a validated map has arrived — and an empty one ({}) only with --allow-empty.
+  # pipefail is set, so a failure anywhere
   # (keychain, assembly, validation, guard, wrangler) is loud.
   tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
       | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${put_args[@]}") || rc=$?
