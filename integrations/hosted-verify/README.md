@@ -71,6 +71,85 @@ independent credential still allows, 21 checks in all. `GET /health` reports
 `registry_enforced: true`; when a signer key is configured,
 `/.well-known/bolyra-signers.json` publishes the signer address.
 
+## Try it in two commands (no credentials)
+
+Nothing to request and nothing to sign: the Worker runs locally under
+`wrangler dev` with the repo's documented placeholder tenant, which trusts the
+repo's conformance-fixture operator key (its private half is public — this
+proves the mechanics, not who signed). Prerequisites: curl, jq, Node 22+
+(wrangler's requirement), bash and `lsof` (macOS or Linux), and a checkout of
+this repo.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
+npm ci
+npm run smoke:dev
+```
+
+`smoke:dev` boots the Worker on `127.0.0.1:8787` (`HOSTED_VERIFY_PORT` picks
+another port) with a fresh, empty registry, checks `/health`, shows an
+unregistered binding denied `untrusted_root` / `credential_not_active`,
+registers the fixture binding, shows the same presentation allowed with its
+`x-bolyra-credential-id`, and stops the Worker. `npm run verify:dev` runs the
+full post-deploy check against a local Worker instead: the auth boundary plus a
+canary credential taken ABSENT → ACTIVE → REVOKED.
+
+### The same flow by hand
+
+Start the Worker and leave it running (`scripts/dev-vars.mjs` writes a
+`.dev.vars` with the placeholder tenant, the mpp capability vocabulary, and a
+throwaway receipt key; `npm run smoke:dev` removes and rewrites it itself):
+
+```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
+node scripts/dev-vars.mjs
+npm run dev          # wrangler dev on http://localhost:8787
+```
+
+In a second terminal (the tokens are the placeholders from `.dev.vars.example`,
+not secrets):
+
+```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
+BASE=http://localhost:8787
+ADMIN=local-admin-token-000000000000000000
+TOKEN=local-verifier-token-0000000000000000
+
+# 1. Health + capability disclosure (no auth):
+curl -s $BASE/health | jq
+
+# 2. Register the fixture binding (admin token) and keep its id:
+ID=$(curl -s -X POST $BASE/v1/credentials \
+  -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  --data @examples/registration.allow.json | jq -r .credential_id)
+echo "$ID"
+
+# 3. A presentation of that binding (verifier token) → allow:
+curl -s -X POST $BASE/v1/verify \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  --data @examples/request.allow.json | jq
+
+# 4. A presentation whose credential lacks the required scope → deny scope_exceeded:
+curl -s -X POST $BASE/v1/verify \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  --data @examples/request.deny-scope.json | jq
+
+# 5. Revoke it (204), then step 3 again → deny untrusted_root, detail.reason credential_not_active:
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$ID/revoke \
+  -H "Authorization: Bearer $ADMIN"
+curl -s -X POST $BASE/v1/verify \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  --data @examples/request.allow.json | jq
+```
+
+`wrangler dev` keeps the registry under `.wrangler/state` across restarts, so
+on a second run step 2 answers `409 credential_revoked` (revocation is
+terminal). `rm -rf .wrangler/state` starts empty; `npm run smoke:dev` always
+does.
+
+When you want your own operator key and a hosted URL, [request a trial
+tenant](#request-a-trial-tenant-hosted-preview-quickstart).
+
 ## Developing
 
 Node **22+** (wrangler's requirement). `npm run typecheck` runs `wrangler types` first: the
@@ -79,19 +158,22 @@ generated, gitignored `worker-configuration.d.ts`, so a plain `tsc --noEmit` on 
 fails until it exists. `npm test` (vitest in the workers pool, then `npm run test:agreement`
 under plain Node) does not need it.
 
-`npx wrangler dev` needs a `TENANTS` value: `cp .dev.vars.example .dev.vars`.
-That file defines one local tenant with placeholder tokens (not secrets) whose
-`trusted_operators` is the repo fixture operator key. The local registry starts
-empty, so run quickstart step 2 against `http://localhost:8787` with the admin
-token from `.dev.vars` (register `examples/registration.allow.json`) before the
-example requests below verify against a local dev server.
+`npx wrangler dev` needs a `TENANTS` value: `node scripts/dev-vars.mjs` writes
+one (see [The same flow by hand](#the-same-flow-by-hand)), or `cp
+.dev.vars.example .dev.vars` for the tenant alone. Either defines one local
+tenant with placeholder tokens (not secrets) whose `trusted_operators` is the
+repo fixture operator key. The local registry starts empty.
 
-## 5-minute quickstart
+## Request a trial tenant (hosted preview quickstart)
 
-You need the preview URL and your tenant's **verifier token** and **admin
-token** (both issued per design partner at provisioning).
+The hosted preview needs a tenant: send your operator public key as described
+in [`pilot/INTEGRATION.md`](../../pilot/INTEGRATION.md#request-a-trial-tenant)
+and we reply with the preview URL and your tenant's **verifier token** and
+**admin token** (both issued per design partner at provisioning). Then, from a
+checkout of this repo:
 
 ```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
 BASE=https://bolyra-hosted-verify.<account>.workers.dev   # preview URL
 TOKEN=<your verifier token>
 ADMIN=<your admin token>
@@ -418,6 +500,7 @@ Tenant attribution is by
 ### Querying usage
 
 ```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
 CF_API_TOKEN=<token> npm run usage    # or: node scripts/usage.mjs
 ```
 
@@ -452,6 +535,7 @@ its own step in the `hosted-verify-tests` job.
 ## Deploy (maintainers)
 
 ```bash
+cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
 npm ci
 npm test && npm run typecheck
 npx wrangler login                                   # founder account
