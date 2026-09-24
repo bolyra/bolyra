@@ -12,7 +12,9 @@
 //
 // A `cd` this checker cannot model (`$VAR`, `~`, `"$(mktemp -d)"`, `-`) makes the current
 // directory UNKNOWN: the relative checks (a, c) are skipped until the next modellable `cd`
-// rather than run against a stale directory. Quoting is not parsed as shell: text inside
+// rather than run against a stale directory — and each real doc must skip NOTHING that way
+// (counts.skipped === 0), so a block that relies on a relative path must re-anchor first
+// (`git clone …/bolyra && cd bolyra/…` re-anchors too). Quoting is not parsed as shell: text inside
 // quotes in a fenced block (a URL in "…", a --data argument in '…') is checked like any
 // other text, with the quote characters themselves stripped from route tokens.
 //
@@ -83,9 +85,9 @@ function cdTarget(arg, cwd, cloned) {
   const top = /^\$\(git rev-parse --show-toplevel\)(\/.*)?$/.exec(a.replace(/"/g, ''));
   if (top) return join(ROOT, top[1] ?? '');
   if (a.includes('$') || a.startsWith('~') || a === '-') return null;
-  if (cwd === null && !a.startsWith('/')) return null; // relative to an unknown directory
-  // `git clone …/bolyra` then `cd bolyra/…`: the clone is this checkout.
+  // `git clone …/bolyra` then `cd bolyra/…`: the clone is this checkout, wherever it was made.
   if (cloned && (a === 'bolyra' || a.startsWith('bolyra/'))) return join(ROOT, a.slice('bolyra'.length));
+  if (cwd === null && !a.startsWith('/')) return null; // relative to an unknown directory
   return resolve(cwd, a);
 }
 
@@ -141,10 +143,14 @@ function commands(line) {
   return out;
 }
 
+// `--data @f`, `--data '@f'`, `--data "@f"` (and --data-binary / --data-raw / -d).
+const DATA_REF = /(?:--data(?:-binary|-raw)?|-d)\s+["']?@([^\s'")]+)/g;
+const NPM_RUN = /\bnpm run ([\w:.-]+)/g;
+
 /** Check one document's text; returns { problems: string[], counts }. */
 export function checkDoc(docPath, markdown, routes) {
   const problems = [];
-  const counts = { blocks: 0, dataRefs: 0, routeRefs: 0, npmRuns: 0 };
+  const counts = { blocks: 0, dataRefs: 0, routeRefs: 0, npmRuns: 0, skipped: 0 };
   let cwd = ROOT; // one reader's shell for the whole doc: a cd carries into later blocks
   for (const block of shellBlocks(markdown)) {
     counts.blocks++;
@@ -171,8 +177,9 @@ export function checkDoc(docPath, markdown, routes) {
         if (cmd.subshell && saved === undefined) saved = cwd;
         const text = cmd.text;
         if (/^git clone\b/.test(text)) cloned = true;
-        if (cwd !== null) {
-          for (const w of text.matchAll(/(?:>\s*|--out\s+|-o\s+)([\w./-]+)/g)) written.add(resolve(cwd, w[1]));
+        for (const w of text.matchAll(/(?:>\s*|--out\s+|-o\s+)([\w./-]+)/g)) {
+          written.add(`raw:${w[1]}`); // same spelling, same block: resolvable even when cwd is unknown
+          if (cwd !== null) written.add(resolve(cwd, w[1]));
         }
         const cd = /^cd\s+(.+)$/.exec(text);
         if (cd) {
@@ -186,8 +193,14 @@ export function checkDoc(docPath, markdown, routes) {
           } else cwd = target;
           continue;
         }
-        if (cwd === null) continue; // relative checks need a known directory
-        for (const d of text.matchAll(/(?:--data(?:-binary|-raw)?|-d)\s+@([^\s'"]+)/g)) {
+        const dataRefs = [...text.matchAll(DATA_REF)];
+        const npmRuns = [...text.matchAll(NPM_RUN)];
+        if (cwd === null) {
+          // relative checks need a known directory; count what went unchecked
+          counts.skipped += dataRefs.filter((d) => !d[1].includes('$') && !written.has(`raw:${d[1]}`)).length + npmRuns.length;
+          continue;
+        }
+        for (const d of dataRefs) {
           counts.dataRefs++;
           if (d[1].includes('$')) continue;
           const file = resolve(cwd, d[1]);
@@ -195,7 +208,7 @@ export function checkDoc(docPath, markdown, routes) {
             problems.push(`${where}: @${d[1]} resolves to ${relative(ROOT, file)} (cwd ${relative(ROOT, cwd) || '<repo root>'}), which does not exist`);
           }
         }
-        for (const n of text.matchAll(/\bnpm run ([\w:.-]+)/g)) {
+        for (const n of npmRuns) {
           counts.npmRuns++;
           const pkgPath = nearestPackageJson(cwd);
           const scripts = pkgPath ? JSON.parse(readFileSync(pkgPath, 'utf8')).scripts ?? {} : {};
@@ -205,7 +218,7 @@ export function checkDoc(docPath, markdown, routes) {
         }
       }
       // Routes: anywhere on the line, comments included (a comment naming a route is a claim too).
-      for (const r of line.matchAll(/(?:\$\{?BASE\}?|https?:\/\/[^\s/'"]+|\s|^)(\/v1\/[^\s|]*|\/health\b|\/\.well-known\/[^\s|]*)/g)) {
+      for (const r of line.matchAll(/(?:\$\{?BASE\}?|https?:\/\/[^\s/'"]+|\s|^)(\/v1\/[^\s|]*|\/health[^\s|]*|\/\.well-known\/[^\s|]*)/g)) {
         counts.routeRefs++;
         const route = normaliseRoute(r[1]);
         if (!routes.has(route)) problems.push(`${where}: ${r[1]} (as ${route}) is not in the Worker's routes list`);
@@ -255,6 +268,9 @@ for (const doc of DOCS) {
     const { problems, counts } = checkDoc(doc, readFileSync(join(ROOT, doc), 'utf8'), routes);
     assert.ok(counts.blocks > 0, `${doc} has no shell blocks — did the fence language change?`);
     assert.deepEqual(problems, [], `\n${problems.join('\n')}`);
+    // Nothing may hide behind an unknown directory: a block after a `cd "$(mktemp -d)"` that
+    // uses a relative path must re-anchor with a modellable `cd` first.
+    assert.equal(counts.skipped, 0, `${doc}: ${counts.skipped} relative reference(s) skipped under an unknown directory — add a cd`);
   });
 }
 
@@ -301,4 +317,46 @@ test('$(( arithmetic )) does not open a subshell', () => {
   // a subshell entered while the directory is unknown still restores on exit
   const nested = block('cd "$(mktemp -d)"', '(' + TOP + ' && npm run smoke:dev)', 'npm run not-checked-here');
   assert.deepEqual(checkDoc('synthetic.md', nested, routes).problems, []);
+});
+
+test('quoted --data file arguments are checked', () => {
+  const doc = block(TOP, "curl --data '@missing-single.json' $BASE/v1/verify", 'curl --data "@missing-double.json" $BASE/v1/verify');
+  const all = checkDoc('synthetic.md', doc, routes).problems.join('\n');
+  assert.match(all, /@missing-single\.json resolves to/);
+  assert.match(all, /@missing-double\.json resolves to/);
+});
+
+test('a path under /health is checked whole, not as /health', () => {
+  const all = checkDoc('synthetic.md', block('curl -s $BASE/health/nope'), routes).problems.join('\n');
+  assert.match(all, /\/health\/nope \(as \/health\/nope\) is not in the Worker's routes list/);
+});
+
+test('git clone … && cd bolyra/… re-anchors from an unknown directory', () => {
+  const doc = block(
+    'cd "$(mktemp -d)"',
+    'git clone https://github.com/bolyra/bolyra && cd bolyra/integrations/hosted-verify',
+    'npm run no-such-script-after-clone',
+  );
+  const { problems, counts } = checkDoc('synthetic.md', doc, routes);
+  assert.match(problems.join('\n'), /npm run no-such-script-after-clone — no such script in integrations\/hosted-verify\/package\.json/);
+  assert.equal(counts.skipped, 0);
+});
+
+test('relative refs under an unknown directory are counted as skipped', () => {
+  const doc = block(TOP, 'cd "$(mktemp -d)"', 'npm run whatever', 'curl --data @x.json $BASE/v1/verify');
+  const { problems, counts } = checkDoc('synthetic.md', doc, routes);
+  assert.deepEqual(problems, []);
+  assert.equal(counts.skipped, 2);
+});
+
+test('a file the block itself writes is not skipped under an unknown directory', () => {
+  const doc = block('cd "$(mktemp -d)"', "jq . a.json > reg.json", 'curl --data @reg.json $BASE/v1/credentials');
+  assert.equal(checkDoc('synthetic.md', doc, routes).counts.skipped, 0);
+});
+
+test('a --data ref inside $( … ) ends at the closing parenthesis', () => {
+  const doc = block(TOP, 'X=$(curl --data @examples/registration.allow.json)', 'Y=$(curl --data @nope.json)');
+  const problems = checkDoc('synthetic.md', doc, routes).problems;
+  assert.equal(problems.length, 1, problems.join('\n'));
+  assert.match(problems[0], /@nope\.json resolves to integrations\/hosted-verify\/nope\.json/);
 });
