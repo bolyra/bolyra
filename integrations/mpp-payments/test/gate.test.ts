@@ -1056,6 +1056,15 @@ describe('verifier URL normalization (TD-1)', () => {
     expect((spy.mock.calls[0] as unknown[])[0]).toBe(expected);
   });
 
+  test.each(['https://verify.example ', 'https://verify.example/ '])(
+    'a whitespace-padded verifier url %p is refused at construction',
+    async (url) => {
+      const { method } = mockMethod();
+      const options = await gateOptions({ verifier: { kind: 'url', url } });
+      expect(() => bolyraGate(method, options)).toThrow(TypeError);
+    },
+  );
+
   test('an invalid verifier url is refused at construction', async () => {
     const { method } = mockMethod();
     const options = await gateOptions({ verifier: { kind: 'url', url: 'verify.example/v1/verify' } });

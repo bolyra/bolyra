@@ -34,7 +34,8 @@ Decision evidence for the application, and a verifier-URL convention.
   root check reads the path as written, so dot segments (`/..`, `/%2e`,
   `/custom/..`) are not roots. Every other URL, including a custom path with
   a trailing slash and any query string, is used byte-for-byte. A `url` that
-  is not an absolute `scheme://authority` URL is now a `TypeError` at
+  is not an absolute `scheme://authority` URL, or that has leading or
+  trailing whitespace (never trimmed), is now a `TypeError` at
   `bolyraGate()` construction (it previously failed closed as
   `internal_error` on every request).
 
