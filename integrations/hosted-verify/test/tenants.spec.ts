@@ -4,7 +4,7 @@
  * partial map).
  */
 import { describe, expect, it } from 'vitest';
-import { loadTenants, resolveAuth, timingSafeEqual, MAX_TENANTS_BYTES } from '../src/tenants';
+import { loadTenants, resolveAuth, timingSafeEqual, compareDigests, tokenDigest, tokenPreimage, DIGEST_BYTES, MAX_TENANTS_BYTES } from '../src/tenants';
 import { VerifyDenial } from '../src/verify/verdict';
 import { buildTestTenants, ORGS, TOKENS, ORG_B_OPERATOR_KEY } from './tenants-fixture';
 
@@ -310,5 +310,39 @@ describe('timingSafeEqual', () => {
     expect(timingSafeEqual('', 'a')).toBe(false);
     expect(timingSafeEqual('é', 'ab')).toBe(false); // equal byte length, different bytes
     expect(timingSafeEqual('é', 'é')).toBe(true);
+  });
+
+  it('equal → true; a difference in the LAST byte → false; different lengths → false', () => {
+    const t = TOKENS.A.verifier;
+    expect(timingSafeEqual(t, `${t}`)).toBe(true);
+    expect(timingSafeEqual(t, `${t.slice(0, -1)}${t.at(-1) === 'a' ? 'b' : 'a'}`)).toBe(false);
+    expect(timingSafeEqual(t, t.slice(0, -1))).toBe(false);
+    expect(timingSafeEqual(t, `${t}a`)).toBe(false);
+    // A length-only difference that a byte-cycling compare would miss: 'ab' vs 'abab'.
+    expect(timingSafeEqual('ab', 'abab')).toBe(false);
+  });
+
+  it('compares fixed-size digests: every input, any length, becomes a 32-byte digest', () => {
+    for (const s of ['', 'a', TOKENS.A.verifier, 'x'.repeat(256), 'x'.repeat(4096)]) {
+      expect(tokenDigest(s)).toHaveLength(DIGEST_BYTES);
+    }
+    expect(DIGEST_BYTES).toBe(32);
+    // The length is folded into the preimage: a zero-padded prefix never collides.
+    expect(compareDigests(tokenDigest('abc'), tokenDigest('abc\u0000'))).toBe(false);
+  });
+
+  it('compareDigests only accepts two 32-byte digests, so its loop count is fixed', () => {
+    const d = tokenDigest('abc');
+    expect(compareDigests(d, tokenDigest('abc'))).toBe(true);
+    expect(() => compareDigests(d.subarray(0, 31), d.subarray(0, 31))).toThrow(/32-byte/);
+    expect(() => compareDigests(new Uint8Array(64), new Uint8Array(64))).toThrow(/32-byte/);
+  });
+
+  it('hashes a stored token in constant work: every valid token length pads to the same preimage size', () => {
+    // A stored token is 32–256 bytes (TOKEN_PATTERN); its preimage is always the same size,
+    // so hashing the secret side costs the same number of SHA-256 blocks whatever its length.
+    expect(tokenPreimage('x'.repeat(32))).toHaveLength(tokenPreimage('x'.repeat(256)).length);
+    // A presented value longer than any token only costs the caller's own length.
+    expect(tokenPreimage('x'.repeat(300)).length).toBeGreaterThan(tokenPreimage('x'.repeat(256)).length);
   });
 });
