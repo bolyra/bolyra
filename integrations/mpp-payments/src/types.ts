@@ -316,7 +316,7 @@ export interface Decision {
   outcome: 'allow' | 'deny';
   /** Deny only: the final denial code (after sink-failure latching). */
   code?: DenyCode;
-  /** Deny only: `verdict.detail.reason`, when the verifier sent it as a string. */
+  /** Deny only: `verdict.detail.reason`, when identifier-shaped (`/^[a-z_]{1,64}$/`); free text is not surfaced. */
   reason?: string;
   /**
    * Allow: the raw `x-bolyra-credential-id` header from a `url` verifier.

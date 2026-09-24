@@ -44,7 +44,7 @@ with `ERESOLVE`; the command above avoids it.
 |---|---|
 | `@bolyra/mpp` | 0.7.0 |
 | `mppx` (peer) | exactly 0.8.13 |
-| `@bolyra/cli` | requires `@bolyra/mpp` ^0.6.0 |
+| `@bolyra/cli` | requires `@bolyra/mpp` ^0.6.0, which excludes 0.7.0 on 0.x semver; the CLI's range gets its own bump after 0.7.0 is published (follow-up) |
 | Node | `>=20` (`engines`; 18 dropped in 0.7.0); 20, 22 and 24 are exercised in CI |
 
 ### Spend mandates authorize a TIER, not an amount
@@ -182,10 +182,13 @@ in the `X-Bolyra-Authorization` header on every request. A denial is thrown as
 }
 ```
 
-When the verifier's deny carries `detail.reason` / `detail.credential_id` as
-strings (the hosted verifier's registry deny does), they are copied into the
-body as `reason` and `credential_id` — e.g. `"reason": "credential_not_active"`.
-No other `detail` member reaches the HTTP body.
+When the verifier's deny carries `detail.reason` / `detail.credential_id` (the
+hosted verifier's registry deny does), they are copied into the body as
+`reason` and `credential_id` — e.g. `"reason": "credential_not_active"`.
+`reason` is an identifier (`/^[a-z_]{1,64}$/`); free-text validator messages
+are not surfaced (they stay on `BolyraDeniedError.verdict.detail` in-process).
+`credential_id` is copied when it is a string. No other `detail` member reaches
+the HTTP body.
 
 On allow, the mppx receipt (and therefore the `Payment-Receipt` header) gains
 a `bolyraAuthorization` extension field — tier, amount, verifier kind, and the
@@ -342,8 +345,10 @@ bolyraGate(method, {
 credentialId?, receipt?, request }`:
 
 - **deny** — `code` is the final denial code and `status` the HTTP status it
-  maps to (`DENY_STATUS[code]`); `reason` and `credentialId` come from the
-  verifier's `detail.reason` / `detail.credential_id` when they are strings.
+  maps to (`DENY_STATUS[code]`); `reason` comes from the verifier's
+  `detail.reason` — `reason` is an identifier; free-text validator messages
+  are not surfaced — and `credentialId` from `detail.credential_id` when it
+  is a string.
 - **allow** — no `code` or `status`; with a `url` verifier, `credentialId` and
   `receipt` are the raw `x-bolyra-credential-id` / `x-bolyra-receipt` response
   headers (absent in `classical`/`command` mode). This `receipt` is the hosted

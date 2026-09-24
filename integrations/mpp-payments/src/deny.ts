@@ -61,12 +61,27 @@ export interface DenyProblem {
   code: DenyCode;
   /**
    * The verifier's machine-readable reason (`verdict.detail.reason`), e.g.
-   * `credential_not_active` on a hosted-registry deny. Present only when the
-   * verdict carried it as a string.
+   * `credential_not_active` on a hosted-registry deny. Present only when it is
+   * an identifier (`/^[a-z_]{1,64}$/`); free-text messages are not surfaced.
    */
   reason?: string;
   /** The credential the verifier named (`verdict.detail.credential_id`), when a string. */
   credential_id?: string;
+}
+
+/** A wire-safe `reason`: a short snake_case identifier such as `credential_not_active`. */
+const IDENTIFIER_REASON = /^[a-z_]{1,64}$/;
+
+/**
+ * `detail.reason` when it is identifier-shaped (`/^[a-z_]{1,64}$/`), else
+ * `undefined`. Free-text validator messages (which may echo client input or
+ * library internals) are never surfaced on the wire — they stay reachable
+ * in-process via `BolyraDeniedError.verdict.detail`. Shared by the Problem
+ * Details body and the `onDecision` Decision.
+ */
+export function identifierReason(detail: Record<string, unknown> | undefined): string | undefined {
+  const reason = detail?.reason;
+  return typeof reason === 'string' && IDENTIFIER_REASON.test(reason) ? reason : undefined;
 }
 
 /** The verdict members a Problem Details body is built from. */
@@ -74,12 +89,13 @@ export type DenyProblemInput = Pick<DenyVerdict, 'code' | 'message' | 'detail'>;
 
 /**
  * Build the Problem Details body for a deny verdict. Of `verdict.detail`,
- * ONLY `reason` and `credential_id` are copied, and only when they are
- * strings — any other detail member stays out of the HTTP body.
+ * ONLY `reason` (when identifier-shaped, see {@link identifierReason}) and
+ * `credential_id` (when a string) are copied — any other detail member stays
+ * out of the HTTP body.
  */
 export function denyProblem(verdict: DenyProblemInput): DenyProblem {
   const status = DENY_STATUS[verdict.code] ?? 500;
-  const reason = verdict.detail?.reason;
+  const reason = identifierReason(verdict.detail);
   const credentialId = verdict.detail?.credential_id;
   return {
     type: `https://bolyra.ai/problems/mpp/${verdict.code.replace(/_/g, '-')}`,
@@ -87,7 +103,7 @@ export function denyProblem(verdict: DenyProblemInput): DenyProblem {
     status,
     detail: verdict.message,
     code: verdict.code,
-    ...(typeof reason === 'string' ? { reason } : {}),
+    ...(reason !== undefined ? { reason } : {}),
     ...(typeof credentialId === 'string' ? { credential_id: credentialId } : {}),
   };
 }

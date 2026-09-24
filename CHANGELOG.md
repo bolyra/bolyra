@@ -54,11 +54,20 @@ Decision evidence for the application, and a verifier-URL convention.
   the unchanged fail-closed verdict. `callUrlVerifier` keeps its return shape.
   `UrlVerifierConfig` and `UrlVerifierEvidence` types are exported.
 - `DenyProblem.reason` and `DenyProblem.credential_id`: copied from the deny
-  verdict's `detail.reason` / `detail.credential_id` when they are strings
-  (e.g. `credential_not_active` from a hosted-registry deny). No other
-  `detail` member reaches the Problem Details body. `denyProblem` /
+  verdict's `detail.reason` / `detail.credential_id` (e.g.
+  `credential_not_active` from a hosted-registry deny). `reason` is an
+  identifier (`/^[a-z_]{1,64}$/`); free-text validator messages are not
+  surfaced — in the Problem Details body or in `Decision.reason` — and stay
+  on `BolyraDeniedError.verdict.detail` in-process. `credential_id` is copied
+  when it is a string. No other `detail` member reaches the body. `denyProblem` /
   `denyResponse` accept the verdict's `detail` (`DenyProblemInput`); existing
   `{ code, message }` callers are unaffected.
+
+### Follow-up
+
+- `@bolyra/cli` currently requires `@bolyra/mpp ^0.6.0`, which excludes 0.7.0
+  on 0.x semver. The CLI's range needs its own bump after `@bolyra/mpp` 0.7.0
+  is published (not part of this release).
 
 ## @bolyra/mpp 0.6.0 (2026-09-22)
 
