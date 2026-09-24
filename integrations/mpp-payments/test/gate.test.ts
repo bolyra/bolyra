@@ -376,6 +376,33 @@ describe('bolyraGate', () => {
     }
   });
 
+  test('a verifier deny detail surfaces reason + credential_id in the Problem Details (T8)', async () => {
+    const { method } = mockMethod();
+    const originalFetch = global.fetch;
+    const id = 'ab'.repeat(32);
+    global.fetch = jest.fn(async () =>
+      new Response(
+        JSON.stringify({
+          verdict: 'deny', kind: 'classical', code: 'untrusted_root', message: 'not active',
+          detail: { reason: 'credential_not_active', credential_id: id, backend: 'secret' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    ) as unknown as typeof fetch;
+    try {
+      const wrapped = bolyraGate(
+        method,
+        await gateOptions({ verifier: { kind: 'url', url: 'https://verify.example' } }),
+      );
+      const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+      const problem = await readProblem(denied!);
+      expect(problem).toMatchObject({ code: 'untrusted_root', reason: 'credential_not_active', credential_id: id });
+      expect(problem).not.toHaveProperty('backend');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   test('a custom nonceStore is used for reserve-before-act', async () => {
     const { method } = mockMethod();
     const originalFetch = global.fetch;

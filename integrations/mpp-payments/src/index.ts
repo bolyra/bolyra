@@ -35,7 +35,13 @@ export type {
   RevealedCredential,
 } from './bundle';
 
-export { denyProblem, denyResponse, DENY_STATUS, type DenyProblem } from './deny';
+export {
+  denyProblem,
+  denyResponse,
+  DENY_STATUS,
+  type DenyProblem,
+  type DenyProblemInput,
+} from './deny';
 export { runCommandVerifier, callUrlVerifier, validateVerdict } from './evc';
 export {
   NonceStore,
