@@ -142,7 +142,7 @@ justify a cap exception.
 
 ## Backlog fixes (2026-09-24, founder: "lets fix the backlog items"; plan Codex-APPROVED after 5 review passes)
 Plan: ~/.claude/plans/eager-discovering-babbage.md · order ruled by Codex: C1 → A1 → B → A2 → D1 → D2 → E → OPS
-- [ ] PR-C1 E9 (CI boots wrangler dev in hosted-verify-tests; five exact checks: health, 401, unregistered deny, register 201, allow) + E10 (@bolyra/mpp devDep; digest agreement from the installed package; example asserts the Worker's id in-process)
+- [x] PR-C1 (MERGED #183, main `4cf75f91`) E9 (CI boots wrangler dev in hosted-verify-tests; five exact checks: health, 401, unregistered deny, register 201, allow) + E10 (@bolyra/mpp devDep; digest agreement from the installed package; example asserts the Worker's id in-process)
 - [ ] PR-A1 schema_meta + E5 E7 E8 E17 E18 T6 E14 E11
 - [ ] PR-B E2 E13 T10 E15 E16 E19
 - [ ] PR-A2 E6
