@@ -33,15 +33,25 @@
 #                                     lift the quarantine; refuses without the flag, which
 #                                     records that any operator key the quarantine was
 #                                     about has been retired or re-issued
-#   ./tenant.sh remove <org_id>       drop the tenant from the map (status=removed, then
+#   ./tenant.sh remove <org_id> [--last]
+#                                     drop the tenant from the map (status=removed, then
 #                                     sync) and delete both tokens from the keychain ONLY
 #                                     once that upload is confirmed. No upload started: the
 #                                     status is restored and the tokens kept. Outcome unknown:
 #                                     lock, tokens and status=removed all stay; recover the
 #                                     lock and re-run remove. The registry file is kept; the
-#                                     tenant's Durable Object and its history are NOT deleted
-#   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
-#                                     re-put (dry-run: validate and report, push nothing)
+#                                     tenant's Durable Object and its history are NOT deleted.
+#                                     Removing the LAST tenant (no other record is active or
+#                                     disabled — a quarantined tenant still occupies the map)
+#                                     pushes the EMPTY map {}: every request is denied (401)
+#                                     and /health reports tenant_count 0. It is refused
+#                                     unless --last is given
+#   ./tenant.sh sync [--dry-run] [--allow-empty]
+#                                     rebuild TENANTS from registry + keychain, validate,
+#                                     re-put (dry-run: validate and report, push nothing).
+#                                     When every record is removed the map is {} and sync
+#                                     refuses unless --allow-empty is given; a directory with
+#                                     NO record files is always refused
 #   ./tenant.sh show                  list tenants, status, keychain presence
 #   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock) for its whole
 #   run. An interrupt (Ctrl-C/TERM aimed at the shell or the put stage) takes effect only
@@ -324,8 +334,12 @@ cmd_enable() {
 }
 
 cmd_remove() {
-  local org="${1:-}" extra="${2:-}" prev role outcome=0 present="" failed=""
+  local org="${1:-}" flag="${2:-}" extra="${3:-}" prev role outcome=0 present="" failed=""
   [ -n "$org" ] || usage
+  case "$flag" in
+    "" | --last) ;;
+    *) die "remove: unknown argument '$flag' (only --last is accepted)" ;;
+  esac
   [ -z "$extra" ] || die "remove: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"; require_security
   # The tokens are the only local recovery material for this tenant: while the old map might
@@ -339,6 +353,13 @@ cmd_remove() {
     active|disabled|removed) ;;
     *) die "$(registry_file "$org"): status must be active, disabled, or removed" ;;
   esac
+  # The last tenant (E13): if no OTHER record is active or disabled (a quarantined tenant still
+  # occupies the map), this removal pushes the EMPTY map {} and every request is denied. That
+  # takes a deliberate --last, checked here, before anything has changed.
+  count_records "$org" || die "remove: could not read the registry in $TENANTS_DIR; nothing changed"
+  if [ "$LIVE_RECORDS" = 0 ] && [ "$flag" != "--last" ]; then
+    die "remove: '$org' is the last tenant; removing it leaves an EMPTY map (every request denied). Re-run with --last to confirm"
+  fi
   # Which items exist now decides which deletes are owed afterwards: one already absent is
   # not a failure to delete.
   for role in admin verifier; do
@@ -357,7 +378,11 @@ cmd_remove() {
     deferred_exit
     exit 1
   fi
-  do_sync || outcome=$?
+  if [ "$flag" = "--last" ]; then
+    do_sync --allow-empty || outcome=$?
+  else
+    do_sync || outcome=$?
+  fi
   case "$outcome" in
     0)
       for role in $present; do
@@ -395,13 +420,44 @@ cmd_remove() {
   esac
 }
 
+# count_records [<org_to_exclude>] — count the registry's record files (RECORD_FILES) and those
+# whose status is active or disabled (LIVE_RECORDS: the tenants the assembled map will hold; a
+# quarantined tenant still occupies the map). The same file filter as tokens_for_sync. Returns 1,
+# with the reason on stderr, on a record it cannot read — never dies, so a caller inside remove's
+# critical section still restores the registry. Registry files hold no secrets.
+RECORD_FILES=0
+LIVE_RECORDS=0
+count_records() {
+  local skip="${1:-}" f b org status
+  RECORD_FILES=0
+  LIVE_RECORDS=0
+  for f in "$TENANTS_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    case "$b" in .*) continue ;; esac
+    case "$f" in *.policy.json) continue ;; esac
+    org="$(basename "$f" .json)"
+    RECORD_FILES=$((RECORD_FILES + 1))
+    [ "$org" != "$skip" ] || continue
+    status="$(reg_field "$org" status)" || return 1
+    case "$status" in
+      removed) ;;
+      active|disabled) LIVE_RECORDS=$((LIVE_RECORDS + 1)) ;;
+      *) echo "error: $f: status must be active, disabled, or removed" >&2; return 1 ;;
+    esac
+  done
+  return 0
+}
+
 # Print "<org> <role> <token>" for every active/disabled tenant — consumed on a pipe only.
 tokens_for_sync() {
   local f b org status role token _xt
   # No token may reach an xtrace log; restore tracing on the way out.
   case "$-" in *x*) _xt=1; set +x ;; *) _xt=0 ;; esac
   for f in "$TENANTS_DIR"/*.json; do
-    [ -e "$f" ] || die "no tenant registry files in $TENANTS_DIR — never push an empty map (the Worker rejects {}); add a tenant, or quarantine the remaining ones instead"
+    # Backstop only: do_sync refuses zero record files before this pipeline starts (a `die`
+    # here ends just this stage), and tenants-assemble.mjs refuses them inside it.
+    [ -e "$f" ] || die "no tenant registry files in $TENANTS_DIR — refusing to build a map from an empty (or wrong) registry directory; check TENANTS_DIR / HOSTED_VERIFY_ENV, or add a tenant"
     # A directory named x.json, or an AppleDouble ._x.json, must not block every sync.
     [ -f "$f" ] || continue
     b="$(basename "$f")"
@@ -427,8 +483,11 @@ tokens_for_sync() {
   return 0
 }
 
-# do_sync [--dry-run] — rebuild, validate and put TENANTS, and RETURN what happened to the
-# upload so a caller can act on it (every message is printed here):
+# do_sync [--dry-run] [--allow-empty] — rebuild, validate and put TENANTS, and RETURN what
+# happened to the upload so a caller can act on it (every message is printed here). An
+# all-removed registry assembles to the EMPTY map {} (valid, but every request is denied): it is
+# refused (2, not started) unless --allow-empty is given, which is then forwarded to the put
+# stage — the put stage refuses {} on its own without it.
 #   0  confirmed    wrangler confirmed the upload (upload.confirmed); SYNC_RC holds the
 #                   pipeline's exit code (130/143 when the put stage deferred an interrupt)
 #   2  not started  nothing was sent: the keychain, the assembler or the validator refused, or
@@ -439,15 +498,18 @@ tokens_for_sync() {
 # therefore explicit (die, or a captured rc), none relies on set -e.
 SYNC_RC=0
 do_sync() {
-  local arg="${1:-}" extra="${2:-}" dry=0 rc=0
+  local arg dry=0 allow_empty=0 rc=0
   SYNC_RC=0
-  # Parse positively: anything that is not exactly --dry-run must refuse, never push live.
-  case "$arg" in
-    "") ;;
-    --dry-run) dry=1 ;;
-    *) die "sync: unknown argument '$arg' (only --dry-run is accepted)" ;;
-  esac
-  [ -z "$extra" ] || die "sync: unexpected extra argument '$extra'"
+  # Parse positively: anything that is not exactly --dry-run or --allow-empty must refuse,
+  # never push live. Each at most once; empty strings are the dispatcher's unused positionals.
+  for arg in "$@"; do
+    case "$arg" in
+      "") ;;
+      --dry-run) [ "$dry" = 0 ] || die "sync: unexpected extra argument '$arg'"; dry=1 ;;
+      --allow-empty) [ "$allow_empty" = 0 ] || die "sync: unexpected extra argument '$arg'"; allow_empty=1 ;;
+      *) die "sync: unknown argument '$arg' (only --dry-run and --allow-empty are accepted)" ;;
+    esac
+  done
   require_security
   # Cancellation point 1, before anything is assembled: an interrupt that has already been
   # recorded (possible only inside a CRITICAL section — elsewhere on_signal has exited) means
@@ -456,6 +518,25 @@ do_sync() {
     echo "error: interrupted by SIG$INTERRUPTED before the upload started; nothing was assembled or uploaded" >&2
     return 2
   fi
+  # The empty-map gate, decided from the RECORD FILES before anything is assembled (the map
+  # itself never enters a shell variable).
+  if ! count_records; then
+    echo "error: sync: could not read the registry in $TENANTS_DIR; nothing was assembled or uploaded" >&2
+    return 2
+  fi
+  # Zero record files is refused whatever the flags say — a wrong TENANTS_DIR far more often
+  # than a deliberate empty map. Decided HERE, not only in tokens_for_sync: that one runs as a
+  # pipeline stage, and its `die` ends only its own subshell while the stages after it carry on.
+  if [ "$RECORD_FILES" = 0 ]; then
+    echo "error: no tenant registry files in $TENANTS_DIR — refusing to build a map from an empty (or wrong) registry directory; check TENANTS_DIR / HOSTED_VERIFY_ENV, or add a tenant" >&2
+    return 2
+  fi
+  if [ "$LIVE_RECORDS" = 0 ] && [ "$allow_empty" = 0 ]; then
+    echo "error: sync: the assembled map is empty (every tenant is removed); pass --allow-empty to push it deliberately" >&2
+    return 2
+  fi
+  local put_args=("${WRANGLER_ENV[@]}")
+  [ "$allow_empty" = 0 ] || put_args+=(--allow-empty)
   echo "assembling TENANTS from $TENANTS_DIR (tokens from keychain service $KEYCHAIN_SERVICE)…" >&2
   if [ "$dry" = 1 ]; then
     tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" || exit $?
@@ -474,10 +555,10 @@ do_sync() {
   # disk or a shell variable. `wrangler secret put` has NO empty-value guard, so it must
   # never be the last stage of this pipeline: on a validator refusal it would read EOF and
   # put an EMPTY TENANTS (every tenant fails closed). tenants-put.mjs starts wrangler only
-  # after a non-empty validated map has arrived. pipefail is set, so a failure anywhere
+  # after a validated map has arrived — and an empty one ({}) only with --allow-empty. pipefail is set, so a failure anywhere
   # (keychain, assembly, validation, guard, wrangler) is loud.
   tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
-      | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${WRANGLER_ENV[@]}") || rc=$?
+      | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${put_args[@]}") || rc=$?
   SYNC_RC="$rc"
   # What happened to the upload is read from what the put stage RECORDED, never from $rc. An
   # exit code cannot tell these three apart: the launcher reports a signalled child as exit 0,
@@ -560,8 +641,8 @@ case "$cmd" in
   rotate)  acquire_lock; cmd_rotate "${1:-}" "${2:-}" "${3:-}" ;;
   disable) acquire_lock; cmd_disable "${1:-}" "${2:-}" ;;
   enable)  acquire_lock; cmd_enable "${1:-}" "${2:-}" "${3:-}" ;;
-  remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" ;;
-  sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" ;;
+  remove)  acquire_lock; cmd_remove "${1:-}" "${2:-}" "${3:-}" ;;
+  sync)    acquire_lock; cmd_sync "${1:-}" "${2:-}" "${3:-}" ;;
   show)    cmd_show "${1:-}" ;;
   *)       usage ;;
 esac

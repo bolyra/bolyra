@@ -140,3 +140,21 @@ test('a registry directory that is a subdirectory named x.json is skipped', () =
     const map = assemble(dir, lines({ 'acme admin': tok('a'), 'acme verifier': tok('b') }));
     assert.deepEqual(Object.keys(map), ['acme']);
   }));
+
+// E13: `{}` is now a VALID map downstream, so an assembler that turned an empty (or wrong)
+// registry directory into `{}` would be one --allow-empty away from wiping every tenant. A
+// directory with no record files is refused here, in the pipeline itself — tenant.sh's own
+// check runs in a pipeline stage whose exit cannot stop the stages after it.
+test('a directory with NO record files is refused (never assembled into {})', () =>
+  withDir({ 'notes.txt': 'x', '.hidden.json': 'x', 'acme.policy.json': 'x' }, (dir) => {
+    mkdirSync(path.join(dir, 'dir.json'));
+    refuses(dir, '', /^no registry record files in .+$/);
+    const cli = spawnSync(process.execPath, [CLI, dir], { input: '', encoding: 'utf8' });
+    assert.equal(cli.status, 1);
+    assert.equal(cli.stdout, '');
+  }));
+
+test('every record removed is the deliberate empty map {} (the flag is decided downstream)', () =>
+  withDir({ 'acme.json': rec('acme', { status: 'removed' }) }, (dir) => {
+    assert.deepEqual(assemble(dir, ''), {});
+  }));
