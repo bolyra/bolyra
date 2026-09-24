@@ -105,16 +105,29 @@ bless a partial migration and `migrate` never merges. A migrate whose
 validation fails commits nothing (no records, no marker, the candidate
 removed) and names the source file to fix.
 
-**Interrupted migrate.** Only a SIGKILL (or a crash) can stop a migrate
-between its first rename and the marker; Ctrl-C/TERM during the commit is
-deferred until it has finished. What it leaves is records (and possibly a
-`.candidate/`) without a marker. Every command — `init` and `migrate`
+**Interrupted migrate.** A Ctrl-C or TERM aimed at the tenant.sh shell during
+the commit is deferred until the marker is written. A SIGKILL, a crash, or a
+terminal Ctrl-C (which reaches the whole foreground process group, so it can
+also kill the in-flight `mv`) can still stop a migrate between its first
+rename and the marker. Every one of these leaves the same recoverable state:
+records (and possibly a `.candidate/`) without a marker. Every command — `init` and `migrate`
 included — then refuses with `has records but no marker: it looks like an
 interrupted migrate`; there is no automatic repair. If the lock was retained,
 remove it first as in "Recovering a retained lock" (no migrate can be
 running). Then delete the partially migrated `*.json` files and `.candidate/`
 from the NEW registry directory (never the source — it was not touched) and
 re-run the same `migrate --from`.
+
+**A legacy record whose keychain token is missing.** `migrate` refuses the
+WHOLE candidate if any active or disabled record lacks either token, and
+`rotate` cannot mint the missing one because the destination is not
+initialized yet. The escape hatch: in the SOURCE directory, set that record's
+`"status"` to `"removed"` by hand; migrate; then bring the tenant back with
+the removed-tenant path in the new registry — `rotate <org_id> admin
+--confirm` and `rotate <org_id> verifier --confirm` (for a removed tenant these
+store the token and skip the sync), set `"status": "active"` in the migrated
+record, and `sync`. The partner then needs both new tokens (schedule it: see
+"2. Rotate a token").
 
 **One-time move of the founder's existing records (do this BEFORE any other
 provisioning mutation).** Until then the real production and staging records
