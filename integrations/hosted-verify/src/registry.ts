@@ -26,6 +26,7 @@
  *   revoke:    absent ─► 'absent'   ACTIVE ─► 'revoked' + history   REVOKED ─► 'unchanged' (pending ─► repair first)
  *              ACTIVE, history write fails ─► 'revoked_history_failed' (still REVOKED; see below)
  *              REVOKED, pending, repair finds a conflict ─► 'revoked_history_conflict'
+ *              REVOKED, pending, repair throws ─► 'revoked_history_failed' (metadata kept)
  *
  * Revocation is durable even when its audit row cannot be written. It is two
  * transactions, run back to back with no `await` between them:
@@ -363,6 +364,11 @@ export class TenantRegistry extends DurableObject<Env> {
           return 'unchanged';
         case 'conflict':
           return 'revoked_history_conflict';
+        case 'storage_error':
+          // The credential is revoked (transaction 1 of an earlier call committed) and only
+          // the audit row is still owed: the same 204 + history_write_failed as the first
+          // attempt, never a 500. The metadata stays (the repair rolled back).
+          return 'revoked_history_failed';
         default:
           return 'storage_error';
       }

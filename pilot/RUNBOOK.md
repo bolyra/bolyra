@@ -131,10 +131,12 @@ curl -s https://bolyra-hosted-verify.<account>.workers.dev/health | jq '{status,
 # probe. `/health` also probes the registry Durable Object (a status read under the 2 s verify
 # deadline) and parses CAPABILITY_MAP, and answers 503 `status: "degraded"` (with `registry:
 # "unavailable"|"timeout"` or `capability_map: "invalid"`) when either fails, so on a build that
-# emits those fields a registry outage or a malformed CAPABILITY_MAP trips the probe too. The
-# registry probe runs at most once per Worker isolate per 10 s (single-flight, healthy results
-# cached; failures are re-probed on the next call), so a /health flood cannot amplify onto the
-# `__health__` object beyond that, and the registry signal may be up to 10 s stale.
+# emits those fields a registry outage or a malformed CAPABILITY_MAP trips the probe too. While
+# the registry is HEALTHY, the probe runs at most once per Worker isolate per 10 s (single-flight;
+# a healthy result is cached for 10 s, so the registry signal may be up to 10 s stale), which
+# bounds what a /health flood can put on the `__health__` object. While the registry is FAILING
+# there is no such bound: a failed result is dropped as soon as it settles, so each /health call
+# may probe again, and an RPC that hit the 2 s deadline stays outstanding until it settles.
 # `registry_enforced` is a build marker, not a registry liveness check (`registry` is the liveness).
 ```
 
@@ -262,8 +264,11 @@ The two audit headers ask for different things:
 - `x-bolyra-audit: history_conflict` (code `revoke_history_conflict`): a retry
   found rows that do not agree → a human looks at the rows; retrying will not help.
 
-A retry of the same `revoke` also attempts the repair (and answers a plain `204`
-once it succeeds). `history_conflict` means a **different** `revoked` event is
+A retry of the same `revoke` also attempts the repair. It answers a plain `204`
+once the repair succeeds. If the repair fails again, it answers the same `204` with
+`x-bolyra-audit: history_write_failed`, never a `500`, and the metadata stays.
+`repair-history` is an explicit admin action, so it reports that failure as a
+`500`. `history_conflict` means a **different** `revoked` event is
 already recorded for that credential (its `ts` or `request_id` does not match the
 metadata), or the stored recovery metadata is itself incomplete (null ts / request
 id): the log shows `stored: null`; fix the row by hand. The repair never overwrites
