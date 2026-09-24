@@ -227,12 +227,15 @@ except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
   The revocation is durable even if its audit (history) row cannot be written:
   the answer is still `204`, with `x-bolyra-audit: history_write_failed`, the
   credential is REVOKED (verify denies it), and `pending_history` is `true`
-  until the row is written.
+  until the row is written. A retry that finds a conflicting row answers `204`
+  with `x-bolyra-audit: history_conflict` (a human must look; retrying will not help).
 - **`POST /v1/credentials/{id}/repair-history`** — writes a revocation's owed
   audit row from the metadata recorded with it; idempotent.
   `200 { credential_id, audit: "repaired" | "clean" }`; `409 history_conflict`
-  when a different revoked event is already recorded (left for a human; the
-  credential stays revoked); `404` if absent.
+  when a different revoked event is already recorded, or the stored recovery
+  metadata is itself incomplete (null ts / request id: the log shows
+  `stored: null`; fix the row by hand). Either is left for a human; the
+  credential stays revoked. `404` if absent.
 
 The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the request's `cf-ray` id (or a UUID when absent).
 `/health` reports `registry: "durable-object"` and `credential_id_version: "v1"`.

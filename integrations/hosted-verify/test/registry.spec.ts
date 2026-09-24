@@ -295,7 +295,7 @@ describe('durable revocation and audit repair', () => {
     ]);
   });
 
-  it('a persistent collision: every revoke stays revoked_history_failed, repair reports conflict and never clears the metadata', async () => {
+  it('a persistent collision: the first revoke is revoked_history_failed, every retry revoked_history_conflict, repair reports conflict and never clears the metadata', async () => {
     const r = registry(ORGS.A);
     await r.register(input(ID_A));
     await seedRevokedEvent(r, ID_A, 1, 'seed');
@@ -303,7 +303,8 @@ describe('durable revocation and audit repair', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
     try {
       expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked_history_failed');
-      expect(await r.revoke(ID_A, NOW + 2, 'r2')).toBe('revoked_history_failed');
+      expect(await r.revoke(ID_A, NOW + 2, 'r2')).toBe('revoked_history_conflict');
+      expect(await r.revoke(ID_A, NOW + 3, 'r3')).toBe('revoked_history_conflict');
       expect(await r.repairHistory(ID_A)).toBe('conflict');
     } finally {
       spy.mockRestore();
@@ -349,6 +350,33 @@ describe('durable revocation and audit repair', () => {
     const got = await r.get(ID_A);
     expect(got.outcome === 'found' && got.record.history[1]).toEqual({ event: 'revoked', ts: T, request_id: 'p' });
     expect(await r.repairHistory(ID_A)).toBe('clean');
+  });
+
+  it('pending metadata that is itself incomplete (null ts / request id) is a conflict: never cleared, logged with stored: null', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    await runInDurableObject(r, (_i, state) => {
+      state.storage.sql.exec(
+        "UPDATE credentials SET status = 'REVOKED', revoked_at = ?, pending_history = 1, pending_request_id = NULL, pending_at = NULL WHERE credential_id = ?",
+        NOW + 7,
+        ID_A,
+      );
+    });
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
+    try {
+      expect(await r.repairHistory(ID_A)).toBe('conflict');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await pendingOf(r, ID_A)).toEqual({ pending_history: 1, pending_request_id: null, pending_at: null });
+    expect(errors.find((e) => e[0] === 'hosted-verify history conflict')?.[1]).toEqual({
+      credential_id: ID_A,
+      pending: { ts: null, request_id: null },
+      stored: null,
+    });
+    const got = await r.get(ID_A);
+    expect(got.outcome === 'found' && got.record.history.map((h) => h.event)).toEqual(['registered']);
   });
 
   it('crash recovery through a plain revoke: repairs and answers unchanged', async () => {

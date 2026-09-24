@@ -4,7 +4,7 @@
  * one in ONE transaction, and refuses (every method → storage_error) a database
  * NEWER than this build. Storage isolation is per file; every test resets.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env, evictDurableObject, reset, runInDurableObject } from 'cloudflare:test';
 import type { RegisterInput } from '../src/registry';
 
@@ -149,6 +149,53 @@ describe('schema versioning', () => {
     expect(await again.register(input(ID_B))).toEqual({ outcome: 'storage_error' });
     expect(await again.repairHistory(ID_A)).toBe('storage_error');
     expect(await versionOf(again)).toEqual([99]);
+  });
+
+  it('refusing a NEWER database rolls the whole constructor transaction back (nothing is created in it)', async () => {
+    const r = registry('schema-newer-rollback');
+    await r.status(ID_A);
+    await runInDurableObject(r, (_i, state) => {
+      state.storage.sql.exec('UPDATE schema_meta SET version = 99');
+      state.storage.sql.exec('DROP TABLE history');
+    });
+    await evictDurableObject(r);
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
+    let status: unknown;
+    try {
+      status = await registry('schema-newer-rollback').status(ID_A);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(status).toBe('storage_error');
+    expect(JSON.stringify(errors)).toContain('schema version 99 is newer than this build supports (2)');
+    // Read in a callback on the same (refusing) instance: the base SCHEMA it ran must not have committed.
+    const tables = await runInDurableObject(registry('schema-newer-rollback'), (_i, state) =>
+      state.storage.sql.exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'history'").toArray(),
+    );
+    expect(tables).toEqual([]);
+  });
+
+  it.each([0, -1, 1.5])('a stored version %s is not a known layout → every method storage_error, with a self-explaining error', async (bad) => {
+    const r = registry('schema-unknown');
+    await r.register(input(ID_A));
+    await runInDurableObject(r, (_i, state) => {
+      state.storage.sql.exec('UPDATE schema_meta SET version = ?', bad);
+    });
+    await evictDurableObject(r);
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
+    const again = registry('schema-unknown');
+    try {
+      expect(await again.status(ID_A)).toBe('storage_error');
+      expect(await again.get(ID_A)).toEqual({ outcome: 'storage_error' });
+      expect(await again.revoke(ID_A, NOW + 1, 'r')).toBe('storage_error');
+      expect(await again.repairHistory(ID_A)).toBe('storage_error');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.stringify(errors)).toContain(`schema version ${bad} is not a known layout`);
+    expect(await versionOf(again)).toEqual([bad]);
   });
 
   it('a restart at the current version is a no-op: version, columns and credentials unchanged', async () => {

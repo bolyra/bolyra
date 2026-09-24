@@ -23,8 +23,9 @@
  *              ACTIVE/REVOKED, DIFFERENT key or digest ─► { mismatch }  (an id-derivation
  *                          defect or a collision; never silently kept, never overwritten)
  *              REVOKED  ─► { revoked }   (terminal; nothing is replaced)
- *   revoke:    absent ─► 'absent'   ACTIVE ─► 'revoked' + history   REVOKED ─► 'unchanged'
+ *   revoke:    absent ─► 'absent'   ACTIVE ─► 'revoked' + history   REVOKED ─► 'unchanged' (pending ─► repair first)
  *              ACTIVE, history write fails ─► 'revoked_history_failed' (still REVOKED; see below)
+ *              REVOKED, pending, repair finds a conflict ─► 'revoked_history_conflict'
  *
  * Revocation is durable even when its audit row cannot be written. It is two
  * transactions, run back to back with no `await` between them:
@@ -41,10 +42,10 @@
  * transaction, so a history row without a credential row cannot exist.
  *
  * Rules this class lives by:
- *   1. Every mutation is ONE `transactionSync` with no `await` inside. The
- *      object's input gate only covers storage operations, so a method that
- *      awaited between a read and a write would interleave with other calls;
- *      synchronous methods run to completion one after another.
+ *   1. Every mutation is synchronous, with no `await` anywhere in it, so a
+ *      method runs to completion before the object can deliver another event:
+ *      revoke's two transactions cannot interleave with another call. (The
+ *      input gate only matters across an `await`, and there are none.)
  *   2. Nothing is thrown across the RPC boundary — a throw inside the object is
  *      reported as an unhandled rejection by the runtime even when the caller
  *      handles it. Storage failures are RETURNED (`storage_error`), a schema
@@ -84,6 +85,8 @@ export type RevokeResult =
   | 'unchanged'
   /** The credential IS revoked; its audit row is owed (pending metadata kept for repair). */
   | 'revoked_history_failed'
+  /** A retry of an owed audit row found a conflicting row (or unusable metadata): a human looks. Still REVOKED. */
+  | 'revoked_history_conflict'
   | 'absent'
   | 'invalid_input'
   | 'storage_error';
@@ -227,16 +230,19 @@ export class TenantRegistry extends DurableObject<Env> {
     // before any request runs. Creation and migration are ONE transaction, so a
     // failure leaves the database exactly as it was.
     try {
-      this.#schemaError = this.ctx.storage.transactionSync(() => this.#migrate());
-      if (this.#schemaError !== undefined) logStorageError('schema', undefined, this.#schemaError);
+      this.ctx.storage.transactionSync(() => this.#migrate());
     } catch (e) {
       this.#schemaError = e;
       logStorageError('schema', undefined, e);
     }
   }
 
-  /** Returns an Error (not thrown: nothing to roll back) when the database is newer than this build. */
-  #migrate(): Error | undefined {
+  /**
+   * Create, then migrate, inside the constructor's transaction. Refusing a
+   * layout THROWS, so everything this ran (the base schema included) rolls back
+   * and the constructor latches the error.
+   */
+  #migrate(): void {
     const sql = this.ctx.storage.sql;
     sql.exec(SCHEMA);
     sql.exec(SCHEMA_META);
@@ -244,14 +250,16 @@ export class TenantRegistry extends DurableObject<Env> {
       sql.exec('INSERT INTO schema_meta (rowid, version) VALUES (1, 1)');
     }
     const version = sql.exec<{ version: number }>('SELECT version FROM schema_meta').one().version;
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw new Error(`schema version ${version} is not a known layout`);
+    }
     if (version > SCHEMA_VERSION) {
       // A rolled-back Worker meeting a database a newer build migrated: refuse
       // rather than read or write a layout this code does not know.
-      return new Error(`schema version ${version} is newer than this build supports (${SCHEMA_VERSION})`);
+      throw new Error(`schema version ${version} is newer than this build supports (${SCHEMA_VERSION})`);
     }
     for (let v = version; v < SCHEMA_VERSION; v++) MIGRATIONS[v - 1]!(sql);
     if (version < SCHEMA_VERSION) sql.exec('UPDATE schema_meta SET version = ?', SCHEMA_VERSION);
-    return undefined;
   }
 
   register(input: RegisterInput): RegisterResult {
@@ -354,7 +362,7 @@ export class TenantRegistry extends DurableObject<Env> {
         case 'clean':
           return 'unchanged';
         case 'conflict':
-          return 'revoked_history_failed';
+          return 'revoked_history_conflict';
         default:
           return 'storage_error';
       }

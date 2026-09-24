@@ -143,15 +143,16 @@ describe('durable revocation over HTTP: an audit-row failure never un-revokes', 
     expect(await body(rep)).toEqual({ credential_id: F.valid.credential_id, audit: 'clean' });
   });
 
-  it('history write fails → 204 + x-bolyra-audit on every retry, the credential denies, repair-history → 409 history_conflict', async () => {
+  it('history write fails → 204 + x-bolyra-audit history_write_failed, then history_conflict on every retry; the credential denies, repair-history → 409 history_conflict', async () => {
     const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
     expect((await body(await postVerify(allowAgentOnly))).verdict).toBe('allow');
     await seedRevokedEvent(id, 1, 'seed');
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       const rev = await postRevoke(id);
       expect(rev.status).toBe(204);
       expect(await rev.text()).toBe('');
-      expect(rev.headers.get('x-bolyra-audit')).toBe('history_write_failed');
+      // The first attempt failed its write; every retry found the conflicting row.
+      expect(rev.headers.get('x-bolyra-audit')).toBe(i === 0 ? 'history_write_failed' : 'history_conflict');
       expect(rev.headers.get('cache-control')).toBe('no-store');
       expect(rev.headers.get('x-bolyra-preview')).toBe('design-partner-preview');
     }
@@ -209,6 +210,16 @@ describe('durable revocation over HTTP: an audit-row failure never un-revokes', 
     const logged = lines.find((l) => l[0] === 'hosted-verify registry request')?.[1] as Record<string, unknown> | undefined;
     expect(logged?.code).toBe('revoke_history_failed');
     expect(logged?.credential_id).toBe(id);
+
+    // A retry meets the same foreign row: a conflict, still 204, its own code.
+    const retry = await worker.fetch(
+      new Request(`${CREDENTIALS}/${id}/revoke`, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.admin}` } }),
+      { ...env, USAGE: usage },
+    );
+    expect(retry.status).toBe(204);
+    expect(retry.headers.get('x-bolyra-audit')).toBe('history_conflict');
+    expect(points).toHaveLength(2);
+    expect(points[1]!.blobs!.slice(0, 4)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'ok', 'revoke_history_conflict']);
   });
 
   it('repair-history: unknown id → 404; no token → 401; verifier → 403', async () => {
