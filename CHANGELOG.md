@@ -186,7 +186,7 @@ Bounded nonce retention, honest spend-mandate naming.
 
 ## hosted-verify — Unreleased
 
-Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183, #184, #185, #187<!-- + PR-E -->). Not yet deployed; the next cutover records its version in the RUNBOOK deploy table.
+Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183, #184, #185, #187, #188). Not yet deployed; the next cutover records its version in the RUNBOOK deploy table.
 
 ### Added
 
@@ -203,7 +203,7 @@ Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183,
 - `pilot/tenants-check.mjs` warns from 80% of the 4,096-byte `TENANTS` ceiling (3,277 bytes up; `warning: <bytes>/4096 bytes (<n> left) — plan tenant growth or raise the ceiling`) — the last point at which one more tenant (roughly 300–750 bytes) can be planned rather than hit. A warning never fails validation (E15; PR #187).
 - A scheduled GitHub Actions probe of production `/health` (every 15 minutes, best effort) that fails when the tenant map or registry enforcement is not healthy; the runbook's alarm instruction now points at it. (PR #167)
 - CI boots the Worker under `wrangler dev` and smoke-tests it (health, auth, unregistered deny, register, allow; a per-request deadline and a step timeout); `npm run smoke:dev` runs the same check locally. `test-node/mpp-agreement.test.mjs` pins the installed `@bolyra/mpp` to the committed binding digests and credential ids, and `examples/managed-revocation` checks the Worker's id against an in-process derivation (E9, E10; PR #183).
-- Docs: the README and `pilot/INTEGRATION.md` open with a credential-free local path (`npm ci` + `npm run smoke:dev`, then the same flow by hand against `wrangler dev`) before "Request a trial tenant"; every shell block that uses relative paths `cd`s to its directory first; `pilot/INTEGRATION.md` gains a Renewal section (a new `expiry` is a new `credential_id`). `test-node/docs-drift.test.mjs` checks the fenced shell blocks of the four integration docs against the repo: `@file` references, Worker routes, `npm run` scripts, `cd` targets. `.nvmrc` (`22`) and `engines.node >=22` state wrangler's Node floor. (T3, T4, T7; PR <!-- PR-E -->)
+- Docs: the README and `pilot/INTEGRATION.md` open with a credential-free local path (`npm ci` + `npm run smoke:dev`, then the same flow by hand against `wrangler dev`) before "Request a trial tenant"; every shell block that uses relative paths `cd`s to its directory first; `pilot/INTEGRATION.md` gains a Renewal section (a new `expiry` is a new `credential_id`). `test-node/docs-drift.test.mjs` checks the fenced shell blocks of the four integration docs against the repo: `@file` references, Worker routes, `npm run` scripts, `cd` targets. `.nvmrc` (`22`) and `engines.node >=22` state wrangler's Node floor. (T3, T4, T7; PR #188)
 
 ### Changed
 
