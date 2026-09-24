@@ -279,12 +279,28 @@ cap in `tierCaps` in the registry file.
 
 ## 2. Rotate a token
 
+A rotation is a partner-visible outage for that role unless it is scheduled.
+There is **no overlap window**: the `TENANTS` schema holds exactly one token
+per role, so the old token stops working the moment the sync lands, and every
+request the partner sends under it is `401` until they have deployed the new
+one. Overlapping old/new tokens are deliberately not supported (deferred).
+
+1. Agree a switch-over time with the partner, and how they will receive the
+   new token.
+2. At that time, rotate — `rotate` refuses without `--confirm`, which records
+   that step 1 happened:
+
 ```bash
 cd integrations/hosted-verify
-pilot/tenant.sh rotate <org_id> verifier     # or admin
-# The old token dies when the sync lands (next request). Send the new one over a
-# secure channel (security find-generic-password … -w, as in 1.4).
+pilot/tenant.sh rotate <org_id> verifier --confirm     # or admin
+# prints: warning: requests under the verifier token return 401 from the next sync until
+# the partner deploys the new token — the sync is part of this command, so that is now.
+# Send the new one over a secure channel (security find-generic-password … -w, as in 1.4),
+# and confirm with the partner that their calls authenticate again.
 ```
+
+A compromised token is the exception: rotate at once (`--confirm` still
+required) and tell the partner afterwards — the 401s are the point.
 
 ## 3. Quarantine, re-enable, remove; revoke a credential
 
@@ -313,7 +329,7 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # A refused or cancelled remove otherwise leaves the registry file byte-identical. The registry
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
 # nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
-# because the file exists: run `rotate <org_id> admin` and `rotate <org_id> verifier`
+# because the file exists: run `rotate <org_id> admin --confirm` and `rotate <org_id> verifier --confirm`
 # to re-mint both tokens first — for a removed tenant rotate stores the token and SKIPS
 # the sync (the map would not change; it says so and exits 0), which also works when every
 # tenant is removed — then set "status": "active" in the registry file by hand and run `sync`;
@@ -393,7 +409,7 @@ Notes:
   A removal can also end with `--last` given for a tenant that turns out not
   to be the last one: that is noted and runs a plain sync (the map stays
   non-empty). Bring a tenant back with `add` (a new org) or, for a removed
-  one, the path above: `rotate <org_id> admin` and `rotate <org_id> verifier`
+  one, the path above: `rotate <org_id> admin --confirm` and `rotate <org_id> verifier --confirm`
   store fresh tokens and skip the sync (the tenant is removed, so the map would
   not change — this holds even when every tenant is removed), then set
   `"status": "active"` and run `sync`.

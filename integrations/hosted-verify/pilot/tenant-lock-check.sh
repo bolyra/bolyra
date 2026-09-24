@@ -780,9 +780,28 @@ ok "(e4) sync --allow-empty uploads exactly {} (confirmed); --dry-run beside it 
 # the new token and SKIPS the sync — the tenant is removed, so the map would not change, and
 # an all-removed registry would refuse the sync anyway. Then status=active plus sync brings it back.
 [ "$(status_of acme)" = removed ] && [ "$(status_of beta)" = removed ] || fail "(e6) precondition: every record should be removed here"
+ROTATE_WARN="requests under the admin token return 401 from the next sync until the partner deploys the new token"
+
+# (k1) E19: rotate refuses without --confirm — the old token dies at the next sync, so the partner
+# has to be scheduled first. Nothing is stored, nothing is uploaded, the lock is released.
+adds_before="$(if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi)"
+for args in "rotate acme admin" "rotate acme admin --confirmed" "rotate acme admin --confirm extra"; do
+  out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-k1" bash "$TENANT" $args 2>&1)"; rc=$?
+  [ "$rc" != 0 ] || fail "(k1) $args exited 0: $out"
+  [ ! -e "$WORK/marker-k1" ] || fail "(k1) $args reached the uploader: $out"
+  [ ! -d "$LOCK_DIR" ] || fail "(k1) $args left its lock behind: $out"
+done
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-k1" bash "$TENANT" rotate acme admin 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(k1) rotate without --confirm exited $rc, expected 1: $out"
+case "$out" in *"rotate: $ROTATE_WARN; re-run with --confirm after scheduling it with them"*) ;; *) fail "(k1) rotate without --confirm did not name the partner impact: $out" ;; esac
+[ "$(if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi)" = "$adds_before" ] \
+  || fail "(k1) a refused rotate stored a token"
+ok "(k1) rotate without --confirm (or with a misspelled flag or an extra argument) is refused: nothing stored, nothing uploaded"
+
 for role in admin verifier; do
-  out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e6" bash "$TENANT" rotate acme "$role" 2>&1)"; rc=$?
+  out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e6" bash "$TENANT" rotate acme "$role" --confirm 2>&1)"; rc=$?
   [ "$rc" = 0 ] || fail "(e6) rotate acme $role on a removed tenant exited $rc: $out"
+  case "$out" in *"requests under the $role token return 401 from the next sync until the partner deploys the new token"*) ;; *) fail "(e6) rotate did not repeat the partner impact: $out" ;; esac
   case "$out" in *"tenant is removed; the map is unchanged — set status active and run sync to bring it back"*) ;; *) fail "(e6) rotate did not say the sync was skipped: $out" ;; esac
   case "$out" in *"changed nothing"*|*"--allow-empty"*) fail "(e6) rotate reported a refused sync: $out" ;; *) ;; esac
   [ -e "$KEYCHAIN/tenant-acme-$role" ] || fail "(e6) rotate acme $role stored no token"
@@ -796,6 +815,16 @@ body_says "$WORK/body-e6" active || fail "(e6) the upload did not carry acme act
 [ "$(node -e 'process.stdout.write(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))).join(","))' "$WORK/body-e6")" = acme ] \
   || fail "(e6) the upload did not carry exactly acme: $(cat "$WORK/body-e6")"
 ok "(e6) rotate on a removed tenant stores the token and skips the sync; status=active plus sync brings it back"
+
+# (k2) E19: rotate --confirm on a live tenant stores the new token, says what it means for the
+# partner, and pushes the map.
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-k2" MARKER_BODY="$WORK/body-k2" SHIM_SLEEP=0 bash "$TENANT" rotate acme admin --confirm 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(k2) rotate acme admin --confirm exited $rc: $out"
+case "$out" in *"$ROTATE_WARN"*) ;; *) fail "(k2) rotate --confirm did not print the partner impact: $out" ;; esac
+case "$out" in *"done. Secrets take effect"*) ;; *) fail "(k2) rotate --confirm did not push a confirmed map: $out" ;; esac
+body_says "$WORK/body-k2" active || fail "(k2) the upload did not carry acme: $(cat "$WORK/body-k2")"
+[ ! -d "$LOCK_DIR" ] || fail "(k2) rotate --confirm left its lock behind: $out"
+ok "(k2) rotate --confirm on a live tenant stores the token, prints the partner impact and pushes the map"
 
 # (e0) a directory with NO record files is still refused, --allow-empty or not: that is a wrong
 # TENANTS_DIR / HOSTED_VERIFY_ENV far more often than a deliberate empty map.
