@@ -9,6 +9,13 @@
 # removed on exit, so every run starts with an empty registry (wrangler dev would otherwise
 # keep Durable Object SQLite under .wrangler/state across runs).
 #
+# If the BOOT fails under CI=true, the log's last 80 lines are printed: wrangler shows
+# every .dev.vars value as "(hidden)", and the values are documented placeholders anyway.
+#
+# Sibling of examples/managed-revocation/scripts/with-worker.sh; keep the two in step.
+# Intended differences: worker= resolves to this package, --persist-to a fresh temp dir,
+# and the boot-failure log tail under CI.
+#
 #   bash scripts/with-worker.sh node scripts/smoke-dev.mjs
 #   HOSTED_VERIFY_PORT=8790 bash scripts/with-worker.sh node scripts/smoke-dev.mjs
 set -euo pipefail
@@ -37,6 +44,7 @@ node "$here/dev-vars.mjs"
 log="$(mktemp "${TMPDIR:-/tmp}/hosted-verify-dev.XXXXXX")"
 state="$(mktemp -d "${TMPDIR:-/tmp}/hosted-verify-state.XXXXXX")"
 keep_log=0
+boot_failed=0
 (
   cd "$worker"
   exec env WRANGLER_SEND_METRICS=false npx --no-install wrangler dev --env="" --ip 127.0.0.1 --port "$port" --persist-to "$state" </dev/null >"$log" 2>&1
@@ -72,6 +80,11 @@ cleanup() {
   rm -f "$worker/.dev.vars"
   rm -rf "$state"
   if [ "$keep_log" -eq 1 ]; then
+    if [ "$boot_failed" -eq 1 ] && [ "${CI:-}" = "true" ]; then
+      echo "--- last 80 lines of the wrangler dev log ---" >&2
+      tail -n 80 "$log" >&2 || true
+      echo "--- end of wrangler dev log ---" >&2
+    fi
     echo "wrangler dev log kept at $log (it names bindings; values are hidden)" >&2
   else
     rm -f "$log"
@@ -87,6 +100,7 @@ while [ "$SECONDS" -lt "$READY_TIMEOUT_S" ]; do
   if curl -sf --max-time 3 "$VERIFY_URL/health" >/dev/null 2>&1; then ready=1; break; fi
   if ! kill -0 "$worker_pid" 2>/dev/null; then
     keep_log=1
+    boot_failed=1
     echo "wrangler dev exited before /health answered" >&2
     exit 1
   fi
@@ -94,6 +108,7 @@ while [ "$SECONDS" -lt "$READY_TIMEOUT_S" ]; do
 done
 if [ "$ready" -ne 1 ]; then
   keep_log=1
+  boot_failed=1
   echo "hosted-verify did not become ready at $VERIFY_URL within ${READY_TIMEOUT_S} s" >&2
   exit 1
 fi
