@@ -315,8 +315,9 @@ export interface AllowDecision extends DecisionBase {
   credentialId?: string;
   /**
    * The raw `x-bolyra-receipt` header from a `url` verifier (not decoded or
-   * verified). Distinct from the gate's own signed decision receipt
-   * (`onReceipt` / `bolyraAuthorization.receipt`).
+   * verified; not length-capped — it never reaches an HTTP body, and the fetch
+   * layer's header-size limit bounds it). Distinct from the gate's own signed
+   * decision receipt (`onReceipt` / `bolyraAuthorization.receipt`).
    */
   receipt?: string;
 }
