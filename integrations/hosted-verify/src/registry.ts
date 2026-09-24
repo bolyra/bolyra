@@ -316,9 +316,11 @@ export class TenantRegistry extends DurableObject<Env> {
             ? { outcome: 'revoked' }
             : { outcome: 'unchanged', registered_at: existing.registered_at };
         }
-        // A full-table count per new registration; bounded by the cap itself.
-        // Revisit trigger: add an index on status if the cap is raised well
-        // past 1000 or register latency shows the count.
+        // A full-table scan per new registration (ACTIVE plus retained REVOKED
+        // rows; there is no index on status). The ACTIVE result is bounded by
+        // the cap; the scan cost is bounded by total rows. Revisit trigger: add
+        // a partial index on status if the cap is raised well past 1000, a
+        // tenant's total rows grow far beyond it, or register latency shows it.
         const active = this.ctx.storage.sql
           .exec<{ n: number }>("SELECT count(*) AS n FROM credentials WHERE status = 'ACTIVE'")
           .one().n;
