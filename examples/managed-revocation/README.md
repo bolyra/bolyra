@@ -36,6 +36,8 @@ Measured from a fresh clone with a warm npm cache: the two installs about
 start is about one; a cold CI cache adds to the installs, not the run.
 
 Against a verifier you already run: `VERIFY_URL=… ADMIN_TOKEN=… VERIFIER_TOKEN=… npm run demo`.
+Step 1's install is still needed: the run imports the Worker's `src/credential-id.ts` to
+derive the credential id in-process and check the verifier's against it.
 The tenant must trust the example's operator key (the repo's documented
 test-only scalar, `42`) and its `CAPABILITY_MAP` must carry the mpp vocabulary.
 The deployment must also have receipts on (`RECEIPT_SIGNER_KEY`) and serve
@@ -47,7 +49,7 @@ non-zero without them.
 | # | step | evidence | result |
 |---|------|----------|--------|
 | 0 | `GET /health` | verifier | `registry_enforced: true`, `tenants: "ok"`, `receipts_enabled: true` |
-| 1 | issue a `mpp:financial:small` mandate; `POST /v1/credentials` | verifier | `201` + `credential_id`; a second presentation of the same binding → `200`, same id |
+| 1 | issue a `mpp:financial:small` mandate; `POST /v1/credentials` | verifier | `201` + `credential_id`, equal to the id derived in-process from the mandate (the installed `@bolyra/mpp` `bindingDigest` + the Worker's `credential-id.ts`); a second presentation of the same binding → `200`, same id |
 | 2 | 402→pay handshake with two fresh presentations | gate | **ALLOWED**, counter **1**; `Payment-Receipt.bolyraAuthorization.verifier = "url"` |
 | 3 | `POST /v1/verify` with a fresh presentation | verifier | `x-bolyra-credential-id` = the registered id; `x-bolyra-receipt` passes `bolyra receipt verify --signer-from` |
 | 4 | handshake again, fresh presentations | gate | **ALLOWED**, counter **2** |
