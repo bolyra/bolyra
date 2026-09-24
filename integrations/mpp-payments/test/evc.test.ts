@@ -8,6 +8,7 @@ import {
   runCommandVerifier,
   callUrlVerifier,
   callUrlVerifierWithEvidence,
+  normalizeVerifierUrl,
   validateVerdict,
 } from '../src/evc';
 import type { VerifierRequest } from '../src/types';
@@ -240,6 +241,64 @@ describe('callUrlVerifierWithEvidence', () => {
     stubFetch(200, { verdict: 'allow', kind: 'classical' }, { 'x-bolyra-credential-id': ID });
     const verdict = await callUrlVerifier({ url: 'https://verify.example/v1/verify' }, REQUEST);
     expect(verdict).toEqual({ verdict: 'allow', kind: 'classical' });
+  });
+});
+
+describe('normalizeVerifierUrl (TD-1)', () => {
+  test.each([
+    ['https://verify.example', 'https://verify.example/v1/verify'],
+    ['https://verify.example/', 'https://verify.example/v1/verify'],
+    ['https://verify.example?x=1', 'https://verify.example/v1/verify?x=1'],
+    ['https://verify.example/?x=1', 'https://verify.example/v1/verify?x=1'],
+  ])('a root path is rewritten to /v1/verify: %s', (input, expected) => {
+    expect(normalizeVerifierUrl(input)).toBe(expected);
+  });
+
+  test.each([
+    'https://verify.example/v1/verify',
+    'https://verify.test/v1/verify',
+    'https://verify.example/custom/',
+    'https://verify.example/custom/?x=1',
+    'https://verify.example/custom',
+    'https://verify.example/v1/verify/',
+    'https://VERIFY.example:8443/Custom?b=2&a=1',
+  ])('every other path is preserved byte-for-byte: %s', (input) => {
+    expect(normalizeVerifierUrl(input)).toBe(input);
+  });
+
+  test('an invalid URL throws', () => {
+    expect(() => normalizeVerifierUrl('not a url')).toThrow();
+  });
+
+  describe('inside callUrlVerifierWithEvidence (direct callers)', () => {
+    const originalFetch = global.fetch;
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+    function spyFetch() {
+      const spy = jest.fn(async () =>
+        new Response(JSON.stringify({ verdict: 'allow' }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+      global.fetch = spy as unknown as typeof fetch;
+      return spy;
+    }
+
+    test.each([
+      ['https://verify.example', 'https://verify.example/v1/verify'],
+      ['https://verify.example/', 'https://verify.example/v1/verify'],
+      ['https://verify.example/custom/?x=1', 'https://verify.example/custom/?x=1'],
+    ])('%s is fetched as %s', async (url, expected) => {
+      const spy = spyFetch();
+      await callUrlVerifierWithEvidence({ url }, REQUEST);
+      expect((spy.mock.calls[0] as unknown[])[0]).toBe(expected);
+    });
+
+    test('an invalid URL fails closed without fetching', async () => {
+      const spy = spyFetch();
+      const evidence = await callUrlVerifierWithEvidence({ url: 'not a url' }, REQUEST);
+      expect(evidence.verdict).toMatchObject({ verdict: 'deny', code: 'internal_error' });
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 });
 

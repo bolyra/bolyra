@@ -912,3 +912,36 @@ describe('onDecision (TD-2)', () => {
     }
   }
 });
+
+describe('verifier URL normalization (TD-1)', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  test.each([
+    ['https://verify.example', 'https://verify.example/v1/verify'],
+    ['https://verify.example/', 'https://verify.example/v1/verify'],
+    ['https://verify.test/v1/verify', 'https://verify.test/v1/verify'],
+    ['https://verify.example/custom/', 'https://verify.example/custom/'],
+    ['https://verify.example/custom/?x=1', 'https://verify.example/custom/?x=1'],
+    ['https://verify.example?x=1', 'https://verify.example/v1/verify?x=1'],
+  ])('verifier url %s is POSTed to %s', async (url, expected) => {
+    const spy = jest.fn(async () =>
+      new Response(JSON.stringify({ verdict: 'allow', kind: 'classical' }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    global.fetch = spy as unknown as typeof fetch;
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ verifier: { kind: 'url', url } }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied).toBeUndefined();
+    expect((spy.mock.calls[0] as unknown[])[0]).toBe(expected);
+  });
+
+  test('an invalid verifier url is refused at construction', async () => {
+    const { method } = mockMethod();
+    const options = await gateOptions({ verifier: { kind: 'url', url: 'verify.example/v1/verify' } });
+    expect(() => bolyraGate(method, options)).toThrow(TypeError);
+    expect(() => bolyraGate(method, options)).toThrow(/url/);
+  });
+});
