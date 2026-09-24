@@ -45,7 +45,7 @@ import { parseBundle, type ParsedBundle } from './bundle';
 import { verifyClassical } from './classical';
 import { DENY_STATUS, denyResponse } from './deny';
 import { BolyraDeniedError, BolyraGateConfigError } from './errors';
-import { callUrlVerifierWithEvidence, runCommandVerifier } from './evc';
+import { callUrlVerifierWithEvidence, normalizeVerifierUrl, runCommandVerifier } from './evc';
 import { NonceStore, NonceStoreCapacityError, NonceRetentionTooLongError } from './nonces';
 import {
   buildDecisionInstance,
@@ -143,7 +143,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
         'display names belong outside the signed surface',
     );
   }
-  const verifier = options.verifier;
+  let verifier = options.verifier;
   if (
     verifier === undefined ||
     (verifier.kind === 'classical' &&
@@ -153,6 +153,20 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       'bolyraGate: `verifier` is required — the default in-process mode needs ' +
         '`{ kind: "classical", trustedOperators: [...] }` (fail-closed: never "all operators trusted")',
     );
+  }
+  if (verifier.kind === 'url') {
+    // Verifier URL convention: a bare origin means its `/v1/verify` route;
+    // any other URL is used byte-for-byte. Resolved once, here.
+    let url: string;
+    try {
+      url = normalizeVerifierUrl(verifier.url);
+    } catch {
+      throw new TypeError(
+        'bolyraGate: verifier `url` must be an absolute URL — the verifier origin, or a full ' +
+          'URL to its verify route',
+      );
+    }
+    verifier = { ...verifier, url };
   }
 
   const program = options.program ?? 'mpp';

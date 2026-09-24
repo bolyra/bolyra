@@ -228,8 +228,26 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<str
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/** The hosted verifier's verify route, appended to a bare-origin `url`. */
+const DEFAULT_VERIFY_PATH = '/v1/verify';
+
+/**
+ * Verifier URL convention: `url` is the verifier's origin, or a full URL to
+ * its verify route. ONLY a bare origin is rewritten — a root path (`''` or
+ * `/`) becomes `/v1/verify`, keeping any query string. Every other URL,
+ * including a custom path with a trailing slash and any query, is returned
+ * byte-for-byte. Throws `TypeError` when `url` is not an absolute URL.
+ */
+export function normalizeVerifierUrl(url: string): string {
+  const parsed = new URL(url);
+  if (parsed.pathname !== '' && parsed.pathname !== '/') return url;
+  parsed.pathname = DEFAULT_VERIFY_PATH;
+  return parsed.href;
+}
+
 /** Configuration for a hosted verifier endpoint (URL mode). */
 export interface UrlVerifierConfig {
+  /** Verifier origin (→ `/v1/verify`) or full verify-route URL; see {@link normalizeVerifierUrl}. */
   url: string;
   token?: string;
   timeoutMs?: number;
@@ -260,8 +278,9 @@ const RECEIPT_HEADER = 'x-bolyra-receipt';
  * plus the call's evidence (HTTP status, raw credential-id and receipt
  * headers). Decision semantics are identical to {@link callUrlVerifier}:
  * 200 = decision; 500 may carry only `deny internal_error`; any other
- * status, transport failure, non-verdict or oversized body, or timeout
- * fails closed with `deny internal_error`.
+ * status, transport failure, non-verdict or oversized body, timeout, or an
+ * invalid `url` fails closed with `deny internal_error`. A bare-origin `url`
+ * is POSTed to `/v1/verify` ({@link normalizeVerifierUrl}).
  */
 export async function callUrlVerifierWithEvidence(
   config: UrlVerifierConfig,
@@ -273,7 +292,9 @@ export async function callUrlVerifierWithEvidence(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let evidence: Omit<UrlVerifierEvidence, 'verdict'> = {};
   try {
-    const response = await fetch(config.url, {
+    // Inside the try: an invalid URL fails closed like any transport fault.
+    const url = normalizeVerifierUrl(config.url);
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
