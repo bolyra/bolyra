@@ -104,14 +104,22 @@ function fakeWorker({ registerMode = 'normal', health = HEALTHY, overrides = {} 
   return { fetch, registry, calls, commitLater: () => later.splice(0).forEach((f) => f()) };
 }
 
+/** The pending store's contract (scripts/lib/pending-store.mjs): one record per id, exclusive create. */
 function memoryLog() {
-  const lines = [];
+  const records = new Map();
   return {
-    lines,
-    append: (line) => lines.push(line),
-    remove: (line) => {
-      const i = lines.indexOf(line);
-      if (i >= 0) lines.splice(i, 1);
+    records,
+    get lines() {
+      return [...records.values()];
+    },
+    append: (id, line) => {
+      assert.match(id, /^[0-9a-f]{64}$/);
+      assert.ok(!records.has(id), 'exclusive create: an id is recorded once');
+      assert.equal(line.split(' ')[3], id, 'the record line names its own id');
+      records.set(id, line);
+    },
+    remove: (id) => {
+      records.delete(id);
     },
   };
 }
@@ -218,6 +226,27 @@ test('parseCliArgs: the URL falls back to VERIFY_URL (with-worker.sh exports it)
   assert.equal(parseCliArgs([URL_], { fallbackUrl: 'http://127.0.0.1:8787' }).url, URL_);
   assert.throws(() => parseCliArgs(['--env', 'local'], {}), /usage/i);
   assert.throws(() => parseCliArgs(['--env', 'local'], { fallbackUrl: '' }), /usage/i);
+});
+
+test('parseCliArgs: --pending-dir replaces --pending-log', () => {
+  assert.equal(parseCliArgs([URL_, '--pending-dir', '/tmp/pd']).pendingDir, '/tmp/pd');
+  assert.equal(parseCliArgs([URL_]).pendingDir, null);
+  assert.throws(() => parseCliArgs([URL_, '--pending-log', '/tmp/p.log']), /pending-log/);
+});
+
+test('a pending store that refuses the record (e.g. a duplicate id) stops the run before registration', async () => {
+  const worker = fakeWorker();
+  const r = await run({
+    worker,
+    log: {
+      append: () => {
+        throw Object.assign(new Error('EEXIST: file already exists'), { code: 'EEXIST' });
+      },
+      remove: () => {},
+    },
+  }).catch((e) => ({ threw: e }));
+  assert.ok(r.threw !== undefined || r.code === 1);
+  assert.ok(!worker.calls.includes('POST /v1/credentials'));
 });
 
 test('parseCliArgs: --secrets-from-dev-vars is refused for production and staging', () => {
@@ -443,7 +472,7 @@ test('version wait: never live → fails after 12 polls, no behavioral leg, no p
   const worker = propagating(Infinity);
   const log = memoryLog();
   let appended = 0;
-  const r = await run({ worker, log: { ...log, append: (l) => (appended++, log.append(l)) } });
+  const r = await run({ worker, log: { ...log, append: (id, l) => (appended++, log.append(id, l)) } });
   assert.equal(r.code, 1);
   assert.equal(r.sleeps.length, 11, 'twelve polls, eleven 5 s waits');
   assert.equal(healthCalls(worker), 13, 'twelve polls, then the auth leg reports the mismatch');

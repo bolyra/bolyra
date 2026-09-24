@@ -519,23 +519,37 @@ is verified only up to the auth boundary, and the output says so: `enforcement N
 verified on this target (tenant bolyra-canary has no keychain entries)`. Without
 `--allow-missing-tenant`, a missing account fails the run and the message names it.
 
-**The pending log.** Before the registration request, the script appends
-`<iso-time> <env> <org> <credential_id> pending` to
-`~/.bolyra/canary-pending-<env>.log` (override with `--pending-log`). After any
-registration attempt, including a timeout or a lost response, it revokes the id
-again in cleanup:
+**The pending directory.** Before the registration request, the script creates
+`~/.bolyra/canary-pending-<env>/<credential_id>.pending` (override the directory with
+`--pending-dir`). The file holds one line, `<iso-time> <env> <org> <credential_id>
+pending`. There is one file per canary, created atomically and never rewritten, so
+concurrent runs cannot lose each other's records. After any registration attempt,
+including a timeout or a lost response, the script revokes the id again in cleanup:
 
-| Cleanup revoke | Registration was | Result | Log line |
+| Cleanup revoke | Registration was | Result | Record |
 |---|---|---|---|
 | 204 | anything | `cleaned` | removed |
 | 404 | a parsed 4xx (never committed) | `nothing_committed` | removed |
 | 404 | timed out / lost / 5xx / unparseable | `unconfirmed`: it may still commit | **kept**; exit non-zero |
 | anything else, or a network error | anything | `unconfirmed` | **kept**; exit non-zero |
 
-`CANARY CLEANUP UNCONFIRMED credential_id=<id>` on stderr means a line was kept. To
-clear it, revoke each listed id with that tenant's admin token (step 3's revoke; a
-204 means it is revoked now, a 404 after some minutes means it never committed),
-then delete its line from the log.
+`CANARY CLEANUP UNCONFIRMED credential_id=<id>` on stderr means a record was kept.
+To resolve the kept records, `ls ~/.bolyra/canary-pending-<env>/` and handle each id
+with that tenant's admin token:
+
+- **Revoke it** (step 3's revoke). A `204` confirms it is revoked, so delete its
+  `.pending` file.
+- A `404` on the revoke is harmless: nothing is registered under that id right now.
+  It does **not** prove the registration will never commit, because a timed-out
+  registration can still land later, and elapsed time proves nothing. So keep the
+  file and revoke again later.
+- Delete the file without a `204` only when `GET /v1/credentials/{id}` (admin token)
+  returns `404` **and** you know from another source that the registration request
+  was never sent or never committed. For example, the run's output shows the
+  registration step failed before sending, or it got a parsed `4xx`. Record that
+  reason when you delete it.
+
+Otherwise, keep revoking until you get a `204`.
 
 **Growth.** Each successful enforcement run leaves one REVOKED row and its history
 in the canary tenant's registry object (revocation is terminal and rows are never
@@ -557,7 +571,7 @@ isolate runs it.
 placeholder tenant `local`, its tokens from `.dev.vars.example`, and scalar `42`.
 `--secrets-from-dev-vars` is accepted only with `--env local` and a loopback URL. CI
 runs the same command. Extra arguments pass through after `--`, for example
-`npm run verify:dev -- --pending-log /tmp/p.log`. The URL defaults to `$VERIFY_URL`,
+`npm run verify:dev -- --pending-dir /tmp/pending`. The URL defaults to `$VERIFY_URL`,
 which `with-worker.sh` exports. To pass it yourself, quote it inside `sh -c` so that
 the wrapper's value is used, not your shell's:
 

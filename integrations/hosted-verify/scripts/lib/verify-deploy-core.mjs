@@ -1,6 +1,6 @@
 /**
  * Post-deploy verification of a hosted-verify Worker (backlog E14) — the testable core.
- * scripts/verify-deploy.mjs wires it to real `fetch`, the macOS keychain, the pending log
+ * scripts/verify-deploy.mjs wires it to real `fetch`, the macOS keychain, the pending store
  * file, and @bolyra/mpp; test-node/verify-deploy.test.mjs drives it with canned responses.
  *
  * Two legs:
@@ -91,7 +91,7 @@ function sameId(value, id) {
 
 const USAGE =
   'usage: node scripts/verify-deploy.mjs <url> [--version <id> | --from-wrangler] [--env production|staging|local] ' +
-  '[--tenant <org>] [--allow-missing-tenant] [--pending-log <path>] [--secrets-from-dev-vars (local only)]';
+  '[--tenant <org>] [--allow-missing-tenant] [--pending-dir <path>] [--secrets-from-dev-vars (local only)]';
 
 /** @param {{ fallbackUrl?: string }} [defaults] fallbackUrl: VERIFY_URL (scripts/with-worker.sh exports it) */
 export function parseCliArgs(argv, { fallbackUrl } = {}) {
@@ -107,7 +107,7 @@ export function parseCliArgs(argv, { fallbackUrl } = {}) {
         tenant: { type: 'string' },
         'allow-missing-tenant': { type: 'boolean', default: false },
         'secrets-from-dev-vars': { type: 'boolean', default: false },
-        'pending-log': { type: 'string' },
+        'pending-dir': { type: 'string' },
       },
     });
   } catch (e) {
@@ -151,7 +151,7 @@ export function parseCliArgs(argv, { fallbackUrl } = {}) {
     tenant: v.tenant ?? null,
     allowMissingTenant: v['allow-missing-tenant'],
     secretsFromDevVars: v['secrets-from-dev-vars'],
-    pendingLog: v['pending-log'] ?? null,
+    pendingDir: v['pending-dir'] ?? null,
   };
 }
 
@@ -349,7 +349,7 @@ function verifyBody(mandate, nowMs) {
  * @param {string} o.env
  * @param {string} o.org
  * @param {{ adminToken: string, verifierToken: string }} o.secrets
- * @param {{ append(line: string): void, remove(line: string): void }} o.log the pending log
+ * @param {{ append(id: string, line: string): void, remove(id: string): void }} o.log the pending store (scripts/lib/pending-store.mjs)
  * @param {(agentName: string, expiry: number) => Promise<import('@bolyra/mpp').IssuedMandate>} o.issue
  * @param {() => number} o.now epoch ms
  * @returns {Promise<boolean>} every check passed and cleanup is confirmed
@@ -376,7 +376,7 @@ export async function runBehavioral({ fetch, url, env, org, secrets, log, issue,
   );
   print(`  --  canary ${agent}: credential_id=${id}`);
   const targets = [{ id, line: `${new Date(now()).toISOString()} ${env} ${org} ${id} pending`, registration: 'not_attempted' }];
-  log.append(targets[0].line);
+  log.append(id, targets[0].line);
 
   const present = async (step, expect) => {
     try {
@@ -413,7 +413,7 @@ export async function runBehavioral({ fetch, url, env, org, secrets, log, issue,
           // The Worker committed under an id we did not derive: track that one too.
           targets[0].registration = 'not_committed';
           const extra = { id: returned, line: `${new Date(now()).toISOString()} ${env} ${org} ${returned} pending`, registration: 'committed' };
-          log.append(extra.line);
+          log.append(returned, extra.line);
           targets.push(extra);
         }
       } else if (r.status >= 400 && r.status < 500 && typeof r.body?.error === 'string') {
@@ -454,7 +454,7 @@ export async function runBehavioral({ fetch, url, env, org, secrets, log, issue,
     // Cleanup after ANY registration attempt: revoke is idempotent (204 for ACTIVE or REVOKED).
     for (const t of targets) {
       if (t.registration === 'not_attempted') {
-        log.remove(t.line); // nothing was sent that could commit
+        log.remove(t.id); // nothing was sent that could commit
         continue;
       }
       let revokeStatus;
@@ -467,10 +467,10 @@ export async function runBehavioral({ fetch, url, env, org, secrets, log, issue,
       const ok = decision !== 'unconfirmed';
       c.check(`cleanup credential_id=${t.id}`, ok, 'cleaned or nothing_committed', `cleanup: ${decision} (revoke → ${revokeStatus})`);
       if (ok) {
-        log.remove(t.line);
+        log.remove(t.id);
       } else {
         cleanupOk = false;
-        printErr(`CANARY CLEANUP UNCONFIRMED credential_id=${t.id} — kept in the pending log; clear it by hand (pilot/RUNBOOK.md, post-deploy verification)`);
+        printErr(`CANARY CLEANUP UNCONFIRMED credential_id=${t.id} — its record stays in the pending directory; resolve it by hand (pilot/RUNBOOK.md, post-deploy verification)`);
       }
     }
   }
