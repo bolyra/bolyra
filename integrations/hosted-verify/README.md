@@ -214,7 +214,8 @@ except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
   `{ "version": 1, "binding": { agent_name, project_key, program, model, capabilities, expiry },
      "signature": { "R8": { "x", "y" }, "S" }, "operator_pubkey": { "x", "y" } }`
   — the same binding shape a presentation carries, signed by the operator key.
-  Checks, in order: the operator key is in this tenant's `trusted_operators`
+  Checks, in order: the canonical binding is within 16 KiB (`413 payload_too_large`;
+  see Limits), the operator key is in this tenant's `trusted_operators`
   (`403 untrusted_operator`), the signature verifies (`400 binding_signature_invalid`),
   `expiry` is in the future by the Worker's clock (`400 binding_expired`).
   Then: `201 { credential_id, status: "ACTIVE", registered_at }` for a new
@@ -247,6 +248,13 @@ A registry storage failure is `500 internal_error`; a quarantined tenant gets
 
 #### Limits
 
+- **Request body: 64 KiB** (65,536 bytes). A larger body is `400 malformed_input`.
+- **Canonical binding: 16 KiB** (16,384 UTF-8 bytes — bytes, not characters, so a
+  3-byte character counts 3). The binding is measured in its canonical
+  (key-sorted) JSON form, the form that is stored and returned; over the bound is
+  `413 payload_too_large` (`{ "error": "payload_too_large", "message": "the
+  canonical binding exceeds the 16384-byte bound" }`), checked before the trust
+  and signature checks. No individual binding field has its own length limit.
 - **1,000 ACTIVE credentials per tenant.** A registration that would create a
   new credential beyond that is `429 quota_exceeded` (`{ "error": "quota_exceeded",
   "message": "this tenant has reached its active credential limit (1000); revoke

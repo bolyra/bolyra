@@ -38,6 +38,7 @@ export type RegistryErrorCode =
   | 'method_not_allowed'
   | 'tenant_disabled'
   | 'quota_exceeded'
+  | 'payload_too_large'
   | 'internal_error';
 
 const FIELDS: ReadonlySet<string> = new Set(['version', 'binding', 'signature', 'operator_pubkey']);

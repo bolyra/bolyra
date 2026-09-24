@@ -10,7 +10,7 @@ import { SELF, env, reset, runInDurableObject } from 'cloudflare:test';
 import { canonicalize } from '@bolyra/receipts';
 import { BODY_READ_DEADLINE_MS } from '../src/deadlines';
 import worker from '../src/index';
-import { MAX_ACTIVE_CREDENTIALS } from '../src/registry';
+import { MAX_ACTIVE_CREDENTIALS, MAX_BINDING_JSON_BYTES } from '../src/registry';
 import {
   BASE,
   CREDENTIALS,
@@ -382,6 +382,50 @@ describe('per-tenant limits (E6)', () => {
     expect((await getCredential(F.valid.credential_id)).status).toBe(404);
 
     expect((await postRegister(F.orgB.body, { token: TOKENS.B.admin })).status).toBe(201);
+  });
+
+  /**
+   * F.valid's binding with agent_name padded so the CANONICAL binding is
+   * `bytes` UTF-8 bytes long. parseBinding puts no bound on agent_name (nor on
+   * any field), so this is still a structurally valid binding; the signature no
+   * longer matches, which is fine: the bound is checked before the signature.
+   */
+  function paddedBody(bytes: number, unit = 'x'): Record<string, unknown> {
+    const binding = F.valid.body.binding as Record<string, unknown>;
+    const base = new TextEncoder().encode(canonicalize({ ...binding, agent_name: '' })).byteLength;
+    const unitBytes = new TextEncoder().encode(unit).byteLength;
+    const agent_name = unit.repeat(Math.floor((bytes - base) / unitBytes)) + 'x'.repeat((bytes - base) % unitBytes);
+    const padded = { ...binding, agent_name };
+    expect(new TextEncoder().encode(canonicalize(padded)).byteLength).toBe(bytes);
+    return { ...F.valid.body, binding: padded };
+  }
+
+  it(`a canonical binding over ${MAX_BINDING_JSON_BYTES} bytes (body under 64 KiB) → 413 payload_too_large with its analytics code`, async () => {
+    const payload = paddedBody(MAX_BINDING_JSON_BYTES + 1);
+    expect(JSON.stringify(payload).length).toBeLessThan(65_536);
+    const { res, points } = await registerWithPoints(payload);
+    expect(res.status).toBe(413);
+    expect(await body(res)).toEqual({
+      error: 'payload_too_large',
+      message: `the canonical binding exceeds the ${MAX_BINDING_JSON_BYTES}-byte bound`,
+    });
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/v1/credentials', `${ORGS.A}:admin`, 'error', 'payload_too_large']);
+  });
+
+  it(`a canonical binding of exactly ${MAX_BINDING_JSON_BYTES} bytes is not 413 (it fails later, on the signature)`, async () => {
+    const res = await postRegister(paddedBody(MAX_BINDING_JSON_BYTES));
+    expect(res.status).not.toBe(413);
+    expect((await body(res)).error).toBe('binding_signature_invalid');
+  });
+
+  it('the bound counts UTF-8 bytes, not characters: 3-byte characters under the length limit but over the byte limit → 413', async () => {
+    const payload = paddedBody(MAX_BINDING_JSON_BYTES + 3, '€');
+    const canonical = canonicalize(payload.binding);
+    expect(canonical.length).toBeLessThanOrEqual(MAX_BINDING_JSON_BYTES);
+    const res = await postRegister(payload);
+    expect(res.status).toBe(413);
+    expect((await body(res)).error).toBe('payload_too_large');
   });
 });
 

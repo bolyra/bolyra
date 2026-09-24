@@ -7,7 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env, evictDurableObject, listDurableObjectIds, reset, runInDurableObject } from 'cloudflare:test';
-import { MAX_ACTIVE_CREDENTIALS, type RegisterInput, type RegisterResult } from '../src/registry';
+import { MAX_ACTIVE_CREDENTIALS, MAX_BINDING_JSON_BYTES, type RegisterInput, type RegisterResult } from '../src/registry';
 import { seedCredentials } from './helpers';
 import { ORGS } from './tenants-fixture';
 
@@ -90,12 +90,19 @@ describe('register', () => {
     ['a NaN now', { now: Number.NaN }],
     ['a fractional now', { now: NOW + 0.5 }],
     ['a negative expiry', { expiry: -1 }],
+    ['a binding_json one byte over the bound', { binding_json: 'x'.repeat(MAX_BINDING_JSON_BYTES + 1) }],
+    ['a binding_json under the bound in characters but over it in UTF-8 bytes', { binding_json: '€'.repeat(Math.ceil((MAX_BINDING_JSON_BYTES + 1) / 3)) }],
   ])('%s → invalid_input, nothing stored', async (_name, overrides) => {
     const r = registry(ORGS.A);
     expect(await r.register(input(ID_A, overrides))).toEqual({ outcome: 'invalid_input' });
     expect(await r.status(ID_A)).toBe('ABSENT');
     expect(await r.status(12345 as unknown as string)).toBe('invalid_input');
     expect(await r.revoke(ID_A, Number.NaN, 'r')).toBe('invalid_input');
+  });
+
+  it('a binding_json of exactly the byte bound is accepted', async () => {
+    const r = registry(ORGS.A);
+    expect(await r.register(input(ID_A, { binding_json: 'x'.repeat(MAX_BINDING_JSON_BYTES) }))).toEqual({ outcome: 'created', registered_at: NOW });
   });
 
   it('REVOKED → revoked (terminal), row untouched', async () => {
