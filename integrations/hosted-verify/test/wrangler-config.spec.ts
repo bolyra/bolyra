@@ -14,7 +14,8 @@ const cfg = JSON.parse(env.WRANGLER_CONFIG!) as {
   durable_objects: unknown;
   analytics_engine_datasets: Array<{ binding: string; dataset: string }>;
   migrations: unknown;
-  env: { staging: { vars: Record<string, string>; durable_objects: unknown; analytics_engine_datasets: Array<{ binding: string; dataset: string }>; name?: string } };
+  version_metadata: unknown;
+  env: { staging: { vars: Record<string, string>; durable_objects: unknown; analytics_engine_datasets: Array<{ binding: string; dataset: string }>; version_metadata: unknown; name?: string } };
 };
 
 describe('wrangler.jsonc', () => {
@@ -31,5 +32,10 @@ describe('wrangler.jsonc', () => {
     expect(cfg.env.staging.vars.RECEIPT_ISSUER).toBe('bolyra-hosted-verify-staging');
     expect(cfg.env.staging.name).toBeUndefined(); // Wrangler names it bolyra-hosted-verify-staging
     expect(cfg.migrations).toBeDefined(); // inherited by every environment
+  });
+
+  it('declares the version_metadata binding /health echoes, in production and staging (not inherited)', () => {
+    expect(cfg.version_metadata).toEqual({ binding: 'CF_VERSION_METADATA' });
+    expect(cfg.env.staging.version_metadata).toEqual({ binding: 'CF_VERSION_METADATA' });
   });
 });

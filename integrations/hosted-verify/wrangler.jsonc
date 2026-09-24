@@ -37,6 +37,10 @@
   "durable_objects": { "bindings": [{ "name": "TENANT", "class_name": "TenantRegistry" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TenantRegistry"] }],
 
+  // The deployed Worker version (id, tag, timestamp), echoed on /health as `version` so a
+  // deploy check can confirm which build is live. Not inherited: env.staging redeclares it.
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+
   "vars": {
     "RECEIPT_ISSUER": "bolyra-hosted-verify-preview",
     // preview-2 since 2026-09-21: the signer key was rotated at the registry cutover; receipts issued under preview-1 predate any consumer.
@@ -54,11 +58,13 @@
   // the environment name), with its own secrets (`wrangler secret put … --env staging`),
   // its own Durable Object namespace, and its own analytics dataset. Environments inherit
   // `main`, `compatibility_date`, `workers_dev`, `observability`, `migrations`, and the
-  // global `alias` — but NOT `vars`, `durable_objects`, or `analytics_engine_datasets`,
+  // global `alias` — but NOT `vars`, `durable_objects`, `analytics_engine_datasets`, or `version_metadata`,
   // so those are redeclared here; test/wrangler-config.spec.ts keeps them in step.
   "env": {
     "staging": {
       "durable_objects": { "bindings": [{ "name": "TENANT", "class_name": "TenantRegistry" }] },
+      // version_metadata is not inherited by environments either; redeclared to match production.
+      "version_metadata": { "binding": "CF_VERSION_METADATA" },
       "analytics_engine_datasets": [
         { "binding": "USAGE", "dataset": "bolyra_hosted_verify_usage_staging" }
       ],

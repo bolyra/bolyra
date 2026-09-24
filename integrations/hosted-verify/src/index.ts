@@ -96,6 +96,11 @@ export interface Env {
   USAGE?: AnalyticsEngineDataset;
   /** The per-tenant credential registry (src/registry.ts); one object per org_id. */
   TENANT: DurableObjectNamespace<TenantRegistry>;
+  /**
+   * The `version_metadata` binding (wrangler.jsonc): the deployed Worker version, echoed on
+   * /health. Optional because a local run may not provide it; /health then reports `null`.
+   */
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp?: string };
 }
 
 /** Request-body bound for /v1/verify — mirrors the spec §6 1 MiB stdin bound. */
@@ -661,6 +666,12 @@ async function handleHealth(env: Env): Promise<Response> {
     capability_map = 'invalid';
   }
   const registry = await probeRegistry(env);
+  const meta = env.CF_VERSION_METADATA;
+  // Copied field by field: the binding is a runtime object, and a timestamp is echoed only when present.
+  const version =
+    meta === undefined
+      ? null
+      : { id: meta.id, tag: meta.tag, ...(meta.timestamp !== undefined ? { timestamp: meta.timestamp } : {}) };
   const healthy = tenants === 'ok' && capability_map === 'ok' && registry === 'ok';
   return json(healthy ? 200 : 503, {
     status: healthy ? 'ok' : 'degraded',
@@ -674,6 +685,8 @@ async function handleHealth(env: Env): Promise<Response> {
     registry,
     registry_kind: 'durable-object',
     credential_id_version: CREDENTIAL_ID_VERSION,
+    // The deployed Worker version (informational; never affects `status`). null when unbound.
+    version,
     // Build marker: true for every build that consults the registry on /v1/verify.
     // worker.spec.ts asserts it; a deploy check can assert it against the live URL.
     registry_enforced: true,
