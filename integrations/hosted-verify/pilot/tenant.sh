@@ -24,7 +24,9 @@
 #                                     conformance fixture key only with --with-fixture-key
 #                                     (preview-only: its private half is public)
 #   ./tenant.sh rotate <org_id> admin|verifier
-#                                     mint a NEW token for that role, then sync
+#                                     mint a NEW token for that role, then sync (a REMOVED
+#                                     tenant: store it and skip the sync — the map would not
+#                                     change; set status active and sync to bring it back)
 #   ./tenant.sh disable <org_id>      quarantine — the entry stays with "disabled": true and
 #                                     the tenant is served on NO route (verify: 500
 #                                     internal_error verdict; registry routes: 503
@@ -45,7 +47,8 @@
 #                                     disabled — a quarantined tenant still occupies the map)
 #                                     pushes the EMPTY map {}: every request is denied (401)
 #                                     and /health reports tenant_count 0. It is refused
-#                                     unless --last is given
+#                                     unless --last is given (a --last on a tenant that is
+#                                     not the last one is noted and runs a plain sync)
 #   ./tenant.sh sync [--dry-run] [--allow-empty]
 #                                     rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing).
@@ -307,7 +310,16 @@ cmd_rotate() {
   case "$role" in admin|verifier) ;; *) usage ;; esac
   [ -z "$extra" ] || die "rotate: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"; require_security
+  local status
+  status="$(reg_field "$org" status)" || die "rotate: could not read $(registry_file "$org")"
   kc_put_minted "$org" "$role"
+  # A removed tenant is not in the map, so a sync would change nothing — and after
+  # `remove --last` an all-removed registry would refuse it and blame a flag rotate does not
+  # take. This is the RUNBOOK's bring-it-back path: re-mint, then set status active and sync.
+  if [ "$status" = removed ]; then
+    echo "tenant '$org': new $role token stored; tenant is removed; the map is unchanged — set status active and run sync to bring it back"
+    exit 0
+  fi
   echo "tenant '$org': new $role token stored; the old one dies when the sync lands"
   cmd_sync
 }
@@ -334,7 +346,7 @@ cmd_enable() {
 }
 
 cmd_remove() {
-  local org="${1:-}" flag="${2:-}" extra="${3:-}" prev role outcome=0 present="" failed=""
+  local org="${1:-}" flag="${2:-}" extra="${3:-}" prev role outcome=0 present="" failed="" others
   [ -n "$org" ] || usage
   case "$flag" in
     "" | --last) ;;
@@ -357,8 +369,13 @@ cmd_remove() {
   # occupies the map), this removal pushes the EMPTY map {} and every request is denied. That
   # takes a deliberate --last, checked here, before anything has changed.
   count_records "$org" || die "remove: could not read the registry in $TENANTS_DIR; nothing changed"
-  if [ "$LIVE_RECORDS" = 0 ] && [ "$flag" != "--last" ]; then
+  # Kept: do_sync recounts into the same globals.
+  others="$LIVE_RECORDS"
+  if [ "$others" = 0 ] && [ "$flag" != "--last" ]; then
     die "remove: '$org' is the last tenant; removing it leaves an EMPTY map (every request denied). Re-run with --last to confirm"
+  fi
+  if [ "$others" != 0 ] && [ "$flag" = "--last" ]; then
+    echo "note: --last given, but '$org' is not the last tenant; the map stays non-empty" >&2
   fi
   # Which items exist now decides which deletes are owed afterwards: one already absent is
   # not a failure to delete.
@@ -378,7 +395,9 @@ cmd_remove() {
     deferred_exit
     exit 1
   fi
-  if [ "$flag" = "--last" ]; then
+  # --allow-empty only for the empty map this removal actually produces (others = 0 implies
+  # --last, or the run died above); a --last on a non-last tenant is a plain sync.
+  if [ "$others" = 0 ]; then
     do_sync --allow-empty || outcome=$?
   else
     do_sync || outcome=$?
@@ -420,55 +439,65 @@ cmd_remove() {
   esac
 }
 
-# count_records [<org_to_exclude>] — count the registry's record files (RECORD_FILES) and those
-# whose status is active or disabled (LIVE_RECORDS: the tenants the assembled map will hold; a
-# quarantined tenant still occupies the map). The same file filter as tokens_for_sync. Returns 1,
-# with the reason on stderr, on a record it cannot read — never dies, so a caller inside remove's
-# critical section still restores the registry. Registry files hold no secrets.
-RECORD_FILES=0
-LIVE_RECORDS=0
-count_records() {
-  local skip="${1:-}" f b org status
-  RECORD_FILES=0
-  LIVE_RECORDS=0
+# registry_orgs — the ONE definition of a registry record: print one org id per line for every
+# <org>.json in $TENANTS_DIR that is a regular file, not a dotfile (an AppleDouble ._x.json) and
+# not a *.policy.json. A directory named x.json and any other file are not records either. The
+# same filter as tenants-assemble.mjs (tenant-lock-check (e0) holds the two to it). Org ids only —
+# never a token. Callers read the list on fd 3 so nothing in the loop body can drain it.
+registry_orgs() {
+  local f b
   for f in "$TENANTS_DIR"/*.json; do
     [ -f "$f" ] || continue
     b="$(basename "$f")"
-    case "$b" in .*) continue ;; esac
-    case "$f" in *.policy.json) continue ;; esac
-    org="$(basename "$f" .json)"
+    case "$b" in .*|*.policy.json) continue ;; esac
+    printf '%s\n' "${b%.json}"
+  done
+}
+
+# count_records [<org_to_exclude>] — count the registry's record files (RECORD_FILES) and those
+# whose status is active or disabled (LIVE_RECORDS: the tenants the assembled map will hold; a
+# quarantined tenant still occupies the map). Returns 1, with the reason on stderr, on a record
+# it cannot read, and never dies — so that do_sync, called inside remove's critical section,
+# returns 2 and remove restores the record. Registry files hold no secrets.
+RECORD_FILES=0
+LIVE_RECORDS=0
+count_records() {
+  local skip="${1:-}" orgs org status
+  RECORD_FILES=0
+  LIVE_RECORDS=0
+  orgs="$(registry_orgs)"
+  while IFS= read -r org <&3; do
+    [ -n "$org" ] || continue
     RECORD_FILES=$((RECORD_FILES + 1))
     [ "$org" != "$skip" ] || continue
     status="$(reg_field "$org" status)" || return 1
     case "$status" in
       removed) ;;
       active|disabled) LIVE_RECORDS=$((LIVE_RECORDS + 1)) ;;
-      *) echo "error: $f: status must be active, disabled, or removed" >&2; return 1 ;;
+      *) echo "error: $(registry_file "$org"): status must be active, disabled, or removed" >&2; return 1 ;;
     esac
-  done
+  done 3<<< "$orgs"
   return 0
 }
 
 # Print "<org> <role> <token>" for every active/disabled tenant — consumed on a pipe only.
 tokens_for_sync() {
-  local f b org status role token _xt
+  local orgs org status role token _xt
   # No token may reach an xtrace log; restore tracing on the way out.
   case "$-" in *x*) _xt=1; set +x ;; *) _xt=0 ;; esac
-  for f in "$TENANTS_DIR"/*.json; do
-    # Backstop only: do_sync refuses zero record files before this pipeline starts (a `die`
-    # here ends just this stage), and tenants-assemble.mjs refuses them inside it.
-    [ -e "$f" ] || die "no tenant registry files in $TENANTS_DIR — refusing to build a map from an empty (or wrong) registry directory; check TENANTS_DIR / HOSTED_VERIFY_ENV, or add a tenant"
-    # A directory named x.json, or an AppleDouble ._x.json, must not block every sync.
-    [ -f "$f" ] || continue
-    b="$(basename "$f")"
-    case "$b" in .*) continue ;; esac
-    case "$f" in *.policy.json) continue ;; esac
-    org="$(basename "$f" .json)"; require_org "$org"
+  # Org ids only in this variable (registry_orgs); tokens go straight from kc_get to printf.
+  orgs="$(registry_orgs)"
+  # Backstop only: do_sync refuses zero record files before this pipeline starts (a `die`
+  # here ends just this stage), and tenants-assemble.mjs refuses them inside it.
+  [ -n "$orgs" ] || die "no tenant registry files in $TENANTS_DIR — refusing to build a map from an empty (or wrong) registry directory; check TENANTS_DIR / HOSTED_VERIFY_ENV, or add a tenant"
+  while IFS= read -r org <&3; do
+    [ -n "$org" ] || continue
+    require_org "$org"
     status="$(reg_field "$org" status)"
     case "$status" in
       removed) continue ;;
       active|disabled) ;;
-      *) die "$f: status must be active, disabled, or removed" ;;
+      *) die "$(registry_file "$org"): status must be active, disabled, or removed" ;;
     esac
     for role in admin verifier; do
       kc_has "$org" "$role" || die "no keychain token for '$org' ($role): run rotate $org $role"
@@ -478,7 +507,7 @@ tokens_for_sync() {
       [ -n "$token" ] || die "the keychain returned an empty $role token for '$org'"
       printf '%s %s %s\n' "$org" "$role" "$token"
     done
-  done
+  done 3<<< "$orgs"
   if [ "$_xt" = 1 ]; then set -x; fi
   return 0
 }
@@ -610,16 +639,13 @@ cmd_sync() {
 }
 
 cmd_show() {
-  local extra="${1:-}" f b org status a v
+  local extra="${1:-}" orgs org status a v
   [ -z "$extra" ] || die "show: unexpected extra argument '$extra'"
   printf '%-24s %-10s %-8s %s\n' "org_id" "status" "admin" "verifier"
-  for f in "$TENANTS_DIR"/*.json; do
-    [ -e "$f" ] || { echo "(no tenants in $TENANTS_DIR)"; return 0; }
-    [ -f "$f" ] || continue
-    b="$(basename "$f")"
-    case "$b" in .*) continue ;; esac
-    case "$f" in *.policy.json) continue ;; esac
-    org="$(basename "$f" .json)"
+  orgs="$(registry_orgs)"
+  [ -n "$orgs" ] || { echo "(no tenants in $TENANTS_DIR)"; return 0; }
+  while IFS= read -r org <&3; do
+    [ -n "$org" ] || continue
     status="$(reg_field "$org" status)"
     if have_security; then
       a="$(kc_has "$org" admin && echo yes || echo no)"; v="$(kc_has "$org" verifier && echo yes || echo no)"
@@ -627,7 +653,7 @@ cmd_show() {
       a="n/a"; v="n/a"
     fi
     printf '%-24s %-10s %-8s %s\n' "$org" "$status" "$a" "$v"
-  done
+  done 3<<< "$orgs"
 }
 
 cmd="${1:-}"
