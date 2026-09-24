@@ -48,6 +48,7 @@
 #                                     token are 401 until they deploy the new one — so it
 #                                     refuses without --confirm, which records that the
 #                                     switch-over has been scheduled with the partner
+#                                     (still required for a removed tenant: no live token)
 #   ./tenant.sh disable <org_id>      quarantine — the entry stays with "disabled": true and
 #                                     the tenant is served on NO route (verify: 500
 #                                     internal_error verdict; registry routes: 503
@@ -81,9 +82,10 @@
 #   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock) for its whole
 #   run. An interrupt (Ctrl-C/TERM aimed at the shell or the put stage) takes effect only
 #   after the in-flight put has finished; one that reaches the put stage before it has
-#   started wrangler cancels the upload instead (nothing is sent). The lock is released only when wrangler confirms the
-#   upload or no upload was started; otherwise it stays and the outcome is unknown — there is
-#   no automatic unlock; see pilot/RUNBOOK.md, "Recovering a retained lock".
+#   started wrangler cancels the upload instead (nothing is sent). The lock is released only
+#   when wrangler confirms the upload or no upload was started; otherwise it stays and the
+#   outcome is unknown — there is no automatic unlock; see pilot/RUNBOOK.md, "Recovering a
+#   retained lock".
 #
 # Environment:
 #   HOSTED_VERIFY_ENV=<name>    target that named Worker environment (`--env=<name>`; keychain
@@ -384,20 +386,27 @@ cmd_rotate() {
   [ -n "$org" ] || usage
   case "$role" in admin|verifier) ;; *) usage ;; esac
   [ -z "$extra" ] || die "rotate: unexpected extra argument '$extra'"
+  # The target first: a mistyped org is reported as a missing registry file, not as a 401 impact.
+  require_org "$org"; require_registry "$org"
   # E19: the Worker holds ONE token per role, so a rotation has no overlap window — the old
   # token stops working the moment the sync lands. Refused, before anything changes, until the
-  # operator confirms the partner has been scheduled to deploy the new one.
+  # operator confirms the partner has been scheduled to deploy the new one. Required for a
+  # removed tenant too (one interface), though nothing live is affected there.
   impact="requests under the $role token return 401 from the next sync until the partner deploys the new token"
   case "$flag" in
     --confirm) ;;
     "") die "rotate: $impact; re-run with --confirm after scheduling it with them" ;;
     *) die "rotate: unknown argument '$flag' (only --confirm is accepted)" ;;
   esac
-  require_org "$org"; require_registry "$org"; require_security
+  require_security
   local status
   status="$(reg_field "$org" status)" || die "rotate: could not read $(registry_file "$org")"
   kc_put_minted "$org" "$role"
-  echo "warning: $impact" >&2
+  if [ "$status" = removed ]; then
+    echo "tenant is removed; no live token is affected" >&2
+  else
+    echo "warning: $impact" >&2
+  fi
   # A removed tenant is not in the map, so a sync would change nothing — and after
   # `remove --last` an all-removed registry would refuse it and blame a flag rotate does not
   # take. This is the RUNBOOK's bring-it-back path: re-mint, then set status active and sync.
