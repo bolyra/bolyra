@@ -7,7 +7,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env, evictDurableObject, listDurableObjectIds, reset, runInDurableObject } from 'cloudflare:test';
-import type { RegisterInput, RegisterResult } from '../src/registry';
+import { MAX_ACTIVE_CREDENTIALS, type RegisterInput, type RegisterResult } from '../src/registry';
+import { seedCredentials } from './helpers';
 import { ORGS } from './tenants-fixture';
 
 const ID_A = 'a'.repeat(64);
@@ -105,6 +106,77 @@ describe('register', () => {
     const got = await r.get(ID_A);
     expect(got.outcome === 'found' && got.record.status).toBe('REVOKED');
     expect(got.outcome === 'found' && got.record.history).toHaveLength(2);
+  });
+});
+
+describe('per-tenant ACTIVE credential cap', () => {
+  const ID_C = 'c'.repeat(64);
+
+  it(`at cap-1 one more registers; the next is quota_exceeded and stores nothing`, async () => {
+    const r = registry(ORGS.A);
+    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS - 1);
+    expect(await r.register(input(ID_A))).toEqual({ outcome: 'created', registered_at: NOW });
+    expect(await r.register(input(ID_B))).toEqual({ outcome: 'quota_exceeded' });
+    expect(await r.status(ID_B)).toBe('ABSENT');
+    await runInDurableObject(r, (_i, state) => {
+      expect(state.storage.sql.exec('SELECT count(*) AS n FROM history WHERE credential_id = ?', ID_B).one().n).toBe(0);
+    });
+  });
+
+  it('at cap, re-registering an existing ACTIVE id is still unchanged with its original registered_at', async () => {
+    const r = registry(ORGS.A);
+    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS - 1);
+    await r.register(input(ID_A));
+    expect(await r.register(input(ID_A, { now: NOW + 50, request_id: 'req-2' }))).toEqual({ outcome: 'unchanged', registered_at: NOW });
+  });
+
+  it('at cap, a REVOKED id still answers revoked and a different key/digest still answers mismatch', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_C));
+    expect(await r.revoke(ID_C, NOW + 1, 'req-r')).toBe('revoked');
+    await r.register(input(ID_A));
+    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS - 1);
+    expect(await r.register(input(ID_C))).toEqual({ outcome: 'revoked' });
+    expect(await r.register(input(ID_A, { operator_key: '9:9' }))).toEqual({ outcome: 'mismatch' });
+  });
+
+  it('revoking one frees a slot', async () => {
+    const r = registry(ORGS.A);
+    const ids = await seedCredentials(r, MAX_ACTIVE_CREDENTIALS);
+    expect(await r.register(input(ID_A))).toEqual({ outcome: 'quota_exceeded' });
+    expect(await r.revoke(ids[0]!, NOW + 1, 'req-r')).toBe('revoked');
+    expect(await r.register(input(ID_A))).toEqual({ outcome: 'created', registered_at: NOW });
+    expect(await r.register(input(ID_B))).toEqual({ outcome: 'quota_exceeded' });
+  });
+
+  it('REVOKED rows do not count toward the cap', async () => {
+    const r = registry(ORGS.A);
+    await seedCredentials(r, 50, { status: 'REVOKED', prefix: 'd' });
+    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS - 1);
+    expect(await r.register(input(ID_A))).toEqual({ outcome: 'created', registered_at: NOW });
+  });
+
+  it('expired-but-ACTIVE rows still count (no reclamation)', async () => {
+    const r = registry(ORGS.A);
+    // Seeded rows registered long ago; their bindings are long expired, but they are ACTIVE until revoked.
+    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS, { now: 1 });
+    expect(await r.register(input(ID_A))).toEqual({ outcome: 'quota_exceeded' });
+  });
+
+  it('two registers issued together at cap-1: exactly one created, one quota_exceeded', async () => {
+    const r = registry(ORGS.A);
+    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS - 1);
+    const [x, y] = await Promise.all([r.register(input(ID_A)), r.register(input(ID_B))]);
+    expect([x.outcome, y.outcome].sort()).toEqual(['created', 'quota_exceeded']);
+    await runInDurableObject(r, (_i, state) => {
+      expect(state.storage.sql.exec("SELECT count(*) AS n FROM credentials WHERE status = 'ACTIVE'").one().n).toBe(MAX_ACTIVE_CREDENTIALS);
+    });
+  });
+
+  it('the cap is per tenant: org A at cap does not affect org B', async () => {
+    await seedCredentials(registry(ORGS.A), MAX_ACTIVE_CREDENTIALS);
+    expect(await registry(ORGS.A).register(input(ID_A))).toEqual({ outcome: 'quota_exceeded' });
+    expect(await registry(ORGS.B).register(input(ID_A))).toEqual({ outcome: 'created', registered_at: NOW });
   });
 });
 

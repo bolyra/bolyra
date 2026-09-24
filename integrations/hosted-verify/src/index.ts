@@ -77,7 +77,7 @@ import { BODY_READ_DEADLINE_MS, TIMEOUT, withDeadline, withRegistryDeadline } fr
 import { cachedProbeRegistry } from './health-probe';
 import { credentialId, CREDENTIAL_ID_PATTERN, CREDENTIAL_ID_VERSION } from './credential-id';
 import { parseRegistration, type RegistryErrorCode } from './routes/credentials';
-import type { TenantRegistry } from './registry';
+import { MAX_ACTIVE_CREDENTIALS, type TenantRegistry } from './registry';
 
 // Durable Object classes must be exported from the Worker's main module.
 export { TenantRegistry } from './registry';
@@ -551,6 +551,13 @@ async function handleRegister(
       return { response: json(200, { credential_id: id, status: 'ACTIVE', registered_at: result.registered_at }), code: '', credential_id: id };
     case 'revoked':
       return fail(409, 'credential_revoked', 'this credential was revoked; revocation is terminal');
+    case 'quota_exceeded':
+      // No Retry-After: time frees nothing, only a revocation does.
+      return fail(
+        429,
+        'quota_exceeded',
+        `this tenant has reached its active credential limit (${MAX_ACTIVE_CREDENTIALS}); revoke credentials before registering more`,
+      );
     case 'expired':
       return fail(400, 'binding_expired', 'binding.expiry is not in the future');
     case 'mismatch':

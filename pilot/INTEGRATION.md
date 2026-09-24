@@ -209,6 +209,7 @@ revocation. Revocation is terminal — re-registering a revoked binding is
 | `deny expired` | `now_unix >= expiry` (equality = expired) | check the `now_unix` you send; re-issue if actually expired |
 | `deny unknown_capability` | capability has no mapping | unmapped is never silently allowed — ask us to map it |
 | `409 {"error":"credential_revoked"}` | re-registering a revoked binding | terminal; issue a new binding |
+| `429 {"error":"quota_exceeded"}` on `POST /v1/credentials` | your tenant already holds 1,000 ACTIVE credentials (expired-but-unrevoked ones count) | revoke credentials you no longer use, then register again; waiting does not help |
 | `404 {"error":"not_found"}` on `/v1/credentials/{id}` | unknown or malformed id — or an id that belongs to another tenant (never 403) | check the id you stored from registration |
 | `500 deny internal_error` | verifier-side failure (configuration, registry, or a quarantined tenant) | fail closed on your side; tell us, we check logs |
 
