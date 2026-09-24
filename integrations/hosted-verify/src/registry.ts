@@ -7,6 +7,12 @@
  *               status ∈ {ACTIVE, REVOKED}, registered_at, revoked_at)
  *   history(credential_id, event ∈ {registered, revoked}, ts, request_id)
  *               PRIMARY KEY (credential_id, event)   -- at most one of each
+ *   schema_meta(version)  -- exactly one row; see SCHEMA_VERSION and MIGRATIONS
+ *
+ * The constructor creates a fresh database and migrates an older one in ONE
+ * transaction; a database NEWER than this build (a rolled-back Worker) is
+ * refused: every method returns `storage_error` rather than touch a layout
+ * this code does not know.
  *
  * Lifecycle (the caller has already authenticated the tenant, checked trust
  * membership and the signature, and computed the id):
@@ -109,6 +115,46 @@ CREATE TABLE IF NOT EXISTS history (
 );
 `;
 
+/**
+ * The layout version this build reads and writes. `schema_meta` holds exactly
+ * one row (the CHECK pins its rowid). Version 1 is the pre-versioning layout
+ * above — every object created before versioning, and the starting point of a
+ * brand-new object; migrations then bring it to `SCHEMA_VERSION`.
+ */
+export const SCHEMA_VERSION = 2;
+
+const SCHEMA_META = `
+CREATE TABLE IF NOT EXISTS schema_meta (
+  version INTEGER NOT NULL,
+  CHECK (rowid = 1)
+);
+`;
+
+/**
+ * Migration N → N+1 is `MIGRATIONS[N - 1]`. Each one is idempotent on its own
+ * (a partially applied migration can be re-run), and runs inside the
+ * constructor's single transaction together with the version bump.
+ */
+const MIGRATIONS: ReadonlyArray<(sql: SqlStorage) => void> = [
+  // 1 → 2: recovery metadata for a revocation whose history row is not yet written.
+  (sql) => {
+    const columns = new Set(
+      sql
+        .exec<{ name: string }>('PRAGMA table_info(credentials)')
+        .toArray()
+        .map((c) => c.name),
+    );
+    const add: Array<[string, string]> = [
+      ['pending_history', 'pending_history INTEGER NOT NULL DEFAULT 0'],
+      ['pending_request_id', 'pending_request_id TEXT'],
+      ['pending_at', 'pending_at INTEGER'],
+    ];
+    for (const [name, definition] of add) {
+      if (!columns.has(name)) sql.exec(`ALTER TABLE credentials ADD COLUMN ${definition}`);
+    }
+  },
+];
+
 type CredentialRow = {
   credential_id: string;
   status: 'ACTIVE' | 'REVOKED';
@@ -151,13 +197,35 @@ export class TenantRegistry extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    // Synchronous and idempotent: the schema exists before any request runs.
+    // Synchronous and idempotent: the schema exists, at this build's version,
+    // before any request runs. Creation and migration are ONE transaction, so a
+    // failure leaves the database exactly as it was.
     try {
-      this.ctx.storage.sql.exec(SCHEMA);
+      this.#schemaError = this.ctx.storage.transactionSync(() => this.#migrate());
+      if (this.#schemaError !== undefined) logStorageError('schema', undefined, this.#schemaError);
     } catch (e) {
       this.#schemaError = e;
       logStorageError('schema', undefined, e);
     }
+  }
+
+  /** Returns an Error (not thrown: nothing to roll back) when the database is newer than this build. */
+  #migrate(): Error | undefined {
+    const sql = this.ctx.storage.sql;
+    sql.exec(SCHEMA);
+    sql.exec(SCHEMA_META);
+    if (sql.exec('SELECT 1 FROM schema_meta').toArray().length === 0) {
+      sql.exec('INSERT INTO schema_meta (rowid, version) VALUES (1, 1)');
+    }
+    const version = sql.exec<{ version: number }>('SELECT version FROM schema_meta').one().version;
+    if (version > SCHEMA_VERSION) {
+      // A rolled-back Worker meeting a database a newer build migrated: refuse
+      // rather than read or write a layout this code does not know.
+      return new Error(`schema version ${version} is newer than this build supports (${SCHEMA_VERSION})`);
+    }
+    for (let v = version; v < SCHEMA_VERSION; v++) MIGRATIONS[v - 1]!(sql);
+    if (version < SCHEMA_VERSION) sql.exec('UPDATE schema_meta SET version = ?', SCHEMA_VERSION);
+    return undefined;
   }
 
   register(input: RegisterInput): RegisterResult {
