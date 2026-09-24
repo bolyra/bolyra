@@ -574,9 +574,12 @@ export function bolyraGate<method extends MppxServerMethodLike>(
    * Under enforce:'always' the 402 discovery request is its own gate
    * invocation (allow + nonce reserved), so a 402→pay pair reports twice.
    *
-   * Observer failures never affect authorization: a sync throw, a rejected
-   * promise, and a thenable whose `then` throws are all routed to `safeLog`,
-   * which cannot throw. The observer gets a copy of the request context, so
+   * Observer failures never affect authorization: a throwing `onDecision`
+   * getter, a sync throw, a rejected promise, and a thenable whose `then`
+   * throws are all routed to `safeLog`, which cannot throw. Boundary: tampered
+   * native Promise internals (an already-rejected native Promise with a
+   * throwing `constructor` getter) are outside the guarantee — its rejection
+   * is left unhandled; authorization is still unaffected. The observer gets a copy of the request context, so
    * mutating the Decision cannot touch the stashed GateDecision.
    */
   const safeLog = (err: unknown): void => {
@@ -587,20 +590,30 @@ export function bolyraGate<method extends MppxServerMethodLike>(
     }
   };
   const reportDecision = (decision: AllowDecision | DenyDecision): void => {
-    const cb = options.onDecision;
-    if (cb === undefined) return;
     let r: unknown;
     try {
+      // The lookup is inside the containment block too: a throwing
+      // `onDecision` getter is an observer failure (logged, treated as no
+      // observer), never an escape that aborts an allow or replaces a
+      // BolyraDeniedError.
+      const cb = options.onDecision;
+      if (cb === undefined) return;
       r = cb(decision);
     } catch (e) {
       safeLog(e);
+      return;
     }
     if (r !== undefined) {
       try {
         Promise.resolve(r).then(undefined, safeLog);
       } catch (e) {
-        // Promise.resolve only throws synchronously for a real Promise with a
-        // throwing `constructor` getter; contained all the same.
+        // Promise.resolve throws synchronously only for a real Promise with a
+        // throwing `constructor` getter. That throw is logged here, but the
+        // tampered promise's OWN rejection then has no handler and surfaces
+        // as an unhandled rejection: tampered native Promise internals are
+        // outside the containment guarantee (pinned by
+        // test-integration/boundary-tampered-promise.mts). Authorization is
+        // unaffected either way.
         safeLog(e);
       }
     }

@@ -26,13 +26,16 @@ Decision evidence for the application, and a verifier-URL convention.
 #### `@bolyra/mpp`
 
 - `engines.node` is now `>=20` (was `>=18`). Node 18 is end-of-life and was
-  never exercised in CI; 20, 22 and 24 are.
+  never exercised in CI. The package's CI job runs on Node 20 and release
+  validation on Node 22; Node 24 is exercised only locally.
 - A `url` verifier whose `url` is a bare origin (`https://verify.example` or
   `https://verify.example/`, with or without a query) is now POSTed to
-  `/v1/verify` on that origin; previously it was POSTed to the root. Every
-  other URL, including a custom path with a trailing slash and any query
-  string, is used byte-for-byte. A `url` that is not an absolute URL is now a
-  `TypeError` at `bolyraGate()` construction (it previously failed closed as
+  `/v1/verify` on that origin; previously it was POSTed to the root. The
+  root check reads the path as written, so dot segments (`/..`, `/%2e`,
+  `/custom/..`) are not roots. Every other URL, including a custom path with
+  a trailing slash and any query string, is used byte-for-byte. A `url` that
+  is not an absolute `scheme://authority` URL is now a `TypeError` at
+  `bolyraGate()` construction (it previously failed closed as
   `internal_error` on every request).
 
 ### Added
@@ -45,8 +48,11 @@ Decision evidence for the application, and a verifier-URL convention.
   discriminated union — `AllowDecision { outcome: 'allow', credentialId?,
   receipt?, request }` | `DenyDecision { outcome: 'deny', code, status,
   reason?, credentialId?, request }` — so consumers narrow on `outcome`.
-  Observer throws, rejections, and broken thenables are logged and contained;
-  they never change the verdict or response. Credential-less discovery under
+  A throwing `onDecision` getter, observer throws, rejections, and broken
+  thenables are logged and contained; they never change the verdict or
+  response. Tampered native Promise internals (an already-rejected native
+  Promise with a throwing `constructor` getter) are outside the guarantee:
+  that rejection is left unhandled, though authorization is unaffected. Credential-less discovery under
   `enforce: 'payment'` and the `verify` hook do not report; under
   `enforce: 'always'` a 402→pay pair reports twice (discovery is its own gate
   invocation). A fault inside the gate's own denial path (e.g. the receipt

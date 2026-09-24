@@ -296,3 +296,12 @@ test('Decision is a discriminated union: consumers narrow on outcome (compile-ti
   assert.equal(describe({ outcome: 'deny', code: 'expired', status: 403, request }), 'expired/403/');
   assert.equal(describe({ outcome: 'allow', receipt: 'r', request }), 'allow//r');
 });
+
+test('BOUNDARY (documented): an already-rejected native Promise with a tampered constructor getter leaves its rejection unhandled; authorization is unaffected', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const script = fileURLToPath(new URL('./boundary-tampered-promise.mts', import.meta.url));
+  const out = spawnSync(process.execPath, ['--import', 'tsx', script], { encoding: 'utf8', cwd: fileURLToPath(new URL('..', import.meta.url)) });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(JSON.parse(out.stdout.trim()), { allowStatus: 200, counter: 1, unhandled: 1 });
+});

@@ -837,6 +837,45 @@ describe('onDecision (TD-2)', () => {
     expect(onDecision.mock.calls[1][0].reason).toBe('tier_2_exceeded');
   });
 
+  test('an onDecision GETTER that throws is contained: allow unchanged, deny and B11 still BolyraDeniedError, logged once per request', async () => {
+    const logged: unknown[] = [];
+    jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { logged.push(args); });
+    const hostile = await gateOptions();
+    Object.defineProperty(hostile, 'onDecision', { get() { throw new Error('getter exploded'); }, enumerable: true });
+    const { method, verifySpy } = mockMethod();
+    const wrapped = bolyraGate(method, hostile);
+
+    const ok = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(ok.denied).toBeUndefined();
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+    expect((ok.receipt as any).bolyraAuthorization.decision).toBe('allow');
+
+    await expect(
+      drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: {} }),
+    ).rejects.toBeInstanceOf(BolyraDeniedError);
+    expect(logged).toHaveLength(2);
+
+    // B11 (decide() itself throws) with the same hostile getter.
+    const real = receiptsModule.createGateReceiptSigner;
+    jest.spyOn(receiptsModule, 'createGateReceiptSigner').mockImplementation((config) => ({
+      ...real(config),
+      sign: () => { throw new Error('signer exploded'); },
+    }));
+    const b11 = bolyraGate(mockMethod().method, hostile);
+    let caught: unknown;
+    try {
+      await drivePreflight(b11, requestWithBundle(undefined), { amount: '25' }, { credential: {} });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(BolyraDeniedError);
+    expect((caught as BolyraDeniedError).verdict.code).toBe('internal_error');
+    expect(logged).toHaveLength(3);
+  });
+
+  // The tampered-native-Promise boundary is pinned in test-integration (child
+  // process), because jest intercepts unhandled rejections itself.
+
   test('missing_authorization deny: one Decision, 401, no reason', async () => {
     const onDecision = jest.fn();
     const { method } = mockMethod();
