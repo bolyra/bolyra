@@ -42,10 +42,10 @@ with `ERESOLVE`; the command above avoids it.
 
 | | Version |
 |---|---|
-| `@bolyra/mpp` | 0.6.0 |
+| `@bolyra/mpp` | 0.7.0 |
 | `mppx` (peer) | exactly 0.8.13 |
 | `@bolyra/cli` | requires `@bolyra/mpp` ^0.6.0 |
-| Node | 20, 22 and 24 are exercised in CI |
+| Node | `>=20` (`engines`; 18 dropped in 0.7.0); 20, 22 and 24 are exercised in CI |
 
 ### Spend mandates authorize a TIER, not an amount
 
@@ -182,6 +182,11 @@ in the `X-Bolyra-Authorization` header on every request. A denial is thrown as
 }
 ```
 
+When the verifier's deny carries `detail.reason` / `detail.credential_id` as
+strings (the hosted verifier's registry deny does), they are copied into the
+body as `reason` and `credential_id` — e.g. `"reason": "credential_not_active"`.
+No other `detail` member reaches the HTTP body.
+
 On allow, the mppx receipt (and therefore the `Payment-Receipt` header) gains
 a `bolyraAuthorization` extension field — tier, amount, verifier kind, and the
 ES256K-signed, hash-chained authorization receipt reference — giving the
@@ -194,6 +199,7 @@ ES256K-signed, hash-chained authorization receipt reference — giving the
 - Every hook that runs during ungated discovery must perform **no protected effects**. The gate cannot verify that by inspecting hooks; it is your integration's obligation.
 - At request time, nothing inside the gate escapes as an exception **except `BolyraDeniedError`** (internal faults, including a throwing `onReceipt` sink, become a 500 `internal_error` denial thrown the same way — a sink failure denies even an otherwise-valid request). Construction-time validation throws `TypeError`/`BolyraGateConfigError` synchronously; your method's own hooks keep their own error behavior.
 - **`onReceipt` is synchronous.** A sink that returns a Promise is treated as a failure and the request is denied (an async sink's rejection could otherwise never fail the decision); do your I/O in a queue the sink hands off to synchronously.
+- **`onDecision` is an observer, not a gate.** See "Observing decisions" below; its failures never change authorization.
 - **Where a denial surfaces depends on the stage.** A `preflight` denial propagates out of `mppx.charge(...)(request)` (this is what `handleDenials` catches). A denial thrown from `verify` — a missing or already-consumed decision — is caught by mppx itself, logged as `mppx: internal verification error`, and re-issued as a 402 challenge; the Bolyra Problem Details are not recoverable there. Both are fail-closed.
 - A failed `originalVerify` is not retryable against the same captured request: the decision is consumed one-use; the client re-runs the request **with a fresh presentation** (a fresh authorization decision; in host-nonce mode the original presentation's nonce was already reserved on the allow, so re-sending it would deny `nonce_replayed`).
 - **One bundle = one presentation.** Issue a fresh presentation per gated HTTP attempt — including the payment retry after a 402 challenge under `enforce: 'always'`, because the discovery attempt already ran the gate and reserved its nullifier; only `enforce: 'payment'` skips the gate on discovery (`issueMandate` / `bolyra mandate issue`; the signer is local and cheap) — rather than re-sending one. Each issuance mints a fresh random nullifier (`publicSignals[1]`); a hosted verifier hands that nullifier back for the gate to reserve before acting, so the same bundle presented twice denies `nonce_replayed` while a re-issued one does not. Classical-mode replay protection is **cooperative**: the nullifier is host-reserved, not proof-bound — an in-process `{ kind: 'classical' }` verifier reserves nothing (see "What is and isn't checked").
@@ -273,6 +279,7 @@ another currency. Unresolvable amounts fail closed.
 | `header` | `string` | `x-bolyra-authorization` | Request header carrying the presentation; `Authorization` is rejected (MPP's payment credential rides it) |
 | `nonceStore` | `NonceStoreLike` | in-memory | Reserve-before-act store for host-nonce-mode verifiers; **inject a shared, durable store for multi-instance deployments** |
 | `receipts` | `{issuer?, keyId?, privateKey?}` | ephemeral key | ES256K decision receipts; pin a key in production |
+| `onDecision` | `(decision: Decision) => void \| Promise<void>` | — | Observer for the gate's final decision, once per gate invocation (see "Observing decisions"). Failures are logged and contained; never affects authorization |
 | `onReceipt` | `(receipt) => void` | — | Sink for every signed decision receipt (allow and deny). Receipts carry a signed `instance` block (receipt instance binding v1) whenever the spend facts are resolved; verify with `verifyInstanceBinding` from `@bolyra/receipts` in addition to `verifyReceipt` |
 | `now` | `() => number` | `Date.now`-derived | Clock override (unix **seconds**). Tests only. Mutually exclusive with `nowMs`; receipts built from it carry `.000Z` decision timestamps |
 | `nowMs` | `() => number` | `Date.now` | Clock override (epoch **milliseconds**). Tests only. Mutually exclusive with `now`; drives both the verifier clock and the ms-precision `decisionAt` in the receipt instance block |
@@ -298,6 +305,20 @@ verifier: {
 verifier: { kind: 'url', url: 'https://…/v1/verify', token: process.env.BOLYRA_VERIFY_TOKEN }
 ```
 
+`verifier.url` is the verifier's origin, or a full URL to your verifier's
+verify route; only a bare origin is rewritten. `https://verify.example` and
+`https://verify.example/` are POSTed to `https://verify.example/v1/verify`
+(a query string is kept); any other path — including `/custom/` with its
+trailing slash — and any query string are used byte-for-byte. A `url` that is
+not an absolute URL is a `TypeError` at `bolyraGate()` construction.
+
+To call a hosted verifier directly, `callUrlVerifierWithEvidence(config,
+request)` returns `{ verdict, status?, credentialId?, receipt? }`: the same
+fail-closed verdict as `callUrlVerifier` (which still returns only the
+verdict), the verifier's HTTP `status` (absent when no response arrived), and
+the raw `x-bolyra-credential-id` / `x-bolyra-receipt` response headers
+(absent when not sent; not decoded or verified). The same URL rule applies.
+
 Both external modes speak the
 [External Verifier Contract v1](https://github.com/bolyra/bolyra/blob/main/spec/external-verifier-contract-v1.md)
 (one JSON request in, one fail-closed verdict out) and implement the host
@@ -307,6 +328,51 @@ single-object closed-schema verdict parsing (unknown members and unrecognized
 verifier failure class — timeout, crash, garbage output, unreachable
 endpoint, oversized response — denies with `internal_error`; a broken
 verifier is never an allow.
+
+### Observing decisions (`onDecision`)
+
+```ts
+bolyraGate(method, {
+  audience, verifier,
+  onDecision: (d) => metrics.record(d.outcome, d.code, d.reason),
+})
+```
+
+`Decision` is `{ outcome: 'allow' | 'deny', code?, status?, reason?,
+credentialId?, receipt?, request }`:
+
+- **deny** — `code` is the final denial code and `status` the HTTP status it
+  maps to (`DENY_STATUS[code]`); `reason` and `credentialId` come from the
+  verifier's `detail.reason` / `detail.credential_id` when they are strings.
+- **allow** — no `code` or `status`; with a `url` verifier, `credentialId` and
+  `receipt` are the raw `x-bolyra-credential-id` / `x-bolyra-receipt` response
+  headers (absent in `classical`/`command` mode). This `receipt` is the hosted
+  verifier's, distinct from the gate's own signed decision receipt
+  (`onReceipt`, `bolyraAuthorization.receipt`).
+- `request` is the request context the gate built (`agent_name`,
+  `project_key`, `program`, `model`, `granted_capabilities`); a copy.
+
+The contract:
+
+- **Exactly once per gate invocation** (one `preflight` run), **after the final
+  decision** — after nonce reservation and after the `onReceipt` sink's
+  outcome. A sink failure that turns an allow into a 500 is reported as
+  `deny` / `internal_error` / 500; a replay as `nonce_replayed` / 403.
+- **Observer failures never affect authorization.** A throw, a rejected
+  Promise, or a broken thenable is logged with `console.error` (itself
+  guarded) and contained; the verdict and response are unchanged and no
+  unhandled rejection is raised. The callback is not awaited.
+- **Credential-less discovery under `enforce: 'payment'` produces no
+  Decision**, because no Bolyra decision was made. The two credential-less
+  refusals in that mode (an `authorize` hook attached after construction, a
+  non-402 preflight result) are reported as `deny` / `internal_error`.
+- **Under `enforce: 'always'` the 402 discovery request is its own gate
+  invocation**, so a 402→pay pair reports two Decisions (the discovery
+  `allow`, then the paid request's outcome). An app counting allow events
+  counts discovery too; correlate by request if you need per-action counts.
+- **The `verify` hook never reports.** Trade-off: a Decision may say `allow`
+  and payment can still be refused at the verify hook if the stashed decision
+  is missing (see "Where a denial surfaces").
 
 ## What is and isn't checked (read this)
 
