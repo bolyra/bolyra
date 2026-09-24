@@ -62,18 +62,21 @@ export interface DenyProblem {
   /**
    * The verifier's machine-readable reason (`verdict.detail.reason`), e.g.
    * `credential_not_active` on a hosted-registry deny. Present only when it is
-   * an identifier (`/^[a-z_]{1,64}$/`); free-text messages are not surfaced.
+   * an identifier (`/^[a-z][a-z0-9_]{0,63}$/`); free-text messages are not surfaced.
    */
   reason?: string;
-  /** The credential the verifier named (`verdict.detail.credential_id`), when a string. */
+  /** The credential the verifier named (`verdict.detail.credential_id`), when a string of ≤ 256 chars. */
   credential_id?: string;
 }
 
 /** A wire-safe `reason`: a short snake_case identifier such as `credential_not_active`. */
-const IDENTIFIER_REASON = /^[a-z_]{1,64}$/;
+const IDENTIFIER_REASON = /^[a-z][a-z0-9_]{0,63}$/;
+
+/** Longest `credential_id` surfaced on the wire (HTTP body, Decision). */
+export const MAX_WIRE_CREDENTIAL_ID_LENGTH = 256;
 
 /**
- * `detail.reason` when it is identifier-shaped (`/^[a-z_]{1,64}$/`), else
+ * `detail.reason` when it is identifier-shaped (`/^[a-z][a-z0-9_]{0,63}$/`), else
  * `undefined`. Free-text validator messages (which may echo client input or
  * library internals) are never surfaced on the wire — they stay reachable
  * in-process via `BolyraDeniedError.verdict.detail`. Shared by the Problem
@@ -84,19 +87,29 @@ export function identifierReason(detail: Record<string, unknown> | undefined): s
   return typeof reason === 'string' && IDENTIFIER_REASON.test(reason) ? reason : undefined;
 }
 
+/**
+ * A credential id safe to surface on the wire: a string of at most
+ * {@link MAX_WIRE_CREDENTIAL_ID_LENGTH} chars, else `undefined` — a
+ * misbehaving verifier must not reflect an arbitrarily large value into the
+ * client response. Shared by the Problem Details body and the Decision.
+ */
+export function wireCredentialId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length <= MAX_WIRE_CREDENTIAL_ID_LENGTH ? value : undefined;
+}
+
 /** The verdict members a Problem Details body is built from. */
 export type DenyProblemInput = Pick<DenyVerdict, 'code' | 'message' | 'detail'>;
 
 /**
  * Build the Problem Details body for a deny verdict. Of `verdict.detail`,
  * ONLY `reason` (when identifier-shaped, see {@link identifierReason}) and
- * `credential_id` (when a string) are copied — any other detail member stays
+ * `credential_id` (when a string of ≤ 256 chars) are copied — any other detail member stays
  * out of the HTTP body.
  */
 export function denyProblem(verdict: DenyProblemInput): DenyProblem {
   const status = DENY_STATUS[verdict.code] ?? 500;
   const reason = identifierReason(verdict.detail);
-  const credentialId = verdict.detail?.credential_id;
+  const credentialId = wireCredentialId(verdict.detail?.credential_id);
   return {
     type: `https://bolyra.ai/problems/mpp/${verdict.code.replace(/_/g, '-')}`,
     title: TITLES[verdict.code] ?? 'Authorization Denied',
@@ -104,7 +117,7 @@ export function denyProblem(verdict: DenyProblemInput): DenyProblem {
     detail: verdict.message,
     code: verdict.code,
     ...(reason !== undefined ? { reason } : {}),
-    ...(typeof credentialId === 'string' ? { credential_id: credentialId } : {}),
+    ...(credentialId !== undefined ? { credential_id: credentialId } : {}),
   };
 }
 

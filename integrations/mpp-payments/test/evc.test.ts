@@ -250,6 +250,10 @@ describe('normalizeVerifierUrl (TD-1)', () => {
     ['https://verify.example/', 'https://verify.example/v1/verify'],
     ['https://verify.example?x=1', 'https://verify.example/v1/verify?x=1'],
     ['https://verify.example/?x=1', 'https://verify.example/v1/verify?x=1'],
+    ['https://[::1]:8787', 'https://[::1]:8787/v1/verify'],
+    ['http://[2001:db8::1]/', 'http://[2001:db8::1]/v1/verify'],
+    ['https://verify.example#frag', 'https://verify.example/v1/verify#frag'],
+    ['https://verify.example/?x=1#frag', 'https://verify.example/v1/verify?x=1#frag'],
   ])('a root path is rewritten to /v1/verify: %s', (input, expected) => {
     expect(normalizeVerifierUrl(input)).toBe(expected);
   });
@@ -262,8 +266,16 @@ describe('normalizeVerifierUrl (TD-1)', () => {
     'https://verify.example/custom',
     'https://verify.example/v1/verify/',
     'https://VERIFY.example:8443/Custom?b=2&a=1',
+    'https://[::1]:8787/custom/',
+    'https://verify.example/custom#frag',
   ])('every other path is preserved byte-for-byte: %s', (input) => {
     expect(normalizeVerifierUrl(input)).toBe(input);
+  });
+
+  test('is exported from the package entry point', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const entry = require('../src/index');
+    expect(entry.normalizeVerifierUrl).toBe(normalizeVerifierUrl);
   });
 
   test('an invalid URL throws', () => {

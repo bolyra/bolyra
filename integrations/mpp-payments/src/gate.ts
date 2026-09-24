@@ -43,7 +43,7 @@ import type { SignedReceipt } from '@bolyra/receipts';
 import { peekBundle } from './bundle';
 import { parseBundle, type ParsedBundle } from './bundle';
 import { verifyClassical } from './classical';
-import { DENY_STATUS, denyResponse, identifierReason } from './deny';
+import { DENY_STATUS, denyResponse, identifierReason, wireCredentialId } from './deny';
 import { BolyraDeniedError, BolyraGateConfigError } from './errors';
 import { callUrlVerifierWithEvidence, normalizeVerifierUrl, runCommandVerifier } from './evc';
 import { NonceStore, NonceStoreCapacityError, NonceRetentionTooLongError } from './nonces';
@@ -60,7 +60,8 @@ import {
   deny,
   isVerifyDenial,
   type BolyraGateOptions,
-  type Decision,
+  type AllowDecision,
+  type DenyDecision,
   type DenyVerdict,
   type FinancialTier,
   type GateDecision,
@@ -549,9 +550,14 @@ export function bolyraGate<method extends MppxServerMethodLike>(
    *     B6  nonce store fault / capacity       → deny internal_error
    *     B7  nonce reservation conflict         → deny nonce_replayed
    *     B8  allow receipt sink failed          → deny internal_error (the 500)
-   *     B9  allow, sink accepted the receipt   → allow (+ url-mode header evidence)
+   *     B9  allow, sink accepted the receipt   → allow (+ url-mode header evidence);
+   *         order: stash the decision → report → the method's own preflight
+   *         (if that preflight then throws, the allow Decision stands)
    *     B10 caught VerifyDenial / unknown fault → deny <its code> / internal_error
    *     (a sink failure while emitting any deny latches the code to internal_error)
+   *     B11 decide() itself threw (e.g. the receipt signer throwing inside
+   *         denyWith) → deny internal_error, request = initial context,
+   *         thrown as BolyraDeniedError — nothing else escapes preflight
    *
    *   Credential-less requests under enforce:'payment' (decide() never runs):
    *     A1  authorize hook attached after construction → deny internal_error
@@ -580,7 +586,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       // A throwing logger must not escape either.
     }
   };
-  const reportDecision = (decision: Decision): void => {
+  const reportDecision = (decision: AllowDecision | DenyDecision): void => {
     const cb = options.onDecision;
     if (cb === undefined) return;
     let r: unknown;
@@ -603,15 +609,24 @@ export function bolyraGate<method extends MppxServerMethodLike>(
     ...ctx,
     granted_capabilities: [...ctx.granted_capabilities],
   });
-  const denyDecision = (verdict: DenyVerdict, ctx: VerifierRequestContext): Decision => {
+  const denyDecision = (verdict: DenyVerdict, ctx: VerifierRequestContext): DenyDecision => {
     const reason = identifierReason(verdict.detail);
-    const credentialId = verdict.detail?.credential_id;
+    const credentialId = wireCredentialId(verdict.detail?.credential_id);
     return {
       outcome: 'deny',
       code: verdict.code,
       status: DENY_STATUS[verdict.code] ?? 500,
       ...(reason !== undefined ? { reason } : {}),
-      ...(typeof credentialId === 'string' ? { credentialId } : {}),
+      ...(credentialId !== undefined ? { credentialId } : {}),
+      request: copyContext(ctx),
+    };
+  };
+  const allowDecision = (evidence: AllowEvidence, ctx: VerifierRequestContext): AllowDecision => {
+    const credentialId = wireCredentialId(evidence.credentialId);
+    return {
+      outcome: 'allow',
+      ...(credentialId !== undefined ? { credentialId } : {}),
+      ...(evidence.receipt !== undefined ? { receipt: evidence.receipt } : {}),
       request: copyContext(ctx),
     };
   };
@@ -660,7 +675,18 @@ export function bolyraGate<method extends MppxServerMethodLike>(
         throw new BolyraDeniedError(verdict, denyResponse(verdict));
       }
 
-      const result = await decide(input, routeOptions ?? {});
+      let result: Awaited<ReturnType<typeof decide>>;
+      try {
+        result = await decide(input, routeOptions ?? {});
+      } catch {
+        // B11: decide() is fail-closed internally, but a fault inside its own
+        // denial path (e.g. the receipt signer throwing in denyWith) would
+        // otherwise escape as a plain Error. Keep both contracts total:
+        // exactly one Decision, and only BolyraDeniedError leaves preflight.
+        const verdict = deny('internal_error', 'authorization gate failed');
+        reportDecision(denyDecision(verdict, initialRequestContext()));
+        throw new BolyraDeniedError(verdict, denyResponse(verdict));
+      }
       if (result.outcome === 'deny') {
         reportDecision(denyDecision(result.verdict, result.request)); // B1–B8, B10
         // Throw, never return: mppx turns a returned non-402 Response into
@@ -671,7 +697,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       if (capturedRequest !== undefined) {
         decisions.set(capturedRequest, result.decision);
       }
-      reportDecision({ outcome: 'allow', ...result.evidence, request: copyContext(result.decision.request) }); // B9
+      reportDecision(allowDecision(result.evidence, result.decision.request)); // B9: stash → report → own preflight
       return originalPreflight ? originalPreflight(parameters) : undefined;
     },
 
