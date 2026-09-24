@@ -2,11 +2,11 @@
 /**
  * Post-deploy verification of a hosted-verify Worker (backlog E14). The logic and its
  * tests live in scripts/lib/verify-deploy-core.mjs and test-node/verify-deploy.test.mjs;
- * this file wires real `fetch`, the macOS keychain, the pending log file and @bolyra/mpp.
+ * this file wires real `fetch`, the macOS keychain, the pending store and @bolyra/mpp.
  *
  *   node scripts/verify-deploy.mjs [<url>] [--version <id> | --from-wrangler]
  *        [--env production|staging|local] [--tenant <org>] [--allow-missing-tenant]
- *        [--pending-log <path>] [--secrets-from-dev-vars]
+ *        [--pending-dir <path>] [--secrets-from-dev-vars]
  *
  *   <url>                the Worker's origin; defaults to $VERIFY_URL (scripts/with-worker.sh sets it)
  *   --from-wrangler      read `wrangler deploy` output on stdin and require its
@@ -17,20 +17,21 @@
  *                        tenant-<org>-admin, tenant-<org>-verifier, operator-<org>-scalar
  *   --allow-missing-tenant   if any of the three is missing, say enforcement was NOT verified
  *                        and exit on the auth-boundary leg alone
- *   --pending-log <path> default ~/.bolyra/canary-pending-<env>.log
+ *   --pending-dir <path> default ~/.bolyra/canary-pending-<env>/ (one <credential_id>.pending file per canary)
  *   --secrets-from-dev-vars  LOCAL ONLY (refused for production and staging): the tenant's
  *                        placeholder tokens from .dev.vars.example and the repo's documented
  *                        test operator scalar 42
  *
- * The procedure (what it proves, the keychain accounts, clearing the pending log) is
+ * The procedure (what it proves, the keychain accounts, resolving pending records) is
  * pilot/RUNBOOK.md §7, "Post-deploy verification". Secrets are never printed.
  */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pendingStore } from './lib/pending-store.mjs';
 import { AUDIENCE, DiagnosticError, MODEL, parseCliArgs, verifyDeploy } from './lib/verify-deploy-core.mjs';
 
 const require = createRequire(import.meta.url);
@@ -72,23 +73,6 @@ function devVarsSecrets(org) {
   return { adminToken: tenant.admin_token, verifierToken: tenant.verifier_token, scalar: LOCAL_TEST_SCALAR };
 }
 
-/** One line per canary: `<iso-time> <env> <org> <credential_id> pending`. */
-function pendingLog(file) {
-  return {
-    append(line) {
-      mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-      appendFileSync(file, `${line}\n`, { mode: 0o600 });
-    },
-    remove(line) {
-      if (!existsSync(file)) return;
-      const lines = readFileSync(file, 'utf8').split('\n');
-      const i = lines.indexOf(line);
-      if (i >= 0) lines.splice(i, 1);
-      writeFileSync(file, lines.join('\n'), { mode: 0o600 });
-    },
-  };
-}
-
 async function main() {
   let opts;
   try {
@@ -102,14 +86,14 @@ async function main() {
     return 2;
   }
   const mpp = require('@bolyra/mpp');
-  const logFile = opts.pendingLog ?? path.join(homedir(), '.bolyra', `canary-pending-${opts.env}.log`);
+  const pendingDir = opts.pendingDir ?? path.join(homedir(), '.bolyra', `canary-pending-${opts.env}`);
   return verifyDeploy(opts, {
     fetch: globalThis.fetch,
     print: (l) => console.log(l),
     printErr: (l) => console.error(l),
     readSecret: keychainReader(opts.keychainService),
     devVarsSecrets,
-    log: pendingLog(logFile),
+    log: pendingStore(pendingDir),
     makeIssuer: (scalar) => (agentName, expiry) =>
       mpp.issueMandate({ operatorPrivateKey: scalar, agentName, audience: AUDIENCE, model: MODEL, tier: 'small', expiry }),
     now: () => Date.now(),

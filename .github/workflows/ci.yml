@@ -213,7 +213,7 @@ jobs:
       - name: Post-deploy verifier against wrangler dev (canary leg with the placeholder tenant)
         working-directory: integrations/hosted-verify
         timeout-minutes: 5
-        run: npm run verify:dev -- --pending-log "$RUNNER_TEMP/canary-pending.log"
+        run: npm run verify:dev -- --pending-dir "$RUNNER_TEMP/canary-pending"
       # The provisioning script and its validator must stay runnable on a plain Linux
       # shell (no keychain here): syntax, both mjs modules parse, the usage path, the
       # empty-map guard in tenants-put.mjs (it must refuse without starting wrangler),

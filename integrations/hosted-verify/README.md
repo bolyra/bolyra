@@ -446,7 +446,7 @@ version id) and that `/v1/verify` and `/v1/credentials/{id}` refuse unauthentica
 bogus-token requests with 401. For a tenant whose tokens and canary operator scalar are
 in the keychain, it also takes a fresh canary credential through ABSENT → ACTIVE →
 REVOKED and revokes it again in cleanup. An id whose cleanup cannot be confirmed stays
-in a pending log. Keychain accounts, the pending log and canary growth are covered in
+in a pending directory, one file per canary. Keychain accounts, the pending directory and canary growth are covered in
 `pilot/RUNBOOK.md` §7 under "Post-deploy verification".
 
 `TENANTS` is the only auth configuration: one entry per design partner
