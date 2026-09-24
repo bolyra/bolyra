@@ -100,7 +100,8 @@ pilot/tenant.sh show                      # confirm; THEN delete the source by h
 ```
 
 Both take the lock. Both refuse a registry that is already initialized, and
-one that holds records or a `.candidate/` without the marker — `init` cannot
+one that holds anything but its `.lock` (a record, a `.candidate/`, a stray
+file or subdirectory) without the marker — `init` cannot
 bless a partial migration and `migrate` never merges. A migrate whose
 validation fails commits nothing (no records, no marker, the candidate
 removed) and names the source file to fix.
@@ -111,8 +112,9 @@ terminal Ctrl-C (which reaches the whole foreground process group, so it can
 also kill the in-flight `mv`) can still stop a migrate between its first
 rename and the marker. Every one of these leaves the same recoverable state:
 records (and possibly a `.candidate/`) without a marker. Every command — `init` and `migrate`
-included — then refuses with `has records but no marker: it looks like an
-interrupted migrate`; there is no automatic repair. If the lock was retained,
+included — then refuses with `is not empty but has no marker … it looks like
+an interrupted migrate`; there is no automatic repair. (`init` and `migrate`
+treat ANY entry but `.lock` as non-empty — a stray file or subdirectory too.) If the lock was retained,
 remove it first as in "Recovering a retained lock" (no migrate can be
 running). Then delete the partially migrated `*.json` files and `.candidate/`
 from the NEW registry directory (never the source — it was not touched) and
@@ -336,10 +338,17 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # restored and the tokens are kept — nothing changed. If the outcome is unknown the lock,
 # the tokens and status=removed all stay: the tokens are what re-syncs the old map if it
 # is still live (see "Recovering a retained lock"). A token delete that fails after a
-# confirmed upload is reported by account and exits non-zero; delete it by hand. If `show`
-# says `removed` with both tokens present and there is no lock, nothing was uploaded (the run
-# was stopped while it wrote the registry file): re-run `remove`, or set "status" back by hand.
-# A refused or cancelled remove otherwise leaves the registry file byte-identical. The registry
+# confirmed upload is reported by account and exits non-zero; delete it by hand. A keychain
+# LOOKUP error before anything changes (a locked keychain) refuses the remove and names the
+# account: unlock it and re-run. After a confirmed upload both deletes are always attempted.
+# `show` saying `removed` with both tokens present and no lock is INCONCLUSIVE: a run stopped
+# while it wrote the registry file leaves it, and so does a confirmed upload whose token
+# deletes failed. Go by that run's own output (its confirmation, or its error), never by this
+# state. To finish, re-run `remove <org_id>` (with `--last` where it is the last tenant): it
+# re-pushes the map without the tenant and deletes the tokens once that is confirmed. Set
+# "status" back to active only as an explicit decision to KEEP the tenant, never as an
+# inference that nothing was uploaded. A refused or cancelled remove otherwise leaves the
+# registry file byte-identical. The registry
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
 # nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
 # because the file exists: run `rotate <org_id> admin --confirm` and `rotate <org_id> verifier --confirm`
@@ -415,8 +424,11 @@ Notes:
   step that can produce it asks for a deliberate flag: `remove <org_id>
   --last` (refused without it, before anything changes), `sync --allow-empty`
   (a plain `sync` over an all-removed registry refuses and uploads nothing),
-  and `tenants-put.mjs --allow-empty` (the put stage refuses `{}` on its own
-  without it). Active **and** disabled records count as tenants. A registry
+  and `--allow-empty` on every pipeline stage that can emit `{}` — the
+  assembler (`tenants-assemble.mjs <dir> --allow-empty`), the validator
+  (`tenants-check.mjs --pass --allow-empty`) and the put stage
+  (`tenants-put.mjs --allow-empty`) each refuse `{}` on their own without it;
+  `sync --allow-empty` forwards the flag to all three. Active **and** disabled records count as tenants. A registry
   directory with **no** record files is refused whatever the flags say; that
   is a wrong `TENANTS_DIR` / `HOSTED_VERIFY_ENV` far more often than intent.
   A removal can also end with `--last` given for a tenant that turns out not
