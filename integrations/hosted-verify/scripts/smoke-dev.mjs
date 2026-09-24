@@ -54,6 +54,8 @@ const VERDICTS = ['allow', 'deny'];
 /** Deny `code` and `detail.reason` are identifiers, not secrets: shown when identifier-shaped. */
 const IDENT = /^[a-z_]{1,40}$/;
 const TENANT_STATES = ['ok', 'invalid'];
+const CAPABILITY_MAP_STATES = ['ok', 'invalid'];
+const REGISTRY_STATES = ['ok', 'unavailable', 'timeout'];
 
 function shown(value, allowed) {
   if (value === undefined || value === null) return 'absent';
@@ -129,7 +131,9 @@ function describeVerify(r) {
   const check = '(0) health';
   const r = await get('/health');
   const j = r.json ?? {};
-  const observed = `status ${r.status}, status field ${shown(j.status, ['ok'])}, tenants ${shown(j.tenants, TENANT_STATES)}, ` +
+  // registry and capability_map are shown so a degraded (503) local Worker says why.
+  const observed = `status ${r.status}, status field ${shown(j.status, ['ok', 'degraded'])}, tenants ${shown(j.tenants, TENANT_STATES)}, ` +
+    `capability_map ${shown(j.capability_map, CAPABILITY_MAP_STATES)}, registry ${shown(j.registry, REGISTRY_STATES)}, ` +
     `registry_enforced ${shownBool(j.registry_enforced)}`;
   if (r.status !== 200 || j.status !== 'ok' || j.tenants !== 'ok' || j.registry_enforced !== true) {
     fail(check, 'status 200, status field ok, tenants ok, registry_enforced true', observed);

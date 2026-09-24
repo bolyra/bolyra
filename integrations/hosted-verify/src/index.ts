@@ -27,7 +27,7 @@
  * accepts an org id from the request, and the ONLY code path that obtains a
  * tenant's registry stub is `registryFor(env, auth)` below — authenticated
  * routing is the isolation control. (`/health` probes one constant, non-tenant
- * object, `__health__`; see `probeRegistry`.)
+ * object, `__health__`; see src/health-probe.ts.)
  *
  *   request ──► loadTenants(TENANTS) + loadCapabilityMap ──defect──► 500
  *                    │                     (verify: deny internal_error verdict;
@@ -73,7 +73,8 @@ import { operatorKeyId } from './verify/operators';
 import { canonicalize } from '@bolyra/receipts';
 import { loadTenants, resolveAuth, type AuthResult, type Role, type TenantConfig } from './tenants';
 import { buildReceiptHeader, buildSignerDiscoveryDoc } from './receipt';
-import { REGISTRY_DEADLINE_MS } from './deadlines';
+import { TIMEOUT, withRegistryDeadline } from './deadlines';
+import { cachedProbeRegistry } from './health-probe';
 import { credentialId, CREDENTIAL_ID_PATTERN, CREDENTIAL_ID_VERSION } from './credential-id';
 import { parseRegistration, type RegistryErrorCode } from './routes/credentials';
 import type { TenantRegistry } from './registry';
@@ -100,7 +101,7 @@ export interface Env {
    * The `version_metadata` binding (wrangler.jsonc): the deployed Worker version, echoed on
    * /health. Optional because a local run may not provide it; /health then reports `null`.
    */
-  CF_VERSION_METADATA?: { id: string; tag: string; timestamp?: string };
+  CF_VERSION_METADATA?: Partial<WorkerVersionMetadata> & Pick<WorkerVersionMetadata, 'id' | 'tag'>;
 }
 
 /** Request-body bound for /v1/verify — mirrors the spec §6 1 MiB stdin bound. */
@@ -108,9 +109,6 @@ const MAX_BODY_BYTES = 1_048_576;
 
 /** Request-body bound for a registration (a binding plus a signature is well under 4 KiB). */
 const MAX_REGISTRATION_BYTES = 65_536;
-
-/** The deadline's own resolution value: a symbol no registry status can collide with. */
-const TIMEOUT = Symbol('registry deadline');
 
 const PREVIEW_HEADERS: Record<string, string> = {
   'content-type': 'application/json; charset=utf-8',
@@ -272,64 +270,11 @@ function authorize(request: Request, env: Env, required: Role): Gate {
 
 /**
  * The ONLY way a TENANT's registry stub is obtained: from a resolved authentication result.
- * The one other stub path is `/health`'s liveness probe (`probeRegistry`), which names the
- * constant `HEALTH_PROBE_ID` — never anything from the request.
+ * The one other stub path is `/health`'s liveness probe (`probeRegistry`, src/health-probe.ts),
+ * which names the constant `HEALTH_PROBE_ID` — never anything from the request.
  */
 function registryFor(env: Env, auth: AuthResult): DurableObjectStub<TenantRegistry> {
   return env.TENANT.get(env.TENANT.idFromName(auth.org_id));
-}
-
-/**
- * The object `/health` probes. It can never be a tenant's registry: `ORG_ID_PATTERN`
- * (src/tenants.ts) forbids `_`, so no configured org id can name it (worker.spec.ts pins this).
- */
-const HEALTH_PROBE_ID = '__health__';
-/** A well-formed credential id that is never registered: the probe reads, and expects ABSENT. */
-const HEALTH_PROBE_CREDENTIAL = '0'.repeat(64);
-
-/**
- * Race a registry read against `REGISTRY_DEADLINE_MS`. The timer is cleared as soon as
- * either side settles; a late rejection of the orphaned RPC is swallowed. A rejection
- * that wins the race propagates to the caller. Shared by the verify path and `/health`
- * so the two deadlines cannot drift.
- */
-async function withRegistryDeadline<T>(read: Promise<T>): Promise<T | typeof TIMEOUT> {
-  read.catch(() => {}); // never an unhandled rejection after the deadline wins
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<typeof TIMEOUT>((resolve) => {
-    timer = setTimeout(() => resolve(TIMEOUT), REGISTRY_DEADLINE_MS);
-  });
-  try {
-    return await Promise.race([read, deadline]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
-/**
- * `/health`'s registry liveness probe: one status read of a constant id on the
- * constant `HEALTH_PROBE_ID` object, under the verify path's deadline. Liveness only —
- * `registry_enforced` stays the build marker, since a live object is not proof of enforcement.
- */
-async function probeRegistry(env: Env): Promise<'ok' | 'unavailable' | 'timeout'> {
-  try {
-    const outcome = await withRegistryDeadline(
-      env.TENANT.get(env.TENANT.idFromName(HEALTH_PROBE_ID)).status(HEALTH_PROBE_CREDENTIAL),
-    );
-    if (outcome === TIMEOUT) return 'timeout';
-    switch (outcome) {
-      case 'ABSENT':
-      case 'ACTIVE':
-      case 'REVOKED':
-        return 'ok';
-      case 'invalid_input':
-      case 'storage_error':
-        return 'unavailable';
-    }
-    return 'unavailable'; // a status the declared union does not name
-  } catch {
-    return 'unavailable';
-  }
 }
 
 /** Result of the registry membership check that follows the classical checks. */
@@ -665,7 +610,7 @@ async function handleHealth(env: Env): Promise<Response> {
   } catch {
     capability_map = 'invalid';
   }
-  const registry = await probeRegistry(env);
+  const registry = await cachedProbeRegistry(env.TENANT);
   const meta = env.CF_VERSION_METADATA;
   // Copied field by field: the binding is a runtime object, and a timestamp is echoed only when present.
   const version =
@@ -774,7 +719,7 @@ export default {
       } else {
         response = await handleHealth(env);
         if (response.ok) {
-          outcome = 'allow';
+          outcome = 'ok'; // a resource route, not a verifier verdict
         } else {
           code = 'degraded';
         }

@@ -4,12 +4,13 @@
  * and env fail-closed behavior.
  */
 
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELF, env, createExecutionContext } from 'cloudflare:test';
 import { verifyReceipt } from '@bolyra/receipts';
 
 import worker, { type Env } from '../src/index';
 import { REGISTRY_DEADLINE_MS } from '../src/deadlines';
+import { resetHealthProbeCache } from '../src/health-probe';
 import { ORG_ID_PATTERN } from '../src/tenants';
 import { bindingDigest } from '../src/verify/binding';
 import type { Binding } from '../src/verify/bundle';
@@ -175,10 +176,15 @@ describe('routing + auth', () => {
   });
 });
 
+// The registry probe is cached per isolate (src/health-probe.ts); each test starts cold.
+beforeEach(() => {
+  resetHealthProbeCache();
+});
+
 describe('/health probes the registry and the capability map (E5)', () => {
   type Probe = { names: string[]; ids: string[] };
   /** A fake TENANT namespace recording what the probe asked for; `status` is the behavior under test. */
-  function fakeTenant(status: (id: string) => Promise<unknown>): { ns: typeof env.TENANT; probe: Probe } {
+  function fakeTenant(status: (id: string) => unknown): { ns: typeof env.TENANT; probe: Probe } {
     const probe: Probe = { names: [], ids: [] };
     const ns = {
       idFromName: (n: string) => {
@@ -279,14 +285,82 @@ describe('/health probes the registry and the capability map (E5)', () => {
     expect(body.registry).toBe('ok');
   });
 
-  it('a malformed TENANTS → 503 degraded, tenants "invalid", the other components still ok', async () => {
-    const res = await health({ ...env, TENANTS: '{not json' });
+  it('a registry stub whose status() throws SYNCHRONOUSLY → 503 registry "unavailable"', async () => {
+    const { ns } = fakeTenant(() => {
+      throw new Error('boom');
+    });
+    const res = await health({ ...env, TENANT: ns });
     expect(res.status).toBe(503);
-    const body = await bodyOf(res);
-    expect(body.status).toBe('degraded');
-    expect(body.tenants).toBe('invalid');
-    expect(body.capability_map).toBe('ok');
-    expect(body.registry).toBe('ok');
+    expect((await bodyOf(res)).registry).toBe('unavailable');
+  });
+
+  it('a fast probe leaves no deadline timer behind', async () => {
+    vi.useFakeTimers();
+    try {
+      const { ns } = fakeTenant(async () => 'ABSENT');
+      const res = await health({ ...env, TENANT: ns });
+      expect(res.status).toBe(200);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe('probe cache: single-flight, 10 s TTL, failures not cached', () => {
+    it('two concurrent /health calls → exactly one status() RPC', async () => {
+      const { ns, probe } = fakeTenant(async () => 'ABSENT');
+      const e = { ...env, TENANT: ns };
+      const [a, b] = await Promise.all([health(e), health(e)]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      expect(probe.ids).toHaveLength(1);
+    });
+
+    it('a healthy result is served from cache within 10 s and re-probed after it', async () => {
+      vi.useFakeTimers();
+      try {
+        const { ns, probe } = fakeTenant(async () => 'ABSENT');
+        const e = { ...env, TENANT: ns };
+        await health(e);
+        await vi.advanceTimersByTimeAsync(9_000);
+        await health(e);
+        expect(probe.ids).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(1_001);
+        const res = await health(e);
+        expect(res.status).toBe(200);
+        expect(probe.ids).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a failed probe is not served from cache: the next call re-probes', async () => {
+      let answer = 'storage_error';
+      const { ns, probe } = fakeTenant(async () => answer);
+      const e = { ...env, TENANT: ns };
+      expect((await health(e)).status).toBe(503);
+      answer = 'ABSENT';
+      const res = await health(e);
+      expect(res.status).toBe(200);
+      expect((await bodyOf(res)).registry).toBe('ok');
+      expect(probe.ids).toHaveLength(2);
+    });
+
+    it('a timed-out probe is not served from cache either', async () => {
+      vi.useFakeTimers();
+      try {
+        let hang = true;
+        const { ns, probe } = fakeTenant(() => (hang ? new Promise<never>(() => {}) : Promise.resolve('ABSENT')));
+        const e = { ...env, TENANT: ns };
+        const pending = health(e);
+        await vi.advanceTimersByTimeAsync(REGISTRY_DEADLINE_MS + 1);
+        expect((await pending).status).toBe(503);
+        hang = false;
+        expect((await health(e)).status).toBe(200);
+        expect(probe.ids).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
 

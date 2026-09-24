@@ -171,7 +171,7 @@ describe('Analytics Engine usage data point', () => {
     await worker.fetch(new Request(`${BASE}/health`), e);
     await worker.fetch(new Request(`${BASE}/does/not/exist`), e);
     expect(points).toHaveLength(2);
-    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/health', 'unauthenticated', 'allow', '']);
+    expect(points[0]!.blobs!.slice(0, 4)).toEqual(['/health', 'unauthenticated', 'ok', '']); // a resource route, not a verdict
     // Unknown paths are normalized to "other" — never store attacker-chosen URLs.
     expect(points[1]!.blobs!.slice(0, 4)).toEqual(['other', 'unauthenticated', 'error', 'not_found']);
     expect(points[1]!.doubles![1]).toBe(404);
