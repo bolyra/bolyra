@@ -24,7 +24,7 @@ Commercials + success criteria: `docs/pilot/design-partner-brief.md` and
 | Tenant registry | `pilot/tenants/<org_id>.json` (gitignored; template `pilot/partner-config.example.json`; no secrets — org id, status, operator keys, contacts) |
 | Policy record | `pilot/tenants/<org_id>.policy.json` (template `pilot/policy-config.example.json`) |
 | Trust anchor | each tenant's `trusted_operators` **plus** that tenant's managed credential registry: an allow needs a trusted key **and** a registered, unrevoked binding |
-| Managed credential registry | one SQLite Durable Object per tenant (`TENANT` binding, class `TenantRegistry`), reachable only through `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke` with the tenant's **admin** token. Persists the signed binding, operator key, credential id, status, and timestamps; never presentations, proofs, nonces, tokens, or IPs. Revoked records are kept forever |
+| Managed credential registry | one SQLite Durable Object per tenant (`TENANT` binding, class `TenantRegistry`), reachable only through `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `POST /v1/credentials/{id}/repair-history` with the tenant's **admin** token. Persists the signed binding, operator key, credential id, status, and timestamps; never presentations, proofs, nonces, tokens, or IPs. Revoked records are kept forever |
 | Capability map | `CAPABILITY_MAP` var in `wrangler.jsonc` (both environments): `@bolyra/mpp`'s `mpp:financial:*` vocabulary merged over the built-in messaging default. Global, not per tenant; a change needs a deploy (`wrangler deploy` re-sets vars from the file) |
 | Usage data | Analytics Engine dataset `bolyra_hosted_verify_usage` (counts + `<org_id>:<role>` labels only, never payloads or credential ids) |
 | CF analytics token | keychain service `bolyra-hosted-verify`, account `cf-analytics-token` |
@@ -231,6 +231,31 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/<credentia
 curl -s $BASE/health | jq .tenants                              # → "ok"
 ```
 
+### Recovering a revocation whose audit row failed
+
+Symptom: a revoke answered `204` **with** `x-bolyra-audit: history_write_failed`,
+or the request log (`npx wrangler tail --env=`) shows `code: "revoke_history_failed"`
+on a `hosted-verify registry request` line. The credential **is revoked** — verify
+already denies it `credential_not_active`, and a `GET` shows `"status": "REVOKED"`
+with `"pending_history": true`. Only its `revoked` history row is missing; the
+timestamp and request id it owes are stored with the credential.
+
+```bash
+# BASE and ADMIN as in step 1.5. Idempotent — safe to repeat:
+curl -s -X POST $BASE/v1/credentials/<credential_id>/repair-history \
+  -H "Authorization: Bearer $ADMIN"
+# → 200 {"credential_id":…,"audit":"repaired"}  the row is written from the stored metadata
+# → 200 {…,"audit":"clean"}                     nothing was owed
+# → 409 {"error":"history_conflict",…}          see below
+```
+
+A retry of the same `revoke` also attempts the repair (and answers a plain `204`
+once it succeeds). `history_conflict` means a **different** `revoked` event is
+already recorded for that credential (its `ts` or `request_id` does not match the
+metadata). The repair never overwrites it or clears the metadata: the Worker logs
+`hosted-verify history conflict` with both values — compare them and decide by
+hand. The credential stays revoked whatever you decide.
+
 Notes:
 - Secrets take effect on the next request; no redeploy.
 - `sync` replaces the WHOLE map from the registry directory: a file you delete
@@ -319,7 +344,8 @@ Full registry: `spec/external-verifier-contract-v1.md` §9.
 | `nonce_replayed` | 200 | (local mode only — not hosted) | Hosted is host-mode: THEY reserve `consume_nonces` before acting; `@bolyra/mpp`'s gate does this |
 | `internal_error` | 500 | Fail-closed: `TENANTS` unset or malformed, or `CAPABILITY_MAP` malformed (every tenant; an *unset* `CAPABILITY_MAP` is not a defect — it falls back to the messaging default and mpp capabilities then deny `unknown_capability`), a quarantined tenant, a registry RPC failure or its 2,000 ms deadline, a missing `TENANT` Durable Object binding (a deploy from an environment that did not redeclare it), or a bug | `npx wrangler tail --env=`; `/health` → `tenants` must be `"ok"`; `tenant.sh sync --dry-run` validates the map; check the deploy came from `wrangler.jsonc` with the `TENANT` binding |
 | *(409 `{"error":"credential_revoked"}`)* | 409 | Re-registering a revoked binding | Terminal by design; the partner must issue a new binding |
-| *(404 `{"error":"not_found"}`)* | 404 | Unknown credential id, a malformed id (not 64 lowercase hex), a wrong path, or **another tenant's** credential (never 403 — tenants cannot probe each other) | Routes: `GET /health`, `POST /v1/verify`, `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `GET /.well-known/bolyra-signers.json` |
+| *(409 `{"error":"history_conflict"}`)* | 409 | `repair-history` found a different `revoked` event already recorded for the credential | Needs a human look — see "Recovering a revocation whose audit row failed" in step 3. The credential is revoked either way |
+| *(404 `{"error":"not_found"}`)* | 404 | Unknown credential id, a malformed id (not 64 lowercase hex), a wrong path, or **another tenant's** credential (never 403 — tenants cannot probe each other) | Routes: `GET /health`, `POST /v1/verify`, `POST /v1/credentials`, `GET /v1/credentials/{id}`, `POST /v1/credentials/{id}/revoke`, `POST /v1/credentials/{id}/repair-history`, `GET /.well-known/bolyra-signers.json` |
 
 `/health` reports `tenants: "invalid"` → the map on the Worker is defective and
 every tenant is down: `tenant.sh sync --dry-run` from the registry, fix what it

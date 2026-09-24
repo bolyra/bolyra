@@ -220,10 +220,19 @@ except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
   `credential_id` is a stable identifier derived from the canonical operator
   key id and the signed binding — never from a presentation's nonce or proof.
 - **`GET /v1/credentials/{id}`** — `200 { credential_id, status, operator_key,
-  binding, binding_digest_hex, registered_at, revoked_at, history: [{ event, ts, request_id }] }`;
+  binding, binding_digest_hex, registered_at, revoked_at, pending_history, history: [{ event, ts, request_id }] }`;
   `404` for an id this tenant never registered. A malformed id is `404` for
   every caller, before authentication is even considered.
 - **`POST /v1/credentials/{id}/revoke`** — `204`; idempotent; `404` if absent.
+  The revocation is durable even if its audit (history) row cannot be written:
+  the answer is still `204`, with `x-bolyra-audit: history_write_failed`, the
+  credential is REVOKED (verify denies it), and `pending_history` is `true`
+  until the row is written.
+- **`POST /v1/credentials/{id}/repair-history`** — writes a revocation's owed
+  audit row from the metadata recorded with it; idempotent.
+  `200 { credential_id, audit: "repaired" | "clean" }`; `409 history_conflict`
+  when a different revoked event is already recorded (left for a human; the
+  credential stays revoked); `404` if absent.
 
 The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the request's `cf-ray` id (or a UUID when absent).
 `/health` reports `registry: "durable-object"` and `credential_id_version: "v1"`.

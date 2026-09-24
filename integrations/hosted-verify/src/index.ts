@@ -15,6 +15,9 @@
  *   POST /v1/credentials               Admin-token auth. Register an operator-signed
  *   GET  /v1/credentials/{id}          binding in the tenant's managed credential
  *   POST /v1/credentials/{id}/revoke   registry (src/registry.ts); read it; revoke it.
+ *   POST /v1/credentials/{id}/repair-history
+ *                                      write a revocation's owed audit row (a 204
+ *                                      revoke that carried x-bolyra-audit).
  *
  * Tenancy and roles (src/tenants.ts): the `TENANTS` secret maps an org id to
  * an admin token, a verifier token and that tenant's trusted operator keys.
@@ -391,7 +394,10 @@ async function membershipOf(env: Env, auth: AuthResult, verified: VerifiedClassi
   }
 }
 
-/** A registry-route outcome: the response plus the code recorded in analytics ('' on success). */
+/**
+ * A registry-route outcome: the response plus the code recorded in analytics
+ * ('' on a clean success; a success can carry a code, e.g. revoke_history_failed).
+ */
 interface RouteOutcome {
   response: Response;
   code: string;
@@ -536,13 +542,12 @@ async function handleRevoke(
   switch (result) {
     case 'revoked':
     case 'unchanged':
-      return {
-        response: new Response(null, {
-          status: 204,
-          headers: { 'cache-control': 'no-store', 'x-bolyra-preview': 'design-partner-preview' },
-        }),
-        code: '',
-      };
+      return { response: revoked(), code: '' };
+    case 'revoked_history_failed':
+      // The credential IS revoked (verify denies it); only its audit row is owed.
+      // Consumers keep their 204 contract; the header and the logged code carry
+      // the gap to the operator (pilot/RUNBOOK.md: repair-history).
+      return { response: revoked({ 'x-bolyra-audit': 'history_write_failed' }), code: 'revoke_history_failed' };
     case 'absent':
       return fail(404, 'not_found', 'no such credential');
     case 'invalid_input':
@@ -552,8 +557,37 @@ async function handleRevoke(
   return unknownOutcome('revoke', result);
 }
 
-/** `/v1/credentials`, `/v1/credentials/{id}`, `/v1/credentials/{id}/revoke` — nothing else. */
-const CREDENTIALS_ROUTE = /^\/v1\/credentials(?:\/([^/]+)(\/revoke)?)?$/;
+function revoked(extra?: Record<string, string>): Response {
+  return new Response(null, {
+    status: 204,
+    headers: { 'cache-control': 'no-store', 'x-bolyra-preview': 'design-partner-preview', ...extra },
+  });
+}
+
+/** POST /v1/credentials/{id}/repair-history — idempotent; see `TenantRegistry.repairHistory`. */
+async function handleRepairHistory(registry: DurableObjectStub<TenantRegistry>, id: string): Promise<RouteOutcome> {
+  const result = await registry.repairHistory(id);
+  switch (result) {
+    case 'repaired':
+    case 'clean':
+      return { response: json(200, { credential_id: id, audit: result }), code: '' };
+    case 'conflict':
+      return fail(
+        409,
+        'history_conflict',
+        'a different revoked event is already recorded for this credential; it needs operator review. The credential is revoked either way',
+      );
+    case 'absent':
+      return fail(404, 'not_found', 'no such credential');
+    case 'invalid_input':
+    case 'storage_error':
+      return fail(500, 'internal_error', 'registry storage failure');
+  }
+  return unknownOutcome('repair_history', result);
+}
+
+/** `/v1/credentials`, `/v1/credentials/{id}`, `…/{id}/revoke`, `…/{id}/repair-history` — nothing else. */
+const CREDENTIALS_ROUTE = /^\/v1\/credentials(?:\/([^/]+)(\/revoke|\/repair-history)?)?$/;
 
 function handleHealth(env: Env): Response {
   // /health is the diagnostic surface: a broken TENANTS is REPORTED here at
@@ -723,8 +757,8 @@ export default {
       // Registry routes: the analytics route is the family name, never a path with an id in it.
       route = '/v1/credentials';
       const id = credentials[1];
-      const isRevoke = credentials[2] !== undefined;
-      const method = id === undefined || isRevoke ? 'POST' : 'GET';
+      const action = credentials[2]; // '/revoke' | '/repair-history' | undefined
+      const method = id === undefined || action !== undefined ? 'POST' : 'GET';
       if (id !== undefined && !CREDENTIAL_ID_PATTERN.test(id)) {
         // Before method and auth: a malformed id is "no such credential" for every
         // caller, so the response cannot depend on who asks or how.
@@ -769,9 +803,11 @@ export default {
               result =
                 id === undefined
                   ? await handleRegister(request, gate.auth, registry, requestId)
-                  : isRevoke
+                  : action === '/revoke'
                     ? await handleRevoke(registry, id, requestId)
-                    : await handleGet(registry, id);
+                    : action === '/repair-history'
+                      ? await handleRepairHistory(registry, id)
+                      : await handleGet(registry, id);
             } catch (e) {
               // The object itself never throws, but the RPC transport can (the
               // object was reset or evicted mid-call, a connection was lost), an
@@ -832,6 +868,7 @@ export default {
           'POST /v1/credentials',
           'GET /v1/credentials/{id}',
           'POST /v1/credentials/{id}/revoke',
+          'POST /v1/credentials/{id}/repair-history',
           'GET /.well-known/bolyra-signers.json',
         ],
       });

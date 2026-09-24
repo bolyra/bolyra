@@ -5,7 +5,7 @@
  * (instance reset, data kept). Every mutation is one synchronous transaction,
  * so concurrent RPCs are ORDERING tests, not races.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { env, evictDurableObject, listDurableObjectIds, reset, runInDurableObject } from 'cloudflare:test';
 import type { RegisterInput, RegisterResult } from '../src/registry';
 import { ORGS } from './tenants-fixture';
@@ -50,6 +50,7 @@ describe('register', () => {
       binding_json: input(ID_A).binding_json,
       registered_at: NOW,
       revoked_at: null,
+      pending_history: false,
       history: [{ event: 'registered', ts: NOW, request_id: 'req-1' }],
     });
   });
@@ -239,5 +240,177 @@ describe('durability contracts', () => {
     const ids = await listDurableObjectIds(env.TENANT);
     const expected = [ORGS.A, ORGS.B, ORGS.C].map((o) => env.TENANT.idFromName(o).toString()).sort();
     expect(ids.map((i) => i.toString()).sort()).toEqual(expected);
+  });
+});
+
+type Stub = ReturnType<typeof registry>;
+type Pending = { pending_history: number; pending_request_id: string | null; pending_at: number | null };
+
+/** Put a 'revoked' history row in place so the revocation's own insert collides with it. */
+async function seedRevokedEvent(r: Stub, id: string, ts: number, request_id: string): Promise<void> {
+  await runInDurableObject(r, (_i, state) => {
+    state.storage.sql.exec("INSERT INTO history (credential_id, event, ts, request_id) VALUES (?, 'revoked', ?, ?)", id, ts, request_id);
+  });
+}
+
+async function deleteRevokedEvent(r: Stub, id: string): Promise<void> {
+  await runInDurableObject(r, (_i, state) => {
+    state.storage.sql.exec("DELETE FROM history WHERE credential_id = ? AND event = 'revoked'", id);
+  });
+}
+
+async function pendingOf(r: Stub, id: string): Promise<Pending> {
+  return runInDurableObject(r, (_i, state) =>
+    state.storage.sql
+      .exec<Pending>('SELECT pending_history, pending_request_id, pending_at FROM credentials WHERE credential_id = ?', id)
+      .one(),
+  );
+}
+
+const CLEAN: Pending = { pending_history: 0, pending_request_id: null, pending_at: null };
+
+describe('durable revocation and audit repair', () => {
+  it('a failed history write leaves the credential REVOKED with pending metadata; a later revoke repairs it from that metadata', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    await seedRevokedEvent(r, ID_A, 1, 'seed');
+    expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked_history_failed');
+    expect(await r.status(ID_A)).toBe('REVOKED');
+    expect(await pendingOf(r, ID_A)).toEqual({ pending_history: 1, pending_request_id: 'r1', pending_at: NOW + 1 });
+    const got = await r.get(ID_A);
+    expect(got.outcome === 'found' && got.record.pending_history).toBe(true);
+    expect(got.outcome === 'found' && got.record.revoked_at).toBe(NOW + 1);
+
+    await deleteRevokedEvent(r, ID_A);
+    expect(await r.revoke(ID_A, NOW + 2, 'r2')).toBe('unchanged');
+    expect(await pendingOf(r, ID_A)).toEqual(CLEAN);
+    const after = await r.get(ID_A);
+    expect(after.outcome).toBe('found');
+    if (after.outcome !== 'found') return;
+    expect(after.record.pending_history).toBe(false);
+    expect(after.record.revoked_at).toBe(NOW + 1);
+    expect(after.record.history).toEqual([
+      { event: 'registered', ts: NOW, request_id: 'req-1' },
+      { event: 'revoked', ts: NOW + 1, request_id: 'r1' },
+    ]);
+  });
+
+  it('a persistent collision: every revoke stays revoked_history_failed, repair reports conflict and never clears the metadata', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    await seedRevokedEvent(r, ID_A, 1, 'seed');
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
+    try {
+      expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked_history_failed');
+      expect(await r.revoke(ID_A, NOW + 2, 'r2')).toBe('revoked_history_failed');
+      expect(await r.repairHistory(ID_A)).toBe('conflict');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await pendingOf(r, ID_A)).toEqual({ pending_history: 1, pending_request_id: 'r1', pending_at: NOW + 1 });
+    expect(await r.status(ID_A)).toBe('REVOKED');
+    const conflict = errors.find((e) => e[0] === 'hosted-verify history conflict');
+    expect(conflict?.[1]).toEqual({
+      credential_id: ID_A,
+      pending: { ts: NOW + 1, request_id: 'r1' },
+      stored: { ts: 1, request_id: 'seed' },
+    });
+    // No log line carries the stored binding.
+    expect(JSON.stringify(errors)).not.toContain('DROP TABLE');
+  });
+
+  it.each([
+    ['the same request id at a different ts', 1, 'r1'],
+    ['the same ts under a different request id', NOW + 1, 'other'],
+  ])('a stored revoked event with %s is a conflict, not our own event', async (_name, ts, request_id) => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    await seedRevokedEvent(r, ID_A, ts, request_id);
+    expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked_history_failed');
+    expect(await r.repairHistory(ID_A)).toBe('conflict');
+    expect((await pendingOf(r, ID_A)).pending_history).toBe(1);
+  });
+
+  it('crash recovery: REVOKED with pending metadata and no event → repairHistory writes the event from the metadata and clears it', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    const T = NOW + 7;
+    await runInDurableObject(r, (_i, state) => {
+      state.storage.sql.exec(
+        "UPDATE credentials SET status = 'REVOKED', revoked_at = ?, pending_history = 1, pending_request_id = 'p', pending_at = ? WHERE credential_id = ?",
+        T,
+        T,
+        ID_A,
+      );
+    });
+    expect(await r.repairHistory(ID_A)).toBe('repaired');
+    expect(await pendingOf(r, ID_A)).toEqual(CLEAN);
+    const got = await r.get(ID_A);
+    expect(got.outcome === 'found' && got.record.history[1]).toEqual({ event: 'revoked', ts: T, request_id: 'p' });
+    expect(await r.repairHistory(ID_A)).toBe('clean');
+  });
+
+  it('crash recovery through a plain revoke: repairs and answers unchanged', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    const T = NOW + 7;
+    await runInDurableObject(r, (_i, state) => {
+      state.storage.sql.exec(
+        "UPDATE credentials SET status = 'REVOKED', revoked_at = ?, pending_history = 1, pending_request_id = 'p', pending_at = ? WHERE credential_id = ?",
+        T,
+        T,
+        ID_A,
+      );
+    });
+    expect(await r.revoke(ID_A, NOW + 9, 'later')).toBe('unchanged');
+    expect(await pendingOf(r, ID_A)).toEqual(CLEAN);
+    const got = await r.get(ID_A);
+    expect(got.outcome === 'found' && got.record.history.map((h) => [h.event, h.ts, h.request_id])).toEqual([
+      ['registered', NOW, 'req-1'],
+      ['revoked', T, 'p'],
+    ]);
+  });
+
+  it('pending metadata that matches the stored event exactly is our own committed event: cleared, repaired', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    expect(await r.revoke(ID_A, NOW + 3, 'r1')).toBe('revoked');
+    await runInDurableObject(r, (_i, state) => {
+      state.storage.sql.exec(
+        "UPDATE credentials SET pending_history = 1, pending_request_id = 'r1', pending_at = ? WHERE credential_id = ?",
+        NOW + 3,
+        ID_A,
+      );
+    });
+    expect(await r.repairHistory(ID_A)).toBe('repaired');
+    expect(await pendingOf(r, ID_A)).toEqual(CLEAN);
+    const got = await r.get(ID_A);
+    expect(got.outcome === 'found' && got.record.history).toHaveLength(2);
+  });
+
+  it('a normal revoke leaves no pending metadata; repairHistory on it → clean; unknown → absent; ill-typed → invalid_input', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    expect(await r.repairHistory(ID_A)).toBe('clean');
+    expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked');
+    expect(await pendingOf(r, ID_A)).toEqual(CLEAN);
+    expect(await r.repairHistory(ID_A)).toBe('clean');
+    expect(await r.repairHistory(ID_B)).toBe('absent');
+    expect(await r.repairHistory(12345 as unknown as string)).toBe('invalid_input');
+  });
+
+  it('pending metadata survives an instance reset and is repairable afterwards', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    await seedRevokedEvent(r, ID_A, 1, 'seed');
+    expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked_history_failed');
+    await deleteRevokedEvent(r, ID_A);
+    await evictDurableObject(r);
+    const again = registry(ORGS.A);
+    expect(await again.status(ID_A)).toBe('REVOKED');
+    expect(await again.repairHistory(ID_A)).toBe('repaired');
+    const got = await again.get(ID_A);
+    expect(got.outcome === 'found' && got.record.history[1]).toEqual({ event: 'revoked', ts: NOW + 1, request_id: 'r1' });
   });
 });

@@ -24,6 +24,18 @@
  *                          defect or a collision; never silently kept, never overwritten)
  *              REVOKED  ─► { revoked }   (terminal; nothing is replaced)
  *   revoke:    absent ─► 'absent'   ACTIVE ─► 'revoked' + history   REVOKED ─► 'unchanged'
+ *              ACTIVE, history write fails ─► 'revoked_history_failed' (still REVOKED; see below)
+ *
+ * Revocation is durable even when its audit row cannot be written. It is two
+ * transactions, run back to back with no `await` between them:
+ *   1. status → REVOKED, and the event it owes the history (pending_history = 1,
+ *      pending_request_id, pending_at) recorded ON the credential row;
+ *   2. the 'revoked' history row inserted from that metadata AND the metadata
+ *      cleared, together.
+ * If (2) fails the revocation stands and the metadata stays: `repairHistory`
+ * (and any later `revoke` of the same id) retries (2) idempotently. A stored
+ * 'revoked' row that does not match the metadata exactly (ts AND request_id)
+ * is a conflict: reported, never cleared — the credential is revoked either way.
  *
  * A credential row and its 'registered' event are created in the same
  * transaction, so a history row without a credential row cannot exist.
@@ -67,7 +79,16 @@ export type RegisterResult =
   | { outcome: 'invalid_input' }
   | { outcome: 'storage_error' };
 
-export type RevokeResult = 'revoked' | 'unchanged' | 'absent' | 'invalid_input' | 'storage_error';
+export type RevokeResult =
+  | 'revoked'
+  | 'unchanged'
+  /** The credential IS revoked; its audit row is owed (pending metadata kept for repair). */
+  | 'revoked_history_failed'
+  | 'absent'
+  | 'invalid_input'
+  | 'storage_error';
+
+export type RepairResult = 'repaired' | 'clean' | 'conflict' | 'absent' | 'invalid_input' | 'storage_error';
 
 export type StatusResult = Status | 'invalid_input' | 'storage_error';
 
@@ -87,6 +108,8 @@ export interface CredentialRecord {
   binding_json: string;
   registered_at: number;
   revoked_at: number | null;
+  /** True while the revocation's history row is owed (see `repairHistory`). */
+  pending_history: boolean;
   history: HistoryEvent[];
 }
 
@@ -163,6 +186,9 @@ type CredentialRow = {
   binding_json: string;
   registered_at: number;
   revoked_at: number | null;
+  pending_history: number;
+  pending_request_id: string | null;
+  pending_at: number | null;
 };
 
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -183,11 +209,11 @@ function validRegisterInput(input: unknown): input is RegisterInput {
 }
 
 /** SQLite messages name tables, columns and constraints — never bound values (verified). */
-function logStorageError(operation: string, requestId: string | undefined, e: unknown): void {
+function logStorageError(operation: string, requestId: string | undefined, e: unknown, credentialId?: string): void {
   console.error(
     `hosted-verify registry storage error (${operation}):`,
     e instanceof Error ? (e.stack ?? e.message) : String(e),
-    { request_id: requestId ?? '' },
+    { request_id: requestId ?? '', ...(credentialId !== undefined ? { credential_id: credentialId } : {}) },
   );
 }
 
@@ -291,25 +317,54 @@ export class TenantRegistry extends DurableObject<Env> {
     if (!isNonEmptyString(credential_id) || !isUnixSeconds(now) || typeof request_id !== 'string') {
       return 'invalid_input';
     }
+    // Transaction 1: the revocation itself, with the audit event it owes.
+    let step: RevokeResult | 'repair' | { revokedAt: number };
     try {
-      return this.ctx.storage.transactionSync((): RevokeResult => {
+      step = this.ctx.storage.transactionSync((): RevokeResult | 'repair' | { revokedAt: number } => {
         const row = this.ctx.storage.sql
-          .exec<Pick<CredentialRow, 'status' | 'registered_at'>>(
-            'SELECT status, registered_at FROM credentials WHERE credential_id = ?',
+          .exec<Pick<CredentialRow, 'status' | 'registered_at' | 'pending_history'>>(
+            'SELECT status, registered_at, pending_history FROM credentials WHERE credential_id = ?',
             credential_id,
           )
           .toArray()[0];
         if (row === undefined) return 'absent';
-        if (row.status === 'REVOKED') return 'unchanged';
+        if (row.status === 'REVOKED') return row.pending_history === 1 ? 'repair' : 'unchanged';
         // Clocks differ between the colo that registered and the one revoking:
         // never record a revocation earlier than the registration it ends.
         const revokedAt = Math.max(now, row.registered_at);
         this.ctx.storage.sql.exec(
-          'UPDATE credentials SET status = ?, revoked_at = ? WHERE credential_id = ?',
+          'UPDATE credentials SET status = ?, revoked_at = ?, pending_history = 1, pending_request_id = ?, pending_at = ? WHERE credential_id = ?',
           'REVOKED',
+          revokedAt,
+          request_id,
           revokedAt,
           credential_id,
         );
+        return { revokedAt };
+      });
+    } catch (e) {
+      logStorageError('revoke', request_id, e, credential_id);
+      return 'storage_error';
+    }
+    if (step === 'repair') {
+      // Already revoked, audit row still owed: this call is a retry of it.
+      const repaired = this.#repair(credential_id);
+      switch (repaired) {
+        case 'repaired':
+        case 'clean':
+          return 'unchanged';
+        case 'conflict':
+          return 'revoked_history_failed';
+        default:
+          return 'storage_error';
+      }
+    }
+    if (typeof step === 'string') return step;
+    const { revokedAt } = step;
+    // Transaction 2: the audit row and the clearing of its metadata, together.
+    // Synchronous and right after (1), so no other call runs in between.
+    try {
+      this.ctx.storage.transactionSync(() => {
         this.ctx.storage.sql.exec(
           'INSERT INTO history (credential_id, event, ts, request_id) VALUES (?, ?, ?, ?)',
           credential_id,
@@ -317,10 +372,79 @@ export class TenantRegistry extends DurableObject<Env> {
           revokedAt,
           request_id,
         );
-        return 'revoked';
+        this.ctx.storage.sql.exec(
+          'UPDATE credentials SET pending_history = 0, pending_request_id = NULL, pending_at = NULL WHERE credential_id = ?',
+          credential_id,
+        );
       });
     } catch (e) {
-      logStorageError('revoke', request_id, e);
+      // The revocation stands (transaction 1 committed); the metadata stays for repair.
+      logStorageError('revoke_history_failed', request_id, e, credential_id);
+      return 'revoked_history_failed';
+    }
+    return 'revoked';
+  }
+
+  /**
+   * Write a revocation's owed audit row from its pending metadata. Idempotent:
+   *   no pending metadata            ─► 'clean'
+   *   no 'revoked' row               ─► insert it from the metadata, clear ─► 'repaired'
+   *   a 'revoked' row with the SAME ts and request_id (our own event) ─► clear ─► 'repaired'
+   *   a 'revoked' row that differs in either ─► 'conflict', metadata KEPT, logged
+   */
+  repairHistory(credential_id: string): RepairResult {
+    if (this.#schemaError !== undefined) return 'storage_error';
+    if (!isNonEmptyString(credential_id)) return 'invalid_input';
+    return this.#repair(credential_id);
+  }
+
+  #repair(credential_id: string): RepairResult {
+    try {
+      return this.ctx.storage.transactionSync((): RepairResult => {
+        const sql = this.ctx.storage.sql;
+        const row = sql
+          .exec<Pick<CredentialRow, 'pending_history' | 'pending_request_id' | 'pending_at'>>(
+            'SELECT pending_history, pending_request_id, pending_at FROM credentials WHERE credential_id = ?',
+            credential_id,
+          )
+          .toArray()[0];
+        if (row === undefined) return 'absent';
+        if (row.pending_history !== 1) return 'clean';
+        const pending = { ts: row.pending_at, request_id: row.pending_request_id };
+        const stored = sql
+          .exec<Pick<HistoryEvent, 'ts' | 'request_id'>>(
+            "SELECT ts, request_id FROM history WHERE credential_id = ? AND event = 'revoked'",
+            credential_id,
+          )
+          .toArray()[0];
+        const unusable = pending.ts === null || pending.request_id === null;
+        const foreign = stored !== undefined && (stored.ts !== pending.ts || stored.request_id !== pending.request_id);
+        if (unusable || foreign) {
+          // Never cleared silently: a human decides which record is right.
+          console.error('hosted-verify history conflict', {
+            credential_id,
+            pending,
+            stored: stored === undefined ? null : { ts: stored.ts, request_id: stored.request_id },
+          });
+          return 'conflict';
+        }
+        if (stored === undefined) {
+          sql.exec(
+            'INSERT INTO history (credential_id, event, ts, request_id) VALUES (?, ?, ?, ?)',
+            credential_id,
+            'revoked',
+            pending.ts,
+            pending.request_id,
+          );
+        }
+        sql.exec(
+          'UPDATE credentials SET pending_history = 0, pending_request_id = NULL, pending_at = NULL WHERE credential_id = ?',
+          credential_id,
+        );
+        return 'repaired';
+      });
+    } catch (e) {
+      logStorageError('repair_history', undefined, e, credential_id);
       return 'storage_error';
     }
   }
@@ -330,8 +454,8 @@ export class TenantRegistry extends DurableObject<Env> {
     if (!isNonEmptyString(credential_id)) return { outcome: 'invalid_input' };
     try {
       const row = this.ctx.storage.sql
-        .exec<CredentialRow>(
-          'SELECT credential_id, status, operator_key, binding_digest, binding_json, registered_at, revoked_at FROM credentials WHERE credential_id = ?',
+        .exec<Omit<CredentialRow, 'pending_request_id' | 'pending_at'>>(
+          'SELECT credential_id, status, operator_key, binding_digest, binding_json, registered_at, revoked_at, pending_history FROM credentials WHERE credential_id = ?',
           credential_id,
         )
         .toArray()[0];
@@ -343,8 +467,11 @@ export class TenantRegistry extends DurableObject<Env> {
         )
         .toArray()
         .map((h) => ({ event: h.event, ts: h.ts, request_id: h.request_id }));
-      const { binding_digest, ...rest } = row;
-      return { outcome: 'found', record: { ...rest, binding_digest_hex: binding_digest, history } };
+      const { binding_digest, pending_history, ...rest } = row;
+      return {
+        outcome: 'found',
+        record: { ...rest, binding_digest_hex: binding_digest, pending_history: pending_history === 1, history },
+      };
     } catch (e) {
       logStorageError('get', undefined, e);
       return { outcome: 'storage_error' };
