@@ -11,7 +11,10 @@
  *              Details `code`; plus the in-process verdict the gate threw.
  *   [verifier] what only the hosted verifier shows — the `x-bolyra-credential-id` header,
  *              the signed receipt (checked with `bolyra receipt verify`), and the deny
- *              `detail` (`reason`, `credential_id`).
+ *              `detail` (`reason`, `credential_id`); plus the registered id checked against
+ *              one derived in-process from the mandate (`credentialId(operator key,
+ *              bindingDigest(binding))` with this example's installed @bolyra/mpp and the
+ *              Worker's own credential-id.ts), so a digest drift between the two is caught.
  *
  * Environment: VERIFY_URL (default http://127.0.0.1:8787), ADMIN_TOKEN and VERIFIER_TOKEN
  * (default: the placeholder tenant of integrations/hosted-verify/.dev.vars.example — not
@@ -21,10 +24,13 @@
  */
 import { randomBytes } from 'node:crypto';
 import { Receipt } from 'mppx';
-import { issueMandate, type IssuedMandate } from '@bolyra/mpp';
+import { bindingDigest, issueMandate, type BindingClaim, type IssuedMandate } from '@bolyra/mpp';
+// The Worker's own derivation, imported by path (tsx resolves the TypeScript source), so the
+// run below can check the id the Worker returns against one computed here from the mandate.
+import { credentialId } from '../../../integrations/hosted-verify/src/credential-id.js';
 import { paidCall } from './client.js';
 import { AUDIENCE, MODEL, createServer } from './server.js';
-import { DiagnosticError, health, register, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
+import { DiagnosticError, health, register, registrationOf, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
 import { CLI_VERSION, PACKAGES } from './versions.js';
 
 /** The repo's documented test-only operator scalar; the placeholder tenant trusts its public key. */
@@ -108,6 +114,13 @@ async function main(): Promise<void> {
   const reg = await register(hosted, mandate);
   const id = reg.credential_id ?? '';
   check('[verifier]', 'POST /v1/credentials (new binding)', reg.status === 201 && id !== '', '201 + credential_id', `${reg.status} ${shownId(id)}`);
+  // The same object register() sends: the signed binding lifted from the presentation.
+  const registration = registrationOf(mandate);
+  const localId = credentialId(
+    { x: BigInt(registration.operator_pubkey.x), y: BigInt(registration.operator_pubkey.y) },
+    bindingDigest(registration.binding as BindingClaim),
+  );
+  check('[verifier]', 'credential_id equals the id derived in-process from the mandate', id === localId, 'same id', id === localId ? 'same id' : 'DIFFERENT id');
   const again = await register(hosted, await issue(AGENT));
   check('[verifier]', 'POST /v1/credentials (same binding, fresh presentation)', again.status === 200 && again.credential_id === id, '200, same id', `${again.status} ${again.credential_id === id ? 'same id' : 'DIFFERENT id'}`);
 

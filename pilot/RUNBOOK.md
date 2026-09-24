@@ -174,7 +174,7 @@ curl -s -X POST $BASE/v1/verify -H "Authorization: Bearer $TOKEN" -H "Content-Ty
 
 # 6. The end-to-end acceptance test is the example, pointed at the deployment:
 #    register → allow → allow → revoke → deny credential_not_active → an independent
-#    credential still allows (20 checks; exits non-zero on any miss):
+#    credential still allows (21 checks; exits non-zero on any miss):
 (cd ../../examples/managed-revocation && npm ci && VERIFY_URL=$BASE ADMIN_TOKEN=$ADMIN VERIFIER_TOKEN=$TOKEN npm run demo)
 
 # 7. Confirm attribution (rows under their <org_id>:verifier label; repeat with :admin for the registry calls):
@@ -380,8 +380,8 @@ curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '
   VERIFY_URL=https://bolyra-hosted-verify-staging.<account>.workers.dev \
   ADMIN_TOKEN="$(security find-generic-password -s bolyra-hosted-verify-staging -a tenant-<org_id>-admin -w)" \
   VERIFIER_TOKEN="$(security find-generic-password -s bolyra-hosted-verify-staging -a tenant-<org_id>-verifier -w)" \
-  npm run demo)                                               # → 20/20 checks passed
-# Record the run (date, commit, version id, "20/20") in the table below.
+  npm run demo)                                               # → 21/21 checks passed
+# Record the run (date, commit, version id, "21/21") in the table below.
 
 # ── Production: the first managed cutover ───────────────────────────────────
 # Zero consumers are on record, so a maintenance window is a courtesy, not a risk.
