@@ -23,8 +23,9 @@
 #
 # Usage:
 #   ./tenant.sh init                  initialize an EMPTY registry for a new environment
-#                                     (refuses one that holds records, a .candidate/, or is
-#                                     already initialized)
+#                                     (refuses one that holds anything but its .lock — a
+#                                     record, a .candidate/, a stray file — or is already
+#                                     initialized)
 #   ./tenant.sh migrate --from <absolute dir>
 #                                     bring an existing registry (e.g. the legacy checkout
 #                                     directory pilot/tenants) into $TENANTS_DIR: copies every
@@ -246,20 +247,26 @@ acquire_lock() {
 
 # has_registry_content — does the directory hold anything a migrate commits (any non-dot *.json
 # regular file: a record or a policy file) or a .candidate/? Names only; never a token.
+# E2: a destination is empty only when it holds NOTHING but the lock this run owns — any file or
+# subdirectory (a record, a policy file, a .candidate/, a stray notes.txt) makes it non-empty, so
+# `init` cannot bless, and `migrate` cannot merge into, whatever is there. The first entry found
+# is left in REGISTRY_ENTRY for the message. Names only; never a token.
+REGISTRY_ENTRY=""
 has_registry_content() {
   local f b
-  [ ! -e "$CANDIDATE_DIR" ] || return 0
-  for f in "$TENANTS_DIR"/*.json; do
-    [ -f "$f" ] || continue
+  REGISTRY_ENTRY=""
+  for f in "$TENANTS_DIR"/* "$TENANTS_DIR"/.[!.]* "$TENANTS_DIR"/..?*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
     b="$(basename "$f")"
-    case "$b" in .*) continue ;; esac
+    [ "$b" != .lock ] || continue
+    REGISTRY_ENTRY="$b"
     return 0
   done
   return 1
 }
-uninitialized_msg() {  # $1 the command, named only when the directory holds records
+uninitialized_msg() {  # $1 the command, named only when the directory is not empty
   if has_registry_content; then
-    echo "$1: $TENANTS_DIR has records but no marker: it looks like an interrupted migrate; delete them and re-run migrate, or move them aside (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+    echo "$1: $TENANTS_DIR is not empty but has no marker (found '$REGISTRY_ENTRY'): it looks like an interrupted migrate; delete everything in it but .lock and re-run migrate, or move it aside (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
   else
     echo "registry $TENANTS_DIR is not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>' to bring existing records over"
   fi
@@ -294,6 +301,10 @@ have_security() { command -v security >/dev/null 2>&1; }
 require_security() { have_security || die "the macOS keychain (security) is required for tokens"; }
 kc_account() { echo "tenant-$1-$2"; }
 kc_has() { have_security && security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null 2>&1; }
+# kc_lookup — 0 the item exists, 44 (errSecItemNotFound) it does not, anything else a lookup ERROR
+# (a locked keychain, access denied) that proves neither. kc_has reads every failure as "absent",
+# which is right only where absence fails closed; `remove` must tell the two apart.
+kc_lookup() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null 2>&1; }
 kc_get() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" -w; }
 kc_put() {  # $1 org, $2 role, $3 token — -U updates in place
   # No token may reach an xtrace log; restore tracing on the way out.
@@ -440,7 +451,7 @@ cmd_enable() {
 }
 
 cmd_remove() {
-  local org="${1:-}" flag="${2:-}" extra="${3:-}" prev role outcome=0 present="" failed="" others
+  local org="${1:-}" flag="${2:-}" extra="${3:-}" prev role outcome=0 present="" failed="" others lrc
   [ -n "$org" ] || usage
   case "$flag" in
     "" | --last) ;;
@@ -471,10 +482,18 @@ cmd_remove() {
   if [ "$others" != 0 ] && [ "$flag" = "--last" ]; then
     echo "note: --last given, but '$org' is not the last tenant; the map stays non-empty" >&2
   fi
-  # Which items exist now decides which deletes are owed afterwards: one already absent is
-  # not a failure to delete.
+  # Which items exist now is only reported (both deletes are attempted after a confirmed upload;
+  # 44 there means already gone). A lookup ERROR is not absence: it refuses here, before anything
+  # changes — read as "absent", a `remove --last` (whose {} needs no token) would report success
+  # and never try to delete tokens that may well still be there.
   for role in admin verifier; do
-    if kc_has "$org" "$role"; then present="$present $role"; fi
+    lrc=0
+    kc_lookup "$org" "$role" || lrc=$?
+    case "$lrc" in
+      0) present="$present $role" ;;
+      44) ;;
+      *) die "remove: could not look up keychain item $(kc_account "$org" "$role") in service $KEYCHAIN_SERVICE (security exit $lrc: locked or access denied?); nothing changed. Unlock the keychain and re-run remove" ;;
+    esac
   done
   REMOVE_BACKUP="$(mktemp "${TMPDIR:-/tmp}/tenant-remove.XXXXXX")" || die "remove: could not create a temporary copy of the registry file"
   cp "$(registry_file "$org")" "$REMOVE_BACKUP" || die "remove: could not copy the registry file before changing it"
@@ -498,7 +517,7 @@ cmd_remove() {
   fi
   case "$outcome" in
     0)
-      for role in $present; do
+      for role in admin verifier; do
         kc_delete "$org" "$role" || failed="$failed $(kc_account "$org" "$role")"
       done
       if [ -n "$failed" ]; then
@@ -658,11 +677,14 @@ do_sync() {
     echo "error: sync: the assembled map is empty (every tenant is removed); pass --allow-empty to push it deliberately" >&2
     return 2
   fi
-  local put_args=("${WRANGLER_ENV[@]}")
-  [ "$allow_empty" = 0 ] || put_args+=(--allow-empty)
+  local put_args=("${WRANGLER_ENV[@]}") empty_args=()
+  # Every stage that can EMIT {} refuses it on its own without the flag (E13); forward it to all
+  # three only when this run is authorized to produce the empty map.
+  if [ "$allow_empty" = 1 ]; then put_args+=(--allow-empty); empty_args=(--allow-empty); fi
   echo "assembling TENANTS from $TENANTS_DIR (tokens from keychain service $KEYCHAIN_SERVICE)…" >&2
   if [ "$dry" = 1 ]; then
-    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" || exit $?
+    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" ${empty_args[@]+"${empty_args[@]}"} \
+      | node "$SCRIPT_DIR/tenants-check.mjs" ${empty_args[@]+"${empty_args[@]}"} || exit $?
     echo "(dry run: not pushing)" >&2
     return 0
   fi
@@ -681,7 +703,8 @@ do_sync() {
   # after a validated map has arrived — and an empty one ({}) only with --allow-empty.
   # pipefail is set, so a failure anywhere
   # (keychain, assembly, validation, guard, wrangler) is loud.
-  tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
+  tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" ${empty_args[@]+"${empty_args[@]}"} \
+      | node "$SCRIPT_DIR/tenants-check.mjs" --pass ${empty_args[@]+"${empty_args[@]}"} \
       | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${put_args[@]}") || rc=$?
   SYNC_RC="$rc"
   # What happened to the upload is read from what the put stage RECORDED, never from $rc. An
@@ -739,7 +762,7 @@ cmd_show() {
   if [ -f "$MARKER_FILE" ]; then
     echo "registry: $TENANTS_DIR (initialized)"
   elif has_registry_content; then
-    echo "registry: $TENANTS_DIR (not initialized: has records but no marker, an interrupted migrate; see pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+    echo "registry: $TENANTS_DIR (not initialized: not empty but has no marker (found '$REGISTRY_ENTRY'), an interrupted migrate?; see pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
   else
     echo "registry: $TENANTS_DIR (not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>')"
   fi
@@ -805,7 +828,10 @@ migrate_validate() {
   done 3<<< "$orgs"
   if [ "$rc" = 0 ]; then
     echo "validating the candidate map (tokens from keychain service $KEYCHAIN_SERVICE)…" >&2
-    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$CANDIDATE_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" >&2 || rc=1
+    # --allow-empty unconditionally: an all-removed candidate is a legitimate registry to
+    # validate, and nothing is uploaded here.
+    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$CANDIDATE_DIR" --allow-empty \
+      | node "$SCRIPT_DIR/tenants-check.mjs" --allow-empty >&2 || rc=1
   fi
   TENANTS_DIR="$dest"
   return "$rc"
@@ -852,10 +878,10 @@ cmd_migrate() {
   for f in "$CANDIDATE_DIR"/*.json; do
     [ -f "$f" ] || continue
     b="$(basename "$f")"
-    [ ! -e "$TENANTS_DIR/$b" ] || die "migrate: $TENANTS_DIR/$b already exists; refusing to overwrite it. The registry has records but no marker (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
-    mv "$f" "$TENANTS_DIR/$b" || die "migrate: could not move $b into $TENANTS_DIR. The registry has records but no marker (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+    [ ! -e "$TENANTS_DIR/$b" ] || die "migrate: $TENANTS_DIR/$b already exists; refusing to overwrite it. The registry is not empty but has no marker (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
+    mv "$f" "$TENANTS_DIR/$b" || die "migrate: could not move $b into $TENANTS_DIR. The registry is not empty but has no marker (pilot/RUNBOOK.md, \"Initializing or migrating the registry\")"
   done
-  : > "$MARKER_FILE" || die "migrate: every file was committed but $MARKER_FILE could not be written; the registry has records but no marker"
+  : > "$MARKER_FILE" || die "migrate: every file was committed but $MARKER_FILE could not be written; the registry is not empty but has no marker"
   rmdir "$CANDIDATE_DIR" 2>/dev/null || echo "warning: could not remove $CANDIDATE_DIR (it should be empty); remove it by hand" >&2
   CRITICAL=0
   echo "migrated $n_rec records and $n_pol policy files from $from into $TENANTS_DIR; the registry is initialized"

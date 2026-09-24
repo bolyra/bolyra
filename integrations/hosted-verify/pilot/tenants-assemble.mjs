@@ -107,11 +107,18 @@ export function assemble(dir, tokenText) {
 
 // CLI entry (only when run directly under Node; the module is also imported by the tests).
 if (typeof process !== 'undefined' && process.argv?.[1] && /tenants-assemble\.mjs$/.test(process.argv[1])) {
-  const dir = process.argv[2];
-  if (!dir) {
-    process.stderr.write('usage: tenants-assemble.mjs <registry-dir> < tokens\n');
+  const [dir, ...rest] = process.argv.slice(2);
+  if (!dir || dir.startsWith('--')) {
+    process.stderr.write('usage: tenants-assemble.mjs <registry-dir> [--allow-empty] < tokens\n');
     process.exit(2);
   }
+  // E13: `{}` (every tenant removed) is a valid map, but EMITTING it takes the deliberate flag
+  // at every stage that can — a misspelled flag must refuse, never fall back to emitting.
+  if (rest.length > 1 || (rest.length === 1 && rest[0] !== '--allow-empty')) {
+    process.stderr.write(`tenants-assemble: unknown argument ${JSON.stringify(rest.length === 1 ? rest[0] : rest[1])} (only --allow-empty is accepted)\n`);
+    process.exit(2);
+  }
+  const allowEmpty = rest.length === 1;
   const chunks = [];
   process.stdin.on('error', (e) => {
     process.stderr.write(`tenants-assemble: could not read stdin (${e.code ?? 'error'})\n`);
@@ -126,6 +133,10 @@ if (typeof process !== 'undefined' && process.argv?.[1] && /tenants-assemble\.mj
       // An AssembleError message is written for the operator; anything else (the directory
       // unreadable, say) is reported by its code alone — never a stack trace.
       process.stderr.write(`tenants-assemble: ${e instanceof AssembleError ? e.message : `could not assemble (${e?.code ?? e?.name ?? 'error'})`}\n`);
+      process.exit(1);
+    }
+    if (Object.keys(map).length === 0 && !allowEmpty) {
+      process.stderr.write('tenants-assemble: refusing to emit an EMPTY map ({}) without --allow-empty — every tenant is removed, and pushed it would deny every request\n');
       process.exit(1);
     }
     process.stdout.write(JSON.stringify(map));

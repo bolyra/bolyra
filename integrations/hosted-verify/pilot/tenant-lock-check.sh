@@ -124,12 +124,23 @@ mkdir -p "$SHIM" "$TENANTS_DIR" "$KEYCHAIN"
 #                         and sleeps first — a window in which the shell is running `security`
 #   SHIM_FINDW_SLEEP=<s>  a token read (find -w) touches $SHIM_KEYCHAIN.findw-started and sleeps
 #                         first — a window inside the sync pipeline, before the put stage has input
+#   SHIM_FINDW_GATE=<f>   with SHIM_FINDW_SLEEP: hold on that release-gate file instead (30 s cap)
+#   SHIM_FIND_FAIL=1      a presence lookup (find without -w) fails with a keychain ERROR (exit 36,
+#                         errSecInteractionNotAllowed: a locked keychain) — not absence (44)
 #   SHIM_DELETE_FAIL=1    delete fails (the keychain refusing it) and removes nothing
 #   SHIM_DELETE_MISSING=1 the item vanishes just before the delete (someone else removed it),
 #                         so delete answers 44 (errSecItemNotFound)
 cat > "$SHIM/security" <<'SHIM_SECURITY'
 #!/usr/bin/env bash
 : "${SHIM_KEYCHAIN:?tenant-lock-check: SHIM_KEYCHAIN must be set}"
+hold() {  # $1 release-gate file (empty: none), $2 fallback seconds — the gate waits at most 30 s
+  if [ -n "$1" ]; then
+    local i=0
+    while [ ! -e "$1" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+  else
+    sleep "$2"
+  fi
+}
 cmd="${1:-}"; [ $# -eq 0 ] || shift
 acct=""; want_w=0
 while [ $# -gt 0 ]; do
@@ -144,9 +155,13 @@ done
 case "$cmd" in
   find-generic-password)
     if [ "$want_w" = 1 ]; then
-      if [ -n "${SHIM_FINDW_SLEEP:-}" ]; then : > "$SHIM_KEYCHAIN.findw-started"; sleep "$SHIM_FINDW_SLEEP"; fi
+      if [ -n "${SHIM_FINDW_SLEEP:-}" ]; then : > "$SHIM_KEYCHAIN.findw-started"; hold "${SHIM_FINDW_GATE:-}" "$SHIM_FINDW_SLEEP"; fi
     else
       if [ -n "${SHIM_FIND_SLEEP:-}" ]; then : > "$SHIM_KEYCHAIN.find-started"; sleep "$SHIM_FIND_SLEEP"; fi
+      if [ "${SHIM_FIND_FAIL:-0}" = 1 ]; then
+        echo "security: SecKeychainSearchCopyNext: shim: User interaction is not allowed." >&2
+        exit 36
+      fi
     fi
     [ -e "$SHIM_KEYCHAIN/$acct" ] || exit 44
     if [ "$want_w" = 1 ]; then
@@ -164,6 +179,8 @@ case "$cmd" in
     printf '%s\n' "$acct" >> "$SHIM_KEYCHAIN.adds"
     exit 0 ;;
   delete-generic-password)
+    # Every delete ATTEMPT is logged (account only), whatever its outcome.
+    printf '%s\n' "$acct" >> "$SHIM_KEYCHAIN.deletes"
     if [ "${SHIM_DELETE_FAIL:-0}" = 1 ]; then
       echo "security: SecKeychainItemDelete: shim: the keychain refused the delete" >&2
       exit 1
@@ -186,13 +203,23 @@ SHIM_SECURITY
 # the launcher's process group, which drains the map off stdin into $MARKER_BODY (so the check
 # can assert WHAT was uploaded) and stays busy long enough to be observed mid-flight. Only a
 # JSON object earns wrangler's success line — the one thing the put stage accepts as
-# confirmation. SHIM_NO_SUCCESS=1 finishes without printing it.
+# confirmation. SHIM_NO_SUCCESS=1 finishes without printing it. SHIM_UPLOAD_GATE=<file> makes the
+# uploader hold until that release-gate file exists (30 s cap) instead of sleeping SHIM_SLEEP, so a
+# scenario that signals a run mid-upload releases the upload only after the signal was sent.
 #
 # The split matters because the uploader can outlive its launcher: its own streams go to
 # /dev/null and its output is left in files that the launcher relays to ITS stdout on the way
 # out, so the launcher holds the only copies of the pipes the put stage reads.
 cat > "$SHIM/npx" <<'SHIM_NPX'
 #!/usr/bin/env bash
+hold() {  # $1 release-gate file (empty: none), $2 fallback seconds — the gate waits at most 30 s
+  if [ -n "$1" ]; then
+    local i=0
+    while [ ! -e "$1" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+  else
+    sleep "$2"
+  fi
+}
 : "${MARKER:?tenant-lock-check: MARKER must be set}"
 : "${MARKER_BODY:?tenant-lock-check: MARKER_BODY must be set}"
 trap '' INT TERM
@@ -210,7 +237,7 @@ exec 3<&0
 (
   trap '' INT TERM
   cat <&3 > "$MARKER_BODY"
-  sleep "${SHIM_SLEEP:-3}"
+  hold "${SHIM_UPLOAD_GATE:-}" "${SHIM_SLEEP:-3}"
   if ! node -e '
 const fs=require("fs");let m;
 try{m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"))}catch(e){process.exit(1)}
@@ -319,7 +346,7 @@ ok "show reports acme as disabled"
 # re-sync goes through.
 mkdir -p "$LOCK_DIR"
 printf '{"acme":{}}' | env PATH="$SHIM:$PATH" MARKER="$WORK/marker-kill" MARKER_BODY="$WORK/body-kill" \
-  SHIM_SLEEP=6 TENANT_LOCK_DIR="$LOCK_DIR" node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck \
+  SHIM_UPLOAD_GATE="$WORK/gate-g1" TENANT_LOCK_DIR="$LOCK_DIR" node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck \
   > "$WORK/kill.log" 2>&1 &
 BG=$!
 wait_for_file "$WORK/body-kill" || fail "the upload never started: $(cat "$WORK/kill.log")"
@@ -342,7 +369,8 @@ out="$(tenant sync 2>&1)"; rc=$?
 case "$out" in *"another tenant.sh is running"*) ;; *) fail "the sync was refused for the wrong reason: $out" ;; esac
 case "$out" in *'Recovering a retained lock'*) ;; *) fail "the refusal did not name the runbook's recovery section: $out" ;; esac
 [ -d "$LOCK_DIR" ] || fail "a refused run removed the retained lock"
-# The orphan is still sleeping: the recovery must not start until it cannot be uploading.
+# The orphan is still holding: the recovery must not start until it cannot be uploading.
+: > "$WORK/gate-g1"
 wait_for_gone "$ORPHAN" || fail "the orphaned upload never finished"
 ORPHAN=""
 rm -rf "$LOCK_DIR"
@@ -384,11 +412,12 @@ ok "the map the disable pushed carries the quarantine"
 # (g5) an interrupt aimed at the put stage itself is deferred there too: the upload finishes,
 # is confirmed, and only then does the run exit 143 — with the lock released.
 rm -f "$MARKER.put.pid"
-env "${TENANT_ENV[@]}" SHIM_SLEEP=6 bash "$TENANT" sync > "$WORK/sync-put-term.log" 2>&1 &
+env "${TENANT_ENV[@]}" SHIM_UPLOAD_GATE="$WORK/gate-g5" bash "$TENANT" sync > "$WORK/sync-put-term.log" 2>&1 &
 BG=$!
 put="$(wait_for_put)" || fail "could not determine the put pid: its launcher recorded none: $(cat "$WORK/sync-put-term.log")"
 require_live "$put" put
 kill -TERM "$put" || fail "could not signal the put stage (pid $put)"
+: > "$WORK/gate-g5"
 wait "$BG"; rc=$?
 BG=""
 [ "$rc" = 143 ] || fail "the sync exited $rc after its put was TERMed, expected 143: $(cat "$WORK/sync-put-term.log")"
@@ -408,7 +437,8 @@ ok "an interrupt aimed at the put stage still lets the upload finish, and the lo
 # The handlers still go on first thing, ahead of stdin: installed any later, a signal in that
 # window would kill the put stage outright with no report at all.
 mkdir -p "$WORK/lock-early"
-( sleep 2; printf '{"acme":{}}' ) | env PATH="$SHIM:$PATH" \
+( i=0; while [ ! -e "$WORK/gate-g6" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+  printf '{"acme":{}}' ) | env PATH="$SHIM:$PATH" \
     MARKER="$WORK/marker-early" MARKER_BODY="$WORK/body-early" SHIM_SLEEP=1 \
     TENANT_LOCK_DIR="$WORK/lock-early" \
     node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck \
@@ -417,6 +447,7 @@ BG=$!
 sleep 0.5
 require_live "$BG" put
 kill -INT "$BG" || fail "could not signal the put stage (pid $BG)"
+: > "$WORK/gate-g6"
 wait "$BG"; rc=$?
 BG=""
 [ "$rc" = 75 ] || fail "the put stage exited $rc after a SIGINT that arrived before its input, expected 75: $(cat "$WORK/early.log")"
@@ -518,17 +549,25 @@ mkdir -p "$NODESHIM"
 {
   printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v node)"
   cat <<'SHIM_NODE'
+hold() {  # $1 release-gate file (empty: none), $2 fallback seconds — the gate waits at most 30 s
+  if [ -n "$1" ]; then
+    local i=0
+    while [ ! -e "$1" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+  else
+    sleep "$2"
+  fi
+}
 if [ -n "${SHIM_STATUS_SLEEP:-}" ] && [ "${1:-}" = -e ] && [ "${4:-}" = removed ] \
     && [ ! -e "$SHIM_KEYCHAIN.status-slowed" ]; then
   case "${2:-}" in
     *'f.status=process.argv[2]'*)
       : > "$SHIM_KEYCHAIN.status-slowed"
       if [ "${SHIM_STATUS_PHASE:-before}" = before ]; then
-        sleep "$SHIM_STATUS_SLEEP"
+        hold "${SHIM_STATUS_GATE:-}" "$SHIM_STATUS_SLEEP"
         exec "$real" "$@"
       fi
       "$real" "$@"; rc=$?
-      sleep "$SHIM_STATUS_SLEEP"
+      hold "${SHIM_STATUS_GATE:-}" "$SHIM_STATUS_SLEEP"
       exit "$rc" ;;
   esac
 fi
@@ -559,13 +598,14 @@ ok "(r1) a validator refusal during remove restores the status and keeps both to
 # it into "not started", the record is restored byte for byte, the tokens stay, exit 130.
 reset_beta
 set -m
-env "${TENANT_ENV[@]}" PATH="$NODESHIM:$SHIM:$PATH" MARKER="$WORK/marker-r2" SHIM_STATUS_SLEEP=1 SHIM_STATUS_PHASE=before \
+env "${TENANT_ENV[@]}" PATH="$NODESHIM:$SHIM:$PATH" MARKER="$WORK/marker-r2" SHIM_STATUS_SLEEP=1 SHIM_STATUS_GATE="$WORK/gate-r2" SHIM_STATUS_PHASE=before \
   bash "$TENANT" remove beta > "$WORK/r2.log" 2>&1 &
 BG=$!
 set +m
 wait_for_file "$KEYCHAIN.status-slowed" || fail "(r2) the registry write never started: $(cat "$WORK/r2.log")"
 require_live "$BG" remove
 kill -INT "$BG" || fail "(r2) could not signal the remove"
+: > "$WORK/gate-r2"
 wait "$BG"; rc=$?
 BG=""
 out="$(cat "$WORK/r2.log")"
@@ -580,7 +620,7 @@ ok "(r2) SIGINT to the shell during the registry write: not started, record rest
 # tokens stay, nothing is uploaded, the lock is released — and a re-run of remove completes.
 reset_beta
 set -m
-env "${TENANT_ENV[@]}" PATH="$NODESHIM:$SHIM:$PATH" MARKER="$WORK/marker-r2b" SHIM_STATUS_SLEEP=2 SHIM_STATUS_PHASE=after \
+env "${TENANT_ENV[@]}" PATH="$NODESHIM:$SHIM:$PATH" MARKER="$WORK/marker-r2b" SHIM_STATUS_SLEEP=2 SHIM_STATUS_GATE="$WORK/gate-r2b" SHIM_STATUS_PHASE=after \
   bash "$TENANT" remove beta > "$WORK/r2b.log" 2>&1 &
 BG=$!
 set +m
@@ -588,6 +628,7 @@ wait_for_file "$KEYCHAIN.status-slowed" || fail "(r2b) the registry write never 
 sleep 0.5
 require_live "$BG" remove
 kill -INT -- "-$BG" || fail "(r2b) could not signal the remove's process group"
+: > "$WORK/gate-r2b"
 wait "$BG"; rc=$?
 BG=""
 out="$(cat "$WORK/r2b.log")"
@@ -609,7 +650,7 @@ ok "(r2b) a terminal SIGINT during the registry write: tokens kept, nothing uplo
 # signal that group the way a terminal does; the signal lands while a token is being read.
 reset_beta
 set -m
-env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r3" SHIM_FINDW_SLEEP=2 bash "$TENANT" remove beta > "$WORK/r3.log" 2>&1 &
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r3" SHIM_FINDW_SLEEP=2 SHIM_FINDW_GATE="$WORK/gate-r3" bash "$TENANT" remove beta > "$WORK/r3.log" 2>&1 &
 BG=$!
 set +m
 wait_for_file "$KEYCHAIN.findw-started" || fail "(r3) the token read never started: $(cat "$WORK/r3.log")"
@@ -618,6 +659,7 @@ wait_for_file "$KEYCHAIN.findw-started" || fail "(r3) the token read never start
 sleep 0.5
 require_live "$BG" remove
 kill -INT -- "-$BG" || fail "(r3) could not signal the remove's process group"
+: > "$WORK/gate-r3"
 wait "$BG"; rc=$?
 BG=""
 out="$(cat "$WORK/r3.log")"
@@ -631,12 +673,14 @@ ok "(r3) a terminal SIGINT while the put stage buffers: wrangler never spawned, 
 # tokens are then deleted, and only then does the deferred exit 130 happen.
 reset_beta
 set -m
-env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r4" SHIM_SLEEP=1 bash "$TENANT" remove beta > "$WORK/r4.log" 2>&1 &
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r4" SHIM_UPLOAD_GATE="$WORK/gate-r4" bash "$TENANT" remove beta > "$WORK/r4.log" 2>&1 &
 BG=$!
 set +m
 wait_for_file "$WORK/marker-r4" || fail "(r4) the upload never started: $(cat "$WORK/r4.log")"
 require_live "$BG" remove
 kill -INT "$BG" || fail "(r4) could not signal the remove"
+# The upload holds until the signal has been sent: the removal cannot finish before it lands.
+: > "$WORK/gate-r4"
 wait "$BG"; rc=$?
 BG=""
 out="$(cat "$WORK/r4.log")"
@@ -684,12 +728,13 @@ ok "(r6) a failed token delete after a confirmed upload names the stale accounts
 # not the interrupt — 130 would read as "interrupted" and hide the half-finished cleanup.
 reset_beta
 set -m
-env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r6b" SHIM_SLEEP=1 SHIM_DELETE_FAIL=1 bash "$TENANT" remove beta > "$WORK/r6b.log" 2>&1 &
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r6b" SHIM_UPLOAD_GATE="$WORK/gate-r6b" SHIM_DELETE_FAIL=1 bash "$TENANT" remove beta > "$WORK/r6b.log" 2>&1 &
 BG=$!
 set +m
 wait_for_file "$WORK/marker-r6b" || fail "(r6b) the upload never started: $(cat "$WORK/r6b.log")"
 require_live "$BG" remove
 kill -INT "$BG" || fail "(r6b) could not signal the remove"
+: > "$WORK/gate-r6b"
 wait "$BG"; rc=$?
 BG=""
 out="$(cat "$WORK/r6b.log")"
@@ -708,6 +753,31 @@ case "$out" in *STALE*) fail "(r7) an already-deleted token was reported stale: 
 [ "$(kc_count beta)" = 0 ] || fail "(r7) beta's tokens are still present: $out"
 [ "$(status_of beta)" = removed ] || fail "(r7) beta is not removed: $out"
 ok "(r7) a token already deleted by someone else (44) counts as gone: exit 0, no stale alarm"
+
+# (r8) a keychain LOOKUP ERROR (a locked keychain: any exit but 44) is not absence. remove refuses
+# before anything changes — naming the account — rather than skipping deletes it could not rule out.
+reset_beta
+rm -f "$KEYCHAIN.deletes"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r8" SHIM_FIND_FAIL=1 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(r8) a remove whose keychain lookup failed exited $rc, expected 1: $out"
+case "$out" in *"tenant-beta-admin"*) ;; *) fail "(r8) the lookup error did not name the account: $out" ;; esac
+case "$out" in *"nothing changed"*) ;; *) fail "(r8) the lookup error did not say nothing changed: $out" ;; esac
+[ ! -e "$WORK/marker-r8" ] || fail "(r8) a remove whose lookup failed reached the uploader: $out"
+[ ! -e "$KEYCHAIN.deletes" ] || fail "(r8) a remove whose lookup failed attempted a delete: $(cat "$KEYCHAIN.deletes")"
+expect_untouched r8 "$out"
+ok "(r8) a keychain lookup error (not 44) refuses remove before any change, naming the account"
+
+# (r9) after a confirmed upload BOTH deletes are attempted, whatever the pre-check found: here the
+# items are already gone (44 at the pre-check), and each delete still runs and answers 44.
+reset_beta
+rm -f "$KEYCHAIN/tenant-beta-admin" "$KEYCHAIN/tenant-beta-verifier" "$KEYCHAIN.deletes"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r9" SHIM_SLEEP=0 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(r9) a remove with no tokens left exited $rc: $out"
+grep -qx 'tenant-beta-admin' "$KEYCHAIN.deletes" 2>/dev/null && grep -qx 'tenant-beta-verifier' "$KEYCHAIN.deletes" \
+  || fail "(r9) not both deletes were attempted after the confirmed upload: $(cat "$KEYCHAIN.deletes" 2>/dev/null)"
+case "$out" in *STALE*) fail "(r9) an already-absent token was reported stale: $out" ;; *) ;; esac
+[ "$(status_of beta)" = removed ] || fail "(r9) beta is not removed: $out"
+ok "(r9) after a confirmed upload both deletes are attempted even when the pre-check found nothing"
 
 # ---- the last tenant (E13): `{}` is a valid, deliberately EMPTY map, and every boundary that can
 # emit it demands a flag that says so. A disabled tenant still occupies the map, so it counts.
@@ -756,6 +826,17 @@ cmp -s "$WORK/acme.before" "$TENANTS_DIR/acme.json" || fail "(e1) acme's record 
 [ ! -d "$LOCK_DIR" ] || fail "(e1) the lock was not released: $out"
 ok "(e1) removing the last tenant without --last is refused: nothing changes, nothing is uploaded"
 
+# (e1b) the case the lookup error is most dangerous in: `remove --last` uploads {}, which needs no
+# token, so a lookup error read as "absent" would report success and delete nothing.
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e1b" SHIM_FIND_FAIL=1 bash "$TENANT" remove acme --last 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(e1b) remove --last with a keychain lookup error exited $rc, expected 1: $out"
+case "$out" in *"tenant-acme-admin"*) ;; *) fail "(e1b) the lookup error did not name the account: $out" ;; esac
+cmp -s "$WORK/acme.before" "$TENANTS_DIR/acme.json" || fail "(e1b) acme's record changed: $(cat "$TENANTS_DIR/acme.json")"
+[ "$(kc_count acme)" = 2 ] || fail "(e1b) acme's tokens were not both kept: $out"
+[ ! -e "$WORK/marker-e1b" ] || fail "(e1b) the refused remove reached the uploader: $out"
+[ ! -d "$LOCK_DIR" ] || fail "(e1b) the lock was not released: $out"
+ok "(e1b) remove --last with a keychain lookup error is refused: nothing changes, nothing is uploaded"
+
 # (e2) with --last the empty map goes up deliberately: exactly {}, tokens deleted, status removed.
 out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e2" MARKER_BODY="$WORK/body-e2" SHIM_SLEEP=0 bash "$TENANT" remove acme --last 2>&1)"; rc=$?
 [ "$rc" = 0 ] || fail "(e2) remove acme --last exited $rc: $out"
@@ -775,7 +856,14 @@ for args in "" "--dry-run"; do
   [ ! -e "$WORK/marker-e3" ] || fail "(e3) sync $args reached the uploader: $out"
   [ ! -d "$LOCK_DIR" ] || fail "(e3) sync $args left its lock behind: $out"
 done
-ok "(e3) sync and sync --dry-run refuse an all-removed registry without --allow-empty; nothing is uploaded"
+# Each emitting stage refuses {} on its own without the flag (E13), not only tenant.sh's gate.
+out="$(printf '' | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(e3) the assembler emitted over an all-removed registry without --allow-empty (exit $rc): $out"
+case "$out" in *"tenants-assemble: refusing to emit an EMPTY map ({}) without --allow-empty"*) ;; *) fail "(e3) the assembler refusal was not reported: $out" ;; esac
+out="$(printf '{}' | node "$SCRIPT_DIR/tenants-check.mjs" --pass 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(e3) the validator passed {} on without --allow-empty (exit $rc): $out"
+case "$out" in *"tenants-check: refusing to emit an EMPTY map ({}) without --allow-empty"*) ;; *) fail "(e3) the validator refusal was not reported: $out" ;; esac
+ok "(e3) sync and sync --dry-run refuse an all-removed registry without --allow-empty; nothing is uploaded; the assembler and validator refuse to emit {} on their own"
 
 # (e4) --allow-empty pushes it deliberately (either order with --dry-run is accepted).
 out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e4d" bash "$TENANT" sync --allow-empty --dry-run 2>&1)"; rc=$?
@@ -786,6 +874,8 @@ out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e4" MARKER_BODY="$WORK/body-e
 case "$out" in *"done. Secrets take effect"*) ;; *) fail "(e4) sync --allow-empty did not report a confirmed upload: $out" ;; esac
 is_empty_body "$WORK/body-e4" || fail "(e4) the upload did not carry exactly {}: $(cat "$WORK/body-e4" 2>/dev/null)"
 [ ! -d "$LOCK_DIR" ] || fail "(e4) the lock survived a confirmed upload: $out"
+out="$(printf '' | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" --allow-empty | node "$SCRIPT_DIR/tenants-check.mjs" --pass --allow-empty 2>/dev/null)"; rc=$?
+[ "$rc" = 0 ] && [ "$out" = '{}' ] || fail "(e4) assembler + validator with --allow-empty did not emit exactly {} (exit $rc): $out"
 out="$(tenant sync --allow-empty --bogus 2>&1)"; rc=$?
 [ "$rc" != 0 ] || fail "(e4) sync with an unknown argument beside --allow-empty exited 0: $out"
 ok "(e4) sync --allow-empty uploads exactly {} (confirmed); --dry-run beside it pushes nothing; unknown flags still refuse"
@@ -872,7 +962,7 @@ ok "(e0) decoys only (dotfile, *.policy.json, a directory, a .txt): shell and as
 # $HOME/.bolyra/tenants-<env> unless TENANTS_DIR says otherwise, and nothing mutates it until
 # it has been initialized (`init`) or had its records brought over (`migrate --from`).
 NOT_INIT="is not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>' to bring existing records over"
-NO_MARKER="has records but no marker"
+NO_MARKER="is not empty but has no marker"
 
 # (m1) the default path: no TENANTS_DIR → $HOME/.bolyra/tenants-production, or -<env> with
 # HOSTED_VERIFY_ENV. `show` works without the marker, says so, and creates nothing.
@@ -917,6 +1007,16 @@ out="$(tenant_at "$WORK/m3" init 2>&1)"; rc=$?
 case "$out" in *"init: $WORK/m3 $NO_MARKER"*) ;; *) fail "(m3) init over records did not name the interrupted migrate: $out" ;; esac
 [ ! -e "$WORK/m3/.initialized" ] || fail "(m3) init blessed a directory of unmarked records"
 [ ! -d "$WORK/m3/.lock" ] || fail "(m3) a refused init left its lock behind"
+# Anything but the lock makes a directory non-empty: a stray file or a subdirectory as much as a record.
+mkdir -p "$WORK/m3n" "$WORK/m3d/sub"
+printf 'x\n' > "$WORK/m3n/notes.txt"
+for d in "$WORK/m3n" "$WORK/m3d"; do
+  out="$(tenant_at "$d" init 2>&1)"; rc=$?
+  [ "$rc" = 1 ] || fail "(m3) init over a non-empty directory ($(ls -A "$d")) exited $rc, expected 1: $out"
+  case "$out" in *"init: $d $NO_MARKER"*) ;; *) fail "(m3) init over $(ls -A "$d") did not refuse as non-empty: $out" ;; esac
+  [ ! -e "$d/.initialized" ] || fail "(m3) init blessed a non-empty directory"
+  [ ! -d "$d/.lock" ] || fail "(m3) a refused init left its lock behind"
+done
 mkdir -p "$WORK/m3c/.candidate"
 out="$(tenant_at "$WORK/m3c" init 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "(m3) init over a leftover .candidate exited $rc, expected 1: $out"
@@ -929,7 +1029,7 @@ out="$(tenant_at "$WORK/m3b" init 2>&1)"; rc=$?
 [ "$rc" = 1 ] || fail "(m3) a second init exited $rc, expected 1: $out"
 case "$out" in *"already initialized"*) ;; *) fail "(m3) the second init did not say it is already initialized: $out" ;; esac
 [ ! -d "$WORK/m3b/.lock" ] || fail "(m3) a refused init left its lock behind"
-ok "(m3) init refuses unmarked records or a .candidate/, and a second init; a fresh init creates the directory and the marker"
+ok "(m3) init refuses unmarked records, a .candidate/, a stray file or a subdirectory, and a second init; a fresh init creates the directory and the marker"
 
 # (m4) the migrate happy path: every record (active with tokens, removed without) and its
 # policy file is copied, validated as a whole, committed file by file; the marker is written

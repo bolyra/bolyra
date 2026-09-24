@@ -154,7 +154,30 @@ test('a directory with NO record files is refused (never assembled into {})', ()
     assert.equal(cli.stdout, '');
   }));
 
-test('every record removed is the deliberate empty map {} (the flag is decided downstream)', () =>
+test('every record removed is the deliberate empty map {} (the library returns it; the CLI decides)', () =>
   withDir({ 'acme.json': rec('acme', { status: 'removed' }) }, (dir) => {
     assert.deepEqual(assemble(dir, ''), {});
+  }));
+
+test('CLI: {} is emitted only with --allow-empty (E13): refused without it, exit 1, nothing on stdout', () =>
+  withDir({ 'acme.json': rec('acme', { status: 'removed' }) }, (dir) => {
+    const refused = spawnSync(process.execPath, [CLI, dir], { input: '', encoding: 'utf8' });
+    assert.equal(refused.status, 1, refused.stderr);
+    assert.equal(refused.stdout, '');
+    assert.match(refused.stderr, /^tenants-assemble: refusing to emit an EMPTY map \(\{\}\) without --allow-empty/);
+    const ok = spawnSync(process.execPath, [CLI, dir, '--allow-empty'], { input: '', encoding: 'utf8' });
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(ok.stdout, '{}');
+    const typo = spawnSync(process.execPath, [CLI, dir, '--allow-emtpy'], { input: '', encoding: 'utf8' });
+    assert.equal(typo.status, 2, typo.stderr);
+    assert.equal(typo.stdout, '');
+  }));
+
+test('CLI: --allow-empty changes nothing for a non-empty map', () =>
+  withDir({ 'acme.json': rec('acme'), 'beta.json': rec('beta') }, (dir) => {
+    const plain = spawnSync(process.execPath, [CLI, dir], { input: lines(TOKENS), encoding: 'utf8' });
+    const flagged = spawnSync(process.execPath, [CLI, dir, '--allow-empty'], { input: lines(TOKENS), encoding: 'utf8' });
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.equal(flagged.status, 0, flagged.stderr);
+    assert.equal(flagged.stdout, plain.stdout);
   }));
