@@ -228,20 +228,50 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<str
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/** Configuration for a hosted verifier endpoint (URL mode). */
+export interface UrlVerifierConfig {
+  url: string;
+  token?: string;
+  timeoutMs?: number;
+  maxBodyBytes?: number;
+}
+
 /**
- * POST the spec §2.1 request to a hosted verifier (e.g. the Bolyra
- * hosted-verify preview's `POST /v1/verify`). Any decision — allow or deny —
- * arrives as a verdict body; transport failures, non-verdict bodies,
- * oversized bodies, and timeouts fail closed.
+ * What a hosted verifier call produced, beyond the verdict: the HTTP status
+ * (absent when no HTTP response was received — unreachable, timed out) and
+ * the raw `x-bolyra-credential-id` / `x-bolyra-receipt` response headers
+ * (absent when the response did not carry them; never decoded or verified
+ * here). The verdict carries the same fail-closed semantics as
+ * {@link callUrlVerifier}; evidence never turns a deny into an allow.
  */
-export async function callUrlVerifier(
-  config: { url: string; token?: string; timeoutMs?: number; maxBodyBytes?: number },
+export interface UrlVerifierEvidence {
+  verdict: Verdict;
+  status?: number;
+  credentialId?: string;
+  receipt?: string;
+}
+
+/** Hosted-verifier response headers surfaced as evidence. */
+const CREDENTIAL_ID_HEADER = 'x-bolyra-credential-id';
+const RECEIPT_HEADER = 'x-bolyra-receipt';
+
+/**
+ * POST the spec §2.1 request to a hosted verifier and return the verdict
+ * plus the call's evidence (HTTP status, raw credential-id and receipt
+ * headers). Decision semantics are identical to {@link callUrlVerifier}:
+ * 200 = decision; 500 may carry only `deny internal_error`; any other
+ * status, transport failure, non-verdict or oversized body, or timeout
+ * fails closed with `deny internal_error`.
+ */
+export async function callUrlVerifierWithEvidence(
+  config: UrlVerifierConfig,
   request: VerifierRequest,
-): Promise<Verdict> {
+): Promise<UrlVerifierEvidence> {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let evidence: Omit<UrlVerifierEvidence, 'verdict'> = {};
   try {
     const response = await fetch(config.url, {
       method: 'POST',
@@ -252,33 +282,55 @@ export async function callUrlVerifier(
       body: JSON.stringify(request),
       signal: controller.signal,
     });
+    const credentialId = response.headers.get(CREDENTIAL_ID_HEADER);
+    const receipt = response.headers.get(RECEIPT_HEADER);
+    evidence = {
+      status: response.status,
+      ...(credentialId !== null ? { credentialId } : {}),
+      ...(receipt !== null ? { receipt } : {}),
+    };
+    const withVerdict = (verdict: Verdict): UrlVerifierEvidence => ({ verdict, ...evidence });
 
     // 200 = decision (allow or policy/crypto deny); 500 may carry a
     // deny internal_error verdict. Anything else is a transport fault.
     if (response.status !== 200 && response.status !== 500) {
-      return deny('internal_error', `verifier endpoint returned HTTP ${response.status}`);
+      return withVerdict(deny('internal_error', `verifier endpoint returned HTTP ${response.status}`));
     }
     const text = await readBodyCapped(response, maxBodyBytes);
     if (text === null) {
-      return deny('internal_error', 'verifier endpoint response exceeded the body cap');
+      return withVerdict(deny('internal_error', 'verifier endpoint response exceeded the body cap'));
     }
     let body: unknown;
     try {
       body = JSON.parse(text);
     } catch {
-      return deny('internal_error', 'verifier endpoint returned a non-JSON body');
+      return withVerdict(deny('internal_error', 'verifier endpoint returned a non-JSON body'));
     }
     const verdict = validateVerdict(body);
     if (verdict === null) {
-      return deny('internal_error', 'verifier endpoint returned an invalid verdict');
+      return withVerdict(deny('internal_error', 'verifier endpoint returned an invalid verdict'));
     }
     if (response.status === 500 && !(verdict.verdict === 'deny' && verdict.code === 'internal_error')) {
-      return deny('internal_error', 'verifier endpoint returned HTTP 500');
+      return withVerdict(deny('internal_error', 'verifier endpoint returned HTTP 500'));
     }
-    return verdict;
+    return withVerdict(verdict);
   } catch {
-    return deny('internal_error', 'verifier endpoint unreachable or timed out');
+    return { verdict: deny('internal_error', 'verifier endpoint unreachable or timed out'), ...evidence };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * POST the spec §2.1 request to a hosted verifier (e.g. the Bolyra
+ * hosted-verify preview's `POST /v1/verify`). Any decision — allow or deny —
+ * arrives as a verdict body; transport failures, non-verdict bodies,
+ * oversized bodies, and timeouts fail closed. Returns the verdict only; use
+ * {@link callUrlVerifierWithEvidence} for the HTTP status and headers.
+ */
+export async function callUrlVerifier(
+  config: UrlVerifierConfig,
+  request: VerifierRequest,
+): Promise<Verdict> {
+  return (await callUrlVerifierWithEvidence(config, request)).verdict;
 }
