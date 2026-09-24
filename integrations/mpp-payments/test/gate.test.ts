@@ -669,3 +669,246 @@ describe('one-use stash', () => {
     await expect(wrapped.verify({ credential, envelope, request: { amount: '25' } })).rejects.toMatchObject({ name: 'BolyraDeniedError', verdict: { code: 'internal_error' } });
   });
 });
+
+describe('onDecision (TD-2)', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+  const ID = 'ab'.repeat(32);
+
+  function stubVerifier(body: unknown, headers: Record<string, string> = {}, status = 200) {
+    global.fetch = jest.fn(async () =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } }),
+    ) as unknown as typeof fetch;
+    return { kind: 'url' as const, url: 'https://verify.example' };
+  }
+  const NONCE_ALLOW = {
+    verdict: 'allow', kind: 'classical',
+    consume_nonces: [{ issuer_key: 'op', nonce: 'n-1', retain_until: NOW_UNIX + 60 }],
+  };
+
+  /** Count unhandled rejections across `fn` plus a couple of macrotask turns. */
+  async function withUnhandledCount(fn: () => Promise<void>): Promise<number> {
+    let unhandled = 0;
+    const onUnhandled = () => { unhandled += 1; };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      await fn();
+      for (let i = 0; i < 3; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+    return unhandled;
+  }
+
+  test('allow (classical): exactly one Decision, outcome allow, no code/status/evidence, request = the gate request context', async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied).toBeUndefined();
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    expect(onDecision.mock.calls[0][0]).toEqual({
+      outcome: 'allow',
+      request: {
+        agent_name: 'shopper-bot',
+        project_key: AUDIENCE,
+        program: 'mpp',
+        model: 'opus-4.1',
+        granted_capabilities: ['mpp:financial:small'],
+      },
+    });
+  });
+
+  test('allow (url): credentialId and receipt are the raw hosted-verifier headers', async () => {
+    const onDecision = jest.fn();
+    const verifier = stubVerifier({ verdict: 'allow', kind: 'classical' }, {
+      'x-bolyra-credential-id': ID, 'x-bolyra-receipt': 'raw.receipt.value',
+    });
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, verifier }));
+    await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    expect(onDecision.mock.calls[0][0]).toMatchObject({
+      outcome: 'allow', credentialId: ID, receipt: 'raw.receipt.value',
+    });
+    expect(onDecision.mock.calls[0][0]).not.toHaveProperty('status');
+    expect(onDecision.mock.calls[0][0]).not.toHaveProperty('code');
+  });
+
+  test('verifier deny: code, mapped status, reason and credentialId from verdict.detail', async () => {
+    const onDecision = jest.fn();
+    const verifier = stubVerifier({
+      verdict: 'deny', kind: 'classical', code: 'untrusted_root', message: 'not active',
+      detail: { reason: 'credential_not_active', credential_id: ID },
+    }, { 'x-bolyra-receipt': 'should-not-surface-on-deny' });
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, verifier }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied!.status).toBe(401);
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    const d = onDecision.mock.calls[0][0];
+    expect(d).toMatchObject({
+      outcome: 'deny', code: 'untrusted_root', status: 401,
+      reason: 'credential_not_active', credentialId: ID,
+    });
+    expect(d).not.toHaveProperty('receipt');
+    expect(d.request.project_key).toBe(AUDIENCE);
+  });
+
+  test('missing_authorization deny: one Decision, 401, no reason', async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    await drive(wrapped, requestWithBundle(undefined), { amount: '25' });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    expect(onDecision.mock.calls[0][0]).toMatchObject({ outcome: 'deny', code: 'missing_authorization', status: 401 });
+    expect(onDecision.mock.calls[0][0]).not.toHaveProperty('reason');
+  });
+
+  test('replay deny: allow then nonce_replayed/403, one Decision per request', async () => {
+    const onDecision = jest.fn();
+    const verifier = stubVerifier(NONCE_ALLOW);
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, verifier }));
+    const bundle = await makeBundle();
+    await drive(wrapped, requestWithBundle(bundle), { amount: '25' });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    await drive(wrapped, requestWithBundle(bundle), { amount: '25' });
+    expect(onDecision).toHaveBeenCalledTimes(2);
+    expect(onDecision.mock.calls.map((c) => [c[0].outcome, c[0].code, c[0].status])).toEqual([
+      ['allow', undefined, undefined],
+      ['deny', 'nonce_replayed', 403],
+    ]);
+  });
+
+  test('sink failure turning an allow into a 500 reports deny internal_error/500, after the sink ran', async () => {
+    const order: string[] = [];
+    const onReceipt = jest.fn(() => { order.push('sink'); throw new Error('sink down'); });
+    const onDecision = jest.fn(() => { order.push('decision'); });
+    const { method, verifySpy } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, onReceipt }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied!.status).toBe(500);
+    expect(verifySpy).not.toHaveBeenCalled();
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    expect(onDecision.mock.calls[0][0]).toMatchObject({ outcome: 'deny', code: 'internal_error', status: 500 });
+    expect(order).toEqual(['sink', 'decision']);
+  });
+
+  test('an allow reports after the sink accepted the receipt', async () => {
+    const order: string[] = [];
+    const onReceipt = jest.fn(() => { order.push('sink'); });
+    const onDecision = jest.fn(() => { order.push('decision'); });
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, onReceipt }));
+    await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(order).toEqual(['sink', 'decision']);
+  });
+
+  test("credential-less passthrough under enforce:'payment' (undefined or 402) fires nothing", async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, enforce: 'payment' }));
+    await drivePreflight(wrapped, requestWithBundle(undefined), { amount: '25' }, { credential: null });
+    const challenge = new Response(null, { status: 402 });
+    const m402 = { ...mockMethod().method, preflight: jest.fn(() => challenge) };
+    const wrapped402 = bolyraGate(m402, await gateOptions({ onDecision, enforce: 'payment' }));
+    expect(await drivePreflight(wrapped402, requestWithBundle(undefined), { amount: '25' }, { credential: null })).toBe(challenge);
+    expect(onDecision).not.toHaveBeenCalled();
+  });
+
+  test("credential-less refusals under enforce:'payment' (late authorize hook, non-402 preflight) report deny internal_error/500", async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const late = bolyraGate(method, await gateOptions({ onDecision, enforce: 'payment' }));
+    (late as any).authorize = async () => undefined;
+    await expect(drivePreflight(late, requestWithBundle(undefined), { amount: '25' }, { credential: null })).rejects.toMatchObject({ name: 'BolyraDeniedError' });
+    const m403 = { ...mockMethod().method, preflight: jest.fn(() => new Response('nope', { status: 403 })) };
+    const non402 = bolyraGate(m403, await gateOptions({ onDecision, enforce: 'payment' }));
+    await expect(drivePreflight(non402, requestWithBundle(undefined), { amount: '25' }, { credential: null })).rejects.toMatchObject({ name: 'BolyraDeniedError' });
+    expect(onDecision).toHaveBeenCalledTimes(2);
+    for (const [d] of onDecision.mock.calls) {
+      expect(d).toMatchObject({ outcome: 'deny', code: 'internal_error', status: 500, request: { project_key: AUDIENCE } });
+    }
+  });
+
+  test('the verify hook never fires (fail-closed verify without a stashed decision)', async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    await expect(wrapped.verify({ credential: {}, envelope: undefined, request: { amount: '25' } } as never)).rejects.toBeInstanceOf(BolyraDeniedError);
+    expect(onDecision).not.toHaveBeenCalled();
+  });
+
+  test("402 then pay under enforce:'always': two gate invocations, two Decisions (discovery allow + paid allow)", async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    await drivePreflight(wrapped, requestWithBundle(await makeBundle()), { amount: '25' }, { credential: null });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+    await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(onDecision).toHaveBeenCalledTimes(2);
+    expect(onDecision.mock.calls.map((c) => c[0].outcome)).toEqual(['allow', 'allow']);
+  });
+
+  test("402 then pay under enforce:'payment': discovery fires nothing, the paid request fires once", async () => {
+    const onDecision = jest.fn();
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, enforce: 'payment' }));
+    await drivePreflight(wrapped, requestWithBundle(await makeBundle()), { amount: '25' }, { credential: null });
+    expect(onDecision).not.toHaveBeenCalled();
+    await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+  });
+
+  test('an observer mutating the Decision cannot change the stashed authorization', async () => {
+    const onDecision = jest.fn((d: any) => {
+      d.request.project_key = 'attacker.example';
+      d.request.granted_capabilities.push('mpp:financial:unlimited');
+      d.outcome = 'deny';
+    });
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    const { denied, receipt } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    expect(denied).toBeUndefined();
+    expect((receipt as any).bolyraAuthorization).toMatchObject({ audience: AUDIENCE, capability: 'mpp:financial:small' });
+  });
+
+  // Observer failure containment: authorization and response unchanged, the failure is logged,
+  // nothing becomes an unhandled rejection — including when the logger itself throws.
+  const failingObservers: Array<[string, () => (d: unknown) => unknown]> = [
+    ['sync throw', () => () => { throw new Error('observer threw'); }],
+    ['async rejection', () => async () => { throw new Error('observer rejected'); }],
+    ['thenable whose then throws', () => () => ({ then() { throw new Error('then threw'); } })],
+  ];
+  for (const loggerThrows of [false, true]) {
+    for (const [name, make] of failingObservers) {
+      test(`${name}${loggerThrows ? ' + a THROWING logger' : ''}: allow and deny unchanged, no unhandled rejection`, async () => {
+        const logged: unknown[] = [];
+        jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+          logged.push(args);
+          if (loggerThrows) throw new Error('logger down');
+        });
+        const onDecision = jest.fn(make());
+        const unhandled = await withUnhandledCount(async () => {
+          const { method, verifySpy } = mockMethod();
+          const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+          const ok = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+          expect(ok.denied).toBeUndefined();
+          expect(verifySpy).toHaveBeenCalledTimes(1);
+          expect((ok.receipt as any).bolyraAuthorization.decision).toBe('allow');
+
+          const no = await drive(wrapped, requestWithBundle(undefined), { amount: '25' });
+          expect(no.denied!.status).toBe(401);
+          expect(await readProblem(no.denied!)).toMatchObject({ code: 'missing_authorization' });
+        });
+        expect(unhandled).toBe(0);
+        expect(onDecision).toHaveBeenCalledTimes(2);
+        expect(logged.length).toBe(2); // one containment log per failing observation
+      });
+    }
+  }
+});

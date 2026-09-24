@@ -80,6 +80,7 @@ export {
   type AllowVerdict,
   type BolyraGateOptions,
   type ConsumeNonce,
+  type Decision,
   type DenyCode,
   type DenyVerdict,
   type EvcDenyCode,

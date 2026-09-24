@@ -43,9 +43,9 @@ import type { SignedReceipt } from '@bolyra/receipts';
 import { peekBundle } from './bundle';
 import { parseBundle, type ParsedBundle } from './bundle';
 import { verifyClassical } from './classical';
-import { denyResponse } from './deny';
+import { DENY_STATUS, denyResponse } from './deny';
 import { BolyraDeniedError, BolyraGateConfigError } from './errors';
-import { callUrlVerifier, runCommandVerifier } from './evc';
+import { callUrlVerifierWithEvidence, runCommandVerifier } from './evc';
 import { NonceStore, NonceStoreCapacityError, NonceRetentionTooLongError } from './nonces';
 import {
   buildDecisionInstance,
@@ -60,11 +60,13 @@ import {
   deny,
   isVerifyDenial,
   type BolyraGateOptions,
+  type Decision,
   type DenyVerdict,
   type FinancialTier,
   type GateDecision,
   type Verdict,
   type VerifierRequest,
+  type VerifierRequestContext,
 } from './types';
 
 /** Default request header carrying the presentation bundle. */
@@ -200,9 +202,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
   /** Allow decisions stashed between preflight and verify, per request. */
   const decisions = new WeakMap<object, GateDecision>();
 
+  /** Raw hosted-verifier evidence carried to the allow Decision (url mode only). */
+  type AllowEvidence = { credentialId?: string; receipt?: string };
+
   async function dispatch(request: VerifierRequest): Promise<{
     verdict: Verdict;
     parsedBundle?: ParsedBundle;
+    evidence?: AllowEvidence;
   }> {
     switch (verifier.kind) {
       case 'classical': {
@@ -220,24 +226,36 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       }
       case 'command':
         return { verdict: await runCommandVerifier(verifier, request) };
-      case 'url':
-        return { verdict: await callUrlVerifier(verifier, request) };
+      case 'url': {
+        const { verdict, credentialId, receipt } = await callUrlVerifierWithEvidence(verifier, request);
+        return {
+          verdict,
+          evidence: {
+            ...(credentialId !== undefined ? { credentialId } : {}),
+            ...(receipt !== undefined ? { receipt } : {}),
+          },
+        };
+      }
     }
   }
 
+  /** The request context before the bundle is read (early denials, credential-less refusals). */
+  const initialRequestContext = (): VerifierRequestContext => ({
+    agent_name: '',
+    project_key: options.audience,
+    program,
+    model: options.model ?? '',
+    granted_capabilities: [],
+  });
+
   async function decide(input: Request, routeOptions: Record<string, unknown>): Promise<
-    | { outcome: 'allow'; decision: GateDecision }
-    | { outcome: 'deny'; verdict: DenyVerdict; response: Response }
+    | { outcome: 'allow'; decision: GateDecision; evidence: AllowEvidence }
+    | { outcome: 'deny'; verdict: DenyVerdict; response: Response; request: VerifierRequestContext }
   > {
     let tier: FinancialTier | undefined;
     let amountUsd = '0';
-    let requestContext: VerifierRequest['request'] = {
-      agent_name: '',
-      project_key: options.audience,
-      program,
-      model: options.model ?? '',
-      granted_capabilities: [],
-    };
+    let requestContext: VerifierRequest['request'] = initialRequestContext();
+    let allowEvidence: AllowEvidence = {};
     let parsedBundle: ParsedBundle | undefined;
     // One timestamp per decision (spec §3.2), sampled fail-closed: a throwing
     // injected clock becomes an internal_error denial below, never an escape.
@@ -313,6 +331,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       outcome: 'deny';
       verdict: DenyVerdict;
       response: Response;
+      request: VerifierRequestContext;
     } => {
       const facts: DecisionReceiptFacts = {
         request: requestContext,
@@ -334,7 +353,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       // is internal_error, whatever code we were about to return.
       const emitted = emit(signed);
       const final = emitted === 'ok' ? verdict : sinkVerdict(emitted);
-      return { outcome: 'deny', verdict: final, response: denyResponse(final) };
+      return { outcome: 'deny', verdict: final, response: denyResponse(final), request: requestContext };
     };
 
     try {
@@ -398,6 +417,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       };
       const outcome = await dispatch(verifierRequest);
       parsedBundle = outcome.parsedBundle;
+      allowEvidence = outcome.evidence ?? {};
       if (outcome.verdict.verdict === 'deny') {
         return denyWith(outcome.verdict);
       }
@@ -474,6 +494,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
 
       return {
         outcome: 'allow',
+        evidence: allowEvidence,
         decision: {
           tier,
           capability,
@@ -496,6 +517,90 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       return denyWith(deny('internal_error', 'authorization gate failed'));
     }
   }
+
+  /**
+   * `onDecision` — the observer contract (TD-2). Fired EXACTLY ONCE per gate
+   * invocation (one preflight run), at the point where that invocation's
+   * outcome is final. Exit-path map (the paths of this file):
+   *
+   *   decide() — fired in preflight right after decide() returns, i.e. after
+   *   nonce reservation (step 6) and after the receipt sink's latched outcome
+   *   (`emit` / `denyWith`), before the denial is thrown or the allow stashed:
+   *     B1  gate clock failed                  → deny internal_error
+   *     B2  missing presentation header        → deny missing_authorization
+   *     B3  route amount unresolvable          → deny internal_error
+   *     B4  verifier deny (classical/command/url) → deny <verifier code>
+   *                                               (+ reason / credentialId from verdict.detail)
+   *     B5  receipt instance not constructible → deny internal_error
+   *     B6  nonce store fault / capacity       → deny internal_error
+   *     B7  nonce reservation conflict         → deny nonce_replayed
+   *     B8  allow receipt sink failed          → deny internal_error (the 500)
+   *     B9  allow, sink accepted the receipt   → allow (+ url-mode header evidence)
+   *     B10 caught VerifyDenial / unknown fault → deny <its code> / internal_error
+   *     (a sink failure while emitting any deny latches the code to internal_error)
+   *
+   *   Credential-less requests under enforce:'payment' (decide() never runs):
+   *     A1  authorize hook attached after construction → deny internal_error
+   *     A2  original preflight returned undefined      → NOT fired (no Bolyra decision)
+   *     A3  original preflight returned a 402          → NOT fired (no Bolyra decision)
+   *     A4  original preflight returned non-402        → deny internal_error
+   *
+   *   verify hook: NEVER fired. C1 (no stashed allow → fail closed) is either a
+   *   request whose preflight already reported, or a standalone
+   *   verifyCredential() with no gate invocation; C2 consumes a decision that
+   *   was already reported. Trade-off: a Decision may say allow and payment can
+   *   still be refused at C1 if the stash is missing.
+   *
+   * Under enforce:'always' the 402 discovery request is its own gate
+   * invocation (allow + nonce reserved), so a 402→pay pair reports twice.
+   *
+   * Observer failures never affect authorization: a sync throw, a rejected
+   * promise, and a thenable whose `then` throws are all routed to `safeLog`,
+   * which cannot throw. The observer gets a copy of the request context, so
+   * mutating the Decision cannot touch the stashed GateDecision.
+   */
+  const safeLog = (err: unknown): void => {
+    try {
+      console.error('bolyra gate: onDecision observer failed', err);
+    } catch {
+      // A throwing logger must not escape either.
+    }
+  };
+  const reportDecision = (decision: Decision): void => {
+    const cb = options.onDecision;
+    if (cb === undefined) return;
+    let r: unknown;
+    try {
+      r = cb(decision);
+    } catch (e) {
+      safeLog(e);
+    }
+    if (r !== undefined) {
+      try {
+        Promise.resolve(r).then(undefined, safeLog);
+      } catch (e) {
+        // Promise.resolve only throws synchronously for a real Promise with a
+        // throwing `constructor` getter; contained all the same.
+        safeLog(e);
+      }
+    }
+  };
+  const copyContext = (ctx: VerifierRequestContext): VerifierRequestContext => ({
+    ...ctx,
+    granted_capabilities: [...ctx.granted_capabilities],
+  });
+  const denyDecision = (verdict: DenyVerdict, ctx: VerifierRequestContext): Decision => {
+    const reason = verdict.detail?.reason;
+    const credentialId = verdict.detail?.credential_id;
+    return {
+      outcome: 'deny',
+      code: verdict.code,
+      status: DENY_STATUS[verdict.code] ?? 500,
+      ...(typeof reason === 'string' ? { reason } : {}),
+      ...(typeof credentialId === 'string' ? { credentialId } : {}),
+      request: copyContext(ctx),
+    };
+  };
 
   const originalPreflight = method.preflight?.bind(method);
   const originalVerify = method.verify.bind(method);
@@ -520,27 +625,30 @@ export function bolyraGate<method extends MppxServerMethodLike>(
             "a method authorize hook was attached after bolyraGate() under enforce:'payment'; " +
               'refusing to expose application success without a Bolyra decision',
           );
+          reportDecision(denyDecision(verdict, initialRequestContext())); // A1
           throw new BolyraDeniedError(verdict, denyResponse(verdict));
         }
         // Discovery only: the original preflight may issue the 402 challenge
         // or do nothing. Any other outcome would surface as application
         // success (mppx maps non-402 preflight Responses to status 200).
         const discovery = originalPreflight ? await originalPreflight(parameters) : undefined;
-        if (discovery === undefined) return undefined;
+        if (discovery === undefined) return undefined; // A2: no Bolyra decision, not reported
         // `instanceof Response` is deliberate and stricter than mppx's own
         // duck-typed `status === 402` check: a cross-realm Response (another
         // global's constructor) is denied here, which is the fail-closed side.
-        if (discovery instanceof Response && discovery.status === 402) return discovery;
+        if (discovery instanceof Response && discovery.status === 402) return discovery; // A3: not reported
         const verdict = deny(
           'internal_error',
           'credential-less preflight produced a non-402 result; refusing to expose application ' +
             'success without a Bolyra decision',
         );
+        reportDecision(denyDecision(verdict, initialRequestContext())); // A4
         throw new BolyraDeniedError(verdict, denyResponse(verdict));
       }
 
       const result = await decide(input, routeOptions ?? {});
       if (result.outcome === 'deny') {
+        reportDecision(denyDecision(result.verdict, result.request)); // B1–B8, B10
         // Throw, never return: mppx turns a returned non-402 Response into
         // outer status 200 and the application runs its action.
         throw new BolyraDeniedError(result.verdict, result.response);
@@ -549,6 +657,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       if (capturedRequest !== undefined) {
         decisions.set(capturedRequest, result.decision);
       }
+      reportDecision({ outcome: 'allow', ...result.evidence, request: copyContext(result.decision.request) }); // B9
       return originalPreflight ? originalPreflight(parameters) : undefined;
     },
 
