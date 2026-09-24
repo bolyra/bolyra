@@ -154,6 +154,8 @@ case "$cmd" in
   add-generic-password)
     cat >/dev/null   # the real one reads the password twice; never leave the writer on a SIGPIPE
     : > "$SHIM_KEYCHAIN/$acct"
+    # Every store is logged (account only) so a check can prove a refused run stored nothing.
+    printf '%s\n' "$acct" >> "$SHIM_KEYCHAIN.adds"
     exit 0 ;;
   delete-generic-password)
     if [ "${SHIM_DELETE_FAIL:-0}" = 1 ]; then
@@ -233,14 +235,24 @@ SHIM_WRANGLER
 
 chmod +x "$SHIM/security" "$SHIM/npx" "$SHIM/wrangler"
 
-printf '%s\n' '{"org_id":"acme","status":"active","trustedOperators":["1:2"]}' > "$TENANTS_DIR/acme.json"
 kc_seed() { : > "$KEYCHAIN/tenant-$1-admin"; : > "$KEYCHAIN/tenant-$1-verifier"; }
-kc_seed acme
 
 # Every tenant.sh call in this check runs with the shims first on PATH and with the temp
 # registry; nothing reads the operator's own environment.
 TENANT_ENV=(PATH="$SHIM:$PATH" SHIM_KEYCHAIN="$KEYCHAIN" HOSTED_VERIFY_ENV=lockcheck TENANTS_DIR="$TENANTS_DIR" MARKER="$MARKER" MARKER_BODY="$MARKER_BODY" SHIM_SLEEP="$SHIM_SLEEP")
 tenant() { env "${TENANT_ENV[@]}" bash "$TENANT" "$@"; }
+
+# E2: every mutating command refuses a registry without the .initialized marker. A registry a
+# scenario expects to be usable is initialized first — through `init` for the main one (it is
+# still empty here), by touching the marker for a directory that holds decoys `init` would
+# rightly refuse.
+init_registry() { : > "$1/.initialized"; }
+out="$(tenant init 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "init of the empty registry exited $rc: $out"
+[ -f "$TENANTS_DIR/.initialized" ] || fail "init wrote no marker: $out"
+[ ! -d "$LOCK_DIR" ] || fail "init left its lock behind: $out"
+printf '%s\n' '{"org_id":"acme","status":"active","trustedOperators":["1:2"]}' > "$TENANTS_DIR/acme.json"
+kc_seed acme
 
 # (a) a dry run validates and stops short of the upload.
 out="$(tenant sync --dry-run 2>&1)"; rc=$?
@@ -793,6 +805,7 @@ mkdir -p "$WORK/tenants-empty/dir.json"
 printf 'not json' > "$WORK/tenants-empty/.hidden.json"
 printf 'not json' > "$WORK/tenants-empty/x.policy.json"
 printf 'ignored' > "$WORK/tenants-empty/notes.txt"
+init_registry "$WORK/tenants-empty"
 out="$(env "${TENANT_ENV[@]}" TENANTS_DIR="$WORK/tenants-empty" MARKER="$WORK/marker-e0" bash "$TENANT" sync --allow-empty 2>&1)"; rc=$?
 [ "$rc" != 0 ] || fail "(e0) sync --allow-empty over a directory with no record files exited 0: $out"
 case "$out" in *"no tenant registry files"*) ;; *) fail "(e0) the refusal did not name the missing record files: $out" ;; esac
@@ -804,5 +817,253 @@ out="$(printf '' | node "$SCRIPT_DIR/tenants-assemble.mjs" "$WORK/tenants-empty"
 [ "$rc" = 1 ] || fail "(e0) the assembler exited $rc over the decoys, expected 1: $out"
 case "$out" in *"no registry record files"*) ;; *) fail "(e0) the assembler did not refuse the decoys as zero records: $out" ;; esac
 ok "(e0) decoys only (dotfile, *.policy.json, a directory, a .txt): shell and assembler agree there are no records; refused even with --allow-empty"
+
+# ---- the registry location (E2): the registry lives OFF the checkout, under
+# $HOME/.bolyra/tenants-<env> unless TENANTS_DIR says otherwise, and nothing mutates it until
+# it has been initialized (`init`) or had its records brought over (`migrate --from`).
+NOT_INIT="is not initialized: run 'tenant.sh init' for a new environment or 'tenant.sh migrate --from <dir>' to bring existing records over"
+NO_MARKER="has records but no marker"
+tenant_at() {  # $1 registry directory, then the tenant.sh arguments
+  local d="$1"; shift
+  env "${TENANT_ENV[@]}" TENANTS_DIR="$d" bash "$TENANT" "$@"
+}
+snapshot() { rm -rf "$2"; cp -Rp "$1" "$2"; }   # $1 dir → $2 copy, for `diff -r` afterwards
+json_count() { local n=0 f; for f in "$1"/*.json; do [ ! -f "$f" ] || n=$((n + 1)); done; echo "$n"; }
+adds_count() { if [ -e "$KEYCHAIN.adds" ]; then wc -l < "$KEYCHAIN.adds" | tr -d ' '; else echo 0; fi; }
+shim_token() { if command -v shasum >/dev/null 2>&1; then printf '%s' "$1" | shasum -a 256 | cut -c1-64; else printf '%s' "$1" | sha256sum | cut -c1-64; fi; }
+
+# (m1) the default path: no TENANTS_DIR → $HOME/.bolyra/tenants-production, or -<env> with
+# HOSTED_VERIFY_ENV. `show` works without the marker, says so, and creates nothing.
+mkdir -p "$WORK/home"
+out="$(env -u TENANTS_DIR -u HOSTED_VERIFY_ENV PATH="$SHIM:$PATH" SHIM_KEYCHAIN="$KEYCHAIN" HOME="$WORK/home" bash "$TENANT" show 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(m1) show under a temp HOME exited $rc: $out"
+case "$out" in *"$WORK/home/.bolyra/tenants-production"*) ;; *) fail "(m1) show did not resolve the production default under HOME: $out" ;; esac
+case "$out" in *"not initialized"*) ;; *) fail "(m1) show did not say the registry is not initialized: $out" ;; esac
+out="$(env -u TENANTS_DIR PATH="$SHIM:$PATH" SHIM_KEYCHAIN="$KEYCHAIN" HOME="$WORK/home" HOSTED_VERIFY_ENV=staging bash "$TENANT" show 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(m1) staging show under a temp HOME exited $rc: $out"
+case "$out" in *"$WORK/home/.bolyra/tenants-staging"*) ;; *) fail "(m1) show did not resolve the staging default under HOME: $out" ;; esac
+[ ! -e "$WORK/home/.bolyra" ] || fail "(m1) show created the registry directory"
+ok "(m1) the registry defaults to \$HOME/.bolyra/tenants-production (-staging under HOSTED_VERIFY_ENV=staging); show reports it uninitialized and creates nothing"
+
+# (m2) a mutating command against an uninitialized registry is refused with the instruction:
+# nothing is created — an absent directory stays absent, an empty one stays empty (the lock
+# released), and no token is stored.
+adds_before="$(adds_count)"
+out="$(tenant_at "$WORK/m2-absent" add m2org 1:2 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m2) add against an absent registry exited $rc, expected 1: $out"
+case "$out" in *"registry $WORK/m2-absent $NOT_INIT"*) ;; *) fail "(m2) add against an absent registry did not give the instruction: $out" ;; esac
+[ ! -e "$WORK/m2-absent" ] || fail "(m2) a refused add created the registry directory"
+mkdir -p "$WORK/m2"
+for args in "add m2org 1:2" "sync" "sync --dry-run" "rotate m2org admin" "disable m2org" "enable m2org --keys-retired" "remove m2org"; do
+  out="$(tenant_at "$WORK/m2" $args 2>&1)"; rc=$?
+  [ "$rc" = 1 ] || fail "(m2) $args against an uninitialized registry exited $rc, expected 1: $out"
+  case "$out" in *"$NOT_INIT"*) ;; *) fail "(m2) $args did not give the instruction: $out" ;; esac
+  [ -z "$(ls -A "$WORK/m2")" ] || fail "(m2) $args left something behind: $(ls -A "$WORK/m2")"
+done
+[ "$(adds_count)" = "$adds_before" ] || fail "(m2) a refused command stored a token"
+ok "(m2) add/rotate/disable/enable/remove/sync refuse an uninitialized registry with the init/migrate instruction and create nothing"
+
+# (m3) init refuses a directory that holds records (or a .candidate/) without the marker — it
+# cannot bless a partial migration — and refuses a registry that is already initialized.
+mkdir -p "$WORK/m3"
+printf '%s\n' '{"org_id":"stray","status":"active","trustedOperators":["1:2"]}' > "$WORK/m3/stray.json"
+out="$(tenant_at "$WORK/m3" init 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m3) init over records without a marker exited $rc, expected 1: $out"
+case "$out" in *"init: $WORK/m3 $NO_MARKER"*) ;; *) fail "(m3) init over records did not name the interrupted migrate: $out" ;; esac
+[ ! -e "$WORK/m3/.initialized" ] || fail "(m3) init blessed a directory of unmarked records"
+[ ! -d "$WORK/m3/.lock" ] || fail "(m3) a refused init left its lock behind"
+mkdir -p "$WORK/m3c/.candidate"
+out="$(tenant_at "$WORK/m3c" init 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m3) init over a leftover .candidate exited $rc, expected 1: $out"
+case "$out" in *"$NO_MARKER"*) ;; *) fail "(m3) init over a .candidate did not name the interrupted migrate: $out" ;; esac
+[ ! -e "$WORK/m3c/.initialized" ] || fail "(m3) init blessed a leftover .candidate"
+out="$(tenant_at "$WORK/m3b" init 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(m3) init of an absent directory exited $rc: $out"
+[ -f "$WORK/m3b/.initialized" ] || fail "(m3) init wrote no marker: $out"
+out="$(tenant_at "$WORK/m3b" init 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m3) a second init exited $rc, expected 1: $out"
+case "$out" in *"already initialized"*) ;; *) fail "(m3) the second init did not say it is already initialized: $out" ;; esac
+[ ! -d "$WORK/m3b/.lock" ] || fail "(m3) a refused init left its lock behind"
+ok "(m3) init refuses unmarked records or a .candidate/, and a second init; a fresh init creates the directory and the marker"
+
+# (m4) the migrate happy path: every record (active with tokens, removed without) and its
+# policy file is copied, validated as a whole, committed file by file; the marker is written
+# last; the source is never modified; show lists what came over; no token is printed.
+SRC="$WORK/m4-src"
+mkdir -p "$SRC/dir.json"
+printf '%s\n' '{"org_id":"mig-a","status":"active","trustedOperators":["5:6"]}' > "$SRC/mig-a.json"
+printf '%s\n' '{"org_id":"mig-b","status":"removed","trustedOperators":["7:8"]}' > "$SRC/mig-b.json"
+printf '%s\n' '{"note":"policy for mig-a"}' > "$SRC/mig-a.policy.json"
+printf 'not a record\n' > "$SRC/notes.txt"
+printf 'not json' > "$SRC/.hidden.json"
+kc_seed mig-a
+snapshot "$SRC" "$WORK/m4-src.orig"
+DEST="$WORK/m4-dest"
+adds_before="$(adds_count)"
+out="$(tenant_at "$DEST" migrate --from "$SRC" 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(m4) migrate exited $rc: $out"
+for f in mig-a.json mig-b.json mig-a.policy.json; do
+  cmp -s "$SRC/$f" "$DEST/$f" || fail "(m4) $f did not arrive byte for byte: $out"
+done
+[ "$(json_count "$DEST")" = 3 ] || fail "(m4) the destination holds $(json_count "$DEST") json files, expected 3: $(ls -A "$DEST")"
+[ ! -e "$DEST/notes.txt" ] && [ ! -e "$DEST/.hidden.json" ] && [ ! -e "$DEST/dir.json" ] || fail "(m4) a non-record came over: $(ls -A "$DEST")"
+[ -f "$DEST/.initialized" ] || fail "(m4) migrate wrote no marker: $out"
+[ ! -e "$DEST/.candidate" ] || fail "(m4) migrate left its .candidate behind"
+[ ! -d "$DEST/.lock" ] || fail "(m4) migrate left its lock behind"
+diff -r "$WORK/m4-src.orig" "$SRC" >/dev/null || fail "(m4) migrate modified the source"
+[ "$(adds_count)" = "$adds_before" ] || fail "(m4) migrate wrote to the keychain"
+case "$out" in *"migrated 2 records"*) ;; *) fail "(m4) the summary did not count 2 records: $out" ;; esac
+case "$out" in *"$SRC"*"delete"*) ;; *) fail "(m4) the summary did not name the source to delete by hand: $out" ;; esac
+case "$out" in *"$(shim_token tenant-mig-a-admin)"*|*"$(shim_token tenant-mig-a-verifier)"*) fail "(m4) migrate printed a token: $out" ;; *) ;; esac
+out="$(tenant_at "$DEST" show 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(m4) show after migrate exited $rc: $out"
+echo "$out" | grep -qE '^mig-a[[:space:]]+active[[:space:]]+yes[[:space:]]+yes' || fail "(m4) show does not list mig-a active with both tokens: $out"
+echo "$out" | grep -qE '^mig-b[[:space:]]+removed' || fail "(m4) show does not list mig-b removed: $out"
+case "$out" in *"not initialized"*) fail "(m4) show still calls the migrated registry uninitialized: $out" ;; *) ;; esac
+out="$(tenant_at "$DEST" sync --dry-run 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(m4) a dry run over the migrated registry exited $rc: $out"
+ok "(m4) migrate copies every record and policy file, validates, commits, marks the registry last, leaves the source untouched, prints no token"
+
+# (m5) migrate never merges: a destination that already holds a record, or is initialized, is
+# refused and left exactly as it was.
+DEST5="$WORK/m5-dest"
+mkdir -p "$DEST5"
+printf '%s\n' '{"org_id":"other","status":"active","trustedOperators":["1:2"]}' > "$DEST5/other.json"
+snapshot "$DEST5" "$WORK/m5-dest.orig"
+out="$(tenant_at "$DEST5" migrate --from "$SRC" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m5) migrate onto a destination with a record exited $rc, expected 1: $out"
+case "$out" in *"$NO_MARKER"*) ;; *) fail "(m5) the refusal did not name the unmarked records: $out" ;; esac
+diff -r "$WORK/m5-dest.orig" "$DEST5" >/dev/null || fail "(m5) the refused migrate changed the destination: $(ls -A "$DEST5")"
+snapshot "$DEST" "$WORK/m4-dest.orig"
+out="$(tenant_at "$DEST" migrate --from "$SRC" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m5) migrate onto an initialized registry exited $rc, expected 1: $out"
+case "$out" in *"already initialized"*) ;; *) fail "(m5) the refusal did not say the destination is initialized: $out" ;; esac
+diff -r "$WORK/m4-dest.orig" "$DEST" >/dev/null || fail "(m5) the refused migrate changed the initialized destination"
+ok "(m5) migrate onto a destination with a record, or an initialized one, is refused and changes nothing"
+
+# (m6) --from must be an absolute path to a directory other than the destination.
+out="$(cd "$WORK" && tenant_at "$WORK/m6" migrate --from m4-src 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m6) migrate with a relative --from exited $rc, expected 1: $out"
+case "$out" in *"--from must be an absolute path"*) ;; *) fail "(m6) the relative --from was not named: $out" ;; esac
+[ ! -e "$WORK/m6" ] || fail "(m6) a refused migrate created the destination"
+out="$(tenant_at "$WORK/m6" migrate --from "$WORK/no-such-dir" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m6) migrate from a missing directory exited $rc, expected 1: $out"
+out="$(tenant_at "$WORK/m6" migrate 2>&1)"; rc=$?
+[ "$rc" != 0 ] || fail "(m6) migrate without --from exited 0: $out"
+out="$(tenant_at "$SRC" migrate --from "$SRC" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m6) migrate onto its own source exited $rc, expected 1: $out"
+case "$out" in *"is the destination"*) ;; *) fail "(m6) migrating a directory onto itself was not named: $out" ;; esac
+diff -r "$WORK/m4-src.orig" "$SRC" >/dev/null || fail "(m6) a refused migrate modified the source"
+ok "(m6) migrate refuses a relative, missing or absent --from, and a source that is the destination"
+
+# A `mv` wrapper, put on PATH only for the runs that need it: after the FIRST rename out of a
+# .candidate/ it touches $SHIM_KEYCHAIN.mv-slowed and sleeps SHIM_MV_SLEEP, so a run can be
+# caught between the commit's renames. Every other mv goes straight through.
+MVSHIM="$WORK/mvshim"
+mkdir -p "$MVSHIM"
+{
+  printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v mv)"
+  cat <<'SHIM_MV'
+"$real" "$@"; rc=$?
+case "$*" in
+  */.candidate/*)
+    if [ -n "${SHIM_MV_SLEEP:-}" ] && [ ! -e "$SHIM_KEYCHAIN.mv-slowed" ]; then
+      : > "$SHIM_KEYCHAIN.mv-slowed"
+      sleep "$SHIM_MV_SLEEP"
+    fi ;;
+esac
+exit "$rc"
+SHIM_MV
+} > "$MVSHIM/mv"
+chmod +x "$MVSHIM/mv"
+
+# (m7) a migrate SIGKILLed between two renames of its commit: records are in place but there is
+# no marker. Once the retained lock is removed by hand (the runbook's recovery), every
+# mutating command, migrate and init refuse with the interrupted-migrate instruction — there
+# is no auto-repair — and the source is untouched.
+DEST7="$WORK/m7-dest"
+rm -f "$KEYCHAIN.mv-slowed"
+set -m
+env "${TENANT_ENV[@]}" PATH="$MVSHIM:$SHIM:$PATH" TENANTS_DIR="$DEST7" SHIM_MV_SLEEP=30 \
+  bash "$TENANT" migrate --from "$SRC" > "$WORK/m7.log" 2>&1 &
+BG=$!
+set +m
+wait_for_file "$KEYCHAIN.mv-slowed" || fail "(m7) the commit never started: $(cat "$WORK/m7.log")"
+require_live "$BG" migrate
+kill -9 -- "-$BG" || fail "(m7) could not kill the migrate's process group"
+{ wait "$BG"; } 2>/dev/null
+BG=""
+[ -d "$DEST7/.lock" ] || fail "(m7) a SIGKILLed migrate released its lock"
+rm -rf "$DEST7/.lock"
+[ ! -e "$DEST7/.initialized" ] || fail "(m7) a migrate killed mid-commit wrote the marker"
+[ "$(json_count "$DEST7")" = 1 ] || fail "(m7) expected exactly one committed file, found $(json_count "$DEST7"): $(ls -A "$DEST7")"
+[ "$(json_count "$DEST7/.candidate")" = 2 ] || fail "(m7) expected two files still in .candidate/: $(ls -A "$DEST7/.candidate" 2>&1)"
+snapshot "$DEST7" "$WORK/m7-dest.orig"
+for args in "add m7org 1:2" "sync" "rotate mig-a admin" "migrate --from $SRC" "init"; do
+  out="$(tenant_at "$DEST7" $args 2>&1)"; rc=$?
+  [ "$rc" = 1 ] || fail "(m7) $args after an interrupted commit exited $rc, expected 1: $out"
+  case "$out" in *"$DEST7 $NO_MARKER"*) ;; *) fail "(m7) $args did not give the interrupted-migrate instruction: $out" ;; esac
+  [ ! -d "$DEST7/.lock" ] || fail "(m7) $args left its lock behind"
+done
+diff -r "$WORK/m7-dest.orig" "$DEST7" >/dev/null || fail "(m7) a refused command changed the half-migrated registry"
+diff -r "$WORK/m4-src.orig" "$SRC" >/dev/null || fail "(m7) the interrupted migrate modified the source"
+ok "(m7) a migrate killed between renames leaves records without a marker; add/sync/rotate/migrate/init all refuse with the instruction"
+
+# (m8) the whole migrate runs under the lock: a concurrent add during a slowed commit is
+# refused as another tenant.sh running, and the migrate then completes.
+DEST8="$WORK/m8-dest"
+rm -f "$KEYCHAIN.mv-slowed"
+env "${TENANT_ENV[@]}" PATH="$MVSHIM:$SHIM:$PATH" TENANTS_DIR="$DEST8" SHIM_MV_SLEEP=2 \
+  bash "$TENANT" migrate --from "$SRC" > "$WORK/m8.log" 2>&1 &
+BG=$!
+wait_for_file "$KEYCHAIN.mv-slowed" || fail "(m8) the commit never started: $(cat "$WORK/m8.log")"
+adds_before="$(adds_count)"
+out="$(tenant_at "$DEST8" add m8org 1:2 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m8) add during a migrate exited $rc, expected 1: $out"
+case "$out" in *"another tenant.sh is running"*) ;; *) fail "(m8) add during a migrate was refused for the wrong reason: $out" ;; esac
+out="$(tenant_at "$DEST8" init 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m8) init during a migrate exited $rc, expected 1: $out"
+case "$out" in *"another tenant.sh is running"*) ;; *) fail "(m8) init during a migrate was refused for the wrong reason: $out" ;; esac
+wait "$BG"; rc=$?
+BG=""
+[ "$rc" = 0 ] || fail "(m8) the slowed migrate exited $rc: $(cat "$WORK/m8.log")"
+[ -f "$DEST8/.initialized" ] || fail "(m8) the slowed migrate wrote no marker"
+[ ! -e "$DEST8/m8org.json" ] || fail "(m8) the concurrent add wrote a record"
+[ "$(adds_count)" = "$adds_before" ] || fail "(m8) the concurrent add stored a token"
+[ ! -d "$DEST8/.lock" ] || fail "(m8) the migrate left its lock behind"
+ok "(m8) a concurrent add or init during a migrate is refused by the lock; the migrate completes"
+
+# (m9) validation covers the COMPLETE candidate before anything is committed: an active record
+# with no keychain token, or one the validator rejects, refuses the whole migrate — no record
+# and no marker at the destination, no .candidate left, the source untouched.
+SRC9="$WORK/m9-src"
+mkdir -p "$SRC9"
+printf '%s\n' '{"org_id":"mig-b","status":"removed","trustedOperators":["7:8"]}' > "$SRC9/mig-b.json"
+printf '%s\n' '{"org_id":"mig-c","status":"active","trustedOperators":["9:10"]}' > "$SRC9/mig-c.json"
+snapshot "$SRC9" "$WORK/m9-src.orig"
+out="$(tenant_at "$WORK/m9-dest" migrate --from "$SRC9" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m9) migrate with a missing token exited $rc, expected 1: $out"
+case "$out" in *"'mig-c' (admin)"*) ;; *) fail "(m9) the refusal did not name the org and role: $out" ;; esac
+case "$out" in *"$SRC9/mig-c.json"*) ;; *) fail "(m9) the refusal did not name the source file: $out" ;; esac
+[ "$(json_count "$WORK/m9-dest")" = 0 ] || fail "(m9) a refused migrate left records: $(ls -A "$WORK/m9-dest")"
+[ ! -e "$WORK/m9-dest/.initialized" ] || fail "(m9) a refused migrate wrote the marker"
+[ ! -e "$WORK/m9-dest/.candidate" ] || fail "(m9) a refused migrate left its .candidate"
+[ ! -d "$WORK/m9-dest/.lock" ] || fail "(m9) a refused migrate left its lock"
+diff -r "$WORK/m9-src.orig" "$SRC9" >/dev/null || fail "(m9) a refused migrate modified the source"
+# The validator's refusal: tokens resolve, the map does not (an operator key that is not x:y).
+printf '%s\n' '{"org_id":"mig-c","status":"active","trustedOperators":["not-a-key"]}' > "$SRC9/mig-c.json"
+kc_seed mig-c
+out="$(tenant_at "$WORK/m9-dest" migrate --from "$SRC9" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m9) migrate of a map the validator rejects exited $rc, expected 1: $out"
+[ "$(json_count "$WORK/m9-dest")" = 0 ] || fail "(m9) a rejected candidate left records: $(ls -A "$WORK/m9-dest")"
+[ ! -e "$WORK/m9-dest/.initialized" ] && [ ! -e "$WORK/m9-dest/.candidate" ] && [ ! -d "$WORK/m9-dest/.lock" ] \
+  || fail "(m9) a rejected candidate left a marker, a .candidate or the lock: $(ls -A "$WORK/m9-dest")"
+case "$out" in *"$(shim_token tenant-mig-c-admin)"*|*"$(shim_token tenant-mig-c-verifier)"*) fail "(m9) migrate printed a token: $out" ;; *) ;; esac
+# And a source with no record files at all is not a migration (init is for a new registry).
+mkdir -p "$WORK/m9-empty"
+out="$(tenant_at "$WORK/m9-dest" migrate --from "$WORK/m9-empty" 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(m9) migrate from an empty source exited $rc, expected 1: $out"
+[ ! -e "$WORK/m9-dest/.initialized" ] || fail "(m9) migrate from an empty source wrote the marker"
+ok "(m9) a missing token or a rejected map refuses the whole migrate: nothing committed, no marker, source untouched"
 
 echo "tenant-lock-check: all checks passed"

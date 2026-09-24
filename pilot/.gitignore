@@ -1,6 +1,10 @@
 # Real tenant records stay local — org ids and contacts are business-sensitive in a
 # public repo (files contain no secrets either way; tokens live in the keychain and are
 # only *referenced* from these files).
+# LEGACY location: tenant.sh now keeps the registry off the checkout, in
+# $HOME/.bolyra/tenants-<env> (E2). These stay ignored so a checkout that still holds
+# records from before the move (bring them over with `tenant.sh migrate --from`) can never
+# commit them.
 tenants/
 # every HOSTED_VERIFY_ENV registry directory, not just staging
 tenants-*/
