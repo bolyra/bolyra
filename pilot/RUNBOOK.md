@@ -83,6 +83,14 @@ earlier request may take effect after the recovery sync. A SIGKILL before
 stdin is delivered can leave an empty secret, causing verification to fail
 closed until a successful re-sync restores the intended map.
 
+If the retained lock came from `remove`, the tenant is half-removed: its
+registry file says `status=removed` but both keychain tokens were kept,
+because the old map (with the tenant in it) may still be live. Once the lock
+is removed as above, finish it with `pilot/tenant.sh remove <org_id>` instead
+of `sync`: it re-puts the map without the tenant and deletes the tokens only
+when that upload is confirmed. To keep the tenant after all, set its
+`"status"` back by hand and run `sync`; its tokens are still there.
+
 After sync, check the affected Worker's `/health` endpoint and the expected
 authenticated behaviour, including successful authentication for intended
 active tenants and rejection for quarantined or removed tenants. A healthy
@@ -220,7 +228,13 @@ pilot/tenant.sh disable <org_id>
 # was about (a key, a token) has been retired or re-issued:
 pilot/tenant.sh enable <org_id> --keys-retired
 
-# remove — deletes both tokens from the keychain and the entry from the map. The registry
+# remove — drops the entry from the map (status=removed, then sync) and deletes both tokens
+# from the keychain only AFTER wrangler has confirmed that upload. If no upload started (a
+# keychain, assembler or validator refusal, or a Ctrl-C before the put began) the status is
+# restored and the tokens are kept — nothing changed. If the outcome is unknown the lock,
+# the tokens and status=removed all stay: the tokens are what re-syncs the old map if it
+# is still live (see "Recovering a retained lock"). A token delete that fails after a
+# confirmed upload is reported by account and exits non-zero; delete it by hand. The registry
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
 # nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
 # because the file exists: run `rotate <org_id> admin` and `rotate <org_id> verifier`

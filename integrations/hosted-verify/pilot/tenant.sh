@@ -33,16 +33,20 @@
 #                                     lift the quarantine; refuses without the flag, which
 #                                     records that any operator key the quarantine was
 #                                     about has been retired or re-issued
-#   ./tenant.sh remove <org_id>       delete both tokens from the keychain and drop the
-#                                     tenant from the map (status=removed; the registry
-#                                     file is kept; the tenant's Durable Object and its
-#                                     history are NOT deleted), then sync
+#   ./tenant.sh remove <org_id>       drop the tenant from the map (status=removed, then
+#                                     sync) and delete both tokens from the keychain ONLY
+#                                     once that upload is confirmed. No upload started: the
+#                                     status is restored and the tokens kept. Outcome unknown:
+#                                     lock, tokens and status=removed all stay; recover the
+#                                     lock and re-run remove. The registry file is kept; the
+#                                     tenant's Durable Object and its history are NOT deleted
 #   ./tenant.sh sync [--dry-run]      rebuild TENANTS from registry + keychain, validate,
 #                                     re-put (dry-run: validate and report, push nothing)
 #   ./tenant.sh show                  list tenants, status, keychain presence
 #   Every command except show takes a per-environment lock ($TENANTS_DIR/.lock) for its whole
 #   run. An interrupt (Ctrl-C/TERM aimed at the shell or the put stage) takes effect only
-#   after the in-flight put has finished. The lock is released only when wrangler confirms the
+#   after the in-flight put has finished; one that reaches the put stage before it has
+#   started wrangler cancels the upload instead (nothing is sent). The lock is released only when wrangler confirms the
 #   upload or no upload was started; otherwise it stays and the outcome is unknown — there is
 #   no automatic unlock; see pilot/RUNBOOK.md, "Recovering a retained lock".
 #
@@ -93,6 +97,12 @@ esac
 # which flock (not on macOS) and lockfile helpers are not.
 LOCK_DIR="$TENANTS_DIR/.lock"
 LOCK_HELD=0
+# INTERRUPTED records the first INT/TERM this run received (0 = none). CRITICAL=1 marks a
+# section that must finish its local bookkeeping before the run may exit — `remove` between
+# changing the registry and acting on the upload's outcome — so a signal there is recorded and
+# acted on by deferred_exit at the end of the section instead of exiting halfway through it.
+INTERRUPTED=0
+CRITICAL=0
 release_lock() {
   # Only ever remove a lock this process created — a failed acquire must leave the holder's.
   [ "$LOCK_HELD" = 1 ] || return 0
@@ -116,6 +126,14 @@ release_lock() {
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
 on_signal() {  # $1 the signal name, INT or TERM
+  [ "$INTERRUPTED" != 0 ] || INTERRUPTED="$1"
+  if [ "$CRITICAL" = 1 ]; then
+    # Recorded, not acted on: the section in progress checks INTERRUPTED before it starts an
+    # upload (and cancels if it has not), finishes whatever an upload that did start requires
+    # locally, and then leaves through deferred_exit.
+    echo "error: interrupted by SIG$1; finishing the current step first (nothing new is started)" >&2
+    return 0
+  fi
   # Bash defers a trapped signal that arrives while a FOREGROUND command is running until that
   # command returns, and the last stage of the sync pipeline does not return until wrangler has
   # exited. So by the time this body runs the in-flight put has either landed or failed, with
@@ -124,6 +142,14 @@ on_signal() {  # $1 the signal name, INT or TERM
   # Exit with the conventional 128+signal code, and through the EXIT trap, so release_lock
   # still runs and still applies the retain rule above.
   case "$1" in
+    INT) exit 130 ;;
+    *)   exit 143 ;;
+  esac
+}
+deferred_exit() {  # the exit a signal inside a CRITICAL section was owed; a no-op without one
+  [ "$INTERRUPTED" != 0 ] || return 0
+  echo "error: exiting because of the earlier SIG$INTERRUPTED" >&2
+  case "$INTERRUPTED" in
     INT) exit 130 ;;
     *)   exit 143 ;;
   esac
@@ -201,7 +227,10 @@ kc_put_minted() {  # $1 org, $2 role — mint a fresh token and store it
   if [ "$_xt" = 1 ]; then set -x; fi
   return "$rc"
 }
-kc_delete() { security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null 2>&1 || true; }
+# Fails when the keychain refuses (denied, locked): a token that was meant to be destroyed and
+# was not must be reported, never swallowed. security's own error text reaches stderr; it holds
+# no secret.
+kc_delete() { security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null; }
 mint() { openssl rand -hex 32; }
 
 registry_file() { echo "$TENANTS_DIR/$1.json"; }
@@ -279,14 +308,54 @@ cmd_enable() {
 }
 
 cmd_remove() {
-  local org="${1:-}" extra="${2:-}"
+  local org="${1:-}" extra="${2:-}" prev role outcome=0 present="" failed=""
   [ -n "$org" ] || usage
   [ -z "$extra" ] || die "remove: unexpected extra argument '$extra'"
   require_org "$org"; require_registry "$org"; require_security
+  # The tokens are the only local recovery material for this tenant: while the old map might
+  # still be live, they are what re-syncs it. So they are deleted only once the upload that
+  # drops the tenant is CONFIRMED, and the status change is undone when no upload started.
+  CRITICAL=1
+  prev="$(reg_field "$org" status)"
+  case "$prev" in
+    active|disabled|removed) ;;
+    *) die "$(registry_file "$org"): status must be active, disabled, or removed" ;;
+  esac
+  # Which items exist now decides which deletes are owed afterwards: one already absent is
+  # not a failure to delete.
+  for role in admin verifier; do
+    if kc_has "$org" "$role"; then present="$present $role"; fi
+  done
   reg_set_status "$org" removed
-  kc_delete "$org" admin; kc_delete "$org" verifier
-  echo "tenant '$org': tokens deleted, status=removed (registry file kept; the tenant's Durable Object and history are retained)"
-  cmd_sync
+  do_sync || outcome=$?
+  case "$outcome" in
+    0)
+      for role in $present; do
+        kc_delete "$org" "$role" || failed="$failed $(kc_account "$org" "$role")"
+      done
+      if [ -n "$failed" ]; then
+        echo "error: tenant '$org' is out of the live map (status=removed), but these keychain items could not be deleted and are STALE — delete them by hand (security delete-generic-password -s $KEYCHAIN_SERVICE -a <account>):$failed" >&2
+      elif [ -n "$present" ]; then
+        echo "tenant '$org': removed from the map, tokens deleted, status=removed (registry file kept; the tenant's Durable Object and history are retained)"
+      else
+        echo "tenant '$org': removed from the map, status=removed; no tokens were left in the keychain to delete (registry file kept; the tenant's Durable Object and history are retained)"
+      fi
+      ;;
+    2)
+      reg_set_status "$org" "$prev"
+      echo "error: remove: nothing changed — this run started no upload, so tenant '$org' is back to status=$prev and its tokens are kept; the map the Worker holds is whatever was pushed last. Fix the error and re-run: pilot/tenant.sh remove $org" >&2
+      ;;
+    *)
+      echo "error: remove: the upload's outcome is UNKNOWN, so tenant '$org' stays status=removed and its tokens are KEPT (the old map, with this tenant in it, may still be live). Follow pilot/RUNBOOK.md, \"Recovering a retained lock\", then re-run: pilot/tenant.sh remove $org" >&2
+      ;;
+  esac
+  CRITICAL=0
+  deferred_exit
+  case "$outcome" in
+    0) [ -z "$failed" ] || exit 1; exit "$SYNC_RC" ;;
+    2) exit 1 ;;
+    *) [ "$SYNC_RC" != 0 ] || SYNC_RC=1; exit "$SYNC_RC" ;;
+  esac
 }
 
 # Print "<org> <role> <token>" for every active/disabled tenant — consumed on a pipe only.
@@ -321,8 +390,20 @@ tokens_for_sync() {
   return 0
 }
 
-cmd_sync() {
-  local arg="${1:-}" extra="${2:-}" dry=0
+# do_sync [--dry-run] — rebuild, validate and put TENANTS, and RETURN what happened to the
+# upload so a caller can act on it (every message is printed here):
+#   0  confirmed    wrangler confirmed the upload (upload.confirmed); SYNC_RC holds the
+#                   pipeline's exit code (130/143 when the put stage deferred an interrupt)
+#   2  not started  nothing was sent: the keychain, the assembler or the validator refused, or
+#                   an interrupt arrived before the upload started
+#   3  unknown      upload.pending: the lock is retained and what is live is unknown
+# A dry run returns 0 or exits with the failing stage's code, as before. Callers invoke it as
+# `do_sync || outcome=$?`, which turns errexit off inside it: every failure path below is
+# therefore explicit (die, or a captured rc), none relies on set -e.
+SYNC_RC=0
+do_sync() {
+  local arg="${1:-}" extra="${2:-}" dry=0 rc=0
+  SYNC_RC=0
   # Parse positively: anything that is not exactly --dry-run must refuse, never push live.
   case "$arg" in
     "") ;;
@@ -331,11 +412,26 @@ cmd_sync() {
   esac
   [ -z "$extra" ] || die "sync: unexpected extra argument '$extra'"
   require_security
+  # Cancellation point 1, before anything is assembled: an interrupt that has already been
+  # recorded (possible only inside a CRITICAL section — elsewhere on_signal has exited) means
+  # nothing new is started.
+  if [ "$INTERRUPTED" != 0 ]; then
+    echo "error: interrupted by SIG$INTERRUPTED before the upload started; nothing was assembled or uploaded" >&2
+    return 2
+  fi
   echo "assembling TENANTS from $TENANTS_DIR (tokens from keychain service $KEYCHAIN_SERVICE)…" >&2
   if [ "$dry" = 1 ]; then
-    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs"
+    tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" || exit $?
     echo "(dry run: not pushing)" >&2
     return 0
+  fi
+  # Cancellation point 2, immediately before the pipeline that ends in the put stage. The
+  # pipeline starts its stages together, so from here on an interrupt that reaches the put
+  # stage while it is still reading the map is cancelled THERE (exit 75, no marker), and one
+  # that reaches only this shell is deferred by bash until the pipeline has returned.
+  if [ "$INTERRUPTED" != 0 ]; then
+    echo "error: interrupted by SIG$INTERRUPTED before the upload started; nothing was uploaded" >&2
+    return 2
   fi
   # The map is assembled in node, validated, and STREAMED into wrangler — it never touches
   # disk or a shell variable. `wrangler secret put` has NO empty-value guard, so it must
@@ -343,9 +439,9 @@ cmd_sync() {
   # put an EMPTY TENANTS (every tenant fails closed). tenants-put.mjs starts wrangler only
   # after a non-empty validated map has arrived. pipefail is set, so a failure anywhere
   # (keychain, assembly, validation, guard, wrangler) is loud.
-  local rc=0
   tokens_for_sync | node "$SCRIPT_DIR/tenants-assemble.mjs" "$TENANTS_DIR" | node "$SCRIPT_DIR/tenants-check.mjs" --pass \
       | (cd "$WORKER_DIR" && node "$SCRIPT_DIR/tenants-put.mjs" "${WRANGLER_ENV[@]}") || rc=$?
+  SYNC_RC="$rc"
   # What happened to the upload is read from what the put stage RECORDED, never from $rc. An
   # exit code cannot tell these three apart: the launcher reports a signalled child as exit 0,
   # a 130/143 can equally be a TERM that arrived before any uploader existed, and a
@@ -356,25 +452,42 @@ cmd_sync() {
   if [ -e "$LOCK_DIR/upload.confirmed" ]; then
     # What is reported is what WRANGLER reported. Nothing here has observed the Worker, and
     # nothing here can establish when the request took effect relative to any other.
-    case "$rc" in
-      130|143) echo "done (an interrupt arrived after the put completed); secrets take effect on the next request" >&2 ;;
-      *)       echo "done. Secrets take effect on the next request (no redeploy)." >&2 ;;
-    esac
-    exit "$rc"
+    if [ "$INTERRUPTED" != 0 ]; then
+      echo "done (an interrupt arrived while the upload was under way; it ran to completion and was confirmed); secrets take effect on the next request" >&2
+    else
+      case "$rc" in
+        130|143) echo "done (an interrupt arrived after the put completed); secrets take effect on the next request" >&2 ;;
+        *)       echo "done. Secrets take effect on the next request (no redeploy)." >&2 ;;
+      esac
+    fi
+    return 0
   fi
   if [ -e "$LOCK_DIR/upload.pending" ]; then
     echo "error: the outcome of the upload is UNKNOWN — the intended map may or may not be live; the lock is retained. Follow pilot/RUNBOOK.md, \"Recovering a retained lock\"." >&2
-    [ "$rc" != 0 ] || rc=1
-    exit "$rc"
+    return 3
   fi
   # No marker at all: the pipeline stopped before the put stage started an upload (keychain,
-  # assembly, or the validator refusing). That is a fact about THIS RUN and it is the only
-  # thing that can be claimed here. What the Worker is serving is whatever the last upload put
-  # there, which may have been days ago or may be a map whose own outcome was never confirmed;
-  # `wrangler secret put` is write-only, so no command can check. Saying the previous map is
-  # "still accepted" would assert exactly that unreadable thing — and would be flatly wrong
-  # where the live secret is empty or was never configured.
-  die "this run started no upload and changed nothing; the map the Worker holds is whatever was pushed last. Fix the error and re-run: pilot/tenant.sh sync"
+  # assembly, the validator refusing, or an interrupt the put stage cancelled on — exit 75).
+  # That is a fact about THIS RUN and it is the only thing that can be claimed here. What the
+  # Worker is serving is whatever the last upload put there, which may have been days ago or
+  # may be a map whose own outcome was never confirmed; `wrangler secret put` is write-only, so
+  # no command can check. Saying the previous map is "still accepted" would assert exactly
+  # that unreadable thing — and would be flatly wrong where the live secret is empty or was
+  # never configured.
+  if [ "$INTERRUPTED" != 0 ] || [ "$rc" = 75 ]; then
+    echo "error: interrupted before the upload started; nothing was uploaded" >&2
+  fi
+  return 2
+}
+
+cmd_sync() {
+  local outcome=0
+  do_sync "$@" || outcome=$?
+  case "$outcome" in
+    0) exit "$SYNC_RC" ;;
+    3) [ "$SYNC_RC" != 0 ] || SYNC_RC=1; exit "$SYNC_RC" ;;
+    *) die "this run started no upload and changed nothing; the map the Worker holds is whatever was pushed last. Fix the error and re-run: pilot/tenant.sh sync" ;;
+  esac
 }
 
 cmd_show() {

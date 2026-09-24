@@ -20,20 +20,27 @@ const SUCCESS_LINE = /Success! Uploaded secret TENANTS/;
 process.stdout.on('error', () => {});
 process.stderr.on('error', () => {});
 
-// An interrupt is DEFERRED here exactly as it is in tenant.sh: recorded, reported once, and
-// acted on only after the upload has finished. Forwarding it to the launcher would be worse
-// than useless — the launcher converts its child's signal death into exit 0, so a forwarded
-// interrupt reads as a clean upload while the map that reached Cloudflare is unknown.
+// An interrupt is handled in two ways, depending on whether wrangler has been started yet.
+// BEFORE the spawn (the map still on its way down the pipe) it CANCELS: nothing has been sent,
+// so the one honest outcome is "not started" — no marker, no wrangler, exit EX_TEMPFAIL below,
+// which tenant.sh reads as "interrupted before the upload started". AFTER the spawn it is
+// DEFERRED exactly as it is in tenant.sh: recorded, reported once, and acted on only after the
+// upload has finished. Forwarding it to the launcher would be worse than useless — the
+// launcher converts its child's signal death into exit 0, so a forwarded interrupt reads as a
+// clean upload while the map that reached Cloudflare is unknown.
 // Installed FIRST, before a byte of the map has been read: until a handler is attached the
-// default disposition applies, so a TERM that arrives while the map is still on its way down
-// the pipe kills this stage outright — no marker, no upload, and a shell upstream left to
-// explain an exit code for something that never started.
+// default disposition applies, so a signal that arrives while the map is still on its way down
+// the pipe kills this stage outright — no report, and a shell upstream left to explain an exit
+// code for something that never started.
+const EX_TEMPFAIL = 75;
 let interrupted = null;
+let spawned = false;
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     if (interrupted !== null) return;
     interrupted = sig;
-    process.stderr.write(`tenants-put: ${sig} received; the upload in flight runs to completion first\n`);
+    if (spawned) process.stderr.write(`tenants-put: ${sig} received; the upload in flight runs to completion first\n`);
+    else process.stderr.write(`tenants-put: ${sig} received before the upload started; it will not be started\n`);
   });
 }
 
@@ -57,6 +64,13 @@ const confirmedFile = lockDir === undefined ? undefined : path.join(lockDir, 'up
 const chunks = [];
 process.stdin.on('data', (d) => chunks.push(d));
 process.stdin.on('end', () => {
+  // The cancellation point. Everything from here to the spawn is synchronous, so no signal
+  // handler can run in between: a signal that arrived while the map was being read is seen
+  // here, and one that arrives later finds `spawned` set and is deferred.
+  if (interrupted !== null) {
+    process.stderr.write(`tenants-put: interrupted before the upload started; wrangler was NOT started and the live map was NOT changed\n`);
+    process.exit(EX_TEMPFAIL);
+  }
   const body = Buffer.concat(chunks);
   if (body.length === 0) {
     process.stderr.write('tenants-put: nothing validated upstream; wrangler was NOT started and the live map was NOT changed\n');
@@ -117,6 +131,7 @@ process.stdin.on('end', () => {
       WRANGLER_LOG: 'log',
     },
   });
+  spawned = true;
   child.on('error', (e) => {
     process.stderr.write(`tenants-put: ${e.message}\n`);
     process.exit(1);
