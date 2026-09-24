@@ -165,8 +165,19 @@ describe('per-tenant ACTIVE credential cap', () => {
 
   it('expired-but-ACTIVE rows still count (no reclamation)', async () => {
     const r = registry(ORGS.A);
-    // Seeded rows registered long ago; their bindings are long expired, but they are ACTIVE until revoked.
-    await seedCredentials(r, MAX_ACTIVE_CREDENTIALS, { now: 1 });
+    // Every seeded row is ACTIVE with a binding whose expiry is in the PAST: still counted until revoked.
+    const pastExpiry = NOW - 3600;
+    const ids = await seedCredentials(r, MAX_ACTIVE_CREDENTIALS, { now: NOW - 7200, expiry: pastExpiry });
+    const seeded = await r.get(ids[0]!);
+    expect(seeded.outcome === 'found' && seeded.record.status).toBe('ACTIVE');
+    expect(seeded.outcome === 'found' && (JSON.parse(seeded.record.binding_json) as { expiry: number }).expiry).toBe(pastExpiry);
+    await runInDurableObject(r, (_i, state) => {
+      expect(
+        state.storage.sql
+          .exec("SELECT count(*) AS n FROM credentials WHERE status = 'ACTIVE' AND json_extract(binding_json, '$.expiry') < ?", NOW)
+          .one().n,
+      ).toBe(MAX_ACTIVE_CREDENTIALS);
+    });
     expect(await r.register(input(ID_A))).toEqual({ outcome: 'quota_exceeded' });
   });
 
