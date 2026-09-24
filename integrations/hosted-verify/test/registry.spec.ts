@@ -171,6 +171,8 @@ describe('per-tenant ACTIVE credential cap', () => {
   });
 
   it('two registers issued together at cap-1: exactly one created, one quota_exceeded', async () => {
+    // Guards the observable invariant only: register has no `await`, so the object serializes these RPCs
+    // anyway; atomicity rests on header rule 1 (no `await`) plus the single transaction.
     const r = registry(ORGS.A);
     await seedCredentials(r, MAX_ACTIVE_CREDENTIALS - 1);
     const [x, y] = await Promise.all([r.register(input(ID_A)), r.register(input(ID_B))]);

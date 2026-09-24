@@ -50,6 +50,9 @@
  *      method runs to completion before the object can deliver another event:
  *      revoke's two transactions cannot interleave with another call. (The
  *      input gate only matters across an `await`, and there are none.)
+ *      The same rule makes the ACTIVE cap atomic: register's count must stay
+ *      inside its transaction and before any future `await`, or two
+ *      registrations at cap-1 could both insert.
  *   2. Nothing is thrown across the RPC boundary — a throw inside the object is
  *      reported as an unhandled rejection by the runtime even when the caller
  *      handles it. Storage failures are RETURNED (`storage_error`), a schema
@@ -80,7 +83,8 @@ export interface RegisterInput {
  * Per-tenant cap on ACTIVE credentials. Only revocation frees a slot: a row
  * whose binding has expired but was never revoked is still ACTIVE and still
  * counts (no reclamation). REVOKED rows never count. The count and the insert
- * are one transaction, so two registrations at cap-1 cannot both succeed.
+ * run in one synchronous transaction with no `await` (header rule 1), which is
+ * what keeps the cap from being exceeded.
  */
 export const MAX_ACTIVE_CREDENTIALS = 1000;
 
@@ -312,6 +316,9 @@ export class TenantRegistry extends DurableObject<Env> {
             ? { outcome: 'revoked' }
             : { outcome: 'unchanged', registered_at: existing.registered_at };
         }
+        // A full-table count per new registration; bounded by the cap itself.
+        // Revisit trigger: add an index on status if the cap is raised well
+        // past 1000 or register latency shows the count.
         const active = this.ctx.storage.sql
           .exec<{ n: number }>("SELECT count(*) AS n FROM credentials WHERE status = 'ACTIVE'")
           .one().n;
