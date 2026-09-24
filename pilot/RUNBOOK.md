@@ -373,8 +373,10 @@ cd integrations/hosted-verify && npx wrangler tail --env=            # --env=sta
 ```
 
 One structured line per authenticated decision and per authenticated registry
-request: `request_id, org_id, role, route, verdict, code, credential_id?,
-latency_ms`. A registry write that fails with `registry storage failure` means
+request: `request_id, cf_ray?, org_id, role, route, verdict, code, credential_id?,
+latency_ms`. `request_id` is the server-generated UUID the caller sees as the
+`x-bolyra-request-id` response header (search the tail for it); `cf_ray` is the
+edge ray id, present only when well-formed. A registry write that fails with `registry storage failure` means
 the tenant's Durable Object could not persist: check the Workers dashboard →
 Durable Objects → storage and errors for `TenantRegistry`. The registry is
 tiny (a few KiB per credential), so a storage error is an outage, not a quota.

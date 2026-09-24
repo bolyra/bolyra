@@ -6,7 +6,7 @@
  *   - TENANTS authenticates with constant-time comparison per token; the usage
  *     label is `<org_id>:<role>` (or `unauthenticated`).
  *   - Exactly ONE data point per request, with the documented shape:
- *       blobs   = [route, label, verdict, code, proof_kind, request_id]
+ *       blobs   = [route, label, verdict, code, proof_kind, request_id, cf_ray]
  *       doubles = [latency_ms, http_status]
  *       indexes = [label]
  *   - The point NEVER contains bodies, proofs, credentials, tokens, or IPs.
@@ -26,6 +26,10 @@ beforeAll(async () => {
   await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
   await registerFixture(fixtureRegistration(allowAgentOnly), 'C');
 });
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const RAY = '0123456789abcdef-SJC';
+const HOSTILE_RAY = `"); DROP TABLE history; --`;
 
 interface DataPoint {
   blobs?: string[];
@@ -118,9 +122,10 @@ describe('Analytics Engine usage data point', () => {
 
     expect(points).toHaveLength(1);
     const p = points[0]!;
-    expect(p.blobs).toHaveLength(6);
+    expect(p.blobs).toHaveLength(7);
     expect(p.blobs!.slice(0, 5)).toEqual(['/v1/verify', `${ORGS.A}:verifier`, 'allow', '', 'classical']);
-    expect(p.blobs![5]).toMatch(/\S/); // request id present
+    expect(p.blobs![5]).toMatch(UUID); // server-generated request id
+    expect(p.blobs![6]).toBe(''); // no cf-ray on this request
     expect(p.doubles).toHaveLength(2);
     expect(p.doubles![0]).toBeGreaterThanOrEqual(0); // latency_ms
     expect(p.doubles![1]).toBe(200); // http status
@@ -310,5 +315,131 @@ describe('one structured log line per /v1/verify decision', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+/** Spy on console.info for one call; returns the captured lines by message. */
+async function captureInfo<T>(fn: () => Promise<T>): Promise<{ result: T; lines: Array<[string, Record<string, unknown>]> }> {
+  const lines: Array<[string, Record<string, unknown>]> = [];
+  const spy = vi.spyOn(console, 'info').mockImplementation((...args: unknown[]) => {
+    lines.push(args as [string, Record<string, unknown>]);
+  });
+  try {
+    return { result: await fn(), lines };
+  } finally {
+    spy.mockRestore();
+  }
+}
+
+function withRay(req: Request, ray: string | null): Request {
+  const headers = new Headers(req.headers);
+  if (ray !== null) headers.set('cf-ray', ray);
+  return new Request(req, { headers });
+}
+
+describe('request id vs cf-ray correlation (E17)', () => {
+  it.each([
+    ['a valid cf-ray', RAY, RAY],
+    ['a valid cf-ray without a colo suffix', '0123456789abcdef', '0123456789abcdef'],
+    ['no cf-ray', null, ''],
+    ['a hostile cf-ray', HOSTILE_RAY, ''],
+  ])('analytics: request_id is a server UUID; cf_ray is its own trailing blob (%s)', async (_n, ray, blob) => {
+    const { env: e, points } = usageEnv();
+    await worker.fetch(withRay(verifyRequest(TOKENS.A.verifier), ray), e);
+    expect(points).toHaveLength(1);
+    expect(points[0]!.blobs).toHaveLength(7);
+    expect(points[0]!.blobs![5]).toMatch(UUID);
+    expect(points[0]!.blobs![6]).toBe(blob);
+  });
+
+  it('the decision and registry log lines carry cf_ray only when it is valid; request_id is always a UUID', async () => {
+    const valid = (registrations as { valid: { body: unknown } }).valid;
+    const register = (ray: string | null) =>
+      withRay(
+        new Request(`${BASE}/v1/credentials`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' },
+          body: JSON.stringify(valid.body),
+        }),
+        ray,
+      );
+    for (const [ray, expected] of [[RAY, RAY], [null, undefined], [HOSTILE_RAY, undefined]] as const) {
+      const { lines } = await captureInfo(async () => {
+        await worker.fetch(withRay(verifyRequest(TOKENS.A.verifier), ray), env as Env);
+        await worker.fetch(register(ray), env as Env);
+      });
+      const decision = lines.find((l) => l[0] === 'hosted-verify decision')![1];
+      const registry = lines.find((l) => l[0] === 'hosted-verify registry request')![1];
+      for (const line of [decision, registry]) {
+        expect(line.request_id).toMatch(UUID);
+        if (expected === undefined) expect(line).not.toHaveProperty('cf_ray');
+        else expect(line.cf_ray).toBe(expected);
+      }
+      expect(JSON.stringify(lines)).not.toContain('DROP TABLE');
+    }
+  });
+});
+
+describe('x-bolyra-request-id response header (T6)', () => {
+  const header = (res: Response) => res.headers.get('x-bolyra-request-id');
+
+  it.each([
+    ['200 verify', () => verifyRequest(TOKENS.A.verifier), {}, 200],
+    ['401 no token', () => verifyRequest(null), {}, 401],
+    ['403 wrong role', () => verifyRequest(TOKENS.A.admin), {}, 403],
+    ['404 unknown route', () => new Request(`${BASE}/does/not/exist`), {}, 404],
+    ['405 wrong method', () => new Request(`${BASE}/v1/verify`), {}, 405],
+    ['503 degraded health', () => new Request(`${BASE}/health`), { TENANTS: '{not json' }, 503],
+    ['500 config-error verdict', () => verifyRequest(TOKENS.A.verifier), { CAPABILITY_MAP: '{not json' }, 500],
+  ] as const)('%s carries a UUID request id, distinct per request', async (_n, make, overrides, status) => {
+    const e = { ...(env as Env), ...overrides };
+    const a = await worker.fetch(make(), e);
+    const b = await worker.fetch(make(), e);
+    expect(a.status).toBe(status);
+    expect(header(a)).toMatch(UUID);
+    expect(header(b)).toMatch(UUID);
+    expect(header(a)).not.toBe(header(b));
+    // The header is ADDED, never a replacement: the preview headers survive.
+    expect(a.headers.get('x-bolyra-preview')).toBe('design-partner-preview');
+  });
+
+  it('a valid cf-ray never becomes the request id header', async () => {
+    const res = await worker.fetch(withRay(verifyRequest(TOKENS.A.verifier), RAY), env as Env);
+    expect(header(res)).toMatch(UUID);
+  });
+
+  it('204 revoke: header present, body still empty; register and revoke headers equal their log lines\' request_id', async () => {
+    const valid = (registrations as { valid: { body: unknown; credential_id: string } }).valid;
+    const { result, lines } = await captureInfo(async () => {
+      const reg = await worker.fetch(
+        new Request(`${BASE}/v1/credentials`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' },
+          body: JSON.stringify(valid.body),
+        }),
+        env as Env,
+      );
+      const rev = await worker.fetch(
+        new Request(`${BASE}/v1/credentials/${valid.credential_id}/revoke`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${TOKENS.A.admin}` },
+        }),
+        env as Env,
+      );
+      return { reg, rev };
+    });
+    expect([200, 201]).toContain(result.reg.status);
+    expect(result.rev.status).toBe(204);
+    expect(await result.rev.text()).toBe('');
+    expect(result.rev.body).toBeNull();
+    expect(result.rev.headers.get('cache-control')).toBe('no-store');
+    const registry = lines.filter((l) => l[0] === 'hosted-verify registry request').map((l) => l[1].request_id);
+    expect(registry).toEqual([header(result.reg), header(result.rev)]);
+  });
+
+  it('a verify decision line and its response header share the request id', async () => {
+    const { result, lines } = await captureInfo(() => worker.fetch(verifyRequest(TOKENS.A.verifier), env as Env));
+    const decision = lines.find((l) => l[0] === 'hosted-verify decision')![1];
+    expect(decision.request_id).toBe(header(result));
   });
 });

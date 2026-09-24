@@ -156,7 +156,8 @@ before the paid action runs — is
   analytics attribute requests to `<org_id>:<role>` — never to token values.
   Auth failures are recorded under the reserved label `unauthenticated`.
 - **Body:** one spec §2.1 request object (`version`, `bundle`, `request`,
-  `now_unix`), capped at **1 MiB** (the spec §6 stdin bound). The optional
+  `now_unix`), capped at **1 MiB** (the spec §6 stdin bound) and required to
+  arrive within **5 s**. The optional
   extension field `kind` may be set to `"classical"`; any other value (e.g.
   `"zk"`) is denied — this endpoint does not do zk verification.
 - **Response body:** exactly one spec §3.4 verdict object (closed schema),
@@ -166,12 +167,12 @@ before the paid action runs — is
     Branch on the verdict, not the status.
   - `500` + `deny code=internal_error` — the verifier could not produce a
     trustworthy verdict (e.g. no trusted roots configured, or the tenant's
-    credential registry was unreachable inside the 2,000 ms deadline). Fail
-    closed.
+    credential registry was unreachable inside the 2,000 ms deadline, or the
+    request body stalled past its 5 s deadline). Fail closed.
   - `401` / `404` / `405` — transport-level errors *before* the contract;
     the body is `{ "error": … }`, not a verdict.
-- **Fail-closed:** malformed JSON, non-object bodies, oversized bodies, wrong
-  request version, undecodable bundles — every one is an explicit `deny` with
+- **Fail-closed:** malformed JSON, non-object bodies, oversized bodies, a body
+  stream that errors mid-read, wrong request version, undecodable bundles — every one is an explicit `deny` with
   a spec §9 code, never a silent allow.
 - **`x-bolyra-credential-id`** — on an `allow`, the credential id of the
   presented binding (the same value `POST /v1/credentials` returned). Unsigned
@@ -237,7 +238,7 @@ except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
   `stored: null`; fix the row by hand). Either is left for a human; the
   credential stays revoked. `404` if absent.
 
-The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the request's `cf-ray` id (or a UUID when absent).
+The returned `binding` is the canonical key-sorted form, so `JSON.stringify` of it equals the serialization the operator signed and `binding_digest_hex` can be re-derived from it. `history.request_id` is the server-generated request id (a UUID, the same value as that request's `x-bolyra-request-id` header) — never a client-supplied value.
 `/health` reports `registry_kind: "durable-object"`, the registry liveness probe result under `registry`, and `credential_id_version: "v1"`.
 A registry storage failure is `500 internal_error`; a quarantined tenant gets
 `503 tenant_disabled` on these routes.
@@ -339,8 +340,11 @@ Two layers, both configured in `wrangler.jsonc`:
    invocation logs, queryable in the Cloudflare dashboard. The Worker adds one
    line per **authenticated** `/v1/verify` decision and per **authenticated**
    registry request:
-   `{ request_id, org_id, role, route, verdict, code, credential_id?, latency_ms }`
-   — `credential_id` on an allow and on registry requests that name one (a
+   `{ request_id, cf_ray?, org_id, role, route, verdict, code, credential_id?, latency_ms }`
+   — `request_id` is the server-generated UUID every response also carries as
+   the **`x-bolyra-request-id`** header (quote it when reporting an issue);
+   `cf_ray` is the edge ray id, a separate correlation field present only when
+   it has Cloudflare's documented shape; `credential_id` on an allow and on registry requests that name one (a
    hash of operator-signed data, not a secret). Never a request body, a bearer
    token, or an IP. A `401`, a wrong-role `403`, a quarantined tenant and a
    `TENANTS` configuration defect are decided before this line is reached, so
@@ -364,7 +368,8 @@ Two layers, both configured in `wrangler.jsonc`:
 | `blob3`   | verdict       | `allow` / `deny` (verifier verdicts), `ok` (a successful resource route: registry routes and a healthy `/health`), `error` (any other non-2xx, including a degraded `/health` with code `degraded`) |
 | `blob4`   | code          | deny code (spec §9), transport-error code, or empty on success |
 | `blob5`   | proof kind    | `classical` for verdict responses, empty otherwise             |
-| `blob6`   | request id    | the `cf-ray` id (or a random UUID)                             |
+| `blob6`   | request id    | the server-generated UUID (= the `x-bolyra-request-id` header)  |
+| `blob7`   | cf-ray        | the edge `cf-ray` id when it has the documented shape, else empty |
 | `double1` | latency_ms    | request handling time                                          |
 | `double2` | HTTP status   | response status code                                           |
 | `index1`  | tenant label  | same as `blob2` (query/sampling index)                        |

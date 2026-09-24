@@ -155,15 +155,25 @@ function tenantLabel(auth: AuthResult): string {
 }
 
 /**
- * The request id recorded in analytics and in registry history. `cf-ray` is
- * assigned at Cloudflare's edge in production, but in `wrangler dev` and tests
- * a client can supply any value — so only the documented shape
- * (`<16 hex>[-<3 uppercase>]`) is accepted; anything else gets a fresh UUID.
+ * The request id: ALWAYS server-generated (a UUID), never taken from the request. It is
+ * recorded in registry history, the log lines and analytics, and returned as the
+ * `x-bolyra-request-id` response header, so an audit row can never carry a value a client
+ * chose.
+ */
+function newRequestId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * The `cf-ray` id, kept as a SEPARATE correlation field (logs and analytics only; never
+ * history). It is assigned at Cloudflare's edge in production, but in `wrangler dev` and
+ * tests a client can supply any value — so only the documented shape
+ * (`<16 hex>[-<3 uppercase>]`) is accepted; anything else is `undefined`.
  */
 const CF_RAY_PATTERN = /^[0-9a-f]{16}(-[A-Z]{3})?$/;
-function requestIdFrom(request: Request): string {
+function cfRayFrom(request: Request): string | undefined {
   const ray = request.headers.get('cf-ray');
-  return ray !== null && CF_RAY_PATTERN.test(ray) ? ray : crypto.randomUUID();
+  return ray !== null && CF_RAY_PATTERN.test(ray) ? ray : undefined;
 }
 
 /**
@@ -702,7 +712,7 @@ async function handleHealth(env: Env): Promise<Response> {
  * Explicitly never stored: request bodies, proofs, credentials, bearer
  * tokens, IPs, credential ids. Documented in README "Observability".
  *
- *   blobs   = [route, label, verdict, code, proof_kind, request_id]
+ *   blobs   = [route, label, verdict, code, proof_kind, request_id, cf_ray]
  *   doubles = [latency_ms, http_status]
  *   indexes = [label]
  *
@@ -711,7 +721,10 @@ async function handleHealth(env: Env): Promise<Response> {
  * `<org_id>:<role>` for an authenticated request (including one refused for
  * the wrong role), or `unauthenticated`. `verdict` is `allow`/`deny` only for
  * verifier verdicts; a successful resource route records `ok`, so verifier
- * allow-rate queries stay pure without a route filter.
+ * allow-rate queries stay pure without a route filter. `request_id` is the
+ * server-generated UUID (also the `x-bolyra-request-id` header); `cf_ray` is the
+ * edge ray id when it has the documented shape, else '' — appended last so no
+ * earlier blob position moved when it was added.
  */
 interface Usage {
   route: string;
@@ -721,6 +734,8 @@ interface Usage {
   code: string; // deny code, transport-error code, or '' on success
   kind: string; // verdict proof kind ('classical'), '' for non-verdicts
   requestId: string;
+  /** The validated `cf-ray`, or '' (a correlation field, never an identifier we issue). */
+  cfRay: string;
   latencyMs: number;
   status: number;
 }
@@ -729,7 +744,7 @@ interface Usage {
 function writeUsage(env: Env, usage: Usage): void {
   try {
     env.USAGE?.writeDataPoint({
-      blobs: [usage.route, usage.label, usage.verdict, usage.code, usage.kind, usage.requestId],
+      blobs: [usage.route, usage.label, usage.verdict, usage.code, usage.kind, usage.requestId, usage.cfRay],
       doubles: [usage.latencyMs, usage.status],
       indexes: [usage.label],
     });
@@ -741,7 +756,9 @@ function writeUsage(env: Env, usage: Usage): void {
 export default {
   async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const start = Date.now();
-    const requestId = requestIdFrom(request);
+    const requestId = newRequestId();
+    const cfRay = cfRayFrom(request);
+    const correlation = cfRay !== undefined ? { cf_ray: cfRay } : {};
     const url = new URL(request.url);
 
     let route = 'other';
@@ -812,6 +829,7 @@ export default {
             // One structured line per decision (Workers Logs). Never a body, token or IP.
             console.info('hosted-verify decision', {
               request_id: requestId,
+              ...correlation,
               org_id: gate.auth.org_id,
               role: gate.auth.role,
               route,
@@ -907,6 +925,7 @@ export default {
             const loggedId = result.credential_id ?? id;
             console.info('hosted-verify registry request', {
               request_id: requestId,
+              ...correlation,
               org_id: gate.auth.org_id,
               role: gate.auth.role,
               route,
@@ -958,6 +977,7 @@ export default {
       code,
       kind,
       requestId,
+      cfRay: cfRay ?? '',
       latencyMs: Date.now() - start,
       status: response.status,
     };
@@ -968,6 +988,10 @@ export default {
       writeUsage(env, usage);
     }
 
-    return response;
+    // Every response, whatever route produced it, names its request id. Rebuilt rather than
+    // mutated: a Response's headers may be immutable. A null body (the 204) stays null.
+    const tagged = new Response(response.body, response);
+    tagged.headers.set('x-bolyra-request-id', requestId);
+    return tagged;
   },
 };

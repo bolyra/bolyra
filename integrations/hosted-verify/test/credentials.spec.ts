@@ -37,6 +37,8 @@ const FIXTURE_OPERATOR_KEY = (() => {
   return `${operator_pubkey.x}:${operator_pubkey.y}`;
 })();
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 async function body(res: Response): Promise<Record<string, unknown>> {
   return (await res.json()) as Record<string, unknown>;
 }
@@ -114,13 +116,14 @@ describe('lifecycle over HTTP', () => {
     expect((await getCredential(F.valid.credential_id)).status).toBe(404);
   });
 
-  it('the request id in history is the edge-shaped cf-ray when present and a UUID otherwise', async () => {
+  it('the request id in history is always a server-generated UUID, even when a valid cf-ray is present', async () => {
     await postRegister(F.valid.body, { headers: { 'cf-ray': '0123456789abcdef-SJC' } });
     await postRevoke(F.valid.credential_id, { headers: { 'cf-ray': `"); DROP TABLE history; --` } });
     const g = await body(await getCredential(F.valid.credential_id));
     const history = g.history as Array<{ event: string; request_id: string }>;
-    expect(history[0]!.request_id).toBe('0123456789abcdef-SJC');
-    expect(history[1]!.request_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(history.map((h) => h.event)).toEqual(['registered', 'revoked']);
+    for (const h of history) expect(h.request_id).toMatch(UUID);
+    expect(history[0]!.request_id).not.toBe(history[1]!.request_id);
   });
 });
 
@@ -173,6 +176,8 @@ describe('durable revocation over HTTP: an audit-row failure never un-revokes', 
     await seedRevokedEvent(id, 1, 'seed');
     const rev = await postRevoke(id, { headers: { 'cf-ray': '0123456789abcdef-SJC' } });
     expect(rev.headers.get('x-bolyra-audit')).toBe('history_write_failed');
+    const revokeRequestId = rev.headers.get('x-bolyra-request-id');
+    expect(revokeRequestId).toMatch(UUID);
     await runInDurableObject(tenantA(), (_i, state) => {
       state.storage.sql.exec("DELETE FROM history WHERE credential_id = ? AND event = 'revoked'", id);
     });
@@ -184,7 +189,7 @@ describe('durable revocation over HTTP: an audit-row failure never un-revokes', 
     const history = g.history as Array<{ event: string; request_id: string }>;
     expect(history.map((h) => [h.event, h.request_id])).toEqual([
       ['registered', expect.any(String)],
-      ['revoked', '0123456789abcdef-SJC'],
+      ['revoked', revokeRequestId], // the owed row carries the FIRST revocation's server request id
     ]);
     expect((await postRevoke(id)).headers.get('x-bolyra-audit')).toBeNull();
   });

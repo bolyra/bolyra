@@ -28,7 +28,8 @@ if (!TOKEN) {
 
 // Row schema (see README "Observability"):
 //   blob1 route · blob2 tenant label (org_id:role) · blob3 verdict · blob4 code
-//   blob5 proof kind · blob6 request id · double1 latency_ms · double2 status
+//   blob5 proof kind · blob6 request id (server UUID) · blob7 cf-ray (or empty)
+//   double1 latency_ms · double2 status
 const SQL_API = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/analytics_engine/sql`;
 
 async function sql(query) {
