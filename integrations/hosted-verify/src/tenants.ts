@@ -32,6 +32,7 @@
  * that as "no tenant is trusted", never "all tenants are trusted".
  */
 
+import { sha256 } from '@noble/hashes/sha256';
 import { loadTrustedOperators } from './verify/operators';
 import { isVerifyDenial, VerifyDenial } from './verify/verdict';
 
@@ -82,16 +83,54 @@ export const MAX_TENANTS_BYTES = 4096;
 
 const encoder = new TextEncoder();
 
-/** Constant-time byte comparison (no early exit on mismatch). */
-export function timingSafeEqual(a: string, b: string): boolean {
-  const ab = encoder.encode(a);
-  const bb = encoder.encode(b);
-  let diff = ab.length ^ bb.length;
-  const len = Math.max(ab.length, bb.length);
-  for (let i = 0; i < len; i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
+/** SHA-256 output size: every compared value is reduced to exactly this many bytes. */
+export const DIGEST_BYTES = 32;
+
+/** The longest valid token (TOKEN_PATTERN), in bytes: every stored token pads to this. */
+const MAX_TOKEN_BYTES = 256;
+
+/**
+ * The hashed preimage of a token: `u32be(byteLength) || bytes || zero padding` up to
+ * `4 + MAX_TOKEN_BYTES`. The length prefix folds the length into the digest (different
+ * lengths → different preimages, so a zero-padded prefix never collides), and the padding
+ * makes hashing a STORED token (32–256 bytes) the same number of SHA-256 blocks whatever
+ * its length. Only a presented value longer than any valid token grows the preimage, and
+ * that costs the caller's own length only.
+ */
+export function tokenPreimage(value: string): Uint8Array {
+  const bytes = encoder.encode(value);
+  const out = new Uint8Array(4 + Math.max(bytes.length, MAX_TOKEN_BYTES));
+  new DataView(out.buffer).setUint32(0, bytes.length);
+  out.set(bytes, 4);
+  return out;
+}
+
+/** The fixed-size digest a token is compared through. */
+export function tokenDigest(value: string): Uint8Array {
+  return sha256(tokenPreimage(value));
+}
+
+/**
+ * Compare two `DIGEST_BYTES` digests with a fixed-count XOR loop (no early exit). Anything
+ * else is a programming error, refused — so the loop count never depends on an input.
+ */
+export function compareDigests(x: Uint8Array, y: Uint8Array): boolean {
+  if (x.length !== DIGEST_BYTES || y.length !== DIGEST_BYTES) {
+    throw new TypeError(`compareDigests takes two ${DIGEST_BYTES}-byte digests`);
   }
+  let diff = 0;
+  for (let i = 0; i < DIGEST_BYTES; i++) diff |= x[i]! ^ y[i]!;
   return diff === 0;
+}
+
+/**
+ * Timing-safe token comparison: both inputs are hashed to fixed-size digests, which are
+ * compared in constant time. Neither the content nor the length of a stored token shapes
+ * the work (see `tokenPreimage`); a length mismatch is folded into the digests, never a
+ * short-circuit.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  return compareDigests(tokenDigest(a), tokenDigest(b));
 }
 
 /**
@@ -243,15 +282,16 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
  * scheme grammar is deliberately narrower than RFC 7235 (SP/HTAB separators,
  * visible-ASCII token) so a fronting proxy or log parser cannot see a
  * different token than the Worker does. Every candidate token of every tenant
- * is compared with the constant-time comparator and ALL candidates are always
- * scanned (no early exit on match). Duplicate values are impossible here —
+ * is compared digest to digest (`tokenDigest` + `compareDigests`, the
+ * `timingSafeEqual` construction) and ALL candidates are always scanned (no
+ * early exit on match). Duplicate values are impossible here —
  * `loadTenants` rejects them.
  */
 export function resolveAuth(request: Request, tenants: Map<string, TenantConfig>): AuthResult | null {
   const header = request.headers.get('authorization') ?? '';
   const match = /^Bearer[ \t]+([\x21-\x7e]+)$/i.exec(header);
   if (match === null || match[1] === undefined) return null;
-  const presented = match[1];
+  const presented = tokenDigest(match[1]); // hashed once; each candidate is compared digest to digest
 
   let result: AuthResult | null = null;
   for (const [org_id, tenant] of tenants) {
@@ -260,7 +300,7 @@ export function resolveAuth(request: Request, tenants: Map<string, TenantConfig>
       ['verifier', tenant.verifier_token],
     ];
     for (const [role, token] of candidates) {
-      if (timingSafeEqual(presented, token) && result === null) {
+      if (compareDigests(presented, tokenDigest(token)) && result === null) {
         result = { org_id, role, disabled: tenant.disabled, trusted_operators: tenant.trusted_operators };
       }
     }
