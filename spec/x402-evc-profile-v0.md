@@ -90,7 +90,9 @@ between verifier and host:
   must check that its `audience` covers `payTo` (byte-literal equality by
   default, or an explicit canonicalization) BEFORE dispatch — a mismatch
   denies `request_mismatch` without consulting the verifier, because the
-  verifier cannot see the extension's payee.
+  host is the actor that binds `payTo` to its `audience` before dispatch;
+  the default (v1) verifier does not evaluate the `x402_evc` extension,
+  though a profile-aware verifier MAY.
 - `nonce` / `expires_at` — the 402 challenge context. The HOST owns both
   checks (EVC §7): a stale context denies `expired`; a reused nonce denies
   `nonce_replayed` via reserve-before-act (§7.3).
