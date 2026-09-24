@@ -6,7 +6,7 @@ import {
 } from '../src/errors';
 import { handleDenials, sendDenial } from '../src/handle-denials';
 import { deny } from '../src/types';
-import { denyResponse } from '../src/deny';
+import { denyProblem, denyResponse } from '../src/deny';
 
 describe('BolyraDeniedError', () => {
   test('carries the verdict and the Problem Details response', () => {
@@ -175,5 +175,54 @@ describe('isBolyraGateConfigError', () => {
     const verdict = deny('missing_authorization', 'no header');
     expect(isBolyraGateConfigError(new BolyraDeniedError(verdict, denyResponse(verdict)))).toBe(false);
     expect(isBolyraGateConfigError(null)).toBe(false);
+  });
+});
+
+describe('denyProblem: verdict detail (T8)', () => {
+  const ID = 'ab'.repeat(32);
+
+  test('copies string reason and credential_id from verdict.detail', async () => {
+    const verdict = deny('untrusted_root', 'not active', { reason: 'credential_not_active', credential_id: ID });
+    expect(denyProblem(verdict)).toEqual({
+      type: 'https://bolyra.ai/problems/mpp/untrusted-root',
+      title: 'Untrusted Issuer',
+      status: 401,
+      detail: 'not active',
+      code: 'untrusted_root',
+      reason: 'credential_not_active',
+      credential_id: ID,
+    });
+    // The HTTP body carries the same fields.
+    const body = await denyResponse(verdict).json();
+    expect(body).toMatchObject({ reason: 'credential_not_active', credential_id: ID });
+  });
+
+  test('missing detail: the fields are absent (not undefined-valued)', () => {
+    const problem = denyProblem(deny('expired', 'stale'));
+    expect('reason' in problem).toBe(false);
+    expect('credential_id' in problem).toBe(false);
+  });
+
+  test('non-string reason / credential_id are dropped', () => {
+    const problem = denyProblem(deny('untrusted_root', 'x', { reason: 42, credential_id: { id: ID } }));
+    expect('reason' in problem).toBe(false);
+    expect('credential_id' in problem).toBe(false);
+  });
+
+  test('no other detail keys leak into the problem body', async () => {
+    const verdict = deny('untrusted_root', 'x', {
+      reason: 'credential_not_active', credential_id: ID, internal: 'db-host:5432', stack: 'at ...',
+    });
+    const problem = denyProblem(verdict);
+    expect(Object.keys(problem).sort()).toEqual(
+      ['code', 'credential_id', 'detail', 'reason', 'status', 'title', 'type'],
+    );
+    const body = await denyResponse(verdict).json();
+    expect(body).not.toHaveProperty('internal');
+    expect(body).not.toHaveProperty('stack');
+  });
+
+  test('a {code, message} pick without detail still works (existing callers)', () => {
+    expect(denyProblem({ code: 'expired', message: 'm' })).toMatchObject({ code: 'expired', status: 403 });
   });
 });

@@ -59,22 +59,41 @@ export interface DenyProblem {
   detail: string;
   /** Stable machine-readable denial code (EVC §9 + `missing_authorization`). */
   code: DenyCode;
+  /**
+   * The verifier's machine-readable reason (`verdict.detail.reason`), e.g.
+   * `credential_not_active` on a hosted-registry deny. Present only when the
+   * verdict carried it as a string.
+   */
+  reason?: string;
+  /** The credential the verifier named (`verdict.detail.credential_id`), when a string. */
+  credential_id?: string;
 }
 
-/** Build the Problem Details body for a deny verdict. */
-export function denyProblem(verdict: Pick<DenyVerdict, 'code' | 'message'>): DenyProblem {
+/** The verdict members a Problem Details body is built from. */
+export type DenyProblemInput = Pick<DenyVerdict, 'code' | 'message' | 'detail'>;
+
+/**
+ * Build the Problem Details body for a deny verdict. Of `verdict.detail`,
+ * ONLY `reason` and `credential_id` are copied, and only when they are
+ * strings — any other detail member stays out of the HTTP body.
+ */
+export function denyProblem(verdict: DenyProblemInput): DenyProblem {
   const status = DENY_STATUS[verdict.code] ?? 500;
+  const reason = verdict.detail?.reason;
+  const credentialId = verdict.detail?.credential_id;
   return {
     type: `https://bolyra.ai/problems/mpp/${verdict.code.replace(/_/g, '-')}`,
     title: TITLES[verdict.code] ?? 'Authorization Denied',
     status,
     detail: verdict.message,
     code: verdict.code,
+    ...(typeof reason === 'string' ? { reason } : {}),
+    ...(typeof credentialId === 'string' ? { credential_id: credentialId } : {}),
   };
 }
 
 /** Build the fail-closed HTTP response for a deny verdict. */
-export function denyResponse(verdict: Pick<DenyVerdict, 'code' | 'message'>): Response {
+export function denyResponse(verdict: DenyProblemInput): Response {
   const problem = denyProblem(verdict);
   return new Response(JSON.stringify(problem), {
     status: problem.status,
