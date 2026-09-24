@@ -31,6 +31,12 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 /** Version propagation: poll /health every 5 s, at most 12 times (~60 s). */
 export const VERSION_POLL_INTERVAL_MS = 5_000;
 export const VERSION_POLLS = 12;
+/**
+ * Each version poll's own request timeout. Shorter than REQUEST_TIMEOUT_MS so a host that
+ * does not answer yet costs 5 s per poll, not 15 s: the whole wait stays near 60 s once the
+ * host answers and about 2 min (12 × 5 s timeouts + 11 × 5 s waits) when it never does.
+ */
+export const VERSION_POLL_TIMEOUT_MS = 5_000;
 /** Well-formed (TOKEN_PATTERN) and never issued: it must be refused like no token. */
 export const BOGUS_TOKEN = 'bogus-token-000000000000000000000000';
 const ZERO_ID = '0'.repeat(64);
@@ -269,12 +275,14 @@ export async function runAuthBoundary({ fetch, url, expectedVersion, print, time
 
 /**
  * Wait for a fresh deploy to propagate: poll /health until `version.id` is `expected`,
- * every VERSION_POLL_INTERVAL_MS, at most VERSION_POLLS times. Mid-propagation /health and
+ * every VERSION_POLL_INTERVAL_MS, at most VERSION_POLLS times, each poll under its own
+ * VERSION_POLL_TIMEOUT_MS. Mid-propagation /health and
  * /v1/verify may be served by different isolates, so a match means "at least one isolate
  * reports this version", not that every isolate runs it.
  * @returns {Promise<boolean>} whether the version was seen
  */
-export async function waitForVersion({ fetch, url, expected, print, sleep, timeoutMs = REQUEST_TIMEOUT_MS }) {
+export async function waitForVersion({ fetch, url, expected, print, sleep, timeoutMs = VERSION_POLL_TIMEOUT_MS }) {
+  if (typeof sleep !== 'function') throw new DiagnosticError('waitForVersion needs sleep');
   for (let n = 1; n <= VERSION_POLLS; n++) {
     try {
       const r = await call(fetch, url, '/health', { method: 'GET' }, timeoutMs);

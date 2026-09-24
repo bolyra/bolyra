@@ -16,6 +16,10 @@ import {
   parseWranglerVersion,
   runAuthBoundary,
   verifyDeploy,
+  waitForVersion,
+  DiagnosticError,
+  REQUEST_TIMEOUT_MS,
+  VERSION_POLL_TIMEOUT_MS,
 } from '../scripts/lib/verify-deploy-core.mjs';
 
 const require = createRequire(import.meta.url);
@@ -447,6 +451,32 @@ test('version wait: never live → fails after 12 polls, no behavioral leg, no p
   assert.ok(!worker.calls.includes('POST /v1/credentials'));
   assert.doesNotMatch(r.out, /behavioral \(tenant/);
   assert.equal(appended, 0);
+});
+
+test('version wait: without a sleep function it refuses up front (no silent busy-poll)', async () => {
+  let fetched = 0;
+  await assert.rejects(
+    waitForVersion({ fetch: async () => (fetched++, new Response('{}')), url: URL_, expected: VERSION, print: () => {}, sleep: undefined }),
+    (e) => e instanceof DiagnosticError && /waitForVersion needs sleep/.test(e.message),
+  );
+  assert.equal(fetched, 0);
+});
+
+test('version wait: each poll runs under the short per-poll timeout, not the 15 s request timeout', async () => {
+  assert.equal(VERSION_POLL_TIMEOUT_MS, 5_000);
+  assert.ok(VERSION_POLL_TIMEOUT_MS < REQUEST_TIMEOUT_MS);
+  const seen = [];
+  const original = AbortSignal.timeout;
+  AbortSignal.timeout = (ms) => (seen.push(ms), original.call(AbortSignal, ms));
+  try {
+    const r = await run({ worker: propagating(2) });
+    assert.equal(r.code, 0, r.out + r.err);
+  } finally {
+    AbortSignal.timeout = original;
+  }
+  // Two version polls, then the auth and behavioral legs on the ordinary request timeout.
+  assert.deepEqual(seen.slice(0, 2), [VERSION_POLL_TIMEOUT_MS, VERSION_POLL_TIMEOUT_MS]);
+  assert.ok(seen.length > 2 && seen.slice(2).every((ms) => ms === REQUEST_TIMEOUT_MS), String(seen));
 });
 
 test('version wait: no expected version → no polling', async () => {
