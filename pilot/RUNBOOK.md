@@ -410,7 +410,7 @@ npm ci && npm test && npm run typecheck
 # ── Staging ─────────────────────────────────────────────────────────────────
 # Deploy FIRST: a `secret put` against a Worker that does not exist yet makes wrangler
 # create a stub Worker (non-interactively it answers its own prompt with yes).
-npm run deploy:staging                                        # note the printed Current Version ID
+npm run deploy:staging                                        # deploys, then verifies it (see "Post-deploy verification"); note the Current Version ID
 npx wrangler secret put RECEIPT_SIGNER_KEY --env staging      # a fresh 0x-hex secp256k1 key
 HOSTED_VERIFY_ENV=staging pilot/tenant.sh add <org_id> <x:y> --with-fixture-key  # staging keychain + <repo root>/pilot/tenants-staging/; the example below signs with the fixture key
 curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '{tenants, registry_enforced, receipts_enabled}'
@@ -428,7 +428,8 @@ curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '
 # Zero consumers are on record, so a maintenance window is a courtesy, not a risk.
 # 1. Deploy the build (100%, one step). The moment it lands, the Worker requires a
 #    REGISTERED binding for every allow — legacy tokens and unregistered bindings stop.
-npm run deploy:prod                                           # note the printed Current Version ID
+npm run deploy:prod                                           # deploys, then verifies it (auth boundary; the canary leg once
+                                                              # bolyra-canary exists); note the Current Version ID
 # 2. Retire the legacy secrets if they are still set (they are read by nothing):
 npx wrangler secret list --env=
 npx wrangler secret delete PREVIEW_TOKEN --env=; npx wrangler secret delete PARTNER_TOKENS --env=
@@ -437,6 +438,99 @@ npx wrangler secret delete PREVIEW_TOKEN --env=; npx wrangler secret delete PART
 # 4. Hand out verifier + admin tokens and the capability vocabulary (step 1.4).
 # 5. Record the version id below as the ROLLBACK FLOOR.
 ```
+
+### Post-deploy verification
+
+`npm run deploy:staging` and `npm run deploy:prod` pipe `wrangler deploy` through
+`tee` into `scripts/verify-deploy.mjs --from-wrangler`, so every deploy is checked
+against the version it just produced. The script reads `Current Version ID: <uuid>`
+from wrangler's output and fails when it is absent. npm runs scripts without
+`pipefail`, so this check is what turns a failed `wrangler deploy` into a failed
+command. Run it by hand against any target:
+
+```bash
+cd integrations/hosted-verify
+node scripts/verify-deploy.mjs https://bolyra-hosted-verify-staging.kondojuviswanadha.workers.dev \
+  --version <id> --env staging --tenant bolyra-staging
+```
+
+**What it proves.**
+- *Auth boundary (always).* `GET /health` answers 200 with `status`, `registry`,
+  `capability_map` and `tenants` all `"ok"`, `registry_enforced: true`, and
+  `version.id` equal to the deployed id. `POST /v1/verify` with no token and with a
+  well-formed bogus token both answer 401. `GET /v1/credentials/<64 zeros>` with no
+  token answers 401.
+- *Enforcement (with `--tenant <org>`).* A fresh canary binding (agent
+  `verify-deploy-<8 hex>`, signed by the tenant's canary operator key) goes through
+  the full registry lifecycle, all on one credential id. The script derives that id
+  locally (`scripts/lib/credential-id.mjs`) before sending anything:
+  1. presented unregistered: deny `credential_not_active` (ABSENT)
+  2. registered: 201
+  3. presented: allow, with `x-bolyra-credential-id` set to the id (ACTIVE)
+  4. revoked: 204
+  5. presented: deny `credential_not_active` (REVOKED)
+
+  A 204 carrying `x-bolyra-audit: history_write_failed` is reported but does not
+  fail the check; run `repair-history` for that id (step 3). Output is limited to
+  status codes, verdict codes, 64-hex ids and the version id. Response bodies and
+  tokens are never printed.
+
+**Keychain accounts** (service `bolyra-hosted-verify`, or `bolyra-hosted-verify-staging`
+with `--env staging`):
+
+| Account | Holds | Created by |
+|---|---|---|
+| `tenant-<org>-admin` | the tenant's admin token | `tenant.sh add` |
+| `tenant-<org>-verifier` | the tenant's verifier token | `tenant.sh add` |
+| `operator-<org>-scalar` | the canary operator's EdDSA private scalar, decimal or `0x`-hex; its public key must be in the tenant's `trusted_operators` | by hand, once (below) |
+
+```bash
+# Create the scalar entry (prompts for the value; nothing lands in shell history):
+security add-generic-password -s bolyra-hosted-verify-staging -a operator-bolyra-staging-scalar -w
+```
+
+`bolyra-staging` trusts the fixture key (`--with-fixture-key`), so its scalar is the
+repo's documented test scalar `42`. Production's `bolyra-canary` gets its own key:
+generate a scalar, add its public key when running `tenant.sh add bolyra-canary <x:y>`,
+store the scalar as `operator-bolyra-canary-scalar`, then delete
+`--allow-missing-tenant` from `deploy:prod` in `package.json`. Until then production
+is verified only up to the auth boundary, and the output says so: `enforcement NOT
+verified on this target (tenant bolyra-canary has no keychain entries)`. Without
+`--allow-missing-tenant`, a missing account fails the run and the message names it.
+
+**The pending log.** Before the registration request, the script appends
+`<iso-time> <env> <org> <credential_id> pending` to
+`~/.bolyra/canary-pending-<env>.log` (override with `--pending-log`). After any
+registration attempt, including a timeout or a lost response, it revokes the id
+again in cleanup:
+
+| Cleanup revoke | Registration was | Result | Log line |
+|---|---|---|---|
+| 204 | anything | `cleaned` | removed |
+| 404 | a parsed 4xx (never committed) | `nothing_committed` | removed |
+| 404 | timed out / lost / 5xx / unparseable | `unconfirmed`: it may still commit | **kept**; exit non-zero |
+| anything else, or a network error | anything | `unconfirmed` | **kept**; exit non-zero |
+
+`CANARY CLEANUP UNCONFIRMED credential_id=<id>` on stderr means a line was kept. To
+clear it, revoke each listed id with that tenant's admin token (step 3's revoke; a
+204 means it is revoked now, a 404 after some minutes means it never committed),
+then delete its line from the log.
+
+**Growth.** Each successful enforcement run leaves one REVOKED row and its history
+in the canary tenant's registry object (revocation is terminal and rows are never
+deleted). Rotate the canary org id (`tenant.sh add bolyra-canary-2 …`, then update
+`deploy:prod`/`deploy:staging`) once it holds more than ~1000 revoked rows.
+
+**Right after a deploy.** A new version can take a few seconds to reach every
+isolate, so a `/health version.id` mismatch straight after the deploy can be
+propagation. Re-run with `--version <id>` after ~30 s before treating it as a
+failure.
+
+**Locally.** `bash scripts/with-worker.sh node scripts/verify-deploy.mjs "$VERIFY_URL"
+--env local --tenant local --allow-missing-tenant` checks the auth boundary of a
+`wrangler dev` Worker. Adding `--secrets-from-dev-vars` (accepted only with
+`--env local` and a loopback URL) also runs the enforcement leg, using the placeholder
+tokens from `.dev.vars.example` and scalar `42`.
 
 **Rollback floor.** The first version that reports `registry_enforced: true`
 on `/health` is the floor. Never deploy a build below it, and never deploy a

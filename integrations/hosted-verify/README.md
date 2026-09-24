@@ -431,6 +431,17 @@ npm run deploy:prod                                  # workers.dev subdomain ONL
 npx wrangler secret put RECEIPT_SIGNER_KEY --env=    # production, if not yet set; --env= pins production even if CLOUDFLARE_ENV is set
 ```
 
+`npm run deploy:staging` and `npm run deploy:prod` check the deploy they just made:
+`wrangler deploy` output is piped into `scripts/verify-deploy.mjs --from-wrangler`, and a
+missing `Current Version ID` fails the command, so a failed deploy never passes. The
+script then checks `/health` (every component `ok`, `registry_enforced`, the deployed
+version id) and that `/v1/verify` and `/v1/credentials/{id}` refuse unauthenticated and
+bogus-token requests with 401. For a tenant whose tokens and canary operator scalar are
+in the keychain, it also takes a fresh canary credential through ABSENT → ACTIVE →
+REVOKED and revokes it again in cleanup. An id whose cleanup cannot be confirmed stays
+in a pending log. Keychain accounts, the pending log and canary growth are covered in
+`pilot/RUNBOOK.md` §7 under "Post-deploy verification".
+
 `TENANTS` is the only auth configuration: one entry per design partner
 (`org_id` = lowercase, 2–63 chars), two tokens per entry (32–256 characters of
 `[A-Za-z0-9._~+/-]`; a value that appears twice anywhere is a defect that
