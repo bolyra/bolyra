@@ -777,6 +777,9 @@ cmd_init() {
 # none is printed). Returns 1 with the reason on stderr, naming the SOURCE file.
 migrate_validate() {
   local src="$1" dest="$TENANTS_DIR" orgs org status role rc=0
+  # Invariant: TENANTS_DIR is swapped to the candidate for the duration of this function; every
+  # early exit below is a `die` (process exit), so the restore at the end is the ONLY non-exit
+  # path. Do not add a `return` before the restore without restoring TENANTS_DIR first.
   TENANTS_DIR="$CANDIDATE_DIR"
   orgs="$(registry_orgs)"
   while IFS= read -r org <&3; do
