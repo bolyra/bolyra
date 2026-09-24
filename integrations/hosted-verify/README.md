@@ -208,7 +208,9 @@ signed bindings the tenant has registered and whether each is ACTIVE or
 REVOKED. Every non-2xx body on these routes is `{ "error": <code>, "message": … }`,
 except the role-mismatch `403`, which is exactly `{ "error": "forbidden" }`.
 
-- **`POST /v1/credentials`** — register a binding. Body (≤ 64 KiB):
+- **`POST /v1/credentials`** — register a binding. Body (≤ 64 KiB, which must
+  finish arriving within 5 s: a stalled body is `500 internal_error`, a body
+  stream that errors mid-read is `400 malformed_input`):
   `{ "version": 1, "binding": { agent_name, project_key, program, model, capabilities, expiry },
      "signature": { "R8": { "x", "y" }, "S" }, "operator_pubkey": { "x", "y" } }`
   — the same binding shape a presentation carries, signed by the operator key.
