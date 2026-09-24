@@ -13,8 +13,9 @@
  *              the signed receipt (checked with `bolyra receipt verify`), and the deny
  *              `detail` (`reason`, `credential_id`); plus the registered id checked against
  *              one derived in-process from the mandate (`credentialId(operator key,
- *              bindingDigest(binding))` with this example's installed @bolyra/mpp and the
- *              Worker's own credential-id.ts), so a digest drift between the two is caught.
+ *              bindingDigest(binding))` with this example's installed @bolyra/mpp and
+ *              src/credential-id.ts, a node:crypto mirror of the Worker's derivation), so a
+ *              digest or id drift between the Worker and the published package is caught.
  *
  * Environment: VERIFY_URL (default http://127.0.0.1:8787), ADMIN_TOKEN and VERIFIER_TOKEN
  * (default: the placeholder tenant of integrations/hosted-verify/.dev.vars.example — not
@@ -25,10 +26,8 @@
 import { randomBytes } from 'node:crypto';
 import { Receipt } from 'mppx';
 import { bindingDigest, issueMandate, type BindingClaim, type IssuedMandate } from '@bolyra/mpp';
-// The Worker's own derivation, imported by path (tsx resolves the TypeScript source), so the
-// run below can check the id the Worker returns against one computed here from the mandate.
-import { credentialId } from '../../../integrations/hosted-verify/src/credential-id.js';
 import { paidCall } from './client.js';
+import { credentialId } from './credential-id.js';
 import { AUDIENCE, MODEL, createServer } from './server.js';
 import { DiagnosticError, health, register, registrationOf, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
 import { CLI_VERSION, PACKAGES } from './versions.js';
