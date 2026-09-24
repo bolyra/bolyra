@@ -234,7 +234,10 @@ pilot/tenant.sh enable <org_id> --keys-retired
 # restored and the tokens are kept — nothing changed. If the outcome is unknown the lock,
 # the tokens and status=removed all stay: the tokens are what re-syncs the old map if it
 # is still live (see "Recovering a retained lock"). A token delete that fails after a
-# confirmed upload is reported by account and exits non-zero; delete it by hand. The registry
+# confirmed upload is reported by account and exits non-zero; delete it by hand. If `show`
+# says `removed` with both tokens present and there is no lock, nothing was uploaded (the run
+# was stopped while it wrote the registry file): re-run `remove`, or set "status" back by hand.
+# A refused or cancelled remove otherwise leaves the registry file byte-identical. The registry
 # file stays (status=removed) and so does the tenant's Durable Object with its history;
 # nothing about a removed tenant is served. To bring the same org_id back, `add` refuses
 # because the file exists: run `rotate <org_id> admin` and `rotate <org_id> verifier`

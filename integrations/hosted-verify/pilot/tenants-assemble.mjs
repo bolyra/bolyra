@@ -32,7 +32,7 @@ function parseTokens(tokenText) {
     const org = first < 0 ? '' : line.slice(0, first);
     const role = second < 0 ? '' : line.slice(first + 1, second);
     const token = second < 0 ? '' : line.slice(second + 1);
-    if (!org || !role || !token) throw new AssembleError('malformed token line (expected "<org_id> <role> <token>")');
+    if (!org || !role || !token) throw new AssembleError(`token line ${i + 1}: malformed (expected "<org_id> <role> <token>")`);
     if (!ROLES.includes(role)) throw new AssembleError(`token line ${i + 1}: role must be admin or verifier`);
     const key = `${org} ${role}`;
     // A second line for the same pair used to overwrite the first silently: which token went

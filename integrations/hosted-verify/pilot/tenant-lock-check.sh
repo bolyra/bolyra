@@ -118,6 +118,8 @@ mkdir -p "$SHIM" "$TENANTS_DIR" "$KEYCHAIN"
 #   SHIM_FINDW_SLEEP=<s>  a token read (find -w) touches $SHIM_KEYCHAIN.findw-started and sleeps
 #                         first — a window inside the sync pipeline, before the put stage has input
 #   SHIM_DELETE_FAIL=1    delete fails (the keychain refusing it) and removes nothing
+#   SHIM_DELETE_MISSING=1 the item vanishes just before the delete (someone else removed it),
+#                         so delete answers 44 (errSecItemNotFound)
 cat > "$SHIM/security" <<'SHIM_SECURITY'
 #!/usr/bin/env bash
 : "${SHIM_KEYCHAIN:?tenant-lock-check: SHIM_KEYCHAIN must be set}"
@@ -157,7 +159,11 @@ case "$cmd" in
       echo "security: SecKeychainItemDelete: shim: the keychain refused the delete" >&2
       exit 1
     fi
-    [ -e "$SHIM_KEYCHAIN/$acct" ] || exit 44
+    if [ "${SHIM_DELETE_MISSING:-0}" = 1 ]; then rm -f "$SHIM_KEYCHAIN/$acct"; fi
+    if [ ! -e "$SHIM_KEYCHAIN/$acct" ]; then
+      echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
+      exit 44
+    fi
     rm -f "$SHIM_KEYCHAIN/$acct"
     exit 0 ;;
 esac
@@ -464,15 +470,46 @@ ok "a validator refusal starts no upload, leaves the uploader untouched, and say
 status_of() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status))' "$TENANTS_DIR/$1.json"; }
 kc_count() { local n=0; [ ! -e "$KEYCHAIN/tenant-$1-admin" ] || n=$((n + 1)); [ ! -e "$KEYCHAIN/tenant-$1-verifier" ] || n=$((n + 1)); echo "$n"; }
 reset_beta() {
-  printf '%s\n' '{"org_id":"beta","status":"active","trustedOperators":["3:4"]}' > "$TENANTS_DIR/beta.json"
+  printf '%s\n' '{"org_id":"beta","status":"active","trustedOperators":["3:4"],"updated":"2000-01-01"}' > "$TENANTS_DIR/beta.json"
+  cp "$TENANTS_DIR/beta.json" "$WORK/beta.before"
   kc_seed beta
-  rm -f "$KEYCHAIN.find-started" "$KEYCHAIN.findw-started"
+  rm -f "$KEYCHAIN.find-started" "$KEYCHAIN.findw-started" "$KEYCHAIN.status-slowed"
 }
-expect_untouched() {  # $1 scenario, $2 output — status restored, both tokens kept, lock released
+expect_untouched() {  # $1 scenario, $2 output — record byte-identical, both tokens kept, lock released
   [ "$(status_of beta)" = active ] || fail "$1: beta's status was not restored (is $(status_of beta)): $2"
+  cmp -s "$WORK/beta.before" "$TENANTS_DIR/beta.json" || fail "$1: beta's record file changed although nothing was uploaded: $(cat "$TENANTS_DIR/beta.json")"
   [ "$(kc_count beta)" = 2 ] || fail "$1: beta's tokens were not both kept ($(kc_count beta) of 2 left): $2"
   [ ! -d "$LOCK_DIR" ] || fail "$1: the lock was not released although no upload started: $2"
 }
+# A `node` wrapper, put on PATH only for the runs that need it: it slows the FIRST registry
+# write that sets status=removed (the file the harness watches is $SHIM_KEYCHAIN.status-slowed),
+# so a signal can be aimed at the moment `remove` mutates the registry. Every other node call
+# goes straight through. SHIM_STATUS_PHASE=before sleeps before the write, after sleeps once the
+# write has landed (the process is still running, so it is still "during" the mutation).
+NODESHIM="$WORK/nodeshim"
+mkdir -p "$NODESHIM"
+{
+  printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v node)"
+  cat <<'SHIM_NODE'
+if [ -n "${SHIM_STATUS_SLEEP:-}" ] && [ "${1:-}" = -e ] && [ "${4:-}" = removed ] \
+    && [ ! -e "$SHIM_KEYCHAIN.status-slowed" ]; then
+  case "${2:-}" in
+    *'f.status=process.argv[2]'*)
+      : > "$SHIM_KEYCHAIN.status-slowed"
+      if [ "${SHIM_STATUS_PHASE:-before}" = before ]; then
+        sleep "$SHIM_STATUS_SLEEP"
+        exec "$real" "$@"
+      fi
+      "$real" "$@"; rc=$?
+      sleep "$SHIM_STATUS_SLEEP"
+      exit "$rc" ;;
+  esac
+fi
+exec "$real" "$@"
+SHIM_NODE
+} > "$NODESHIM/node"
+chmod +x "$NODESHIM/node"
+
 reset_beta
 # A background job started WITHOUT job control begins with SIGINT ignored, and a signal ignored
 # on entry cannot be trapped — so every run that is sent SIGINT below is launched with job
@@ -490,15 +527,16 @@ case "$out" in *"nothing changed"*) ;; *) fail "(r1) the refusal did not say not
 expect_untouched r1 "$out"
 ok "(r1) a validator refusal during remove restores the status and keeps both tokens"
 
-# (r2) SIGINT to the shell before assembly: the shell is inside a keychain lookup when the
-# signal lands, so the trap runs as soon as that returns — and the pre-assembly check must
-# turn it into "not started": status restored, tokens kept, then the deferred exit 130.
+# (r2) SIGINT to the shell while `remove` writes status=removed: the write finishes (bash
+# defers the trap until it returns), the trap records the signal, the pre-assembly check turns
+# it into "not started", the record is restored byte for byte, the tokens stay, exit 130.
 reset_beta
 set -m
-env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r2" SHIM_FIND_SLEEP=1 bash "$TENANT" remove beta > "$WORK/r2.log" 2>&1 &
+env "${TENANT_ENV[@]}" PATH="$NODESHIM:$SHIM:$PATH" MARKER="$WORK/marker-r2" SHIM_STATUS_SLEEP=1 SHIM_STATUS_PHASE=before \
+  bash "$TENANT" remove beta > "$WORK/r2.log" 2>&1 &
 BG=$!
 set +m
-wait_for_file "$KEYCHAIN.find-started" || fail "(r2) the presence lookup never started: $(cat "$WORK/r2.log")"
+wait_for_file "$KEYCHAIN.status-slowed" || fail "(r2) the registry write never started: $(cat "$WORK/r2.log")"
 require_live "$BG" remove
 kill -INT "$BG" || fail "(r2) could not signal the remove"
 wait "$BG"; rc=$?
@@ -508,7 +546,35 @@ out="$(cat "$WORK/r2.log")"
 [ ! -e "$WORK/marker-r2" ] || fail "(r2) the interrupted remove reached the uploader: $out"
 case "$out" in *"interrupted by SIGINT before the upload started"*) ;; *) fail "(r2) the interrupt was not reported as before the upload: $out" ;; esac
 expect_untouched r2 "$out"
-ok "(r2) SIGINT before assembly: not started, status restored, tokens kept, exit 130"
+ok "(r2) SIGINT to the shell during the registry write: not started, record restored byte for byte, tokens kept, exit 130"
+
+# (r2b) a terminal Ctrl-C (the whole process group) DURING that write kills the node doing it.
+# errexit must not end the run there: the record goes back (or, at worst, stays removed), both
+# tokens stay, nothing is uploaded, the lock is released — and a re-run of remove completes.
+reset_beta
+set -m
+env "${TENANT_ENV[@]}" PATH="$NODESHIM:$SHIM:$PATH" MARKER="$WORK/marker-r2b" SHIM_STATUS_SLEEP=2 SHIM_STATUS_PHASE=after \
+  bash "$TENANT" remove beta > "$WORK/r2b.log" 2>&1 &
+BG=$!
+set +m
+wait_for_file "$KEYCHAIN.status-slowed" || fail "(r2b) the registry write never started: $(cat "$WORK/r2b.log")"
+sleep 0.5
+require_live "$BG" remove
+kill -INT -- "-$BG" || fail "(r2b) could not signal the remove's process group"
+wait "$BG"; rc=$?
+BG=""
+out="$(cat "$WORK/r2b.log")"
+[ "$rc" = 130 ] || fail "(r2b) the remove interrupted during the registry write exited $rc, expected 130: $out"
+[ ! -e "$WORK/marker-r2b" ] || fail "(r2b) the interrupted remove reached the uploader: $out"
+case "$(status_of beta)" in active|removed) ;; *) fail "(r2b) beta's status is neither the previous one nor removed: $(status_of beta)" ;; esac
+[ "$(kc_count beta)" = 2 ] || fail "(r2b) beta's tokens were not both kept ($(kc_count beta) of 2 left): $out"
+[ ! -d "$LOCK_DIR" ] || fail "(r2b) the lock was not released although nothing was uploaded: $out"
+case "$out" in *"could not update the registry file; nothing was uploaded"*) ;; *) fail "(r2b) the failed registry write was not reported: $out" ;; esac
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r2b2" SHIM_SLEEP=1 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(r2b) re-running remove exited $rc: $out"
+[ "$(status_of beta)" = removed ] || fail "(r2b) beta is not removed after the re-run: $out"
+[ "$(kc_count beta)" = 0 ] || fail "(r2b) the re-run did not delete beta's tokens: $out"
+ok "(r2b) a terminal SIGINT during the registry write: tokens kept, nothing uploaded, lock released, exit 130; a re-run completes"
 
 # (r3) a Ctrl-C in the terminal reaches the WHOLE foreground process group — the shell and
 # every pipeline stage, including the put stage while it is still buffering the map. The run
@@ -586,5 +652,34 @@ case "$out" in *"tenant-beta-verifier"*) ;; *) fail "(r6) the stale verifier acc
 [ "$(kc_count beta)" = 2 ] || fail "(r6) the fake keychain lost items it refused to delete: $out"
 [ ! -d "$LOCK_DIR" ] || fail "(r6) the lock survived a confirmed upload: $out"
 ok "(r6) a failed token delete after a confirmed upload names the stale accounts and exits non-zero; the record stays removed"
+
+# (r6b) a failed delete AND a recorded interrupt: the stale tokens decide the exit code (1),
+# not the interrupt — 130 would read as "interrupted" and hide the half-finished cleanup.
+reset_beta
+set -m
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r6b" SHIM_SLEEP=1 SHIM_DELETE_FAIL=1 bash "$TENANT" remove beta > "$WORK/r6b.log" 2>&1 &
+BG=$!
+set +m
+wait_for_file "$WORK/marker-r6b" || fail "(r6b) the upload never started: $(cat "$WORK/r6b.log")"
+require_live "$BG" remove
+kill -INT "$BG" || fail "(r6b) could not signal the remove"
+wait "$BG"; rc=$?
+BG=""
+out="$(cat "$WORK/r6b.log")"
+[ "$rc" = 1 ] || fail "(r6b) a remove with stale tokens and an interrupt exited $rc, expected 1: $out"
+case "$out" in *"tenant-beta-admin"*"tenant-beta-verifier"*) ;; *) fail "(r6b) the stale accounts were not named: $out" ;; esac
+case "$out" in *"SIGINT"*) ;; *) fail "(r6b) the interrupt was not reported: $out" ;; esac
+[ "$(status_of beta)" = removed ] || fail "(r6b) beta is not removed: $out"
+ok "(r6b) stale tokens plus an interrupt: both reported, exit 1"
+
+# (r7) a token someone else deleted between the presence check and the delete (44,
+# errSecItemNotFound) is already gone — not a STALE alarm.
+reset_beta
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r7" SHIM_SLEEP=1 SHIM_DELETE_MISSING=1 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(r7) a remove whose tokens were already gone exited $rc: $out"
+case "$out" in *STALE*) fail "(r7) an already-deleted token was reported stale: $out" ;; *) ;; esac
+[ "$(kc_count beta)" = 0 ] || fail "(r7) beta's tokens are still present: $out"
+[ "$(status_of beta)" = removed ] || fail "(r7) beta is not removed: $out"
+ok "(r7) a token already deleted by someone else (44) counts as gone: exit 0, no stale alarm"
 
 echo "tenant-lock-check: all checks passed"

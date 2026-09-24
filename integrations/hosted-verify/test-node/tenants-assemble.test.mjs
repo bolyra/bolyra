@@ -109,7 +109,7 @@ test('an unknown role is refused', () =>
 
 test('a malformed token line is refused', () =>
   withDir({ 'acme.json': rec('acme') }, (dir) =>
-    refuses(dir, 'acme admin\n', /^malformed token line \(expected "<org_id> <role> <token>"\)$/)));
+    refuses(dir, `acme admin ${tok('a')}\nacme verifier\n`, /^token line 2: malformed \(expected "<org_id> <role> <token>"\)$/)));
 
 test('CLI: the map on stdout, refusals on stderr with exit 1, usage exit 2', () =>
   withDir({ 'acme.json': rec('acme'), 'beta.json': rec('beta') }, (dir) => {

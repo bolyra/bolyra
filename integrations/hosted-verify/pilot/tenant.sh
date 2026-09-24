@@ -103,7 +103,11 @@ LOCK_HELD=0
 # acted on by deferred_exit at the end of the section instead of exiting halfway through it.
 INTERRUPTED=0
 CRITICAL=0
+# `remove` keeps a byte-for-byte copy of the registry file it mutates, so an upload that never
+# started leaves the tracked file exactly as it was. Removed on the way out (release_lock).
+REMOVE_BACKUP=""
 release_lock() {
+  [ -z "$REMOVE_BACKUP" ] || rm -f "$REMOVE_BACKUP"
   # Only ever remove a lock this process created — a failed acquire must leave the holder's.
   [ "$LOCK_HELD" = 1 ] || return 0
   LOCK_HELD=0
@@ -228,9 +232,21 @@ kc_put_minted() {  # $1 org, $2 role — mint a fresh token and store it
   return "$rc"
 }
 # Fails when the keychain refuses (denied, locked): a token that was meant to be destroyed and
-# was not must be reported, never swallowed. security's own error text reaches stderr; it holds
-# no secret.
-kc_delete() { security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" >/dev/null; }
+# was not must be reported, never swallowed. Exit 44 (errSecItemNotFound) means the item is
+# already gone — someone removed it in the meantime — which is the outcome wanted, not a
+# failure. security's own error text holds no secret and is shown for a real failure only.
+kc_delete() {
+  local rc=0 err
+  err="$(security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$(kc_account "$1" "$2")" 2>&1 >/dev/null)" || rc=$?
+  [ "$rc" != 44 ] || return 0
+  if [ "$rc" != 0 ]; then printf '%s\n' "$err" >&2; fi
+  return "$rc"
+}
+# Put a registry file back from a copy, atomically (sibling temp file + rename, as reg_set_status).
+reg_restore() {  # $1 org, $2 the copy
+  local f; f="$(registry_file "$1")"
+  cp "$2" "$f.tmp.$$" && mv -f "$f.tmp.$$" "$f"
+}
 mint() { openssl rand -hex 32; }
 
 registry_file() { echo "$TENANTS_DIR/$1.json"; }
@@ -314,8 +330,10 @@ cmd_remove() {
   require_org "$org"; require_registry "$org"; require_security
   # The tokens are the only local recovery material for this tenant: while the old map might
   # still be live, they are what re-syncs it. So they are deleted only once the upload that
-  # drops the tenant is CONFIRMED, and the status change is undone when no upload started.
-  CRITICAL=1
+  # drops the tenant is CONFIRMED, and the registry file is put back when no upload started.
+  #
+  # Read-only preparation first, OUTSIDE the critical section: nothing has changed yet, so an
+  # interrupt or a refusal here may simply end the run.
   prev="$(reg_field "$org" status)"
   case "$prev" in
     active|disabled|removed) ;;
@@ -326,7 +344,19 @@ cmd_remove() {
   for role in admin verifier; do
     if kc_has "$org" "$role"; then present="$present $role"; fi
   done
-  reg_set_status "$org" removed
+  REMOVE_BACKUP="$(mktemp "${TMPDIR:-/tmp}/tenant-remove.XXXXXX")" || die "remove: could not create a temporary copy of the registry file"
+  cp "$(registry_file "$org")" "$REMOVE_BACKUP" || die "remove: could not copy the registry file before changing it"
+  CRITICAL=1
+  # The one mutation. Errexit must not end the run here: a terminal Ctrl-C kills the node doing
+  # the write (the trap only records it), and set -e would then exit before anything below put
+  # the file back or reported. The write is atomic, so the file is either as it was or removed.
+  if ! reg_set_status "$org" removed; then
+    cmp -s "$REMOVE_BACKUP" "$(registry_file "$org")" || reg_restore "$org" "$REMOVE_BACKUP" || true
+    CRITICAL=0
+    echo "error: remove: could not update the registry file; nothing was uploaded and the tokens are kept (if show still says removed, re-run remove, or set \"status\" back by hand)" >&2
+    deferred_exit
+    exit 1
+  fi
   do_sync || outcome=$?
   case "$outcome" in
     0)
@@ -342,7 +372,8 @@ cmd_remove() {
       fi
       ;;
     2)
-      reg_set_status "$org" "$prev"
+      # Byte for byte, `updated` included: a remove that uploaded nothing leaves no diff.
+      reg_restore "$org" "$REMOVE_BACKUP" || echo "error: remove: could not put $(registry_file "$org") back; set \"status\" to $prev by hand (nothing was uploaded)" >&2
       echo "error: remove: nothing changed — this run started no upload, so tenant '$org' is back to status=$prev and its tokens are kept; the map the Worker holds is whatever was pushed last. Fix the error and re-run: pilot/tenant.sh remove $org" >&2
       ;;
     *)
@@ -350,9 +381,15 @@ cmd_remove() {
       ;;
   esac
   CRITICAL=0
+  # Stale tokens decide the exit code over a recorded interrupt: 130 would read as "interrupted"
+  # and hide the half-finished cleanup. The interrupt is still reported.
+  if [ "$outcome" = 0 ] && [ -n "$failed" ]; then
+    [ "$INTERRUPTED" = 0 ] || echo "error: SIG$INTERRUPTED also arrived during this run; exiting 1 for the stale keychain items above" >&2
+    exit 1
+  fi
   deferred_exit
   case "$outcome" in
-    0) [ -z "$failed" ] || exit 1; exit "$SYNC_RC" ;;
+    0) exit "$SYNC_RC" ;;
     2) exit 1 ;;
     *) [ "$SYNC_RC" != 0 ] || SYNC_RC=1; exit "$SYNC_RC" ;;
   esac
