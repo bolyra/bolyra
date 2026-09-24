@@ -484,6 +484,11 @@ with `--env staging`):
 | `tenant-<org>-verifier` | the tenant's verifier token | `tenant.sh add` |
 | `operator-<org>-scalar` | the canary operator's EdDSA private scalar, decimal or `0x`-hex; its public key must be in the tenant's `trusted_operators` | by hand, once (below) |
 
+Create these items with `security` (as `tenant.sh` and the command below do). A
+generic-password item created another way, such as in Keychain Access, can raise a GUI
+access prompt when `security` reads it. That prompt stalls the chained deploy until
+someone answers it.
+
 ```bash
 # Create the scalar entry (prompts for the value; nothing lands in shell history):
 security add-generic-password -s bolyra-hosted-verify-staging -a operator-bolyra-staging-scalar -w
@@ -522,15 +527,28 @@ deleted). Rotate the canary org id (`tenant.sh add bolyra-canary-2 …`, then up
 `deploy:prod`/`deploy:staging`) once it holds more than ~1000 revoked rows.
 
 **Right after a deploy.** A new version can take a few seconds to reach every
-isolate, so a `/health version.id` mismatch straight after the deploy can be
-propagation. Re-run with `--version <id>` after ~30 s before treating it as a
-failure.
+isolate. When a version id is expected (`--version` or `--from-wrangler`), the script
+first polls `/health` every 5 s, up to 12 times (about 60 s), until `version.id`
+matches. Each miss prints `--  waiting for version <id> (n/12)`. If the version never
+appears, the run fails on the `/health version.id` mismatch, and no canary is written.
+During propagation, `/health` and `/v1/verify` can be served by different isolates.
+A match therefore means at least one isolate reports the new version, not that every
+isolate runs it.
 
-**Locally.** `bash scripts/with-worker.sh node scripts/verify-deploy.mjs "$VERIFY_URL"
---env local --tenant local --allow-missing-tenant` checks the auth boundary of a
-`wrangler dev` Worker. Adding `--secrets-from-dev-vars` (accepted only with
-`--env local` and a loopback URL) also runs the enforcement leg, using the placeholder
-tokens from `.dev.vars.example` and scalar `42`.
+**Locally.** `npm run verify:dev` boots the Worker under `wrangler dev`
+(`scripts/with-worker.sh`) and runs both legs against it. The enforcement leg uses the
+placeholder tenant `local`, its tokens from `.dev.vars.example`, and scalar `42`.
+`--secrets-from-dev-vars` is accepted only with `--env local` and a loopback URL. CI
+runs the same command. Extra arguments pass through after `--`, for example
+`npm run verify:dev -- --pending-log /tmp/p.log`. The URL defaults to `$VERIFY_URL`,
+which `with-worker.sh` exports. To pass it yourself, quote it inside `sh -c` so that
+the wrapper's value is used, not your shell's:
+
+```bash
+bash scripts/with-worker.sh sh -c 'node scripts/verify-deploy.mjs "$VERIFY_URL" --env local --tenant local --allow-missing-tenant'
+```
+
+`--from-wrangler` refuses to run when stdin is a terminal: pipe a deploy into it.
 
 **Rollback floor.** The first version that reports `registry_enforced: true`
 on `/health` is the floor. Never deploy a build below it, and never deploy a

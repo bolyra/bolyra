@@ -36,3 +36,11 @@ test('credentialId rejects a digest outside [0, 2^256) and emits lowercase hex',
   assert.throws(() => credentialId(p, 1n << 256n), RangeError);
   assert.match(credentialId(p, (1n << 256n) - 1n), /^[0-9a-f]{64}$/);
 });
+
+test('credentialId rejects non-bigint and negative coordinates', () => {
+  const { x, y } = pointOf(registrations.valid);
+  const d = BigInt('0x' + registrations.valid.binding_digest_hex);
+  assert.throws(() => credentialId({ x: String(x), y }, d), TypeError);
+  assert.throws(() => credentialId({ x, y: Number(1) }, d), TypeError);
+  assert.throws(() => credentialId({ x, y: -1n }, d), RangeError);
+});

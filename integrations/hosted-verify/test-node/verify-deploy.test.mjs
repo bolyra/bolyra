@@ -121,7 +121,7 @@ const FULL_KEYCHAIN = {
   [`operator-${ORG}-scalar`]: '42',
 };
 
-async function run({ worker = fakeWorker(), args = [URL_, '--version', VERSION, '--tenant', ORG], secrets = FULL_KEYCHAIN, log = memoryLog(), wranglerOutput } = {}) {
+async function run({ worker = fakeWorker(), args = [URL_, '--version', VERSION, '--tenant', ORG], secrets = FULL_KEYCHAIN, log = memoryLog(), wranglerOutput, sleeps = [] } = {}) {
   const out = [];
   const err = [];
   const code = await verifyDeploy(parseCliArgs(args), {
@@ -136,8 +136,11 @@ async function run({ worker = fakeWorker(), args = [URL_, '--version', VERSION, 
     makeIssuer,
     now: () => Date.now(),
     wranglerOutput,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
   });
-  return { code, out: out.join('\n'), err: err.join('\n'), log, worker };
+  return { code, out: out.join('\n'), err: err.join('\n'), log, worker, sleeps };
 }
 
 // ─── pure pieces ──────────────────────────────────────────────────────────────────────
@@ -204,6 +207,13 @@ test('parseCliArgs: --version and --from-wrangler are exclusive; env selects the
   assert.throws(() => parseCliArgs([URL_, '--env', 'prod']), /--env/);
   assert.throws(() => parseCliArgs(['http://verify.example.test']), /https/);
   assert.throws(() => parseCliArgs([]), /usage/i);
+});
+
+test('parseCliArgs: the URL falls back to VERIFY_URL (with-worker.sh exports it); a positional wins', () => {
+  assert.equal(parseCliArgs(['--env', 'local'], { fallbackUrl: 'http://127.0.0.1:8787' }).url, 'http://127.0.0.1:8787');
+  assert.equal(parseCliArgs([URL_], { fallbackUrl: 'http://127.0.0.1:8787' }).url, URL_);
+  assert.throws(() => parseCliArgs(['--env', 'local'], {}), /usage/i);
+  assert.throws(() => parseCliArgs(['--env', 'local'], { fallbackUrl: '' }), /usage/i);
 });
 
 test('parseCliArgs: --secrets-from-dev-vars is refused for production and staging', () => {
@@ -311,6 +321,7 @@ test('(b) registration times out, cleanup sees 404, the commit lands later → u
   assert.equal(r.log.lines.length, 1, 'the pending entry is kept');
   const id = r.log.lines[0].split(' ')[3];
   assert.match(r.err, new RegExp(`CANARY CLEANUP UNCONFIRMED credential_id=${id}`));
+  assert.match(r.out, /FAIL present registered → ACTIVE: not observed: the registration was not confirmed/);
   worker.commitLater();
   assert.equal(worker.registry.get(id), 'ACTIVE', 'why the entry must be kept: the registration committed after the cleanup');
 });
@@ -388,4 +399,60 @@ test('a malformed operator scalar is refused without echoing it', async () => {
 test('a 0x-hex operator scalar is accepted', async () => {
   const r = await run({ secrets: { ...FULL_KEYCHAIN, [`operator-${ORG}-scalar`]: '0x2a' } });
   assert.equal(r.code, 0, r.out + r.err);
+});
+
+// ─── version propagation wait ─────────────────────────────────────────────────────────
+
+/** A /health that reports the old version until the `matchOn`-th request (Infinity: never). */
+function propagating(matchOn) {
+  let n = 0;
+  return fakeWorker({
+    overrides: {
+      'GET /health': () => {
+        n++;
+        const id = n >= matchOn ? VERSION : 'aaaaaaaa-0000-0000-0000-000000000000';
+        return new Response(JSON.stringify({ ...HEALTHY, version: { id } }), { status: 200 });
+      },
+    },
+  });
+}
+const healthCalls = (worker) => worker.calls.filter((c) => c === 'GET /health').length;
+
+test('version wait: a version already live → no wait', async () => {
+  const r = await run({ worker: propagating(1) });
+  assert.equal(r.code, 0, r.out + r.err);
+  assert.deepEqual(r.sleeps, []);
+  assert.doesNotMatch(r.out, /waiting for version/);
+});
+
+test('version wait: the version appears on the 3rd poll → 2 waits of 5 s, then both legs run', async () => {
+  const worker = propagating(3);
+  const r = await run({ worker });
+  assert.equal(r.code, 0, r.out + r.err);
+  assert.deepEqual(r.sleeps, [5000, 5000]);
+  assert.match(r.out, new RegExp(`--  waiting for version ${VERSION} \\(1/12\\)`));
+  assert.match(r.out, new RegExp(`--  waiting for version ${VERSION} \\(2/12\\)`));
+  assert.ok(worker.calls.includes('POST /v1/credentials'));
+});
+
+test('version wait: never live → fails after 12 polls, no behavioral leg, no pending entry', async () => {
+  const worker = propagating(Infinity);
+  const log = memoryLog();
+  let appended = 0;
+  const r = await run({ worker, log: { ...log, append: (l) => (appended++, log.append(l)) } });
+  assert.equal(r.code, 1);
+  assert.equal(r.sleeps.length, 11, 'twelve polls, eleven 5 s waits');
+  assert.equal(healthCalls(worker), 13, 'twelve polls, then the auth leg reports the mismatch');
+  assert.match(r.out, /FAIL \/health version\.id: aaaaaaaa-0000-0000-0000-000000000000 \(expected /);
+  assert.ok(!worker.calls.includes('POST /v1/credentials'));
+  assert.doesNotMatch(r.out, /behavioral \(tenant/);
+  assert.equal(appended, 0);
+});
+
+test('version wait: no expected version → no polling', async () => {
+  const worker = propagating(Infinity);
+  const r = await run({ worker, args: [URL_, '--tenant', ORG] });
+  assert.equal(r.code, 0, r.out + r.err);
+  assert.deepEqual(r.sleeps, []);
+  assert.equal(healthCalls(worker), 1);
 });

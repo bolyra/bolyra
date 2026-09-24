@@ -205,6 +205,15 @@ jobs:
         working-directory: integrations/hosted-verify
         timeout-minutes: 5
         run: npm run smoke:dev
+      # The post-deploy verifier's own tests (test-node/verify-deploy.test.mjs) drive a fake
+      # Worker, so they cannot detect drift between the verifier's request shapes and the real
+      # routes (registration body, /v1/verify request, revoke). This step can: the full canary
+      # leg (ABSENT -> ACTIVE -> REVOKED, cleanup) against the real Worker under wrangler dev,
+      # with the placeholder tenant's tokens and the documented test scalar 42.
+      - name: Post-deploy verifier against wrangler dev (canary leg with the placeholder tenant)
+        working-directory: integrations/hosted-verify
+        timeout-minutes: 5
+        run: npm run verify:dev -- --pending-log "$RUNNER_TEMP/canary-pending.log"
       # The provisioning script and its validator must stay runnable on a plain Linux
       # shell (no keychain here): syntax, both mjs modules parse, the usage path, the
       # empty-map guard in tenants-put.mjs (it must refuse without starting wrangler),
