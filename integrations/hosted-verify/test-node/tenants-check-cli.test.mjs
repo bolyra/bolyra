@@ -65,12 +65,29 @@ test('4096 bytes: refused with the existing hard error, nothing on stdout', () =
   assert.doesNotMatch(r.stderr, /warning/);
 });
 
-test('{} (the last tenant removed): exit 0, the empty-map warning on stderr, --pass stdout is exactly {}', () => {
-  const r = run('{}', '--pass');
+test('{} (the last tenant removed): exit 0, the empty-map warning on stderr, --pass --allow-empty stdout is exactly {}', () => {
+  const r = run('{}', '--pass', '--allow-empty');
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout, '{}');
   assert.match(r.stderr, /^tenants-check: warning: empty map: every request will be denied until a tenant is added$/m);
   assert.match(r.stderr, /tenants-check: ok: 0 tenant\(s\) \[\], 2 bytes$/m);
+});
+
+test('{} is EMITTED only with --allow-empty: --pass alone refuses (exit 1, nothing on stdout); plain validation stays ok', () => {
+  const refused = run('{}', '--pass');
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.equal(refused.stdout, '');
+  assert.match(refused.stderr, /^tenants-check: refusing to emit an EMPTY map \(\{\}\) without --allow-empty/m);
+  for (const args of [[], ['--allow-empty']]) {
+    const r = run('{}', ...args);
+    assert.equal(r.status, 0, `${args}: ${r.stderr}`);
+    assert.equal(r.stdout, '');
+    assert.match(r.stderr, /tenants-check: ok: 0 tenant\(s\)/);
+  }
+  // Order-free, each at most once; anything else is still an unknown argument.
+  assert.equal(run('{}', '--allow-empty', '--pass').status, 0);
+  assert.equal(run('{}', '--pass', '--allow-empty', '--allow-empty').status, 2);
+  assert.equal(run('{}', '--pass', '--allow-emtpy').status, 2);
 });
 
 test('empty stdin and a non-object stay refused', () => {

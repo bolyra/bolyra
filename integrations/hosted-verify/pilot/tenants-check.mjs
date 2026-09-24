@@ -13,6 +13,9 @@
 //                                               of what --pass emits (trailing newlines
 //                                               stripped); pipe --pass, never re-read the
 //                                               file, so the Worker measures the same bytes.
+//   --allow-empty                               with --pass, emit the EMPTY map {} (E13); without
+//                                               it --pass refuses {} (exit 1). Plain validation
+//                                               of {} is ok either way (with a warning).
 
 export const ORG_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/;
 export const TOKEN_PATTERN = /^[A-Za-z0-9._~+\/-]{32,256}$/;
@@ -131,14 +134,16 @@ export function checkTenants(raw) {
 if (typeof process !== 'undefined' && process.argv?.[1] && /tenants-check\.mjs$/.test(process.argv[1])) {
   const args = process.argv.slice(2);
   const pass = args.includes('--pass');
-  const unknown = args.filter((a) => a !== '--pass');
-  if (unknown.length > 0) {
+  const allowEmpty = args.includes('--allow-empty');
+  const unknown = args.filter((a) => a !== '--pass' && a !== '--allow-empty');
+  if (unknown.length > 0 || args.length !== new Set(args).size) {
     // A misspelled flag must not validate-and-emit-nothing: downstream that is an empty secret.
-    process.stderr.write(`tenants-check: unknown argument ${JSON.stringify(unknown[0])} (only --pass is accepted)\n`);
+    const bad = unknown.length > 0 ? unknown[0] : args.find((a, i) => args.indexOf(a) !== i);
+    process.stderr.write(`tenants-check: unknown argument ${JSON.stringify(bad)} (only --pass and --allow-empty are accepted, each once)\n`);
     process.exit(2);
   }
   if (process.stdin.isTTY) {
-    process.stderr.write('tenants-check: reads the TENANTS map on stdin: node tenants-check.mjs [--pass] < map.json\n');
+    process.stderr.write('tenants-check: reads the TENANTS map on stdin: node tenants-check.mjs [--pass [--allow-empty]] < map.json\n');
     process.exit(2);
   }
   const chunks = [];
@@ -155,6 +160,11 @@ if (typeof process !== 'undefined' && process.argv?.[1] && /tenants-check\.mjs$/
     if (!result.ok) {
       for (const e of result.errors) process.stderr.write(`tenants-check: ${e}\n`);
       process.stderr.write('tenants-check: REFUSED — this map would fail every tenant closed; nothing was pushed\n');
+      process.exit(1);
+    }
+    if (pass && result.orgs.length === 0 && !allowEmpty) {
+      // E13: a valid map, but passing {} on is how every request gets denied — only on purpose.
+      process.stderr.write('tenants-check: refusing to emit an EMPTY map ({}) without --allow-empty — pushed, it would deny every request; nothing was passed on\n');
       process.exit(1);
     }
     for (const w of result.warnings) process.stderr.write(`tenants-check: ${w}\n`);
