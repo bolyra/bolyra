@@ -77,8 +77,9 @@ Nothing to request and nothing to sign: the Worker runs locally under
 `wrangler dev` with the repo's documented placeholder tenant, which trusts the
 repo's conformance-fixture operator key (its private half is public — this
 proves the mechanics, not who signed). Prerequisites: Node 22+ (wrangler's
-requirement), bash and `lsof` (macOS or Linux), and a checkout of this repo;
-curl and jq are for the curl steps below.
+requirement), bash, curl and `lsof` (macOS or Linux; the boot script uses
+curl to wait for `/health`), and a checkout of this repo; jq is for the curl
+steps below.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/integrations/hosted-verify"
