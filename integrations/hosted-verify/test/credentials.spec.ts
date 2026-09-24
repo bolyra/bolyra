@@ -171,6 +171,33 @@ describe('durable revocation over HTTP: an audit-row failure never un-revokes', 
     expect((await body(rep)).error).toBe('history_conflict');
   });
 
+  it('a retry whose audit repair throws → still 204 + x-bolyra-audit history_write_failed (never a 500), pending kept; repair-history → 500', async () => {
+    const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
+    await seedRevokedEvent(id, 1, 'seed');
+    expect((await postRevoke(id)).headers.get('x-bolyra-audit')).toBe('history_write_failed');
+    await runInDurableObject(tenantA(), (_i, state) => {
+      state.storage.sql.exec("DELETE FROM history WHERE credential_id = ? AND event = 'revoked'", id);
+      state.storage.sql.exec(
+        "CREATE TRIGGER test_fail_history_insert BEFORE INSERT ON history BEGIN SELECT RAISE(ABORT, 'injected history failure'); END",
+      );
+    });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const rev = await postRevoke(id);
+      expect(rev.status).toBe(204);
+      expect(rev.headers.get('x-bolyra-audit')).toBe('history_write_failed');
+      expect((await postRepairHistory(id)).status).toBe(500);
+    } finally {
+      spy.mockRestore();
+      await runInDurableObject(tenantA(), (_i, state) => {
+        state.storage.sql.exec('DROP TRIGGER IF EXISTS test_fail_history_insert');
+      });
+    }
+    const g = await body(await getCredential(id));
+    expect(g.status).toBe('REVOKED');
+    expect(g.pending_history).toBe(true);
+  });
+
   it('once the foreign row is gone, repair-history → 200 repaired and the audit row carries the first revocation', async () => {
     const id = await registerFixture(fixtureRegistration(allowAgentOnly), 'A');
     await seedRevokedEvent(id, 1, 'seed');

@@ -48,9 +48,11 @@ let cached: { at: number; result: Promise<RegistryHealth> } | undefined;
 /**
  * `/health` is unauthenticated and every probe lands on the ONE shared `__health__`
  * object, so probes are single-flight per isolate and a healthy result is reused for
- * `HEALTH_PROBE_TTL_MS`: a flood cannot amplify onto the object beyond one RPC per isolate
- * per 10 s, and the signal may be up to 10 s stale. A failed result (`unavailable` /
- * `timeout`) is dropped as soon as it settles, so the next call re-probes.
+ * `HEALTH_PROBE_TTL_MS`. While the registry is HEALTHY, a flood therefore reaches the
+ * object with at most one RPC per isolate per 10 s, and the signal may be up to 10 s stale.
+ * That bound does not hold while it is FAILING: a failed result (`unavailable` / `timeout`,
+ * or a rejection) is dropped as soon as it settles, so each /health call may probe again,
+ * and an RPC that hit the deadline stays outstanding until it settles.
  */
 export function cachedProbeRegistry(
   ns: DurableObjectNamespace<TenantRegistry>,

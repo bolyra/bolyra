@@ -269,6 +269,17 @@ async function pendingOf(r: Stub, id: string): Promise<Pending> {
 
 const CLEAN: Pending = { pending_history: 0, pending_request_id: null, pending_at: null };
 
+/** Make every history INSERT throw (a storage failure confined to the audit write). */
+async function failHistoryInserts(r: Stub, on: boolean): Promise<void> {
+  await runInDurableObject(r, (_i, state) => {
+    state.storage.sql.exec(
+      on
+        ? "CREATE TRIGGER test_fail_history_insert BEFORE INSERT ON history BEGIN SELECT RAISE(ABORT, 'injected history failure'); END"
+        : 'DROP TRIGGER IF EXISTS test_fail_history_insert',
+    );
+  });
+}
+
 describe('durable revocation and audit repair', () => {
   it('a failed history write leaves the credential REVOKED with pending metadata; a later revoke repairs it from that metadata', async () => {
     const r = registry(ORGS.A);
@@ -293,6 +304,27 @@ describe('durable revocation and audit repair', () => {
       { event: 'registered', ts: NOW, request_id: 'req-1' },
       { event: 'revoked', ts: NOW + 1, request_id: 'r1' },
     ]);
+  });
+
+  it('a retry whose repair THROWS stays revoked_history_failed (the 204 contract), metadata kept; repairHistory still reports storage_error', async () => {
+    const r = registry(ORGS.A);
+    await r.register(input(ID_A));
+    await seedRevokedEvent(r, ID_A, 1, 'seed');
+    expect(await r.revoke(ID_A, NOW + 1, 'r1')).toBe('revoked_history_failed');
+    await deleteRevokedEvent(r, ID_A);
+    await failHistoryInserts(r, true);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await r.revoke(ID_A, NOW + 2, 'r2')).toBe('revoked_history_failed');
+      expect(await r.repairHistory(ID_A)).toBe('storage_error'); // an explicit admin action reports the failure as such
+    } finally {
+      spy.mockRestore();
+      await failHistoryInserts(r, false);
+    }
+    expect(await r.status(ID_A)).toBe('REVOKED');
+    expect(await pendingOf(r, ID_A)).toEqual({ pending_history: 1, pending_request_id: 'r1', pending_at: NOW + 1 });
+    expect(await r.repairHistory(ID_A)).toBe('repaired');
+    expect(await pendingOf(r, ID_A)).toEqual(CLEAN);
   });
 
   it('a persistent collision: the first revoke is revoked_history_failed, every retry revoked_history_conflict, repair reports conflict and never clears the metadata', async () => {
