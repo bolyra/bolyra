@@ -758,6 +758,37 @@ describe('onDecision (TD-2)', () => {
     expect(d.request.project_key).toBe(AUDIENCE);
   });
 
+  test('a free-text verifier reason is dropped from the HTTP body AND the Decision', async () => {
+    const onDecision = jest.fn();
+    const verifier = stubVerifier({
+      verdict: 'deny', kind: 'classical', code: 'invalid_proof', message: 'bad envelope',
+      detail: { reason: 'Invalid circuit.name: x', credential_id: ID },
+    });
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision, verifier }));
+    const { denied } = await drive(wrapped, requestWithBundle(await makeBundle()), { amount: '25' });
+    const problem = await readProblem(denied!);
+    expect(problem).not.toHaveProperty('reason');
+    expect(problem.credential_id).toBe(ID);
+    const d = onDecision.mock.calls[0][0];
+    expect(d).not.toHaveProperty('reason');
+    expect(d.credentialId).toBe(ID);
+  });
+
+  test('classical in-process free-text reason (proof-envelope validator message) is dropped from both surfaces', async () => {
+    const onDecision = jest.fn();
+    const bundle = JSON.parse(await makeBundle());
+    bundle.agent.envelope = { circuit: 'not-an-object' };
+    const { method } = mockMethod();
+    const wrapped = bolyraGate(method, await gateOptions({ onDecision }));
+    const { denied } = await drive(wrapped, requestWithBundle(JSON.stringify(bundle)), { amount: '25' });
+    const problem = await readProblem(denied!);
+    expect(problem.code).toBe('invalid_proof');
+    expect(problem).not.toHaveProperty('reason');
+    expect(onDecision.mock.calls[0][0]).toMatchObject({ outcome: 'deny', code: 'invalid_proof' });
+    expect(onDecision.mock.calls[0][0]).not.toHaveProperty('reason');
+  });
+
   test('missing_authorization deny: one Decision, 401, no reason', async () => {
     const onDecision = jest.fn();
     const { method } = mockMethod();

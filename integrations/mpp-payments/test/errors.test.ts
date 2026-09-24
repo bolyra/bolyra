@@ -226,3 +226,28 @@ describe('denyProblem: verdict detail (T8)', () => {
     expect(denyProblem({ code: 'expired', message: 'm' })).toMatchObject({ code: 'expired', status: 403 });
   });
 });
+
+describe('denyProblem: reason is an identifier (T8 hardening)', () => {
+  test('a free-text reason is dropped from the problem and the HTTP body', async () => {
+    const verdict = deny('invalid_proof', 'agent: invalid proof envelope', { reason: 'Invalid circuit.name: x' });
+    expect('reason' in denyProblem(verdict)).toBe(false);
+    expect(await denyResponse(verdict).json()).not.toHaveProperty('reason');
+    // Still reachable in-process on the verdict.
+    expect(new BolyraDeniedError(verdict, denyResponse(verdict)).verdict.detail?.reason).toBe('Invalid circuit.name: x');
+  });
+
+  test.each(['Credential_not_active', 'credential-not-active', 'a'.repeat(65), '', 'has space'])(
+    'non-identifier reason %p is dropped', (reason) => {
+      expect('reason' in denyProblem(deny('untrusted_root', 'x', { reason }))).toBe(false);
+    },
+  );
+
+  test('identifier reasons pass through (credential_not_active, 64 chars)', () => {
+    expect(denyProblem(deny('untrusted_root', 'x', { reason: 'credential_not_active' })).reason).toBe('credential_not_active');
+    expect(denyProblem(deny('untrusted_root', 'x', { reason: 'a'.repeat(64) })).reason).toBe('a'.repeat(64));
+  });
+
+  test('credential_id keeps the plain string rule', () => {
+    expect(denyProblem(deny('untrusted_root', 'x', { credential_id: 'Not An Identifier!' })).credential_id).toBe('Not An Identifier!');
+  });
+});

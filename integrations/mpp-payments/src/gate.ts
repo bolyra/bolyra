@@ -43,7 +43,7 @@ import type { SignedReceipt } from '@bolyra/receipts';
 import { peekBundle } from './bundle';
 import { parseBundle, type ParsedBundle } from './bundle';
 import { verifyClassical } from './classical';
-import { DENY_STATUS, denyResponse } from './deny';
+import { DENY_STATUS, denyResponse, identifierReason } from './deny';
 import { BolyraDeniedError, BolyraGateConfigError } from './errors';
 import { callUrlVerifierWithEvidence, normalizeVerifierUrl, runCommandVerifier } from './evc';
 import { NonceStore, NonceStoreCapacityError, NonceRetentionTooLongError } from './nonces';
@@ -544,7 +544,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
    *     B2  missing presentation header        → deny missing_authorization
    *     B3  route amount unresolvable          → deny internal_error
    *     B4  verifier deny (classical/command/url) → deny <verifier code>
-   *                                               (+ reason / credentialId from verdict.detail)
+   *                                               (+ identifier reason / credentialId from verdict.detail)
    *     B5  receipt instance not constructible → deny internal_error
    *     B6  nonce store fault / capacity       → deny internal_error
    *     B7  nonce reservation conflict         → deny nonce_replayed
@@ -604,13 +604,13 @@ export function bolyraGate<method extends MppxServerMethodLike>(
     granted_capabilities: [...ctx.granted_capabilities],
   });
   const denyDecision = (verdict: DenyVerdict, ctx: VerifierRequestContext): Decision => {
-    const reason = verdict.detail?.reason;
+    const reason = identifierReason(verdict.detail);
     const credentialId = verdict.detail?.credential_id;
     return {
       outcome: 'deny',
       code: verdict.code,
       status: DENY_STATUS[verdict.code] ?? 500,
-      ...(typeof reason === 'string' ? { reason } : {}),
+      ...(reason !== undefined ? { reason } : {}),
       ...(typeof credentialId === 'string' ? { credentialId } : {}),
       request: copyContext(ctx),
     };
