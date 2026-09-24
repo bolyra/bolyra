@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,11 @@ const opKey = (() => {
 })();
 
 export default defineConfig({
+  test: {
+    // test-node/ runs under plain `node --test` (npm run test:agreement): it loads the
+    // installed @bolyra/mpp, which the workers pool cannot import.
+    exclude: [...configDefaults.exclude, 'test-node/**'],
+  },
   resolve: {
     alias: {
       // @bolyra/receipts ships CJS that requires the ESM-only
