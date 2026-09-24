@@ -172,6 +172,14 @@ describe('pilot/tenants-check agrees with the Worker loader', () => {
     });
   });
 
+  it('an empty map ({}) is accepted with a warning: every request will be denied (E13)', () => {
+    const result = checkTenants('{}');
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.orgs).toEqual([]);
+    expect(result.warnings).toEqual(['warning: empty map: every request will be denied until a tenant is added']);
+  });
+
   it('exports exactly what the type sidecar declares, and the scanner decodes keys', () => {
     expect(Object.keys(validator).sort()).toEqual(['MAX_TENANTS_BYTES', 'ORG_ID_PATTERN', 'TOKEN_PATTERN', 'checkTenants', 'hasDuplicateKey']);
     expect(validator.MAX_TENANTS_BYTES).toBe(4096);

@@ -665,8 +665,11 @@ async function handleHealth(env: Env): Promise<Response> {
   // the ones that fail closed). A degraded service answers 503 so a probe that checks
   // only the HTTP status cannot mistake it for healthy.
   let tenants: 'ok' | 'invalid' = 'ok';
+  // How many tenants the map holds (null when it does not load). 0 is a valid, deliberately
+  // empty map (E13): healthy, but every authenticated request is denied.
+  let tenant_count: number | null = null;
   try {
-    loadTenants(env.TENANTS);
+    tenant_count = loadTenants(env.TENANTS).size;
   } catch {
     tenants = 'invalid';
   }
@@ -692,6 +695,7 @@ async function handleHealth(env: Env): Promise<Response> {
     verifier_kind: 'classical',
     nonce_mode: 'host',
     tenants,
+    tenant_count,
     capability_map,
     registry,
     registry_kind: 'durable-object',

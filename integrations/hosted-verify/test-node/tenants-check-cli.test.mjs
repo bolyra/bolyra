@@ -64,3 +64,19 @@ test('4096 bytes: refused with the existing hard error, nothing on stdout', () =
   assert.match(r.stderr, /serialized size must be under 4096 bytes \(is 4096\)/);
   assert.doesNotMatch(r.stderr, /warning/);
 });
+
+test('{} (the last tenant removed): exit 0, the empty-map warning on stderr, --pass stdout is exactly {}', () => {
+  const r = run('{}', '--pass');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '{}');
+  assert.match(r.stderr, /^tenants-check: warning: empty map: every request will be denied until a tenant is added$/m);
+  assert.match(r.stderr, /tenants-check: ok: 0 tenant\(s\) \[\], 2 bytes$/m);
+});
+
+test('empty stdin and a non-object stay refused', () => {
+  for (const input of ['', '[]', 'null']) {
+    const r = run(input, '--pass');
+    assert.equal(r.status, 1, `input ${JSON.stringify(input)}: ${r.stderr}`);
+    assert.equal(r.stdout, '');
+  }
+});

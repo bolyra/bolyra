@@ -177,6 +177,56 @@ describe('routing + auth', () => {
     expect(res.status).toBe(200);
     expect(((await res.json()) as { tenants: string }).tenants).toBe('ok');
   });
+
+  it('GET /health reports tenant_count for a normal map (the fixture has org-a/b/c)', async () => {
+    const res = await worker.fetch(new Request(`${BASE}/health`), env);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { tenant_count: unknown }).tenant_count).toBe(3);
+  });
+});
+
+// E13: `{}` is the deliberately EMPTY map the last tenant's removal leaves behind. It is valid
+// configuration, not a defect: every authenticated route denies (401 — there is no tenant for
+// any bearer to resolve to), and /health stays 200 with tenants ok and a count of 0.
+describe('an empty TENANTS map ({}) — the last tenant was removed (E13)', () => {
+  const empty = () => ({ ...env, TENANTS: '{}' });
+
+  it('POST /v1/verify with a formerly valid verifier token → 401 (no tenant to resolve to)', async () => {
+    const res = await worker.fetch(verifyReq(TOKENS.A.verifier), empty());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized', hint: 'Authorization: Bearer <token>' });
+  });
+
+  it('POST /v1/verify with any other bearer → 401', async () => {
+    expect((await worker.fetch(verifyReq('x'.repeat(40)), empty())).status).toBe(401);
+  });
+
+  it('POST /v1/credentials with a formerly valid admin token → 401', async () => {
+    const req = new Request(`${BASE}/v1/credentials`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKENS.A.admin}`, 'content-type': 'application/json' },
+      body: '{}',
+    });
+    const res = await worker.fetch(req, empty());
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /health → 200 ok, tenants 'ok', tenant_count 0", async () => {
+    const res = await worker.fetch(new Request(`${BASE}/health`), empty());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.status).toBe('ok');
+    expect(body.tenants).toBe('ok');
+    expect(body.tenant_count).toBe(0);
+  });
+
+  it('a MALFORMED map is still a defect: /health 503 tenants invalid, tenant_count null', async () => {
+    const res = await worker.fetch(new Request(`${BASE}/health`), { ...env, TENANTS: '{not json' });
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.tenants).toBe('invalid');
+    expect(body.tenant_count).toBeNull();
+  });
 });
 
 // The registry probe is cached per isolate (src/health-probe.ts); each test starts cold.
