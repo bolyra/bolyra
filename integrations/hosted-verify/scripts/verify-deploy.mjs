@@ -4,10 +4,11 @@
  * tests live in scripts/lib/verify-deploy-core.mjs and test-node/verify-deploy.test.mjs;
  * this file wires real `fetch`, the macOS keychain, the pending log file and @bolyra/mpp.
  *
- *   node scripts/verify-deploy.mjs <url> [--version <id> | --from-wrangler]
+ *   node scripts/verify-deploy.mjs [<url>] [--version <id> | --from-wrangler]
  *        [--env production|staging|local] [--tenant <org>] [--allow-missing-tenant]
  *        [--pending-log <path>] [--secrets-from-dev-vars]
  *
+ *   <url>                the Worker's origin; defaults to $VERIFY_URL (scripts/with-worker.sh sets it)
  *   --from-wrangler      read `wrangler deploy` output on stdin and require its
  *                        "Current Version ID: <uuid>" (absent → exit 1: a failed deploy never passes)
  *   --env                keychain service bolyra-hosted-verify (production, the default) or
@@ -91,9 +92,13 @@ function pendingLog(file) {
 async function main() {
   let opts;
   try {
-    opts = parseCliArgs(process.argv.slice(2));
+    opts = parseCliArgs(process.argv.slice(2), { fallbackUrl: process.env.VERIFY_URL });
   } catch (e) {
     console.error(e instanceof DiagnosticError ? e.message : 'bad arguments');
+    return 2;
+  }
+  if (opts.fromWrangler && process.stdin.isTTY) {
+    console.error('--from-wrangler reads `wrangler deploy` output on stdin, and stdin is a terminal: pipe the deploy into it (npm run deploy:staging / deploy:prod)');
     return 2;
   }
   const mpp = require('@bolyra/mpp');
@@ -108,6 +113,7 @@ async function main() {
     makeIssuer: (scalar) => (agentName, expiry) =>
       mpp.issueMandate({ operatorPrivateKey: scalar, agentName, audience: AUDIENCE, model: MODEL, tier: 'small', expiry }),
     now: () => Date.now(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     wranglerOutput: opts.fromWrangler ? await readStdin() : undefined,
   });
 }

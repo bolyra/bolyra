@@ -39,6 +39,10 @@ function bytes32(value) {
  * @returns {string} 64 lowercase hex characters
  */
 export function credentialId(operator, bindingDigest) {
+  for (const c of [operator?.x, operator?.y]) {
+    if (typeof c !== 'bigint') throw new TypeError('operator coordinates must be bigints');
+    if (c < 0n || c >= 1n << 256n) throw new RangeError('operator coordinates must be in [0, 2^256)');
+  }
   const k = Buffer.from(`${operator.x.toString()}:${operator.y.toString()}`, 'utf8');
   return createHash('sha256')
     .update(Buffer.concat([DST_BYTES, lengthPrefixed(k), lengthPrefixed(bytes32(bindingDigest))]))

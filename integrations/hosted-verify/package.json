@@ -11,6 +11,7 @@
     "deploy:prod": "wrangler deploy --env=\"\" | tee /dev/stderr | node scripts/verify-deploy.mjs https://bolyra-hosted-verify.kondojuviswanadha.workers.dev --from-wrangler --env production --tenant bolyra-canary --allow-missing-tenant",
     "test": "vitest run && npm run test:agreement",
     "smoke:dev": "bash scripts/with-worker.sh node scripts/smoke-dev.mjs",
+    "verify:dev": "bash scripts/with-worker.sh node scripts/verify-deploy.mjs --env local --tenant local --secrets-from-dev-vars",
     "typecheck": "wrangler types && tsc --noEmit",
     "usage": "node scripts/usage.mjs",
     "test:agreement": "node --test test-node/*.test.mjs"

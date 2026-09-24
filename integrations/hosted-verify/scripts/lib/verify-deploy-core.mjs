@@ -28,6 +28,9 @@ const { bindingDigest, parseBundle, tierCapability } = require('@bolyra/mpp');
 export const AUDIENCE = 'api.merchant.example';
 export const MODEL = 'opus-4.1';
 export const REQUEST_TIMEOUT_MS = 15_000;
+/** Version propagation: poll /health every 5 s, at most 12 times (~60 s). */
+export const VERSION_POLL_INTERVAL_MS = 5_000;
+export const VERSION_POLLS = 12;
 /** Well-formed (TOKEN_PATTERN) and never issued: it must be refused like no token. */
 export const BOGUS_TOKEN = 'bogus-token-000000000000000000000000';
 const ZERO_ID = '0'.repeat(64);
@@ -55,7 +58,7 @@ const REASONS = ['credential_not_active'];
 const AUDIT = ['history_write_failed', 'history_conflict'];
 const HEALTH_FIELDS = {
   status: ['ok', 'degraded'],
-  registry: ['ok', 'unavailable', 'timeout', 'durable-object'],
+  registry: ['ok', 'unavailable', 'timeout'],
   capability_map: ['ok', 'invalid'],
   tenants: ['ok', 'invalid'],
 };
@@ -84,7 +87,8 @@ const USAGE =
   'usage: node scripts/verify-deploy.mjs <url> [--version <id> | --from-wrangler] [--env production|staging|local] ' +
   '[--tenant <org>] [--allow-missing-tenant] [--pending-log <path>] [--secrets-from-dev-vars (local only)]';
 
-export function parseCliArgs(argv) {
+/** @param {{ fallbackUrl?: string }} [defaults] fallbackUrl: VERIFY_URL (scripts/with-worker.sh exports it) */
+export function parseCliArgs(argv, { fallbackUrl } = {}) {
   let parsed;
   try {
     parsed = parseArgs({
@@ -104,7 +108,9 @@ export function parseCliArgs(argv) {
     throw new DiagnosticError(`${e instanceof Error ? e.message : 'bad arguments'}\n${USAGE}`);
   }
   const { values: v, positionals } = parsed;
-  if (positionals.length !== 1) throw new DiagnosticError(USAGE);
+  if (positionals.length > 1) throw new DiagnosticError(USAGE);
+  const rawUrl = positionals[0] ?? (fallbackUrl || undefined);
+  if (rawUrl === undefined) throw new DiagnosticError(`${USAGE}\n(no <url>, and VERIFY_URL is not set)`);
   if (!Object.hasOwn(ENVIRONMENTS, v.env)) throw new DiagnosticError(`--env must be production, staging or local\n${USAGE}`);
   if (v.version !== undefined && v['from-wrangler']) throw new DiagnosticError('--version and --from-wrangler are mutually exclusive');
   if (v.version !== undefined && !VERSION_PATTERN.test(v.version)) throw new DiagnosticError('--version must match ^[A-Za-z0-9-]{1,64}$');
@@ -116,7 +122,7 @@ export function parseCliArgs(argv) {
 
   let url;
   try {
-    url = new URL(positionals[0]);
+    url = new URL(rawUrl);
   } catch {
     throw new DiagnosticError(`not a URL: the first argument\n${USAGE}`);
   }
@@ -259,6 +265,29 @@ export async function runAuthBoundary({ fetch, url, expectedVersion, print, time
   if (r !== null) c.check(step, r.status === 401, '401', String(r.status));
 
   return c.failed === 0;
+}
+
+/**
+ * Wait for a fresh deploy to propagate: poll /health until `version.id` is `expected`,
+ * every VERSION_POLL_INTERVAL_MS, at most VERSION_POLLS times. Mid-propagation /health and
+ * /v1/verify may be served by different isolates, so a match means "at least one isolate
+ * reports this version", not that every isolate runs it.
+ * @returns {Promise<boolean>} whether the version was seen
+ */
+export async function waitForVersion({ fetch, url, expected, print, sleep, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  for (let n = 1; n <= VERSION_POLLS; n++) {
+    try {
+      const r = await call(fetch, url, '/health', { method: 'GET' }, timeoutMs);
+      if (r.body?.version?.id === expected) return true;
+    } catch {
+      /* not reachable yet: keep polling */
+    }
+    if (n < VERSION_POLLS) {
+      print(`  --  waiting for version ${expected} (${n}/${VERSION_POLLS})`);
+      await sleep(VERSION_POLL_INTERVAL_MS);
+    }
+  }
+  return false;
 }
 
 // ─── behavioral leg ───────────────────────────────────────────────────────────────────
@@ -469,6 +498,7 @@ export function parseScalar(value, account) {
  * @param {{ append(line: string): void, remove(line: string): void }} deps.log
  * @param {(scalar: bigint) => (agentName: string, expiry: number) => Promise<unknown>} deps.makeIssuer
  * @param {() => number} deps.now
+ * @param {(ms: number) => Promise<void>} deps.sleep
  * @param {string} [deps.wranglerOutput] stdin, with --from-wrangler
  * @returns {Promise<number>} the exit code
  */
@@ -510,6 +540,10 @@ export async function verifyDeploy(opts, deps) {
   }
 
   print(`verify-deploy ${opts.url} (env ${opts.env}${expectedVersion !== null ? `, version ${expectedVersion}` : ''})`);
+  if (expectedVersion !== null) {
+    // A timeout is not reported here: the auth leg's /health check fails with the mismatch.
+    await waitForVersion({ fetch: deps.fetch, url: opts.url, expected: expectedVersion, print, sleep: deps.sleep });
+  }
   print('auth boundary:');
   const authOk = await runAuthBoundary({ fetch: deps.fetch, url: opts.url, expectedVersion, print });
 
