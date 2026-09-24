@@ -64,6 +64,12 @@ export function assemble(dir, tokenText) {
       }
     })
     .sort();
+  // `{}` is a valid map downstream (E13), so a directory with NO record files must stop HERE:
+  // it is almost always a wrong TENANTS_DIR / HOSTED_VERIFY_ENV, not a deliberate empty map
+  // (that one keeps its records, every one status=removed). tenant.sh refuses it too, but its
+  // refusal runs in the pipeline stage before this one, and that stage's exit does not stop
+  // this one from writing a map.
+  if (files.length === 0) throw new AssembleError(`no registry record files in ${dir}`);
   for (const f of files) {
     const org = path.basename(f, '.json');
     let record;

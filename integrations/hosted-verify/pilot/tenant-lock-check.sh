@@ -22,7 +22,8 @@
 # never reached. The `npx` shim is shaped like the real launcher AND the process it launches:
 # a launcher that ignores interrupts, and a separate uploader that drains the map off stdin,
 # takes its time, and can OUTLIVE the launcher. wrangler's success line is printed only when
-# what arrived is a non-empty JSON object. The registry lives in a temp directory under
+# what arrived is a JSON object (`{}` included: whether an empty map may go up at all is the
+# put stage's decision, under --allow-empty, and the E13 checks below assert it). The registry lives in a temp directory under
 # HOSTED_VERIFY_ENV=lockcheck.
 # Runs on Linux and macOS; bash 3.2 (no flock, no associative arrays, no `wait -n`).
 #
@@ -176,7 +177,7 @@ SHIM_SECURITY
 # swallows its child's signal death, and starts a background UPLOADER: a separate process, in
 # the launcher's process group, which drains the map off stdin into $MARKER_BODY (so the check
 # can assert WHAT was uploaded) and stays busy long enough to be observed mid-flight. Only a
-# non-empty JSON object earns wrangler's success line — the one thing the put stage accepts as
+# JSON object earns wrangler's success line — the one thing the put stage accepts as
 # confirmation. SHIM_NO_SUCCESS=1 finishes without printing it.
 #
 # The split matters because the uploader can outlive its launcher: its own streams go to
@@ -205,7 +206,7 @@ exec 3<&0
   if ! node -e '
 const fs=require("fs");let m;
 try{m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"))}catch(e){process.exit(1)}
-if(typeof m!=="object"||m===null||Array.isArray(m)||Object.keys(m).length===0)process.exit(1)' "$MARKER_BODY"; then
+if(typeof m!=="object"||m===null||Array.isArray(m))process.exit(1)' "$MARKER_BODY"; then
     printf 'shim: bad body\n' >> "$MARKER.err"
     exit 1
   fi
@@ -681,5 +682,92 @@ case "$out" in *STALE*) fail "(r7) an already-deleted token was reported stale: 
 [ "$(kc_count beta)" = 0 ] || fail "(r7) beta's tokens are still present: $out"
 [ "$(status_of beta)" = removed ] || fail "(r7) beta is not removed: $out"
 ok "(r7) a token already deleted by someone else (44) counts as gone: exit 0, no stale alarm"
+
+# ---- the last tenant (E13): `{}` is a valid, deliberately EMPTY map, and every boundary that can
+# emit it demands a flag that says so. A disabled tenant still occupies the map, so it counts.
+is_empty_body() { [ "$(cat "$1" 2>/dev/null)" = '{}' ]; }
+
+# (u1) the put stage refuses `{}` without --allow-empty: wrangler is never started.
+out="$(printf '{}' | env PATH="$SHIM:$PATH" MARKER="$WORK/marker-u1" MARKER_BODY="$WORK/body-u1" \
+  node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(u1) the put stage exited $rc on {} without --allow-empty, expected 1: $out"
+case "$out" in *"refusing to push an EMPTY map without --allow-empty"*) ;; *) fail "(u1) the refusal did not name --allow-empty: $out" ;; esac
+[ ! -e "$WORK/marker-u1" ] || fail "(u1) wrangler was started for an empty map without --allow-empty"
+ok "(u1) the put stage refuses {} without --allow-empty and starts nothing"
+
+# (u2) with --allow-empty it goes up — and the flag is the put stage's, never wrangler's.
+out="$(printf '{}' | env PATH="$SHIM:$PATH" MARKER="$WORK/marker-u2" MARKER_BODY="$WORK/body-u2" SHIM_SLEEP=0 \
+  node "$SCRIPT_DIR/tenants-put.mjs" --env=lockcheck --allow-empty 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(u2) the put stage exited $rc on {} with --allow-empty: $out"
+is_empty_body "$WORK/body-u2" || fail "(u2) the upload did not carry exactly {}: $(cat "$WORK/body-u2" 2>/dev/null)"
+grep -q -- '--env=lockcheck' "$WORK/marker-u2" || fail "(u2) the environment did not reach wrangler: $(cat "$WORK/marker-u2")"
+grep -q -- '--allow-empty' "$WORK/marker-u2" && fail "(u2) --allow-empty leaked into wrangler's argv: $(cat "$WORK/marker-u2")"
+ok "(u2) --allow-empty lets {} through; wrangler gets --env but never --allow-empty"
+
+# (e5) a DISABLED tenant counts: with acme disabled and beta active, removing beta leaves a
+# non-empty map (acme quarantined) and needs no --last.
+reset_beta
+[ "$(status_of acme)" = disabled ] || fail "(e5) precondition: acme should be disabled here (is $(status_of acme))"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e5" MARKER_BODY="$WORK/body-e5" SHIM_SLEEP=0 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(e5) removing beta beside a disabled acme exited $rc: $out"
+[ "$(status_of beta)" = removed ] || fail "(e5) beta is not removed: $out"
+body_says "$WORK/body-e5" disabled || fail "(e5) the upload did not keep the disabled acme: $(cat "$WORK/body-e5")"
+ok "(e5) a disabled tenant occupies the map: removing the other one needs no --last"
+
+# (e1) acme is now the only record that is active or disabled. Without --last its removal is
+# refused before anything changes: status untouched, tokens kept, no upload, lock released.
+node -e 'const fs=require("fs");const p=process.argv[1];const f=JSON.parse(fs.readFileSync(p,"utf8"));f.status="active";fs.writeFileSync(p,JSON.stringify(f,null,2)+"\n")' "$TENANTS_DIR/acme.json"
+cp "$TENANTS_DIR/acme.json" "$WORK/acme.before"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e1" bash "$TENANT" remove acme 2>&1)"; rc=$?
+[ "$rc" = 1 ] || fail "(e1) removing the last tenant without --last exited $rc, expected 1: $out"
+case "$out" in *"remove: 'acme' is the last tenant; removing it leaves an EMPTY map (every request denied). Re-run with --last to confirm"*) ;; *) fail "(e1) the refusal did not ask for --last: $out" ;; esac
+cmp -s "$WORK/acme.before" "$TENANTS_DIR/acme.json" || fail "(e1) acme's record changed although the remove was refused: $(cat "$TENANTS_DIR/acme.json")"
+[ "$(kc_count acme)" = 2 ] || fail "(e1) acme's tokens were not both kept: $out"
+[ ! -e "$WORK/marker-e1" ] || fail "(e1) a refused remove reached the uploader: $out"
+[ ! -d "$LOCK_DIR" ] || fail "(e1) the lock was not released: $out"
+ok "(e1) removing the last tenant without --last is refused: nothing changes, nothing is uploaded"
+
+# (e2) with --last the empty map goes up deliberately: exactly {}, tokens deleted, status removed.
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e2" MARKER_BODY="$WORK/body-e2" SHIM_SLEEP=0 bash "$TENANT" remove acme --last 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(e2) remove acme --last exited $rc: $out"
+is_empty_body "$WORK/body-e2" || fail "(e2) the upload did not carry exactly {}: $(cat "$WORK/body-e2" 2>/dev/null)"
+grep -q -- '--allow-empty' "$WORK/marker-e2" && fail "(e2) --allow-empty leaked into wrangler's argv: $(cat "$WORK/marker-e2")"
+case "$out" in *"empty map: every request will be denied"*) ;; *) fail "(e2) the validator's empty-map warning was not shown: $out" ;; esac
+[ "$(status_of acme)" = removed ] || fail "(e2) acme is not removed: $out"
+[ "$(kc_count acme)" = 0 ] || fail "(e2) acme's tokens were not deleted after the confirmed upload: $out"
+[ ! -d "$LOCK_DIR" ] || fail "(e2) the lock survived a confirmed upload: $out"
+ok "(e2) remove --last uploads exactly {} (confirmed), deletes the tokens and records status=removed"
+
+# (e3) every record is removed now: a plain sync (or dry run) refuses to push {} — nothing starts.
+for args in "" "--dry-run"; do
+  out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e3" bash "$TENANT" sync $args 2>&1)"; rc=$?
+  [ "$rc" != 0 ] || fail "(e3) sync $args with every tenant removed exited 0: $out"
+  case "$out" in *"sync: the assembled map is empty (every tenant is removed); pass --allow-empty to push it deliberately"*) ;; *) fail "(e3) sync $args did not ask for --allow-empty: $out" ;; esac
+  [ ! -e "$WORK/marker-e3" ] || fail "(e3) sync $args reached the uploader: $out"
+  [ ! -d "$LOCK_DIR" ] || fail "(e3) sync $args left its lock behind: $out"
+done
+ok "(e3) sync and sync --dry-run refuse an all-removed registry without --allow-empty; nothing is uploaded"
+
+# (e4) --allow-empty pushes it deliberately (either order with --dry-run is accepted).
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e4d" bash "$TENANT" sync --allow-empty --dry-run 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(e4) sync --allow-empty --dry-run exited $rc: $out"
+[ ! -e "$WORK/marker-e4d" ] || fail "(e4) a dry run reached the uploader: $out"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-e4" MARKER_BODY="$WORK/body-e4" SHIM_SLEEP=0 bash "$TENANT" sync --allow-empty 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(e4) sync --allow-empty exited $rc: $out"
+case "$out" in *"done. Secrets take effect"*) ;; *) fail "(e4) sync --allow-empty did not report a confirmed upload: $out" ;; esac
+is_empty_body "$WORK/body-e4" || fail "(e4) the upload did not carry exactly {}: $(cat "$WORK/body-e4" 2>/dev/null)"
+[ ! -d "$LOCK_DIR" ] || fail "(e4) the lock survived a confirmed upload: $out"
+out="$(tenant sync --allow-empty --bogus 2>&1)"; rc=$?
+[ "$rc" != 0 ] || fail "(e4) sync with an unknown argument beside --allow-empty exited 0: $out"
+ok "(e4) sync --allow-empty uploads exactly {} (confirmed); --dry-run beside it pushes nothing; unknown flags still refuse"
+
+# (e0) a directory with NO record files is still refused, --allow-empty or not: that is a wrong
+# TENANTS_DIR / HOSTED_VERIFY_ENV far more often than a deliberate empty map.
+mkdir -p "$WORK/tenants-empty"
+out="$(env "${TENANT_ENV[@]}" TENANTS_DIR="$WORK/tenants-empty" MARKER="$WORK/marker-e0" bash "$TENANT" sync --allow-empty 2>&1)"; rc=$?
+[ "$rc" != 0 ] || fail "(e0) sync --allow-empty over a directory with no record files exited 0: $out"
+case "$out" in *"no tenant registry files"*) ;; *) fail "(e0) the refusal did not name the missing record files: $out" ;; esac
+[ ! -e "$WORK/marker-e0" ] || fail "(e0) an empty registry directory reached the uploader: $out"
+ok "(e0) a registry directory with no record files is refused even with --allow-empty"
 
 echo "tenant-lock-check: all checks passed"

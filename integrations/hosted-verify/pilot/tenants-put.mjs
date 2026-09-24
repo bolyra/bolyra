@@ -3,7 +3,9 @@
 // of the assembly pipeline: on a validator refusal it would read EOF and put an empty
 // secret, which fails EVERY tenant closed. The map is held in memory and never written
 // anywhere. Extra arguments (`--env=staging`, or `--env=` for production) are passed
-// through to wrangler.
+// through to wrangler — except `--allow-empty`, which is this stage's own flag: without it
+// an EMPTY map (`{}`, valid since E13 but denying every request) is refused. It is taken out
+// of the argument list before wrangler sees it (wrangler would reject an unknown flag).
 import { spawn } from 'node:child_process';
 import { renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -33,6 +35,9 @@ process.stderr.on('error', () => {});
 // the pipe kills this stage outright — no report, and a shell upstream left to explain an exit
 // code for something that never started.
 const EX_TEMPFAIL = 75;
+const ALLOW_EMPTY = '--allow-empty';
+const allowEmpty = process.argv.slice(2).includes(ALLOW_EMPTY);
+const wranglerArgs = process.argv.slice(2).filter((a) => a !== ALLOW_EMPTY);
 let interrupted = null;
 let spawned = false;
 for (const sig of ['SIGINT', 'SIGTERM']) {
@@ -76,17 +81,24 @@ process.stdin.on('end', () => {
     process.stderr.write('tenants-put: nothing validated upstream; wrangler was NOT started and the live map was NOT changed\n');
     process.exit(1);
   }
-  // Last line of defence before the live map: whatever reaches here must parse as a
-  // non-empty JSON object. This guard costs one parse and is the only thing standing
-  // between a future upstream change and a TENANTS that fails every tenant closed.
+  // Last line of defence before the live map: whatever reaches here must parse as a JSON
+  // object, and an EMPTY one only with --allow-empty. `{}` is valid (E13) but denies every
+  // request, so it goes up only when the operator said so — tenant.sh passes the flag only
+  // for `remove <org> --last` and `sync --allow-empty`. This guard costs one parse and is the
+  // only thing standing between a future upstream change and a TENANTS that fails every
+  // tenant closed or silently drops every tenant.
   let parsed;
   try {
     parsed = JSON.parse(body.toString('utf8'));
   } catch {
     parsed = undefined;
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
-    process.stderr.write('tenants-put: refusing to push a map that is not a non-empty JSON object; wrangler was NOT started and the live map was NOT changed\n');
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    process.stderr.write('tenants-put: refusing to push a map that is not a JSON object; wrangler was NOT started and the live map was NOT changed\n');
+    process.exit(1);
+  }
+  if (Object.keys(parsed).length === 0 && !allowEmpty) {
+    process.stderr.write('tenants-put: refusing to push an EMPTY map without --allow-empty (every request would be denied); wrangler was NOT started and the live map was NOT changed\n');
     process.exit(1);
   }
 
@@ -110,7 +122,7 @@ process.stdin.on('end', () => {
   // debug log; they are pinned on the child so the environment cannot opt into that.
   // Both output streams are piped rather than inherited so the success line can be read on
   // the way past; every chunk is passed through unchanged.
-  const child = spawn('npx', ['--no-install', 'wrangler', 'secret', 'put', 'TENANTS', ...process.argv.slice(2)], {
+  const child = spawn('npx', ['--no-install', 'wrangler', 'secret', 'put', 'TENANTS', ...wranglerArgs], {
     stdio: ['pipe', 'pipe', 'pipe'],
     // A NEW process group (setsid), whose id is child.pid: the launcher, wrangler, and every
     // descendant either of them starts belong to it. The trade-off is deliberate and is the
