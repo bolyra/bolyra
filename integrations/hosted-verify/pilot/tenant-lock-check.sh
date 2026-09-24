@@ -105,12 +105,22 @@ if(want==="disabled"&&!disabled){process.stderr.write("body does not quarantine 
 if(want==="active"&&disabled){process.stderr.write("body quarantines acme\n");process.exit(1)}' "$1" "$2"
 }
 
-mkdir -p "$SHIM" "$TENANTS_DIR"
+KEYCHAIN="$WORK/keychain"
+mkdir -p "$SHIM" "$TENANTS_DIR" "$KEYCHAIN"
 
 # A fake `security`: tokens are derived from the account name, so they are deterministic,
-# distinct per role (the validator refuses a repeated token) and never touch a keychain.
+# distinct per role (the validator refuses a repeated token) and never touch a keychain. The
+# keychain itself is a directory ($SHIM_KEYCHAIN) holding one empty file per account, so a check
+# can assert which items exist after a run: find answers 44 (errSecItemNotFound) for an account
+# with no file, add creates it, delete removes it. Knobs, all off by default:
+#   SHIM_FIND_SLEEP=<s>   a presence lookup (find without -w) touches $SHIM_KEYCHAIN.find-started
+#                         and sleeps first — a window in which the shell is running `security`
+#   SHIM_FINDW_SLEEP=<s>  a token read (find -w) touches $SHIM_KEYCHAIN.findw-started and sleeps
+#                         first — a window inside the sync pipeline, before the put stage has input
+#   SHIM_DELETE_FAIL=1    delete fails (the keychain refusing it) and removes nothing
 cat > "$SHIM/security" <<'SHIM_SECURITY'
 #!/usr/bin/env bash
+: "${SHIM_KEYCHAIN:?tenant-lock-check: SHIM_KEYCHAIN must be set}"
 cmd="${1:-}"; [ $# -eq 0 ] || shift
 acct=""; want_w=0
 while [ $# -gt 0 ]; do
@@ -121,8 +131,15 @@ while [ $# -gt 0 ]; do
     *) shift ;;
   esac
 done
+[ -n "$acct" ] || exit 1
 case "$cmd" in
   find-generic-password)
+    if [ "$want_w" = 1 ]; then
+      if [ -n "${SHIM_FINDW_SLEEP:-}" ]; then : > "$SHIM_KEYCHAIN.findw-started"; sleep "$SHIM_FINDW_SLEEP"; fi
+    else
+      if [ -n "${SHIM_FIND_SLEEP:-}" ]; then : > "$SHIM_KEYCHAIN.find-started"; sleep "$SHIM_FIND_SLEEP"; fi
+    fi
+    [ -e "$SHIM_KEYCHAIN/$acct" ] || exit 44
     if [ "$want_w" = 1 ]; then
       if command -v shasum >/dev/null 2>&1; then
         printf '%s' "$acct" | shasum -a 256 | cut -c1-64
@@ -133,8 +150,15 @@ case "$cmd" in
     exit 0 ;;
   add-generic-password)
     cat >/dev/null   # the real one reads the password twice; never leave the writer on a SIGPIPE
+    : > "$SHIM_KEYCHAIN/$acct"
     exit 0 ;;
   delete-generic-password)
+    if [ "${SHIM_DELETE_FAIL:-0}" = 1 ]; then
+      echo "security: SecKeychainItemDelete: shim: the keychain refused the delete" >&2
+      exit 1
+    fi
+    [ -e "$SHIM_KEYCHAIN/$acct" ] || exit 44
+    rm -f "$SHIM_KEYCHAIN/$acct"
     exit 0 ;;
 esac
 exit 1
@@ -203,10 +227,12 @@ SHIM_WRANGLER
 chmod +x "$SHIM/security" "$SHIM/npx" "$SHIM/wrangler"
 
 printf '%s\n' '{"org_id":"acme","status":"active","trustedOperators":["1:2"]}' > "$TENANTS_DIR/acme.json"
+kc_seed() { : > "$KEYCHAIN/tenant-$1-admin"; : > "$KEYCHAIN/tenant-$1-verifier"; }
+kc_seed acme
 
 # Every tenant.sh call in this check runs with the shims first on PATH and with the temp
 # registry; nothing reads the operator's own environment.
-TENANT_ENV=(PATH="$SHIM:$PATH" HOSTED_VERIFY_ENV=lockcheck TENANTS_DIR="$TENANTS_DIR" MARKER="$MARKER" MARKER_BODY="$MARKER_BODY" SHIM_SLEEP="$SHIM_SLEEP")
+TENANT_ENV=(PATH="$SHIM:$PATH" SHIM_KEYCHAIN="$KEYCHAIN" HOSTED_VERIFY_ENV=lockcheck TENANTS_DIR="$TENANTS_DIR" MARKER="$MARKER" MARKER_BODY="$MARKER_BODY" SHIM_SLEEP="$SHIM_SLEEP")
 tenant() { env "${TENANT_ENV[@]}" bash "$TENANT" "$@"; }
 
 # (a) a dry run validates and stops short of the upload.
@@ -350,10 +376,12 @@ body_says "$MARKER_BODY" disabled || fail "the upload did not carry the map: $(c
 [ ! -d "$LOCK_DIR" ] || fail "the lock survived a confirmed upload"
 ok "an interrupt aimed at the put stage still lets the upload finish, and the lock is released"
 
-# (g6) an interrupt that arrives before the map has finished coming down the pipe is deferred
-# too. The handlers go on first thing, ahead of stdin: installed any later, a TERM in that
-# window would kill the put stage outright — no upload started, no marker, and an exit code
-# upstream that looks like an interrupt over an upload that never existed.
+# (g6) an interrupt that arrives before the map has finished coming down the pipe CANCELS the
+# upload rather than deferring it: nothing has been started yet, so the only honest outcome is
+# "not started" — wrangler is never spawned, no marker is written under the lock, and the put
+# stage exits 75 (EX_TEMPFAIL), which tenant.sh reads as "interrupted before the upload started".
+# The handlers still go on first thing, ahead of stdin: installed any later, a signal in that
+# window would kill the put stage outright with no report at all.
 mkdir -p "$WORK/lock-early"
 ( sleep 2; printf '{"acme":{}}' ) | env PATH="$SHIM:$PATH" \
     MARKER="$WORK/marker-early" MARKER_BODY="$WORK/body-early" SHIM_SLEEP=1 \
@@ -363,17 +391,16 @@ mkdir -p "$WORK/lock-early"
 BG=$!
 sleep 0.5
 require_live "$BG" put
-kill -TERM "$BG" || fail "could not signal the put stage (pid $BG)"
+kill -INT "$BG" || fail "could not signal the put stage (pid $BG)"
 wait "$BG"; rc=$?
 BG=""
-[ "$rc" = 143 ] || fail "the put stage exited $rc after a TERM that arrived before its input, expected 143: $(cat "$WORK/early.log")"
-grep -q "received; the upload in flight runs to completion first" "$WORK/early.log" \
-  || fail "the early interrupt was not deferred: $(cat "$WORK/early.log")"
-[ -e "$WORK/marker-early" ] || fail "the upload never started after the early interrupt: $(cat "$WORK/early.log")"
-[ "$(tail -n 1 "$WORK/marker-early")" = "done" ] || fail "the upload did not finish: $(cat "$WORK/marker-early")"
-[ -e "$WORK/lock-early/upload.confirmed" ] || fail "the completed upload was not recorded as confirmed"
-[ ! -e "$WORK/lock-early/upload.pending" ] || fail "a confirmed upload left its pending marker behind"
-ok "a TERM that lands before the map does is deferred, and the upload still runs and is confirmed"
+[ "$rc" = 75 ] || fail "the put stage exited $rc after a SIGINT that arrived before its input, expected 75: $(cat "$WORK/early.log")"
+grep -q "interrupted before the upload started; wrangler was NOT started" "$WORK/early.log" \
+  || fail "the early interrupt was not reported as a cancelled upload: $(cat "$WORK/early.log")"
+[ ! -e "$WORK/marker-early" ] || fail "wrangler was spawned after an interrupt that arrived before the map: $(cat "$WORK/marker-early")"
+[ ! -e "$WORK/lock-early/upload.pending" ] || fail "a cancelled upload left a pending marker under the lock"
+[ ! -e "$WORK/lock-early/upload.confirmed" ] || fail "a cancelled upload left a confirmation under the lock"
+ok "a SIGINT that lands before the map does cancels the upload: exit 75, wrangler never spawned, no marker"
 
 # (g7) wrangler's log level is pinned on the child alongside its log sanitizing. At warn, error
 # or none wrangler uploads and lands the secret exactly as before — the only thing that changes
@@ -431,5 +458,133 @@ cmp -s "$WORK/body-before-refusal" "$MARKER_BODY" || fail "a refusal that starte
 [ ! -e "$LOCK_DIR/upload.confirmed" ] || fail "a refusal that started no upload left a confirmation under the lock"
 [ ! -d "$LOCK_DIR" ] || fail "the lock was not released after a refusal that started no upload"
 ok "a validator refusal starts no upload, leaves the uploader untouched, and says only that this run changed nothing"
+
+# ---- remove (T10): tokens are deleted only after the upload that drops the tenant is
+# confirmed. A second tenant, beta, is the one removed — acme stays, so the map is never empty.
+status_of() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status))' "$TENANTS_DIR/$1.json"; }
+kc_count() { local n=0; [ ! -e "$KEYCHAIN/tenant-$1-admin" ] || n=$((n + 1)); [ ! -e "$KEYCHAIN/tenant-$1-verifier" ] || n=$((n + 1)); echo "$n"; }
+reset_beta() {
+  printf '%s\n' '{"org_id":"beta","status":"active","trustedOperators":["3:4"]}' > "$TENANTS_DIR/beta.json"
+  kc_seed beta
+  rm -f "$KEYCHAIN.find-started" "$KEYCHAIN.findw-started"
+}
+expect_untouched() {  # $1 scenario, $2 output — status restored, both tokens kept, lock released
+  [ "$(status_of beta)" = active ] || fail "$1: beta's status was not restored (is $(status_of beta)): $2"
+  [ "$(kc_count beta)" = 2 ] || fail "$1: beta's tokens were not both kept ($(kc_count beta) of 2 left): $2"
+  [ ! -d "$LOCK_DIR" ] || fail "$1: the lock was not released although no upload started: $2"
+}
+reset_beta
+# A background job started WITHOUT job control begins with SIGINT ignored, and a signal ignored
+# on entry cannot be trapped — so every run that is sent SIGINT below is launched with job
+# control on (`set -m`), in its own process group, exactly as a terminal's foreground job is.
+
+# (r1) a validator refusal during remove: nothing was uploaded, so nothing local may change —
+# the status goes back to what it was and both tokens stay in the keychain.
+: > "$KEYCHAIN/tenant-badkey-admin"; : > "$KEYCHAIN/tenant-badkey-verifier"
+printf '%s\n' '{"org_id":"badkey","status":"active","trustedOperators":["not-a-key"]}' > "$TENANTS_DIR/badkey.json"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r1" bash "$TENANT" remove beta 2>&1)"; rc=$?
+rm -f "$TENANTS_DIR/badkey.json" "$KEYCHAIN/tenant-badkey-admin" "$KEYCHAIN/tenant-badkey-verifier"
+[ "$rc" != 0 ] || fail "(r1) a remove the validator refused exited 0: $out"
+[ ! -e "$WORK/marker-r1" ] || fail "(r1) a refused remove reached the uploader: $out"
+case "$out" in *"nothing changed"*) ;; *) fail "(r1) the refusal did not say nothing changed: $out" ;; esac
+expect_untouched r1 "$out"
+ok "(r1) a validator refusal during remove restores the status and keeps both tokens"
+
+# (r2) SIGINT to the shell before assembly: the shell is inside a keychain lookup when the
+# signal lands, so the trap runs as soon as that returns — and the pre-assembly check must
+# turn it into "not started": status restored, tokens kept, then the deferred exit 130.
+reset_beta
+set -m
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r2" SHIM_FIND_SLEEP=1 bash "$TENANT" remove beta > "$WORK/r2.log" 2>&1 &
+BG=$!
+set +m
+wait_for_file "$KEYCHAIN.find-started" || fail "(r2) the presence lookup never started: $(cat "$WORK/r2.log")"
+require_live "$BG" remove
+kill -INT "$BG" || fail "(r2) could not signal the remove"
+wait "$BG"; rc=$?
+BG=""
+out="$(cat "$WORK/r2.log")"
+[ "$rc" = 130 ] || fail "(r2) the interrupted remove exited $rc, expected 130: $out"
+[ ! -e "$WORK/marker-r2" ] || fail "(r2) the interrupted remove reached the uploader: $out"
+case "$out" in *"interrupted by SIGINT before the upload started"*) ;; *) fail "(r2) the interrupt was not reported as before the upload: $out" ;; esac
+expect_untouched r2 "$out"
+ok "(r2) SIGINT before assembly: not started, status restored, tokens kept, exit 130"
+
+# (r3) a Ctrl-C in the terminal reaches the WHOLE foreground process group — the shell and
+# every pipeline stage, including the put stage while it is still buffering the map. The run
+# is started in its own process group (job control on for just this launch) so the check can
+# signal that group the way a terminal does; the signal lands while a token is being read.
+reset_beta
+set -m
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r3" SHIM_FINDW_SLEEP=2 bash "$TENANT" remove beta > "$WORK/r3.log" 2>&1 &
+BG=$!
+set +m
+wait_for_file "$KEYCHAIN.findw-started" || fail "(r3) the token read never started: $(cat "$WORK/r3.log")"
+# Every stage has long been running by now (the pipeline starts them together, and the token
+# read comes after the registry parse); the sleep only keeps the signal off the process start-up.
+sleep 0.5
+require_live "$BG" remove
+kill -INT -- "-$BG" || fail "(r3) could not signal the remove's process group"
+wait "$BG"; rc=$?
+BG=""
+out="$(cat "$WORK/r3.log")"
+[ "$rc" = 130 ] || fail "(r3) the remove interrupted mid-pipeline exited $rc, expected 130: $out"
+[ ! -e "$WORK/marker-r3" ] || fail "(r3) wrangler was spawned after the interrupt: $out"
+case "$out" in *"interrupted before the upload started"*) ;; *) fail "(r3) the interrupt was not reported as before the upload: $out" ;; esac
+expect_untouched r3 "$out"
+ok "(r3) a terminal SIGINT while the put stage buffers: wrangler never spawned, status restored, tokens kept, exit 130"
+
+# (r4) SIGINT after the put has spawned: the upload runs to completion and is confirmed, the
+# tokens are then deleted, and only then does the deferred exit 130 happen.
+reset_beta
+set -m
+env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r4" SHIM_SLEEP=1 bash "$TENANT" remove beta > "$WORK/r4.log" 2>&1 &
+BG=$!
+set +m
+wait_for_file "$WORK/marker-r4" || fail "(r4) the upload never started: $(cat "$WORK/r4.log")"
+require_live "$BG" remove
+kill -INT "$BG" || fail "(r4) could not signal the remove"
+wait "$BG"; rc=$?
+BG=""
+out="$(cat "$WORK/r4.log")"
+[ "$rc" = 130 ] || fail "(r4) the remove interrupted mid-upload exited $rc, expected 130: $out"
+[ "$(tail -n 1 "$WORK/marker-r4")" = "done" ] || fail "(r4) the upload did not finish: $(cat "$WORK/marker-r4")"
+case "$out" in *"ran to completion and was confirmed"*) ;; *) fail "(r4) the confirmed upload was not reported: $out" ;; esac
+[ "$(status_of beta)" = removed ] || fail "(r4) beta is not removed (is $(status_of beta)): $out"
+[ "$(kc_count beta)" = 0 ] || fail "(r4) beta's tokens were not deleted after a confirmed upload ($(kc_count beta) left): $out"
+[ ! -d "$LOCK_DIR" ] || fail "(r4) the lock survived a confirmed upload: $out"
+ok "(r4) SIGINT after the put spawned: the upload is confirmed, tokens deleted, then exit 130"
+
+# (r5) an unknown outcome keeps everything: the lock (upload.pending), both tokens, and the
+# removed status — the tokens are the only way back if the old map is still live. Finishing the
+# half-removed tenant is the runbook's recovery (lock removed by hand) plus the same remove.
+reset_beta
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r5" SHIM_SLEEP=1 SHIM_NO_SUCCESS=1 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" != 0 ] || fail "(r5) a remove with an unconfirmed upload exited 0: $out"
+[ -e "$LOCK_DIR/upload.pending" ] || fail "(r5) the lock was not retained over an unknown outcome: $out"
+[ "$(status_of beta)" = removed ] || fail "(r5) beta's status changed after an unknown outcome (is $(status_of beta)): $out"
+[ "$(kc_count beta)" = 2 ] || fail "(r5) beta's tokens were deleted after an unknown outcome ($(kc_count beta) of 2 left): $out"
+case "$out" in *'Recovering a retained lock'*) ;; *) fail "(r5) the unknown outcome did not name the runbook's recovery section: $out" ;; esac
+case "$out" in *"tokens are KEPT"*) ;; *) fail "(r5) the unknown outcome did not say the tokens were kept: $out" ;; esac
+rm -rf "$LOCK_DIR"
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r5b" SHIM_SLEEP=1 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" = 0 ] || fail "(r5) re-running remove after the recovery exited $rc: $out"
+[ "$(status_of beta)" = removed ] || fail "(r5) beta is not removed after the re-run: $out"
+[ "$(kc_count beta)" = 0 ] || fail "(r5) the re-run did not delete beta's tokens ($(kc_count beta) left): $out"
+[ ! -d "$LOCK_DIR" ] || fail "(r5) the re-run left its lock behind: $out"
+ok "(r5) an unknown outcome retains the lock, both tokens and status=removed; recovery plus a re-run finishes the removal"
+
+# (r6) a keychain delete that fails after a confirmed upload is reported by account and fails
+# the run — the tenant is gone from the map, so the record stays removed; the lock is released.
+reset_beta
+out="$(env "${TENANT_ENV[@]}" MARKER="$WORK/marker-r6" SHIM_SLEEP=1 SHIM_DELETE_FAIL=1 bash "$TENANT" remove beta 2>&1)"; rc=$?
+[ "$rc" != 0 ] || fail "(r6) a remove whose token delete failed exited 0: $out"
+[ "$(tail -n 1 "$WORK/marker-r6")" = "done" ] || fail "(r6) the upload did not finish: $out"
+case "$out" in *"tenant-beta-admin"*) ;; *) fail "(r6) the stale admin account was not named: $out" ;; esac
+case "$out" in *"tenant-beta-verifier"*) ;; *) fail "(r6) the stale verifier account was not named: $out" ;; esac
+[ "$(status_of beta)" = removed ] || fail "(r6) beta is not removed (is $(status_of beta)): $out"
+[ "$(kc_count beta)" = 2 ] || fail "(r6) the fake keychain lost items it refused to delete: $out"
+[ ! -d "$LOCK_DIR" ] || fail "(r6) the lock survived a confirmed upload: $out"
+ok "(r6) a failed token delete after a confirmed upload names the stale accounts and exits non-zero; the record stays removed"
 
 echo "tenant-lock-check: all checks passed"
