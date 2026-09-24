@@ -86,7 +86,7 @@ jobs:
           fi
 
           # TEMPORARY soft form until the build that emits registry/capability_map is deployed (the OPS
-          # step flips both to strict `== "ok"`): the old build reports registry:"durable-object" and no
+          # step flips both to strict `== "ok"`; see pilot/RUNBOOK.md §7 step 6): the old build reports registry:"durable-object" and no
           # registry_kind, so registry is checked only when registry_kind is present; an absent
           # capability_map passes. On the new build these two clauses are redundant with the HTTP 200
           # gate above (it answers 200 only when tenants, capability_map and registry are all "ok");

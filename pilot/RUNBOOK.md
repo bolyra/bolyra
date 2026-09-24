@@ -415,7 +415,7 @@ npm ci && npm test && npm run typecheck
 npm run deploy:staging                                        # deploys, then verifies it (see "Post-deploy verification"); note the Current Version ID
 npx wrangler secret put RECEIPT_SIGNER_KEY --env staging      # a fresh 0x-hex secp256k1 key
 HOSTED_VERIFY_ENV=staging pilot/tenant.sh add <org_id> <x:y> --with-fixture-key  # staging keychain + <repo root>/pilot/tenants-staging/; the example below signs with the fixture key
-curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '{tenants, registry_enforced, receipts_enabled}'
+curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '{status, tenants, capability_map, registry, registry_enforced, receipts_enabled}'
 # A secret put takes a few seconds to reach every isolate: /health can still say tenants "invalid" right after the put; re-check after ~10 s before reading anything into it.
 
 # The gate for production: the example must pass against staging.
@@ -439,6 +439,15 @@ npx wrangler secret delete PREVIEW_TOKEN --env=; npx wrangler secret delete PART
 #    (step 1), then REGISTER each binding a tenant expects to verify (step 1.5/1.6).
 # 4. Hand out verifier + admin tokens and the capability vocabulary (step 1.4).
 # 5. Record the version id below as the ROLLBACK FLOOR.
+# 6. Post-cutover: harden the /health alarm. After the FIRST production deploy whose /health
+#    answers `registry: "ok"` and carries `capability_map` (check with the step 0 curl), edit
+#    .github/workflows/hosted-verify-health.yml: replace the two TEMPORARY soft clauses
+#        (if (.[0] | has("registry_kind")) then .[0].registry == "ok" else true end)
+#        ((.[0].capability_map // "ok") == "ok")
+#    with the strict
+#        .[0].registry == "ok" and .[0].capability_map == "ok"
+#    (and the matching registry_ok / capability_map_ok diagnostic lines), and drop
+#    "durable-object" from the `registry` enum in diag(). Open it as its own PR.
 ```
 
 ### Post-deploy verification

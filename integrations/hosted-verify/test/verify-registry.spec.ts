@@ -36,6 +36,9 @@ beforeEach(async () => {
   await reset();
 });
 
+/** process 'unhandledRejection' listener count before the contention test added its own. */
+let contentionListenerBaseline: number | undefined;
+
 describe('registry membership on /v1/verify', () => {
   it('unregistered → deny untrusted_root with reason credential_not_active and the derivable id; no header', async () => {
     const res = await postVerify(allowAgentOnly);
@@ -215,42 +218,50 @@ describe('ordering: classical checks come first', () => {
     const unhandled: unknown[] = [];
     const onWorkerEvent = (event: Event) => unhandled.push((event as PromiseRejectionEvent).reason);
     const onProcess = (reason: unknown) => unhandled.push(reason);
+    contentionListenerBaseline = process.listenerCount('unhandledRejection');
     self.addEventListener('unhandledrejection', onWorkerEvent);
     process.on('unhandledRejection', onProcess);
-    vi.useFakeTimers();
     try {
-      const pending = Array.from({ length: N }, () =>
-        worker.fetch(
-          new Request(`${BASE}/v1/verify`, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.verifier}`, 'content-type': 'application/json' }, body: JSON.stringify(allowAgentOnly) }),
-          { ...env, TENANT: contended },
-        ),
-      );
-      await vi.advanceTimersByTimeAsync(REGISTRY_DEADLINE_MS + 1);
-      const responses = await Promise.all(pending);
-      expect(rejects).toHaveLength(N); // every request reached the registry read
-      for (const res of responses) {
-        expect(res.status).toBe(500);
-        const v = await verdictOf(res);
-        expect(v.code).toBe('internal_error');
-        expect(v.message).toBe('registry timeout');
-      }
-      expect(vi.getTimerCount()).toBe(0);
+      vi.useFakeTimers();
+      try {
+        const pending = Array.from({ length: N }, () =>
+          worker.fetch(
+            new Request(`${BASE}/v1/verify`, { method: 'POST', headers: { authorization: `Bearer ${TOKENS.A.verifier}`, 'content-type': 'application/json' }, body: JSON.stringify(allowAgentOnly) }),
+            { ...env, TENANT: contended },
+          ),
+        );
+        await vi.advanceTimersByTimeAsync(REGISTRY_DEADLINE_MS + 1);
+        const responses = await Promise.all(pending);
+        expect(rejects).toHaveLength(N); // every request reached the registry read
+        for (const res of responses) {
+          expect(res.status).toBe(500);
+          const v = await verdictOf(res);
+          expect(v.code).toBe('internal_error');
+          expect(v.message).toBe('registry timeout');
+        }
+        expect(vi.getTimerCount()).toBe(0);
 
-      // Now the orphaned RPCs fail — explicitly, after the verdicts were sent.
-      for (const reject of rejects) reject(new Error('late failure'));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-    try {
+        // Now the orphaned RPCs fail — explicitly, after the verdicts were sent.
+        for (const reject of rejects) reject(new Error('late failure'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
       // Give the runtime a real macrotask turn to dispatch any unhandled-rejection event.
       await new Promise((r) => setTimeout(r, 20));
       expect(unhandled).toEqual([]);
     } finally {
+      // Removed whatever happened above: a leaked process listener would silence Node's
+      // default unhandled-rejection reporting for the rest of this file.
       self.removeEventListener('unhandledrejection', onWorkerEvent);
       process.off('unhandledRejection', onProcess);
     }
+  });
+
+  it('the contention test leaves no unhandled-rejection listener behind, pass or fail', () => {
+    expect(contentionListenerBaseline).toBeDefined();
+    expect(process.listenerCount('unhandledRejection')).toBe(contentionListenerBaseline);
   });
 
   it("the object's own storage_error result → 500, never an allow", async () => {
