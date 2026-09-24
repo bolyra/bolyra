@@ -170,6 +170,56 @@ revoking the id denies all of them, including presentations minted after the
 revocation. Revocation is terminal — re-registering a revoked binding is
 `409 credential_revoked`; issue a new binding instead.
 
+### Renewal
+
+`expiry` is inside the signed binding, so **any new expiry is a new binding
+and therefore a new `credential_id`**. A relative `--expiry 30d` is
+recomputed against the clock every time you run `bolyra mandate issue`, so
+two issues a second apart are two different credentials — the second is not
+registered until you register it, and it verifies as `deny untrusted_root`
+(`credential_not_active`) until then.
+
+To re-present the **same** binding (a lost `mandate.json`, a second agent
+instance), issue with the absolute Unix-seconds form of `--expiry` and keep
+the value:
+
+```bash
+EXPIRY=$(( $(date +%s) + 30*24*3600 ))   # record this once, next to the credential_id
+bolyra mandate issue \
+  --operator-key '/absolute/path/to/operator.key' \
+  --agent '<agent-name>' --audience '<project-key>' --model '<model>' \
+  --tier small --expiry "$EXPIRY" --encoding json --out mandate.json
+```
+
+The same key, fields, and `$EXPIRY` give the same binding and the same
+`credential_id`; registering it again answers `200` with that same id (still
+ACTIVE), or `409 credential_revoked` if it was revoked.
+
+To **roll to a new expiry**: issue the new binding, register it, switch the
+agent to the new presentation, then revoke the old id.
+
+```bash
+BASE=https://bolyra-hosted-verify.<account>.workers.dev
+ADMIN=<your admin token>
+OLD_ID=<the credential_id you are replacing>
+
+# 1. Register the new binding (mandate.json from the issue above); 201 + the new id:
+jq '{version: 1, binding, signature: .sig, operator_pubkey: .agent.credential.operator_pubkey}' \
+  mandate.json > registration.json
+NEW_ID=$(curl -s -X POST $BASE/v1/credentials \
+  -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  --data @registration.json | jq -r .credential_id)
+echo "$NEW_ID"
+
+# 2. Switch the agent to the new presentation, then revoke the old id (204):
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/v1/credentials/$OLD_ID/revoke \
+  -H "Authorization: Bearer $ADMIN"
+```
+
+Until step 2, both credentials are ACTIVE and both verify; the old one also
+stops on its own at its expiry. A registration is refused with `400
+binding_expired` once the binding's expiry has passed, so renew before it.
+
 ### Handling responses — the rules that matter
 
 1. **Branch on `verdict`, never on HTTP status.** `200` means "a decision was
@@ -206,7 +256,7 @@ revocation. Revocation is terminal — re-registering a revoked binding is
 | `deny invalid_signature` | the signature does not verify against a pinned key | you signed with a different key than the one you sent us, or the bundle is corrupt |
 | `deny request_mismatch` | request fields ≠ the signed binding | `agent_name`/`project_key`/`program`/`model` must match byte-for-byte |
 | `deny scope_exceeded` | capability needs bits your credential lacks | working as intended (tier cap), or re-issue the credential |
-| `deny expired` | `now_unix >= expiry` (equality = expired) | check the `now_unix` you send; re-issue if actually expired |
+| `deny expired` | `now_unix >= expiry` (equality = expired) | check the `now_unix` you send; if actually expired, issue and register a new binding ([Renewal](#renewal)) |
 | `deny unknown_capability` | capability has no mapping | unmapped is never silently allowed — ask us to map it |
 | `409 {"error":"credential_revoked"}` | re-registering a revoked binding | terminal; issue a new binding |
 | `413 {"error":"payload_too_large"}` on `POST /v1/credentials` | the canonical binding is over 16,384 UTF-8 bytes | shorten the binding and re-sign it |
