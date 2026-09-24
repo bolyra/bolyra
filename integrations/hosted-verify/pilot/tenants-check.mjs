@@ -62,7 +62,8 @@ export function hasDuplicateKey(text) {
 
 /**
  * `warnings` never affect `ok`: they flag a map the Worker accepts today but that is close to
- * a limit (the size ceiling). They carry byte counts only.
+ * a limit (the size ceiling) or that denies every request (the empty map). They carry byte
+ * counts only.
  * @returns {{ ok: boolean, errors: string[], warnings: string[], bytes: number, orgs: string[] }}
  */
 export function checkTenants(raw) {
@@ -86,7 +87,9 @@ export function checkTenants(raw) {
     return { ok: false, errors: [...errors, 'must be a JSON object keyed by org_id'], warnings, bytes, orgs };
   }
   const entries = Object.entries(parsed);
-  if (entries.length === 0) errors.push('no tenants configured (the Worker rejects an empty map)');
+  // `{}` is valid (E13, the Worker loads it as an empty map), but it denies every request —
+  // worth saying out loud. The uploader still refuses it without --allow-empty.
+  if (entries.length === 0) warnings.push('warning: empty map: every request will be denied until a tenant is added');
   const seenTokens = new Map(); // token -> where it was first seen (org/field), for a message without the value
   for (const [index, [orgId, value]] of entries.entries()) {
     const validOrg = ORG_ID_PATTERN.test(orgId);

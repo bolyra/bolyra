@@ -66,9 +66,18 @@ describe('loadTenants', () => {
     ['invalid JSON', '{not json', 'not valid JSON'],
     ['an array', '[]', 'JSON object'],
     ['a string', '"x"', 'JSON object'],
-    ['zero tenants', '{}', 'no tenants'],
   ])('fails closed on %s', (_name, raw, part) => {
     expectInternalError(() => loadTenants(raw as string | undefined), part);
+  });
+
+  // E13: `{}` is a VALID, deliberately empty map (the last tenant was removed). It loads as an
+  // empty Map, so every authenticated request resolves to no tenant (401); only a MISSING or
+  // malformed configuration is a defect.
+  it('loads `{}` as an empty map (zero tenants is valid; every bearer resolves to nothing)', () => {
+    const tenants = loadTenants('{}');
+    expect(tenants.size).toBe(0);
+    const req = new Request('https://x.example/v1/verify', { headers: { authorization: `Bearer ${'a'.repeat(40)}` } });
+    expect(resolveAuth(req, tenants)).toBeNull();
   });
 
   it.each([

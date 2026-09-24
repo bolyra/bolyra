@@ -28,8 +28,10 @@
  * unknown field (a typo in `disabled` must not silently leave a tenant live),
  * a missing or weak token, a duplicate token value ANYWHERE (a token that
  * appears twice grants nothing anywhere), an empty or malformed operator list,
- * an oversize secret, or an empty map — each throws, and the caller must treat
- * that as "no tenant is trusted", never "all tenants are trusted".
+ * a missing (unset or '') secret, or an oversize one — each throws, and the
+ * caller must treat that as "no tenant is trusted", never "all tenants are
+ * trusted". An empty MAP (`{}`) is not a defect (E13): it loads as zero tenants,
+ * so every bearer is unauthenticated.
  */
 
 import { sha256 } from '@noble/hashes/sha256';
@@ -231,8 +233,10 @@ export function loadTenants(raw: string | undefined): Map<string, TenantConfig> 
     throw invalid('not valid JSON');
   }
   if (!isPlainObject(parsed)) throw invalid('must be a JSON object keyed by org_id');
+  // `{}` is VALID (E13): the deliberately empty map the last tenant's removal leaves. It loads
+  // as an empty Map, so resolveAuth finds no tenant for any bearer and every authenticated
+  // route answers 401. Only a missing or malformed configuration is a defect.
   const entries = Object.entries(parsed);
-  if (entries.length === 0) throw invalid('no tenants configured');
 
   const tenants = new Map<string, TenantConfig>();
   const seenTokens = new Set<string>();
