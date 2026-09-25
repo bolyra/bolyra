@@ -39,17 +39,20 @@ export interface HostedVerifier {
 /**
  * Every route here is `${url}/<route>`, so `url` must be the verifier's origin: a path
  * prefix would reach /health and /v1/credentials and then fail closed on /v1/verify.
- * Throws a DiagnosticError in our words for a path or an unparseable value (the URL
- * parser's own message may quote the input).
+ * Throws a DiagnosticError in our words for a path, query, fragment, userinfo or an
+ * unparseable value (the URL parser's own message may quote the input).
  */
 export function assertVerifierOrigin(url: string): void {
-  let pathname: string;
+  const refuse = (): never => { throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)'); };
+  let u: URL;
   try {
-    pathname = new URL(url).pathname;
+    u = new URL(url);
   } catch {
-    pathname = '<unparseable>';
+    return refuse();
   }
-  if (pathname !== '/') throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)');
+  // `href` equals `origin + '/'` only for a bare origin: a path, query, fragment or userinfo
+  // all make it longer, and every route here concatenates after the value as given.
+  if (u.href !== `${u.origin}/`) refuse();
 }
 
 export interface Health {
