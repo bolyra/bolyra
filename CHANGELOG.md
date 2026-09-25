@@ -28,7 +28,7 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
-## @bolyra/mpp 0.7.0 (unreleased)
+## @bolyra/mpp 0.7.0 (2026-09-24)
 
 Decision evidence for the application, and a verifier-URL convention.
 
@@ -92,13 +92,11 @@ Decision evidence for the application, and a verifier-URL convention.
 
 ### Follow-up
 
-- `@bolyra/cli` currently requires `@bolyra/mpp ^0.6.0`, which excludes 0.7.0
-  on 0.x semver. The CLI's range needs its own bump after `@bolyra/mpp` 0.7.0
-  is published (not part of this release).
-- Done after publish: `examples/managed-revocation` moved to `@bolyra/mpp`
-  0.7.0 (`callUrlVerifierWithEvidence` for the verifier evidence, `onDecision`
-  for the gate's decision; 22 checks), `@bolyra/cli` range `^0.7.0`, landing
-  pin `@bolyra/mpp@0.7.0`.
+- Done after publish (same day): `examples/managed-revocation` moved to
+  `@bolyra/mpp` 0.7.0 (`callUrlVerifierWithEvidence` for the verifier
+  evidence, `onDecision` for the gate's decision; 22 checks); `@bolyra/cli`
+  range `^0.6.0` → `^0.7.0` (0.x semver excluded 0.7.0; the CLI itself is not
+  republished by this change); landing pin `@bolyra/mpp@0.7.0`.
 
 ## @bolyra/mpp 0.6.0 (2026-09-22)
 
