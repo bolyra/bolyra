@@ -67,7 +67,7 @@ The runnable proof of the behaviour above is
 against a deployment that trusts the example's operator key, carries the mpp
 capability vocabulary, and has receipts enabled (its README lists the
 prerequisites), it runs register → allow → allow → revoke → deny → an
-independent credential still allows, 21 checks in all. `GET /health` reports
+independent credential still allows, 22 checks in all. `GET /health` reports
 `registry_enforced: true`; when a signer key is configured,
 `/.well-known/bolyra-signers.json` publishes the signer address.
 
@@ -544,7 +544,7 @@ npm run deploy:staging                               # deploy FIRST: a secret pu
                                                      # exist yet creates a stub Worker; note the printed Current Version ID
 npx wrangler secret put RECEIPT_SIGNER_KEY --env staging   # a 0x-hex secp256k1 key; receipts and /.well-known/bolyra-signers.json need it
 # provision staging tenants with pilot/tenant.sh add … --with-fixture-key (HOSTED_VERIFY_ENV=staging),
-# run examples/managed-revocation against it (21/21), THEN:
+# run examples/managed-revocation against it (22/22), THEN:
 npm run deploy:prod                                  # workers.dev subdomain ONLY (a bare `npm run deploy` refuses); note the Current Version ID — the rollback floor
 npx wrangler secret put RECEIPT_SIGNER_KEY --env=    # production, if not yet set; --env= pins production even if CLOUDFLARE_ENV is set
 ```

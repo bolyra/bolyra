@@ -1,15 +1,25 @@
 /**
- * Direct calls to the hosted verifier — the evidence the gate cannot surface. The gate's
- * `callUrlVerifier` discards response headers, and its Problem Details body carries the
- * verdict message rather than `detail`; so the `x-bolyra-credential-id` header, the signed
- * receipt header, and a deny's structured `detail` are read here, from the verifier itself.
+ * Direct calls to the hosted verifier — the evidence the gate does not put on the wire.
+ * The gate's `callUrlVerifier` returns the verdict only and discards response headers;
+ * `callUrlVerifierWithEvidence` (@bolyra/mpp 0.7.0) makes the same fail-closed call and
+ * keeps the HTTP status and the raw `x-bolyra-credential-id` / `x-bolyra-receipt` headers,
+ * so `verify()` below no longer hand-rolls the transport. The signed receipt header, the
+ * credential id header, and a deny's structured `detail` are read here, from the verifier
+ * itself; registration, revocation, and /health are plain admin calls.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseBundle, tierCapability, type IssuedMandate } from '@bolyra/mpp';
+import {
+  callUrlVerifierWithEvidence,
+  parseBundle,
+  tierCapability,
+  type IssuedMandate,
+  type Verdict,
+  type VerifierRequest,
+} from '@bolyra/mpp';
 
 /**
  * An error whose message is ours — a route, a status, a byte count — and therefore safe
@@ -106,7 +116,7 @@ export async function revoke(v: HostedVerifier, credentialId: string): Promise<n
 
 export interface VerifyOutcome {
   status: number;
-  verdict: Record<string, unknown>;
+  verdict: Verdict;
   credentialIdHeader: string | null;
   receiptHeader: string | null;
 }
@@ -120,7 +130,7 @@ export interface VerifyOutcome {
  * the preflight stashed rather than asking the verifier again.
  */
 export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise<VerifyOutcome> {
-  const body = {
+  const request: VerifierRequest = {
     version: 1,
     bundle: mandate.presentation,
     request: {
@@ -132,18 +142,19 @@ export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise
     },
     now_unix: Math.floor(Date.now() / 1000),
   };
-  const res = await fetch(`${v.url}/v1/verify`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${v.verifierToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const { bytes, body: verdict } = await jsonOf(res);
-  if (Object.keys(verdict).length === 0) throw new DiagnosticError(`POST /v1/verify → HTTP ${res.status} with a non-JSON body (${bytes} bytes withheld)`);
+  // `v.url` is the verifier's origin; the SDK POSTs a bare origin to `/v1/verify`.
+  const evidence = await callUrlVerifierWithEvidence({ url: v.url, token: v.verifierToken }, request);
+  // The SDK fails closed: an unreachable verifier, a timeout, or a body that is not a
+  // verdict comes back as `deny internal_error` rather than a throw. With no status, no
+  // HTTP response was received; its verdict message is the SDK's, so only our words print.
+  if (evidence.status === undefined) {
+    throw new DiagnosticError('POST /v1/verify → no HTTP response (unreachable, timed out, or an invalid URL; the call failed closed, details withheld)');
+  }
   return {
-    status: res.status,
-    verdict,
-    credentialIdHeader: res.headers.get('x-bolyra-credential-id'),
-    receiptHeader: res.headers.get('x-bolyra-receipt'),
+    status: evidence.status,
+    verdict: evidence.verdict,
+    credentialIdHeader: evidence.credentialId ?? null,
+    receiptHeader: evidence.receipt ?? null,
   };
 }
 

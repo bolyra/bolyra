@@ -16,7 +16,7 @@ locally and is not revocation evidence.
 cd "$(git rev-parse --show-toplevel)"
 # 1. the hosted verifier (built from this repo — it is not published)
 cd integrations/hosted-verify && npm ci --no-audit --no-fund && cd ../..
-# 2. the example (published @bolyra/mpp 0.5.0 + mppx 0.8.13 from the registry)
+# 2. the example (published @bolyra/mpp 0.7.0 + mppx 0.8.13 from the registry)
 cd examples/managed-revocation && npm ci --no-audit --no-fund
 npm run demo:local
 ```
@@ -52,7 +52,7 @@ non-zero without them.
 | 3 | `POST /v1/verify` with a fresh presentation | verifier | `x-bolyra-credential-id` = the registered id; `x-bolyra-receipt` passes `bolyra receipt verify --signer-from` |
 | 4 | handshake again, fresh presentations | gate | **ALLOWED**, counter **2** |
 | 5 | `POST /v1/credentials/{id}/revoke` | verifier | `204`; again `204` (idempotent); re-register → `409 credential_revoked` (terminal) |
-| 6 | handshake with a fresh presentation of the revoked binding | gate | **DENIED** `401` `code: untrusted_root` before any 402; counter still **2**; the verdict the gate threw carries `detail.reason: credential_not_active` and the id |
+| 6 | handshake with a fresh presentation of the revoked binding | gate | **DENIED** `401` `code: untrusted_root` before any 402; counter still **2**; the verdict the gate threw carries `detail.reason: credential_not_active` and the id, and the gate's `onDecision` observer reports `deny` with the same `reason` and `credentialId` |
 | 7 | `POST /v1/verify` with another fresh presentation | verifier | `200` `deny untrusted_root`, `detail: { reason: "credential_not_active", credential_id }`, no id header |
 | 8 | an independent mandate under the same operator: register, handshake | both | `201`, a different id; **ALLOWED**, counter **3** |
 
@@ -70,11 +70,16 @@ must be registered on its own — see
   counter, the Problem Details `code`, and the payment receipt's
   `bolyraAuthorization` field. The gate's hosted-verifier client keeps only the
   verdict body, so response headers never reach it, and its Problem Details
-  `detail` is the verdict's message; the structured `detail` object is
-  available in-process on the thrown `BolyraDeniedError`, which is where row 6
-  reads it.
+  `detail` is the verdict's message (since 0.7.0 the body also carries the
+  verdict's identifier-shaped `reason` and a short `credential_id`); the full
+  structured `detail` object is
+  available in-process on the thrown `BolyraDeniedError`, and (since 0.7.0) the
+  gate's `onDecision` observer reports each request's final decision with an
+  identifier-shaped `reason` and the `credentialId`; row 6 reads both.
 - **`[verifier]`** — what only the hosted verifier shows, read by calling
-  `POST /v1/verify` directly with the verifier token: the
+  `POST /v1/verify` directly with the verifier token through `@bolyra/mpp`'s
+  `callUrlVerifierWithEvidence` (the gate's fail-closed client, keeping the
+  HTTP status and response headers): the
   `x-bolyra-credential-id` header on an allow (unsigned correlation, not an
   authorization input), the signed `x-bolyra-receipt` (decoded and checked with
   `bolyra receipt verify --signer-from <verifier>/.well-known/bolyra-signers.json`),
@@ -108,7 +113,7 @@ Worker.
 ## Tests
 
 ```bash
-npm test   # typecheck + test/server.test.ts (4 cases against a stubbed verifier) + test/versions.test.ts (pins, incl. the installed @bolyra/mpp) + test/credential-id.test.ts
+npm test   # typecheck + test/server.test.ts (7 cases against a stubbed verifier) + test/versions.test.ts (pins, incl. the installed @bolyra/mpp) + test/credential-id.test.ts
 ```
 
 `test/credential-id.test.ts` checks `src/credential-id.ts` against every committed

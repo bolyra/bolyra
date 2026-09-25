@@ -12,7 +12,7 @@
  */
 import { Method, z } from 'mppx';
 import { Mppx } from 'mppx/server';
-import { bolyraGate, handleDenials, isBolyraDeniedError, type DenyVerdict } from '@bolyra/mpp';
+import { bolyraGate, handleDenials, isBolyraDeniedError, type Decision, type DenyVerdict } from '@bolyra/mpp';
 
 export const AUDIENCE = 'api.merchant.example';
 export const MODEL = 'opus-4.1';
@@ -25,9 +25,17 @@ export interface ServerState {
   counter: number;
   /**
    * The verdict the gate denied the CURRENT request with, cleared at the start of every
-   * request; its `detail` never reaches the HTTP body. `undefined` after an allow.
+   * request; its full `detail` stays in-process (the HTTP body carries only an
+   * identifier-shaped `reason` and a short `credential_id`). `undefined` after an allow.
    */
   lastDenial: DenyVerdict | undefined;
+  /**
+   * The gate's final decision for the CURRENT request, as its `onDecision` observer
+   * reported it (0.7.0+), cleared at the start of every request: an allow, or a deny with
+   * its code, status, and — when identifier-shaped — the verifier's `reason` and
+   * `credential_id`. `undefined` when the gate made no decision on this request.
+   */
+  lastDecision: Decision | undefined;
 }
 
 export interface GatedServer {
@@ -46,9 +54,10 @@ export const chargeMethod = Method.from({
 });
 
 /**
- * Build the gated server. `verifier.url` is the hosted verifier's origin — `/v1/verify`
- * is appended here (a trailing slash is tolerated) — and `verifier.token` is the tenant's
- * verifier token, sent as a bearer on every decision.
+ * Build the gated server. `verifier.url` is the hosted verifier's origin; the gate appends
+ * `/v1/verify` to a bare origin (with or without a trailing slash) and preserves any
+ * explicit path. `verifier.token` is the tenant's verifier token, sent as a bearer on
+ * every decision.
  */
 export function createServer(verifier: { url: string; token: string }): GatedServer {
   const method = Method.toServer(chargeMethod, {
@@ -63,11 +72,16 @@ export function createServer(verifier: { url: string; token: string }): GatedSer
     },
   });
 
-  const verifyUrl = `${verifier.url.replace(/\/+$/, '')}/v1/verify`;
+  const state: ServerState = { counter: 0, lastDenial: undefined, lastDecision: undefined };
+
   const gated = bolyraGate(method, {
     audience: AUDIENCE,
     model: MODEL,
-    verifier: { kind: 'url', url: verifyUrl, token: verifier.token },
+    verifier: { kind: 'url', url: verifier.url, token: verifier.token },
+    // Called exactly once per gate run, after the decision is final; observation only.
+    onDecision: (decision) => {
+      state.lastDecision = decision;
+    },
   });
 
   const mppx = Mppx.create({
@@ -77,8 +91,6 @@ export function createServer(verifier: { url: string; token: string }): GatedSer
     secretKey: 'example-secret-key-example-secret-key-32',
   });
 
-  const state: ServerState = { counter: 0, lastDenial: undefined };
-
   const action = async (request: Request): Promise<Response> => {
     const result = await mppx.charge({ amount: CHARGE_AMOUNT })(request);
     if (result.status === 402) return result.challenge;
@@ -87,13 +99,14 @@ export function createServer(verifier: { url: string; token: string }): GatedSer
   };
 
   // handleDenials turns the gate's thrown BolyraDeniedError into its Problem Details
-  // response; the wrapper in between records the verdict so run.ts can show the
-  // structured `detail` the HTTP body does not carry. Only denials thrown from the
-  // gate's preflight stage arrive here — a denial from its verify hook is re-issued by
-  // mppx as a 402 and never reaches this wrapper — which is why the preflight-stage
-  // decision is the one worth recording.
+  // response; the wrapper in between records the verdict so run.ts can show its full
+  // structured `detail`, which the HTTP body carries only in part. Only denials thrown
+  // from the gate's preflight stage arrive here — a denial from its verify hook is
+  // re-issued by mppx as a 402 and never reaches this wrapper — which is why the
+  // preflight-stage decision is the one worth recording.
   const handler = handleDenials(async (request: Request): Promise<Response> => {
     state.lastDenial = undefined;
+    state.lastDecision = undefined;
     try {
       return await action(request);
     } catch (e) {

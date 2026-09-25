@@ -22,3 +22,8 @@ test('the pins in src/versions.ts are the ones package.json installs', () => {
 test('the installed @bolyra/mpp is the pinned version', () => {
   assert.equal((require('@bolyra/mpp/package.json') as { version: string }).version, PACKAGES.mpp);
 });
+
+test('the installed @bolyra/mpp exports callUrlVerifierWithEvidence (0.7.0+)', async () => {
+  const mpp = (await import('@bolyra/mpp')) as Record<string, unknown>;
+  assert.equal(typeof mpp.callUrlVerifierWithEvidence, 'function');
+});

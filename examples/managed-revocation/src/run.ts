@@ -8,7 +8,8 @@
  *
  * Two evidence sources, labelled in the output:
  *   [gate]     what the published @bolyra/mpp gate proves — the counter and the Problem
- *              Details `code`; plus the in-process verdict the gate threw.
+ *              Details `code`; plus the in-process verdict the gate threw and the final
+ *              decision its `onDecision` observer reported.
  *   [verifier] what only the hosted verifier shows — the `x-bolyra-credential-id` header,
  *              the signed receipt (checked with `bolyra receipt verify`), and the deny
  *              `detail` (`reason`, `credential_id`); plus the registered id checked against
@@ -61,7 +62,7 @@ const DENY_CODES = [
   'unknown_capability', 'scope_exceeded', 'expired', 'nonce_missing', 'nonce_replayed', 'internal_error',
 ] as const;
 const REASONS = ['credential_not_active'] as const;
-const REGISTRY_ERRORS = ['credential_revoked', 'binding_expired', 'untrusted_operator', 'not_found', 'internal_error'] as const;
+const REGISTRY_ERRORS = ['credential_revoked', 'binding_expired', 'untrusted_operator', 'not_found', 'quota_exceeded', 'payload_too_large', 'internal_error'] as const;
 const TENANT_STATES = ['ok', 'invalid'] as const;
 const VERIFIER_KINDS = ['url', 'classical', 'command'] as const;
 const TIERS = ['small', 'medium', 'unlimited'] as const;
@@ -163,12 +164,16 @@ async function main(): Promise<void> {
   const problem = (await denied.json()) as { code?: unknown; detail?: unknown };
   check('[gate]', 'paid call #3 after revoke', denied.status === 401 && problem.code === 'untrusted_root' && server.state.counter === 2, '401 untrusted_root, counter 2', `${denied.status} ${shown(problem.code, DENY_CODES)}, counter ${server.state.counter}`);
   const thrown = detailOf(server.state.lastDenial);
-  check('[gate]', 'in-process verdict.detail (the wire body carries only the message; the id is cross-checked against the registration)', thrown.reason === 'credential_not_active' && thrown.credential_id === id, 'credential_not_active, registered id', `${shown(thrown.reason, REASONS)}, ${thrown.credential_id === id ? 'registered id' : 'a DIFFERENT id'}`);
+  check('[gate]', 'in-process verdict.detail (the id is cross-checked against the registration)', thrown.reason === 'credential_not_active' && thrown.credential_id === id, 'credential_not_active, registered id', `${shown(thrown.reason, REASONS)}, ${thrown.credential_id === id ? 'registered id' : 'a DIFFERENT id'}`);
+  const decision = server.state.lastDecision;
+  const denyDecision = decision?.outcome === 'deny' ? decision : undefined;
+  check('[gate]', 'onDecision observer (deny, reason, credential id)', denyDecision !== undefined && denyDecision.reason === 'credential_not_active' && denyDecision.credentialId === id, 'deny, credential_not_active, registered id', `${shown(decision?.outcome, VERDICTS)}, ${shown(denyDecision?.reason, REASONS)}, ${denyDecision?.credentialId === undefined ? 'no id' : denyDecision.credentialId === id ? `registered id ${shownId(denyDecision.credentialId)}` : 'a DIFFERENT id'}`);
 
   // 7. The verifier's own words for the same presentation.
   const v2 = await verify(hosted, await issue(AGENT));
-  const d2 = detailOf(v2.verdict);
-  check('[verifier]', 'POST /v1/verify after revoke', v2.status === 200 && v2.verdict.verdict === 'deny' && v2.verdict.code === 'untrusted_root', '200 deny untrusted_root', `${v2.status} ${shown(v2.verdict.verdict, VERDICTS)} ${shown(v2.verdict.code, DENY_CODES)}`);
+  const v2deny = v2.verdict.verdict === 'deny' ? v2.verdict : undefined;
+  const d2 = detailOf(v2deny);
+  check('[verifier]', 'POST /v1/verify after revoke', v2.status === 200 && v2deny?.code === 'untrusted_root', '200 deny untrusted_root', `${v2.status} ${shown(v2.verdict.verdict, VERDICTS)} ${shown(v2deny?.code, DENY_CODES)}`);
   check('[verifier]', 'deny detail', d2.reason === 'credential_not_active' && d2.credential_id === id, 'credential_not_active, registered id', `${shown(d2.reason, REASONS)}, ${d2.credential_id === id ? 'registered id' : 'a DIFFERENT id'}`);
   check('[verifier]', 'no x-bolyra-credential-id on a deny', v2.credentialIdHeader === null, 'absent', v2.credentialIdHeader === null ? 'absent' : 'present');
 
