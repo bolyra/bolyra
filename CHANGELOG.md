@@ -184,9 +184,9 @@ Bounded nonce retention, honest spend-mandate naming.
 - The `MAX_NONCE_TTL` constant's "spec §5.2" citation was wrong — §5.2 is the
   single-object stdout parse rule — and is corrected.
 
-## hosted-verify — Unreleased
+## hosted-verify — deployed 2026-09-24 (production 07a5a031, staging a16251b1; rollback floor unchanged 4a4e83fc)
 
-Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183, #184, #185, #187, #188). Not yet deployed; the next cutover records its version in the RUNBOOK deploy table.
+Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183, #184, #185, #187, #188) and deployed 2026-09-24 from `6aa8be6b`; the RUNBOOK deploy table records both versions. The production canary tenant does not exist yet, so the post-deploy verifier ran its auth-boundary leg only on production (the behavioral leg ran on staging).
 
 ### Added
 
