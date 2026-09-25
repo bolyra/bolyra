@@ -40,7 +40,8 @@ export interface HostedVerifier {
  * Every route here is `${url}/<route>`, so `url` must be the verifier's origin: a path
  * prefix would reach /health and /v1/credentials and then fail closed on /v1/verify.
  * Throws a DiagnosticError in our words for anything but `http(s)://host[:port][/]`
- * (the URL parser's own message may quote the input, so it is never consulted).
+ * or for a spelling the URL parser still refuses (its message may quote the input,
+ * so it is never surfaced).
  */
 export function assertVerifierOrigin(url: string): void {
   // Judged on the spelling as written, not on the parsed URL: `new URL()` collapses dot
@@ -48,8 +49,14 @@ export function assertVerifierOrigin(url: string): void {
   // while the gate (which reads the string as written) would POST somewhere else. An
   // http(s) scheme, a host (DNS name, IPv4, or bracketed IPv6), an optional port, and at
   // most one trailing slash; no userinfo, path, query, fragment, backslash or whitespace.
-  if (!/^https?:\/\/(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?\/?$/.test(url)) {
-    throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)');
+  const refuse = (): never => { throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)'); };
+  if (!/^https?:\/\/(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?\/?$/.test(url)) refuse();
+  // Well-spelled is not parseable (a port above 65535, a malformed IP literal): the parser's
+  // TypeError would otherwise surface later as a generic failure instead of this diagnostic.
+  try {
+    new URL(url);
+  } catch {
+    refuse();
   }
 }
 
