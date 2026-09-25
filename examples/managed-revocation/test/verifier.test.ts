@@ -56,7 +56,7 @@ test('a non-200/500 verifier status (a wrong token) is a DiagnosticError naming 
 test('assertVerifierOrigin accepts an origin and refuses a path or an unparseable value in its own words', () => {
   assertVerifierOrigin('http://127.0.0.1:8787');
   assertVerifierOrigin('https://verify.example/');
-  for (const bad of ['https://verify.example/prefix', 'not a url secret-ish']) {
+  for (const bad of ['https://verify.example/prefix', 'https://verify.example/?x=1', 'https://verify.example/#f', 'https://u:pw@verify.example/', 'not a url secret-ish']) {
     assert.throws(() => assertVerifierOrigin(bad), (e: unknown) => {
       assert.ok(e instanceof DiagnosticError);
       assert.equal(e.message, 'VERIFY_URL must be the verifier origin with no path (value withheld)');

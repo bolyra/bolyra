@@ -83,10 +83,10 @@ must be registered on its own — see
   `callUrlVerifierWithEvidence` (the gate's fail-closed client, keeping the
   HTTP status and response headers): the `x-bolyra-credential-id` header on an
   allow (unsigned correlation, not an authorization input) and the
-  `x-bolyra-receipt` header; and, verifier-only, the receipt's signature check
+  `x-bolyra-receipt` header; verifier-only, the receipt's signature check
   (decoded and checked with
-  `bolyra receipt verify --signer-from <verifier>/.well-known/bolyra-signers.json`)
-  and the deny `detail` object.
+  `bolyra receipt verify --signer-from <verifier>/.well-known/bolyra-signers.json`);
+  and the deny `detail` object as the verifier wrote it.
 
 ## Two presentations per paid action
 
