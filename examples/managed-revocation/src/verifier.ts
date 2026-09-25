@@ -39,20 +39,18 @@ export interface HostedVerifier {
 /**
  * Every route here is `${url}/<route>`, so `url` must be the verifier's origin: a path
  * prefix would reach /health and /v1/credentials and then fail closed on /v1/verify.
- * Throws a DiagnosticError in our words for a path, query, fragment, userinfo or an
- * unparseable value (the URL parser's own message may quote the input).
+ * Throws a DiagnosticError in our words for anything but `http(s)://host[:port][/]`
+ * (the URL parser's own message may quote the input, so it is never consulted).
  */
 export function assertVerifierOrigin(url: string): void {
-  const refuse = (): never => { throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)'); };
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return refuse();
+  // Judged on the spelling as written, not on the parsed URL: `new URL()` collapses dot
+  // segments and trims whitespace, so `https://host/prefix/..` would parse as a bare origin
+  // while the gate (which reads the string as written) would POST somewhere else. An
+  // http(s) scheme, a host (DNS name, IPv4, or bracketed IPv6), an optional port, and at
+  // most one trailing slash; no userinfo, path, query, fragment, backslash or whitespace.
+  if (!/^https?:\/\/(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?\/?$/.test(url)) {
+    throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)');
   }
-  // `href` equals `origin + '/'` only for a bare origin: a path, query, fragment or userinfo
-  // all make it longer, and every route here concatenates after the value as given.
-  if (u.href !== `${u.origin}/`) refuse();
 }
 
 export interface Health {
