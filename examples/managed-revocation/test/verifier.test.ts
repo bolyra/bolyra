@@ -61,6 +61,8 @@ test('assertVerifierOrigin accepts an origin and refuses a path or an unparseabl
     // the SDK reads the spelling as written, so what the URL parser would normalize away must be refused too
     'https://verify.example/prefix/..', 'https://verify.example/%2e', 'https://verify.example ', ' https://verify.example',
     'https://verify.example\\', 'ftp://verify.example', 'not a url secret-ish',
+    // well-spelled but unparseable: the parser's TypeError must not replace our diagnostic
+    'https://verify.example:99999', 'https://[::::]', 'https://999.999.999.999',
   ]) {
     assert.throws(() => assertVerifierOrigin(bad), (e: unknown) => {
       assert.ok(e instanceof DiagnosticError);
