@@ -30,7 +30,7 @@ import { bindingDigest, issueMandate, type BindingClaim, type IssuedMandate } fr
 import { paidCall } from './client.js';
 import { credentialId } from './credential-id.js';
 import { AUDIENCE, MODEL, createServer } from './server.js';
-import { DiagnosticError, health, register, registrationOf, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
+import { DiagnosticError, assertVerifierOrigin, health, register, registrationOf, revoke, verify, verifyReceiptWithCli, type HostedVerifier } from './verifier.js';
 import { CLI_VERSION, PACKAGES } from './versions.js';
 
 /** The repo's documented test-only operator scalar; the placeholder tenant trusts its public key. */
@@ -100,6 +100,7 @@ async function main(): Promise<void> {
   if (!TOKEN_SHAPE.test(hosted.adminToken) || !TOKEN_SHAPE.test(hosted.verifierToken)) {
     throw new DiagnosticError('ADMIN_TOKEN and VERIFIER_TOKEN must be printable ASCII without spaces (values withheld)');
   }
+  assertVerifierOrigin(hosted.url);
   console.log(`managed revocation — @bolyra/mpp ${PACKAGES.mpp}, mppx ${PACKAGES.mppx}, @bolyra/cli ${CLI_VERSION}, verifier ${hosted.url}\n`);
 
   // 0. The verifier is a registry-enforcing build with a parsed tenant config and receipts on.

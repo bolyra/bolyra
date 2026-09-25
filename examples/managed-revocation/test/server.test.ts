@@ -117,7 +117,7 @@ test('a not-active verdict denies before any 402: 401 untrusted_root, counter 0,
     assert.match(res.headers.get('content-type') ?? '', /^application\/problem\+json/);
     const problem = (await res.json()) as { code?: string; detail?: unknown; reason?: unknown; credential_id?: unknown };
     assert.equal(problem.code, 'untrusted_root');
-    assert.equal(problem.detail, NOT_ACTIVE_MESSAGE, 'the HTTP body carries the verdict message, not the structured detail');
+    assert.equal(problem.detail, NOT_ACTIVE_MESSAGE, "the body's detail is the verdict message; the identifier-shaped members are copied alongside it, not nested");
     assert.equal(problem.reason, 'credential_not_active', '0.7.0 copies an identifier-shaped reason into the body');
     assert.equal(problem.credential_id, NOT_ACTIVE_ID);
     assert.equal(server.state.counter, 0);
