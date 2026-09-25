@@ -68,22 +68,25 @@ must be registered on its own — see
 
 - **`[gate]`** — what the published `@bolyra/mpp` gate proves on its own: the
   counter, the Problem Details `code`, and the payment receipt's
-  `bolyraAuthorization` field. The gate's hosted-verifier client keeps only the
-  verdict body, so response headers never reach it, and its Problem Details
+  `bolyraAuthorization` field. The gate's Problem Details body never carries
+  the verifier's response headers: on an allow, the raw `x-bolyra-credential-id`
+  and `x-bolyra-receipt` reach the in-process `onDecision` observer
+  (`credentialId`, `receipt`) and nothing else. The body's
   `detail` is the verdict's message (since 0.7.0 the body also carries the
   verdict's identifier-shaped `reason` and a short `credential_id`); the full
   structured `detail` object is
   available in-process on the thrown `BolyraDeniedError`, and (since 0.7.0) the
   gate's `onDecision` observer reports each request's final decision with an
   identifier-shaped `reason` and the `credentialId`; row 6 reads both.
-- **`[verifier]`** — what only the hosted verifier shows, read by calling
+- **`[verifier]`** — what the hosted verifier shows, read by calling
   `POST /v1/verify` directly with the verifier token through `@bolyra/mpp`'s
   `callUrlVerifierWithEvidence` (the gate's fail-closed client, keeping the
-  HTTP status and response headers): the
-  `x-bolyra-credential-id` header on an allow (unsigned correlation, not an
-  authorization input), the signed `x-bolyra-receipt` (decoded and checked with
-  `bolyra receipt verify --signer-from <verifier>/.well-known/bolyra-signers.json`),
-  and the deny `detail`.
+  HTTP status and response headers): the `x-bolyra-credential-id` header on an
+  allow (unsigned correlation, not an authorization input) and the
+  `x-bolyra-receipt` header; and, verifier-only, the receipt's signature check
+  (decoded and checked with
+  `bolyra receipt verify --signer-from <verifier>/.well-known/bolyra-signers.json`)
+  and the deny `detail` object.
 
 ## Two presentations per paid action
 
@@ -113,7 +116,7 @@ Worker.
 ## Tests
 
 ```bash
-npm test   # typecheck + test/server.test.ts (7 cases against a stubbed verifier) + test/versions.test.ts (pins, incl. the installed @bolyra/mpp) + test/credential-id.test.ts
+npm test   # typecheck + test/server.test.ts (7 cases against a stubbed verifier) + test/verifier.test.ts (the direct verify call against a stubbed fetch) + test/versions.test.ts (pins, incl. the installed @bolyra/mpp) + test/credential-id.test.ts
 ```
 
 `test/credential-id.test.ts` checks `src/credential-id.ts` against every committed

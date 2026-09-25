@@ -36,6 +36,22 @@ export interface HostedVerifier {
   verifierToken: string;
 }
 
+/**
+ * Every route here is `${url}/<route>`, so `url` must be the verifier's origin: a path
+ * prefix would reach /health and /v1/credentials and then fail closed on /v1/verify.
+ * Throws a DiagnosticError in our words for a path or an unparseable value (the URL
+ * parser's own message may quote the input).
+ */
+export function assertVerifierOrigin(url: string): void {
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    pathname = '<unparseable>';
+  }
+  if (pathname !== '/') throw new DiagnosticError('VERIFY_URL must be the verifier origin with no path (value withheld)');
+}
+
 export interface Health {
   registry_enforced?: unknown;
   receipts_enabled?: unknown;
@@ -142,13 +158,17 @@ export async function verify(v: HostedVerifier, mandate: IssuedMandate): Promise
     },
     now_unix: Math.floor(Date.now() / 1000),
   };
-  // `v.url` is the verifier's origin; the SDK POSTs a bare origin to `/v1/verify`.
-  const evidence = await callUrlVerifierWithEvidence({ url: v.url, token: v.verifierToken }, request);
+  const evidence = await callUrlVerifierWithEvidence({ url: `${v.url}/v1/verify`, token: v.verifierToken }, request);
   // The SDK fails closed: an unreachable verifier, a timeout, or a body that is not a
   // verdict comes back as `deny internal_error` rather than a throw. With no status, no
   // HTTP response was received; its verdict message is the SDK's, so only our words print.
   if (evidence.status === undefined) {
     throw new DiagnosticError('POST /v1/verify → no HTTP response (unreachable, timed out, or an invalid URL; the call failed closed, details withheld)');
+  }
+  // 200 is a decision and 500 may carry `deny internal_error`; any other status (a wrong
+  // verifier token's 401, a proxy's 404) is a misconfiguration, not a verdict worth a row.
+  if (evidence.status !== 200 && evidence.status !== 500) {
+    throw new DiagnosticError(`POST /v1/verify → HTTP ${evidence.status} (body withheld)`);
   }
   return {
     status: evidence.status,
