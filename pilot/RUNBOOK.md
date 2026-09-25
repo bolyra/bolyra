@@ -601,7 +601,10 @@ npx wrangler secret delete PREVIEW_TOKEN --env=; npx wrangler secret delete PART
 #    (step 1), then REGISTER each binding a tenant expects to verify (step 1.5/1.6).
 # 4. Hand out verifier + admin tokens and the capability vocabulary (step 1.4).
 # 5. Record the version id below as the ROLLBACK FLOOR.
-# 6. Post-cutover: harden the /health alarm. After the FIRST production deploy whose /health
+# 6. Post-cutover: harden the /health alarm. Strict checks implemented 2026-09-24 (production
+#    07a5a031); the scheduled probe runs them once this change is on the default branch. The
+#    post-cutover dispatch passed using the soft form. Kept for the record: after the FIRST
+#    production deploy whose /health
 #    answers `registry: "ok"` and carries `capability_map` (check with the step 0 curl), edit
 #    .github/workflows/hosted-verify-health.yml: replace the two TEMPORARY soft clauses
 #        (if (.[0] | has("registry_kind")) then .[0].registry == "ok" else true end)
@@ -762,6 +765,8 @@ becomes the new floor (recorded at the OPS step, in the table below).
 | staging | 1c4eaa83-2b5f-4c98-9f41-9f4e980bcf32 | 2026-09-21 | e7cb720 | 20/20 (2026-09-21, tenant bolyra-staging, fixture key) |
 | production | **4a4e83fc-6e53-4287-8f92-c5d03a6fbc6f — the rollback floor** | 2026-09-21 | e7cb720 | 20/20 (2026-09-21, tenant bolyra-smoke, fixture key; quarantined afterwards) |
 | production | e38b3190-4203-432d-aa71-18d69b512c68 | 2026-09-21 | 4cef2454 | no example run — /health ok, registry enforced, signers → preview-2 |
+| staging | a16251b1-2085-4b81-8615-e30ef5f66d8d | 2026-09-24 | 6aa8be6b | `deploy:staging` verify-deploy: auth boundary + canary ABSENT→ACTIVE→REVOKED (tenant bolyra-staging, fixture scalar) all ok; managed-revocation example 21/21 |
+| production | 07a5a031-c64d-4a7e-930a-cb18b3c533e1 | 2026-09-24 | 6aa8be6b | `deploy:prod` verify-deploy: auth boundary ok, version bound after 2 polls; canary leg NOT run (no bolyra-canary tenant yet — enforcement not verified on production until it exists); floor unchanged |
 
 ## Out of scope — waits for a real pilot
 

@@ -59,7 +59,7 @@ jobs:
                 | "diagnostic: status=\(.status | enum(["ok", "degraded"]))"
                   + " tenants=\(.tenants | enum(["ok", "invalid"]))"
                   + " capability_map=\(.capability_map | enum(["ok", "invalid"]))"
-                  + " registry=\(.registry | enum(["ok", "unavailable", "timeout", "durable-object"]))"
+                  + " registry=\(.registry | enum(["ok", "unavailable", "timeout"]))"
                   + " registry_kind=\(.registry_kind | enum(["durable-object"]))"
                   + " version_id=\((.version.id? // null) | if . == null then "absent" elif type == "string" and test("^[A-Za-z0-9-]{1,64}$") then . else "other" end)"
               else
@@ -85,21 +85,17 @@ jobs:
             exit 1
           fi
 
-          # TEMPORARY soft form until the build that emits registry/capability_map is deployed (the OPS
-          # step flips both to strict `== "ok"`; see pilot/RUNBOOK.md §7 step 6): the old build reports registry:"durable-object" and no
-          # registry_kind, so registry is checked only when registry_kind is present; an absent
-          # capability_map passes. On the new build these two clauses are redundant with the HTTP 200
-          # gate above (it answers 200 only when tenants, capability_map and registry are all "ok");
-          # they only guard that computation drifting, so the strict flip is a consistency check, not
-          # new coverage.
+          # Strict since 2026-09-24 (production version 07a5a031 emits registry and capability_map).
+          # The HTTP 200 gate above already requires tenants, capability_map and registry all "ok";
+          # these clauses guard that computation drifting.
           if ! jq -e -s '
             length == 1
             and (.[0] | type) == "object"
             and .[0].status == "ok"
             and .[0].tenants == "ok"
             and .[0].registry_enforced == true
-            and (if (.[0] | has("registry_kind")) then .[0].registry == "ok" else true end)
-            and ((.[0].capability_map // "ok") == "ok")
+            and .[0].registry == "ok"
+            and .[0].capability_map == "ok"
           ' body.json > /dev/null; then
             echo "::error::health probe: assertions failed"
             jq -r -s '
@@ -108,8 +104,8 @@ jobs:
                 + " status_ok=\(.[0].status == "ok")"
                 + " tenants_ok=\(.[0].tenants == "ok")"
                 + " registry_enforced=\(.[0].registry_enforced == true)"
-                + " registry_ok=\(if (.[0] | has("registry_kind")) then .[0].registry == "ok" else "n/a" end)"
-                + " capability_map_ok=\((.[0].capability_map // "ok") == "ok")"
+                + " registry_ok=\(.[0].registry == "ok")"
+                + " capability_map_ok=\(.[0].capability_map == "ok")"
               else
                 "single_object=false"
               end
@@ -117,4 +113,4 @@ jobs:
             exit 1
           fi
 
-          echo "health ok: status=ok tenants=ok registry_enforced=true registry/capability_map ok or not yet emitted (soft)"
+          echo "health ok: status=ok tenants=ok capability_map=ok registry=ok registry_enforced=true"
