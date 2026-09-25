@@ -109,7 +109,7 @@ VERIFY_URL='<base URL>' ADMIN_TOKEN='<admin token>' VERIFIER_TOKEN='<verifier to
 ```
 
 Node 22+. Your pilot is configured for the example's signing key, MPP
-capabilities, and receipt checks; expect `21/21 checks passed`.
+capabilities, and receipt checks; expect `22/22 checks passed`.
 
 **Read once — load-bearing.** The example signs its bindings with the
 repository's conformance fixture key, whose private half is public. To make

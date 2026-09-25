@@ -115,12 +115,21 @@ test('a not-active verdict denies before any 402: 401 untrusted_root, counter 0,
     const res = await server.handler(discoveryRequest(a.presentation));
     assert.equal(res.status, 401);
     assert.match(res.headers.get('content-type') ?? '', /^application\/problem\+json/);
-    const problem = (await res.json()) as { code?: string; detail?: unknown };
+    const problem = (await res.json()) as { code?: string; detail?: unknown; reason?: unknown; credential_id?: unknown };
     assert.equal(problem.code, 'untrusted_root');
     assert.equal(problem.detail, NOT_ACTIVE_MESSAGE, 'the HTTP body carries the verdict message, not the structured detail');
+    assert.equal(problem.reason, 'credential_not_active', '0.7.0 copies an identifier-shaped reason into the body');
+    assert.equal(problem.credential_id, NOT_ACTIVE_ID);
     assert.equal(server.state.counter, 0);
     assert.equal(stub.calls.length, 1);
     assert.deepEqual(server.state.lastDenial?.detail, { reason: 'credential_not_active', credential_id: NOT_ACTIVE_ID });
+    const decision = server.state.lastDecision;
+    assert.equal(decision?.outcome, 'deny', 'onDecision recorded the deny');
+    if (decision?.outcome !== 'deny') return;
+    assert.equal(decision.code, 'untrusted_root');
+    assert.equal(decision.status, 401);
+    assert.equal(decision.reason, 'credential_not_active');
+    assert.equal(decision.credentialId, NOT_ACTIVE_ID);
   } finally {
     stub.restore();
   }
@@ -139,3 +148,51 @@ test('no presentation at all denies before any 402: 401 missing_authorization, t
     stub.restore();
   }
 });
+
+test('onDecision records an allow, and the recorded decision is cleared at the start of the next request', async () => {
+  const stub = stubVerifier('active');
+  try {
+    const server = createServer(VERIFIER);
+    // Read through a function so each read sees the state after the request, not a narrowed copy.
+    const recorded = () => server.state.lastDecision;
+    const first = await server.handler(discoveryRequest((await issue()).presentation));
+    assert.equal(first.status, 402);
+    assert.equal(recorded()?.outcome, 'allow', 'the discovery attempt ran the gate and allowed');
+    const none = await server.handler(new Request(ROUTE));
+    assert.equal(none.status, 401);
+    // A credential-less request under enforce:'always' is a gate deny, so the slot holds
+    // THIS request's decision, not the previous allow.
+    const denied = recorded();
+    assert.ok(denied?.outcome === 'deny', 'the credential-less request recorded a deny');
+    assert.equal(denied.code, 'missing_authorization');
+    // Observe the slot from inside the verifier round-trip of the next request: the gate has
+    // not decided yet, so a cleared slot reads undefined, not the previous request's deny.
+    const stubbed = globalThis.fetch;
+    let seenDuringVerify: unknown = 'not called';
+    globalThis.fetch = async (input, init) => {
+      seenDuringVerify = recorded();
+      return stubbed(input, init);
+    };
+    const paid = await server.handler(paidRetryRequest(first, (await issue()).presentation));
+    globalThis.fetch = stubbed;
+    assert.equal(seenDuringVerify, undefined, 'cleared at the start of the request');
+    assert.equal(paid.status, 200);
+    assert.equal(recorded()?.outcome, 'allow');
+  } finally {
+    stub.restore();
+  }
+});
+
+for (const url of [`${VERIFIER.url}/`, `${VERIFIER.url}/v1/verify`]) {
+  test(`verifier url ${url} reaches the verifier at /v1/verify exactly once`, async () => {
+    const stub = stubVerifier('active');
+    try {
+      const server = createServer({ url, token: VERIFIER.token });
+      const res = await server.handler(discoveryRequest((await issue()).presentation));
+      assert.equal(stub.calls.length, 1, 'one call, to the path the stub accepts');
+      assert.equal(res.status, 402, 'the gate allowed, so mppx answered the discovery with its challenge');
+    } finally {
+      stub.restore();
+    }
+  });
+}
