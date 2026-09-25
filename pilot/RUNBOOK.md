@@ -671,13 +671,20 @@ security add-generic-password -s bolyra-hosted-verify-staging -a operator-bolyra
 ```
 
 `bolyra-staging` trusts the fixture key (`--with-fixture-key`), so its scalar is the
-repo's documented test scalar `42`. Production's `bolyra-canary` gets its own key:
-generate a scalar, add its public key when running `tenant.sh add bolyra-canary <x:y>`,
-store the scalar as `operator-bolyra-canary-scalar`, then delete
-`--allow-missing-tenant` from `deploy:prod` in `package.json`. Until then production
-is verified only up to the auth boundary, and the output says so: `enforcement NOT
-verified on this target (tenant bolyra-canary has no keychain entries)`. Without
-`--allow-missing-tenant`, a missing account fails the run and the message names it.
+repo's documented test scalar `42`. Production's `bolyra-canary` has its own key
+(created 2026-09-25: a random 31-byte scalar stored as `operator-bolyra-canary-scalar`
+through `security` on stdin, its public key registered with `tenant.sh add
+bolyra-canary <x:y>`). `deploy:prod` runs the behavioral leg unconditionally: a missing
+keychain account fails the run and the message names it. `--allow-missing-tenant`
+remains a flag of the script (the local `with-worker.sh` recipe below uses it) for a
+target whose canary tenant does not exist yet; the output then says `enforcement NOT
+verified on this target (tenant <org> has no keychain entries)`.
+
+**Secret uploads mint versions.** `tenant.sh sync` (a `wrangler secret put`) creates a
+new Worker version with source `Secret Change` and the same code as the version it
+follows, and `/health version.id` moves to it. A `verify-deploy --version <id>` run
+after a sync must name the new id (`wrangler versions list --env=""`); the rollback
+floor is a code version and is unaffected.
 
 **The pending directory.** Before the registration request, the script creates
 `~/.bolyra/canary-pending-<env>/<credential_id>.pending` (override the directory with
@@ -767,6 +774,8 @@ becomes the new floor (recorded at the OPS step, in the table below).
 | production | e38b3190-4203-432d-aa71-18d69b512c68 | 2026-09-21 | 4cef2454 | no example run — /health ok, registry enforced, signers → preview-2 |
 | staging | a16251b1-2085-4b81-8615-e30ef5f66d8d | 2026-09-24 | 6aa8be6b | `deploy:staging` verify-deploy: auth boundary + canary ABSENT→ACTIVE→REVOKED (tenant bolyra-staging, fixture scalar) all ok; managed-revocation example 21/21 |
 | production | 07a5a031-c64d-4a7e-930a-cb18b3c533e1 | 2026-09-24 | 6aa8be6b | `deploy:prod` verify-deploy: auth boundary ok, version bound after 2 polls; canary leg NOT run (no bolyra-canary tenant yet — enforcement not verified on production until it exists); floor unchanged |
+| production | 7a224328-07df-4a1a-a787-a4e3e9ed0928 (Secret Change on 07a5a031's code) | 2026-09-25 | 6aa8be6b | `tenant.sh add bolyra-canary` sync; `verify-deploy --tenant bolyra-canary`: auth boundary + canary ABSENT→ACTIVE→REVOKED all ok, cleanup 204 — **enforcement verified on production**; floor unchanged |
+| production | 0d75ed6f-8696-42c2-94cb-16aaa43f0de8 (Secret Change on 07a5a031's code) | 2026-09-25 | 6aa8be6b | `tenant.sh remove bolyra-smoke` sync (tenant_count 1, tokens deleted, registry object retained); `verify-deploy --tenant bolyra-canary` all ok again; floor unchanged |
 
 ## Out of scope — waits for a real pilot
 

@@ -11,7 +11,7 @@
     "dev:staging": "wrangler dev --env staging",
     "deploy": "echo 'deploy: choose the target explicitly — npm run deploy:staging or npm run deploy:prod' >&2 && exit 1",
     "deploy:staging": "wrangler deploy --env staging | tee /dev/stderr | node scripts/verify-deploy.mjs https://bolyra-hosted-verify-staging.kondojuviswanadha.workers.dev --from-wrangler --env staging --tenant bolyra-staging",
-    "deploy:prod": "wrangler deploy --env=\"\" | tee /dev/stderr | node scripts/verify-deploy.mjs https://bolyra-hosted-verify.kondojuviswanadha.workers.dev --from-wrangler --env production --tenant bolyra-canary --allow-missing-tenant",
+    "deploy:prod": "wrangler deploy --env=\"\" | tee /dev/stderr | node scripts/verify-deploy.mjs https://bolyra-hosted-verify.kondojuviswanadha.workers.dev --from-wrangler --env production --tenant bolyra-canary",
     "test": "vitest run && npm run test:agreement",
     "smoke:dev": "bash scripts/with-worker.sh node scripts/smoke-dev.mjs",
     "verify:dev": "bash scripts/with-worker.sh node scripts/verify-deploy.mjs --env local --tenant local --secrets-from-dev-vars",
