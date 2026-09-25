@@ -95,6 +95,10 @@ Decision evidence for the application, and a verifier-URL convention.
 - `@bolyra/cli` currently requires `@bolyra/mpp ^0.6.0`, which excludes 0.7.0
   on 0.x semver. The CLI's range needs its own bump after `@bolyra/mpp` 0.7.0
   is published (not part of this release).
+- Done after publish: `examples/managed-revocation` moved to `@bolyra/mpp`
+  0.7.0 (`callUrlVerifierWithEvidence` for the verifier evidence, `onDecision`
+  for the gate's decision; 22 checks), `@bolyra/cli` range `^0.7.0`, landing
+  pin `@bolyra/mpp@0.7.0`.
 
 ## @bolyra/mpp 0.6.0 (2026-09-22)
 
