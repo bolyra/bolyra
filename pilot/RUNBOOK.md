@@ -592,8 +592,8 @@ curl -s https://bolyra-hosted-verify-staging.<account>.workers.dev/health | jq '
 # Zero consumers are on record, so a maintenance window is a courtesy, not a risk.
 # 1. Deploy the build (100%, one step). The moment it lands, the Worker requires a
 #    REGISTERED binding for every allow — legacy tokens and unregistered bindings stop.
-npm run deploy:prod                                           # deploys, then verifies it (auth boundary; the canary leg once
-                                                              # bolyra-canary exists); note the Current Version ID
+npm run deploy:prod                                           # deploys, then requires the auth-boundary and bolyra-canary
+                                                              # behavioral checks; note the Current Version ID
 # 2. Retire the legacy secrets if they are still set (they are read by nothing):
 npx wrangler secret list --env=
 npx wrangler secret delete PREVIEW_TOKEN --env=; npx wrangler secret delete PARTNER_TOKENS --env=
@@ -674,11 +674,12 @@ security add-generic-password -s bolyra-hosted-verify-staging -a operator-bolyra
 repo's documented test scalar `42`. Production's `bolyra-canary` has its own key
 (created 2026-09-25: a random 31-byte scalar stored as `operator-bolyra-canary-scalar`
 through `security` on stdin, its public key registered with `tenant.sh add
-bolyra-canary <x:y>`). `deploy:prod` runs the behavioral leg unconditionally: a missing
-keychain account fails the run and the message names it. `--allow-missing-tenant`
-remains a flag of the script (the local `with-worker.sh` recipe below uses it) for a
-target whose canary tenant does not exist yet; the output then says `enforcement NOT
-verified on this target (tenant <org> has no keychain entries)`.
+bolyra-canary <x:y>`). A successful `deploy:prod` requires both legs: a missing
+keychain account fails the run and the message names it, and a failed auth-boundary
+leg skips the behavioral leg and fails the run. `--allow-missing-tenant` remains a
+flag of the script for auth-boundary-only verification when the tenant's keychain
+accounts are absent (the local `with-worker.sh` recipe below uses it); the output then
+says `enforcement NOT verified on this target (tenant <org> has no keychain entries)`.
 
 **Secret uploads mint versions.** `tenant.sh sync` (a `wrangler secret put`) creates a
 new Worker version with source `Secret Change` and the same code as the version it
