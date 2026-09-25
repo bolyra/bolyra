@@ -149,7 +149,7 @@ Plan: ~/.claude/plans/eager-discovering-babbage.md · order ruled by Codex: C1 �
 - [x] PR-D1 (MERGED #186) T8 TD-1 TD-2 engines — [ ] publish @bolyra/mpp 0.7.0 (FOUNDER GO; unpublished)
 - [ ] PR-D2 example migration to 0.7.0
 - [x] PR-E (MERGED #188) T3 T4 T7 spec wording
-- [ ] OPS: [ ] migrate tenant records (BLOCKED: permission) · [x] staging deploy a16251b1 + canary leg + example 21/21 · [x] prod deploy 07a5a031 (auth boundary) · [x] strict health · [ ] bolyra-canary tenant + canary leg on prod · [ ] remove `--allow-missing-tenant` · [ ] bolyra-smoke removal
+- [x] OPS: [x] migrate tenant records (founder ran both, 2026-09-25) · [x] staging deploy a16251b1 + canary leg + example 21/21 · [x] prod deploy 07a5a031 (auth boundary) · [x] strict health (dispatch green on main) · [x] bolyra-canary tenant + canary leg on prod (7a224328, 0d75ed6f) · [x] remove `--allow-missing-tenant` · [x] bolyra-smoke removal (tenant_count 1)
 Deferred by ruling: release backoff widen, T9 keychain seam, E19 overlap, T6 docs links.
 
 ## Review (backlog fixes)

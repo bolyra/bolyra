@@ -188,7 +188,7 @@ Bounded nonce retention, honest spend-mandate naming.
 
 ## hosted-verify — deployed 2026-09-24 (production 07a5a031, staging a16251b1; rollback floor unchanged 4a4e83fc)
 
-Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183, #184, #185, #187, #188) and deployed 2026-09-24 from `6aa8be6b`; the RUNBOOK deploy table records both versions. The production canary tenant does not exist yet, so the post-deploy verifier ran its auth-boundary leg only on production (the behavioral leg ran on staging).
+Merged since the 2026-09-21 production deploy (PRs #166, #167, #170, #175, #183, #184, #185, #187, #188) and deployed 2026-09-24 from `6aa8be6b`; the RUNBOOK deploy table records both versions. On 2026-09-24 the post-deploy verifier ran its auth-boundary leg only on production (the behavioral leg ran on staging). On 2026-09-25 the production canary tenant `bolyra-canary` was created (own operator key, never the fixture key) and the behavioral leg passed on production (versions `7a224328` and `0d75ed6f`, both `Secret Change` on the same code); `bolyra-smoke` (E4 quarantine) was removed from the map and its tokens deleted; `deploy:prod` no longer passes `--allow-missing-tenant`; tenant records now live under `~/.bolyra/tenants-<env>` (migrated with `tenant.sh migrate --from`).
 
 ### Added
 
