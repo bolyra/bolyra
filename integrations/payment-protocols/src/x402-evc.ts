@@ -185,43 +185,92 @@ export interface X402EvcDecision {
   request?: X402EvcVerifierRequest;
 }
 
+/** A usable unix-seconds timestamp: finite, non-negative, below 2^40 (A3). */
+export function isUnixSeconds(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 2 ** 40;
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Request building
 // ---------------------------------------------------------------------------
 
+const ISO4217_ASSET = /^iso4217:[A-Z]{3}$/;
+const DECIMAL_AMOUNT = /^(0|[1-9]\d*)(\.\d{1,18})?$/;
+const INTEGER_AMOUNT = /^(0|[1-9]\d*)$/;
+const MAX_AMOUNT_CHARS = 40;
+const MAX_USD = 1e15;
+
+function unusableAmount(requirements: X402EvcRequirements, reason: string): VerifyDenial {
+  return new VerifyDenial('internal_error', 'amount did not resolve to a usable USD value', {
+    amount: requirements.amount,
+    asset: requirements.asset,
+    reason,
+  });
+}
+
+/** Atomic integer units → exact decimal string via BigInt (no float round-trip). */
+function atomicToDecimal(amount: string, decimals: number): string {
+  const scale = 10n ** BigInt(decimals);
+  const value = BigInt(amount);
+  const whole = value / scale;
+  const frac = (value % scale).toString().padStart(decimals, '0').replace(/0+$/, '');
+  return frac.length > 0 ? `${whole}.${frac}` : `${whole}`;
+}
+
+/**
+ * Resolve the challenge amount to a decimal USD string. Asset policy is
+ * explicit and fail-closed (A2, 2026-09-29):
+ *   - `iso4217:USD` — the amount IS decimal USD (Tavily agent-pay shape).
+ *   - other `iso4217:*` — no implicit conversion; `amountToUsd` is required.
+ *   - anything else — the legacy 1:1 USD-stablecoin atomic mapping, ONLY when
+ *     the host asserts `assetDecimals` explicitly. That assertion is the
+ *     host's, not proof of the valuation.
+ * A custom `amountToUsd` bypasses the asset policy but not the result checks.
+ */
 function resolveUsdAmount(
   requirements: X402EvcRequirements,
   amountToUsd?: (requirements: X402EvcRequirements) => string | number,
 ): string {
-  let raw: string | number;
+  const { amount, asset } = requirements;
+  if (typeof amount !== 'string' || amount.length === 0 || amount.length > MAX_AMOUNT_CHARS) {
+    throw unusableAmount(requirements, 'amount_syntax');
+  }
+
+  let usd: string;
   if (amountToUsd !== undefined) {
-    raw = amountToUsd(requirements);
-  } else {
-    // Default: 1:1 USD stablecoin in atomic units (assetDecimals, default 6).
-    const atomic = Number(requirements.amount);
-    const decimals = requirements.assetDecimals ?? 6;
-    if (
-      requirements.amount.trim() === '' ||
-      !Number.isFinite(atomic) ||
-      !Number.isInteger(decimals) ||
-      decimals < 0
-    ) {
-      throw new VerifyDenial('internal_error', 'amount did not resolve to a usable USD value', {
-        amount: requirements.amount,
-      });
+    const raw = amountToUsd(requirements);
+    usd = typeof raw === 'number' ? String(raw) : raw;
+    if (typeof usd !== 'string' || usd.trim() === '') {
+      throw unusableAmount(requirements, 'converter_output');
     }
-    raw = atomic / 10 ** decimals;
+  } else if (typeof asset === 'string' && asset.startsWith('iso4217:')) {
+    if (!ISO4217_ASSET.test(asset)) throw unusableAmount(requirements, 'iso4217_syntax');
+    if (asset !== 'iso4217:USD') throw unusableAmount(requirements, 'iso4217_currency_unsupported');
+    if (!DECIMAL_AMOUNT.test(amount)) throw unusableAmount(requirements, 'amount_syntax');
+    usd = amount;
+  } else {
+    const decimals = requirements.assetDecimals;
+    if (decimals === undefined) throw unusableAmount(requirements, 'asset_decimals_required');
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+      throw unusableAmount(requirements, 'asset_decimals_range');
+    }
+    if (!INTEGER_AMOUNT.test(amount)) throw unusableAmount(requirements, 'amount_syntax');
+    usd = atomicToDecimal(amount, decimals);
   }
-  const asNumber = typeof raw === 'number' ? raw : Number(raw);
-  if (typeof raw === 'string' && raw.trim() === '') {
-    throw new VerifyDenial('internal_error', 'amount resolved to an empty string');
+
+  const asNumber = Number(usd);
+  if (!Number.isFinite(asNumber) || asNumber <= 0 || asNumber > MAX_USD) {
+    throw unusableAmount(requirements, 'amount_range');
   }
-  if (!Number.isFinite(asNumber) || asNumber < 0) {
-    throw new VerifyDenial('internal_error', 'amount did not resolve to a usable USD value', {
-      amount: requirements.amount,
-    });
-  }
-  return typeof raw === 'string' ? raw : String(raw);
+  return usd;
 }
 
 /**
@@ -240,7 +289,12 @@ export function buildX402EvcRequest(
   // the profile extension, so an audience/payTo mismatch must fail closed
   // here, before any verifier can allow.
   const payeeMatches = options.payeeMatches ?? ((a: string, p: string) => a === p);
-  if (!payeeMatches(audience, context.requirements.payTo)) {
+  const matched: unknown = payeeMatches(audience, context.requirements.payTo);
+  if (matched !== true) {
+    // Only literal `true` allows. A Promise (or any thenable) is truthy and
+    // would otherwise fail open; assimilate it so a rejection cannot surface
+    // as an unhandled rejection, then deny without waiting for it.
+    if (isThenable(matched)) Promise.resolve(matched).catch(() => undefined);
     throw new VerifyDenial('request_mismatch', 'x402 payee does not match the authorization audience', {
       audience,
       pay_to: context.requirements.payTo,
@@ -317,6 +371,12 @@ export async function verifyX402EvcAuthorization(
   options: X402EvcVerifyOptions,
 ): Promise<X402EvcDecision> {
   const nowUnix = options.now !== undefined ? options.now() : Math.floor(Date.now() / 1000);
+  if (!isUnixSeconds(nowUnix)) {
+    return denied(deny('internal_error', 'host clock did not produce a finite unix time'));
+  }
+  if (!isUnixSeconds(options.context.expiresAt)) {
+    return denied(deny('internal_error', 'challenge expiresAt is not a finite unix time'));
+  }
 
   if (presentation === null || presentation === undefined || presentation.trim() === '') {
     return denied(deny('missing_authorization', 'no authorization presentation on the request'));

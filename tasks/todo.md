@@ -1,3 +1,35 @@
+# x402 issuer-quoted payee binding + spec §4.2 (founder override 2026-09-29, started 2026-09-29)
+
+Goal: `@bolyra/payment-protocols` 0.9.0 with an agent-side host mode that binds a
+placeholder `payTo` to an issuer-signed quote (Tavily agent-pay shape), fail-closed
+throughout, plus spec §4.2; Codex-approved plan at
+`~/.claude/plans/reactive-giggling-sunset.md`. No publish, no outbound.
+
+- [x] 1. F2 compat probe: jose@^6 + engines + jest allow-list; compiled require
+      probe in node:20.19 and node:22.12; one-line jest import test
+- [x] 2. A1 payeeMatches literal-true + thenable assimilation (red → green)
+- [x] 3. A2 asset-aware resolveUsdAmount, fixture assetDecimals:6 (red → green)
+- [x] 4. A3 finite-time guards (red → green)
+- [ ] 5. Types + local challenge helper `x402LocalChallenge` (red → green)
+- [ ] 6. jws.ts signature layer vs RFC 7515 A.3 (red → green)
+- [ ] 7. createIssuerQuotePayeeResolver: config validation, parser contract,
+      claims, products, settlementFields (red → green)
+- [ ] 8. verify wiring: resolvePayee, snapshots, double recheck, quote nonce,
+      checkedLeg, payee_binding (red → green)
+- [ ] 9. openssl full-profile ES256/ES384 fixtures + sanitized Tavily fixture +
+      real-token wrong-key test + replay/race/config-fault suites
+- [ ] 10. tsconfig.test.json + typecheck:test + ci.yml; README section; spec §4.2;
+      residual wording fixes; CHANGELOG 0.9.0 (BREAKING A2); demo assetDecimals
+- [ ] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
+      consumer smoke
+- [ ] 12. sdk-guardian + security passes; Codex review → clean; DCO commits; PR;
+      CI on PR and main
+
+## Review
+(fill when done)
+
+---
+
 # IETF draft-kondoju-evc-01 revision (Codex queue item 1, started 2026-08-27)
 
 Goal: -01 source ready to submit to datatracker, Codex-reviewed. Founder does

@@ -35,6 +35,7 @@ const REQS_25_USD: X402EvcRequirements = {
   asset: 'USDC',
   amount: '25000000', // 25 USDC in atomic units
   payTo: AUDIENCE,
+  assetDecimals: 6, // A2: the host asserts the 1:1-USD asset explicitly
 };
 
 const REQS_500_USD: X402EvcRequirements = {
@@ -320,6 +321,130 @@ describe('verifyX402EvcAuthorization', () => {
 
     expect(decision.allowed).toBe(false);
     expect(decision.status).toBe(500);
+    expect(decision.problem?.code).toBe('internal_error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A1-A3 pre-fixes (plan 2026-09-29): hook result discipline, asset-aware
+// amounts, finite-time guards. Each of these was a fail-open or silent
+// mis-scaling path before.
+// ---------------------------------------------------------------------------
+
+describe('A1: payeeMatches must return literal true', () => {
+  const payTo = '0x000000000000000000000000000000000000beef';
+
+  async function decide(payeeMatches: unknown, nonce: string) {
+    const mandate = await smallMandate();
+    return verifyX402EvcAuthorization(mandate.presentation, {
+      context: context({ ...REQS_25_USD, payTo }, { nonce }),
+      audience: AUDIENCE,
+      verifier: { kind: 'classical', trustedOperators: [mandate.operatorPublicKey] },
+      // Deliberately wrong types: what a JS caller can hand us.
+      payeeMatches: payeeMatches as (a: string, p: string) => boolean,
+      now: () => NOW,
+    });
+  }
+
+  test('a Promise-returning hook (resolving true) denies request_mismatch instead of failing open', async () => {
+    const decision = await decide(async () => true, 'a1-promise');
+    expect(decision.allowed).toBe(false);
+    expect(decision.problem?.code).toBe('request_mismatch');
+  });
+
+  test('a rejecting Promise hook denies and leaves no unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const decision = await decide(() => Promise.reject(new Error('boom')), 'a1-reject');
+      expect(decision.allowed).toBe(false);
+      expect(decision.problem?.code).toBe('request_mismatch');
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  test('a then-only thenable (no .catch) denies without throwing', async () => {
+    const thenOnly = { then(onFulfilled: (v: boolean) => void) { onFulfilled(true); } };
+    const decision = await decide(() => thenOnly, 'a1-thenonly');
+    expect(decision.allowed).toBe(false);
+    expect(decision.problem?.code).toBe('request_mismatch');
+  });
+
+  test('a truthy non-boolean (the string "true") denies', async () => {
+    const decision = await decide(() => 'true', 'a1-string');
+    expect(decision.allowed).toBe(false);
+    expect(decision.problem?.code).toBe('request_mismatch');
+  });
+});
+
+describe('A2: asset-aware USD amount resolution', () => {
+  async function built(requirements: X402EvcRequirements) {
+    const mandate = await smallMandate();
+    return buildX402EvcRequest({
+      bundle: mandate.presentation,
+      context: context(requirements),
+      audience: AUDIENCE,
+      verifier: { kind: 'classical', trustedOperators: [mandate.operatorPublicKey] },
+      now: () => NOW,
+    });
+  }
+  const atomic = (amount: string, extra: Partial<X402EvcRequirements> = {}): X402EvcRequirements =>
+    ({ network: 'base-sepolia', asset: 'USDC', amount, payTo: AUDIENCE, assetDecimals: 6, ...extra });
+
+  test('iso4217:USD amounts are decimal USD already (Tavily agent-pay shape)', async () => {
+    const req = await built({ network: 'aws:base', asset: 'iso4217:USD', amount: '0.016', payTo: AUDIENCE });
+    expect(req.x402_evc.amount).toBe('0.016');
+  });
+
+  test('atomic amounts map to exact decimal strings at tier boundaries', async () => {
+    expect((await built(atomic('99999999'))).x402_evc.amount).toBe('99.999999');
+    expect((await built(atomic('100000000'))).x402_evc.amount).toBe('100');
+    expect((await built(atomic('1'))).x402_evc.amount).toBe('0.000001');
+    expect((await built(atomic('25000000'))).x402_evc.amount).toBe('25');
+  });
+
+  test.each([
+    ['iso4217:EUR without a converter', { network: 'n', asset: 'iso4217:EUR', amount: '1.00', payTo: AUDIENCE }],
+    ['malformed iso4217 identifier', { network: 'n', asset: 'iso4217:usd', amount: '1.00', payTo: AUDIENCE }],
+    ['non-ISO asset with assetDecimals omitted', { network: 'n', asset: 'USDC', amount: '25000000', payTo: AUDIENCE }],
+    ['fractional atomic amount', atomic('25000000.5')],
+    ['exponent syntax', atomic('2.5e7')],
+    ['zero amount', atomic('0')],
+    ['iso4217:USD exponent syntax', { network: 'n', asset: 'iso4217:USD', amount: '1.6e-8', payTo: AUDIENCE }],
+    ['overlong amount', atomic('1'.repeat(41))],
+    ['assetDecimals out of range', atomic('25000000', { assetDecimals: 37 })],
+  ])('fails closed (internal_error) on %s', async (_label, requirements) => {
+    await expect(built(requirements as X402EvcRequirements)).rejects.toMatchObject({ code: 'internal_error' });
+  });
+});
+
+describe('A3: finite-time guards', () => {
+  test('a NaN challenge expiresAt fails closed instead of bypassing the expiry check', async () => {
+    const mandate = await smallMandate();
+    const decision = await verifyX402EvcAuthorization(mandate.presentation, {
+      context: context(REQS_25_USD, { nonce: 'a3-nan-exp', expiresAt: Number.NaN }),
+      audience: AUDIENCE,
+      verifier: { kind: 'classical', trustedOperators: [mandate.operatorPublicKey] },
+      now: () => NOW,
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.problem?.code).toBe('internal_error');
+  });
+
+  test('a NaN clock fails closed', async () => {
+    const mandate = await smallMandate();
+    const decision = await verifyX402EvcAuthorization(mandate.presentation, {
+      context: context(REQS_25_USD, { nonce: 'a3-nan-now' }),
+      audience: AUDIENCE,
+      verifier: { kind: 'classical', trustedOperators: [mandate.operatorPublicKey] },
+      now: () => Number.NaN,
+    });
+    expect(decision.allowed).toBe(false);
     expect(decision.problem?.code).toBe('internal_error');
   });
 });

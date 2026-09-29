@@ -29,6 +29,7 @@ function requirements(atomicUsdc: string): X402EvcRequirements {
     asset: 'USDC',
     amount: atomicUsdc,
     payTo: AUDIENCE,
+    assetDecimals: 6, // the host asserts a 1:1-USD asset explicitly (A2)
   };
 }
 
