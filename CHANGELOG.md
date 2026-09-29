@@ -477,11 +477,23 @@ Clear to tag.
   (an unbound derived payee still denies), that the quote was addressed to
   this host, who receives funds, or delivery.
 - `X402EvcRequirements.scheme` and `.extra` (x402 v2 `accepts[]` fields).
-- Signature layer `verifyCompactEs` (strict compact-JWS parser in front of
-  jose: canonical base64url, fatal UTF-8, plain-object header/payload with
-  no prototype-named members, exact `alg`, no `crit`/`b64`/token-supplied
+- Internal signature layer (`src/x402-issuer-quote/jws.ts`, not part of the
+  package entry: a strict compact-JWS parser in front of jose — canonical
+  base64url, fatal UTF-8, plain-object header/payload with no
+  prototype-named members, exact `alg`, no `crit`/`b64`/token-supplied
   keys) verified against RFC 7515 Appendix A.3 and two full-profile
   fixtures signed independently with OpenSSL.
+- Unbound `extra` fields are rejected: every leaf under the leg's `extra`
+  must be the token field, a `settlementFields` challenge path, or listed in
+  the new per-issuer `unboundExtraFields` (e.g. Tavily's `tier`); anything
+  else denies `request_mismatch` (`extra_unbound`). `checkedLeg.extra` is
+  trimmed to the token field plus the settlement-verified paths, so nothing
+  unverified reaches settlement (`PayeeResolution.verifiedExtraPaths`).
+- Other exports: `isUnixSeconds`, `MAX_LOCAL_CHALLENGE_SECONDS`,
+  `MAX_PAYMENT_REQUIRED_CHARS`, and the types `JwsAlg`, `PayeeBinding`,
+  `PayeeResolution`, `PayeeResolver`, `IssuerQuoteConfig`,
+  `IssuerQuoteIssuer`, `IssuerQuoteKey`, `X402Leg`, `X402LocalChallenge`,
+  `X402LocalChallengeInput`.
 
 ### Changed (BREAKING)
 
@@ -495,7 +507,29 @@ Clear to tag.
   explicitly (omitting it now fails closed; fractional atomic amounts,
   exponent syntax, zero and > 1e15 are rejected; conversion is exact via
   BigInt); a `NaN` clock or `NaN` `expiresAt` now fails closed instead of
-  bypassing the expiry comparison.
+  bypassing the expiry comparison. The result checks apply on EVERY path,
+  including a custom `amountToUsd` and `iso4217:USD`: a zero amount, a
+  value above 1e15, an `amount` that is empty or longer than 40 characters,
+  and a converter output that is not a strict decimal string
+  (`^(0|[1-9]\d*)(\.\d{1,18})?$`, no padding, no exponent) now deny
+  `internal_error` where some used to pass through. Timestamps (`now`,
+  `expiresAt`, every compared time) must be finite, non-negative and at most
+  2^40, so a millisecond timestamp no longer passes as a far-future deadline.
+  A challenge context that `structuredClone` cannot copy denies.
+- `X402EvcVerifyOptions.context` is now optional at the type level (exactly
+  one of `context` / `localChallenge` is required at runtime). Callers that
+  pass `context` compile unchanged; code that reads `options.context.x`
+  from a value typed as `X402EvcVerifyOptions` needs a narrowing check.
+- `verifyX402EvcAuthorization` snapshots every security-relevant option
+  (`audience`, `verifier`, `nonceStore`, `now`, hooks) before its first
+  await, treats only a literal `true` from `nonceStore.reserve` as a
+  reservation, deduplicates reservation entries on the exact
+  `(issuer_key, nonce)` pair, validates the local challenge against the
+  snapshot it verifies (`mode`, header-hash nonce, deadline cap, leg equals
+  requirements), and always returns a decision instead of throwing.
+- `createIssuerQuotePayeeResolver` rejects `maxLifetimeSeconds +
+  clockSkewSeconds` above 900 at creation, so a legitimately long quote
+  cannot collide with the verifier's default acceptance bound.
 - Runtime floor: `jose@^6` (the upstream-supported line) is ESM-only and is
   loaded from the CommonJS build through Node's require(esm), so the
   package declares `engines.node: "^20.19.0 || ^22.12.0 || >=23.0.0"`.

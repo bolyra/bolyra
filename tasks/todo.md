@@ -22,7 +22,7 @@ throughout, plus spec §4.2; Codex-approved plan at
       residual wording fixes; CHANGELOG 0.9.0 (BREAKING A2); demo assetDecimals
 - [x] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
       consumer smoke
-- [ ] 12. sdk-guardian + security passes; Codex review → clean; DCO commits; PR;
+- [~] 12. sdk-guardian PASS-after-fixes + security SHIP-after-fixes DONE; Codex review → clean; DCO commits; PR;
       CI on PR and main
 
 ## Review

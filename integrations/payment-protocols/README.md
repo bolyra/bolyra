@@ -210,6 +210,7 @@ const resolvePayee = await createIssuerQuotePayeeResolver({
       { challenge: 'extra.reference', claim: 'reference' },
       { challenge: 'extra.settlement.product_id', claim: 'settlement.product_id' },
     ],
+    unboundExtraFields: ['tier'], // present on the leg, unverified, never reaches checkedLeg
   }]]),
 });
 
@@ -232,8 +233,17 @@ fields match that quote. What it does NOT prove: ownership of any derived
 on-chain address (an unbound derived `payTo` still denies), that the quote
 was addressed to this host, who ultimately receives funds, or delivery.
 `x402_evc.payee_binding` is a host assertion for audit; `payee` stays the
-literal placeholder. Keys are never discovered; a resolver never touches
-the network.
+literal placeholder, and receipts under spec §4.1 do not commit to the
+binding. `token_sha256` is an audit handle, not a unique quote identifier
+(ECDSA signatures are malleable); replay identity is `(issuer, jti)`. Keys
+are never discovered; a resolver never touches the network. Any leaf under
+`extra` that is not the token, a bound settlement field, or a declared
+`unboundExtraFields` entry denies, and `checkedLeg.extra` carries only the
+verified paths.
+
+The issuer, key id and product identifiers above are the shape observed on
+a public 402 on 2026-09-29 and are used as an example only; no endorsement
+is implied.
 
 ## Design Principles
 

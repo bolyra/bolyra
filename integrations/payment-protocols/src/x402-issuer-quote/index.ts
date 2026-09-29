@@ -29,7 +29,12 @@ export interface PayeeBinding {
   kid: string;
   jti: string;
   exp: number;
-  /** Lowercase hex SHA-256 over the exact compact token (UTF-8 bytes). */
+  /**
+   * Lowercase hex SHA-256 over the exact compact token (UTF-8 bytes). An
+   * audit handle, NOT a unique quote identifier: ECDSA signatures are
+   * malleable (high-S), so one quote can have several valid encodings.
+   * Replay identity is `(issuer, jti)`.
+   */
   token_sha256: string;
 }
 
@@ -37,6 +42,13 @@ export interface PayeeResolution {
   binding: PayeeBinding;
   /** Validated acceptance deadline (unix seconds): `exp` plus the resolver's own skew. */
   acceptUntil: number;
+  /**
+   * Dot-paths under the leg's `extra` that were bound to authenticated
+   * claims (plus the token field). `verifyX402EvcAuthorization` trims
+   * `checkedLeg.extra` to exactly these, so nothing unverified reaches
+   * settlement.
+   */
+  verifiedExtraPaths: string[];
 }
 
 export type PayeeResolver = (input: {
@@ -64,7 +76,13 @@ export interface IssuerQuoteIssuer {
   products: Map<string, Record<string, string | number | boolean>>;
   /** Challenge fields settlement consumes; each MUST equal the authenticated claim. */
   settlementFields: Array<{ challenge: string; claim: string }>;
-  /** Default 300, at most 900. */
+  /**
+   * Dot-paths under `extra` that MAY be present without being bound to a
+   * claim (e.g. Tavily's `tier`). Any other unbound leaf under `extra` denies
+   * `request_mismatch` (`extra_unbound`), and these never reach `checkedLeg`.
+   */
+  unboundExtraFields?: string[];
+  /** Default 300; `maxLifetimeSeconds + clockSkewSeconds` MUST be at most 900. */
   maxLifetimeSeconds?: number;
 }
 
@@ -156,6 +174,9 @@ interface CompiledIssuer {
   keys: Map<string, CompiledKey>;
   products: Map<string, Array<{ segments: string[]; expected: string | number | boolean }>>;
   settlementFields: Array<{ challenge: string[]; claim: string[] }>;
+  /** Leaf paths under `extra` that are allowed: token field, bound settlement paths, declared unbound fields. */
+  allowedExtraPaths: Set<string>;
+  verifiedExtraPaths: string[];
   maxLifetimeSeconds: number;
 }
 
@@ -183,7 +204,20 @@ async function compileKey(kid: string, entry: unknown): Promise<CompiledKey> {
   return { alg, key };
 }
 
-async function compileIssuer(iss: string, raw: unknown): Promise<CompiledIssuer> {
+const MAX_ACCEPTANCE_WINDOW = 900;
+
+/** Enumerate every leaf path under a value (arrays count as leaves). */
+function leafPaths(value: unknown, prefix: string, out: string[]): void {
+  if (isRecord(value)) {
+    const keys = Object.keys(value);
+    if (keys.length === 0) { out.push(prefix); return; }
+    for (const key of keys) leafPaths(value[key], prefix === '' ? key : `${prefix}.${key}`, out);
+    return;
+  }
+  out.push(prefix);
+}
+
+async function compileIssuer(iss: string, raw: unknown, tokenField: string, skew: number): Promise<CompiledIssuer> {
   if (!isRecord(raw)) throw configFault('issuers', iss);
   const payTo = requireIdentifier(raw.payTo, 'payTo');
   const scheme = requireIdentifier(raw.scheme, 'scheme');
@@ -228,8 +262,27 @@ async function compileIssuer(iss: string, raw: unknown): Promise<CompiledIssuer>
   if (!Number.isInteger(maxLifetimeSeconds) || (maxLifetimeSeconds as number) < 1 || (maxLifetimeSeconds as number) > MAX_LIFETIME) {
     throw configFault('max_lifetime', iss);
   }
+  // The resolver returns acceptUntil = exp + skew and a verifier bounds
+  // acceptUntil - now by 900 by default: keep the two consistent at creation.
+  if ((maxLifetimeSeconds as number) + skew > MAX_ACCEPTANCE_WINDOW) throw configFault('max_lifetime', `${iss}: maxLifetimeSeconds + clockSkewSeconds exceeds ${MAX_ACCEPTANCE_WINDOW}`);
 
-  return { payTo, scheme, network, audience, payToRole, keys, products, settlementFields, maxLifetimeSeconds: maxLifetimeSeconds as number };
+  const verifiedExtraPaths = [tokenField];
+  const allowedExtraPaths = new Set<string>([tokenField]);
+  for (const { challenge } of settlementFields) {
+    if (challenge[0] === 'extra' && challenge.length > 1) {
+      const rel = challenge.slice(1).join('.');
+      allowedExtraPaths.add(rel);
+      verifiedExtraPaths.push(rel);
+    }
+  }
+  const unbound = raw.unboundExtraFields ?? [];
+  if (!Array.isArray(unbound)) throw configFault('unbound_extra_fields', iss);
+  for (const path of unbound) allowedExtraPaths.add(parsePath(path, 'unbound_extra_fields').join('.'));
+
+  return {
+    payTo, scheme, network, audience, payToRole, keys, products, settlementFields,
+    allowedExtraPaths, verifiedExtraPaths, maxLifetimeSeconds: maxLifetimeSeconds as number,
+  };
 }
 
 /**
@@ -247,7 +300,7 @@ export async function createIssuerQuotePayeeResolver(config: IssuerQuoteConfig):
 
   const issuers = new Map<string, CompiledIssuer>();
   for (const [iss, raw] of config.issuers) {
-    issuers.set(requireIdentifier(iss, 'iss'), await compileIssuer(iss, raw));
+    issuers.set(requireIdentifier(iss, 'iss'), await compileIssuer(iss, raw, tokenField, skew));
   }
 
   return async ({ audience, context, now }) => {
@@ -319,10 +372,20 @@ export async function createIssuerQuotePayeeResolver(config: IssuerQuoteConfig):
       }
     }
 
+    // Every leaf under `extra` must be the token, a bound settlement field, or
+    // a declared unbound field. Anything else is attacker-controllable bytes
+    // that would otherwise ride into settlement.
+    const leaves: string[] = [];
+    leafPaths(extra, '', leaves);
+    for (const leaf of leaves) {
+      if (!issuer.allowedExtraPaths.has(leaf)) throw mismatch('extra_unbound', { path: `extra.${leaf}` });
+    }
+
     const kid = verified.header.kid as string;
     return {
       binding: { kind: 'issuer_quote', issuer: audience, kid, jti, exp, token_sha256: verified.tokenSha256 },
       acceptUntil: exp + skew,
+      verifiedExtraPaths: [...issuer.verifiedExtraPaths],
     };
   };
 }

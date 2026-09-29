@@ -77,13 +77,18 @@ export interface X402EvcRequirements {
   network: string;
   /** Asset identifier — token address or ISO currency code. */
   asset: string;
-  /** Amount in atomic token units, as a decimal string (x402 v2 shape). */
+  /**
+   * The x402 v2 `amount` string. For `iso4217:USD` this IS decimal USD
+   * (e.g. `"0.016"`); for token assets it is integer atomic units.
+   */
   amount: string;
   /** Payee address/identifier — x402 v2 `payTo`. */
   payTo: string;
   /**
-   * Token decimals used by the default USD mapping (assumes a 1:1 USD
-   * stablecoin). Default 6 (USDC). Non-USD assets MUST supply `amountToUsd`.
+   * Token decimals for the 1:1 USD-stablecoin atomic mapping. REQUIRED for
+   * every non-`iso4217:*` asset (there is no default; omitting it fails
+   * closed). This is the host's assertion that the asset is a 1:1 USD
+   * stablecoin, not proof of that valuation. Ignored for `iso4217:*`.
    */
   assetDecimals?: number;
   /** x402 v2 `accepts[].extra`, carried for §4.2 resolvers (e.g. an issuer quote token). */
@@ -149,10 +154,11 @@ export interface X402EvcOptions {
   /** Optional model pin; when omitted, the binding's own model is echoed. */
   model?: string;
   /**
-   * Resolve `requirements.amount` (atomic units) to a decimal USD value.
-   * Default assumes a 1:1 USD stablecoin with `assetDecimals` (default 6,
-   * USDC). Non-USD assets MUST provide this. Unresolvable amounts fail closed
-   * (`internal_error`).
+   * Resolve `requirements.amount` to a decimal USD string. Without it:
+   * `iso4217:USD` amounts are decimal USD already, other `iso4217:*`
+   * currencies fail closed, and token assets use the atomic mapping with an
+   * explicit `assetDecimals`. The output MUST be a strict decimal string
+   * (`^(0|[1-9]\d*)(\.\d{1,18})?$`); anything else fails closed.
    */
   amountToUsd?: (requirements: X402EvcRequirements) => string | number;
   /**
@@ -285,7 +291,7 @@ function resolveUsdAmount(
   if (amountToUsd !== undefined) {
     const raw = amountToUsd(requirements);
     usd = typeof raw === 'number' ? String(raw) : raw;
-    if (typeof usd !== 'string' || usd.trim() === '') {
+    if (typeof usd !== 'string' || usd.length > MAX_AMOUNT_CHARS || !DECIMAL_AMOUNT.test(usd)) {
       throw unusableAmount(requirements, 'converter_output');
     }
   } else if (typeof asset === 'string' && asset.startsWith('iso4217:')) {
@@ -407,6 +413,7 @@ function denied(verdict: Verdict & { verdict: 'deny' }, request?: X402EvcVerifie
 }
 
 const DEFAULT_MAX_ACCEPTANCE_SECONDS = 900;
+const MAX_LOCAL_DEADLINE_SECONDS = 900;
 const MAX_BINDING_STRING = 256;
 
 function deepFreeze<T>(value: T): T {
@@ -424,6 +431,63 @@ function snapshotContext(context: X402EvcContext): X402EvcContext {
 
 function isBoundedString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_BINDING_STRING && !value.includes('\0');
+}
+
+function deepEqualJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b || a === null || b === null || typeof a !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a as object).sort();
+  const kb = Object.keys(b as object).sort();
+  if (ka.length !== kb.length || ka.some((k, i) => k !== kb[i])) return false;
+  return ka.every((k) => deepEqualJson((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** Local-mode invariants (spec §4.2) checked against the SNAPSHOT; returns a fault message or undefined. */
+function validateLocalChallenge(local: X402LocalChallenge, context: X402EvcContext): string | undefined {
+  if (local.mode !== 'local') return 'localChallenge.mode must be "local"';
+  if (typeof local.headerSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(local.headerSha256)) return 'localChallenge.headerSha256 is malformed';
+  if (context.nonce !== local.headerSha256) return 'localChallenge nonce is not the header hash';
+  if (!isUnixSeconds(local.receivedAt)) return 'localChallenge.receivedAt is not a finite unix time';
+  if (context.expiresAt > local.receivedAt + MAX_LOCAL_DEADLINE_SECONDS) return 'localChallenge deadline exceeds the local cap';
+  const leg = local.selectedLeg;
+  if (typeof leg !== 'object' || leg === null) return 'localChallenge.selectedLeg is missing';
+  const r = context.requirements;
+  for (const field of ['scheme', 'network', 'asset', 'amount', 'payTo'] as const) {
+    if (leg[field] !== r[field]) return `localChallenge.selectedLeg.${field} disagrees with the verified requirements`;
+  }
+  if (!deepEqualJson(leg.extra ?? undefined, r.extra ?? undefined)) return 'localChallenge.selectedLeg.extra disagrees with the verified requirements';
+  if (!Number.isInteger(leg.maxTimeoutSeconds) || leg.maxTimeoutSeconds <= 0) return 'localChallenge.selectedLeg.maxTimeoutSeconds is not usable';
+  return undefined;
+}
+
+/** The checked leg: the verified snapshot, with `extra` trimmed to the verified paths (H1). */
+function buildCheckedLeg(leg: X402Leg, verifiedExtraPaths: readonly string[]): Readonly<X402Leg> {
+  const out: X402Leg = {
+    scheme: leg.scheme, network: leg.network, asset: leg.asset, amount: leg.amount, payTo: leg.payTo,
+    maxTimeoutSeconds: leg.maxTimeoutSeconds,
+  };
+  if (leg.extra !== undefined) {
+    const trimmed: Record<string, unknown> = {};
+    for (const path of verifiedExtraPaths) {
+      const segments = path.split('.');
+      let src: unknown = leg.extra;
+      let found = true;
+      for (const seg of segments) {
+        if (typeof src !== 'object' || src === null || !Object.prototype.hasOwnProperty.call(src, seg)) { found = false; break; }
+        src = (src as Record<string, unknown>)[seg];
+      }
+      if (!found) continue;
+      let dst = trimmed;
+      for (const seg of segments.slice(0, -1)) {
+        if (typeof dst[seg] !== 'object' || dst[seg] === null) dst[seg] = {};
+        dst = dst[seg] as Record<string, unknown>;
+      }
+      dst[segments[segments.length - 1]] = structuredClone(src);
+    }
+    out.extra = trimmed;
+  }
+  return deepFreeze(out);
 }
 
 /** Validate a resolver's output; returns the fault message, or undefined when usable. */
@@ -445,6 +509,8 @@ function validateResolution(
   if (!isUnixSeconds(acceptUntil)) return 'payee resolver acceptUntil is not a finite unix time';
   if (acceptUntil < b.exp) return 'payee resolver acceptUntil precedes the binding exp';
   if (acceptUntil - nowUnix > maxAcceptance) return 'payee resolver acceptUntil exceeds maxAcceptanceSeconds';
+  const paths = (resolution as { verifiedExtraPaths?: unknown }).verifiedExtraPaths;
+  if (!Array.isArray(paths) || paths.length > 256 || paths.some((p) => !isBoundedString(p))) return 'payee resolver verifiedExtraPaths is malformed';
   return undefined;
 }
 
@@ -463,43 +529,84 @@ export async function verifyX402EvcAuthorization(
   presentation: string | null | undefined,
   options: X402EvcVerifyOptions,
 ): Promise<X402EvcDecision> {
-  const readClock = (): number => (options.now !== undefined ? options.now() : Math.floor(Date.now() / 1000));
+  try {
+    return await verifyInner(presentation, options);
+  } catch {
+    // The contract is "always a decision, never a throw" (§4).
+    return denied(deny('internal_error', 'verification failed unexpectedly'));
+  }
+}
+
+async function verifyInner(
+  presentation: string | null | undefined,
+  options: X402EvcVerifyOptions,
+): Promise<X402EvcDecision> {
+  // Snapshot every security-relevant option synchronously, before any await
+  // (M1): a caller sharing one options object across concurrent calls must
+  // not be able to change the audience, verifier, clock or store mid-flight.
+  const {
+    audience, verifier, amountToUsd, program, model, payeeMatches, resolvePayee,
+    localChallenge: local, nonceStore, maxAcceptanceSeconds,
+  } = options;
+  const clock = options.now;
+  const readClock = (): number => (clock !== undefined ? clock() : Math.floor(Date.now() / 1000));
   const nowUnix = readClock();
   if (!isUnixSeconds(nowUnix)) {
     return denied(deny('internal_error', 'host clock did not produce a finite unix time'));
   }
+  if (typeof audience !== 'string' || audience.length === 0) {
+    return denied(deny('internal_error', 'audience is required'));
+  }
 
   // Mode selection (spec §4.2): exactly one of context / localChallenge.
-  const local = options.localChallenge;
   if ((options.context === undefined) === (local === undefined)) {
     return denied(deny('internal_error', 'exactly one of context or localChallenge is required'));
   }
-  if (local !== undefined && options.resolvePayee === undefined) {
+  if (local !== undefined && resolvePayee === undefined) {
     return denied(deny('internal_error', 'local mode requires resolvePayee (quote single-use is the replay protection)'));
   }
-  if (options.resolvePayee !== undefined && options.payeeMatches !== undefined) {
+  if (resolvePayee !== undefined && payeeMatches !== undefined) {
     return denied(deny('internal_error', 'resolvePayee and payeeMatches are mutually exclusive'));
   }
-  const maxAcceptance = options.maxAcceptanceSeconds ?? DEFAULT_MAX_ACCEPTANCE_SECONDS;
+  const maxAcceptance = maxAcceptanceSeconds ?? DEFAULT_MAX_ACCEPTANCE_SECONDS;
   if (!Number.isInteger(maxAcceptance) || maxAcceptance < 1 || maxAcceptance > 2 ** 40) {
     return denied(deny('internal_error', 'maxAcceptanceSeconds is not a usable bound'));
   }
 
-  // Snapshot everything security-relevant before the first await.
-  const rawContext = (options.context ?? local!.context) as X402EvcContext;
-  if (!isUnixSeconds(rawContext.expiresAt)) {
-    return denied(deny('internal_error', 'challenge expiresAt is not a finite unix time'));
+  // Snapshot the challenge (deep clone + freeze), then validate THE SNAPSHOT
+  // (L3): a getter that changes between reads cannot smuggle a bad value past
+  // the guard.
+  const rawContext = options.context ?? local?.context;
+  if (typeof rawContext !== 'object' || rawContext === null) {
+    return denied(deny('internal_error', 'challenge context is required'));
   }
-  const audience = options.audience;
   let context: X402EvcContext;
   try {
     context = snapshotContext(rawContext);
   } catch {
     return denied(deny('internal_error', 'challenge context is not snapshot-able'));
   }
-  const checkedLeg = local !== undefined ? (deepFreeze(structuredClone(local.selectedLeg)) as Readonly<X402Leg>) : undefined;
+  if (!isUnixSeconds(context.expiresAt)) {
+    return denied(deny('internal_error', 'challenge expiresAt is not a finite unix time'));
+  }
+  if (typeof context.nonce !== 'string' || context.nonce.length === 0 || context.nonce.length > 256 || context.nonce.includes('\0')) {
+    return denied(deny('internal_error', 'challenge nonce is not a usable identifier'));
+  }
+  if (typeof context.resource !== 'string' || typeof context.requirements !== 'object' || context.requirements === null) {
+    return denied(deny('internal_error', 'challenge context is malformed'));
+  }
 
-  if (presentation === null || presentation === undefined || presentation.trim() === '') {
+  // Local mode (L2/G2): the selected leg must be exactly what the snapshot
+  // verifies, and the local invariants must hold, or the "checked leg"
+  // guarantee would be a lie.
+  let localLeg: X402Leg | undefined;
+  if (local !== undefined) {
+    const fault = validateLocalChallenge(local, context);
+    if (fault !== undefined) return denied(deny('internal_error', fault));
+    localLeg = structuredClone(local.selectedLeg);
+  }
+
+  if (typeof presentation !== 'string' || presentation.trim() === '') {
     return denied(deny('missing_authorization', 'no authorization presentation on the request'));
   }
 
@@ -510,9 +617,9 @@ export async function verifyX402EvcAuthorization(
   // §4.2: bind the payee through the resolver BEFORE building the request.
   let resolution: PayeeResolution | undefined;
   let expiresAt = context.expiresAt;
-  if (options.resolvePayee !== undefined) {
+  if (resolvePayee !== undefined) {
     try {
-      resolution = await options.resolvePayee({ audience, context, now: nowUnix });
+      resolution = await resolvePayee({ audience, context, now: nowUnix });
     } catch (err) {
       if (isVerifyDenial(err)) return denied(err.toVerdict());
       return denied(deny('internal_error', 'payee resolver failed'));
@@ -531,7 +638,7 @@ export async function verifyX402EvcAuthorization(
   let request: X402EvcVerifierRequest;
   try {
     request = buildX402EvcRequestInternal(
-      { ...options, context, bundle: presentation, now: () => nowUnix },
+      { context, audience, verifier, amountToUsd, program, model, payeeMatches, bundle: presentation, now: () => nowUnix },
       resolution?.binding,
     );
   } catch (err) {
@@ -541,7 +648,7 @@ export async function verifyX402EvcAuthorization(
 
   let verdict: Verdict;
   try {
-    verdict = await dispatchVerifier(options.verifier, request);
+    verdict = await dispatchVerifier(verifier, request);
   } catch {
     // The transports already fail closed internally; this guards the
     // in-process classical path and any unexpected throw. Never an allow.
@@ -558,10 +665,10 @@ export async function verifyX402EvcAuthorization(
 
   // Reserve-before-act (§7.3): the challenge nonce, the quote's (issuer, jti)
   // through its whole acceptance window, and any nonces the verifier asked
-  // the host to burn — atomically, deduplicated on the store's own identity
-  // keeping the longest retention, so a replayed challenge, a replayed quote
-  // and a replayed presentation are all refused before any payment logic.
-  const store = options.nonceStore ?? defaultNonceStore;
+  // the host to burn — atomically, deduplicated on the exact (issuer_key,
+  // nonce) PAIR (never a joined string, I1) keeping the longest retention, so
+  // a replayed challenge, quote or presentation is refused before payment.
+  const store = nonceStore ?? defaultNonceStore;
   const raw: ConsumeNonce[] = [
     { issuer_key: `x402_evc:${audience}`, nonce: context.nonce, retain_until: expiresAt },
     ...(resolution !== undefined
@@ -569,17 +676,22 @@ export async function verifyX402EvcAuthorization(
       : []),
     ...(verdict.consume_nonces ?? []),
   ];
-  const byIdentity = new Map<string, ConsumeNonce>();
+  const byIssuer = new Map<string, Map<string, ConsumeNonce>>();
   for (const entry of raw) {
+    if (typeof entry.issuer_key !== 'string' || typeof entry.nonce !== 'string' || !isUnixSeconds(entry.retain_until)) {
+      return denied(deny('internal_error', 'nonce entry is malformed'), request);
+    }
     if (entry.issuer_key.includes('\0') || entry.nonce.includes('\0')) {
       return denied(deny('internal_error', 'nonce identifiers must not contain NUL'), request);
     }
-    const id = `${entry.issuer_key}\0${entry.nonce}`;
-    const prior = byIdentity.get(id);
-    if (prior === undefined || entry.retain_until > prior.retain_until) byIdentity.set(id, { ...entry });
+    let perIssuer = byIssuer.get(entry.issuer_key);
+    if (perIssuer === undefined) { perIssuer = new Map(); byIssuer.set(entry.issuer_key, perIssuer); }
+    const prior = perIssuer.get(entry.nonce);
+    if (prior === undefined || entry.retain_until > prior.retain_until) perIssuer.set(entry.nonce, { ...entry });
   }
-  const entries = [...byIdentity.values()];
-  let reserved: boolean;
+  const entries: ConsumeNonce[] = [];
+  for (const perIssuer of byIssuer.values()) entries.push(...perIssuer.values());
+  let reserved: unknown;
   try {
     reserved = await store.reserve(entries, afterDispatch);
   } catch {
@@ -587,15 +699,22 @@ export async function verifyX402EvcAuthorization(
     // never an allow, and never an unhandled rejection.
     return denied(deny('internal_error', 'nonce reservation failed'), request);
   }
-  if (!reserved) {
+  if (reserved === false) {
     return denied(deny('nonce_replayed', 'challenge nonce or presentation nonce already used'), request);
   }
-  // Final re-check after reservation (sync or awaited): the reservation is
-  // already burned, which is the correct side of the race — never an allow
-  // past the deadline.
+  if (reserved !== true) {
+    // Only literal true proves the reservation (L1); a truthy object is not proof.
+    return denied(deny('internal_error', 'nonce store returned a non-boolean result'), request);
+  }
+  // Final re-check after reservation: the reservation is already burned,
+  // which is the correct side of the race — never an allow past the deadline.
   const afterReserve = readClock();
   if (!isUnixSeconds(afterReserve)) return denied(deny('internal_error', 'host clock did not produce a finite unix time'), request);
   if (expiresAt <= afterReserve) return denied(deny('expired', 'the x402 challenge context expired during reservation'), request);
+
+  const checkedLeg = localLeg !== undefined && resolution !== undefined
+    ? buildCheckedLeg(localLeg, resolution.verifiedExtraPaths)
+    : undefined;
 
   return {
     allowed: true,

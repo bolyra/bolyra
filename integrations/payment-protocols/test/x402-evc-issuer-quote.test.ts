@@ -83,6 +83,7 @@ function issuerConfig(overrides: Partial<IssuerQuoteConfig['issuers'] extends Ma
       { challenge: 'extra.reference', claim: 'reference' },
       { challenge: 'extra.settlement.product_id', claim: 'settlement.product_id' },
     ],
+    unboundExtraFields: ['tier'],
     ...overrides,
   };
 }
@@ -263,4 +264,26 @@ describe('createIssuerQuotePayeeResolver: settlementFields bind the challenge to
   test('altered extra.settlement.product_id with a valid quote', () => denies(resolve(resolver, requirements(token, {}, { settlement: { product_id: 'prod-other' } })), 'settlement'));
   test('challenge-side field missing', () => denies(resolve(resolver, requirements(token, {}, { settlement: {} })), 'settlement'));
   test('challenge-side field of the wrong type', () => denies(resolve(resolver, requirements(token, {}, { reference: ['tavily-search-advanced'] })), 'settlement'));
+});
+
+describe('review fixes (2026-09-29)', () => {
+  test('creation rejects maxLifetimeSeconds + clockSkewSeconds above 900 (G7/I5)', async () => {
+    await expect(createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 900 })))
+      .rejects.toMatchObject({ code: 'internal_error', detail: expect.objectContaining({ reason: 'max_lifetime' }) });
+    await expect(createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 840 }))).resolves.toBeDefined();
+  });
+  test('unbound extra leaves deny unless listed in unboundExtraFields (H1)', async () => {
+    const token = await sign(baseClaims());
+    const strict = await createIssuerQuotePayeeResolver(config({}, { unboundExtraFields: [] }));
+    await denies(resolve(strict, requirements(token)), 'extra_unbound'); // the Tavily leg carries `tier`
+    const lenient = await createIssuerQuotePayeeResolver(config());
+    await expect(resolve(lenient, requirements(token))).resolves.toBeDefined();
+    await denies(resolve(lenient, requirements(token, {}, { callback: 'https://evil.example' })), 'extra_unbound');
+    await denies(resolve(lenient, requirements(token, {}, { settlement: { product_id: 'prod-maeet6sajeg42', quantity: 100 } })), 'extra_unbound');
+  });
+  test('the resolution reports the verified extra paths so verify can trim checkedLeg (H1)', async () => {
+    const lenient = await createIssuerQuotePayeeResolver(config());
+    const out = await resolve(lenient, requirements(await sign(baseClaims())));
+    expect(out.verifiedExtraPaths.sort()).toEqual(['quoteToken', 'reference', 'settlement.product_id']);
+  });
 });

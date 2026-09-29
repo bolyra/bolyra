@@ -154,7 +154,7 @@ export function x402LocalChallenge(input: X402LocalChallengeInput): X402LocalCha
     ...(leg.extra !== undefined ? { extra: cloneJson(leg.extra, 'leg_extra') as Record<string, unknown> } : {}),
   };
 
-  return {
+  return deepFreeze({
     mode: 'local',
     receivedAt: now,
     headerSha256,
@@ -166,5 +166,5 @@ export function x402LocalChallenge(input: X402LocalChallengeInput): X402LocalCha
       nonce: headerSha256,
       expiresAt: now + Math.min(leg.maxTimeoutSeconds, maxSeconds),
     },
-  };
+  });
 }

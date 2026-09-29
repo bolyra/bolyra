@@ -27,6 +27,7 @@ const resolvePayee = await pp.createIssuerQuotePayeeResolver({ issuers: new Map(
   keys: new Map([[fixture.kid, { alg: fixture.alg, jwk: fixture.publicJwk }]]),
   products: new Map([[RESOURCE, { reference: "tavily-search-advanced", "settlement.product_id": "prod-maeet6sajeg42" }]]),
   settlementFields: [{ challenge: "extra.reference", claim: "reference" }, { challenge: "extra.settlement.product_id", claim: "settlement.product_id" }],
+  unboundExtraFields: ["tier"],
 }]]) });
 const local = pp.x402LocalChallenge({ headerValue, resource: RESOURCE, legIndex: 1, now: fixture.now, maxSeconds: 900 });
 const m = await mpp.issueMandate({ operatorPrivateKey: 42n, agentName: "search-agent", audience: ISS, model: "test-model", program: "x402", maxUsd: "99", expiry: fixture.now + 3600 });

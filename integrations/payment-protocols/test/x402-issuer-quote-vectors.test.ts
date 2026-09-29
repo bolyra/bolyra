@@ -21,6 +21,7 @@ function configFor(f: typeof es256): IssuerQuoteConfig {
     keys: new Map([[f.kid, { alg: f.alg as JwsAlg, jwk: f.publicJwk }]]),
     products: new Map([[RESOURCE, { reference: 'tavily-search-advanced', 'settlement.product_id': 'prod-maeet6sajeg42' }]]),
     settlementFields: [{ challenge: 'extra.reference', claim: 'reference' }, { challenge: 'extra.settlement.product_id', claim: 'settlement.product_id' }],
+    unboundExtraFields: ['tier'],
   }]]) };
 }
 

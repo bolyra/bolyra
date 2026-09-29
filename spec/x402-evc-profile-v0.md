@@ -190,9 +190,14 @@ retained through the quote's whole acceptance window, together with the
 challenge nonce, atomically. (8) The signed price equals the leg's amount
 and ISO currency, the host-declared product claims for `resource` are
 present and equal, and every settlement-consumed challenge field equals its
-authenticated claim. (9) The extension records `payee_binding` (issuer,
-`kid`, `jti`, `exp`, SHA-256 of the compact token) and `payee` stays the
-literal placeholder.
+authenticated claim; every other leaf under the leg's `extra` MUST be either
+the quote token or explicitly declared unbound by host configuration, else
+the request denies, and the checked leg passed to settlement MUST carry
+only the token and the bound settlement fields. (9) The extension records
+`payee_binding` (issuer, `kid`, `jti`, `exp`, SHA-256 of the compact token)
+and `payee` stays the literal placeholder; the token hash is an audit
+handle, not a unique quote identifier (signature malleability), and replay
+identity is `(iss, jti)`.
 
 **MUST NOT claim.** A verified binding establishes who quoted this product
 at this price within this window. It does NOT establish the settlement
