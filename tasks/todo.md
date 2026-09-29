@@ -14,7 +14,7 @@ throughout, plus spec §4.2; Codex-approved plan at
 - [x] 6. jws.ts signature layer vs RFC 7515 A.3 (red → green)
 - [x] 7. createIssuerQuotePayeeResolver: config validation, parser contract,
       claims, products, settlementFields (red → green)
-- [ ] 8. verify wiring: resolvePayee, snapshots, double recheck, quote nonce,
+- [x] 8. verify wiring: resolvePayee, snapshots, double recheck, quote nonce,
       checkedLeg, payee_binding (red → green)
 - [ ] 9. openssl full-profile ES256/ES384 fixtures + sanitized Tavily fixture +
       real-token wrong-key test + replay/race/config-fault suites

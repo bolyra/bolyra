@@ -19,6 +19,9 @@
  * only owns the x402-shaped mapping and the host-side challenge checks.
  */
 
+import type { PayeeBinding, PayeeResolver, PayeeResolution } from './x402-issuer-quote';
+import type { X402Leg, X402LocalChallenge } from './x402-local-challenge';
+
 import {
   BOLYRA_AUTHORIZATION_HEADER,
   DENY_STATUS,
@@ -117,6 +120,13 @@ export interface X402EvcExtension {
   nonce: string;
   expires_at: number;
   verifier: VerifierConfig['kind'];
+  /**
+   * §4.2 issuer-quoted payee binding, when the host bound a placeholder
+   * `payee` to a verified quote. A HOST ASSERTION for audit: it carries
+   * neither the signature nor the signed claims, so it is not independently
+   * verifiable from this member alone.
+   */
+  payee_binding?: PayeeBinding;
 }
 
 /** An EVC §2.1 request carrying the profile extension. */
@@ -148,9 +158,9 @@ export interface X402EvcOptions {
   /**
    * Decide whether the host's authorization audience covers the x402 payee.
    * Default: byte-literal equality `audience === requirements.payTo`. A
-   * mismatch denies `request_mismatch` BEFORE any verifier runs — conformant
-   * EVC verifiers ignore the profile extension, so the host must own this
-   * check (spec §4).
+   * mismatch denies `request_mismatch` BEFORE any verifier runs — the default
+   * v1 verifier does not evaluate the profile extension, so the host must own
+   * this check (spec §3). Only literal `true` allows.
    */
   payeeMatches?: (audience: string, payTo: string) => boolean;
   /** Clock override (unix seconds). Tests only. */
@@ -166,7 +176,23 @@ export interface X402EvcOptions {
 const defaultNonceStore = new NonceStore();
 
 /** Additional options for {@link verifyX402EvcAuthorization}. */
-export interface X402EvcVerifyOptions extends X402EvcOptions {
+export interface X402EvcVerifyOptions extends Omit<X402EvcOptions, 'context'> {
+  /** The 402 challenge context (server-participating mode). Exclusive with `localChallenge`. */
+  context?: X402EvcContext;
+  /**
+   * Agent-side host mode (spec §4.2): a locally built challenge context.
+   * Exclusive with `context`; REQUIRES `resolvePayee` (a local challenge has
+   * no server nonce, so quote single-use is the replay protection).
+   */
+  localChallenge?: X402LocalChallenge;
+  /**
+   * Async payee binding (spec §4.2), e.g. `createIssuerQuotePayeeResolver`.
+   * Exclusive with `payeeMatches`; both set is a configuration fault
+   * (`internal_error`). Its `acceptUntil` caps the challenge deadline.
+   */
+  resolvePayee?: PayeeResolver;
+  /** Upper bound on `acceptUntil - now` a resolver may return. Default 900. */
+  maxAcceptanceSeconds?: number;
   /**
    * Reserve-before-act nonce store (EVC §7.3) for the challenge nonce AND any
    * verifier `consume_nonces`. Default: a process-wide in-memory store —
@@ -187,6 +213,13 @@ export interface X402EvcDecision {
   problem?: DenyProblem;
   /** The request that was (or would have been) dispatched, for audit. */
   request?: X402EvcVerifierRequest;
+  /** The finalized challenge deadline used for the request and the reservation (allow only). */
+  expiresAt?: number;
+  /**
+   * Local mode, allow only: the deep-frozen leg that was verified. This is
+   * the ONLY object a host may pass to settlement; every denial omits it.
+   */
+  checkedLeg?: Readonly<X402Leg>;
 }
 
 /** A usable unix-seconds timestamp: finite, non-negative, below 2^40 (A3). */
@@ -286,14 +319,27 @@ function resolveUsdAmount(
 export function buildX402EvcRequest(
   options: X402EvcOptions & { bundle: string },
 ): X402EvcVerifierRequest {
+  return buildX402EvcRequestInternal(options, undefined);
+}
+
+/**
+ * Private: build with an already-verified §4.2 payee binding. When `binding`
+ * is present the byte-equality payee check is skipped because the host
+ * bound the payee through `resolvePayee`; the binding is recorded on the
+ * extension. Not exported: no public data-shaped bypass.
+ */
+function buildX402EvcRequestInternal(
+  options: X402EvcOptions & { bundle: string },
+  binding: PayeeBinding | undefined,
+): X402EvcVerifierRequest {
   const { bundle, context, audience, verifier } = options;
   const nowUnix = options.now !== undefined ? options.now() : Math.floor(Date.now() / 1000);
 
-  // The host owns the payee check (spec §4): conformant EVC verifiers ignore
-  // the profile extension, so an audience/payTo mismatch must fail closed
-  // here, before any verifier can allow.
+  // The host owns the payee check (spec §3): the default v1 verifier does not
+  // evaluate the profile extension, so an audience/payTo mismatch must fail
+  // closed here, before any verifier can allow.
   const payeeMatches = options.payeeMatches ?? ((a: string, p: string) => a === p);
-  const matched: unknown = payeeMatches(audience, context.requirements.payTo);
+  const matched: unknown = binding !== undefined ? true : payeeMatches(audience, context.requirements.payTo);
   if (matched !== true) {
     // Only literal `true` allows. A Promise (or any thenable) is truthy and
     // would otherwise fail open; assimilate it so a rejection cannot surface
@@ -332,6 +378,7 @@ export function buildX402EvcRequest(
       nonce: context.nonce,
       expires_at: context.expiresAt,
       verifier: verifier.kind,
+      ...(binding !== undefined ? { payee_binding: binding } : {}),
     },
   };
 }
@@ -359,6 +406,48 @@ function denied(verdict: Verdict & { verdict: 'deny' }, request?: X402EvcVerifie
   return { allowed: false, status: problem.status, verdict, problem, request };
 }
 
+const DEFAULT_MAX_ACCEPTANCE_SECONDS = 900;
+const MAX_BINDING_STRING = 256;
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null) {
+    for (const key of Object.keys(value as object)) deepFreeze((value as Record<string, unknown>)[key]);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** Deep, frozen copy of the challenge context so later caller mutation cannot reach the verified data. */
+function snapshotContext(context: X402EvcContext): X402EvcContext {
+  return deepFreeze(structuredClone(context));
+}
+
+function isBoundedString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_BINDING_STRING && !value.includes('\0');
+}
+
+/** Validate a resolver's output; returns the fault message, or undefined when usable. */
+function validateResolution(
+  resolution: unknown,
+  audience: string,
+  nowUnix: number,
+  maxAcceptance: number,
+): string | undefined {
+  if (typeof resolution !== 'object' || resolution === null) return 'payee resolver returned no result';
+  const { binding, acceptUntil } = resolution as { binding?: unknown; acceptUntil?: unknown };
+  if (typeof binding !== 'object' || binding === null) return 'payee resolver returned no binding';
+  const b = binding as Record<string, unknown>;
+  if (b.kind !== 'issuer_quote') return 'payee binding kind is not supported';
+  if (!isBoundedString(b.issuer) || !isBoundedString(b.kid) || !isBoundedString(b.jti)) return 'payee binding identifiers are not usable';
+  if (b.issuer !== audience) return 'payee binding issuer does not equal the host audience';
+  if (!isUnixSeconds(b.exp)) return 'payee binding exp is not a finite unix time';
+  if (typeof b.token_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(b.token_sha256)) return 'payee binding token hash is malformed';
+  if (!isUnixSeconds(acceptUntil)) return 'payee resolver acceptUntil is not a finite unix time';
+  if (acceptUntil < b.exp) return 'payee resolver acceptUntil precedes the binding exp';
+  if (acceptUntil - nowUnix > maxAcceptance) return 'payee resolver acceptUntil exceeds maxAcceptanceSeconds';
+  return undefined;
+}
+
 /**
  * Verify one x402 retry's authorization evidence (spec §2 step 3).
  *
@@ -374,25 +463,77 @@ export async function verifyX402EvcAuthorization(
   presentation: string | null | undefined,
   options: X402EvcVerifyOptions,
 ): Promise<X402EvcDecision> {
-  const nowUnix = options.now !== undefined ? options.now() : Math.floor(Date.now() / 1000);
+  const readClock = (): number => (options.now !== undefined ? options.now() : Math.floor(Date.now() / 1000));
+  const nowUnix = readClock();
   if (!isUnixSeconds(nowUnix)) {
     return denied(deny('internal_error', 'host clock did not produce a finite unix time'));
   }
-  if (!isUnixSeconds(options.context.expiresAt)) {
+
+  // Mode selection (spec §4.2): exactly one of context / localChallenge.
+  const local = options.localChallenge;
+  if ((options.context === undefined) === (local === undefined)) {
+    return denied(deny('internal_error', 'exactly one of context or localChallenge is required'));
+  }
+  if (local !== undefined && options.resolvePayee === undefined) {
+    return denied(deny('internal_error', 'local mode requires resolvePayee (quote single-use is the replay protection)'));
+  }
+  if (options.resolvePayee !== undefined && options.payeeMatches !== undefined) {
+    return denied(deny('internal_error', 'resolvePayee and payeeMatches are mutually exclusive'));
+  }
+  const maxAcceptance = options.maxAcceptanceSeconds ?? DEFAULT_MAX_ACCEPTANCE_SECONDS;
+  if (!Number.isInteger(maxAcceptance) || maxAcceptance < 1 || maxAcceptance > 2 ** 40) {
+    return denied(deny('internal_error', 'maxAcceptanceSeconds is not a usable bound'));
+  }
+
+  // Snapshot everything security-relevant before the first await.
+  const rawContext = (options.context ?? local!.context) as X402EvcContext;
+  if (!isUnixSeconds(rawContext.expiresAt)) {
     return denied(deny('internal_error', 'challenge expiresAt is not a finite unix time'));
   }
+  const audience = options.audience;
+  let context: X402EvcContext;
+  try {
+    context = snapshotContext(rawContext);
+  } catch {
+    return denied(deny('internal_error', 'challenge context is not snapshot-able'));
+  }
+  const checkedLeg = local !== undefined ? (deepFreeze(structuredClone(local.selectedLeg)) as Readonly<X402Leg>) : undefined;
 
   if (presentation === null || presentation === undefined || presentation.trim() === '') {
     return denied(deny('missing_authorization', 'no authorization presentation on the request'));
   }
 
-  if (options.context.expiresAt <= nowUnix) {
+  if (context.expiresAt <= nowUnix) {
     return denied(deny('expired', 'the x402 challenge context has expired'));
+  }
+
+  // §4.2: bind the payee through the resolver BEFORE building the request.
+  let resolution: PayeeResolution | undefined;
+  let expiresAt = context.expiresAt;
+  if (options.resolvePayee !== undefined) {
+    try {
+      resolution = await options.resolvePayee({ audience, context, now: nowUnix });
+    } catch (err) {
+      if (isVerifyDenial(err)) return denied(err.toVerdict());
+      return denied(deny('internal_error', 'payee resolver failed'));
+    }
+    const fault = validateResolution(resolution, audience, nowUnix, maxAcceptance);
+    if (fault !== undefined) return denied(deny('internal_error', fault));
+    // Fresh time after the await: both the challenge and the quote must still be live.
+    const afterResolve = readClock();
+    if (!isUnixSeconds(afterResolve)) return denied(deny('internal_error', 'host clock did not produce a finite unix time'));
+    if (context.expiresAt <= afterResolve) return denied(deny('expired', 'the x402 challenge context has expired'));
+    if (resolution.acceptUntil <= afterResolve) return denied(deny('expired', 'the quote acceptance deadline has passed'));
+    expiresAt = Math.min(context.expiresAt, resolution.acceptUntil);
+    context = Object.freeze({ ...context, expiresAt });
   }
 
   let request: X402EvcVerifierRequest;
   try {
-    request = buildX402EvcRequest({ ...options, bundle: presentation });
+    request = buildX402EvcRequestInternal(
+      { ...options, context, bundle: presentation, now: () => nowUnix },
+      resolution?.binding,
+    );
   } catch (err) {
     if (isVerifyDenial(err)) return denied(err.toVerdict());
     return denied(deny('internal_error', 'failed to build the verifier request'));
@@ -410,21 +551,37 @@ export async function verifyX402EvcAuthorization(
     return denied(verdict, request);
   }
 
-  // Reserve-before-act (§7.3): the profile's challenge nonce plus any nonces
-  // the verifier asked the host to burn — atomically, so a replayed challenge
-  // and a replayed presentation are both refused before any payment logic.
+  // Fresh time after dispatch: re-check the finalized deadline (challenge and quote).
+  const afterDispatch = readClock();
+  if (!isUnixSeconds(afterDispatch)) return denied(deny('internal_error', 'host clock did not produce a finite unix time'), request);
+  if (expiresAt <= afterDispatch) return denied(deny('expired', 'the x402 challenge context has expired'), request);
+
+  // Reserve-before-act (§7.3): the challenge nonce, the quote's (issuer, jti)
+  // through its whole acceptance window, and any nonces the verifier asked
+  // the host to burn — atomically, deduplicated on the store's own identity
+  // keeping the longest retention, so a replayed challenge, a replayed quote
+  // and a replayed presentation are all refused before any payment logic.
   const store = options.nonceStore ?? defaultNonceStore;
-  const entries: ConsumeNonce[] = [
-    {
-      issuer_key: `x402_evc:${options.audience}`,
-      nonce: options.context.nonce,
-      retain_until: options.context.expiresAt,
-    },
+  const raw: ConsumeNonce[] = [
+    { issuer_key: `x402_evc:${audience}`, nonce: context.nonce, retain_until: expiresAt },
+    ...(resolution !== undefined
+      ? [{ issuer_key: `x402_evc_quote:${resolution.binding.issuer}`, nonce: resolution.binding.jti, retain_until: resolution.acceptUntil }]
+      : []),
     ...(verdict.consume_nonces ?? []),
   ];
+  const byIdentity = new Map<string, ConsumeNonce>();
+  for (const entry of raw) {
+    if (entry.issuer_key.includes('\0') || entry.nonce.includes('\0')) {
+      return denied(deny('internal_error', 'nonce identifiers must not contain NUL'), request);
+    }
+    const id = `${entry.issuer_key}\0${entry.nonce}`;
+    const prior = byIdentity.get(id);
+    if (prior === undefined || entry.retain_until > prior.retain_until) byIdentity.set(id, { ...entry });
+  }
+  const entries = [...byIdentity.values()];
   let reserved: boolean;
   try {
-    reserved = await store.reserve(entries, nowUnix);
+    reserved = await store.reserve(entries, afterDispatch);
   } catch {
     // A broken nonce store cannot prove non-replay — fail closed (§7.3),
     // never an allow, and never an unhandled rejection.
@@ -433,6 +590,19 @@ export async function verifyX402EvcAuthorization(
   if (!reserved) {
     return denied(deny('nonce_replayed', 'challenge nonce or presentation nonce already used'), request);
   }
+  // Final re-check after reservation (sync or awaited): the reservation is
+  // already burned, which is the correct side of the race — never an allow
+  // past the deadline.
+  const afterReserve = readClock();
+  if (!isUnixSeconds(afterReserve)) return denied(deny('internal_error', 'host clock did not produce a finite unix time'), request);
+  if (expiresAt <= afterReserve) return denied(deny('expired', 'the x402 challenge context expired during reservation'), request);
 
-  return { allowed: true, status: 200, verdict, request };
+  return {
+    allowed: true,
+    status: 200,
+    verdict,
+    request,
+    expiresAt,
+    ...(checkedLeg !== undefined ? { checkedLeg } : {}),
+  };
 }

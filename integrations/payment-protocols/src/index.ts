@@ -109,3 +109,24 @@ export type {
   StripeACPContext,
   StripeACPSpendDecision,
 } from './types';
+
+// x402 EVC profile §4.2 — issuer-quoted payee binding (agent-side host mode)
+export {
+  createIssuerQuotePayeeResolver,
+  type IssuerQuoteConfig,
+  type IssuerQuoteIssuer,
+  type IssuerQuoteKey,
+  type JwsAlg,
+  type PayeeBinding,
+  type PayeeResolution,
+  type PayeeResolver,
+} from './x402-issuer-quote';
+export {
+  x402LocalChallenge,
+  MAX_LOCAL_CHALLENGE_SECONDS,
+  MAX_PAYMENT_REQUIRED_CHARS,
+  type X402Leg,
+  type X402LocalChallenge,
+  type X402LocalChallengeInput,
+} from './x402-local-challenge';
+export { isUnixSeconds } from './x402-evc';
