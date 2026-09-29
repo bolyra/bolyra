@@ -546,8 +546,20 @@ async function verifyInner(
   // not be able to change the audience, verifier, clock or store mid-flight.
   const {
     audience, amountToUsd, program, model, payeeMatches, resolvePayee,
-    localChallenge: local, nonceStore, maxAcceptanceSeconds,
+    nonceStore, maxAcceptanceSeconds,
   } = options;
+  // The local challenge is snapshotted ONCE, up front, so every later read
+  // (validation, the context, the checked leg) sees the same bytes; an
+  // accessor-backed object cannot show one leg to validation and another to
+  // settlement (Codex review 3).
+  let local: X402LocalChallenge | undefined;
+  if (options.localChallenge !== undefined) {
+    try {
+      local = deepFreeze(structuredClone(options.localChallenge));
+    } catch {
+      return denied(deny('internal_error', 'localChallenge is not snapshot-able'));
+    }
+  }
   // The verifier configuration is DATA (trust anchors, destination), so it
   // is deep-copied, not just referenced: a caller sharing one mutable config
   // across concurrent calls cannot append a trust key while a resolver await
@@ -613,7 +625,7 @@ async function verifyInner(
   if (local !== undefined) {
     const fault = validateLocalChallenge(local, context);
     if (fault !== undefined) return denied(deny('internal_error', fault));
-    localLeg = structuredClone(local.selectedLeg);
+    localLeg = local.selectedLeg as X402Leg; // from the frozen snapshot
   }
 
   if (typeof presentation !== 'string' || presentation.trim() === '') {

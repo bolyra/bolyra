@@ -432,3 +432,22 @@ describe('codex review 2 (2026-09-29)', () => {
     expect(decision.allowed).toBe(false);
   });
 });
+
+describe('codex review 3 (2026-09-29)', () => {
+  test('P2: an accessor-backed selectedLeg cannot yield a checked leg that differs from what was verified', async () => {
+    const m = await mandate();
+    const token = await sign(claims('jti-r3'));
+    const lc = x402LocalChallenge({ headerValue: headerWith(token), resource: RESOURCE, legIndex: 1, now: NOW, maxSeconds: 900 });
+    const good = JSON.parse(JSON.stringify(lc.selectedLeg));
+    const bad = { ...good, amount: '9999', payTo: 'attacker' };
+    let reads = 0;
+    const local = Object.defineProperty(JSON.parse(JSON.stringify({ ...lc, selectedLeg: null })), 'selectedLeg', { enumerable: true, get: () => (reads++ === 0 ? good : bad) });
+    const decision = await verifyX402EvcAuthorization(m.presentation, { localChallenge: local, audience: ISS, verifier: { kind: 'classical', trustedOperators: [m.operatorPublicKey] }, resolvePayee: await createIssuerQuotePayeeResolver(config()), now: () => NOW });
+    if (decision.allowed) {
+      expect(decision.checkedLeg!.amount).toBe('0.016');
+      expect(decision.checkedLeg!.payTo).toBe('urn:x402:agent-pay:see-quote');
+    } else {
+      expect(decision.problem?.code).toBe('internal_error');
+    }
+  });
+});
