@@ -21,6 +21,36 @@ let es384: { privateKey: CryptoKey; publicJwk: JWK };
 let es256: { privateKey: CryptoKey; publicJwk: JWK };
 let other384: { privateKey: CryptoKey; publicJwk: JWK };
 
+// In-process network sanity spies: the resolver must never reach for a key
+// or anything else over the network. The authoritative isolation gate is the
+// --network none container run (see the plan's Verification section).
+/* eslint-disable @typescript-eslint/no-var-requires */
+const nodeHttp = require('node:http') as typeof import('node:http');
+const nodeHttps = require('node:https') as typeof import('node:https');
+const nodeNet = require('node:net') as typeof import('node:net');
+const nodeTls = require('node:tls') as typeof import('node:tls');
+const nodeDns = require('node:dns') as typeof import('node:dns');
+/* eslint-enable @typescript-eslint/no-var-requires */
+const networkCalls: string[] = [];
+const blocked = (name: string) => (...args: unknown[]): never => { networkCalls.push(`${name}(${String(args[0]).slice(0, 40)})`); throw new Error(`network call attempted: ${name}`); };
+const originalFetch = globalThis.fetch;
+beforeAll(() => {
+  (globalThis as { fetch: unknown }).fetch = blocked('fetch');
+  jest.spyOn(nodeHttp, 'request').mockImplementation(blocked('http.request') as never);
+  jest.spyOn(nodeHttp, 'get').mockImplementation(blocked('http.get') as never);
+  jest.spyOn(nodeHttps, 'request').mockImplementation(blocked('https.request') as never);
+  jest.spyOn(nodeHttps, 'get').mockImplementation(blocked('https.get') as never);
+  jest.spyOn(nodeNet, 'connect').mockImplementation(blocked('net.connect') as never);
+  jest.spyOn(nodeNet, 'createConnection').mockImplementation(blocked('net.createConnection') as never);
+  jest.spyOn(nodeTls, 'connect').mockImplementation(blocked('tls.connect') as never);
+  jest.spyOn(nodeDns, 'lookup').mockImplementation(blocked('dns.lookup') as never);
+});
+afterAll(() => {
+  (globalThis as { fetch: unknown }).fetch = originalFetch;
+  jest.restoreAllMocks();
+  expect(networkCalls).toEqual([]);
+});
+
 beforeAll(async () => {
   const mk = async (alg: 'ES256' | 'ES384') => {
     const kp = await generateKeyPair(alg, { extractable: true });
