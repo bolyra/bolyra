@@ -74,3 +74,15 @@
   render templates with single-pass brace-safe substitution, never str.format().
   Provider model pins (~/.codex/config.toml) are stale-pin hazards — on unexplained
   4xx from a judge CLI, probe the model id first.
+
+## 2026-09-29 — issuer-quote build (PR #193) review corrections
+- Snapshot once, then check: `deepFreeze(structuredClone(x))` for EVERY caller-supplied
+  object before the first read; validate-then-clone and clone-per-read are TOCTOU holes
+  (found three separate times by three reviewers on the same PR).
+- The verifier request must carry the clock re-sampled AFTER any await that precedes it;
+  entry-time `now` let an expired mandate authorize.
+- `npm install <pkg>` in a package listing a dep in both `dependencies` and
+  `peerDependencies` rewrites the dep range to the peer range silently; diff
+  package.json after every install there.
+- A settlement object derived from attacker-controlled bytes must be an allow-list
+  projection (token + verified paths), never the raw object with checks layered on top.
