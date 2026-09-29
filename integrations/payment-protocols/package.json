@@ -7,19 +7,21 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "@bolyra/sdk": "^0.6.1",
+    "@bolyra/mpp": "^0.4.0",
     "@bolyra/receipts": "^0.11.0",
-    "@bolyra/mpp": "^0.4.0"
+    "@bolyra/sdk": ">=0.4.0",
+    "jose": "^6.2.12"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^26.0.0",
     "jest": "^30.4.2",
     "ts-jest": "^29.2.0",
-    "@types/jest": "^30.0.0"
+    "typescript": "^5.5.0"
   },
   "peerDependencies": {
     "@bolyra/sdk": ">=0.4.0"
@@ -57,5 +59,8 @@
     "zero-knowledge",
     "privacy"
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=23.0.0"
+  }
 }
