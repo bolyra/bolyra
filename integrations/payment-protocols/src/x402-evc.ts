@@ -68,6 +68,8 @@ export const X402_EVC_EXPIRES_HEADER = 'x402-evc-expires';
  * specification's `accepts` entries), NOT the legacy `x402.ts` adapter shape.
  */
 export interface X402EvcRequirements {
+  /** x402 v2 payment scheme (e.g. `exact`, `agent-pay`). Optional; pinned by §4.2 resolvers. */
+  scheme?: string;
   /** x402 v2 network identifier (e.g. `base-sepolia`). */
   network: string;
   /** Asset identifier — token address or ISO currency code. */
@@ -81,6 +83,8 @@ export interface X402EvcRequirements {
    * stablecoin). Default 6 (USDC). Non-USD assets MUST supply `amountToUsd`.
    */
   assetDecimals?: number;
+  /** x402 v2 `accepts[].extra`, carried for §4.2 resolvers (e.g. an issuer quote token). */
+  extra?: Record<string, unknown>;
 }
 
 /** The 402 challenge context the resource server issued (spec §2 step 1). */

@@ -10,8 +10,8 @@ throughout, plus spec §4.2; Codex-approved plan at
 - [x] 2. A1 payeeMatches literal-true + thenable assimilation (red → green)
 - [x] 3. A2 asset-aware resolveUsdAmount, fixture assetDecimals:6 (red → green)
 - [x] 4. A3 finite-time guards (red → green)
-- [ ] 5. Types + local challenge helper `x402LocalChallenge` (red → green)
-- [ ] 6. jws.ts signature layer vs RFC 7515 A.3 (red → green)
+- [x] 5. Types + local challenge helper `x402LocalChallenge` (red → green)
+- [x] 6. jws.ts signature layer vs RFC 7515 A.3 (red → green)
 - [ ] 7. createIssuerQuotePayeeResolver: config validation, parser contract,
       claims, products, settlementFields (red → green)
 - [ ] 8. verify wiring: resolvePayee, snapshots, double recheck, quote nonce,
