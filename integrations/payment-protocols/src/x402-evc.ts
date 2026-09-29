@@ -545,9 +545,19 @@ async function verifyInner(
   // (M1): a caller sharing one options object across concurrent calls must
   // not be able to change the audience, verifier, clock or store mid-flight.
   const {
-    audience, verifier, amountToUsd, program, model, payeeMatches, resolvePayee,
+    audience, amountToUsd, program, model, payeeMatches, resolvePayee,
     localChallenge: local, nonceStore, maxAcceptanceSeconds,
   } = options;
+  // The verifier configuration is DATA (trust anchors, destination), so it
+  // is deep-copied, not just referenced: a caller sharing one mutable config
+  // across concurrent calls cannot append a trust key while a resolver await
+  // is pending (Codex review 2). Functions and the store stay by reference.
+  let verifier: VerifierConfig;
+  try {
+    verifier = deepFreeze(structuredClone(options.verifier));
+  } catch {
+    return denied(deny('internal_error', 'verifier configuration is not snapshot-able'));
+  }
   const clock = options.now;
   const readClock = (): number => (clock !== undefined ? clock() : Math.floor(Date.now() / 1000));
   const nowUnix = readClock();

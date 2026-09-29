@@ -420,3 +420,15 @@ describe('codex review 1 (2026-09-29)', () => {
     expect(decision.request?.now_unix).toBe(NOW + 10);
   });
 });
+
+describe('codex review 2 (2026-09-29)', () => {
+  test('P2: a verifier configuration mutated during resolvePayee does not reach dispatch (deep snapshot)', async () => {
+    const m = await mandate();
+    const verifier = { kind: 'classical' as const, trustedOperators: [] as Array<typeof m.operatorPublicKey> }; // empty trust list at entry
+    const inner = await createIssuerQuotePayeeResolver(config());
+    const slow: PayeeResolver = async (input) => { const out = await inner(input); verifier.trustedOperators.push(m.operatorPublicKey); return out; };
+    const lc = x402LocalChallenge({ headerValue: headerWith(await sign(claims('jti-r2'))), resource: RESOURCE, legIndex: 1, now: NOW, maxSeconds: 900 });
+    const decision = await verifyX402EvcAuthorization(m.presentation, { localChallenge: lc, audience: ISS, verifier, resolvePayee: slow, now: () => NOW });
+    expect(decision.allowed).toBe(false);
+  });
+});
