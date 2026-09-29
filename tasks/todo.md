@@ -22,11 +22,26 @@ throughout, plus spec §4.2; Codex-approved plan at
       residual wording fixes; CHANGELOG 0.9.0 (BREAKING A2); demo assetDecimals
 - [x] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
       consumer smoke
-- [~] 12. sdk-guardian PASS-after-fixes + security SHIP-after-fixes DONE; Codex review → clean; DCO commits; PR;
+- [x] 12. sdk-guardian PASS-after-fixes + security SHIP-after-fixes DONE; Codex review → clean; DCO commits; PR;
       CI on PR and main
 
-## Review
-(fill when done)
+## Review (2026-09-29)
+
+Shipped on branch `feat/x402-issuer-quote-payee` (PR to follow), 12 DCO commits.
+- Tests: 343 green in the package (was 132); `typecheck:test` green; node:20.19 and
+  node:22.12 gates green incl. packed CJS/ESM consumers; resolver suites green under
+  `--network none` (194).
+- Reviews: bolyra-sdk-guardian FAIL → fixed (sdk range widened by the jose install,
+  checkedLeg vs verified requirements, jsdoc/CHANGELOG honesty); bolyra-security
+  SHIP WITH FIXES → fixed (H1 unbound `extra` fields reaching settlement, M1 options
+  re-read after await, L1-L4, I1/I3); Codex `review --base origin/main` 4 rounds
+  (3 findings → 1 → 1 → clean): fresh request clock after resolution, dotted
+  tokenField, 2×skew bound, verifier config deep copy, local challenge snapshot-first.
+- Pattern worth keeping: every "snapshot" must be ONE structuredClone taken before any
+  read, and every check must run on that clone; three separate findings (L3, verifier
+  config, selectedLeg) were the same TOCTOU shape.
+- Not done: publish 0.9.0 (separate, Codex-routed); the reply to Zach/probe402
+  (separate Claude-take → Codex → founder-send step).
 
 ---
 
