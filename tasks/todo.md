@@ -18,7 +18,7 @@ throughout, plus spec §4.2; Codex-approved plan at
       checkedLeg, payee_binding (red → green)
 - [x] 9. openssl full-profile ES256/ES384 fixtures + sanitized Tavily fixture +
       real-token wrong-key test + replay/race/config-fault suites
-- [ ] 10. tsconfig.test.json + typecheck:test + ci.yml; README section; spec §4.2;
+- [x] 10. tsconfig.test.json + typecheck:test + ci.yml; README section; spec §4.2;
       residual wording fixes; CHANGELOG 0.9.0 (BREAKING A2); demo assetDecimals
 - [ ] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
       consumer smoke
