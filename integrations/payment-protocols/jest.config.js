@@ -6,7 +6,7 @@ module.exports = {
     '^@bolyra/sdk$': '<rootDir>/../../sdk/src',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(@noble|@bolyra/receipts)/)',
+    'node_modules/(?!(@noble|@bolyra/receipts|jose)/)',
   ],
   transform: {
     '^.+\\.jsx?$': [

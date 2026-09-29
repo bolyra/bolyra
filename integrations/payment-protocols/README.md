@@ -183,6 +183,68 @@ const { satisfied, reasons } = verifySpendPolicyProof(bitmask, {
 });
 ```
 
+## x402 EVC profile — issuer-quoted payee binding (§4.2)
+
+The x402 EVC authorization-evidence profile (`spec/x402-evc-profile-v0.md`)
+carries "who permitted this spend?" through the 402/retry round-trip. Its
+payee check is byte equality `audience === payTo`. When a 402 leg names a
+placeholder `payTo` and carries an issuer-signed quote, an agent-side host
+can bind the payee to the quote issuer instead:
+
+```ts
+import {
+  createIssuerQuotePayeeResolver,
+  verifyX402EvcAuthorization,
+  x402LocalChallenge,
+} from '@bolyra/payment-protocols';
+
+const resolvePayee = await createIssuerQuotePayeeResolver({
+  issuers: new Map([['https://x402.tavily.com', {
+    payTo: 'urn:x402:agent-pay:see-quote', scheme: 'agent-pay', network: 'aws:base',
+    audience: 'aws:marketplace', payToRole: 'seller',
+    keys: new Map([['tavily-agentpay-x402-signing-key', { alg: 'ES384', jwk /* provisioned out of band */ }]]),
+    products: new Map([['https://x402.tavily.com/search', {
+      reference: 'tavily-search-advanced', 'settlement.product_id': 'prod-maeet6sajeg42',
+    }]]),
+    settlementFields: [
+      { challenge: 'extra.reference', claim: 'reference' },
+      { challenge: 'extra.settlement.product_id', claim: 'settlement.product_id' },
+    ],
+    unboundExtraFields: ['tier'], // present on the leg, unverified, never reaches checkedLeg
+  }]]),
+});
+
+const local = x402LocalChallenge({
+  headerValue: response.headers.get('payment-required')!, // exactly as received
+  resource: 'https://x402.tavily.com/search',             // host-known outbound URL
+  legIndex: 1, now: Math.floor(Date.now() / 1000), maxSeconds: 300,
+});
+
+const decision = await verifyX402EvcAuthorization(presentation, {
+  localChallenge: local, audience: 'https://x402.tavily.com', resolvePayee,
+  verifier: { kind: 'classical', trustedOperators }, nonceStore /* shared, durable */,
+});
+if (decision.allowed) settle(decision.checkedLeg); // the ONLY leg to settle
+```
+
+What a successful binding proves: the holder of the issuer's key quoted this
+product at this price within this window, and the challenge's settlement
+fields match that quote. What it does NOT prove: ownership of any derived
+on-chain address (an unbound derived `payTo` still denies), that the quote
+was addressed to this host, who ultimately receives funds, or delivery.
+`x402_evc.payee_binding` is a host assertion for audit; `payee` stays the
+literal placeholder, and receipts under spec §4.1 do not commit to the
+binding. `token_sha256` is an audit handle, not a unique quote identifier
+(ECDSA signatures are malleable); replay identity is `(issuer, jti)`. Keys
+are never discovered; a resolver never touches the network. Any leaf under
+`extra` that is not the token, a bound settlement field, or a declared
+`unboundExtraFields` entry denies, and `checkedLeg.extra` carries only the
+verified paths.
+
+The issuer, key id and product identifiers above are the shape observed on
+a public 402 on 2026-09-29 and are used as an example only; no endorsement
+is implied.
+
 ## Design Principles
 
 1. **Thin glue** — all cryptographic work delegates to `@bolyra/sdk`

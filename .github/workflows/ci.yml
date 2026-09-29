@@ -268,6 +268,8 @@ jobs:
 
       - run: npx tsc --noEmit
         working-directory: integrations/payment-protocols
+      - run: npm run typecheck:test
+        working-directory: integrations/payment-protocols
       - run: npm test
         working-directory: integrations/payment-protocols
 

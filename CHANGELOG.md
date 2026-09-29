@@ -451,6 +451,103 @@ Clear to tag.
 
 - Dependencies: `@bolyra/receipts@~0.11.0`, `@bolyra/mpp@^0.4.0`.
 
+## @bolyra/payment-protocols 0.9.0 (2026-09-29)
+
+### Added
+
+- x402 EVC profile §4.2 — **issuer-quoted payee binding** for an agent-side
+  host. When a 402 names a placeholder `payTo` and carries an issuer-signed
+  quote (the Tavily `agent-pay` shape observed 2026-09-29 via probe402's
+  report), the host can bind the payee to the quote ISSUER: host `audience`
+  must byte-equal the token `iss`, the token must verify under an
+  out-of-band provisioned public key, and price, product and every
+  settlement-consumed challenge field must equal the authenticated claims.
+  New: `createIssuerQuotePayeeResolver(config)` (async; rejects at creation
+  on any configuration fault), `verifyX402EvcAuthorization({ resolvePayee,
+  localChallenge, maxAcceptanceSeconds })`, `x402LocalChallenge()` (builds
+  the profile context from a raw `PAYMENT-REQUIRED` header: nonce = SHA-256
+  of the header value exactly as received, provisional deadline finalized
+  against the quote), `X402EvcExtension.payee_binding` (a host assertion for
+  audit; `payee` stays the literal placeholder), `X402EvcDecision.expiresAt`
+  and `checkedLeg` (allow only; the ONLY object to pass to settlement).
+  The quote's `(iss, jti)` is reserved through its whole acceptance window
+  with the challenge nonce and the verifier's `consume_nonces`, atomically.
+  What a binding proves: who quoted this product at this price within this
+  window. What it does NOT prove: ownership of a derived on-chain address
+  (an unbound derived payee still denies), that the quote was addressed to
+  this host, who receives funds, or delivery.
+- `X402EvcRequirements.scheme` and `.extra` (x402 v2 `accepts[]` fields).
+- Internal signature layer (`src/x402-issuer-quote/jws.ts`, not part of the
+  package entry: a strict compact-JWS parser in front of jose — canonical
+  base64url, fatal UTF-8, plain-object header/payload with no
+  prototype-named members, exact `alg`, no `crit`/`b64`/token-supplied
+  keys) verified against RFC 7515 Appendix A.3 and two full-profile
+  fixtures signed independently with OpenSSL.
+- Unbound `extra` fields are rejected: every leaf under the leg's `extra`
+  must be the token field, a `settlementFields` challenge path, or listed in
+  the new per-issuer `unboundExtraFields` (e.g. Tavily's `tier`); anything
+  else denies `request_mismatch` (`extra_unbound`). `checkedLeg.extra` is
+  trimmed to the token field plus the settlement-verified paths, so nothing
+  unverified reaches settlement (`PayeeResolution.verifiedExtraPaths`).
+- Other exports: `isUnixSeconds`, `MAX_LOCAL_CHALLENGE_SECONDS`,
+  `MAX_PAYMENT_REQUIRED_CHARS`, and the types `JwsAlg`, `PayeeBinding`,
+  `PayeeResolution`, `PayeeResolver`, `IssuerQuoteConfig`,
+  `IssuerQuoteIssuer`, `IssuerQuoteKey`, `X402Leg`, `X402LocalChallenge`,
+  `X402LocalChallengeInput`.
+
+### Changed (BREAKING)
+
+- Fail-closed hardening of three pre-existing paths in the x402 EVC profile
+  (A1-A3): `payeeMatches` must return literal `true` — a Promise or any
+  truthy non-boolean now DENIES `request_mismatch` (it failed OPEN before,
+  and a rejecting Promise crashed the process); `resolveUsdAmount` is
+  asset-aware — `iso4217:USD` amounts are decimal USD, other `iso4217:*`
+  currencies require `amountToUsd`, and every other asset keeps the 1:1
+  USD-stablecoin atomic mapping ONLY when `assetDecimals` is supplied
+  explicitly (omitting it now fails closed; fractional atomic amounts,
+  exponent syntax, zero and > 1e15 are rejected; conversion is exact via
+  BigInt); a `NaN` clock or `NaN` `expiresAt` now fails closed instead of
+  bypassing the expiry comparison. The result checks apply on EVERY path,
+  including a custom `amountToUsd` and `iso4217:USD`: a zero amount, a
+  value above 1e15, an `amount` that is empty or longer than 40 characters,
+  and a converter output that is not a strict decimal string
+  (`^(0|[1-9]\d*)(\.\d{1,18})?$`, no padding, no exponent) now deny
+  `internal_error` where some used to pass through. Timestamps (`now`,
+  `expiresAt`, every compared time) must be finite, non-negative and at most
+  2^40, so a millisecond timestamp no longer passes as a far-future deadline.
+  A challenge context that `structuredClone` cannot copy denies.
+- `X402EvcVerifyOptions.context` is now optional at the type level (exactly
+  one of `context` / `localChallenge` is required at runtime). Callers that
+  pass `context` compile unchanged; code that reads `options.context.x`
+  from a value typed as `X402EvcVerifyOptions` needs a narrowing check.
+- `verifyX402EvcAuthorization` snapshots every security-relevant option
+  (`audience`, `verifier`, `nonceStore`, `now`, hooks) before its first
+  await, treats only a literal `true` from `nonceStore.reserve` as a
+  reservation, deduplicates reservation entries on the exact
+  `(issuer_key, nonce)` pair, validates the local challenge against the
+  snapshot it verifies (`mode`, header-hash nonce, deadline cap, leg equals
+  requirements), and always returns a decision instead of throwing.
+- `createIssuerQuotePayeeResolver` rejects `maxLifetimeSeconds + 2 *
+  clockSkewSeconds` above 900 at creation (issuance may sit `skew` ahead
+  and acceptance runs `skew` past `exp`), so a legitimately long quote at
+  the edge of tolerance cannot collide with the verifier's default
+  acceptance bound; a dotted `tokenField` is rejected at creation. The
+  verifier request carries the clock re-sampled AFTER payee resolution, so
+  a mandate that expires during resolution cannot authorize.
+- Runtime floor: `jose@^6` (the upstream-supported line) is ESM-only and is
+  loaded from the CommonJS build through Node's require(esm), so the
+  package declares `engines.node: "^20.19.0 || ^22.12.0 || >=23.0.0"`.
+  Node 22.12 prints an `ExperimentalWarning` on load; 20.19 does not.
+
+### Migration
+
+- Hosts that used the default amount mapping with a token asset (e.g.
+  USDC) must set `requirements.assetDecimals` (6 for USDC). That value is
+  the host's assertion of a 1:1 USD asset, not proof of the valuation.
+- Any `payeeMatches` that returned a Promise was never enforcing anything;
+  use `resolvePayee` (async) instead.
+- New script `typecheck:test` (`tsconfig.test.json`) runs in CI.
+
 ## @bolyra/payment-protocols 0.8.0 (2026-08-25)
 
 ### Changed

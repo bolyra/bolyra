@@ -1,3 +1,50 @@
+# x402 issuer-quoted payee binding + spec §4.2 (founder override 2026-09-29, started 2026-09-29)
+
+Goal: `@bolyra/payment-protocols` 0.9.0 with an agent-side host mode that binds a
+placeholder `payTo` to an issuer-signed quote (Tavily agent-pay shape), fail-closed
+throughout, plus spec §4.2; Codex-approved plan at
+`~/.claude/plans/reactive-giggling-sunset.md`. No publish, no outbound.
+
+- [x] 1. F2 compat probe: jose@^6 + engines + jest allow-list; compiled require
+      probe in node:20.19 and node:22.12; one-line jest import test
+- [x] 2. A1 payeeMatches literal-true + thenable assimilation (red → green)
+- [x] 3. A2 asset-aware resolveUsdAmount, fixture assetDecimals:6 (red → green)
+- [x] 4. A3 finite-time guards (red → green)
+- [x] 5. Types + local challenge helper `x402LocalChallenge` (red → green)
+- [x] 6. jws.ts signature layer vs RFC 7515 A.3 (red → green)
+- [x] 7. createIssuerQuotePayeeResolver: config validation, parser contract,
+      claims, products, settlementFields (red → green)
+- [x] 8. verify wiring: resolvePayee, snapshots, double recheck, quote nonce,
+      checkedLeg, payee_binding (red → green)
+- [x] 9. openssl full-profile ES256/ES384 fixtures + sanitized Tavily fixture +
+      real-token wrong-key test + replay/race/config-fault suites
+- [x] 10. tsconfig.test.json + typecheck:test + ci.yml; README section; spec §4.2;
+      residual wording fixes; CHANGELOG 0.9.0 (BREAKING A2); demo assetDecimals
+- [x] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
+      consumer smoke
+- [x] 12. sdk-guardian PASS-after-fixes + security SHIP-after-fixes DONE; Codex review → clean; DCO commits; PR;
+      CI on PR and main
+
+## Review (2026-09-29)
+
+Shipped on branch `feat/x402-issuer-quote-payee` (PR to follow), 12 DCO commits.
+- Tests: 343 green in the package (was 132); `typecheck:test` green; node:20.19 and
+  node:22.12 gates green incl. packed CJS/ESM consumers; resolver suites green under
+  `--network none` (194).
+- Reviews: bolyra-sdk-guardian FAIL → fixed (sdk range widened by the jose install,
+  checkedLeg vs verified requirements, jsdoc/CHANGELOG honesty); bolyra-security
+  SHIP WITH FIXES → fixed (H1 unbound `extra` fields reaching settlement, M1 options
+  re-read after await, L1-L4, I1/I3); Codex `review --base origin/main` 4 rounds
+  (3 findings → 1 → 1 → clean): fresh request clock after resolution, dotted
+  tokenField, 2×skew bound, verifier config deep copy, local challenge snapshot-first.
+- Pattern worth keeping: every "snapshot" must be ONE structuredClone taken before any
+  read, and every check must run on that clone; three separate findings (L3, verifier
+  config, selectedLeg) were the same TOCTOU shape.
+- Not done: publish 0.9.0 (separate, Codex-routed); the reply to Zach/probe402
+  (separate Claude-take → Codex → founder-send step).
+
+---
+
 # IETF draft-kondoju-evc-01 revision (Codex queue item 1, started 2026-08-27)
 
 Goal: -01 source ready to submit to datatracker, Codex-reviewed. Founder does
