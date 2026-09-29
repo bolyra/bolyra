@@ -20,7 +20,7 @@ throughout, plus spec §4.2; Codex-approved plan at
       real-token wrong-key test + replay/race/config-fault suites
 - [x] 10. tsconfig.test.json + typecheck:test + ci.yml; README section; spec §4.2;
       residual wording fixes; CHANGELOG 0.9.0 (BREAKING A2); demo assetDecimals
-- [ ] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
+- [x] 11. node:20.19 + node:22.12 full runs, --network none gate, npm pack
       consumer smoke
 - [ ] 12. sdk-guardian + security passes; Codex review → clean; DCO commits; PR;
       CI on PR and main
