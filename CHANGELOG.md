@@ -527,9 +527,13 @@ Clear to tag.
   `(issuer_key, nonce)` pair, validates the local challenge against the
   snapshot it verifies (`mode`, header-hash nonce, deadline cap, leg equals
   requirements), and always returns a decision instead of throwing.
-- `createIssuerQuotePayeeResolver` rejects `maxLifetimeSeconds +
-  clockSkewSeconds` above 900 at creation, so a legitimately long quote
-  cannot collide with the verifier's default acceptance bound.
+- `createIssuerQuotePayeeResolver` rejects `maxLifetimeSeconds + 2 *
+  clockSkewSeconds` above 900 at creation (issuance may sit `skew` ahead
+  and acceptance runs `skew` past `exp`), so a legitimately long quote at
+  the edge of tolerance cannot collide with the verifier's default
+  acceptance bound; a dotted `tokenField` is rejected at creation. The
+  verifier request carries the clock re-sampled AFTER payee resolution, so
+  a mandate that expires during resolution cannot authorize.
 - Runtime floor: `jose@^6` (the upstream-supported line) is ESM-only and is
   loaded from the CommonJS build through Node's require(esm), so the
   package declares `engines.node: "^20.19.0 || ^22.12.0 || >=23.0.0"`.

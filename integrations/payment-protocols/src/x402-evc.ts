@@ -617,6 +617,10 @@ async function verifyInner(
   // §4.2: bind the payee through the resolver BEFORE building the request.
   let resolution: PayeeResolution | undefined;
   let expiresAt = context.expiresAt;
+  // The clock the verifier evaluates the MANDATE against (P1): re-sampled
+  // after the resolver await so a mandate that expired meanwhile cannot
+  // authorize on entry-time.
+  let requestNow = nowUnix;
   if (resolvePayee !== undefined) {
     try {
       resolution = await resolvePayee({ audience, context, now: nowUnix });
@@ -633,12 +637,13 @@ async function verifyInner(
     if (resolution.acceptUntil <= afterResolve) return denied(deny('expired', 'the quote acceptance deadline has passed'));
     expiresAt = Math.min(context.expiresAt, resolution.acceptUntil);
     context = Object.freeze({ ...context, expiresAt });
+    requestNow = afterResolve;
   }
 
   let request: X402EvcVerifierRequest;
   try {
     request = buildX402EvcRequestInternal(
-      { context, audience, verifier, amountToUsd, program, model, payeeMatches, bundle: presentation, now: () => nowUnix },
+      { context, audience, verifier, amountToUsd, program, model, payeeMatches, bundle: presentation, now: () => requestNow },
       resolution?.binding,
     );
   } catch (err) {

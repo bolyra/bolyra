@@ -270,7 +270,7 @@ describe('review fixes (2026-09-29)', () => {
   test('creation rejects maxLifetimeSeconds + clockSkewSeconds above 900 (G7/I5)', async () => {
     await expect(createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 900 })))
       .rejects.toMatchObject({ code: 'internal_error', detail: expect.objectContaining({ reason: 'max_lifetime' }) });
-    await expect(createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 840 }))).resolves.toBeDefined();
+    await expect(createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 780 }))).resolves.toBeDefined();
   });
   test('unbound extra leaves deny unless listed in unboundExtraFields (H1)', async () => {
     const token = await sign(baseClaims());
@@ -285,5 +285,20 @@ describe('review fixes (2026-09-29)', () => {
     const lenient = await createIssuerQuotePayeeResolver(config());
     const out = await resolve(lenient, requirements(await sign(baseClaims())));
     expect(out.verifiedExtraPaths.sort()).toEqual(['quoteToken', 'reference', 'settlement.product_id']);
+  });
+});
+
+describe('codex review 1 (2026-09-29)', () => {
+  test('P2: a dotted tokenField is rejected at creation (literal-key vs path ambiguity)', async () => {
+    await expect(createIssuerQuotePayeeResolver(config({ tokenField: 'quote.token' })))
+      .rejects.toMatchObject({ code: 'internal_error', detail: expect.objectContaining({ reason: 'token_field' }) });
+  });
+  test('P2: the acceptance bound counts issuance skew too (maxLifetime + 2*skew <= 900)', async () => {
+    await expect(createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 840 })))
+      .rejects.toMatchObject({ code: 'internal_error', detail: expect.objectContaining({ reason: 'max_lifetime' }) });
+    const r = await createIssuerQuotePayeeResolver(config({ clockSkewSeconds: 60 }, { maxLifetimeSeconds: 780 }));
+    // iat ahead by the full skew + full lifetime: acceptUntil = now + 59 + 780 + 60 = now + 899
+    const out = await resolve(r, requirements(await sign({ ...baseClaims(), iat: NOW + 59, exp: NOW + 59 + 780 })));
+    expect(out.acceptUntil - NOW).toBeLessThanOrEqual(900);
   });
 });

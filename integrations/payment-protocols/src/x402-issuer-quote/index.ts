@@ -82,7 +82,7 @@ export interface IssuerQuoteIssuer {
    * `request_mismatch` (`extra_unbound`), and these never reach `checkedLeg`.
    */
   unboundExtraFields?: string[];
-  /** Default 300; `maxLifetimeSeconds + clockSkewSeconds` MUST be at most 900. */
+  /** Default 300; `maxLifetimeSeconds + 2 * clockSkewSeconds` MUST be at most 900. */
   maxLifetimeSeconds?: number;
 }
 
@@ -262,9 +262,13 @@ async function compileIssuer(iss: string, raw: unknown, tokenField: string, skew
   if (!Number.isInteger(maxLifetimeSeconds) || (maxLifetimeSeconds as number) < 1 || (maxLifetimeSeconds as number) > MAX_LIFETIME) {
     throw configFault('max_lifetime', iss);
   }
-  // The resolver returns acceptUntil = exp + skew and a verifier bounds
-  // acceptUntil - now by 900 by default: keep the two consistent at creation.
-  if ((maxLifetimeSeconds as number) + skew > MAX_ACCEPTANCE_WINDOW) throw configFault('max_lifetime', `${iss}: maxLifetimeSeconds + clockSkewSeconds exceeds ${MAX_ACCEPTANCE_WINDOW}`);
+  // The resolver returns acceptUntil = exp + skew, `iat` may itself sit up to
+  // `skew` ahead of the host clock, and a verifier bounds acceptUntil - now by
+  // 900 by default: maxLifetime + 2*skew must fit, or a valid quote at the
+  // edge of tolerance would be rejected downstream as internal_error (P2).
+  if ((maxLifetimeSeconds as number) + 2 * skew > MAX_ACCEPTANCE_WINDOW) {
+    throw configFault('max_lifetime', `${iss}: maxLifetimeSeconds + 2 * clockSkewSeconds exceeds ${MAX_ACCEPTANCE_WINDOW}`);
+  }
 
   const verifiedExtraPaths = [tokenField];
   const allowedExtraPaths = new Set<string>([tokenField]);
@@ -294,7 +298,9 @@ export async function createIssuerQuotePayeeResolver(config: IssuerQuoteConfig):
   if (!isRecord(config)) throw configFault('config');
   if (!(config.issuers instanceof Map) || config.issuers.size === 0) throw configFault('issuers');
   const tokenField = config.tokenField ?? 'quoteToken';
-  if (!isIdentifier(tokenField)) throw configFault('token_field');
+  // A literal key under `extra`; a dot would be read as a nested path when
+  // the checked leg is rebuilt, so it is rejected outright (P2).
+  if (!isIdentifier(tokenField) || tokenField.includes('.')) throw configFault('token_field');
   const skew = config.clockSkewSeconds ?? DEFAULT_SKEW;
   if (!Number.isInteger(skew) || skew < 0 || skew > MAX_SKEW) throw configFault('clock_skew');
 

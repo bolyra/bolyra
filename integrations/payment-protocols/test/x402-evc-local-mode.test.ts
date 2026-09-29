@@ -407,3 +407,16 @@ describe('review fixes: converter output is normalized (I3)', () => {
     }
   });
 });
+
+describe('codex review 1 (2026-09-29)', () => {
+  test('P1: a mandate that expires while resolvePayee is awaited cannot authorize (verifier sees fresh time)', async () => {
+    const m = await issueMandate({ operatorPrivateKey: OPERATOR_PRIVATE_KEY, agentName: 'search-agent', audience: ISS, model: 'test-model', program: 'x402', maxUsd: '99', expiry: NOW + 1 });
+    let clock = NOW;
+    const inner = await createIssuerQuotePayeeResolver(config());
+    const slow: PayeeResolver = async (input) => { const out = await inner(input); clock = NOW + 10; return out; };
+    const lc = x402LocalChallenge({ headerValue: headerWith(await sign(claims('jti-p1'))), resource: RESOURCE, legIndex: 1, now: NOW, maxSeconds: 900 });
+    const decision = await verifyX402EvcAuthorization(m.presentation, { localChallenge: lc, audience: ISS, verifier: { kind: 'classical', trustedOperators: [m.operatorPublicKey] }, resolvePayee: slow, now: () => clock });
+    expect(decision.allowed).toBe(false);
+    expect(decision.request?.now_unix).toBe(NOW + 10);
+  });
+});
