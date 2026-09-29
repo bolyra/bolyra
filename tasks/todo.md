@@ -12,7 +12,7 @@ throughout, plus spec §4.2; Codex-approved plan at
 - [x] 4. A3 finite-time guards (red → green)
 - [x] 5. Types + local challenge helper `x402LocalChallenge` (red → green)
 - [x] 6. jws.ts signature layer vs RFC 7515 A.3 (red → green)
-- [ ] 7. createIssuerQuotePayeeResolver: config validation, parser contract,
+- [x] 7. createIssuerQuotePayeeResolver: config validation, parser contract,
       claims, products, settlementFields (red → green)
 - [ ] 8. verify wiring: resolvePayee, snapshots, double recheck, quote nonce,
       checkedLeg, payee_binding (red → green)

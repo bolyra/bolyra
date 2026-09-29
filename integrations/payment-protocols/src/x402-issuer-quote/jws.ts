@@ -91,6 +91,19 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /**
+ * Parse the protected header with the same shape rules as verification, but
+ * WITHOUT verifying anything. Callers use it to pick a key by `kid`; every
+ * decision still goes through {@link verifyCompactEs} afterwards.
+ */
+export function peekHeader(compact: string): Record<string, unknown> {
+  if (typeof compact !== 'string') throw new JwsRejected('compact_shape');
+  if (compact.length > MAX_COMPACT_JWS_CHARS) throw new JwsRejected('size');
+  const parts = compact.split('.');
+  if (parts.length !== 3 || parts.some((p) => p.length === 0)) throw new JwsRejected('compact_shape');
+  return parseJsonObjectPart(decodeCanonicalBase64url(parts[0]), 'header_object');
+}
+
+/**
  * Verify one compact JWS with exactly one expected algorithm and key.
  * Throws {@link JwsRejected}; never returns a partially verified result.
  */
