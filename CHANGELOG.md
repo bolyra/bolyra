@@ -28,6 +28,38 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## bolyra.ai — /playground rebuilt around real receipt verification (2026-09-30)
+
+The old page reported "signature VALID" after checking only hex lengths and
+emitted receipts with random signatures. Replaced (no package release):
+
+- **Verify receipts** runs the published `@bolyra/receipts@0.11.0` in the
+  browser: per-receipt envelope, ES256K signature, match against an
+  independently supplied expected signer, chain integrity with an optional
+  external checkpoint (expected count / head hash, never derived from the
+  pasted log), and instance binding reported verbatim (`ok` / `absent` /
+  failure code). Overall success is decided in one place and needs every
+  component; malformed, unsupported, unsigned and empty inputs never show
+  success.
+- **Simulate spend policy**: tier chosen independently of the amount, shipped
+  decimal tier semantics (`99.99` vs `100`, `9999.99` vs `10000`), no invented
+  cumulative budget; decisions are labelled simulated while the receipts are
+  real chained `bolyra.auth` receipts signed by a temporary in-tab key,
+  exportable as JSONL + signer document and verifiable with
+  `bolyra receipt verify-chain`.
+- Removed: Delegation Flow, Gateway Simulation, Base Wallet, the Ed25519
+  issuer, runtime Babel and CDN React. Prebuilt static bundle from
+  `apps/playground` (esbuild; exact pins; source + build script + generated
+  HTML committed).
+- Gates: `npm test` (unit, build determinism, extracted-artifact run against
+  repository fixtures), `npm run check` (committed page == fresh build, in
+  CI), a Playwright gate that serves the committed page under the production
+  CSP and rejects any unexpected request, and `test:cli` verifying the
+  browser's own export with `@bolyra/cli@0.9.0`. `landing/deploy.sh` runs all
+  of them and compares the live CSP to the snapshot before upload;
+  `landing/verify.sh` now proves `/playground` byte-identical to the committed
+  page, checks needles and version equality, and executes the fetched bundle.
+
 ## @bolyra/mpp 0.7.0 (2026-09-24)
 
 Decision evidence for the application, and a verifier-URL convention.

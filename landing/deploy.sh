@@ -81,6 +81,25 @@ EVC_LATEST=$(npm view "@bolyra/evc-conformance" version 2>/dev/null | tr -d '[:s
 # silent lie about which claims exist.
 node "$SCRIPT_DIR/gen-conformance.js" --check || { echo "ERROR: landing/conformance.html drifts from interop/claims.json — run node landing/gen-conformance.js" >&2; exit 1; }
 
+# Playground pre-upload gates. landing/playground.html is GENERATED from
+# apps/playground (React UI + the pinned @bolyra/receipts verifier bundled
+# inline). Before any byte reaches S3: the committed page must match a fresh
+# build, the extracted bundle must verify repository fixtures, the committed
+# page must work in Chromium under the PRODUCTION CSP with no unexpected
+# network, and the browser's own export must verify with the published CLI.
+# The CSP the browser gate applies is a snapshot; if the live policy changed,
+# the gate would be testing a stale contract, so compare first.
+echo "→ playground pre-upload gates (apps/playground)"
+[ -z "${PLAYGROUND_OFFLINE:-}" ] || { echo "ERROR: PLAYGROUND_OFFLINE is set; deploy.sh refuses to skip the CLI gate" >&2; exit 1; }
+PLAYGROUND_APP="$SCRIPT_DIR/../apps/playground"
+LIVE_CSP=$(curl -fsSI "https://bolyra.ai/playground?csp=$(date +%s)" | tr -d '\r' | grep -i '^content-security-policy:' | sed 's/^[^:]*: *//' | head -1)
+SNAP_CSP=$(tr -d '\r' < "$PLAYGROUND_APP/test/fixtures/csp.txt" | sed '/^$/d' | head -1)
+[ -n "$LIVE_CSP" ] || { echo "ERROR: live /playground returned no Content-Security-Policy header" >&2; exit 1; }
+[ "$LIVE_CSP" = "$SNAP_CSP" ] || { echo "ERROR: live CSP differs from apps/playground/test/fixtures/csp.txt — update the snapshot (and re-run the browser gate) before deploying" >&2; echo "  live: $LIVE_CSP" >&2; echo "  snap: $SNAP_CSP" >&2; exit 1; }
+echo "OK: live CSP matches the browser-gate snapshot"
+( cd "$PLAYGROUND_APP" && npm ci --no-audit --no-fund >/dev/null && npm test && npm run check && npm run test:browser && npm run test:cli ) || { echo "ERROR: playground gates failed — landing/playground.html must not be deployed" >&2; exit 1; }
+echo "OK: playground gates passed (unit, artifact, build drift, browser under production CSP, CLI on browser export)"
+
 echo "→ uploading index.html to s3://$BUCKET/"
 aws s3 cp "$INDEX" "s3://$BUCKET/index.html" \
   --content-type "text/html; charset=utf-8" \

@@ -306,6 +306,42 @@ done
 rm -f "$CONF_TMP"
 pass "/conformance, /conformance.html and a cache-busted fetch are byte-identical to landing/conformance.html ($(grep -c '<h2 class="claim-id">' "$SCRIPT_DIR/conformance.html") claims)"
 
+# The live playground must be exactly the committed, gate-tested page. Same
+# convention as /conformance: verify.sh runs from the checkout deploy.sh
+# deployed from. Byte identity FIRST, so that everything executed below runs
+# against bytes proven to be the locally tested artifact; then the needles,
+# forbidden legacy markers, a three-way version equality (page pin ==
+# apps/playground lockfile == bundle constant, via the artifact test), and the
+# extracted-artifact smoke on the FETCHED bytes.
+PLAYGROUND_APP="$SCRIPT_DIR/../apps/playground"
+PG_TMP=$(mktemp)
+for url in "https://bolyra.ai/playground" "https://bolyra.ai/playground.html" "https://bolyra.ai/playground?vguard=$(date +%s)"; do
+  curl -fsS "$url" -o "$PG_TMP" || { rm -f "$PG_TMP"; fail "GET $url failed"; }
+  cmp -s "$PG_TMP" "$SCRIPT_DIR/playground.html" || { rm -f "$PG_TMP"; fail "$url differs from landing/playground.html (stale CDN or wrong deploy source)"; }
+done
+pass "/playground, /playground.html and a cache-busted fetch are byte-identical to landing/playground.html"
+PG_PIN=$(grep -oE '@bolyra/receipts@[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?' "$PG_TMP" | sed 's|^@bolyra/receipts@||' | sort -u || true)
+[ "$(printf '%s' "$PG_PIN" | grep -c . || true)" = "1" ] || { rm -f "$PG_TMP"; fail "/playground must pin exactly one @bolyra/receipts version (got: '$(echo "$PG_PIN" | tr '\n' ' ')')"; }
+for needle in "@bolyra/receipts@$PG_PIN" "Verify receipts" "Simulate spend policy" 'id="playground-bundle"'; do
+  grep -qF "$needle" "$PG_TMP" || { rm -f "$PG_TMP"; fail "/playground lacks '$needle'"; }
+done
+for forbidden in "text/babel" "unpkg.com/react" "secp256k1-keccak256" "Delegation Flow" "Gateway Simulation"; do
+  ! grep -qF "$forbidden" "$PG_TMP" || { rm -f "$PG_TMP"; fail "/playground still contains legacy marker '$forbidden'"; }
+done
+pass "/playground needles present, legacy markers absent"
+PG_LOCK=$(node -e 'const l=require(require("path").resolve(process.argv[1]));process.stdout.write(l.packages["node_modules/@bolyra/receipts"].version)' "$PLAYGROUND_APP/package-lock.json") || { rm -f "$PG_TMP"; fail "cannot read @bolyra/receipts from apps/playground/package-lock.json"; }
+PG_CONFIG=$(node -e 'process.stdout.write(require(require("path").resolve(process.argv[1])).config.receiptsVersion)' "$PLAYGROUND_APP/package.json")
+[ "$PG_PIN" = "$PG_LOCK" ] && [ "$PG_PIN" = "$PG_CONFIG" ] || { rm -f "$PG_TMP"; fail "@bolyra/receipts version drift: page pins $PG_PIN, lockfile installs $PG_LOCK, package config says $PG_CONFIG"; }
+PG_NPM=$(npm view "@bolyra/receipts@$PG_PIN" version 2>/dev/null | tr -d '[:space:]') || true
+[ "$PG_NPM" = "$PG_PIN" ] || { rm -f "$PG_TMP"; fail "@bolyra/receipts@$PG_PIN is not resolvable on npm (got '$PG_NPM')"; }
+pass "/playground pins @bolyra/receipts@$PG_PIN == lockfile == package config; version exists on npm (latest is not required)"
+# Execute the fetched bundle: repository fixtures in, expected verdicts out.
+if ! PG_OUT=$(cd "$PLAYGROUND_APP" && PLAYGROUND_HTML="$PG_TMP" node --test test/artifact.test.js 2>&1); then
+  rm -f "$PG_TMP"; fail "extracted-artifact smoke on the LIVE /playground failed: $(grep -E '^(not ok|✖)' <<< "$PG_OUT" | head -3 | tr '\n' ' ')"
+fi
+rm -f "$PG_TMP"
+pass "live /playground bundle executes the repository fixtures correctly (extracted-artifact smoke)"
+
 # GitHub link sanity — the page CTAs must resolve for unauthenticated visitors.
 # GitHub returns 404 (not 403) for private repos, so this catches re-privatization too.
 declare -a GH_URLS=(

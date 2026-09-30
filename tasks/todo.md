@@ -1,3 +1,23 @@
+# Playground rebuild: real receipt verification (founder "go ahead and build", 2026-09-30)
+
+Goal: replace landing/playground.html with a prebuilt static page that verifies real
+receipts with @bolyra/receipts@0.11.0 in-browser and simulates spend policy honestly;
+Codex-approved plan at ~/.claude/plans/reactive-giggling-sunset.md (4 rounds).
+
+- [x] 1. apps/playground scaffold: package.json (exact pins), lock in node:20, csp snapshot
+- [x] 2. tiers.js (red → green) + differential test vs @bolyra/mpp@0.7.0
+- [x] 3. verify.js (red → green): parse/limits, envelope, options, central overall-ok
+- [x] 4. simulate.js (red → green): session, decide, chained real receipts, export, reset
+- [x] 5. build.mjs + template.html + UI (React); build.test.js; artifact.test.js
+- [x] 6. browser.mjs (Playwright, CSP, request policy) + cli.test.js (browser download → CLI)
+- [x] 7. landing/verify.sh + deploy.sh gates; ci.yml playground job; CHANGELOG
+- [ ] 8. node:20 container run; Codex review → clean; DCO commits; PR; merge; deploy; verify live
+
+## Review
+(fill when done)
+
+---
+
 # x402 issuer-quoted payee binding + spec §4.2 (founder override 2026-09-29, started 2026-09-29)
 
 Goal: `@bolyra/payment-protocols` 0.9.0 with an agent-side host mode that binds a
