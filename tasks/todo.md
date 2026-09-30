@@ -11,10 +11,21 @@ Codex-approved plan at ~/.claude/plans/reactive-giggling-sunset.md (4 rounds).
 - [x] 5. build.mjs + template.html + UI (React); build.test.js; artifact.test.js
 - [x] 6. browser.mjs (Playwright, CSP, request policy) + cli.test.js (browser download → CLI)
 - [x] 7. landing/verify.sh + deploy.sh gates; ci.yml playground job; CHANGELOG
-- [ ] 8. node:20 container run; Codex review → clean; DCO commits; PR; merge; deploy; verify live
+- [x] 8. node:20 container run; Codex review → clean; DCO commits; PR; merge; deploy; verify live
 
-## Review
-(fill when done)
+## Review (2026-09-30)
+- Shipped: PR #198 squash-merged as `3313834d`; deployed via `landing/deploy.sh` (pre-upload gates
+  incl. live-CSP compare + Playwright + CLI; CloudFront invalidation `I7VJCQ3CW7TZGJD5P1KNY4BYU2`);
+  `verify.sh` proved `/playground` byte-identical, needles/forbidden, receipts pin 0.11.0 ==
+  lockfile == config, and executed the fetched bundle against repository fixtures.
+- Codex: R1 four P2 (commerce field validation + bare intentHash, signature.keyId == payload.keyId,
+  checkpoint `unchecked` on chain-verifier exception, per-field sample provenance), R2 one P2 (views
+  unmounted on tab switch dropped the simulator session), R3 clean. All fixed test-first.
+- Container node:20: 41/41 + check green (twice); host browser gate + container CLI gate PASS.
+- Lessons: esbuild escapes `</script` only, not `<!--`/`<script` (post-process to `\x3C`); Node 20
+  prints TAP so grep for `# pass`, not `ℹ pass`; `node --test <dir>` needs a glob on Node 24;
+  `require(relative)` in `node -e` resolves against node_modules (use `path.resolve`).
+- Not done: Phase B (402 decoder, EVC wire shapes) awaits a separate founder request.
 
 ---
 
