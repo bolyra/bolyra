@@ -141,7 +141,7 @@ const sdk = require("@bolyra/sdk");
 const pp  = require("@bolyra/payment-protocols");
 const expected = {
   "@bolyra/sdk": ["createHumanIdentity","createAgentCredential","proveHandshake","verifyHandshake","createDevIdentities"],
-  "@bolyra/payment-protocols": ["createX402Authorization","verifyX402Authorization","verifyStripeACPSpend"],
+  "@bolyra/payment-protocols": ["createX402Authorization","verifyX402Authorization","verifyStripeACPSpend","createIssuerQuotePayeeResolver","x402LocalChallenge"],
 };
 const mods = { "@bolyra/sdk": sdk, "@bolyra/payment-protocols": pp };
 let bad = 0;
