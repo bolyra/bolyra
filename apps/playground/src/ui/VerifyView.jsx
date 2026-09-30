@@ -23,7 +23,10 @@ export function VerifyView({ pg }) {
   };
   const onText = (v) => {
     setText(v);
-    if (fromSample.expectedSigner || fromSample.expectedCount || fromSample.expectedHeadHash) { setOpts((o) => ({ ...o, expectedSigner: '', expectedCount: '', expectedHeadHash: '' })); setFromSample({}); }
+    // Clear ONLY the expectations that still carry sample provenance; a value the
+    // user supplied independently must survive edits to the text.
+    setOpts((o) => ({ ...o, ...(fromSample.expectedSigner ? { expectedSigner: '' } : {}), ...(fromSample.expectedCount ? { expectedCount: '' } : {}), ...(fromSample.expectedHeadHash ? { expectedHeadHash: '' } : {}) }));
+    setFromSample({});
   };
   const setOpt = (k, v) => { setOpts((o) => ({ ...o, [k]: v })); setFromSample((f) => ({ ...f, [k]: false })); };
   const onVerify = () => {
@@ -80,6 +83,7 @@ function checkpointLine(cp, overall, kind) {
     case 'partial': return `Partial checkpoint (${cp.count !== 'absent' ? 'count only' : 'head only'}): ${cp.count !== 'absent' ? cp.count : cp.head}.`;
     case 'mismatch': return `Checkpoint mismatch: count ${cp.count}, head ${cp.head}.`;
     case 'matched-but-failed': return 'Checkpoint values match, but verification failed (see rows).';
+    case 'unchecked': return 'Checkpoint not checked: the chain verifier failed before comparing it (see problems).';
     case 'matched': return overall === 'ok' ? 'Valid chain matches the supplied head and count; complete system coverage is not established.' : 'Checkpoint values match, but verification failed (see rows).';
     default: return `Checkpoint: ${cp.state}.`;
   }

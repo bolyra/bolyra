@@ -172,3 +172,38 @@ test('parseInput classifies', () => {
   assert.equal(parseInput(CHAIN).kind, 'chain');
   assert.equal(parseInput('').kind, 'invalid');
 });
+
+// --- Codex review round 1 (2026-09-30) ---------------------------------------
+test('commerce envelope: required fields typed, intentHash bare 64-hex (CLAUDE.md invariant)', () => {
+  const base = JSON.parse(conf('no-instance.json'));
+  const withCommerce = (c) => { const o = structuredClone(base); o.payload.commerce = c; return o; };
+  assert.equal(verifyAll(JSON.stringify(base), {}).overall, 'ok', 'fixture itself verifies');
+  for (const [label, c] of [
+    ['empty object', {}],
+    ['0x-prefixed intentHash', { ...base.payload.commerce, intentHash: '0x' + base.payload.commerce.intentHash }],
+    ['short intentHash', { ...base.payload.commerce, intentHash: 'abab' }],
+    ['amount string', { ...base.payload.commerce, amount: '25' }],
+    ['missing rail', { ...base.payload.commerce, rail: undefined }],
+  ]) {
+    const r = verifyAll(JSON.stringify(withCommerce(c)), {});
+    assert.equal(r.overall, 'failed', label); assert.equal(r.rows[0].envelope.ok, false, label); assert.equal(r.rows[0].signature, 'not-run', label);
+  }
+});
+
+test('signature.keyId must equal payload.keyId (outside the signed bytes)', () => {
+  const o = JSON.parse(conf('no-instance.json')); o.signature.keyId = 'k2';
+  const r = verifyAll(JSON.stringify(o), { expectedSigner: CONF_SIGNER });
+  assert.equal(r.overall, 'failed'); assert.equal(r.rows[0].envelope.ok, false); assert.ok(r.rows[0].envelope.problems.some((p) => /keyId/.test(p)));
+});
+
+test('chain verifier exception → checkpoint unchecked, never matched', () => {
+  const [a] = lines(CHAIN); const o = JSON.parse(a);
+  Object.defineProperty(o.payload.chain, 'seq', { get() { return 0; }, enumerable: true });
+  let reads = 0;
+  Object.defineProperty(o.payload.chain, 'prevReceiptHash', { get() { reads += 1; if (reads > 2) throw new Error('boom'); return '0x' + '00'.repeat(32); }, enumerable: true });
+  const r = verifyAll.__withReceipts([o], { expectedCount: 99, expectedHeadHash: '0x' + '11'.repeat(32) });
+  assert.equal(r.overall, 'failed');
+  assert.equal(r.chain.error, true);
+  assert.equal(r.checkpoint.state, 'unchecked');
+  assert.notEqual(r.checkpoint.count, 'matched'); assert.notEqual(r.checkpoint.head, 'matched');
+});

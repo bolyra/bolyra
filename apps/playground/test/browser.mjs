@@ -107,6 +107,14 @@ async function verifyAndRead(page) {
     check(await page.$(resultsSel) === null, `changing ${field} clears results`);
   }
 
+  // a manually supplied signer survives editing the text; sample-sourced count/head are cleared
+  await page.click('[data-sample=chain]');
+  await page.fill('[data-field=expectedSigner]', '0x' + '33'.repeat(20));
+  await page.type('[data-field=input]', ' ');
+  check(await page.inputValue('[data-field=expectedSigner]') === '0x' + '33'.repeat(20), 'manual expected signer preserved after editing sample text');
+  check(await page.inputValue('[data-field=expectedCount]') === '' && await page.inputValue('[data-field=expectedHeadHash]') === '', 'sample-sourced count/head cleared after editing text');
+  check(await verifyAndRead(page) === 'failed', 'edited sample with manual wrong signer fails');
+
   // forged instance ref → signature valid, instance ref_mismatch, overall failed
   await page.click('[data-sample=forgedRef]');
   check(await verifyAndRead(page) === 'failed', 'forged-ref sample fails overall');

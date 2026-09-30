@@ -128,11 +128,23 @@ export function validateEnvelope(receipt) {
       need(problems, isStr(p.chain.prevReceiptHash) && RE_HASH.test(p.chain.prevReceiptHash), 'payload.chain.prevReceiptHash must be 0x + 64 hex');
     } else problems.push('payload.chain must be an object when present');
   }
-  if (p.kind === 'bolyra.commerce') need(problems, isPlainObject(p.commerce), 'bolyra.commerce payload must carry a commerce object');
+  if (p.kind === 'bolyra.commerce') {
+    if (isPlainObject(p.commerce)) {
+      const c = p.commerce;
+      need(problems, isStr(c.rail) && c.rail.length > 0, 'commerce.rail must be a non-empty string');
+      need(problems, typeof c.amount === 'number' && Number.isFinite(c.amount), 'commerce.amount must be a finite number');
+      need(problems, isStr(c.currency) && c.currency.length > 0, 'commerce.currency must be a non-empty string');
+      need(problems, isStr(c.merchant), 'commerce.merchant must be a string');
+      // Bare 64-hex by design (no 0x): the published `receipt verify` CLI enforces the same.
+      need(problems, isStr(c.intentHash) && /^[0-9a-fA-F]{64}$/.test(c.intentHash), 'commerce.intentHash must be a bare 64-hex string (no 0x)');
+    } else problems.push('bolyra.commerce payload must carry a commerce object');
+  }
   if (p.instance !== undefined) need(problems, isPlainObject(p.instance), 'payload.instance must be an object when present');
 
   need(problems, s.alg === 'ES256K', `signature.alg must be ES256K (got ${JSON.stringify(s.alg)})`);
   need(problems, isStr(s.keyId) && s.keyId.length > 0, 'signature.keyId must be a non-empty string');
+  // signature.keyId sits outside the signed bytes; the schema requires it to equal payload.keyId.
+  need(problems, s.keyId === p.keyId, 'signature.keyId does not match payload.keyId');
   need(problems, isStr(s.signer) && RE_ADDRESS.test(s.signer), 'signature.signer must be a 0x-prefixed 20-byte address');
   need(problems, isStr(s.payloadHash) && RE_HASH.test(s.payloadHash), 'signature.payloadHash must be 0x + 64 hex');
   need(problems, isStr(s.value) && RE_SIGNATURE.test(s.value), 'signature.value must be 0x + 130 hex (r‖s‖v)');
@@ -242,6 +254,8 @@ function verifyChainPart(receipts, options) {
 
 function decideCheckpoint(chain, options, componentsFailed) {
   const hasCount = options.expectedCount !== undefined, hasHead = options.expectedHeadHash !== undefined;
+  // The chain verifier threw: nothing about the checkpoint was compared.
+  if (chain.error) return { state: hasCount || hasHead ? 'unchecked' : 'missing', count: hasCount ? 'unchecked' : 'absent', head: hasHead ? 'unchecked' : 'absent' };
   const countMismatch = chain.issues.some((i) => i.code === 'count-mismatch');
   const headMismatch = chain.issues.some((i) => i.code === 'head-hash-mismatch');
   const cp = { count: hasCount ? (countMismatch ? 'mismatch' : 'matched') : 'absent', head: hasHead ? (headMismatch ? 'mismatch' : 'matched') : 'absent' };
