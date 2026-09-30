@@ -430,6 +430,45 @@ jobs:
           node --test landing/gen-conformance.test.js
           node landing/gen-conformance.js --check
 
+  playground:
+    name: Playground — build drift, artifact, browser and CLI gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # landing/playground.html is generated from apps/playground and committed.
+      # Order matters: the browser gate writes the export the CLI gate verifies.
+      - name: Refuse offline mode in CI
+        run: '[ -z "${PLAYGROUND_OFFLINE:-}" ] || { echo "PLAYGROUND_OFFLINE must not be set in CI" >&2; exit 1; }'
+
+      - name: Install (clean)
+        working-directory: apps/playground
+        run: npm ci
+
+      - name: Unit, build-determinism and extracted-artifact tests
+        working-directory: apps/playground
+        run: npm test
+
+      - name: Committed page matches a fresh build
+        working-directory: apps/playground
+        run: npm run check
+
+      - name: Provision Chromium
+        working-directory: apps/playground
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser gate (committed page under the production CSP, no unexpected network)
+        working-directory: apps/playground
+        run: npm run test:browser
+
+      - name: Browser export verifies with the published CLI
+        working-directory: apps/playground
+        run: npm run test:cli
+
   typecheck-all:
     name: Typecheck — all TypeScript packages
     runs-on: ubuntu-latest
