@@ -140,6 +140,14 @@ async function verifyAndRead(page) {
   check(JSON.stringify(outcomes) === JSON.stringify(['allow', 'deny', 'allow', 'allow', 'allow', 'allow', 'allow']), `preset outcomes: ${outcomes.join(',')}`);
   const strip = await page.textContent('[data-chain-strip]');
   check(strip.includes('Chain 1') && strip.includes('seq 0..6'), `chain strip before reset: ${strip}`);
+  // the session survives a tab switch: only Reset destroys it
+  await page.click('[data-tab=verify]');
+  await page.waitForSelector('[data-view=verify]');
+  await page.click('[data-tab=simulate]');
+  await page.waitForSelector('[data-view=simulate]');
+  const stripAfterSwitch = await page.textContent('[data-chain-strip]');
+  check(stripAfterSwitch === strip, `session preserved across tab switch (before: ${strip} / after: ${stripAfterSwitch})`);
+  check((await page.$$('[data-run]')).length === 7, 'runs preserved across tab switch');
   const exportText = await page.textContent('.export');
   const expectedCount = Number((exportText.match(/--expect-count (\d+)/) || [])[1]);
   const expectedHead = (exportText.match(/--expect-head (0x[0-9a-f]{64})/) || [])[1];

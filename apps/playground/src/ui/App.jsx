@@ -17,7 +17,10 @@ export function App({ pg }) {
           <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} data-tab={t.id}>{t.label}</button>
         ))}
       </div>
-      {tab === 'verify' ? <VerifyView pg={pg} /> : <SimulateView pg={pg} />}
+      {/* Both views stay mounted: the simulator's session (key, chain, log) must
+          survive a tab switch. Only the explicit Reset action destroys it. */}
+      <div hidden={tab !== 'verify'}><VerifyView pg={pg} /></div>
+      <div hidden={tab !== 'simulate'}><SimulateView pg={pg} /></div>
     </div>
   );
 }
