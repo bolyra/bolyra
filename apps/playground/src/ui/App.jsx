@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import { VerifyView } from './VerifyView.jsx';
 import { SimulateView } from './SimulateView.jsx';
+import { DecodeView } from './DecodeView.jsx';
+import { WireView } from './WireView.jsx';
 
 const TABS = [
   { id: 'verify', label: 'Verify receipts' },
   { id: 'simulate', label: 'Simulate spend policy' },
+  { id: 'decode', label: 'Decode a 402' },
+  { id: 'wire', label: 'EVC wire shapes' },
 ];
 
 export function App({ pg }) {
-  const initial = typeof location !== 'undefined' && location.hash === '#simulate' ? 'simulate' : 'verify';
+  const fromHash = typeof location !== 'undefined' ? location.hash.slice(1) : '';
+  const initial = TABS.some((t) => t.id === fromHash) ? fromHash : 'verify';
   const [tab, setTab] = useState(initial);
   return (
     <div className="app">
@@ -21,6 +26,8 @@ export function App({ pg }) {
           survive a tab switch. Only the explicit Reset action destroys it. */}
       <div hidden={tab !== 'verify'}><VerifyView pg={pg} /></div>
       <div hidden={tab !== 'simulate'}><SimulateView pg={pg} /></div>
+      <div hidden={tab !== 'decode'}><DecodeView pg={pg} /></div>
+      <div hidden={tab !== 'wire'}><WireView pg={pg} /></div>
     </div>
   );
 }

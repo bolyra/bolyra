@@ -13,6 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { extractEvcSpec } from '../tools/spec-extract.mjs';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(APP, '../..');
@@ -20,6 +21,11 @@ const HTML_PATH = path.join(ROOT, 'landing/playground.html');
 const html = fs.readFileSync(HTML_PATH);
 const htmlSha256 = crypto.createHash('sha256').update(html).digest('hex');
 const CSP = fs.readFileSync(path.join(APP, 'test/fixtures/csp.txt'), 'utf8').trim();
+const observed = JSON.parse(fs.readFileSync(path.join(ROOT, 'integrations/payment-protocols/test/fixtures/x402-issuer-quote/tavily-challenge-observed.json'), 'utf8'));
+const evcX = extractEvcSpec(fs.readFileSync(path.join(ROOT, 'spec/external-verifier-contract-v1.md'), 'utf8'));
+const cliRequest = JSON.parse(fs.readFileSync(path.join(ROOT, 'integrations/cli/test/fixtures/verify/allow-agent-only/request.json'), 'utf8'));
+const encodeHeader = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64');
+const deepEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const RUN_DIR = path.resolve(process.env.PLAYGROUND_RUN_DIR ?? path.join(APP, '.playground-run', new Date().toISOString().replace(/[:.]/g, '-')));
 fs.mkdirSync(RUN_DIR, { recursive: true });
 
@@ -86,7 +92,7 @@ async function verifyAndRead(page) {
 
   const caps = await page.evaluate(() => ({ subtle: !!(crypto && crypto.subtle), grv: typeof crypto.getRandomValues === 'function', pg: typeof BolyraPlayground === 'object' }));
   check(caps.subtle && caps.grv, 'crypto.subtle / getRandomValues available'); check(caps.pg, 'BolyraPlayground global present');
-  check((await page.$$('[role=tab]')).length === 2, 'two tabs rendered');
+  check((await page.$$('[role=tab]')).length === 4, 'four tabs rendered');
 
   // sample chain → ok, matched
   await page.click('[data-sample=chain]');
@@ -171,6 +177,69 @@ async function verifyAndRead(page) {
   await page.waitForFunction(() => document.querySelector('[data-chain-strip]').textContent.includes('Chain 2'));
   check((await page.$$('[data-run]')).length === 0, 'reset clears runs');
 
+  // ---- Phase B: Decode a 402 ---------------------------------------------
+  await page.click('[data-tab=decode]');
+  await page.waitForSelector('[data-view=decode]');
+  const decodeAndRead = async () => { await page.click('[data-action=decode]'); await page.waitForSelector('[data-results-decode]'); return page.getAttribute('[data-results-decode]', 'data-decode-ok'); };
+  await page.click('[data-sample=tavily]');
+  check(await decodeAndRead() === 'true', 'tavily sample decodes');
+  check((await page.$$('[data-leg]')).length === 2, 'two legs rendered');
+  check(await page.getAttribute('[data-leg="0"]', 'data-classification') === 'address-valued', 'leg 0 address-valued');
+  check(await page.getAttribute('[data-leg="1"]', 'data-classification') === 'placeholder-urn', 'leg 1 placeholder-urn');
+  check((await page.textContent('[data-leg="0"] [data-matcher]')).includes('Supply a host audience'), 'no audience → asks for one');
+  const leg1Text = await page.textContent('[data-leg="1"]');
+  check(leg1Text.includes('placeholder-and-token shape discussed in §4.2; issuer signature and host configuration are not checked here'), 'leg 1 shape sentence');
+  check(!leg1Text.includes('§4.2 applies'), 'no affirmative "§4.2 applies"');
+  check(leg1Text.includes('Decoded; signature not verified') && (await page.textContent('[data-leg="1"] [data-kid]')) === 'tavily-agentpay-x402-signing-key', 'token shown not verified with kid');
+  check((await page.$$('[data-leg="1"] .musts li')).length === 9, 'nine host MUSTs listed');
+  check((await page.textContent('[data-leg="0"] [data-observation]')).includes('differed on every call'), 'sourced observation on sample leg 0');
+  await page.fill('[data-field=audience]', observed.decoded.accepts[0].payTo);
+  check(await page.$('[data-results-decode]') === null, 'changing audience clears results');
+  check(await decodeAndRead() === 'true' && (await page.textContent('[data-leg="0"] [data-matcher]')).includes('this check passes'), 'audience == payTo → passes');
+  await page.fill('[data-field=audience]', '0x' + '11'.repeat(20));
+  check(await decodeAndRead() === 'true' && (await page.textContent('[data-leg="0"] [data-matcher]')).includes('request_mismatch'), 'other audience → deny request_mismatch');
+  for (const [field, value] of [['resource', 'https://other.example/x'], ['now', '1790697720'], ['maxSeconds', '120']]) {
+    await decodeAndRead(); await page.fill(`[data-field=${field}]`, value);
+    check(await page.$('[data-results-decode]') === null, `changing ${field} clears results`);
+  }
+  check(await decodeAndRead() === 'true', 'decodes with a differing resource');
+  check((await page.textContent('[data-header-resource]')) === 'https://x402.tavily.com/search' && (await page.textContent('[data-input-resource]')) === 'https://other.example/x', 'header resource and proposed URL shown separately');
+  const otherRail = encodeHeader({ ...observed.decoded, accepts: [{ ...observed.decoded.accepts[1], payTo: 'urn:example:other-rail' }] });
+  await page.fill('[data-field=x402-header]', otherRail);
+  check(await page.$('[data-results-decode]') === null, 'editing header clears results');
+  check(await decodeAndRead() === 'true' && await page.getAttribute('[data-leg="0"]', 'data-classification') === 'other', 'another rail placeholder → other');
+  check((await page.textContent('[data-leg="0"] [data-require]')).includes('cannot determine whether §4.2 applies'), 'other → cannot determine');
+  const malformedTok = encodeHeader({ ...observed.decoded, accepts: [{ ...observed.decoded.accepts[1], extra: { ...observed.decoded.accepts[1].extra, quoteToken: 'not.a.jws' } }] });
+  await page.fill('[data-field=x402-header]', malformedTok);
+  check(await decodeAndRead() === 'true' && (await page.textContent('[data-leg="0"] [data-require]')).includes('not a well-formed compact JWS'), 'malformed token → no claim');
+  check(!(await page.textContent('[data-leg="0"]')).includes('placeholder-and-token shape'), 'malformed token → no shape sentence');
+  await page.fill('[data-field=x402-header]', 'A'.repeat(65 * 1024));
+  check(await decodeAndRead() === 'false' && (await page.textContent('[data-results-decode]')).includes('exceeds'), '65 KiB paste → inline error');
+  check((await page.textContent('[data-statement=must-not-claim]')).includes('does NOT establish'), 'MUST NOT claim statement present');
+  check((await page.textContent('[data-statement=role]')).includes('agent-side host'), 'Role statement present');
+
+  // ---- Phase B: EVC wire shapes --------------------------------------------
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  await page.click('[data-tab=wire]');
+  await page.waitForSelector('[data-view=wire]');
+  await page.$$eval('[data-view=wire] details', (els) => els.forEach((d) => { d.open = true; }));
+  const expectedShapes = { 'request-example': evcX.request.example, 'request-schema': evcX.request.schema, 'real-request': cliRequest, 'verdict-allow': evcX.verdict.allow, 'verdict-consume': evcX.verdict.allowConsume, 'verdict-deny': evcX.verdict.deny, 'verdict-schema': evcX.verdict.schema };
+  const blocks = [];
+  for (const [id, json] of Object.entries(expectedShapes)) blocks.push({ sel: `[data-shape="${id}"]`, json, label: id });
+  for (const e of evcX.examples) { blocks.push({ sel: `[data-example="${e.id}"] [data-example-part=verdict]`, json: e.verdict, label: `§${e.id} verdict` }); if (e.request) blocks.push({ sel: `[data-example="${e.id}"] [data-example-part=request]`, json: e.request, label: `§${e.id} request` }); }
+  check(blocks.length === 7 + 9, `expected 16 JSON blocks, planned ${blocks.length}`);
+  for (const b of blocks) {
+    const shown = await page.$eval(`${b.sel} pre code`, (el) => el.textContent);
+    check(deepEq(JSON.parse(shown), b.json), `${b.label}: displayed JSON equals the checkout's spec`);
+    await page.click(`${b.sel} button.btn-ghost`);
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    check(clip === shown, `${b.label}: clipboard equals displayed text`);
+  }
+  check((await page.textContent('[data-code=request_mismatch]')).includes('403'), 'request_mismatch row shows 403');
+  check((await page.$$('[data-view=wire] [data-code]')).length === 16, '15 registry rows + 1 gate-local row');
+  await page.click('[data-tab=simulate]');
+  await page.waitForSelector('[data-view=simulate]');
+
   check(page.consoleErrors.length === 0, `console errors: ${page.consoleErrors.join(' | ')}`);
   fs.writeFileSync(path.join(RUN_DIR, 'manifest.json'), JSON.stringify({ htmlSha256, htmlPath: HTML_PATH, expectedCount, expectedHead, signer, files: { receipts: 'receipts.jsonl', signer: 'signer.json' } }, null, 2) + '\n');
   await context.close();
@@ -193,6 +262,13 @@ async function verifyAndRead(page) {
   await page.click('[data-action=run]');
   await page.waitForSelector('[data-run="0"]');
   check(await page.getAttribute('[data-run="0"]', 'data-outcome') === 'allow', 'mobile: run works');
+  await page.click('[data-tab=decode]');
+  await page.waitForSelector('[data-view=decode]');
+  await page.click('[data-sample=tavily]');
+  await page.click('[data-action=decode]');
+  await page.waitForSelector('[data-results-decode]');
+  check((await page.$$('[data-leg]')).length === 2, 'mobile: tavily decodes');
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'mobile: no horizontal scroll after decode');
   check(page.consoleErrors.length === 0, `mobile console errors: ${page.consoleErrors.join(' | ')}`);
   await context.close();
 }

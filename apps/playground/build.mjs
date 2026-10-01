@@ -17,6 +17,10 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { extractEvcSpec, extractProfile42 } from './tools/spec-extract.mjs';
+import { denyTable } from './tools/deny-table.mjs';
+import { decodeBase64Strict, PLACEHOLDER_URN } from './src/core/x402.js';
 
 const APP = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(APP, '../..');
@@ -29,6 +33,8 @@ const META = typeof flag('--meta') === 'string' ? path.resolve(flag('--meta')) :
 
 const installed = JSON.parse(fs.readFileSync(path.join(APP, 'node_modules/@bolyra/receipts/package.json'), 'utf8')).version;
 if (installed !== pkg.config.receiptsVersion) throw new Error(`config.receiptsVersion ${pkg.config.receiptsVersion} != installed @bolyra/receipts ${installed}`);
+const installedPP = JSON.parse(fs.readFileSync(path.join(APP, 'node_modules/@bolyra/payment-protocols/package.json'), 'utf8')).version;
+if (installedPP !== pkg.config.paymentProtocolsVersion) throw new Error(`config.paymentProtocolsVersion ${pkg.config.paymentProtocolsVersion} != installed @bolyra/payment-protocols ${installedPP}`);
 
 // ---- samples from committed fixtures ------------------------------------
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -51,6 +57,47 @@ for (const [id, s] of Object.entries(samples)) {
 }
 if (process.env.PLAYGROUND_EXTRA_SAMPLES) Object.assign(samples, JSON.parse(fs.readFileSync(process.env.PLAYGROUND_EXTRA_SAMPLES, 'utf8')));
 
+// ---- Phase B: x402 sample (Tavily fixture) + EVC wire shapes -------------
+const sha = (buf) => createHash('sha256').update(buf).digest('hex');
+const tavilyPath = 'integrations/payment-protocols/test/fixtures/x402-issuer-quote/tavily-challenge-observed.json';
+const tavily = JSON.parse(read(tavilyPath));
+{
+  const bytes = decodeBase64Strict(tavily.paymentRequiredHeader);
+  if (bytes === null) throw new Error('tavily fixture header is not canonical base64');
+  const decoded = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  if (JSON.stringify(decoded) !== JSON.stringify(tavily.decoded)) throw new Error('tavily fixture: header does not decode to `decoded`');
+  if (decoded.accepts[1].payTo !== PLACEHOLDER_URN) throw new Error(`tavily fixture leg 1 payTo != PLACEHOLDER_URN`);
+}
+const evcMd = read('spec/external-verifier-contract-v1.md');
+const profileMd = read('spec/x402-evc-profile-v0.md');
+const evc = extractEvcSpec(evcMd);
+const profile42 = extractProfile42(profileMd);
+const x402Samples = {
+  tavily: {
+    label: 'Tavily POST /search 402 (observed 2026-09-29)',
+    header: tavily.paymentRequiredHeader,
+    source: tavily._source,
+    resource: 'https://x402.tavily.com/search',
+    now: 1790697716,
+    nowNote: 'sample time = the quote token\u2019s iat',
+    observation: profile42.example,
+  },
+};
+const deny = denyTable(evc.registry.map((r) => r.code));
+const cliRequestPath = 'integrations/cli/test/fixtures/verify/allow-agent-only/request.json';
+const cliRequest = JSON.parse(read(cliRequestPath));
+const evcShapes = {
+  source: { spec: 'spec/external-verifier-contract-v1.md', specSha256: sha(evcMd), revision: evc.revision, profile: 'spec/x402-evc-profile-v0.md', profileSha256: sha(profileMd), fixture: tavilyPath, fixtureSha256: sha(read(tavilyPath)), cliRequest: cliRequestPath, mppVersion: deny.mppVersion, paymentProtocolsVersion: pkg.config.paymentProtocolsVersion },
+  request: evc.request,
+  verdict: { ...evc.verdict, kinds: evc.kinds, omittedKindMeans: evc.omittedKindMeans },
+  registry: evc.registry.map((r, i) => ({ ...r, ...deny.registry[i] })),
+  gateLocal: deny.gateLocal,
+  examples: evc.examples,
+  realRequest: { label: 'Real request from the CLI verify fixture (full bundle)', json: cliRequest, bundleChars: cliRequest.bundle.length },
+  profile42,
+};
+for (let i = 0; i < evc.registry.length; i++) if (evc.registry[i].code !== deny.registry[i].code) throw new Error('registry/deny-table order mismatch');
+
 // ---- bundle -------------------------------------------------------------
 const result = await build({
   entryPoints: [path.join(APP, 'src/main.jsx')],
@@ -62,6 +109,9 @@ const result = await build({
     __RECEIPTS_VERSION__: JSON.stringify(pkg.config.receiptsVersion),
     __CLI_VERSION__: JSON.stringify(pkg.config.cliVersion),
     __SAMPLES__: JSON.stringify(samples),
+    __PAYMENT_PROTOCOLS_VERSION__: JSON.stringify(pkg.config.paymentProtocolsVersion),
+    __X402_SAMPLES__: JSON.stringify(x402Samples),
+    __EVC_SHAPES__: JSON.stringify(evcShapes),
   },
   supported: { 'inline-script': true },
 });
@@ -71,7 +121,11 @@ const result = await build({
 // else it is a syntax error that the artifact test would surface immediately.
 let bundle = result.outputFiles[0].text.replace(/\r\n/g, '\n').replace(/<(!--|script)/gi, '\\x3C$1');
 if (/<\/script|<script|<!--/i.test(bundle)) throw new Error('bundle contains an unescaped inline-script terminator');
-for (const input of Object.keys(result.metafile.inputs)) if (input.includes('@bolyra/mpp')) throw new Error('@bolyra/mpp must not be bundled');
+for (const input of Object.keys(result.metafile.inputs)) {
+  if (input.includes('@bolyra/mpp')) throw new Error('@bolyra/mpp must not be bundled');
+  if (input.includes('@bolyra/payment-protocols')) throw new Error('@bolyra/payment-protocols must not be bundled (the page ports its parser; see src/core/x402.js)');
+  if (/node_modules\/jose\//.test(input)) throw new Error('jose must not be bundled in Phase B (verification is deferred)');
+}
 
 // ---- licenses -----------------------------------------------------------
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -91,8 +145,8 @@ const template = fs.readFileSync(path.join(APP, 'template.html'), 'utf8').replac
 const fill = (tpl, map) => Object.entries(map).reduce((acc, [k, v]) => acc.split(`{{${k}}}`).join(v), tpl);
 const count = (k) => (template.match(new RegExp(`\\{\\{${k}\\}\\}`, 'g')) || []).length;
 if (count('BUNDLE') !== 1 || count('LICENSES') !== 1) throw new Error('template must contain exactly one {{BUNDLE}} and one {{LICENSES}}');
-if (count('RECEIPTS_VERSION') < 1 || count('CLI_VERSION') < 1) throw new Error('template must mention {{RECEIPTS_VERSION}} and {{CLI_VERSION}}');
-const html = fill(template, { BUNDLE: bundle, LICENSES: licenses, RECEIPTS_VERSION: esc(pkg.config.receiptsVersion), CLI_VERSION: esc(pkg.config.cliVersion) });
+if (count('RECEIPTS_VERSION') < 1 || count('CLI_VERSION') < 1 || count('PAYMENT_PROTOCOLS_VERSION') < 1) throw new Error('template must mention {{RECEIPTS_VERSION}}, {{CLI_VERSION}} and {{PAYMENT_PROTOCOLS_VERSION}}');
+const html = fill(template, { BUNDLE: bundle, LICENSES: licenses, RECEIPTS_VERSION: esc(pkg.config.receiptsVersion), CLI_VERSION: esc(pkg.config.cliVersion), PAYMENT_PROTOCOLS_VERSION: esc(pkg.config.paymentProtocolsVersion) });
 if (!html.endsWith('\n')) throw new Error('template must end with a newline');
 
 if (CHECK !== undefined) {

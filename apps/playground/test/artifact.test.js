@@ -80,3 +80,71 @@ test('simulate: presets sign real chained receipts that verify with the library;
   assert.equal(check.overall, 'ok');
   assert.equal(sim.afterReset.chainId, 2); assert.equal(sim.afterReset.chain.seq, 0); assert.notEqual(sim.afterReset.signer, sim.signer.signer);
 });
+
+// --- Phase B ---------------------------------------------------------------
+// Boundary: this run proves the tested bytes agree with THIS checkout's
+// spec-derived data and fixtures. It does not prove normative conformance, nor
+// agreement with a later repository revision.
+import { extractEvcSpec, extractProfile42 } from './lib/../../tools/spec-extract.mjs';
+import crypto from 'node:crypto';
+
+const observed = JSON.parse(fs.readFileSync(path.join(ROOT, 'integrations/payment-protocols/test/fixtures/x402-issuer-quote/tavily-challenge-observed.json'), 'utf8'));
+const X402_NOW = 1_790_697_736;
+const X402_RESOURCE = 'https://x402.tavily.com/search';
+const evcMd = fs.readFileSync(path.join(ROOT, 'spec/external-verifier-contract-v1.md'), 'utf8');
+const profileMd = fs.readFileSync(path.join(ROOT, 'spec/x402-evc-profile-v0.md'), 'utf8');
+
+test('x402 ops: the Tavily header parses, selects, peeks and inspects as the repository fixture says', () => {
+  const h = observed.paymentRequiredHeader;
+  const [parsed, leg1, leg0, peek, inspect, bad] = run([
+    { op: 'x402.parse', header: h },
+    { op: 'x402.select', header: h, legIndex: 1, resource: X402_RESOURCE, now: X402_NOW, maxSeconds: 900 },
+    { op: 'x402.select', header: h, legIndex: 0, resource: X402_RESOURCE, now: X402_NOW, maxSeconds: 900 },
+    { op: 'x402.peek', token: observed.decoded.accepts[1].extra.quoteToken },
+    { op: 'x402.inspect', token: observed.decoded.accepts[1].extra.quoteToken },
+    { op: 'x402.parse', header: 'not base64!' },
+  ]);
+  assert.equal(parsed.ok, true); assert.equal(parsed.legs.length, 2); assert.deepEqual(parsed.decoded, observed.decoded);
+  assert.equal(parsed.headerSha256, crypto.createHash('sha256').update(h, 'utf8').digest('hex'));
+  assert.equal(leg1.context.nonce, parsed.headerSha256); assert.equal(leg1.context.expiresAt, X402_NOW + 300); assert.equal(leg1.requirements.payTo, 'urn:x402:agent-pay:see-quote');
+  assert.equal(leg0.context.expiresAt, X402_NOW + 60);
+  assert.equal(peek.kid, 'tavily-agentpay-x402-signing-key'); assert.equal(peek.alg, 'ES384');
+  assert.equal(inspect.iss, 'https://x402.tavily.com'); assert.equal(inspect.aud, 'aws:marketplace'); assert.equal(inspect.jti, '18d01c35-6ccc-4563-974b-97961bc7e008');
+  assert.equal(bad.ok, false); assert.equal(bad.reason, 'header_base64');
+});
+
+/** Second, minimal fence reader (independent of tools/spec-extract.mjs) tying each §13 verdict to its source fence. */
+function fencesUnderHeading(md, headingPrefix) {
+  const lines = md.split('\n'); const out = []; let inSection = false, inFence = false, buf = [];
+  for (const line of lines) {
+    if (/^#{1,6}\s/.test(line) && !inFence) { inSection = line.startsWith(headingPrefix); continue; }
+    if (!inSection) continue;
+    if (/^```json\s*$/.test(line)) { inFence = true; buf = []; continue; }
+    if (inFence && /^```\s*$/.test(line)) { inFence = false; out.push(JSON.parse(buf.join('\n'))); continue; }
+    if (inFence) buf.push(line);
+  }
+  return out;
+}
+
+test('shapes op: registry, gate-local, revision, source hash and every worked example match this checkout', () => {
+  const [shapes, meta] = run([{ op: 'shapes' }, { op: 'meta' }]);
+  const x = extractEvcSpec(evcMd); const p = extractProfile42(profileMd);
+  assert.deepEqual(shapes.registry.map((r) => r.code), x.registry.map((r) => r.code));
+  assert.equal(shapes.registry.length, 15);
+  assert.deepEqual(shapes.gateLocal.map((r) => r.code), ['missing_authorization']);
+  assert.equal(shapes.source.revision, x.revision);
+  assert.equal(shapes.source.specSha256, crypto.createHash('sha256').update(evcMd).digest('hex'));
+  assert.equal(shapes.source.profileSha256, crypto.createHash('sha256').update(profileMd).digest('hex'));
+  assert.equal(shapes.source.mppVersion, JSON.parse(fs.readFileSync(path.join(here, '../node_modules/@bolyra/mpp/package.json'), 'utf8')).version);
+  assert.equal(shapes.examples.length, 8);
+  for (const e of shapes.examples) {
+    const fences = fencesUnderHeading(evcMd, `### ${e.id} `);
+    assert.deepEqual(e.verdict, fences[fences.length - 1], `§${e.id} verdict == source fence`);
+    if (e.request) assert.deepEqual(e.request, fences[0], `§${e.id} request == source fence`);
+  }
+  assert.deepEqual(shapes.request.example, fencesUnderHeading(evcMd, '### 2.1 ')[0]);
+  assert.deepEqual(shapes.verdict.schema, fencesUnderHeading(evcMd, '### 3.4 ')[0]);
+  assert.equal(shapes.profile42.hostMusts.length, 9); assert.equal(shapes.profile42.role, p.role);
+  assert.equal(meta.PAYMENT_PROTOCOLS_VERSION, pkg.config.paymentProtocolsVersion);
+  assert.ok(meta.exports.includes('parseChallenge') && meta.exports.includes('EVC_SHAPES'));
+});

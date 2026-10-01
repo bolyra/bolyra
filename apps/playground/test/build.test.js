@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { extractBundle, externalScripts } from './lib/extract.mjs';
 import { runBundle } from './lib/run-bundle.mjs';
@@ -65,4 +66,16 @@ test('@bolyra/mpp is not bundled', () => {
   assert.equal(build(['--out', path.join(tmp, 'm.html'), '--meta', meta]).status, 0);
   const inputs = Object.keys(JSON.parse(fs.readFileSync(meta, 'utf8')).inputs);
   assert.ok(inputs.length > 0); assert.ok(inputs.every((i) => !i.includes('@bolyra/mpp')), inputs.filter((i) => i.includes('mpp')).join(','));
+});
+
+// --- Phase B ---------------------------------------------------------------
+test('phase B statics: needles, payment-protocols pin, no oracle in the bundle, spec hash define', () => {
+  const html = fs.readFileSync(COMMITTED, 'utf8');
+  for (const needle of ['Decode a 402', 'EVC wire shapes', `@bolyra/payment-protocols@${pkg.config.paymentProtocolsVersion}`]) assert.ok(html.includes(needle), needle);
+  const meta = path.join(tmp, 'meta-b.json');
+  assert.equal(build(['--out', path.join(tmp, 'b2.html'), '--meta', meta]).status, 0);
+  const inputs = Object.keys(JSON.parse(fs.readFileSync(meta, 'utf8')).inputs);
+  assert.ok(inputs.every((i) => !/@bolyra\/(payment-protocols|mpp)|node_modules\/jose\//.test(i)), inputs.filter((i) => /payment-protocols|mpp|jose/.test(i)).join(','));
+  const specSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, 'spec/external-verifier-contract-v1.md'))).digest('hex');
+  assert.ok(html.includes(specSha.slice(0, 12)), 'spec sha256 prefix rendered on the page');
 });

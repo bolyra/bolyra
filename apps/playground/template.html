@@ -87,6 +87,18 @@ table.rows th { color: var(--text-muted); font-weight: 600; font-size: 0.75rem; 
 .run summary { cursor: pointer; font-size: 0.8rem; color: var(--text-muted); }
 pre.code { background: var(--bg-code); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; overflow-x: auto; margin-top: 8px; white-space: pre; }
 pre.code-tall { max-height: 320px; overflow: auto; }
+.leg { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.leg-head { margin-bottom: 4px; }
+.require { background: var(--bg-code); border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
+.require p { margin: 4px 0; }
+.musts { padding-left: 20px; margin: 4px 0; }
+.musts li { margin: 3px 0; }
+.token { margin-top: 8px; }
+.trust, .statements { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 14px 0; font-size: 0.88rem; }
+.trust ul { padding-left: 20px; margin: 6px 0; }
+.kv > div { margin: 3px 0; }
+.row { display: flex; gap: 8px; align-items: center; }
+.shape { margin-top: 16px; }
 .fineprint { font-size: 0.8rem; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; }
 .licenses { margin-top: 40px; font-size: 0.8rem; color: var(--text-muted); }
 .licenses details { margin: 4px 0; }
@@ -112,8 +124,8 @@ noscript { display: block; padding: 20px; border: 1px solid var(--border); borde
 
 <main class="container">
   <h1>Bolyra <span>Playground</span></h1>
-  <p class="subtitle">Two views: <strong>Verify receipts</strong> checks a pasted receipt or receipt log for signature validity, expected signer, chain integrity against an external checkpoint, and instance binding. <strong>Simulate spend policy</strong> makes simulated allow/deny decisions and signs real chained receipts for them with a temporary key.</p>
-  <p class="pin">Verification runs the published <code>@bolyra/receipts@{{RECEIPTS_VERSION}}</code> in your browser. Nothing you paste is sent anywhere. Verify exports with <code>npx @bolyra/cli@{{CLI_VERSION}} receipt verify-chain</code>.</p>
+  <p class="subtitle">Four views: <strong>Verify receipts</strong> checks a pasted receipt or receipt log for signature validity, expected signer, chain integrity against an external checkpoint, and instance binding. <strong>Simulate spend policy</strong> makes simulated allow/deny decisions and signs real chained receipts for them with a temporary key. <strong>Decode a 402</strong> decodes an x402 PAYMENT-REQUIRED header and shows what the EVC profile §4.2 would require (nothing is verified). <strong>EVC wire shapes</strong> shows the External Verifier Contract request, verdict and denial registry as copyable JSON extracted from the spec at build time.</p>
+  <p class="pin">Verification runs the published <code>@bolyra/receipts@{{RECEIPTS_VERSION}}</code> in your browser; 402 decoding mirrors the header and leg rules of <code>@bolyra/payment-protocols@{{PAYMENT_PROTOCOLS_VERSION}}</code> (a browser port, differentially tested). This page’s own code makes no request with what you paste; the page loads Plausible analytics for page views. Verify exports with <code>npx @bolyra/cli@{{CLI_VERSION}} receipt verify-chain</code>.</p>
   <div id="app"><noscript>This page runs the verifier in your browser and needs JavaScript. To verify receipts without it, use the published CLI: <code>npx @bolyra/cli receipt verify-chain receipts.jsonl --signer 0x…</code></noscript></div>
   <details class="licenses"><summary>Bundled open-source licenses</summary>
 {{LICENSES}}
