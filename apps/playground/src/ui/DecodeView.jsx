@@ -46,7 +46,7 @@ export function DecodeView({ pg }) {
       }
       return { index: entry.index, leg, cls, token, deadline: now + Math.min(leg.maxTimeoutSeconds, cap), observation: isSample && entry.index === 0 ? sentenceWith(pg.X402_SAMPLES.tavily.observation, 'differed on every call') : null };
     });
-    setResult({ key, value: { ok: true, parsed, legs, now, cap, audience: f.audience.trim(), resource: f.resource.trim() } });
+    setResult({ key, value: { ok: true, parsed, legs, now, cap, audience: f.audience, resource: f.resource, defaultPayeeMatch: pg.defaultPayeeMatch } }); // host inputs kept byte-exact: the matcher is byte equality
   };
   const p42 = pg.EVC_SHAPES.profile42;
 
@@ -112,12 +112,12 @@ function DecodeResults({ r, p42 }) {
         <div><strong>Your proposed outbound URL (host-known):</strong> <code data-input-resource>{r.resource || '(none supplied)'}</code></div>
         {d.error !== undefined ? <div><strong>error:</strong> <code>{show(d.error)}</code></div> : null}
       </div>
-      {r.legs.map((L) => <LegPanel key={L.index} L={L} r={r} p42={p42} />)}
+      {r.legs.map((L) => <LegPanel key={L.index} L={L} r={r} p42={p42} defaultPayeeMatch={r.defaultPayeeMatch} />)}
     </div>
   );
 }
 
-function LegPanel({ L, r, p42 }) {
+function LegPanel({ L, r, p42, defaultPayeeMatch }) {
   if (!L.leg) return <div className="leg" data-leg={L.index} data-classification="unusable"><strong>Leg {L.index}:</strong> <Status kind="bad">not usable</Status> <span className="muted small">reason {L.reason}</span></div>;
   const { leg, cls, token } = L;
   const extraKeys = leg.extra ? Object.keys(leg.extra) : [];
@@ -135,7 +135,7 @@ function LegPanel({ L, r, p42 }) {
         {cls.kind === 'address-valued' ? (
           <div className="small">
             <p><code>payTo</code> is an address-valued string and this leg {tokenFact}. If a host uses the default payee matcher, its audience must byte-equal <code>payTo</code>.</p>
-            <p data-matcher>{aud === '' ? 'Supply a host audience above to see the default-matcher outcome.' : aud === leg.payTo ? <>With audience <code>{aud}</code> under that matcher: byte-equal, so this check passes.</> : <>With audience <code>{aud}</code> under that matcher: differs, so a host would deny <code>request_mismatch</code>.</>}</p>
+            <p data-matcher>{aud === '' ? 'Supply a host audience above to see the default-matcher outcome.' : defaultPayeeMatch(aud, leg.payTo) ? <>With audience <code>{aud}</code> under that matcher: byte-equal, so this check passes.</> : <>With audience <code>{aud}</code> under that matcher: differs, so a host would deny <code>request_mismatch</code>.</>}</p>
           </div>
         ) : cls.kind === 'placeholder-urn' && cls.hasQuoteToken && token && token.ok ? (
           <div className="small">

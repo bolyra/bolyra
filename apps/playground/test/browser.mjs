@@ -196,6 +196,8 @@ async function verifyAndRead(page) {
   await page.fill('[data-field=audience]', observed.decoded.accepts[0].payTo);
   check(await page.$('[data-results-decode]') === null, 'changing audience clears results');
   check(await decodeAndRead() === 'true' && (await page.textContent('[data-leg="0"] [data-matcher]')).includes('this check passes'), 'audience == payTo → passes');
+  await page.fill('[data-field=audience]', observed.decoded.accepts[0].payTo + ' ');
+  check(await decodeAndRead() === 'true' && (await page.textContent('[data-leg="0"] [data-matcher]')).includes('request_mismatch'), 'audience bytes are not trimmed: payTo + space → deny request_mismatch');
   await page.fill('[data-field=audience]', '0x' + '11'.repeat(20));
   check(await decodeAndRead() === 'true' && (await page.textContent('[data-leg="0"] [data-matcher]')).includes('request_mismatch'), 'other audience → deny request_mismatch');
   for (const [field, value] of [['resource', 'https://other.example/x'], ['now', '1790697720'], ['maxSeconds', '120']]) {
