@@ -23,7 +23,12 @@ if (!PG) { console.error('bundle did not define globalThis.BolyraPlayground'); p
 const ops = JSON.parse(fs.readFileSync(0, 'utf8'));
 const out = [];
 for (const op of ops) {
-  if (op.op === 'meta') out.push({ VERSION: PG.VERSION, RECEIPTS_VERSION: PG.RECEIPTS_VERSION, samples: Object.keys(PG.SAMPLES), exports: Object.keys(PG).sort() });
+  if (op.op === 'meta') out.push({ VERSION: PG.VERSION, RECEIPTS_VERSION: PG.RECEIPTS_VERSION, PAYMENT_PROTOCOLS_VERSION: PG.PAYMENT_PROTOCOLS_VERSION, samples: Object.keys(PG.SAMPLES), x402Samples: Object.keys(PG.X402_SAMPLES), exports: Object.keys(PG).sort() });
+  else if (op.op === 'x402.parse') out.push(PG.parseChallenge(op.header));
+  else if (op.op === 'x402.select') { try { out.push(PG.selectLeg({ headerValue: op.header, resource: op.resource, legIndex: op.legIndex, now: op.now, maxSeconds: op.maxSeconds })); } catch (e) { out.push({ error: { code: e.code, reason: e.detail?.reason } }); } }
+  else if (op.op === 'x402.peek') { try { out.push(PG.peekJwsHeader(op.token)); } catch (e) { out.push({ error: { reason: e.reason } }); } }
+  else if (op.op === 'x402.inspect') { try { out.push(PG.inspectJwsPayload(op.token)); } catch (e) { out.push({ error: { reason: e.reason } }); } }
+  else if (op.op === 'shapes') out.push(PG.EVC_SHAPES);
   else if (op.op === 'sample') out.push(PG.SAMPLES[op.key] ?? null);
   else if (op.op === 'verify') out.push(PG.verifyAll(op.text, op.options ?? {}));
   else if (op.op === 'simulate') {

@@ -335,6 +335,20 @@ PG_CONFIG=$(node -e 'process.stdout.write(require(require("path").resolve(proces
 PG_NPM=$(npm view "@bolyra/receipts@$PG_PIN" version 2>/dev/null | tr -d '[:space:]') || true
 [ "$PG_NPM" = "$PG_PIN" ] || { rm -f "$PG_TMP"; fail "@bolyra/receipts@$PG_PIN is not resolvable on npm (got '$PG_NPM')"; }
 pass "/playground pins @bolyra/receipts@$PG_PIN == lockfile == package config; version exists on npm (latest is not required)"
+# Phase B: the 402 decoder mirrors the header/leg rules of a pinned @bolyra/payment-protocols
+# (browser port, differentially tested); the page pin must equal the lockfile and the package
+# config, and resolve on npm (latest not required).
+PP_PIN=$(grep -oE '@bolyra/payment-protocols@[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?' "$PG_TMP" | sed 's|^@bolyra/payment-protocols@||' | sort -u || true)
+[ "$(printf '%s' "$PP_PIN" | grep -c . || true)" = "1" ] || { rm -f "$PG_TMP"; fail "/playground must pin exactly one @bolyra/payment-protocols version (got: '$(echo "$PP_PIN" | tr '\n' ' ')')"; }
+for needle in "Decode a 402" "EVC wire shapes" "@bolyra/payment-protocols@$PP_PIN"; do
+  grep -qF "$needle" "$PG_TMP" || { rm -f "$PG_TMP"; fail "/playground lacks '$needle'"; }
+done
+PP_LOCK=$(node -e 'const l=require(require("path").resolve(process.argv[1]));process.stdout.write(l.packages["node_modules/@bolyra/payment-protocols"].version)' "$PLAYGROUND_APP/package-lock.json") || { rm -f "$PG_TMP"; fail "cannot read @bolyra/payment-protocols from apps/playground/package-lock.json"; }
+PP_CONFIG=$(node -e 'process.stdout.write(require(require("path").resolve(process.argv[1])).config.paymentProtocolsVersion)' "$PLAYGROUND_APP/package.json")
+[ "$PP_PIN" = "$PP_LOCK" ] && [ "$PP_PIN" = "$PP_CONFIG" ] || { rm -f "$PG_TMP"; fail "@bolyra/payment-protocols version drift: page pins $PP_PIN, lockfile installs $PP_LOCK, package config says $PP_CONFIG"; }
+PP_NPM=$(npm view "@bolyra/payment-protocols@$PP_PIN" version 2>/dev/null | tr -d '[:space:]') || true
+[ "$PP_NPM" = "$PP_PIN" ] || { rm -f "$PG_TMP"; fail "@bolyra/payment-protocols@$PP_PIN is not resolvable on npm (got '$PP_NPM')"; }
+pass "/playground Phase B needles present; pins @bolyra/payment-protocols@$PP_PIN == lockfile == package config; version exists on npm"
 # Execute the fetched bundle: repository fixtures in, expected verdicts out.
 if ! PG_OUT=$(cd "$PLAYGROUND_APP" && PLAYGROUND_HTML="$PG_TMP" node --test test/artifact.test.js 2>&1); then
   rm -f "$PG_TMP"; fail "extracted-artifact smoke on the LIVE /playground failed: $(grep -E '^(not ok|✖)' <<< "$PG_OUT" | head -3 | tr '\n' ' ')"

@@ -1,3 +1,33 @@
+# Playground Phase B: Decode a 402 + EVC wire shapes (founder "playground Phase B", 2026-09-30)
+
+Goal: two illustrative tabs on bolyra.ai/playground; nothing fabricated (build-time extraction
+from spec/fixtures/@bolyra/mpp), parse-only port of x402LocalChallenge/peekHeader differentially
+tested against @bolyra/payment-protocols@0.9.0; Codex-approved plan (3 rounds, APPROVE) at
+~/.claude/plans/reactive-giggling-sunset.md; approval delegated by founder ("let codex decide").
+Red→green record: each test file's first run is logged here before its implementation exists.
+
+- [x] 1. worktree + pins (payment-protocols 0.9.0 devDep, engines range, config) + lock in node:20.19
+- [x] 2. x402.diff.test.js + x402.test.js (RED) → src/core/x402.js (GREEN)
+- [x] 3. spec-extract.test.js + mini-schema.test.js + evc-shapes.test.js (RED) → tools/{spec-extract,mini-schema,deny-table}.mjs (GREEN)
+- [x] 4. build.test.js + artifact.test.js additions (RED) → build.mjs/template/index.js/bundle-runner ops (GREEN)
+- [x] 5. DecodeView.jsx + WireView.jsx + App.jsx (4 tabs) → npm run build → npm test → npm run check
+- [x] 6. browser.mjs additions (RED) → green; test:cli still green
+- [x] 7. landing/verify.sh needles + payment-protocols pin; README; CHANGELOG
+- [ ] 8. node:20.19 container run; Codex review → clean; DCO commits; PR; merge; deploy; verify live
+
+## Red→green record
+(append: `<test file> RED <reason> → GREEN <count>`)
+- test/unit/x402.diff.test.js + x402.test.js RED (ERR_MODULE_NOT_FOUND src/core/x402.js) → GREEN 15/15 (diff suite green first run) 2026-09-30
+- test/unit/{spec-extract,mini-schema,evc-shapes}.test.js RED (ERR_MODULE_NOT_FOUND build/*.mjs) → GREEN (unit total 53/53) 2026-09-30
+- test/build.test.js + test/artifact.test.js Phase B additions RED (needles absent; unknown ops x402.*/shapes) → GREEN (node total 66/66) 2026-09-30
+- test/browser.mjs Phase B: NO red observed — the UI was built in step 5 before this file was extended, and the old 2-tab assertion was replaced in the same edit that added the new checks; first run of the extended gate passed (all checks). test:cli green on the new run dir.
+- Codex code review R1: 2 P2 (hostile object-valued decoded fields crash the render; header trimmed before parse). browser.mjs assertions added → RED (timeout: hostile header unmounted the page) → fix: safe `show()` renderer, no trim, per-view ErrorBoundary. R2: 1 P2 (audience trimmed before the byte-equality matcher) → browser assertion RED → audience/resource kept byte-exact, matcher via pg.defaultPayeeMatch.
+
+## Review
+(fill when done)
+
+---
+
 # Playground rebuild: real receipt verification (founder "go ahead and build", 2026-09-30)
 
 Goal: replace landing/playground.html with a prebuilt static page that verifies real
