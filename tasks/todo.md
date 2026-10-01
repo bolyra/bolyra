@@ -13,7 +13,7 @@ Red→green record: each test file's first run is logged here before its impleme
 - [x] 5. DecodeView.jsx + WireView.jsx + App.jsx (4 tabs) → npm run build → npm test → npm run check
 - [x] 6. browser.mjs additions (RED) → green; test:cli still green
 - [x] 7. landing/verify.sh needles + payment-protocols pin; README; CHANGELOG
-- [ ] 8. node:20.19 container run; Codex review → clean; DCO commits; PR; merge; deploy; verify live
+- [x] 8. node:20.19 container run; Codex review → clean; DCO commits; PR; merge; deploy; verify live
 
 ## Red→green record
 (append: `<test file> RED <reason> → GREEN <count>`)
@@ -23,8 +23,20 @@ Red→green record: each test file's first run is logged here before its impleme
 - test/browser.mjs Phase B: NO red observed — the UI was built in step 5 before this file was extended, and the old 2-tab assertion was replaced in the same edit that added the new checks; first run of the extended gate passed (all checks). test:cli green on the new run dir.
 - Codex code review R1: 2 P2 (hostile object-valued decoded fields crash the render; header trimmed before parse). browser.mjs assertions added → RED (timeout: hostile header unmounted the page) → fix: safe `show()` renderer, no trim, per-view ErrorBoundary. R2: 1 P2 (audience trimmed before the byte-equality matcher) → browser assertion RED → audience/resource kept byte-exact, matcher via pg.defaultPayeeMatch.
 
-## Review
-(fill when done)
+## Review (2026-10-01)
+- Shipped: PR #201 squash-merged `f1a16841`; main CI green; `landing/deploy.sh` ran the pre-upload
+  gates (live CSP == snapshot; 66 tests; drift; Playwright; CLI), uploaded, invalidated
+  `I9O2QNG7BKYSUD0P3DXI3DOZ9X`; verify.sh: byte identity, Phase A + Phase B needles,
+  receipts 0.11.0 and payment-protocols 0.9.0 three-way pins, fetched-bundle smoke → `✓ all checks passed`.
+- Scope: Codex scoped Phase B DOWN from the proposed resolver port to the illustrative decode
+  (plan R1 REVISE 11 → R2 APPROVE WITH EDITS 4 → R3 APPROVE; approval delegated by the founder).
+  Quote verification (jose, keys, resolver port) is deferred to a separate request.
+- Code review: R1 2×P2 (hostile object-valued fields crashed the render; header trimmed),
+  R2 1×P2 (audience trimmed before byte-equality display), R3 clean. All fixed test-first.
+- Honest gaps in the red→green record: browser.mjs's Phase B assertions were first run after the
+  UI existed (no red for that file in step 6; later rounds did have red runs).
+- Lessons: the root .gitignore ignores `build/` (helper dir renamed to `tools/`); `codex exec`
+  prompts must be passed as an argument when stdin is /dev/null; node 20 prints TAP.
 
 ---
 
