@@ -4,6 +4,8 @@ import { Field, Status, CodeBlock } from './shared.jsx';
 const SAMPLE_NOTE = 'Bundled sample value, not independently trusted';
 const EMPTY = { header: '', resource: '', now: '', maxSeconds: '900', audience: '' };
 const keyOf = (f) => JSON.stringify([f.header, f.resource, f.now, f.maxSeconds, f.audience]);
+/** Render any decoded JSON value as text without coercing objects (a hostile `toString` must not throw). */
+const show = (v) => (typeof v === 'string' ? v : v === undefined ? '(none)' : (typeof v === 'number' || typeof v === 'boolean' || v === null) ? String(v) : JSON.stringify(v));
 const sentenceWith = (text, needle) => { const m = new RegExp(`[^.]*${needle}[^.]*\\.`).exec(text); return m ? m[0].trim() : null; };
 
 export function DecodeView({ pg }) {
@@ -26,7 +28,7 @@ export function DecodeView({ pg }) {
     const cap = Number(f.maxSeconds);
     if (!Number.isInteger(cap) || cap < 1 || cap > pg.X402_LIMITS.MAX_LOCAL_CHALLENGE_SECONDS) problems.push('host cap must be an integer from 1 to 900');
     if (problems.length > 0) { setResult({ key, value: { ok: false, problems } }); return; }
-    const parsed = pg.parseChallenge(f.header.trim());
+    const parsed = pg.parseChallenge(f.header); // bytes exactly as pasted: the package and the nonce are byte-sensitive
     if (!parsed.ok) { setResult({ key, value: { ok: false, problems: [`not usable: ${parsed.code} (reason ${parsed.reason})`] } }); return; }
     const isSample = sampleLoaded && f.header === pg.X402_SAMPLES.tavily.header;
     const legs = parsed.legs.map((entry) => {
@@ -106,9 +108,9 @@ function DecodeResults({ r, p42 }) {
       <div className="results-head"><Status kind="ok">Decoded</Status> <span className="muted">x402Version {String(d.x402Version)} · {r.parsed.legs.length} leg{r.parsed.legs.length === 1 ? '' : 's'}</span></div>
       <div className="kv small">
         <div><strong>Header SHA-256 (the local-mode nonce):</strong> <code data-nonce>{r.parsed.headerSha256}</code></div>
-        <div><strong>Header-declared resource (counterparty):</strong> <code data-header-resource>{d.resource && typeof d.resource === 'object' ? String(d.resource.url ?? '') : String(d.resource ?? '')}</code>{d.resource && typeof d.resource === 'object' && d.resource.description ? <span className="muted"> — {String(d.resource.description)}</span> : null}</div>
+        <div><strong>Header-declared resource (counterparty):</strong> <code data-header-resource>{d.resource && typeof d.resource === 'object' && !Array.isArray(d.resource) ? show(d.resource.url) : show(d.resource)}</code>{d.resource && typeof d.resource === 'object' && !Array.isArray(d.resource) && d.resource.description !== undefined ? <span className="muted"> — {show(d.resource.description)}</span> : null}</div>
         <div><strong>Your proposed outbound URL (host-known):</strong> <code data-input-resource>{r.resource || '(none supplied)'}</code></div>
-        {d.error !== undefined ? <div><strong>error:</strong> <code>{String(d.error)}</code></div> : null}
+        {d.error !== undefined ? <div><strong>error:</strong> <code>{show(d.error)}</code></div> : null}
       </div>
       {r.legs.map((L) => <LegPanel key={L.index} L={L} r={r} p42={p42} />)}
     </div>
@@ -159,8 +161,8 @@ function TokenPanel({ token, now }) {
   const exp = token.payload.exp;
   return (
     <div className="token" data-token="decoded">
-      <div className="small"><strong>Quote token:</strong> <Status kind="neutral">Decoded; signature not verified</Status> <span className="muted">— no trusted public key configured. Header <code>kid</code>: <code data-kid>{String(token.header.kid ?? '(none)')}</code>, <code>alg</code>: <code>{String(token.header.alg ?? '(none)')}</code>.</span></div>
-      {typeof exp === 'number' ? <div className="small muted">Inspection only: <code>exp</code> {exp} is {exp > now ? 'after' : 'before or equal to'} the <code>now</code> field ({now}).</div> : null}
+      <div className="small"><strong>Quote token:</strong> <Status kind="neutral">Decoded; signature not verified</Status> <span className="muted">— no trusted public key configured. Header <code>kid</code>: <code data-kid>{show(token.header.kid)}</code>, <code>alg</code>: <code>{show(token.header.alg)}</code>.</span></div>
+      {typeof exp === 'number' && Number.isFinite(exp) ? <div className="small muted">Inspection only: <code>exp</code> {exp} is {exp > now ? 'after' : 'before or equal to'} the <code>now</code> field ({now}).</div> : <div className="small muted">Inspection only: <code>exp</code> is {exp === undefined ? 'absent' : 'not a number'} ({show(exp)}).</div>}
       <div className="small muted">SHA-256 of the compact token (an audit handle, not a quote identifier): <code>{token.sha256}</code></div>
       <details><summary>Protected header and payload — decoded, not verified; iss/aud/claims are the token’s own statements</summary>
         <CodeBlock text={JSON.stringify({ header: token.header, payload: token.payload }, null, 2)} tall />

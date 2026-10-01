@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Component, useState } from 'react';
 import { VerifyView } from './VerifyView.jsx';
 import { SimulateView } from './SimulateView.jsx';
 import { DecodeView } from './DecodeView.jsx';
@@ -10,6 +10,16 @@ const TABS = [
   { id: 'decode', label: 'Decode a 402' },
   { id: 'wire', label: 'EVC wire shapes' },
 ];
+
+/** A render error in one view must never unmount the other views. */
+class ViewBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) return <div className="results" data-view-error><strong>This view hit a rendering error:</strong> <code>{String(this.state.error && this.state.error.message)}</code>. The other tabs are unaffected; reload the page to reset this one.</div>;
+    return this.props.children;
+  }
+}
 
 export function App({ pg }) {
   const fromHash = typeof location !== 'undefined' ? location.hash.slice(1) : '';
@@ -24,10 +34,10 @@ export function App({ pg }) {
       </div>
       {/* Both views stay mounted: the simulator's session (key, chain, log) must
           survive a tab switch. Only the explicit Reset action destroys it. */}
-      <div hidden={tab !== 'verify'}><VerifyView pg={pg} /></div>
-      <div hidden={tab !== 'simulate'}><SimulateView pg={pg} /></div>
-      <div hidden={tab !== 'decode'}><DecodeView pg={pg} /></div>
-      <div hidden={tab !== 'wire'}><WireView pg={pg} /></div>
+      <div hidden={tab !== 'verify'}><ViewBoundary><VerifyView pg={pg} /></ViewBoundary></div>
+      <div hidden={tab !== 'simulate'}><ViewBoundary><SimulateView pg={pg} /></ViewBoundary></div>
+      <div hidden={tab !== 'decode'}><ViewBoundary><DecodeView pg={pg} /></ViewBoundary></div>
+      <div hidden={tab !== 'wire'}><ViewBoundary><WireView pg={pg} /></ViewBoundary></div>
     </div>
   );
 }

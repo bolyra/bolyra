@@ -215,6 +215,14 @@ async function verifyAndRead(page) {
   check(!(await page.textContent('[data-leg="0"]')).includes('placeholder-and-token shape'), 'malformed token → no shape sentence');
   await page.fill('[data-field=x402-header]', 'A'.repeat(65 * 1024));
   check(await decodeAndRead() === 'false' && (await page.textContent('[data-results-decode]')).includes('exceeds'), '65 KiB paste → inline error');
+  // Codex review round 1: hostile decoded fields must not crash the page; bytes are not trimmed.
+  const hostileResource = encodeHeader({ ...observed.decoded, resource: { url: { toString: 0 }, description: [1, 2] }, error: { toString: null }, accepts: [{ ...observed.decoded.accepts[1], extra: { ...observed.decoded.accepts[1].extra, quoteToken: Buffer.from('{"alg":{"toString":0},"kid":[1]}').toString('base64url') + '.' + Buffer.from('{"exp":"soon"}').toString('base64url') + '.c' } }] });
+  await page.fill('[data-field=x402-header]', hostileResource);
+  check(await decodeAndRead() === 'true', 'hostile object-valued fields still decode');
+  check((await page.$$('[role=tab]')).length === 4 && await page.$('[data-view=decode]') !== null, 'page survives hostile decoded fields (no unmount)');
+  check(page.consoleErrors.length === 0, `no console errors after hostile fields: ${page.consoleErrors.join(' | ')}`);
+  await page.fill('[data-field=x402-header]', observed.paymentRequiredHeader + ' ');
+  check(await decodeAndRead() === 'false' && (await page.textContent('[data-results-decode]')).includes('header_base64'), 'trailing whitespace is NOT trimmed: rejected as header_base64 like the package');
   check((await page.textContent('[data-statement=must-not-claim]')).includes('does NOT establish'), 'MUST NOT claim statement present');
   check((await page.textContent('[data-statement=role]')).includes('agent-side host'), 'Role statement present');
 

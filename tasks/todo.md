@@ -21,6 +21,7 @@ Red→green record: each test file's first run is logged here before its impleme
 - test/unit/{spec-extract,mini-schema,evc-shapes}.test.js RED (ERR_MODULE_NOT_FOUND build/*.mjs) → GREEN (unit total 53/53) 2026-09-30
 - test/build.test.js + test/artifact.test.js Phase B additions RED (needles absent; unknown ops x402.*/shapes) → GREEN (node total 66/66) 2026-09-30
 - test/browser.mjs Phase B: NO red observed — the UI was built in step 5 before this file was extended, and the old 2-tab assertion was replaced in the same edit that added the new checks; first run of the extended gate passed (all checks). test:cli green on the new run dir.
+- Codex code review R1: 2 P2 (hostile object-valued decoded fields crash the render; header trimmed before parse). browser.mjs assertions added → RED (timeout: hostile header unmounted the page) → fix: safe `show()` renderer, no trim, per-view ErrorBoundary.
 
 ## Review
 (fill when done)
