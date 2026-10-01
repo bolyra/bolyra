@@ -28,6 +28,32 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## bolyra.ai — /playground Phase B: "Decode a 402" and "EVC wire shapes" (2026-09-30)
+
+Two illustrative tabs added to the playground (no package release):
+
+- **Decode a 402** decodes an x402 v2 `PAYMENT-REQUIRED` header with a browser
+  port of `@bolyra/payment-protocols@0.9.0`'s header and leg rules
+  (`x402LocalChallenge`) and protected-header peek (`peekHeader`), differentially
+  tested against the published package on its own test corpus (claim bounded to
+  that corpus). Legs are described from observed fields (address-valued /
+  placeholder-urn / other; quote token present or not); the quote token is shown
+  decoded and explicitly not verified; the x402 EVC profile §4.2 Role,
+  Applicability, Local-context, nine Host MUSTs and MUST-NOT-claim paragraphs are
+  rendered verbatim from the spec. Nothing is verified; no keys, no network.
+  Configurable quote verification is deferred to a separate request.
+- **EVC wire shapes**: request (§2.1), schemas (§2.2, §3.4), verdicts (§3.1–3.3),
+  the `kind` table, the 15-code denial registry (§9) with HTTP status/title/`type`
+  attributed to `@bolyra/mpp@0.7.0`, the gate-local `missing_authorization`, and
+  worked examples §13.1–13.8 — all extracted from the spec at build time with
+  checked extraction contracts, schema validation of every example, and source
+  sha256s on the page.
+- Gates: new differential, extractor, schema-validator and deny-table unit tests;
+  artifact test ties every displayed example to its source fence with an
+  independent fence reader; browser gate proves displayed and copied JSON equal
+  the checkout's extraction; `landing/verify.sh` checks the Phase B needles and a
+  three-way `@bolyra/payment-protocols` pin.
+
 ## bolyra.ai — /playground rebuilt around real receipt verification (2026-09-30)
 
 The old page reported "signature VALID" after checking only hex lengths and
