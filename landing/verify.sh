@@ -322,13 +322,17 @@ done
 pass "/playground, /playground.html and a cache-busted fetch are byte-identical to landing/playground.html"
 PG_PIN=$(grep -oE '@bolyra/receipts@[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?' "$PG_TMP" | sed 's|^@bolyra/receipts@||' | sort -u || true)
 [ "$(printf '%s' "$PG_PIN" | grep -c . || true)" = "1" ] || { rm -f "$PG_TMP"; fail "/playground must pin exactly one @bolyra/receipts version (got: '$(echo "$PG_PIN" | tr '\n' ' ')')"; }
-for needle in "@bolyra/receipts@$PG_PIN" "Verify receipts" "Simulate spend policy" 'id="playground-bundle"'; do
+for needle in "@bolyra/receipts@$PG_PIN" "Verify receipts" "Simulate spend policy" 'id="playground-bundle"' "is never included in analytics requests" "Our hosting access logs record request metadata, including IP addresses and browser information."; do
   grep -qF "$needle" "$PG_TMP" || { rm -f "$PG_TMP"; fail "/playground lacks '$needle'"; }
 done
-for forbidden in "text/babel" "unpkg.com/react" "secp256k1-keccak256" "Delegation Flow" "Gateway Simulation"; do
+for forbidden in "text/babel" "unpkg.com/react" "secp256k1-keccak256" "Delegation Flow" "Gateway Simulation" "plausible.io" "loads Plausible analytics"; do
   ! grep -qF "$forbidden" "$PG_TMP" || { rm -f "$PG_TMP"; fail "/playground still contains legacy marker '$forbidden'"; }
 done
 pass "/playground needles present, legacy markers absent"
+# The usage-signal endpoint must answer 200 (HEAD, no query: the usage report ignores requests without ev=).
+E_STATUS=$(curl -s -o /dev/null -I -w "%{http_code}" "https://bolyra.ai/e") || true
+[ "$E_STATUS" = "200" ] || { rm -f "$PG_TMP"; fail "usage-signal endpoint https://bolyra.ai/e returned $E_STATUS, expected 200"; }
+pass "usage-signal endpoint /e answers 200"
 PG_LOCK=$(node -e 'const l=require(require("path").resolve(process.argv[1]));process.stdout.write(l.packages["node_modules/@bolyra/receipts"].version)' "$PLAYGROUND_APP/package-lock.json") || { rm -f "$PG_TMP"; fail "cannot read @bolyra/receipts from apps/playground/package-lock.json"; }
 PG_CONFIG=$(node -e 'process.stdout.write(require(require("path").resolve(process.argv[1])).config.receiptsVersion)' "$PLAYGROUND_APP/package.json")
 [ "$PG_PIN" = "$PG_LOCK" ] && [ "$PG_PIN" = "$PG_CONFIG" ] || { rm -f "$PG_TMP"; fail "@bolyra/receipts version drift: page pins $PG_PIN, lockfile installs $PG_LOCK, package config says $PG_CONFIG"; }

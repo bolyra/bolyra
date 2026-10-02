@@ -38,7 +38,7 @@ test('the build is byte-deterministic and a one-byte mutation fails --check', ()
 test('page statics: no Babel, no CDN React, pin text, licenses block, escaped bundle', () => {
   const html = fs.readFileSync(COMMITTED, 'utf8');
   assert.ok(!/text\/babel/i.test(html)); assert.ok(!/unpkg\.com/.test(html)); assert.ok(!/cdnjs|jsdelivr/.test(html));
-  assert.deepEqual(externalScripts(html), ['https://plausible.io/js/script.js']);
+  assert.deepEqual(externalScripts(html), []);
   assert.ok(html.includes(`@bolyra/receipts@${pkg.config.receiptsVersion}`));
   assert.ok(html.includes('<details class="licenses">'));
   for (const [name, ver] of Object.entries({ react: '18.3.1', 'react-dom': '18.3.1', '@bolyra/receipts': pkg.config.receiptsVersion, '@noble/secp256k1': pkg.dependencies['@noble/secp256k1'], '@noble/hashes': pkg.dependencies['@noble/hashes'] })) assert.ok(html.includes(`${name}@${ver}`), `${name}@${ver} in licenses`);
@@ -78,4 +78,15 @@ test('phase B statics: needles, payment-protocols pin, no oracle in the bundle, 
   assert.ok(inputs.every((i) => !/@bolyra\/(payment-protocols|mpp)|node_modules\/jose\//.test(i)), inputs.filter((i) => /payment-protocols|mpp|jose/.test(i)).join(','));
   const specSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, 'spec/external-verifier-contract-v1.md'))).digest('hex');
   assert.ok(html.includes(specSha.slice(0, 12)), 'spec sha256 prefix rendered on the page');
+});
+
+// --- usage signals -----------------------------------------------------------
+test('usage statics: no Plausible, the exact privacy sentence, no stale analytics claim', () => {
+  const html = fs.readFileSync(COMMITTED, 'utf8');
+  assert.ok(!html.includes('plausible.io'), 'no plausible.io reference');
+  assert.ok(html.includes('Pasted content is processed in your browser and is never included in analytics requests.'));
+  assert.ok(html.includes('Our hosting access logs record request metadata, including IP addresses and browser information.'));
+  assert.ok(!html.includes('loads Plausible analytics'));
+  const visible = html.replace(/<script id="playground-bundle">[\s\S]*?<\/script>/, '');
+  assert.ok(!/anonymous/i.test(visible), 'page copy never describes the logs as anonymous');
 });

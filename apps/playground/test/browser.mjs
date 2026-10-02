@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { extractEvcSpec } from '../tools/spec-extract.mjs';
+import { EVENTS } from '../src/core/usage.js';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(APP, '../..');
@@ -40,8 +41,12 @@ const server = http.createServer((req, res) => {
   if (url === '/playground' || url === '/playground.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': CSP, 'cache-control': 'no-store' });
     res.end(html);
-  } else { res.writeHead(404); res.end('not found'); }
+  } else if (url === '/e') { res.writeHead(eStatus, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); res.end(''); }
+  else { res.writeHead(404); res.end('not found'); }
 });
+let eStatus = 200;
+const events = []; // { phase, ev }
+const CANARY = 'CANARY-7f3a-secret-do-not-send';
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
@@ -49,7 +54,6 @@ const browser = await chromium.launch();
 const STUBS = [
   [/^https:\/\/fonts\.googleapis\.com\//, { contentType: 'text/css', body: '/* stub: no @font-face, so no gstatic fetch */' }],
   [/^https:\/\/fonts\.gstatic\.com\//, { contentType: 'font/woff2', body: '' }],
-  [/^https:\/\/plausible\.io\/js\/script\.js$/, { contentType: 'application/javascript', body: '/* stub */' }],
 ];
 
 async function newPage(context) {
@@ -63,10 +67,23 @@ async function newPage(context) {
 
 async function newContext(opts = {}) {
   const context = await browser.newContext({ acceptDownloads: true, ...opts });
-  await context.route('**/*', (route) => {
-    const url = route.request().url();
+  await context.route('**/*', async (route) => {
+    const req = route.request();
+    const url = req.url();
     requests.push({ phase, url });
     if (url.startsWith(origin + '/playground')) return route.continue();
+    if (url.startsWith(origin + '/e?') || url === origin + '/e') {
+      // Usage beacon policy: same-origin GET /e, empty body, exactly v=1 and one allowlisted ev,
+      // no other params, no cookie, no referer; never during page load.
+      const u = new URL(url); const keys = [...u.searchParams.keys()];
+      const headers = await req.allHeaders();
+      const ok = phase !== 'load' && req.method() === 'GET' && !req.postData() && u.pathname === '/e'
+        && keys.length === 2 && keys[0] === 'v' && keys[1] === 'ev' && u.searchParams.get('v') === '1'
+        && EVENTS.includes(u.searchParams.get('ev')) && !('cookie' in headers) && !('referer' in headers);
+      if (!ok) failures.push(`beacon violates policy during ${phase}: ${req.method()} ${url} headers=${Object.keys(headers).join(',')}`);
+      else events.push({ phase, ev: u.searchParams.get('ev') });
+      return route.continue();
+    }
     const stub = STUBS.find(([re]) => re.test(url));
     if (stub && phase === 'load') return route.fulfill({ status: 200, contentType: stub[1].contentType, body: stub[1].body });
     failures.push(`unexpected request during ${phase}: ${url}`);
@@ -250,6 +267,19 @@ async function verifyAndRead(page) {
   await page.click('[data-tab=simulate]');
   await page.waitForSelector('[data-view=simulate]');
 
+  // ---- usage signals: canary never leaves; expected events, each once ------------
+  await page.click('[data-tab=verify]'); await page.click('[data-tab=verify]');
+  await page.fill('[data-field=input]', CANARY); await verifyAndRead(page);
+  await page.fill('[data-field=expectedSigner]', CANARY);
+  await page.click('[data-tab=decode]');
+  await page.fill('[data-field=x402-header]', CANARY); await page.fill('[data-field=audience]', CANARY); await page.fill('[data-field=resource]', CANARY);
+  await page.click('[data-action=decode]'); await page.waitForSelector('[data-results-decode]');
+  check(requests.every((r) => !r.url.includes(CANARY) && !r.url.includes('CANARY')), 'pasted canary never appears in any request');
+  const desk = events.filter((e) => e.phase === 'interact').map((e) => e.ev);
+  check(desk.length === new Set(desk).size, `each usage event sent at most once per page load: ${desk.join(',')}`);
+  check(desk[0] === 'interacted', `first usage event is interacted (got ${desk[0]})`);
+  for (const ev of ['sample_verify', 'run_verify', 'verify_ok', 'verify_failed', 'verify_invalid', 'tab_simulate', 'sample_simulate', 'run_simulate', 'simulate_ok', 'simulate_failed', 'export_clicked', 'tab_decode', 'sample_decode', 'run_decode', 'decode_ok', 'decode_invalid', 'tab_evc', 'copy_clicked', 'tab_verify']) check(desk.includes(ev), `usage event ${ev} emitted`);
+  check(desk.length <= 32, 'usage event cap respected');
   check(page.consoleErrors.length === 0, `console errors: ${page.consoleErrors.join(' | ')}`);
   fs.writeFileSync(path.join(RUN_DIR, 'manifest.json'), JSON.stringify({ htmlSha256, htmlPath: HTML_PATH, expectedCount, expectedHead, signer, files: { receipts: 'receipts.jsonl', signer: 'signer.json' } }, null, 2) + '\n');
   await context.close();
@@ -258,6 +288,7 @@ async function verifyAndRead(page) {
 // --- mobile run -----------------------------------------------------------
 {
   phase = 'load';
+  eStatus = 500; // the beacon endpoint failing must not affect the page
   const context = await newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await newPage(context);
   await page.goto(`${origin}/playground`, { waitUntil: 'load' });
@@ -279,7 +310,9 @@ async function verifyAndRead(page) {
   await page.waitForSelector('[data-results-decode]');
   check((await page.$$('[data-leg]')).length === 2, 'mobile: tavily decodes');
   check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'mobile: no horizontal scroll after decode');
-  check(page.consoleErrors.length === 0, `mobile console errors: ${page.consoleErrors.join(' | ')}`);
+  check(events.some((e) => e.phase === 'interact-mobile'), 'mobile: usage events attempted while /e returns 500');
+  const mobileErrors = page.consoleErrors.filter((t) => !/status of 500/.test(t));
+  check(mobileErrors.length === 0, `mobile console errors (besides the forced /e 500): ${mobileErrors.join(' | ')}`);
   await context.close();
 }
 
@@ -287,9 +320,11 @@ await browser.close();
 server.close();
 
 const interactive = requests.filter((r) => r.phase !== 'load');
-check(interactive.length === 0, `requests during interaction: ${interactive.map((r) => r.url).join(', ')}`);
+const nonBeacon = interactive.filter((r) => !(r.url.startsWith(origin + '/e?')));
+check(nonBeacon.length === 0, `non-beacon requests during interaction: ${nonBeacon.map((r) => r.url).join(', ')}`);
+check(!requests.some((r) => r.phase === 'load' && r.url.startsWith(origin + '/e')), 'no usage beacon during page load');
 const external = requests.filter((r) => !r.url.startsWith(origin));
-console.log(`requests: ${requests.length} total, ${external.length} external during load (${[...new Set(external.map((r) => new URL(r.url).host))].join(', ')}), 0 during interaction`);
+console.log(`requests: ${requests.length} total, ${external.length} external during load (${[...new Set(external.map((r) => new URL(r.url).host))].join(', ')}), ${interactive.length} during interaction (all /e usage beacons; ${events.length} allowlisted events)`);
 console.log(`run dir: ${RUN_DIR}`);
 if (failures.length > 0) { console.error(`BROWSER GATE FAILED (${failures.length}):\n - ${failures.join('\n - ')}`); process.exit(1); }
 console.log(`browser gate: all ${failures.length === 0 ? 'checks' : ''} passed`);

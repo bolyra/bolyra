@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Field, Status, CodeBlock } from './shared.jsx';
+import { track } from '../core/usage.js';
 
 const SAMPLE_NOTE = 'Bundled sample value, not independently trusted';
 const EMPTY = { expectedSigner: '', expectedCount: '', expectedHeadHash: '', allowUnchained: false };
@@ -15,6 +16,7 @@ export function VerifyView({ pg }) {
   const shown = result && result.key === key ? result.value : null;
 
   const loadSample = (id) => {
+    track('sample_verify');
     const s = pg.SAMPLES[id];
     setText(s.text);
     const next = { ...EMPTY, expectedSigner: s.signer ?? '', expectedCount: s.count != null ? String(s.count) : '', expectedHeadHash: s.head ?? '' };
@@ -30,9 +32,11 @@ export function VerifyView({ pg }) {
   };
   const setOpt = (k, v) => { setOpts((o) => ({ ...o, [k]: v })); setFromSample((f) => ({ ...f, [k]: false })); };
   const onVerify = () => {
+    track('run_verify');
     let value;
     try { value = pg.verifyAll(text, opts); }
     catch (err) { value = { overall: 'failed', kind: 'invalid', rows: [], chain: null, checkpoint: { state: 'invalid' }, problems: [`verifier_error: ${err && err.message ? err.message : String(err)}`] }; }
+    track(`verify_${value.overall === 'ok' ? 'ok' : value.overall === 'invalid' ? 'invalid' : 'failed'}`);
     setResult({ key, value });
   };
 

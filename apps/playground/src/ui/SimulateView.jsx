@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Field, Status, CodeBlock, CopyButton, DownloadButton } from './shared.jsx';
+import { track } from '../core/usage.js';
 
 const PRESETS = [
   { id: 'over-limit', label: '$25 then $500 under small', steps: [{ tier: 'small', amount: '25' }, { tier: 'small', amount: '500' }] },
@@ -17,12 +18,15 @@ export function SimulateView({ pg }) {
   const [error, setError] = useState('');
   const session = sessionRef.current;
 
-  const runSteps = async (steps) => {
+  const runSteps = async (steps, { preset = false } = {}) => {
     if (busy) return;
+    if (preset) track('sample_simulate');
+    track('run_simulate');
     setBusy(true); setError('');
     try {
       for (const step of steps) {
         const r = await pg.decide(session, step);
+        track(r.outcome === 'allow' ? 'simulate_ok' : r.outcome === 'deny' ? 'simulate_failed' : 'simulate_invalid');
         setRuns((prev) => [...prev, { ...r, tier: step.tier, amount: String(step.amount) }]);
       }
     } catch (err) { setError(err && err.message ? err.message : String(err)); }
@@ -52,7 +56,7 @@ export function SimulateView({ pg }) {
       </div>
       <div className="actions">
         <button type="button" className="btn btn-primary" disabled={busy} onClick={() => runSteps([{ tier, amount }])} data-action="run">Run</button>
-        {PRESETS.map((p) => <button key={p.id} type="button" className="btn" disabled={busy} onClick={() => runSteps(p.steps)} data-preset={p.id}>{p.label}</button>)}
+        {PRESETS.map((p) => <button key={p.id} type="button" className="btn" disabled={busy} onClick={() => runSteps(p.steps, { preset: true })} data-preset={p.id}>{p.label}</button>)}
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={onReset} data-action="reset">Reset (new key, new chain)</button>
       </div>
       {error ? <div className="problems"><li>{error}</li></div> : null}

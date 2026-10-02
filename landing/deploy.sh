@@ -36,8 +36,9 @@ VIDEO8="$SCRIPT_DIR/video-oauth.html"
 PLAYGROUND="$SCRIPT_DIR/playground.html"
 CONFORMANCE="$SCRIPT_DIR/conformance.html"
 OPERATOR_TRIAL="$SCRIPT_DIR/operator-trial.html"
+USAGE_BEACON="$SCRIPT_DIR/e"
 
-for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$BLOG6" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND" "$CONFORMANCE" "$OPERATOR_TRIAL"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$BLOG6" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND" "$CONFORMANCE" "$OPERATOR_TRIAL" "$USAGE_BEACON"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
@@ -296,6 +297,11 @@ aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground.html" \
 aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
+# Usage-signal endpoint for the playground: an empty object so GET /e?v=1&ev=<name> returns 200.
+# The signal is the CloudFront access-log line (apps/playground/tools/usage-report.mjs reads it).
+aws s3 cp "$USAGE_BEACON" "s3://$BUCKET/e" \
+  --content-type "text/plain" \
+  --cache-control "no-store"
 
 echo "→ uploading school.html to s3://$BUCKET/"
 aws s3 cp "$SCRIPT_DIR/school.html" "s3://$BUCKET/school.html" \

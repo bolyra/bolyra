@@ -28,6 +28,22 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## bolyra.ai — /playground usage signals (2026-10-02)
+
+- The playground now sends limited usage signals to bolyra.ai: a fixed allowlist of event names
+  (tab selected, sample loaded, verify/simulate/decode run and its broad outcome, copy/export
+  clicked) as `GET /e?v=1&ev=<name>`, no body, no cookies, no referrer, no visitor IDs, each
+  event at most once per page load, hard cap 32. Pasted content is never included.
+- The Plausible script is removed from the playground (no account evidence existed); the page's
+  privacy sentence now states exactly what is sent and that hosting access logs record request
+  metadata including IP addresses.
+- `apps/playground/tools/usage-report.mjs` reads the CloudFront access logs and prints per-day
+  raw and heuristic-filtered counts; it never prints addresses.
+- Gates: the browser gate's request policy changes from "no requests during interaction" to
+  "only allowlisted `/e` beacons", with a pasted-canary check, once-per-event, no beacon during
+  load, and `/e` failure tolerance; `landing/verify.sh` checks the new sentence, forbids any
+  `plausible.io` reference on the playground, and requires `/e` to answer 200.
+
 ## bolyra.ai — /playground Phase B: "Decode a 402" and "EVC wire shapes" (2026-09-30)
 
 Two illustrative tabs added to the playground (no package release):

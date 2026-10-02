@@ -30,7 +30,7 @@ const lines = (t) => t.split('\n').filter(Boolean);
 
 test('page shape: one bundle marker, Plausible is the only external script', () => {
   assert.doesNotThrow(() => extractBundle(html));
-  assert.deepEqual(externalScripts(html), ['https://plausible.io/js/script.js']);
+  assert.deepEqual(externalScripts(html), []);
   assert.ok(!/text\/babel/.test(html)); assert.ok(!/unpkg\.com/.test(html));
   assert.ok(html.includes(`@bolyra/receipts@${pkg.config.receiptsVersion}`), 'visible version pin');
 });
@@ -147,4 +147,12 @@ test('shapes op: registry, gate-local, revision, source hash and every worked ex
   assert.equal(shapes.profile42.hostMusts.length, 9); assert.equal(shapes.profile42.role, p.role);
   assert.equal(meta.PAYMENT_PROTOCOLS_VERSION, pkg.config.paymentProtocolsVersion);
   assert.ok(meta.exports.includes('parseChallenge') && meta.exports.includes('EVC_SHAPES'));
+});
+
+// --- usage signals -----------------------------------------------------------
+import { EVENTS as SOURCE_EVENTS } from '../src/core/usage.js';
+test('bundle exposes track and the exact usage allowlist', () => {
+  const [meta] = run([{ op: 'meta' }]);
+  assert.ok(meta.exports.includes('track') && meta.exports.includes('USAGE_EVENTS'));
+  assert.deepEqual(meta.USAGE_EVENTS, [...SOURCE_EVENTS]);
 });

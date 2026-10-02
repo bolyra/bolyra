@@ -1,3 +1,22 @@
+# Playground usage signals (founder: "i want to learn about how people are using the playground", 2026-10-01)
+
+Claude take → Codex BUILD (bounded same-origin instrumentation, ½-day cap, daily counts, no funnels,
+no demand inference); plan approved. Red→green:
+- test/unit/usage.test.js RED (module missing) → GREEN 7/7
+- build/artifact usage expectations RED (Plausible present, no track export) → GREEN (node 75/75)
+- browser.mjs beacon policy + canary + 500 tolerance: written with the UI hooks in the same pass;
+  first run green (no observed red for this file)
+- test/unit/usage-report.test.js RED (module missing) → GREEN (unit 61/61)
+- Codex review R1: 1 P2 (report skipped middle months) → monthsBetween test RED (no export) → GREEN (unit 62/62)
+- Codex review R2: 1 P2 (HEAD requests counted as loads/events) → GET-only test RED → GREEN (unit 63/63)
+
+- [x] 1. usage.js + hooks + template (Plausible removed, Codex privacy wording)
+- [x] 2. landing/e + deploy.sh upload + verify.sh needles/forbidden/endpoint
+- [x] 3. tools/usage-report.mjs
+- [ ] 4. container run, Codex review, PR, merge, deploy, live synthetic event confirmed in logs
+
+---
+
 # Playground Phase B: Decode a 402 + EVC wire shapes (founder "playground Phase B", 2026-09-30)
 
 Goal: two illustrative tabs on bolyra.ai/playground; nothing fabricated (build-time extraction
