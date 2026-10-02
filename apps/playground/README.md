@@ -19,6 +19,12 @@ Source for **bolyra.ai/playground** (`landing/playground.html`, generated and co
   schemas, source sha256s), with HTTP status/title/type from `@bolyra/mpp` in a child process.
   Guarantee, stated narrowly: contracts are checked at build; `--check` rejects stale output; a
   spec edit that keeps the contracts intact changes the page on the next build.
+- `src/core/usage.js` — usage signals: a fixed allowlist of event names sent as a same-origin
+  `GET /e?v=1&ev=<name>` (no body, no cookies, no referrer, no IDs, once per event per page load,
+  cap 32). Nothing derived from input is ever sent. Read them with
+  `node tools/usage-report.mjs --since YYYY-MM-DD` (syncs CloudFront logs read-only into a temp
+  dir; prints per-day raw and filtered counts, never addresses). Counts are first occurrences per
+  page load, not sessions or people, and not evidence of demand.
 - `src/ui/` — React 18 views (Verify receipts, Simulate spend policy, Decode a 402, EVC wire shapes). `build.mjs` bundles everything with esbuild into one
   inline `<script id="playground-bundle">` in `template.html`; samples are read from
   repository fixtures at build time.

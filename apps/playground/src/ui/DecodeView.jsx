@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Field, Status, CodeBlock } from './shared.jsx';
+import { track } from '../core/usage.js';
 
 const SAMPLE_NOTE = 'Bundled sample value, not independently trusted';
 const EMPTY = { header: '', resource: '', now: '', maxSeconds: '900', audience: '' };
@@ -16,20 +17,22 @@ export function DecodeView({ pg }) {
   const shown = result && result.key === key ? result.value : null;
   const set = (k, v) => { setF((o) => ({ ...o, [k]: v })); if (k === 'header') setSampleLoaded(false); };
   const loadSample = () => {
+    track('sample_decode');
     const s = pg.X402_SAMPLES.tavily;
     setF({ header: s.header, resource: s.resource, now: String(s.now), maxSeconds: '900', audience: '' });
     setSampleLoaded(true);
   };
   const onDecode = () => {
+    track('run_decode');
     const problems = [];
     if (f.header.length > pg.X402_LIMITS.MAX_PAYMENT_REQUIRED_CHARS) problems.push(`header exceeds ${pg.X402_LIMITS.MAX_PAYMENT_REQUIRED_CHARS} characters; not decoded`);
     const now = f.now.trim() === '' ? null : Number(f.now);
     if (now === null || !pg.isUnixSeconds(now)) problems.push('now must be a unix time in seconds (finite, non-negative)');
     const cap = Number(f.maxSeconds);
     if (!Number.isInteger(cap) || cap < 1 || cap > pg.X402_LIMITS.MAX_LOCAL_CHALLENGE_SECONDS) problems.push('host cap must be an integer from 1 to 900');
-    if (problems.length > 0) { setResult({ key, value: { ok: false, problems } }); return; }
+    if (problems.length > 0) { track('decode_invalid'); setResult({ key, value: { ok: false, problems } }); return; }
     const parsed = pg.parseChallenge(f.header); // bytes exactly as pasted: the package and the nonce are byte-sensitive
-    if (!parsed.ok) { setResult({ key, value: { ok: false, problems: [`not usable: ${parsed.code} (reason ${parsed.reason})`] } }); return; }
+    if (!parsed.ok) { track('decode_invalid'); setResult({ key, value: { ok: false, problems: [`not usable: ${parsed.code} (reason ${parsed.reason})`] } }); return; }
     const isSample = sampleLoaded && f.header === pg.X402_SAMPLES.tavily.header;
     const legs = parsed.legs.map((entry) => {
       if (entry.leg === null) return { index: entry.index, reason: entry.reason };
@@ -46,13 +49,14 @@ export function DecodeView({ pg }) {
       }
       return { index: entry.index, leg, cls, token, deadline: now + Math.min(leg.maxTimeoutSeconds, cap), observation: isSample && entry.index === 0 ? sentenceWith(pg.X402_SAMPLES.tavily.observation, 'differed on every call') : null };
     });
+    track('decode_ok');
     setResult({ key, value: { ok: true, parsed, legs, now, cap, audience: f.audience, resource: f.resource, defaultPayeeMatch: pg.defaultPayeeMatch } }); // host inputs kept byte-exact: the matcher is byte equality
   };
   const p42 = pg.EVC_SHAPES.profile42;
 
   return (
     <section className="view" data-view="decode">
-      <p className="lead">Paste the value of an x402 v2 <code>PAYMENT-REQUIRED</code> header (standard base64 of JSON). Decoding runs in your browser with the header and leg rules of <code>@bolyra/payment-protocols@{pg.PAYMENT_PROTOCOLS_VERSION}</code>’s local-challenge parser (a browser port, differentially tested against the package on its test corpus). This page’s own code makes no request with what you paste; the page loads Plausible analytics for page views. Nothing here verifies a signature, a mandate, or a payee.</p>
+      <p className="lead">Paste the value of an x402 v2 <code>PAYMENT-REQUIRED</code> header (standard base64 of JSON). Decoding runs in your browser with the header and leg rules of <code>@bolyra/payment-protocols@{pg.PAYMENT_PROTOCOLS_VERSION}</code>’s local-challenge parser (a browser port, differentially tested against the package on its test corpus). Pasted content is processed in your browser and is never included in analytics requests. Nothing here verifies a signature, a mandate, or a payee.</p>
       <div className="samples">
         <span className="samples-label">Sample from the repository:</span>
         <button type="button" className="btn btn-sm" onClick={loadSample} data-sample="tavily">{pg.X402_SAMPLES.tavily.label}</button>

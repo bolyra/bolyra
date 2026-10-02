@@ -1,4 +1,5 @@
 import { Component, useState } from 'react';
+import { track } from '../core/usage.js';
 import { VerifyView } from './VerifyView.jsx';
 import { SimulateView } from './SimulateView.jsx';
 import { DecodeView } from './DecodeView.jsx';
@@ -29,7 +30,7 @@ export function App({ pg }) {
     <div className="app">
       <div className="tab-bar" role="tablist">
         {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} data-tab={t.id}>{t.label}</button>
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => { track(`tab_${t.id === 'wire' ? 'evc' : t.id}`); setTab(t.id); }} data-tab={t.id}>{t.label}</button>
         ))}
       </div>
       {/* Both views stay mounted: the simulator's session (key, chain, log) must

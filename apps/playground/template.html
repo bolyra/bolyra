@@ -10,7 +10,6 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://bolyra.ai/playground">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0a0a'/%3E%3Ctext x='32' y='44' font-family='-apple-system,BlinkMacSystemFont,sans-serif' font-size='38' font-weight='700' text-anchor='middle' fill='%236366f1'%3EB%3C/text%3E%3C/svg%3E">
-<script defer data-domain="bolyra.ai" src="https://plausible.io/js/script.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -125,7 +124,7 @@ noscript { display: block; padding: 20px; border: 1px solid var(--border); borde
 <main class="container">
   <h1>Bolyra <span>Playground</span></h1>
   <p class="subtitle">Four views: <strong>Verify receipts</strong> checks a pasted receipt or receipt log for signature validity, expected signer, chain integrity against an external checkpoint, and instance binding. <strong>Simulate spend policy</strong> makes simulated allow/deny decisions and signs real chained receipts for them with a temporary key. <strong>Decode a 402</strong> decodes an x402 PAYMENT-REQUIRED header and shows what the EVC profile §4.2 would require (nothing is verified). <strong>EVC wire shapes</strong> shows the External Verifier Contract request, verdict and denial registry as copyable JSON extracted from the spec at build time.</p>
-  <p class="pin">Verification runs the published <code>@bolyra/receipts@{{RECEIPTS_VERSION}}</code> in your browser; 402 decoding mirrors the header and leg rules of <code>@bolyra/payment-protocols@{{PAYMENT_PROTOCOLS_VERSION}}</code> (a browser port, differentially tested). This page’s own code makes no request with what you paste; the page loads Plausible analytics for page views. Verify exports with <code>npx @bolyra/cli@{{CLI_VERSION}} receipt verify-chain</code>.</p>
+  <p class="pin">Verification runs the published <code>@bolyra/receipts@{{RECEIPTS_VERSION}}</code> in your browser; 402 decoding mirrors the header and leg rules of <code>@bolyra/payment-protocols@{{PAYMENT_PROTOCOLS_VERSION}}</code> (a browser port, differentially tested). Pasted content is processed in your browser and is never included in analytics requests. We send limited usage signals—such as tab selections, button clicks, and broad result categories—to bolyra.ai without cookies or visitor IDs. Our hosting access logs record request metadata, including IP addresses and browser information. Verify exports with <code>npx @bolyra/cli@{{CLI_VERSION}} receipt verify-chain</code>.</p>
   <div id="app"><noscript>This page runs the verifier in your browser and needs JavaScript. To verify receipts without it, use the published CLI: <code>npx @bolyra/cli receipt verify-chain receipts.jsonl --signer 0x…</code></noscript></div>
   <details class="licenses"><summary>Bundled open-source licenses</summary>
 {{LICENSES}}
