@@ -8,6 +8,7 @@ no demand inference); plan approved. Red→green:
   first run green (no observed red for this file)
 - test/unit/usage-report.test.js RED (module missing) → GREEN (unit 61/61)
 - Codex review R1: 1 P2 (report skipped middle months) → monthsBetween test RED (no export) → GREEN (unit 62/62)
+- Codex review R2: 1 P2 (HEAD requests counted as loads/events) → GET-only test RED → GREEN (unit 63/63)
 
 - [x] 1. usage.js + hooks + template (Plausible removed, Codex privacy wording)
 - [x] 2. landing/e + deploy.sh upload + verify.sh needles/forbidden/endpoint

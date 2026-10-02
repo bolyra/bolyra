@@ -43,3 +43,10 @@ test('monthsBetween enumerates every calendar month in the range (Codex review R
   assert.deepEqual(monthsBetween('2025-11-15', '2026-02-01'), ['2025-11', '2025-12', '2026-01', '2026-02']);
   assert.deepEqual(monthsBetween('2026-10-02', '2026-10-02'), ['2026-10']);
 });
+
+test('only GET requests count as page loads or usage events (Codex review R2)', () => {
+  const row = (method, stem, query = '-') => ['2026-10-02', '12:00:00', 'IAD89', '10', '7.7.7.7', method, 'd.cloudfront.net', stem, '200', '-', 'Mozilla/5.0%20Chrome/152', query].join('\t');
+  const s = summarize([row('HEAD', '/playground'), row('HEAD', '/e', 'v=1&ev=tab_decode'), row('POST', '/e', 'v=1&ev=tab_decode'), row('GET', '/playground'), row('GET', '/e', 'v=1&ev=tab_decode')], { since: '2026-10-02' });
+  const d = s.days['2026-10-02'];
+  assert.equal(d.loads.raw, 1); assert.equal(d.raw.tab_decode, 1); assert.equal(d.filtered.tab_decode, 1);
+});

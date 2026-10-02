@@ -24,12 +24,13 @@ const SCANNER_PATH = /^\/(\.env|\.git|index\.php|wp-|xmlrpc|\.aws|phpinfo|admin|
 
 export function summarize(lines, { since = '0000-00-00' } = {}) {
   const rows = [];
-  for (const l of lines) { if (!l || l.startsWith('#')) continue; const f = l.split('\t'); if (f.length < 12) continue; rows.push({ date: f[0], ip: f[4], stem: f[7], ua: f[10], query: f[11] }); }
+  for (const l of lines) { if (!l || l.startsWith('#')) continue; const f = l.split('\t'); if (f.length < 12) continue; rows.push({ date: f[0], ip: f[4], method: f[5], stem: f[7], ua: f[10], query: f[11] }); }
   const scanners = new Set(rows.filter((r) => SCANNER_PATH.test(r.stem)).map((r) => r.ip));
   const days = {};
   const day = (d) => (days[d] ??= { raw: {}, filtered: {}, rejected: 0, probes: 0, loads: { raw: 0, filtered: 0 } });
   for (const r of rows) {
     if (r.date < since) continue;
+    if (r.method !== 'GET') continue; // HEAD probes (deploy.sh, verify.sh, crawlers) are not loads or events
     const human = !BOT_UA.test(r.ua) && !scanners.has(r.ip);
     if (r.stem === '/playground' || r.stem === '/playground.html') { const d = day(r.date); d.loads.raw++; if (human) d.loads.filtered++; continue; }
     if (r.stem !== '/e') continue;
