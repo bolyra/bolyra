@@ -36,3 +36,10 @@ test('counts allowlisted events per day, raw vs filtered, rejects anything else,
   assert.match(text, /not evidence of demand/);
   assert.ok(!text.includes('1.1.1.1'), 'report never prints addresses');
 });
+
+import { monthsBetween } from '../../tools/usage-report.mjs';
+test('monthsBetween enumerates every calendar month in the range (Codex review R1)', () => {
+  assert.deepEqual(monthsBetween('2026-08-01', '2026-10-02'), ['2026-08', '2026-09', '2026-10']);
+  assert.deepEqual(monthsBetween('2025-11-15', '2026-02-01'), ['2025-11', '2025-12', '2026-01', '2026-02']);
+  assert.deepEqual(monthsBetween('2026-10-02', '2026-10-02'), ['2026-10']);
+});

@@ -7,6 +7,7 @@ no demand inference); plan approved. Red→green:
 - browser.mjs beacon policy + canary + 500 tolerance: written with the UI hooks in the same pass;
   first run green (no observed red for this file)
 - test/unit/usage-report.test.js RED (module missing) → GREEN (unit 61/61)
+- Codex review R1: 1 P2 (report skipped middle months) → monthsBetween test RED (no export) → GREEN (unit 62/62)
 
 - [x] 1. usage.js + hooks + template (Plausible removed, Codex privacy wording)
 - [x] 2. landing/e + deploy.sh upload + verify.sh needles/forbidden/endpoint

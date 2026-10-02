@@ -45,6 +45,15 @@ export function summarize(lines, { since = '0000-00-00' } = {}) {
   return { since, days: sorted };
 }
 
+/** Every calendar month (YYYY-MM) from `since` through `until`, inclusive. */
+export function monthsBetween(since, until) {
+  let [y, m] = since.slice(0, 7).split('-').map(Number);
+  const [ey, em] = until.slice(0, 7).split('-').map(Number);
+  const out = [];
+  while (y < ey || (y === ey && m <= em)) { out.push(`${y}-${String(m).padStart(2, '0')}`); m += 1; if (m === 13) { m = 1; y += 1; } }
+  return out;
+}
+
 export function formatReport(s) {
   const out = [`Playground usage since ${s.since} (CloudFront access logs)`, ''];
   for (const [date, d] of Object.entries(s.days)) {
@@ -75,7 +84,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   let dir = opt('--logs');
   if (!dir) {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-usage-'));
-    const months = [...new Set([since.slice(0, 7), new Date().toISOString().slice(0, 7)])];
+    const months = monthsBetween(since, new Date().toISOString().slice(0, 10));
     for (const m of months) {
       const r = spawnSync('aws', ['s3', 'sync', 's3://bolyra-ai-cloudfront-logs/cf-logs/', dir, '--exclude', '*', '--include', `E28JZX72HEYVTP.${m}-*`, '--quiet'], { stdio: 'inherit' });
       if (r.status !== 0) { console.error('aws s3 sync failed'); process.exit(1); }
