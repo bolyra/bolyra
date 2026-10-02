@@ -13,7 +13,9 @@ no demand inference); plan approved. Red→green:
 - [x] 1. usage.js + hooks + template (Plausible removed, Codex privacy wording)
 - [x] 2. landing/e + deploy.sh upload + verify.sh needles/forbidden/endpoint
 - [x] 3. tools/usage-report.mjs
-- [ ] 4. container run, Codex review, PR, merge, deploy, live synthetic event confirmed in logs
+- [x] 4. container run, Codex review, PR, merge, deploy, live synthetic event confirmed in logs
+
+Review (2026-10-02): PR #202 `6266149e` deployed; verify.sh green incl. /e 200. Live synthetic check from Chrome: interacted, tab_decode, sample_decode, run_decode, decode_ok all 200 and visible in `tools/usage-report.mjs` output ~10 min later. Gap: browser.mjs had no observed red (hooks written in the same pass).
 
 ---
 
