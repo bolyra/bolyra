@@ -28,6 +28,18 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## examples/gov-stats-portal (2026-10-03)
+
+- New example: a mock government statistics portal acting as a relying party. Two loopback
+  portals with different configured audiences run the published `bolyra verify` (through
+  `@bolyra/mpp`'s fail-closed runner) with a host-defined capability map; six scenes show the real
+  verdict codes: allow, binding-capability `request_mismatch`, literal-audience `request_mismatch`,
+  `nonce_replayed`, portal-local `missing_authorization`, and the proof-anchored `scope_exceeded`.
+  Disclosure first: the proof is the repository test vector reused unchanged and the bindings are
+  re-signed with the public test key `42n`; it demonstrates relying-party enforcement, not
+  operator identity. Every response carries its decision origin (cli / runner / portal).
+- CI job `gov-stats-portal` (demo + tests from a clean checkout).
+
 ## bolyra.ai — /playground usage signals (2026-10-02)
 
 - The playground now sends limited usage signals to bolyra.ai: a fixed allowlist of event names

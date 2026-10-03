@@ -689,6 +689,26 @@ jobs:
           npm run trial -- --dry-run
           npm test
 
+  gov-stats-portal:
+    name: Gov stats portal example — demo and tests from a clean checkout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # A mock relying party that runs the PUBLISHED `bolyra verify` (devDependency) on the
+      # committed vkeys/roots copies (byte-equality to the CLI fixtures is a test). The demo
+      # exits non-zero if any of its six scenes deviates from the expected verdict.
+      - name: Install, run the demo, run its tests
+        working-directory: examples/gov-stats-portal
+        run: |
+          npm ci --no-audit --no-fund
+          npm run demo
+          npm test
+
   managed-revocation-example:
     name: Managed revocation example — register, spend, revoke, deny against wrangler dev
     runs-on: ubuntu-latest

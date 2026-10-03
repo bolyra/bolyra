@@ -1,3 +1,25 @@
+# examples/gov-stats-portal (founder task 2 from the 2026-10-03 rogue-agent handoff; overrides the "build nothing now" brainstorm ruling by direct instruction)
+
+Codex plan: 3 rounds (R1 APPROVE WITH EDITS 7, R2 APPROVE WITH EDITS 1, R3 APPROVE under delegated approval).
+Plan: ~/.claude/plans/reactive-giggling-sunset.md. Red→green record below.
+
+- [x] 1. scaffold + fixtures (fixtures.test RED → copy → GREEN)
+- [x] 2. credential.test RED → src/credential.ts GREEN
+- [x] 3. portal.test RED → src/portal.ts + data.ts + portal-main.ts GREEN
+- [x] 4. scenes.test + demo.test RED → src/scenes.ts + demo.ts GREEN
+- [x] 5. README (disclosure first, attribution rule), CI job, CHANGELOG
+- [ ] 6. lockfile in node:20; verify-lockfiles.sh; container run; Codex review → clean; DCO; PR; merge
+
+## Red→green record
+- fixtures.test RED (ENOENT) → copied 5 files → GREEN 1/1
+- credential.test RED (TS2307 module missing) → GREEN 3/3
+- spike (not committed): published verifier on P1/P2 → allow, request_mismatch×2, nonce_replayed, scope_exceeded, invalid_bundle, invalid_signature, invalid_proof, ~0.85 s each
+- portal.test RED (TS2307) → GREEN 5/5 (first run)
+- scenes.test + demo.test RED (TS2307) → demo deviated on scene 1 origin (200 body lacked origin) → fixed → GREEN 12/12
+- container: `npm run demo` via ts-node FAILED (child entry resolved to src/portal-main.js, which only exists compiled) while tests passed; demo script switched to `tsc && node dist/src/demo.js`, ts-node dropped; green on host
+
+---
+
 # Playground usage signals (founder: "i want to learn about how people are using the playground", 2026-10-01)
 
 Claude take → Codex BUILD (bounded same-origin instrumentation, ½-day cap, daily counts, no funnels,
