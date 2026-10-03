@@ -326,3 +326,21 @@ Deferred by ruling: release backoff widen, T9 keychain seam, E19 overlap, T6 doc
 
 ## Review (backlog fixes)
 (fill per PR)
+
+## 2026-10-03 — Handoff task 1: scope-bound authorization walkthrough (docs)
+
+Founder instruction "do task 1" (overrides Codex "defer drafting"; honesty constraints kept).
+Shape per Codex evening ruling: hypothetical authorization-boundary walkthrough, explicit
+assumptions, what is constrained, what remains unprotected, no incident-prevention claims.
+
+- [x] Draft `docs/scope-bound-authorization-walkthrough.md` (cites origin/main 5b0ab459)
+- [x] Fact-check cites: core.ts L321–370, receipts types L20+, spec §2.1/§4.1/§8/§9
+- [x] Codex round 1: REVISE (3 factual, 7 overclaim, §1 incident background CUT), PUBLISH NO
+- [x] Codex round 2: REVISE (rejected-vs-absent bundle receipts in §4.3), PUBLISH NO
+- [x] Codex round 3: APPROVE, PUBLISH YES
+- [ ] DCO commit, docs PR, checks, merge (no CHANGELOG entry, same as the gap-note PR #204)
+
+Review: the handoff title ("would have stopped") was not usable under the no-incident-claims
+hold; the shipped doc is a hypothetical walkthrough with six explicit assumptions, a fixed
+verifier check order, three constrained situations, and a §5 that itemizes seven ways the
+assumptions fail. Codex cut the incident background paragraph entirely in round 1.
