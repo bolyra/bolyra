@@ -28,6 +28,22 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## bolyra.ai — "How Bolyra works" walkthrough (2026-10-03)
+
+- New interactive animated walkthrough at `/video-how-it-works` (58 s, same Stage/Sprite
+  framework as the launch videos): the operator-signed mandate (six binding fields), the
+  relying party's gate and its checks in order with the real `npx @bolyra/mpp demo`
+  outcomes (`200` allow; `403 request_mismatch` "Mandate Does Not Cover This Request";
+  `401 missing_authorization` "Authorization Required"), two of the demo's four hash-chained
+  receipts, and a "where it applies" boundary scene. Classical path only; on-screen
+  disclosure: real verification path, stub transport, nothing settles. No analytics tag.
+- Sources: `landing/video/scenes_how.jsx`, `timeline_how.jsx`; production page generated
+  by `landing/video/inline-how.mjs` (fully inline; `--check` drift gate in `deploy.sh`).
+- `deploy.sh` uploads/invalidates both URL forms and gates on the inline build;
+  `verify.sh` asserts the root links it and both URLs serve the page.
+- Index: new first card in "Launch videos"; the "All 10 walkthroughs" link (which always
+  pointed at the single Gateway film) is now labelled "Gateway walkthrough".
+
 ## examples/gov-stats-portal (2026-10-03)
 
 - New example: a mock government statistics portal acting as a relying party. Two loopback

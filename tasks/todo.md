@@ -344,3 +344,17 @@ Review: the handoff title ("would have stopped") was not usable under the no-inc
 hold; the shipped doc is a hypothetical walkthrough with six explicit assumptions, a fixed
 verifier check order, three constrained situations, and a §5 that itemizes seven ways the
 assumptions fail. Codex cut the incident background paragraph entirely in round 1.
+
+## 2026-10-03 — "How Bolyra works" interactive walkthrough (landing/video-how-it-works)
+
+Founder instruction "create video explaining how bolyra works" (founder-authorized exception to
+the build-nothing ruling; honesty constraints kept). Plan: Codex R1 REVISE → R2/R3 APPROVE WITH
+EDITS → R4 APPROVE. Authority for every on-screen string: `npx @bolyra/mpp demo` (classical path).
+
+- [x] `landing/video/scenes_how.jsx` (OperatorCard, MandateCard, RelyingPartyPanel + GateChecklist, ProblemCard, VerdictStamp, HonestyLabel, Boundary, CTA, scenes)
+- [x] `landing/video/Bolyra How It Works.html` (dev page, external JSX, local HTTP)
+- [x] `landing/video-how-it-works.html` (prod, fully inline via `landing/video/inline-how.mjs`)
+- [x] Browser pass (dev + prod under the live CSP): console = 0 errors + only Babel's precompile warning; screenshots at t=2.5/11/22/27.5/33/40/49/56 (+1280-wide at 27.5); effective-visibility audit at t=4/10/21.5/23/27.5/33/40/49/56 all ≥0.96 except by-design dimmed 'not reached' rows (0.5); fixes: mandate timing, request A sub-line window, panel y (caption overlap), two annotation sizes
+- [x] `deploy.sh` (VIDEO9, uploads, invalidation, pre-upload assertions) · `verify.sh` (root link + both URLs 200 + persistKey/title) · `index.html` card + "Gateway walkthrough" label · CHANGELOG
+- [ ] Codex review of scene text + diff → clean → DCO commits → PR → CI → merge
+- [ ] Deploy from a worktree on updated main (BOLYRA_SKIP_VERIFY unset) → verify.sh → browser check of both URLs + card
