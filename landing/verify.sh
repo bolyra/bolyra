@@ -289,6 +289,18 @@ grep -qF "11 domain-agnostic wire-envelope vectors" <<< "$LIVE_HTML" || fail "ro
 grep -qF 'href="/conformance"' <<< "$LIVE_HTML" || fail "root page does not link /conformance"
 pass "root page advertises 11 envelope vectors and links /conformance"
 
+# "How Bolyra works" walkthrough (2026-10-03): the root must link it and both URL
+# forms must serve the inline page (title + stage persist key), with HTTP 200.
+grep -qF 'href="/video-how-it-works"' <<< "$LIVE_HTML" || fail "root page does not link /video-how-it-works"
+for u in "https://bolyra.ai/video-how-it-works" "https://bolyra.ai/video-how-it-works.html"; do
+  resp=$(curl -s -w $'\n%{http_code}' "$u?vguard=$(date +%s)") || fail "fetch failed: $u"
+  code=${resp##*$'\n'}; body=${resp%$'\n'*}
+  [ "$code" = "200" ] || fail "$u returned HTTP $code"
+  grep -qF 'persistKey="bolyra-how"' <<< "$body" || fail "$u lacks persistKey=\"bolyra-how\""
+  grep -qF '<title>How Bolyra Works</title>' <<< "$body" || fail "$u lacks the How Bolyra Works title"
+done
+pass "root links /video-how-it-works; both URL forms serve the inline walkthrough"
+
 # The live conformance page must be exactly the page generated from the
 # registry in this checkout. First prove the checkout is self-consistent
 # (page == registry): otherwise a stale local page and a stale live page could

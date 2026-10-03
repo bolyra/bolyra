@@ -33,17 +33,34 @@ VIDEO5="$SCRIPT_DIR/video-devmode.html"
 VIDEO6="$SCRIPT_DIR/video-offchain.html"
 VIDEO7="$SCRIPT_DIR/video-frameworks.html"
 VIDEO8="$SCRIPT_DIR/video-oauth.html"
+VIDEO9="$SCRIPT_DIR/video-how-it-works.html"
 PLAYGROUND="$SCRIPT_DIR/playground.html"
 CONFORMANCE="$SCRIPT_DIR/conformance.html"
 OPERATOR_TRIAL="$SCRIPT_DIR/operator-trial.html"
 USAGE_BEACON="$SCRIPT_DIR/e"
 
-for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$BLOG6" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$PLAYGROUND" "$CONFORMANCE" "$OPERATOR_TRIAL" "$USAGE_BEACON"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$BLOG6" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$VIDEO9" "$PLAYGROUND" "$CONFORMANCE" "$OPERATOR_TRIAL" "$USAGE_BEACON"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
   fi
 done
+
+# Pre-upload gate for the "How Bolyra works" walkthrough (2026-10-03): the index
+# must link it, the production page must be the fully inline build of its
+# sources (landing/video/inline-how.mjs), and it must carry no external JSX
+# and no analytics tag. verify.sh re-checks the LIVE URLs after upload.
+grep -qF 'href="/video-how-it-works"' "$INDEX" || { echo "ERROR: index.html does not link /video-how-it-works" >&2; exit 1; }
+grep -qF 'persistKey="bolyra-how"' "$VIDEO9" || { echo "ERROR: $VIDEO9 lacks persistKey=\"bolyra-how\"" >&2; exit 1; }
+node "$SCRIPT_DIR/video/inline-how.mjs" --check || exit 1
+node -e '
+  const html = require("fs").readFileSync(process.argv[1], "utf8");
+  const tags = [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);
+  const bad = tags.filter((t) => /\bsrc\s*=\s*["\x27][^"\x27]*\.jsx["\x27]/i.test(t));
+  if (bad.length) { console.error("ERROR: external JSX in " + process.argv[1] + ": " + bad.join(" | ")); process.exit(1); }
+  if (/plausible\.io/.test(html)) { console.error("ERROR: analytics tag in " + process.argv[1]); process.exit(1); }
+' "$VIDEO9" || exit 1
+echo "OK: video-how-it-works.html is inline, analytics-free and linked from the index"
 
 # Pre-upload version drift gate — block stale copy from ever reaching S3.
 # (verify.sh re-checks the LIVE page post-deploy; this catches it earlier.)
@@ -218,6 +235,14 @@ aws s3 cp "$SCRIPT_DIR/video-replay-check.html" "s3://$BUCKET/video-replay-check
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
 
+echo "→ uploading video-how-it-works.html to s3://$BUCKET/"
+aws s3 cp "$VIDEO9" "s3://$BUCKET/video-how-it-works.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$VIDEO9" "s3://$BUCKET/video-how-it-works" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+
 echo "→ uploading video-cli.html to s3://$BUCKET/"
 aws s3 cp "$SCRIPT_DIR/video-cli.html" "s3://$BUCKET/video-cli.html" \
   --content-type "text/html; charset=utf-8" \
@@ -321,7 +346,7 @@ done
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/blog-6.html" "/blog-6" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/conformance.html" "/conformance" "/operator-trial.html" "/operator-trial" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" \
+  --paths "/index.html" "/" "/video-how-it-works.html" "/video-how-it-works" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/blog-6.html" "/blog-6" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/conformance.html" "/conformance" "/operator-trial.html" "/operator-trial" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" \
   --query 'Invalidation.Id' \
   --output text)
 
