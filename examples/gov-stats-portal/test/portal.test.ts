@@ -2,7 +2,6 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPortal, HEADER, type PortalConfig } from '../src/portal';
 import { buildPresentation, PUBLIC_STATS_BINDING, OVERREACH_BINDING, AUDIENCE } from '../src/credential';
-import { verifierSpec } from '../src/paths';
 import { startChildPortal, request, type ChildPortal } from './helpers';
 
 const OTHER_AUDIENCE = 'https://internal.example.gov';

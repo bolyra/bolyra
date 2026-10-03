@@ -8,7 +8,16 @@ Plan: ~/.claude/plans/reactive-giggling-sunset.md. Red→green record below.
 - [x] 3. portal.test RED → src/portal.ts + data.ts + portal-main.ts GREEN
 - [x] 4. scenes.test + demo.test RED → src/scenes.ts + demo.ts GREEN
 - [x] 5. README (disclosure first, attribution rule), CI job, CHANGELOG
-- [ ] 6. lockfile in node:20; verify-lockfiles.sh; container run; Codex review → clean; DCO; PR; merge
+- [x] 6. lockfile in node:20; verify-lockfiles.sh; container run; Codex review → clean; DCO; PR; merge
+
+## Review (2026-10-03)
+- Shipped: PR #203 squash-merged `1ba5de71`; main CI green; CI job `gov-stats-portal` green from a clean checkout.
+- Codex: plan 3 rounds (7 + 1 edits, then APPROVE under delegated approval); code review clean R1.
+- Honesty: disclosure first (repo test-vector proof unchanged; bindings re-signed with public key 42n;
+  enforcement not identity); decision origin on every response; no incident claims.
+- Found+fixed before merge: `ts-node` demo path bug (child entry only exists compiled). Post-merge nit:
+  unused test import removed (CodeQL).
+- Handoff tasks 1, 3, 4 not done (not requested); task-4 facts recorded in memory.
 
 ## Red→green record
 - fixtures.test RED (ENOENT) → copied 5 files → GREEN 1/1
