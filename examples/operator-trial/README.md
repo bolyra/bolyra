@@ -64,6 +64,18 @@ Receipts are signed by the `@bolyra/receipts` bundled inside `@bolyra/gateway 0.
 
 **If this ran against an endpoint you own, email the bundle directory to hello@bolyra.ai.** Nothing is sent automatically. `dispatched: true` means this host invoked the request; delivery and execution at your endpoint are not proven by the receipts.
 
+## Produce a reviewer report
+
+Hand a bundle to someone who has to decide what it proves. The report lists, for each claim a reviewer might make, whether this bundle supports it, by which file and field, and with which kind of evidence:
+
+```bash
+npm run report -- --bundle trial-out/<timestamp> --signer <signer> --expect-count 3 --expect-head <hash>
+```
+
+It writes `report-out/<timestamp>/report.html` (self-contained, printable) and `report.json` (the same findings). The anchors come from the flags only: `signer.json` and `summary.json` are compared against them, never used as anchors. Copying the values out of the bundle makes the report consistent with the bundle; it does not establish signer identity or completeness, and the report says so.
+
+Five statuses: **SIGNED** (inside a receipt payload whose signature recovered to the anchored signer), **OBSERVED** (recorded by the host, signed by nothing), **DERIVED** (computed by a named check), **ABSENT** (no evidence in the bundle), **FAILED** (a check failed or two sources contradict). Execution, consent, payee control, spend limits, subject authentication and production credentials are always ABSENT: the trial never produces evidence for them. One check is report-local: the receipt `id` is neither signed nor hashed by the published verifier, so the report checks it itself (B1a) and says the CLI does not.
+
 ## What this is, and is not
 
 - A controlled trial. Credentials are simulated and registered locally; ZK proof verification is disabled (dev mode). Production Bolyra uses real proofs and a credential registry.

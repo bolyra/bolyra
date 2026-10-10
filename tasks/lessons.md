@@ -86,3 +86,15 @@
   package.json after every install there.
 - A settlement object derived from attacker-controlled bytes must be an allow-list
   projection (token + verified paths), never the raw object with checks layered on top.
+
+## 2026-10-10 · reviewer evidence report (Codex code review R1, REVISE)
+- **Path containment:** `path.relative(parent, child).startsWith('..')` is NOT a containment test: `<parent>/..report`
+  is a child whose relative path starts with `..`. Test `rel === '..' || rel.startsWith('..' + sep)` on REAL paths
+  (realpath the deepest existing ancestor; follow dangling symlinks by hand) and also lstat the output files.
+- **Receipt `id` is unverified by the published verifier** (sign.ts recomputes payloadHash and recovers the signer; chain.ts
+  excludes `id`): any tool that keys on `id` must check `id === signature.payloadHash.slice(0,18)` itself and say so.
+- **A mutation elsewhere in a chain does not change the head hash:** editing line 1's payload or line 3's stored
+  `receiptHash` leaves the recomputed head identical, so head/count checkpoints still pass; only B1/B2 catch it.
+  Write the expectation from the hash definition, not from intuition.
+- **Shape-guard every consumed field before dereferencing** untrusted JSON; a `TypeError` in the classifier
+  turns a FAILED report into no report.

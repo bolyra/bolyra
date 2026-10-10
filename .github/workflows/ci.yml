@@ -669,7 +669,7 @@ jobs:
           npm test
 
   operator-trial:
-    name: Operator trial — dry run and tests from a clean checkout
+    name: Operator trial — dry run, reviewer report and tests from a clean checkout
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -682,11 +682,17 @@ jobs:
       # PUBLISHED @bolyra packages, so this proves the README path works with
       # nothing else in the repo built. The dry run exits non-zero if any
       # attempt verdict, dispatch count, or chain check comes out wrong.
-      - name: Install, dry-run the trial, run its tests
+      - name: Install, dry-run the trial, report on the bundle, run its tests
         working-directory: examples/operator-trial
         run: |
           npm ci --no-audit --no-fund
           npm run trial -- --dry-run
+          bundle=$(ls -d trial-out/*/ | head -1)
+          signer=$(node -p "require('./$bundle/signer.json').signer")
+          head=$(node -p "require('./$bundle/summary.json').headReceiptHash")
+          out=$(npm run report --silent -- --bundle "$bundle" --signer "$signer" --expect-count 3 --expect-head "$head")
+          echo "$out"
+          grep -q 'FAILED: 0' <<<"$out"
           npm test
 
   gov-stats-portal:
