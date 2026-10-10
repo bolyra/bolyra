@@ -407,7 +407,11 @@ test('19. an appended malformed line makes every whole-log claim FAILED, not a c
   assert.equal(status(r, 'B3a'), 'FAILED');
   assert.match(one(r, 'B3a').note ?? '', /4 non-blank line\(s\), of which 1 malformed/);
   assert.equal(status(r, 'B3b'), 'DERIVED');
+  assert.match(one(r, 'B3b').note ?? '', /last readable chained receipt \(line 3\); malformed line\(s\) 4 are excluded \(see B2\)/);
+  assert.deepEqual(one(r, 'B3b').evidence, [{ file: 'receipts.jsonl', line: 3 }]);
   assert.equal(status(r, 'B8a'), 'FAILED');
+  assert.equal(status(r, 'B8b'), 'OBSERVED');
+  assert.match(one(r, 'B8b').note ?? '', /line 3\); malformed line\(s\) 4 are excluded/);
   for (const attempt of [1, 2, 3]) expectAttempt(r, attempt, 'SIGNED');
 });
 

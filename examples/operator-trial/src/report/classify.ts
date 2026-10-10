@@ -137,6 +137,12 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
     chain = { ok: false, total: parsed.length, chained: 0, unchained: 0, issues: [{ index: -1, code: 'malformed-receipt', message: `verifier threw: ${(err as Error).message}` }] };
   }
   const chainOk = chain.ok && malformedLines.length === 0;
+  const lastReadable = parsed.length > 0 ? parsed[parsed.length - 1].line : undefined;
+  const headLabel =
+    chain.headHash === undefined
+      ? '(the readable receipts did not verify as a chain)'
+      : `${chain.headHash}, the recomputed hash of the last readable chained receipt (line ${lastReadable})` +
+        (malformedLines.length > 0 ? `; malformed line(s) ${malformedLines.join(', ')} are excluded (see B2)` : '');
   const codes = Array.from(new Set(chain.issues.map((i) => i.code)));
   add({
     claim: 'B2',
@@ -168,9 +174,9 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
     add({
       claim: 'B3b',
       status: ok ? 'DERIVED' : 'FAILED',
-      evidence: [{ file: RECEIPTS }],
-      inputs: [`--expect-head ${anchors.expectHead}`, `recomputed head: ${chain.headHash ?? '(chain did not verify)'}`],
-      note: ok ? 'head hash matches the supplied checkpoint.' : 'head-hash-mismatch: recomputed head differs from the checkpoint.',
+      evidence: lastReadable !== undefined ? [{ file: RECEIPTS, line: lastReadable }] : [{ file: RECEIPTS }],
+      inputs: [`--expect-head ${anchors.expectHead}`, `recomputed: ${headLabel}`],
+      note: (ok ? 'the supplied checkpoint equals ' : 'head-hash-mismatch: the supplied checkpoint differs from ') + headLabel + '.',
     });
   }
 
@@ -193,8 +199,8 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
     add({
       claim: 'B8b',
       status: same ? 'OBSERVED' : 'FAILED',
-      evidence: [{ file: SUMMARY, path: 'headReceiptHash' }, { file: RECEIPTS }],
-      note: same ? `headReceiptHash (unsigned) equals the recomputed head of the log.` : `contradiction: summary.json names head ${summary.headReceiptHash}, the log recomputes to ${chain.headHash ?? '(chain did not verify)'}.`,
+      evidence: [{ file: SUMMARY, path: 'headReceiptHash' }, ...(lastReadable !== undefined ? [{ file: RECEIPTS, line: lastReadable }] : [{ file: RECEIPTS }])],
+      note: (same ? 'headReceiptHash (unsigned) equals ' : `contradiction: summary.json names head ${summary.headReceiptHash}, which differs from `) + headLabel + '.',
     });
   }
 

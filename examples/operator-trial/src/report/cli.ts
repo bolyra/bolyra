@@ -101,9 +101,13 @@ export function main(argv: string[]): number {
   }
   const html = render(report, { receiptsPath: './receipts.jsonl' });
 
-  fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
-  fs.writeFileSync(path.join(outDir, 'report.html'), html);
+  try {
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
+    fs.writeFileSync(path.join(outDir, 'report.html'), html);
+  } catch (err) {
+    return usage(`cannot write --out: ${(err as Error).message}`);
+  }
 
   const counts: Record<string, number> = { SIGNED: 0, OBSERVED: 0, DERIVED: 0, ABSENT: 0, FAILED: 0 };
   for (const f of report.findings) counts[f.status] = (counts[f.status] ?? 0) + 1;
@@ -135,14 +139,18 @@ export function realExistingAncestor(p: string): string {
   for (;;) {
     try {
       return path.join(fs.realpathSync(cur), ...tail.reverse());
-    } catch {
-      // A dangling symlink has no realpath; follow it by hand so a link into the bundle cannot hide.
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      // A dangling or looping symlink has no realpath; follow it by hand so a link into the bundle cannot hide.
       if (isSymlink(cur)) {
         if (seen.has(cur) || seen.size >= MAX_LINK_HOPS) throw new Error(`symlink cycle or too many links while resolving ${p}`);
         seen.add(cur);
         cur = path.resolve(path.dirname(cur), fs.readlinkSync(cur));
         continue;
       }
+      // Only a genuinely missing component may fall back to its parent; ENOTDIR, EACCES, EIO and
+      // the rest are resolution failures the caller must surface.
+      if (code !== 'ENOENT') throw err;
       const parent = path.dirname(cur);
       if (parent === cur) return path.join(cur, ...tail.reverse());
       tail.push(path.basename(cur));
@@ -151,11 +159,13 @@ export function realExistingAncestor(p: string): string {
   }
 }
 
+/** lstat-based; a missing path is not a symlink, any other error propagates. */
 function isSymlink(p: string): boolean {
   try {
     return fs.lstatSync(p).isSymbolicLink();
-  } catch {
-    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
   }
 }
 

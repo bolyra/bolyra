@@ -154,5 +154,18 @@ test('cli: a symlink cycle in --out exits 2 instead of hanging', () => {
   fs.symlinkSync(path.join(base, 'a'), path.join(base, 'b'));
   const r = runCli(['--bundle', bundle, '--signer', signer, '--out', path.join(base, 'a', 'out')]);
   assert.equal(r.code, 2);
-  assert.match(r.err, /cycle|too many links/);
+  assert.match(r.err, /cycle|too many (symbolic )?links/);
+});
+
+test('cli: a non-ENOENT resolution error (ENOTDIR under /dev/null) exits 2, as does an unwritable --out', () => {
+  const bundle = path.join(tmp(), 'bundle');
+  fs.cpSync(FIX, bundle, { recursive: true });
+  const r = runCli(['--bundle', bundle, '--signer', signer, '--out', '/dev/null/report']);
+  assert.equal(r.code, 2);
+  assert.match(r.err, /cannot resolve|cannot write/);
+  const file = path.join(tmp(), 'a-file');
+  fs.writeFileSync(file, 'x');
+  const r2 = runCli(['--bundle', bundle, '--signer', signer, '--out', path.join(file, 'sub')]);
+  assert.equal(r2.code, 2);
+  assert.match(r2.err, /cannot resolve|cannot write/);
 });
