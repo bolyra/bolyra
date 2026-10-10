@@ -64,14 +64,20 @@ export function main(argv: string[]): number {
   const bundleDir = path.resolve(v.bundle);
   const outDir = path.resolve(v.out ?? path.join('report-out', path.basename(bundleDir)));
   if (!fs.existsSync(bundleDir) || !fs.statSync(bundleDir).isDirectory()) return usage(`--bundle is not a directory: ${bundleDir}`);
-  if (isInside(realBundle(bundleDir), realExistingAncestor(outDir))) {
-    return usage(`--out must not be inside the bundle directory (${bundleDir})`);
-  }
-  for (const name of ['report.json', 'report.html']) {
-    const target = path.join(outDir, name);
-    if (isSymlink(target) && isInside(realBundle(bundleDir), realExistingAncestor(target))) {
-      return usage(`--out/${name} resolves inside the bundle directory`);
+  let bundleReal: string;
+  try {
+    bundleReal = fs.realpathSync(bundleDir);
+    if (isInside(bundleReal, realExistingAncestor(outDir))) {
+      return usage(`--out must not be inside the bundle directory (${bundleDir})`);
     }
+    for (const name of ['report.json', 'report.html']) {
+      const target = path.join(outDir, name);
+      if (isSymlink(target) && isInside(bundleReal, realExistingAncestor(target))) {
+        return usage(`--out/${name} resolves inside the bundle directory`);
+      }
+    }
+  } catch (err) {
+    return usage(`cannot resolve --bundle/--out: ${(err as Error).message}`);
   }
 
   let files: BundleFiles;
@@ -115,13 +121,16 @@ export function isInside(parentReal: string, childReal: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
-function realBundle(dir: string): string {
-  return fs.realpathSync(dir);
-}
+const MAX_LINK_HOPS = 40;
 
-/** realpath of the deepest existing ancestor, with the non-existing tail appended, so symlinked parents cannot hide the target. */
+/**
+ * realpath of the deepest existing ancestor, with the non-existing tail appended, so symlinked
+ * parents cannot hide the target. Dangling symlinks are followed by hand; a cycle or more than
+ * MAX_LINK_HOPS hops throws, and the caller turns that into exit 2.
+ */
 export function realExistingAncestor(p: string): string {
   const tail: string[] = [];
+  const seen = new Set<string>();
   let cur = p;
   for (;;) {
     try {
@@ -129,6 +138,8 @@ export function realExistingAncestor(p: string): string {
     } catch {
       // A dangling symlink has no realpath; follow it by hand so a link into the bundle cannot hide.
       if (isSymlink(cur)) {
+        if (seen.has(cur) || seen.size >= MAX_LINK_HOPS) throw new Error(`symlink cycle or too many links while resolving ${p}`);
+        seen.add(cur);
         cur = path.resolve(path.dirname(cur), fs.readlinkSync(cur));
         continue;
       }

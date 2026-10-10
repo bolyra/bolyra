@@ -145,3 +145,14 @@ test('cli: upper-case anchors are normalized so the report and the printed comma
   const html = fs.readFileSync(path.join(out, 'report.html'), 'utf8');
   assert.ok(html.includes(`--expect-head ${summary.headReceiptHash}`));
 });
+
+test('cli: a symlink cycle in --out exits 2 instead of hanging', () => {
+  const base = tmp();
+  const bundle = path.join(base, 'bundle');
+  fs.cpSync(FIX, bundle, { recursive: true });
+  fs.symlinkSync(path.join(base, 'b'), path.join(base, 'a'));
+  fs.symlinkSync(path.join(base, 'a'), path.join(base, 'b'));
+  const r = runCli(['--bundle', bundle, '--signer', signer, '--out', path.join(base, 'a', 'out')]);
+  assert.equal(r.code, 2);
+  assert.match(r.err, /cycle|too many links/);
+});

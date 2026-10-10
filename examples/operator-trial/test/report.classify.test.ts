@@ -3,6 +3,9 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BundleInputError, classify } from '../src/report/classify';
+import { createGatewayReceiptSigner } from '@bolyra/gateway';
+import { buildGatewayConfig } from '../src/gateway-config';
+import { createDemoAgent } from '../src/agents';
 import type { Anchors, BundleFiles, Finding, Report, Status } from '../src/report/classify';
 
 const FIX = path.join(__dirname, '..', '..', 'test', 'report-fixtures', 'dry-run');
@@ -374,4 +377,55 @@ test('17. upper-case anchors normalize and still verify', () => {
   assert.equal(r.anchors.signer, ANCHORS.signer);
   assert.equal(r.anchors.expectHead, ANCHORS.expectHead);
   expectBundle(r);
+});
+
+test('18. hostile values in envelope, chain and signer.json produce findings, never exceptions', () => {
+  const hostile = { toString: null };
+  for (const mut of [
+    (x: any) => { x.receiptHash = hostile; },
+    (x: any) => { x.payload.chain.seq = hostile; },
+    (x: any) => { x.payload.chain.prevReceiptHash = hostile; },
+    (x: any) => { x.payload.chain = 'nope'; },
+  ]) {
+    const r = run(files({ receiptsJsonl: mutateLine(2, mut) }));
+    assert.ok(r.findings.some((f) => f.claim === 'B0' && f.receiptLine === 2 && f.status === 'FAILED'));
+    assert.equal(status(r, 'B2'), 'FAILED');
+    assert.equal(status(r, 'B8a'), 'FAILED');
+    expectAttempt(r, 1, 'SIGNED');
+    expectAttempt(r, 2, 'FAILED', 'FAILED');
+  }
+  const r = run(files({ signerJson: JSON.stringify({ signer: hostile, ephemeral: true }) }));
+  assert.equal(status(r, 'B4'), 'FAILED');
+  assert.match(one(r, 'B4').note ?? '', /toString/);
+});
+
+test('19. an appended malformed line makes every whole-log claim FAILED, not a claim about the readable subset', () => {
+  const r = run(files({ receiptsJsonl: lines.join('\n') + '\n{}\n' }));
+  assert.ok(r.findings.some((f) => f.claim === 'B0' && f.receiptLine === 4 && f.status === 'FAILED'));
+  assert.equal(status(r, 'B2'), 'FAILED');
+  assert.match(one(r, 'B2').note ?? '', /malformed line\(s\) 4/);
+  assert.equal(status(r, 'B3a'), 'FAILED');
+  assert.match(one(r, 'B3a').note ?? '', /4 non-blank line\(s\), of which 1 malformed/);
+  assert.equal(status(r, 'B3b'), 'DERIVED');
+  assert.equal(status(r, 'B8a'), 'FAILED');
+  for (const attempt of [1, 2, 3]) expectAttempt(r, attempt, 'SIGNED');
+});
+
+test('20. a freshly signed receipt without reasonCode: A3 ABSENT (not a SIGNED empty string), A4b ABSENT', () => {
+  const cfg = buildGatewayConfig('refund', 2n, createDemoAgent('g', 2n), createDemoAgent('w', 1n));
+  const signer = createGatewayReceiptSigner(cfg);
+  const receipt = signer.sign({
+    rootDid: 'did:bolyra:dev:t', actingDid: 'did:bolyra:dev:t', credentialCommitment: '1', effectiveCommitment: '1',
+    allowed: true, score: 100, permissionBitmask: '2', chainDepth: 0,
+    humanProof: { proof: {} }, agentProof: { proof: {} }, humanPublicSignals: [], agentPublicSignals: [], bundleVersion: 1, nonce: '7',
+  });
+  assert.equal(receipt.payload.decision.reasonCode, undefined);
+  const sum = { dryRun: true, action: summary.action, attempts: [{ n: 1, credential: 'granted', decision: 'allow', dispatched: true, upstreamStatus: 200, receiptId: receipt.id }], receiptCount: 1, headReceiptHash: receipt.receiptHash };
+  const r = classify({ receiptsJsonl: JSON.stringify(receipt) + '\n', summaryJson: JSON.stringify(sum) }, { signer: signer.signer, expectCount: 1, expectHead: receipt.receiptHash! });
+  assert.equal(status(r, 'B1', { line: 1 }), 'DERIVED');
+  assert.equal(status(r, 'A2', { attempt: 1 }), 'SIGNED');
+  assert.equal(status(r, 'A3', { attempt: 1 }), 'ABSENT');
+  assert.equal(status(r, 'A4b', { attempt: 1 }), 'ABSENT');
+  assert.equal(status(r, 'A4c', { attempt: 1 }), 'ABSENT');
+  assert.ok(!r.findings.some((f) => f.status === 'FAILED'), JSON.stringify(r.findings.filter((f) => f.status === 'FAILED').map((f) => f.id)));
 });

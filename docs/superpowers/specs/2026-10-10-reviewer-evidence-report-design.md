@@ -1,6 +1,6 @@
 # Reviewer evidence report for an operator-trial bundle
 
-**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), R3 APPROVE WITH EDITS (1), all applied; code review R1 (REVISE, 8) folded in: B4b, B8a, B8b, validation rules, containment. Founder
+**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), R3 APPROVE WITH EDITS (1), all applied; code review R1 (REVISE, 8) and R2 (REVISE, 4) folded in: B4b, B8a, B8b, validation rules, whole-log rules, containment. Founder
 override of the same-day "build nothing" ruling (private decision record). Time cap: 8 hours.
 
 ## 1. Purpose
@@ -67,7 +67,12 @@ Malformed input (a receipt line that is not JSON, or lacking any field the repor
 `signature.{payloadHash,value,signer,keyId}`, `payload.decision.{allowed,permissionBitmask}`,
 `payload.subject.*`, `payload.proof.*`) is a `B0` `FAILED` finding naming the **physical line
 number** and the missing field; that line is never dereferenced further; the remaining lines are
-still processed. `summary.json` must be an object whose `attempts` is a non-empty array of objects
+still processed. The whole-log findings never describe the readable subset as the log: any
+malformed line makes B2, B3a and B8a `FAILED`, with the line numbers named, while B1/B1a and the
+per-attempt rows for the readable receipts still stand. Envelope and chain fields the verifier
+touches (`receiptHash`, `payload.chain.seq`, `payload.chain.prevReceiptHash`) are validated the
+same way, and a verifier exception is itself a `FAILED` B2, never a crash. A verified receipt
+with no `reasonCode` gets A3 `ABSENT` (and A4b/A4c `ABSENT`), never a signed empty string. `summary.json` must be an object whose `attempts` is a non-empty array of objects
 with `n === index + 1`; anything else is a `BundleInputError` (exit 2), because attempt numbers are
 the attribution key and a renumbered attempt would silently re-point evidence. Anchors are
 normalized to lower-case hex before classification so the report and the generated command agree
@@ -76,7 +81,8 @@ with the verifier's case-sensitive comparison.
 `--out` containment is component-aware on real paths: `<bundle>/..report` is a child of the bundle
 (a lexical `startsWith('..')` test would have let it through) and is rejected; `<parent>/bundle..report`
 is a genuine sibling and allowed; a symlink (even a dangling one) that resolves into the bundle, or an
-output file that is a symlink into the bundle, is rejected.
+output file that is a symlink into the bundle, is rejected; a symlink cycle or more than 40 link
+hops is a resolution failure (exit 2), never a hang.
 
 ## 4. Classification
 

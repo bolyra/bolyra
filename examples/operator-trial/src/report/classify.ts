@@ -124,31 +124,41 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
   };
 
   const summary = parseSummary(files.summaryJson);
-  const parsed = parseReceipts(files.receiptsJsonl, anchors.signer, add);
+  const { parsed, malformedLines, entries } = parseReceipts(files.receiptsJsonl, anchors.signer, add);
+  const logNote = malformedLines.length === 0 ? `${entries} receipt line(s)` : `${entries} non-blank line(s), of which ${malformedLines.length} malformed (line ${malformedLines.join(', ')})`;
 
   // ---- Bundle-level ----
-  const chain = verifyReceiptChain(parsed.map((p) => p.receipt), { expectedSigner: anchors.signer });
+  // The chain is verified over the readable receipts only; a malformed line means the log as a
+  // whole cannot be called intact, whatever the readable subset says.
+  let chain: ReturnType<typeof verifyReceiptChain>;
+  try {
+    chain = verifyReceiptChain(parsed.map((p) => p.receipt), { expectedSigner: anchors.signer });
+  } catch (err) {
+    chain = { ok: false, total: parsed.length, chained: 0, unchained: 0, issues: [{ index: -1, code: 'malformed-receipt', message: `verifier threw: ${(err as Error).message}` }] };
+  }
+  const chainOk = chain.ok && malformedLines.length === 0;
   const codes = Array.from(new Set(chain.issues.map((i) => i.code)));
   add({
     claim: 'B2',
-    status: chain.ok ? 'DERIVED' : 'FAILED',
+    status: chainOk ? 'DERIVED' : 'FAILED',
     evidence: [{ file: RECEIPTS }],
-    inputs: ['verifyReceiptChain(@bolyra/receipts) with expectedSigner = anchor'],
-    note: chain.ok
+    inputs: ['verifyReceiptChain(@bolyra/receipts) with expectedSigner = anchor', `log: ${logNote}`],
+    note: chainOk
       ? `${chain.total} receipt(s), ${chain.chained} chained; recomputed head hash ${chain.headHash ?? '(none)'}`
-      : `issues: ${codes.join(', ')}; ${chain.issues.map((i) => `line ${lineOfIndex(parsed, i.index)}: ${i.message}`).join(' | ')}`,
+      : (malformedLines.length > 0 ? `malformed line(s) ${malformedLines.join(', ')} (B0) mean the log cannot be verified as one intact chain. ` : '') +
+        (chain.issues.length > 0 ? `issues over the readable receipts: ${codes.join(', ')}; ${chain.issues.map((i) => `line ${lineOfIndex(parsed, i.index)}: ${i.message}`).join(' | ')}` : 'the readable receipts chain, but the log is not whole.'),
   });
 
   if (anchors.expectCount === undefined) {
     add({ claim: 'B3a', status: 'ABSENT', evidence: [], note: '--expect-count was not supplied; tail truncation is not excluded by count.' });
   } else {
-    const ok = parsed.length === anchors.expectCount;
+    const ok = entries === anchors.expectCount && malformedLines.length === 0;
     add({
       claim: 'B3a',
       status: ok ? 'DERIVED' : 'FAILED',
       evidence: [{ file: RECEIPTS }],
-      inputs: [`--expect-count ${anchors.expectCount}`, `receipt lines parsed: ${parsed.length}`],
-      note: ok ? 'count matches the supplied checkpoint.' : `count-mismatch: log holds ${parsed.length}, checkpoint says ${anchors.expectCount}.`,
+      inputs: [`--expect-count ${anchors.expectCount}`, `log: ${logNote}`],
+      note: ok ? 'count matches the supplied checkpoint.' : `count-mismatch: the log has ${logNote}, checkpoint says ${anchors.expectCount}.`,
     });
   }
   if (anchors.expectHead === undefined) {
@@ -168,12 +178,12 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
   if (typeof summary.receiptCount !== 'number') {
     add({ claim: 'B8a', status: 'ABSENT', evidence: [], note: 'summary.json records no receiptCount.' });
   } else {
-    const same = summary.receiptCount === parsed.length;
+    const same = summary.receiptCount === entries && malformedLines.length === 0;
     add({
       claim: 'B8a',
       status: same ? 'OBSERVED' : 'FAILED',
       evidence: [{ file: SUMMARY, path: 'receiptCount' }, { file: RECEIPTS }],
-      note: same ? `receiptCount ${summary.receiptCount} (unsigned) equals the number of receipt lines.` : `contradiction: summary.json says ${summary.receiptCount} receipts, the log holds ${parsed.length}.`,
+      note: same ? `receiptCount ${summary.receiptCount} (unsigned) equals the number of receipt lines.` : `contradiction: summary.json says ${summary.receiptCount} receipts, the log has ${logNote}.`,
     });
   }
   if (typeof summary.headReceiptHash !== 'string') {
@@ -200,7 +210,7 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
       status: same ? 'DERIVED' : 'FAILED',
       evidence: [{ file: SIGNER, path: 'signer' }],
       inputs: [`--signer ${anchors.signer}`],
-      note: same ? 'matches the supplied anchor.' : `contradiction: signer.json names ${String(signerFile.signer)}, the anchor is ${anchors.signer}.`,
+      note: same ? 'matches the supplied anchor.' : `contradiction: signer.json names ${fmt(signerFile.signer)}, the anchor is ${anchors.signer}.`,
     });
     add({
       claim: 'B6',
@@ -383,6 +393,16 @@ function actionOf(a: unknown): { name: string; method: string; host: string; pat
   return typeof name === 'string' && typeof method === 'string' && typeof host === 'string' && typeof path === 'string' ? { name, method, host, path } : null;
 }
 
+/** Safe rendering of an untrusted value for a note; never calls the value's own toString. */
+function fmt(v: unknown): string {
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v) ?? String(typeof v);
+  } catch {
+    return `(unprintable ${typeof v})`;
+  }
+}
+
 function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
@@ -398,21 +418,26 @@ function parseJsonOrNull(text: string | undefined): unknown {
 }
 
 /** B0 / B1 / B1a per physical line. Blank lines are skipped and not counted. */
-function parseReceipts(text: string, signer: string, add: Add): ParsedReceipt[] {
+function parseReceipts(text: string, signer: string, add: Add): { parsed: ParsedReceipt[]; malformedLines: number[]; entries: number } {
   const out: ParsedReceipt[] = [];
+  const malformedLines: number[] = [];
+  let entries = 0;
   const raw = text.split('\n');
   for (let i = 0; i < raw.length; i++) {
     const line = i + 1;
     if (raw[i].trim() === '') continue;
+    entries++;
     let r: unknown;
     try {
       r = JSON.parse(raw[i]);
     } catch (err) {
+      malformedLines.push(line);
       add({ claim: 'B0', receiptLine: line, status: 'FAILED', evidence: [{ file: RECEIPTS, line }], note: `not JSON: ${(err as Error).message}` });
       continue;
     }
     const shape = receiptShapeProblem(r);
     if (shape) {
+      malformedLines.push(line);
       add({ claim: 'B0', receiptLine: line, status: 'FAILED', evidence: [{ file: RECEIPTS, line }], note: `JSON, but not a signed receipt this report can read: ${shape}.` });
       continue;
     }
@@ -460,7 +485,7 @@ function parseReceipts(text: string, signer: string, add: Add): ParsedReceipt[] 
           : `id ${p.receipt.id} appears ${counts.get(p.receipt.id)} times in the log.`,
     });
   }
-  return out;
+  return { parsed: out, malformedLines, entries };
 }
 
 /** Every field the report reads must be present with the right type; otherwise the line is B0 FAILED, never dereferenced. */
@@ -483,6 +508,12 @@ function receiptShapeProblem(r: unknown): string | null {
   const proof = pl.proof;
   if (!isObject(proof)) return 'payload.proof is not an object';
   for (const k of ['nonce', 'humanProofHash', 'agentProofHash', 'publicSignalsHash']) if (typeof proof[k] !== 'string') return `payload.proof.${k} is not a string`;
+  if (r.receiptHash !== undefined && typeof r.receiptHash !== 'string') return 'receiptHash is not a string';
+  if (pl.chain !== undefined) {
+    if (!isObject(pl.chain)) return 'payload.chain is not an object';
+    if (typeof pl.chain.seq !== 'number' || !Number.isInteger(pl.chain.seq) || pl.chain.seq < 0) return 'payload.chain.seq is not a non-negative integer';
+    if (typeof pl.chain.prevReceiptHash !== 'string') return 'payload.chain.prevReceiptHash is not a string';
+  }
   return null;
 }
 
@@ -500,7 +531,9 @@ function payloadRows(p: ParsedReceipt, add: Add, attempt: number | undefined, ac
 
   const pl = p.receipt.payload;
   signed('A2', 'payload.decision.allowed', pl.decision.allowed ? 'allow' : 'deny');
-  signed('A3', 'payload.decision.reasonCode', `"${pl.decision.reasonCode ?? ''}"`);
+  if (typeof pl.decision.reasonCode === 'string') signed('A3', 'payload.decision.reasonCode', `"${pl.decision.reasonCode}"`);
+  else if (!p.verified) add({ claim: 'A3', ...scope, status: 'FAILED', evidence: ev('payload.decision.reasonCode'), note: PAYLOAD_FAILED });
+  else add({ claim: 'A3', ...scope, status: 'ABSENT', evidence: [], note: 'the signed payload carries no reasonCode.' });
 
   const m = typeof pl.decision.reasonCode === 'string' ? DESCRIPTOR.exec(pl.decision.reasonCode) : null;
   if (!p.verified) {
