@@ -1,6 +1,6 @@
 # Reviewer evidence report for an operator-trial bundle
 
-**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9, all applied). Founder
+**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), all applied. Founder
 override of the same-day "build nothing" ruling (private decision record). Time cap: 8 hours.
 
 ## 1. Purpose
@@ -112,12 +112,15 @@ Bundle-level:
 | B4 | Signer in `signer.json` equals the supplied signer anchor | `DERIVED` (match) / `FAILED` (mismatch) | `signer.json` `signer` |
 | B5 | Proof verification mode | `ABSENT`: the bundle does not record it. Note: the shipped operator-trial 0.1.0 runs the gateway with `devMode: true` and static simulated credentials (`examples/operator-trial/src/gateway-config.ts`); this is a property of the implementation, not authenticated provenance of this bundle | note only |
 | B6 | Host reports an ephemeral signer | `OBSERVED` (no key-destruction claim follows) | `signer.json` `ephemeral`, `summary.json` `note` |
-| B7 | Run was a dry run against the built-in echo endpoint | `OBSERVED` | `summary.json` `dryRun` |
+| B7 | Host-reported dry-run flag (the actual boolean is displayed; the built-in-echo explanation appears only when `true`; the same renderer accepts non-dry-run bundles) | `OBSERVED` | `summary.json` `dryRun` |
 
-Per attempt n (1, 2, 3). Attribution: `summary.json` `attempts[n].receiptId` must equal exactly
-one receipt's valid id. **Receipts that no attempt links to keep their own B1/B1a/B2 findings
-and their payload findings under an "unattributed receipt" heading; a link is never inferred by
-position.**
+Per attempt n (1, 2, 3; the record is `summary.json` `attempts[n-1]`). Attribution (A1) holds
+only when `attempts[n-1].receiptId` equals exactly one receipt's valid id (B1a) **and no other
+attempt references that receipt**. A failed A1 makes that attempt's receipt-backed findings (A2,
+A3, A4b, A4c, A5, A6, A8a, A9a, and A7b/A8b where emitted) `FAILED` without assigning payload
+values; A8b additionally depends on successful A1 for attempts 1 and 3. **Receipts that no
+attempt links to keep their own B1/B1a findings and their authentic payload findings under an
+"unattributed receipt" heading; a link is never inferred by position.**
 
 | # | Claim | Expected on clean dry-run | Evidence |
 |---|---|---|---|
@@ -125,14 +128,14 @@ position.**
 | A2 | Decision (allow / deny) | `SIGNED` | `payload.decision.allowed` |
 | A3 | Decision reason text | `SIGNED` (text) | `payload.decision.reasonCode` |
 | A4a | Action name, method, host, path as the host recorded them | `OBSERVED` | `summary.json` `action` |
-| A4b | Action descriptor parsed from the signed reason text (` | action=` suffix: an operator-trial convention, not a receipt schema field) | `DERIVED` from A3 | `reasonCode` |
+| A4b | Action descriptor parsed from the signed reason text (` \| action=` suffix: an operator-trial convention, not a receipt schema field) | `DERIVED` from A3 | `reasonCode` |
 | A4c | A4a and A4b agree | `DERIVED` / `FAILED` | both |
 | A5 | Signer-asserted simulated subject identifiers; subject authentication is not established | `SIGNED` (identifiers only) | `payload.subject.*` |
 | A6 | Recorded permission bitmask | `SIGNED`. Note on attempt 3: the signed `0` is the gateway's failure default (replay is rejected before tool policy runs), not evidence that permissions were evaluated | `payload.decision.permissionBitmask` |
 | A7a | Permission the host configured as required | `ABSENT` from the bundle (host configuration, unsigned) | note |
-| A7b | Required mask as reported in the denial text (attempt 2 only) | `DERIVED` from A3 (reported, not the enforced configuration) | `reasonCode` |
+| A7b | Required mask as reported in the denial text. **Emitted for attempt 2 only** | `DERIVED` from A3 (reported, not the enforced configuration); `ABSENT` if the text carries no mask | `reasonCode` |
 | A8a | Nonce | `SIGNED` | `payload.proof.nonce` |
-| A8b | Attempt 3 presented attempt 1's nonce and was denied | `DERIVED` from A8a of attempts 1 and 3 plus A2 of attempt 3; `FAILED` if either dependency failed | both receipts |
+| A8b | Attempt 3 presented attempt 1's nonce and was denied. **Emitted for attempt 3 only** | `DERIVED` from A8a of attempts 1 and 3 plus A2 of attempt 3; `FAILED` if any dependency (including A1 of attempt 1 or 3) failed | both receipts |
 | A9a | Proof hashes | `SIGNED` (hashes only) | `payload.proof.*Hash`, `publicSignalsHash` |
 | A9b | Human/agent proofs were verified | `ABSENT` (verification disabled in dev mode; see B5) | note |
 | A10 | Host reports invoking fetch toward the endpoint; delivery and execution unproven | `OBSERVED` | `attempts[n].dispatched` |
@@ -151,10 +154,11 @@ position.**
   plain styling. Every value copied from the bundle is HTML-escaped. Order: (1) what this report
   is and is not, dev-mode disclosure as in §2.6; (2) anchors used, with the §2.4 wording verbatim;
   (3) verification results B1–B7; (4) per-attempt tables A1–A17, then unattributed receipts if any;
-  (5) "re-verify yourself": the exact CLI command built from the validated flags, and *"Change
+  (5) "re-verify yourself": the exact CLI command built from the validated flags, always pinned to
+  the trial's `CLI_VERSION` (`npx @bolyra/cli@0.9.0 …`, never an unversioned package), and *"Change
   `payload.decision.allowed` in any receipt line without re-signing and re-run: expect
-  `FAIL [signature-invalid]` on that line, possibly with additional chain failures. The report's
-  id check is not part of the CLI's output."*; (6) legend for the five statuses.
+  `FAIL line <n>: [signature-invalid]` for that line, possibly with additional chain failures. The
+  report's id check (B1a) is not part of the CLI's output."*; (6) legend for the five statuses.
 - `report.json`: `{ tool, generatedAt, bundle, anchors, findings: [{id, attempt?, claim, status, evidence:[{file, path, line?}], note, inputs?}] }`.
   The HTML is rendered from this object; tests assert on the JSON.
 
@@ -178,18 +182,23 @@ Inside `examples/operator-trial` (shares `@bolyra/receipts 0.11.0`, the CI job, 
 
 1. Clean fixture + all anchors → every expected status in §5 matches.
 2. Signed-payload mutation (`payload.decision.allowed` flipped, line 1) → B1 `FAILED`
-   `signature-invalid` for that receipt; its A2–A9a `FAILED`; A8b `FAILED` (dependency); B2 `FAILED`;
-   other receipts' payload rows unchanged; A4a/A10/A11/A12–A17 unchanged.
+   `signature-invalid` for that receipt; receipt 1's A2, A3, A4b, A4c, A5, A6, A8a and A9a are
+   `FAILED`; attempt 3's A8b is `FAILED`; B2 `FAILED`; other receipts' payload rows unchanged;
+   independent `OBSERVED` and `ABSENT` rows (A4a, A7a, A9b, A10, A11, A12–A17) remain unchanged.
 3. Id-only mutation (one hex digit of `id`, line 2) → B1 `DERIVED` (still verifies), B1a `FAILED`,
-   A1 for attempt 2 `FAILED`, that receipt listed as unattributed with its payload rows `SIGNED`.
+   A1 for attempt 2 `FAILED`, attempt 2's receipt-backed rows `FAILED` with no values, that receipt
+   listed as unattributed with its payload rows `SIGNED`.
 4. Convenience-hash mutation (`receiptHash`, line 3) → B1 `DERIVED`, B2 `FAILED`
    `receipt-hash-mismatch`, payload rows `SIGNED`.
 5. Tail-truncated log (3 → 2 lines): with both anchors → B3a and B3b `FAILED`; with only
    `--expect-count` → B3a `FAILED`, B3b `ABSENT`; with only `--expect-head` → B3a `ABSENT`, B3b
-   `FAILED`; without either → B2 `DERIVED`, B3a/B3b `ABSENT` naming the flags; attempt 3's A1 `FAILED`.
-6. `summary.json` `attempts[0].receiptId` pointing at a nonexistent id → A1 `FAILED`; the real
-   receipt 1 appears as unattributed with `SIGNED` payload rows; no positional re-link.
-7. Duplicate link (two attempts naming the same receipt id) → both A1 `FAILED`.
+   `FAILED`; without either → B2 `DERIVED`, B3a/B3b `ABSENT` naming the flags; attempt 3's A1 and
+   receipt-backed rows `FAILED`, A8b `FAILED`.
+6. `summary.json` `attempts[0].receiptId` pointing at a nonexistent id → A1 `FAILED`; attempt 1's
+   receipt-backed rows `FAILED` with no values; A8b `FAILED`; the real receipt 1 appears as
+   unattributed with `SIGNED` payload rows; no positional re-link.
+7. Duplicate link (two attempts naming the same receipt id) → both A1 `FAILED`, both attempts'
+   receipt-backed rows `FAILED`, both receipts unattributed with `SIGNED` payload rows.
 8. `signer.json` edited → B4 `FAILED`; B1 unchanged.
 9. Wrong `--signer` → every B1 `FAILED`; no `SIGNED` row anywhere.
 10. Malformed line (non-JSON at physical line 2) → a `FAILED` finding naming line 2; lines 1 and 3
@@ -203,8 +212,9 @@ Inside `examples/operator-trial` (shares `@bolyra/receipts 0.11.0`, the CI job, 
 ## 9. Cut order if the 8-hour cap is hit
 
 Cut, in this order: print styling beyond page breaks; `VERIFY.txt` comparison (B4 keeps
-`signer.json`); the unattributed-receipt section's payload detail (keep the B1/B1a/B2 findings).
-Never cut: tests 1–10, the id check, the §2.4 wording, the escaping.
+`signer.json`); decorative formatting or explanatory prose in the unattributed-receipt section
+(its findings, including `SIGNED` payload rows, stay). Never cut: tests 1–10, the id check, the
+§2.4 wording, the escaping.
 
 ## 10. Out of scope, explicitly
 
