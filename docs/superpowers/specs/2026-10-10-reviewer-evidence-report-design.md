@@ -1,6 +1,6 @@
 # Reviewer evidence report for an operator-trial bundle
 
-**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), all applied. Founder
+**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), R3 APPROVE WITH EDITS (1), all applied. Founder
 override of the same-day "build nothing" ruling (private decision record). Time cap: 8 hours.
 
 ## 1. Purpose
@@ -124,7 +124,7 @@ attempt links to keep their own B1/B1a findings and their authentic payload find
 
 | # | Claim | Expected on clean dry-run | Evidence |
 |---|---|---|---|
-| A1 | The summary's receipt id names exactly one valid receipt in the log | `DERIVED` / `FAILED` (no match, duplicate, or invalid id) | `attempts[n].receiptId` vs `id` |
+| A1 | The summary's receipt id names exactly one valid receipt in the log | `DERIVED` / `FAILED` (no match, duplicate, or invalid id) | `attempts[n-1].receiptId` vs `id` |
 | A2 | Decision (allow / deny) | `SIGNED` | `payload.decision.allowed` |
 | A3 | Decision reason text | `SIGNED` (text) | `payload.decision.reasonCode` |
 | A4a | Action name, method, host, path as the host recorded them | `OBSERVED` | `summary.json` `action` |
@@ -138,8 +138,8 @@ attempt links to keep their own B1/B1a findings and their authentic payload find
 | A8b | Attempt 3 presented attempt 1's nonce and was denied. **Emitted for attempt 3 only** | `DERIVED` from A8a of attempts 1 and 3 plus A2 of attempt 3; `FAILED` if any dependency (including A1 of attempt 1 or 3) failed | both receipts |
 | A9a | Proof hashes | `SIGNED` (hashes only) | `payload.proof.*Hash`, `publicSignalsHash` |
 | A9b | Human/agent proofs were verified | `ABSENT` (verification disabled in dev mode; see B5) | note |
-| A10 | Host reports invoking fetch toward the endpoint; delivery and execution unproven | `OBSERVED` | `attempts[n].dispatched` |
-| A11 | Upstream HTTP status | `OBSERVED` when a status is recorded (attempt 1); `ABSENT` when `null` (attempts 2, 3) | `attempts[n].upstreamStatus` |
+| A10 | Host reports invoking fetch toward the endpoint; delivery and execution unproven | `OBSERVED` | `attempts[n-1].dispatched` |
+| A11 | Upstream HTTP status | `OBSERVED` when a status is recorded (attempt 1); `ABSENT` when `null` (attempts 2, 3) | `attempts[n-1].upstreamStatus` |
 | A12 | Decision was signed before dispatch | `ABSENT` (no ordering evidence in the bundle; the host's code verifies the persisted receipt before dispatching, but the bundle does not record that) | note |
 | A13 | The endpoint executed the action | `ABSENT` | note: never claimed |
 | A14 | A human consented to this action | `ABSENT` | note |
