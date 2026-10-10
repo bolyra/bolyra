@@ -1,6 +1,6 @@
 # Reviewer evidence report for an operator-trial bundle
 
-**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), R3 APPROVE WITH EDITS (1), all applied. Founder
+**Status:** design, 2026-10-10, Codex plan review R1 APPROVE WITH EDITS (9) and R2 APPROVE WITH EDITS (5), R3 APPROVE WITH EDITS (1), all applied; code review R1 (REVISE, 8) folded in: B4b, B8a, B8b, validation rules, containment. Founder
 override of the same-day "build nothing" ruling (private decision record). Time cap: 8 hours.
 
 ## 1. Purpose
@@ -63,8 +63,20 @@ npm run report -- --bundle <dir> --signer <0xaddr> [--expect-count <n>] [--expec
 Exit code: 0 when the report was written, regardless of findings; 2 on unreadable or rejected
 input. Findings live in the report, not in the exit code, so a FAILED bundle still gets a report.
 
-Malformed input (a receipt line that is not JSON, or not a receipt) is a `FAILED` finding naming
-the **physical line number**; the remaining lines are still processed.
+Malformed input (a receipt line that is not JSON, or lacking any field the report reads: `id`,
+`signature.{payloadHash,value,signer,keyId}`, `payload.decision.{allowed,permissionBitmask}`,
+`payload.subject.*`, `payload.proof.*`) is a `B0` `FAILED` finding naming the **physical line
+number** and the missing field; that line is never dereferenced further; the remaining lines are
+still processed. `summary.json` must be an object whose `attempts` is a non-empty array of objects
+with `n === index + 1`; anything else is a `BundleInputError` (exit 2), because attempt numbers are
+the attribution key and a renumbered attempt would silently re-point evidence. Anchors are
+normalized to lower-case hex before classification so the report and the generated command agree
+with the verifier's case-sensitive comparison.
+
+`--out` containment is component-aware on real paths: `<bundle>/..report` is a child of the bundle
+(a lexical `startsWith('..')` test would have let it through) and is rejected; `<parent>/bundle..report`
+is a genuine sibling and allowed; a symlink (even a dangling one) that resolves into the bundle, or an
+output file that is a symlink into the bundle, is rejected.
 
 ## 4. Classification
 
@@ -107,12 +119,15 @@ Bundle-level:
 | B1 | Each receipt's signature recovers to the anchored signer and its payload hash recomputes | `DERIVED` per receipt (named check: `verifyReceipt(receipt, anchor)`); `FAILED` with code | `receipts.jsonl` line n, `signature.{signer,payloadHash,value}` |
 | B1a | Each receipt's `id` equals the first 18 characters of its payload hash and is unique in the log | `DERIVED` (report-local check) / `FAILED` | `id`, `signature.payloadHash` |
 | B2 | Receipts form one intact hash chain (genesis, seq, prevReceiptHash, stored receiptHash) | `DERIVED` (named check: `verifyReceiptChain`); `FAILED` with codes | chain issue list |
-| B3a | Receipt count matches the supplied count checkpoint | `DERIVED` with `--expect-count`; `ABSENT` without | flag; `summary.json` `receiptCount` shown `OBSERVED` for comparison only |
-| B3b | Head hash matches the supplied head checkpoint | `DERIVED` with `--expect-head`; `ABSENT` without | flag; `summary.json` `headReceiptHash` shown `OBSERVED` for comparison only |
-| B4 | Signer in `signer.json` equals the supplied signer anchor | `DERIVED` (match) / `FAILED` (mismatch) | `signer.json` `signer` |
+| B3a | Receipt count matches the supplied count checkpoint | `DERIVED` with `--expect-count`; `ABSENT` without | flag (the host's own count is B8a) |
+| B3b | Head hash matches the supplied head checkpoint | `DERIVED` with `--expect-head`; `ABSENT` without | flag (the host's own head is B8b) |
+| B4 | Signer in `signer.json` equals the supplied signer anchor | `DERIVED` (match) / `FAILED` (contradiction) | `signer.json` `signer` |
+| B4b | `VERIFY.txt` names the anchored signer and no other address | `OBSERVED` / `FAILED` (contradiction) / `ABSENT` (file missing) | `VERIFY.txt` (text only; never parsed as a command) |
 | B5 | Proof verification mode | `ABSENT`: the bundle does not record it. Note: the shipped operator-trial 0.1.0 runs the gateway with `devMode: true` and static simulated credentials (`examples/operator-trial/src/gateway-config.ts`); this is a property of the implementation, not authenticated provenance of this bundle | note only |
 | B6 | Host reports an ephemeral signer | `OBSERVED` (no key-destruction claim follows) | `signer.json` `ephemeral`, `summary.json` `note` |
-| B7 | Host-reported dry-run flag (the actual boolean is displayed; the built-in-echo explanation appears only when `true`; the same renderer accepts non-dry-run bundles) | `OBSERVED` | `summary.json` `dryRun` |
+| B7 | Host-reported dry-run flag (the actual boolean is displayed; the built-in-echo explanation appears only when `true`; the same renderer accepts non-dry-run bundles) | `OBSERVED`; `ABSENT` if not a boolean | `summary.json` `dryRun` |
+| B8a | The host's unsigned `receiptCount` equals the number of receipt lines | `OBSERVED` (equal) / `FAILED` (contradiction) / `ABSENT` | `summary.json` `receiptCount` |
+| B8b | The host's unsigned `headReceiptHash` equals the recomputed head of the log | `OBSERVED` / `FAILED` (contradiction) / `ABSENT` | `summary.json` `headReceiptHash` |
 
 Per attempt n (1, 2, 3; the record is `summary.json` `attempts[n-1]`). Attribution (A1) holds
 only when `attempts[n-1].receiptId` equals exactly one receipt's valid id (B1a) **and no other
@@ -127,19 +142,19 @@ attempt links to keep their own B1/B1a findings and their authentic payload find
 | A1 | The summary's receipt id names exactly one valid receipt in the log | `DERIVED` / `FAILED` (no match, duplicate, or invalid id) | `attempts[n-1].receiptId` vs `id` |
 | A2 | Decision (allow / deny) | `SIGNED` | `payload.decision.allowed` |
 | A3 | Decision reason text | `SIGNED` (text) | `payload.decision.reasonCode` |
-| A4a | Action name, method, host, path as the host recorded them | `OBSERVED` | `summary.json` `action` |
+| A4a | Action name, method, host, path as the host recorded them | `OBSERVED`; `ABSENT` if any of the four is missing (never a placeholder) | `summary.json` `action` |
 | A4b | Action descriptor parsed from the signed reason text (` \| action=` suffix: an operator-trial convention, not a receipt schema field) | `DERIVED` from A3 | `reasonCode` |
 | A4c | A4a and A4b agree | `DERIVED` / `FAILED` | both |
 | A5 | Signer-asserted simulated subject identifiers; subject authentication is not established | `SIGNED` (identifiers only) | `payload.subject.*` |
-| A6 | Recorded permission bitmask | `SIGNED`. Note on attempt 3: the signed `0` is the gateway's failure default (replay is rejected before tool policy runs), not evidence that permissions were evaluated | `payload.decision.permissionBitmask` |
+| A6 | Recorded permission bitmask | `SIGNED`. Attempt 3 always carries an implementation note, independent of any bundle field: in the shipped trial attempt 3 is the replay, and the gateway's failure default is `0` (replay is rejected before tool policy runs), so a `0` is not evidence that permissions were evaluated | `payload.decision.permissionBitmask` |
 | A7a | Permission the host configured as required | `ABSENT` from the bundle (host configuration, unsigned) | note |
 | A7b | Required mask as reported in the denial text. **Emitted for attempt 2 only** | `DERIVED` from A3 (reported, not the enforced configuration); `ABSENT` if the text carries no mask | `reasonCode` |
 | A8a | Nonce | `SIGNED` | `payload.proof.nonce` |
 | A8b | Attempt 3 presented attempt 1's nonce and was denied. **Emitted for attempt 3 only** | `DERIVED` from A8a of attempts 1 and 3 plus A2 of attempt 3; `FAILED` if any dependency (including A1 of attempt 1 or 3) failed | both receipts |
 | A9a | Proof hashes | `SIGNED` (hashes only) | `payload.proof.*Hash`, `publicSignalsHash` |
-| A9b | Human/agent proofs were verified | `ABSENT` (verification disabled in dev mode; see B5) | note |
-| A10 | Host reports invoking fetch toward the endpoint; delivery and execution unproven | `OBSERVED` | `attempts[n-1].dispatched` |
-| A11 | Upstream HTTP status | `OBSERVED` when a status is recorded (attempt 1); `ABSENT` when `null` (attempts 2, 3) | `attempts[n-1].upstreamStatus` |
+| A9b | Human/agent proofs were verified | `ABSENT`: the bundle provides no proof-verification evidence. Stated separately: the shipped implementation disables verification (see B5) | note |
+| A10 | Host reports invoking fetch toward the endpoint; delivery and execution unproven | `OBSERVED`; `ABSENT` if not a boolean | `attempts[n-1].dispatched` |
+| A11 | Upstream HTTP status | `OBSERVED` when a status is recorded (attempt 1); `ABSENT` when `null` ("no upstream status was recorded"; when `dispatched` is `true` the note adds the host's `outcome`, e.g. timeout, and never says nothing was dispatched) | `attempts[n-1].upstreamStatus` |
 | A12 | Decision was signed before dispatch | `ABSENT` (no ordering evidence in the bundle; the host's code verifies the persisted receipt before dispatching, but the bundle does not record that) | note |
 | A13 | The endpoint executed the action | `ABSENT` | note: never claimed |
 | A14 | A human consented to this action | `ABSENT` | note |

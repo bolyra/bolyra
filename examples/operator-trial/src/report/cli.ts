@@ -51,21 +51,27 @@ export function main(argv: string[]): number {
   if (!v.bundle) return usage('--bundle is required');
   if (!v.signer) return usage('--signer is required');
   if (!/^0x[0-9a-fA-F]{40}$/.test(v.signer)) return usage('--signer must be a 0x-prefixed 20-byte hex address');
-  const anchors: Anchors = { signer: v.signer };
+  const anchors: Anchors = { signer: v.signer.toLowerCase() };
   if (v['expect-count'] !== undefined) {
     if (!/^\d+$/.test(v['expect-count'])) return usage('--expect-count must be a non-negative integer');
     anchors.expectCount = Number(v['expect-count']);
   }
   if (v['expect-head'] !== undefined) {
     if (!/^0x[0-9a-fA-F]{64}$/.test(v['expect-head'])) return usage('--expect-head must be a 0x-prefixed 32-byte hex hash');
-    anchors.expectHead = v['expect-head'];
+    anchors.expectHead = v['expect-head'].toLowerCase();
   }
 
   const bundleDir = path.resolve(v.bundle);
   const outDir = path.resolve(v.out ?? path.join('report-out', path.basename(bundleDir)));
-  const rel = path.relative(bundleDir, outDir);
-  if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+  if (!fs.existsSync(bundleDir) || !fs.statSync(bundleDir).isDirectory()) return usage(`--bundle is not a directory: ${bundleDir}`);
+  if (isInside(realBundle(bundleDir), realExistingAncestor(outDir))) {
     return usage(`--out must not be inside the bundle directory (${bundleDir})`);
+  }
+  for (const name of ['report.json', 'report.html']) {
+    const target = path.join(outDir, name);
+    if (isSymlink(target) && isInside(realBundle(bundleDir), realExistingAncestor(target))) {
+      return usage(`--out/${name} resolves inside the bundle directory`);
+    }
   }
 
   let files: BundleFiles;
@@ -101,6 +107,45 @@ export function main(argv: string[]): number {
       `anchors came from the command line; see the report's Anchors section for what that does and does not establish.\n`,
   );
   return 0;
+}
+
+/** Component-aware containment on resolved real paths: `<bundle>/..report` is outside, `<bundle>/x` is inside. */
+export function isInside(parentReal: string, childReal: string): boolean {
+  const rel = path.relative(parentReal, childReal);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
+
+function realBundle(dir: string): string {
+  return fs.realpathSync(dir);
+}
+
+/** realpath of the deepest existing ancestor, with the non-existing tail appended, so symlinked parents cannot hide the target. */
+export function realExistingAncestor(p: string): string {
+  const tail: string[] = [];
+  let cur = p;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      // A dangling symlink has no realpath; follow it by hand so a link into the bundle cannot hide.
+      if (isSymlink(cur)) {
+        cur = path.resolve(path.dirname(cur), fs.readlinkSync(cur));
+        continue;
+      }
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.join(cur, ...tail.reverse());
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+function isSymlink(p: string): boolean {
+  try {
+    return fs.lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 function readOptional(p: string): string | undefined {

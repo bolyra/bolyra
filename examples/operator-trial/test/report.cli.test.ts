@@ -96,3 +96,52 @@ test('cli: malformed anchors are rejected before anything is read', () => {
     assert.equal(r.code, 2, args.join(' '));
   }
 });
+
+test('cli: containment is component-aware and symlink-aware', () => {
+  const base = tmp();
+  const bundle = path.join(base, 'bundle');
+  fs.cpSync(FIX, bundle, { recursive: true });
+  // "<bundle>/..report" is a CHILD of the bundle named "..report"; a lexical startsWith('..') check would let it through.
+  const child = path.join(bundle, '..report');
+  const r1 = runCli(['--bundle', bundle, '--signer', signer, '--out', child]);
+  assert.equal(r1.code, 2);
+  assert.ok(!fs.existsSync(child));
+  // "<base>/bundle..report" is a genuine sibling and is allowed.
+  const sibling = path.join(base, 'bundle..report');
+  const r1b = runCli(['--bundle', bundle, '--signer', signer, '--out', sibling]);
+  assert.equal(r1b.code, 0, r1b.err);
+  assert.ok(fs.existsSync(path.join(sibling, 'report.html')));
+  // A symlink elsewhere that points into the bundle is rejected.
+  const link = path.join(base, 'link');
+  fs.symlinkSync(path.join(bundle, 'sub'), link);
+  const r2 = runCli(['--bundle', bundle, '--signer', signer, '--out', path.join(link, 'deeper')]);
+  assert.equal(r2.code, 2);
+  assert.match(r2.err, /inside the bundle/);
+  assert.ok(!fs.existsSync(path.join(bundle, 'sub')));
+  // A symlinked bundle path still resolves to the same directory.
+  const blink = path.join(base, 'bundle-link');
+  fs.symlinkSync(bundle, blink);
+  const r3 = runCli(['--bundle', blink, '--signer', signer, '--out', path.join(bundle, 'x')]);
+  assert.equal(r3.code, 2);
+  // An output FILE that is a symlink into the bundle is rejected.
+  const out = path.join(base, 'out');
+  fs.mkdirSync(out);
+  fs.symlinkSync(path.join(bundle, 'summary.json'), path.join(out, 'report.json'));
+  const r4 = runCli(['--bundle', bundle, '--signer', signer, '--out', out]);
+  assert.equal(r4.code, 2);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(bundle, 'summary.json'), 'utf8')).trialVersion, '0.1.0');
+});
+
+test('cli: upper-case anchors are normalized so the report and the printed command agree with the verifier', () => {
+  const bundle = path.join(tmp(), 'bundle');
+  fs.cpSync(FIX, bundle, { recursive: true });
+  const out = path.join(tmp(), 'out');
+  const r = runCli(['--bundle', bundle, '--signer', signer.toUpperCase().replace('0X', '0x'), '--expect-head', (summary.headReceiptHash as string).toUpperCase().replace('0X', '0x'), '--out', out]);
+  assert.equal(r.code, 0, r.err);
+  const json = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'));
+  assert.equal(json.anchors.signer, signer);
+  assert.equal(json.anchors.expectHead, summary.headReceiptHash);
+  assert.ok(!json.findings.some((f: { status: string }) => f.status === 'FAILED'));
+  const html = fs.readFileSync(path.join(out, 'report.html'), 'utf8');
+  assert.ok(html.includes(`--expect-head ${summary.headReceiptHash}`));
+});

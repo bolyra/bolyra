@@ -53,6 +53,7 @@ export interface Report {
   tool: { name: string; version: string; receipts: string; cli: string };
   generatedAt: string;
   bundle: string;
+  /** Normalized (lower-case hex) so the report and the generated CLI command agree with the verifier's comparison. */
   anchors: Anchors;
   attempts: number[];
   unattributedLines: number[];
@@ -74,34 +75,48 @@ interface ParsedReceipt {
 }
 
 interface SummaryAttempt {
+  /** 1-based, equal to array index + 1 (validated). */
   n: number;
-  credential?: string;
-  decision?: string;
-  stage?: string;
-  reason?: string;
-  dispatched?: boolean;
-  upstreamStatus?: number | null;
-  receiptId?: string | null;
+  index: number;
+  credential?: unknown;
+  stage?: unknown;
+  dispatched?: unknown;
+  upstreamStatus?: unknown;
+  outcome?: unknown;
+  receiptId?: unknown;
 }
 
 interface Summary {
   dryRun?: unknown;
-  action?: { name?: string; method?: string; host?: string; path?: string };
-  attempts?: SummaryAttempt[];
+  action?: unknown;
+  attempts: SummaryAttempt[];
   receiptCount?: unknown;
   headReceiptHash?: unknown;
   note?: unknown;
 }
 
+type Add = (f: Omit<Finding, 'id' | 'title'>) => Finding;
+
 const RECEIPTS = 'receipts.jsonl';
 const SUMMARY = 'summary.json';
 const SIGNER = 'signer.json';
+const VERIFY = 'VERIFY.txt';
 const DESCRIPTOR = / \| action=([a-z][a-z0-9_-]{0,63}) ([A-Z]+) ([^/\s]+)(\/\S*)$/;
 const REQUIRED_MASK = /requires permissions (\S+), agent has (\S+)/;
+const ADDRESS = /0x[0-9a-f]{40}(?![0-9a-f])/g;
+const PAYLOAD_FAILED = 'receipt failed signature verification (B1: signature-invalid); its payload cannot be read as a signed assertion.';
 
-export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Date; bundleName?: string } = {}): Report {
+export function normalizeAnchors(a: Anchors): Anchors {
+  const out: Anchors = { signer: a.signer.toLowerCase() };
+  if (a.expectCount !== undefined) out.expectCount = a.expectCount;
+  if (a.expectHead !== undefined) out.expectHead = a.expectHead.toLowerCase();
+  return out;
+}
+
+export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: Date; bundleName?: string } = {}): Report {
+  const anchors = normalizeAnchors(rawAnchors);
   const findings: Finding[] = [];
-  const add = (f: Omit<Finding, 'id' | 'title'>): Finding => {
+  const add: Add = (f) => {
     const id = f.attempt !== undefined ? `${f.claim}@${f.attempt}` : f.receiptLine !== undefined ? `${f.claim}:L${f.receiptLine}` : f.claim;
     const full: Finding = { id, title: CLAIM_TITLES[f.claim] ?? f.claim, ...f };
     findings.push(full);
@@ -112,8 +127,7 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
   const parsed = parseReceipts(files.receiptsJsonl, anchors.signer, add);
 
   // ---- Bundle-level ----
-  const chainInput = parsed.map((p) => p.receipt);
-  const chain = verifyReceiptChain(chainInput, { expectedSigner: anchors.signer });
+  const chain = verifyReceiptChain(parsed.map((p) => p.receipt), { expectedSigner: anchors.signer });
   const codes = Array.from(new Set(chain.issues.map((i) => i.code)));
   add({
     claim: 'B2',
@@ -125,9 +139,8 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
       : `issues: ${codes.join(', ')}; ${chain.issues.map((i) => `line ${lineOfIndex(parsed, i.index)}: ${i.message}`).join(' | ')}`,
   });
 
-  const observedCount = typeof summary.receiptCount === 'number' ? ` summary.json receiptCount (unsigned): ${summary.receiptCount}.` : '';
   if (anchors.expectCount === undefined) {
-    add({ claim: 'B3a', status: 'ABSENT', evidence: [], note: `--expect-count was not supplied; tail truncation is not excluded by count.${observedCount}` });
+    add({ claim: 'B3a', status: 'ABSENT', evidence: [], note: '--expect-count was not supplied; tail truncation is not excluded by count.' });
   } else {
     const ok = parsed.length === anchors.expectCount;
     add({
@@ -135,45 +148,77 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
       status: ok ? 'DERIVED' : 'FAILED',
       evidence: [{ file: RECEIPTS }],
       inputs: [`--expect-count ${anchors.expectCount}`, `receipt lines parsed: ${parsed.length}`],
-      note: (ok ? 'count matches the supplied checkpoint.' : `count-mismatch: log holds ${parsed.length}, checkpoint says ${anchors.expectCount}.`) + observedCount,
+      note: ok ? 'count matches the supplied checkpoint.' : `count-mismatch: log holds ${parsed.length}, checkpoint says ${anchors.expectCount}.`,
     });
   }
-  const observedHead = typeof summary.headReceiptHash === 'string' ? ` summary.json headReceiptHash (unsigned): ${summary.headReceiptHash}.` : '';
   if (anchors.expectHead === undefined) {
-    add({ claim: 'B3b', status: 'ABSENT', evidence: [], note: `--expect-head was not supplied; tail truncation is not excluded by head hash.${observedHead}` });
+    add({ claim: 'B3b', status: 'ABSENT', evidence: [], note: '--expect-head was not supplied; tail truncation is not excluded by head hash.' });
   } else {
-    const ok = chain.headHash !== undefined && chain.headHash.toLowerCase() === anchors.expectHead.toLowerCase();
+    const ok = chain.headHash !== undefined && chain.headHash.toLowerCase() === anchors.expectHead;
     add({
       claim: 'B3b',
       status: ok ? 'DERIVED' : 'FAILED',
       evidence: [{ file: RECEIPTS }],
       inputs: [`--expect-head ${anchors.expectHead}`, `recomputed head: ${chain.headHash ?? '(chain did not verify)'}`],
-      note: (ok ? 'head hash matches the supplied checkpoint.' : 'head-hash-mismatch: recomputed head differs from the checkpoint.') + observedHead,
+      note: ok ? 'head hash matches the supplied checkpoint.' : 'head-hash-mismatch: recomputed head differs from the checkpoint.',
     });
   }
 
-  // B4 / B6: signer.json compared against the anchor, never used as one.
+  // B8a / B8b: the host's own unsigned checkpoints, compared with the log. Never anchors.
+  if (typeof summary.receiptCount !== 'number') {
+    add({ claim: 'B8a', status: 'ABSENT', evidence: [], note: 'summary.json records no receiptCount.' });
+  } else {
+    const same = summary.receiptCount === parsed.length;
+    add({
+      claim: 'B8a',
+      status: same ? 'OBSERVED' : 'FAILED',
+      evidence: [{ file: SUMMARY, path: 'receiptCount' }, { file: RECEIPTS }],
+      note: same ? `receiptCount ${summary.receiptCount} (unsigned) equals the number of receipt lines.` : `contradiction: summary.json says ${summary.receiptCount} receipts, the log holds ${parsed.length}.`,
+    });
+  }
+  if (typeof summary.headReceiptHash !== 'string') {
+    add({ claim: 'B8b', status: 'ABSENT', evidence: [], note: 'summary.json records no headReceiptHash.' });
+  } else {
+    const same = chain.headHash !== undefined && summary.headReceiptHash.toLowerCase() === chain.headHash.toLowerCase();
+    add({
+      claim: 'B8b',
+      status: same ? 'OBSERVED' : 'FAILED',
+      evidence: [{ file: SUMMARY, path: 'headReceiptHash' }, { file: RECEIPTS }],
+      note: same ? `headReceiptHash (unsigned) equals the recomputed head of the log.` : `contradiction: summary.json names head ${summary.headReceiptHash}, the log recomputes to ${chain.headHash ?? '(chain did not verify)'}.`,
+    });
+  }
+
+  // B4 / B4b / B6: signer.json and VERIFY.txt compared against the anchor, never used as one.
   const signerFile = parseJsonOrNull(files.signerJson) as { signer?: unknown; ephemeral?: unknown } | null;
   if (!signerFile) {
     add({ claim: 'B4', status: 'ABSENT', evidence: [], note: 'signer.json is missing or unreadable; nothing to compare against the anchor.' });
     add({ claim: 'B6', status: 'ABSENT', evidence: [], note: 'signer.json is missing or unreadable.' });
   } else {
-    const same = typeof signerFile.signer === 'string' && signerFile.signer.toLowerCase() === anchors.signer.toLowerCase();
-    const verifyMentions = typeof files.verifyTxt === 'string' ? files.verifyTxt.toLowerCase().includes(anchors.signer.toLowerCase()) : undefined;
+    const same = typeof signerFile.signer === 'string' && signerFile.signer.toLowerCase() === anchors.signer;
     add({
       claim: 'B4',
       status: same ? 'DERIVED' : 'FAILED',
       evidence: [{ file: SIGNER, path: 'signer' }],
       inputs: [`--signer ${anchors.signer}`],
-      note:
-        (same ? 'matches the supplied anchor.' : `signer.json names ${String(signerFile.signer)}, the anchor is ${anchors.signer}.`) +
-        (verifyMentions === undefined ? '' : verifyMentions ? ' VERIFY.txt mentions the anchored signer.' : ' VERIFY.txt does not mention the anchored signer.'),
+      note: same ? 'matches the supplied anchor.' : `contradiction: signer.json names ${String(signerFile.signer)}, the anchor is ${anchors.signer}.`,
     });
     add({
       claim: 'B6',
       status: signerFile.ephemeral === true ? 'OBSERVED' : 'ABSENT',
-      evidence: signerFile.ephemeral === true ? [{ file: SIGNER, path: 'ephemeral' }, { file: SUMMARY, path: 'note' }] : [],
+      evidence: signerFile.ephemeral === true ? [{ file: SIGNER, path: 'ephemeral' }] : [],
       note: signerFile.ephemeral === true ? 'the host asserts the key was generated for this run; no key-destruction claim follows.' : 'signer.json does not assert an ephemeral key.',
+    });
+  }
+  if (typeof files.verifyTxt !== 'string') {
+    add({ claim: 'B4b', status: 'ABSENT', evidence: [], note: 'VERIFY.txt is missing.' });
+  } else {
+    const mentioned = Array.from(new Set(files.verifyTxt.toLowerCase().match(ADDRESS) ?? []));
+    const same = mentioned.length === 1 && mentioned[0] === anchors.signer;
+    add({
+      claim: 'B4b',
+      status: same ? 'OBSERVED' : 'FAILED',
+      evidence: [{ file: VERIFY }],
+      note: same ? 'VERIFY.txt names the anchored signer (unsigned text; not used as an anchor).' : `contradiction: VERIFY.txt names ${mentioned.length === 0 ? 'no address' : mentioned.join(', ')}, the anchor is ${anchors.signer}.`,
     });
   }
   add({
@@ -181,23 +226,20 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
     status: 'ABSENT',
     evidence: [],
     note:
-      'the bundle does not record whether proofs were verified. The shipped operator-trial 0.1.0 runs the gateway with devMode: true and static simulated credentials (examples/operator-trial/src/gateway-config.ts); that is a property of the implementation, not authenticated provenance of this bundle.',
+      'the bundle does not record whether proofs were verified. Separately: the shipped operator-trial 0.1.0 runs the gateway with devMode: true and static simulated credentials (examples/operator-trial/src/gateway-config.ts); that is a property of the implementation, not authenticated provenance of this bundle.',
   });
-  add({
-    claim: 'B7',
-    status: 'OBSERVED',
-    evidence: [{ file: SUMMARY, path: 'dryRun' }],
-    note: summary.dryRun === true ? 'dryRun: true (the host reports the built-in echo endpoint was used).' : `dryRun: ${JSON.stringify(summary.dryRun)}.`,
-  });
+  if (typeof summary.dryRun === 'boolean') {
+    add({ claim: 'B7', status: 'OBSERVED', evidence: [{ file: SUMMARY, path: 'dryRun' }], note: summary.dryRun ? 'dryRun: true (the host reports the built-in echo endpoint was used).' : 'dryRun: false.' });
+  } else {
+    add({ claim: 'B7', status: 'ABSENT', evidence: [], note: 'summary.json records no boolean dryRun.' });
+  }
 
-  // ---- Attempt linking (A1) ----
-  const attempts = (summary.attempts ?? []).filter((a) => typeof a?.n === 'number');
+  // ---- Attempt linking (A1): one valid receipt per attempt, one attempt per receipt ----
+  const attempts = summary.attempts;
   const byId = new Map<string, ParsedReceipt[]>();
   for (const p of parsed) {
     if (!p.idOk) continue;
-    const list = byId.get(p.receipt.id) ?? [];
-    list.push(p);
-    byId.set(p.receipt.id, list);
+    byId.set(p.receipt.id, [...(byId.get(p.receipt.id) ?? []), p]);
   }
   const claimedBy = new Map<string, number[]>();
   for (const a of attempts) {
@@ -205,8 +247,7 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
   }
   const linked = new Map<number, ParsedReceipt>();
   for (const a of attempts) {
-    const idx = attempts.indexOf(a);
-    const ev: Evidence[] = [{ file: SUMMARY, path: `attempts[${idx}].receiptId` }];
+    const ev: Evidence[] = [{ file: SUMMARY, path: `attempts[${a.index}].receiptId` }];
     if (typeof a.receiptId !== 'string') {
       add({ claim: 'A1', attempt: a.n, status: 'FAILED', evidence: ev, note: 'the summary records no receipt id for this attempt.' });
       continue;
@@ -235,52 +276,61 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
   const unattributedLines = parsed.map((p) => p.line).filter((l) => !linkedLines.has(l));
 
   // ---- Per attempt ----
-  const action = summary.action ?? {};
-  const actionText = `${action.name ?? '?'} ${action.method ?? '?'} ${action.host ?? '?'}${action.path ?? ''}`;
+  const action = actionOf(summary.action);
   for (const a of attempts) {
-    const idx = attempts.indexOf(a);
     const p = linked.get(a.n);
-    if (p) payloadRows(p, add, a.n, { summaryAttempt: a, summaryIndex: idx, action });
+    if (p) payloadRows(p, add, a.n, action);
     else unattributedRows(add, a.n);
-    add({ claim: 'A4a', attempt: a.n, status: 'OBSERVED', evidence: [{ file: SUMMARY, path: 'action' }], note: actionText });
+
+    if (action) add({ claim: 'A4a', attempt: a.n, status: 'OBSERVED', evidence: [{ file: SUMMARY, path: 'action' }], note: `${action.name} ${action.method} ${action.host}${action.path}` });
+    else add({ claim: 'A4a', attempt: a.n, status: 'ABSENT', evidence: [], note: 'summary.json records no complete action (name, method, host, path).' });
     add({ claim: 'A7a', attempt: a.n, status: 'ABSENT', evidence: [], note: 'the required permission is host configuration; the bundle does not carry it in signed or unsigned form.' });
-    add({ claim: 'A9b', attempt: a.n, status: 'ABSENT', evidence: [], note: 'proof verification is disabled in dev mode (see B5); the signed hashes (A9a) name proofs that were not verified.' });
-    add({
-      claim: 'A10',
-      attempt: a.n,
-      status: 'OBSERVED',
-      evidence: [{ file: SUMMARY, path: `attempts[${idx}].dispatched` }],
-      note: `dispatched: ${String(a.dispatched)}. 'dispatched' means the host reports invoking fetch; delivery and execution at the endpoint are not proven.`,
-    });
-    if (typeof a.upstreamStatus === 'number') {
-      add({ claim: 'A11', attempt: a.n, status: 'OBSERVED', evidence: [{ file: SUMMARY, path: `attempts[${idx}].upstreamStatus` }], note: `upstreamStatus: ${a.upstreamStatus} (as observed by the host).` });
+    add({ claim: 'A9b', attempt: a.n, status: 'ABSENT', evidence: [], note: 'the bundle provides no evidence that any proof was verified; A9a lists hashes only. Separately: the shipped operator-trial 0.1.0 disables proof verification (dev mode; see B5).' });
+    if (typeof a.dispatched === 'boolean') {
+      add({
+        claim: 'A10',
+        attempt: a.n,
+        status: 'OBSERVED',
+        evidence: [{ file: SUMMARY, path: `attempts[${a.index}].dispatched` }],
+        note: `dispatched: ${a.dispatched}. 'dispatched' means the host reports invoking fetch; delivery and execution at the endpoint are not proven.`,
+      });
     } else {
-      add({ claim: 'A11', attempt: a.n, status: 'ABSENT', evidence: [], note: 'no upstream status was recorded (nothing was dispatched).' });
+      add({ claim: 'A10', attempt: a.n, status: 'ABSENT', evidence: [], note: 'summary.json records no boolean dispatched for this attempt.' });
+    }
+    if (typeof a.upstreamStatus === 'number') {
+      add({ claim: 'A11', attempt: a.n, status: 'OBSERVED', evidence: [{ file: SUMMARY, path: `attempts[${a.index}].upstreamStatus` }], note: `upstreamStatus: ${a.upstreamStatus} (as observed by the host).` });
+    } else {
+      add({
+        claim: 'A11',
+        attempt: a.n,
+        status: 'ABSENT',
+        evidence: [],
+        note: 'no upstream status was recorded.' + (a.dispatched === true ? ` The host reports dispatching without a status (outcome: ${typeof a.outcome === 'string' ? a.outcome : 'not recorded'}).` : ''),
+      });
     }
     add({ claim: 'A12', attempt: a.n, status: 'ABSENT', evidence: [], note: "the bundle holds no ordering evidence. The host's code verifies the persisted receipt before dispatching, but the bundle does not record that." });
-    add({ claim: 'A13', attempt: a.n, status: 'ABSENT', evidence: [], note: 'never claimed by the trial; an upstream status is the host\'s observation of a response, not proof of execution.' });
+    add({ claim: 'A13', attempt: a.n, status: 'ABSENT', evidence: [], note: "never claimed by the trial; an upstream status is the host's observation of a response, not proof of execution." });
     add({ claim: 'A14', attempt: a.n, status: 'ABSENT', evidence: [], note: 'no consent artifact exists in the bundle.' });
     add({ claim: 'A15', attempt: a.n, status: 'ABSENT', evidence: [], note: 'the receipt records a permission tier mask only; there is no cumulative budget, and this is an auth receipt, not a commerce receipt.' });
     add({ claim: 'A16', attempt: a.n, status: 'ABSENT', evidence: [], note: 'nothing in the bundle names a payee, a settlement address, or who controls one.' });
     add({ claim: 'A17', attempt: a.n, status: 'ABSENT', evidence: [], note: 'see B5: simulated credentials, no registry.' });
   }
 
-  // A8b: the replay relation, for the attempt the host labelled a replay.
-  const replayAttempt = attempts.find((a) => a.n === 3);
-  if (replayAttempt) {
+  // A8b: the replay relation, attempt 3 only (the trial's fixed order).
+  if (attempts.some((a) => a.n === 3)) {
     const first = linked.get(1);
-    const third = linked.get(replayAttempt.n);
-    const deps = [`A8a@1`, `A8a@${replayAttempt.n}`, `A2@${replayAttempt.n}`];
+    const third = linked.get(3);
+    const deps = ['A1@1', 'A1@3', 'A8a@1', 'A8a@3', 'A2@3'];
     if (!first || !third) {
-      add({ claim: 'A8b', attempt: replayAttempt.n, status: 'FAILED', evidence: [], inputs: [...deps, 'A1@1', `A1@${replayAttempt.n}`], note: `dependency failed: attempt ${!first ? 1 : replayAttempt.n} is not attributed to a receipt (A1).` });
+      add({ claim: 'A8b', attempt: 3, status: 'FAILED', evidence: [], inputs: deps, note: `dependency failed: attempt ${!first ? 1 : 3} is not attributed to a receipt (A1).` });
     } else if (!first.verified || !third.verified) {
-      add({ claim: 'A8b', attempt: replayAttempt.n, status: 'FAILED', evidence: [], inputs: deps, note: `dependency failed: receipt line ${!first.verified ? first.line : third.line} did not verify (B1).` });
+      add({ claim: 'A8b', attempt: 3, status: 'FAILED', evidence: [], inputs: deps, note: `dependency failed: receipt line ${!first.verified ? first.line : third.line} did not verify (B1: signature-invalid).` });
     } else {
       const same = first.receipt.payload.proof.nonce === third.receipt.payload.proof.nonce;
       const denied = third.receipt.payload.decision.allowed === false;
       add({
         claim: 'A8b',
-        attempt: replayAttempt.n,
+        attempt: 3,
         status: same && denied ? 'DERIVED' : 'FAILED',
         evidence: [
           { file: RECEIPTS, line: first.line, path: 'payload.proof.nonce' },
@@ -295,14 +345,14 @@ export function classify(files: BundleFiles, anchors: Anchors, opts: { now?: Dat
 
   // ---- Unattributed receipts: their own payload rows, no attempt ----
   for (const p of parsed) {
-    if (!linkedLines.has(p.line)) payloadRows(p, add, undefined, { action });
+    if (!linkedLines.has(p.line)) payloadRows(p, add, undefined, action);
   }
 
   return {
     tool: { name: '@bolyra/operator-trial report', version: TRIAL_VERSION, receipts: PACKAGES.receipts, cli: CLI_VERSION },
     generatedAt: (opts.now ?? new Date()).toISOString(),
     bundle: opts.bundleName ?? 'bundle',
-    anchors: { ...anchors },
+    anchors,
     attempts: attempts.map((a) => a.n),
     unattributedLines,
     findings,
@@ -316,22 +366,39 @@ function parseSummary(text: string): Summary {
   } catch (err) {
     throw new BundleInputError(`summary.json is not JSON: ${(err as Error).message}`);
   }
-  if (!s || typeof s !== 'object' || Array.isArray(s)) throw new BundleInputError('summary.json is not an object');
-  return s as Summary;
+  if (!isObject(s)) throw new BundleInputError('summary.json is not an object');
+  if (!Array.isArray(s.attempts)) throw new BundleInputError('summary.json: attempts is not an array');
+  const attempts: SummaryAttempt[] = s.attempts.map((raw, index) => {
+    if (!isObject(raw)) throw new BundleInputError(`summary.json: attempts[${index}] is not an object`);
+    if (raw.n !== index + 1) throw new BundleInputError(`summary.json: attempts[${index}].n is ${JSON.stringify(raw.n)}, expected ${index + 1}`);
+    return { n: index + 1, index, credential: raw.credential, stage: raw.stage, dispatched: raw.dispatched, upstreamStatus: raw.upstreamStatus, outcome: raw.outcome, receiptId: raw.receiptId };
+  });
+  if (attempts.length === 0) throw new BundleInputError('summary.json: attempts is empty');
+  return { dryRun: s.dryRun, action: s.action, attempts, receiptCount: s.receiptCount, headReceiptHash: s.headReceiptHash, note: s.note };
+}
+
+function actionOf(a: unknown): { name: string; method: string; host: string; path: string } | null {
+  if (!isObject(a)) return null;
+  const { name, method, host, path } = a;
+  return typeof name === 'string' && typeof method === 'string' && typeof host === 'string' && typeof path === 'string' ? { name, method, host, path } : null;
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
 function parseJsonOrNull(text: string | undefined): unknown {
   if (typeof text !== 'string') return null;
   try {
     const v = JSON.parse(text);
-    return v && typeof v === 'object' ? v : null;
+    return isObject(v) ? v : null;
   } catch {
     return null;
   }
 }
 
 /** B0 / B1 / B1a per physical line. Blank lines are skipped and not counted. */
-function parseReceipts(text: string, signer: string, add: (f: Omit<Finding, 'id' | 'title'>) => Finding): ParsedReceipt[] {
+function parseReceipts(text: string, signer: string, add: Add): ParsedReceipt[] {
   const out: ParsedReceipt[] = [];
   const raw = text.split('\n');
   for (let i = 0; i < raw.length; i++) {
@@ -344,11 +411,18 @@ function parseReceipts(text: string, signer: string, add: (f: Omit<Finding, 'id'
       add({ claim: 'B0', receiptLine: line, status: 'FAILED', evidence: [{ file: RECEIPTS, line }], note: `not JSON: ${(err as Error).message}` });
       continue;
     }
-    if (!isReceiptShaped(r)) {
-      add({ claim: 'B0', receiptLine: line, status: 'FAILED', evidence: [{ file: RECEIPTS, line }], note: 'JSON, but not shaped like a signed receipt (id, payload, signature).' });
+    const shape = receiptShapeProblem(r);
+    if (shape) {
+      add({ claim: 'B0', receiptLine: line, status: 'FAILED', evidence: [{ file: RECEIPTS, line }], note: `JSON, but not a signed receipt this report can read: ${shape}.` });
       continue;
     }
-    const verified = verifyReceipt(r, signer);
+    const receipt = r as SignedReceipt;
+    let verified = false;
+    try {
+      verified = verifyReceipt(receipt, signer);
+    } catch {
+      verified = false;
+    }
     add({
       claim: 'B1',
       receiptLine: line,
@@ -360,7 +434,7 @@ function parseReceipts(text: string, signer: string, add: (f: Omit<Finding, 'id'
       inputs: [`verifyReceipt(@bolyra/receipts) with expectedSigner = ${signer}`],
       note: verified ? 'signature recovered to the anchor; payload hash recomputed.' : 'signature-invalid: the signature did not recover to the anchored signer, or the payload hash did not recompute (the payload was altered after signing, or the key differs).',
     });
-    out.push({ line, receipt: r, verified, idOk: false });
+    out.push({ line, receipt, verified, idOk: false });
   }
   // B1a needs the whole log for uniqueness.
   const counts = new Map<string, number>();
@@ -389,16 +463,27 @@ function parseReceipts(text: string, signer: string, add: (f: Omit<Finding, 'id'
   return out;
 }
 
-function isReceiptShaped(r: unknown): r is SignedReceipt {
-  if (!r || typeof r !== 'object') return false;
-  const x = r as Record<string, unknown>;
-  const sig = x.signature as Record<string, unknown> | undefined;
-  const payload = x.payload as Record<string, unknown> | undefined;
-  return (
-    typeof x.id === 'string' &&
-    !!payload && typeof payload === 'object' &&
-    !!sig && typeof sig === 'object' && typeof sig.payloadHash === 'string' && typeof sig.value === 'string' && typeof sig.signer === 'string'
-  );
+/** Every field the report reads must be present with the right type; otherwise the line is B0 FAILED, never dereferenced. */
+function receiptShapeProblem(r: unknown): string | null {
+  if (!isObject(r)) return 'not an object';
+  if (typeof r.id !== 'string') return 'id is not a string';
+  const sig = r.signature;
+  if (!isObject(sig)) return 'signature is not an object';
+  for (const k of ['payloadHash', 'value', 'signer', 'keyId']) if (typeof sig[k] !== 'string') return `signature.${k} is not a string`;
+  const pl = r.payload;
+  if (!isObject(pl)) return 'payload is not an object';
+  const dec = pl.decision;
+  if (!isObject(dec)) return 'payload.decision is not an object';
+  if (typeof dec.allowed !== 'boolean') return 'payload.decision.allowed is not a boolean';
+  if (typeof dec.permissionBitmask !== 'string') return 'payload.decision.permissionBitmask is not a string';
+  if (dec.reasonCode !== undefined && typeof dec.reasonCode !== 'string') return 'payload.decision.reasonCode is not a string';
+  const sub = pl.subject;
+  if (!isObject(sub)) return 'payload.subject is not an object';
+  for (const k of ['rootDid', 'actingDid', 'credentialCommitment', 'effectiveCommitment']) if (typeof sub[k] !== 'string') return `payload.subject.${k} is not a string`;
+  const proof = pl.proof;
+  if (!isObject(proof)) return 'payload.proof is not an object';
+  for (const k of ['nonce', 'humanProofHash', 'agentProofHash', 'publicSignalsHash']) if (typeof proof[k] !== 'string') return `payload.proof.${k} is not a string`;
+  return null;
 }
 
 function lineOfIndex(parsed: ParsedReceipt[], index: number): string {
@@ -406,18 +491,12 @@ function lineOfIndex(parsed: ParsedReceipt[], index: number): string {
 }
 
 /** A2, A3, A4b, A4c, A5, A6, A7b, A8a, A9a for one receipt, attributed or not. */
-function payloadRows(
-  p: ParsedReceipt,
-  add: (f: Omit<Finding, 'id' | 'title'>) => Finding,
-  attempt: number | undefined,
-  ctx: { summaryAttempt?: SummaryAttempt; summaryIndex?: number; action: NonNullable<Summary['action']> },
-): void {
+function payloadRows(p: ParsedReceipt, add: Add, attempt: number | undefined, action: ReturnType<typeof actionOf>): void {
   const line = p.line;
   const scope = attempt !== undefined ? { attempt } : { receiptLine: line };
   const ev = (path: string): Evidence[] => [{ file: RECEIPTS, line, path }];
-  const failedNote = 'receipt failed signature verification (B1); its payload cannot be read as a signed assertion.';
-  const signed = (claim: string, path: string, note: string, extraEv: Evidence[] = []) =>
-    add({ claim, ...scope, status: p.verified ? 'SIGNED' : 'FAILED', evidence: [...ev(path), ...extraEv], note: p.verified ? note : failedNote });
+  const signed = (claim: string, path: string, note: string) =>
+    add({ claim, ...scope, status: p.verified ? 'SIGNED' : 'FAILED', evidence: ev(path), note: p.verified ? note : PAYLOAD_FAILED });
 
   const pl = p.receipt.payload;
   signed('A2', 'payload.decision.allowed', pl.decision.allowed ? 'allow' : 'deny');
@@ -425,8 +504,8 @@ function payloadRows(
 
   const m = typeof pl.decision.reasonCode === 'string' ? DESCRIPTOR.exec(pl.decision.reasonCode) : null;
   if (!p.verified) {
-    add({ claim: 'A4b', ...scope, status: 'FAILED', evidence: ev('payload.decision.reasonCode'), note: failedNote });
-    if (attempt !== undefined) add({ claim: 'A4c', ...scope, status: 'FAILED', evidence: [], inputs: [`A4a@${attempt}`, `A4b@${attempt}`], note: failedNote });
+    add({ claim: 'A4b', ...scope, status: 'FAILED', evidence: ev('payload.decision.reasonCode'), note: PAYLOAD_FAILED });
+    if (attempt !== undefined) add({ claim: 'A4c', ...scope, status: 'FAILED', evidence: [], inputs: [`A4a@${attempt}`, `A4b@${attempt}`], note: PAYLOAD_FAILED });
   } else if (!m) {
     add({ claim: 'A4b', ...scope, status: 'ABSENT', evidence: [], note: 'the signed reason text carries no " | action=" descriptor.' });
     if (attempt !== undefined) add({ claim: 'A4c', ...scope, status: 'ABSENT', evidence: [], inputs: [`A4a@${attempt}`, `A4b@${attempt}`], note: 'nothing signed to compare against.' });
@@ -434,31 +513,36 @@ function payloadRows(
     const [, name, method, host, path] = m;
     add({ claim: 'A4b', ...scope, status: 'DERIVED', evidence: ev('payload.decision.reasonCode'), inputs: ['rule: trailing " | action=<name> <METHOD> <host><path>"'], note: `${name} ${method} ${host}${path}` });
     if (attempt !== undefined) {
-      const agree = name === ctx.action.name && method === ctx.action.method && host === ctx.action.host && path === ctx.action.path;
-      add({
-        claim: 'A4c',
-        ...scope,
-        status: agree ? 'DERIVED' : 'FAILED',
-        evidence: [{ file: SUMMARY, path: 'action' }, ...ev('payload.decision.reasonCode')],
-        inputs: [`A4a@${attempt}`, `A4b@${attempt}`],
-        note: agree ? 'the unsigned record and the signed descriptor name the same action.' : 'the unsigned record and the signed descriptor disagree.',
-      });
+      if (!action) {
+        add({ claim: 'A4c', ...scope, status: 'ABSENT', evidence: ev('payload.decision.reasonCode'), inputs: [`A4a@${attempt}`, `A4b@${attempt}`], note: 'summary.json records no complete action to compare against.' });
+      } else {
+        const agree = name === action.name && method === action.method && host === action.host && path === action.path;
+        add({
+          claim: 'A4c',
+          ...scope,
+          status: agree ? 'DERIVED' : 'FAILED',
+          evidence: [{ file: SUMMARY, path: 'action' }, ...ev('payload.decision.reasonCode')],
+          inputs: [`A4a@${attempt}`, `A4b@${attempt}`],
+          note: agree ? 'the unsigned record and the signed descriptor name the same action.' : 'contradiction: the unsigned record and the signed descriptor disagree.',
+        });
+      }
     }
   }
 
   signed('A5', 'payload.subject', `rootDid ${pl.subject.rootDid}; actingDid ${pl.subject.actingDid}; commitments ${pl.subject.credentialCommitment} / ${pl.subject.effectiveCommitment}. Dev DIDs from a simulated credential; these identify a key material commitment, not a person or legal entity.`);
 
-  const stage = ctx.summaryAttempt?.stage;
-  const maskNote =
-    `permissionBitmask ${pl.decision.permissionBitmask}` +
-    (pl.decision.permissionBitmask === '0' && stage === 'verification_failed'
-      ? ". This 0 is the gateway's failure default: verification failed before tool policy ran, so it is not evidence that permissions were evaluated."
-      : '');
+  // A6: the value is signed; the attempt-3 caveat is an implementation fact, stated separately and not controlled by any bundle field.
+  let maskNote = `permissionBitmask ${pl.decision.permissionBitmask}.`;
+  if (attempt === 3) {
+    maskNote +=
+      " Implementation note (not from the bundle): in the shipped trial, attempt 3 is the replay; the gateway's failure default for a replay is 0 because verification fails before tool policy runs, so a 0 here is not evidence that permissions were evaluated." +
+      (pl.decision.permissionBitmask === '0' ? '' : ' This receipt records a non-zero mask, which the shipped trial would not produce for a replay.');
+  }
   signed('A6', 'payload.decision.permissionBitmask', maskNote);
 
   if (attempt === 2) {
     const rm = p.verified && typeof pl.decision.reasonCode === 'string' ? REQUIRED_MASK.exec(pl.decision.reasonCode) : null;
-    if (!p.verified) add({ claim: 'A7b', ...scope, status: 'FAILED', evidence: ev('payload.decision.reasonCode'), note: failedNote });
+    if (!p.verified) add({ claim: 'A7b', ...scope, status: 'FAILED', evidence: ev('payload.decision.reasonCode'), note: PAYLOAD_FAILED });
     else if (!rm) add({ claim: 'A7b', ...scope, status: 'ABSENT', evidence: [], note: 'the signed reason text reports no required mask.' });
     else add({ claim: 'A7b', ...scope, status: 'DERIVED', evidence: ev('payload.decision.reasonCode'), inputs: ['rule: "requires permissions <mask>, agent has <mask>" in the signed reason text'], note: `reported required ${rm[1]}, agent ${rm[2]}; this is what the host wrote into the reason, not the enforced configuration.` });
   }
@@ -468,7 +552,7 @@ function payloadRows(
 }
 
 /** Receipt-backed rows for an attempt whose A1 failed: FAILED, no payload values assigned. */
-function unattributedRows(add: (f: Omit<Finding, 'id' | 'title'>) => Finding, attempt: number): void {
+function unattributedRows(add: Add, attempt: number): void {
   const note = 'this attempt is not attributed to a receipt (A1); no payload value is assigned.';
   const claims = ['A2', 'A3', 'A4b', 'A4c', 'A5', 'A6', 'A8a', 'A9a', ...(attempt === 2 ? ['A7b'] : [])];
   for (const claim of claims) add({ claim, attempt, status: 'FAILED', evidence: [], inputs: [`A1@${attempt}`], note });

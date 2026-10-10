@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { classify } from '../src/report/classify';
+import { BundleInputError, classify } from '../src/report/classify';
 import type { Anchors, BundleFiles, Finding, Report, Status } from '../src/report/classify';
 
 const FIX = path.join(__dirname, '..', '..', 'test', 'report-fixtures', 'dry-run');
@@ -226,4 +226,152 @@ test('every finding has a claim, a status, and evidence or a note', () => {
   }
   const ids = r.findings.map((f) => f.id);
   assert.equal(new Set(ids).size, ids.length, 'finding ids unique');
+});
+
+/** The receipt-backed claims every attributed attempt carries. */
+const PAYLOAD_CLAIMS = ['A2', 'A3', 'A4b', 'A4c', 'A5', 'A6', 'A8a', 'A9a'];
+const CLEAN_BUNDLE: Record<string, Status> = { B2: 'DERIVED', B3a: 'DERIVED', B3b: 'DERIVED', B4: 'DERIVED', B4b: 'OBSERVED', B5: 'ABSENT', B6: 'OBSERVED', B7: 'OBSERVED', B8a: 'OBSERVED', B8b: 'OBSERVED' };
+function expectAttempt(r: Report, attempt: number, payload: Status, a1: Status = 'DERIVED') {
+  assert.equal(status(r, 'A1', { attempt }), a1, `A1@${attempt}`);
+  for (const c of PAYLOAD_CLAIMS) {
+    const want = payload === 'SIGNED' && (c === 'A4b' || c === 'A4c') ? 'DERIVED' : payload;
+    assert.equal(status(r, c, { attempt }), want, `${c}@${attempt}`);
+  }
+  assert.equal(status(r, 'A4a', { attempt }), 'OBSERVED');
+  assert.equal(status(r, 'A10', { attempt }), 'OBSERVED');
+  assert.equal(status(r, 'A11', { attempt }), attempt === 1 ? 'OBSERVED' : 'ABSENT');
+  for (const c of ['A7a', 'A9b', 'A12', 'A13', 'A14', 'A15', 'A16', 'A17']) assert.equal(status(r, c, { attempt }), 'ABSENT', `${c}@${attempt}`);
+  if (attempt === 2) assert.equal(status(r, 'A7b', { attempt }), payload === 'SIGNED' ? 'DERIVED' : 'FAILED');
+}
+function expectBundle(r: Report, over: Partial<Record<string, Status>> = {}) {
+  for (const [c, st] of Object.entries({ ...CLEAN_BUNDLE, ...over })) assert.equal(status(r, c), st, c);
+}
+
+test('1b. clean fixture: complete bundle table incl. the host checkpoints and VERIFY.txt', () => {
+  const r = run();
+  expectBundle(r);
+  for (const attempt of [1, 2, 3]) expectAttempt(r, attempt, 'SIGNED');
+  assert.equal(status(r, 'A8b', { attempt: 3 }), 'DERIVED');
+});
+
+test('2b. payload mutation on line 1: complete tables', () => {
+  const r = run(files({ receiptsJsonl: mutateLine(1, (x) => { x.payload.decision.allowed = false; }) }));
+  expectBundle(r, { B2: 'FAILED' });
+  expectAttempt(r, 1, 'FAILED');
+  expectAttempt(r, 2, 'SIGNED');
+  expectAttempt(r, 3, 'SIGNED');
+  assert.equal(status(r, 'A8b', { attempt: 3 }), 'FAILED');
+  assert.match(one(r, 'A2', { attempt: 1 }).note ?? '', /signature-invalid/);
+});
+
+test('4b. convenience-hash mutation on line 3: complete tables', () => {
+  const r = run(files({ receiptsJsonl: mutateLine(3, (x) => { x.receiptHash = '0x' + 'ab'.repeat(32); }) }));
+  expectBundle(r, { B2: 'FAILED' });
+  for (const attempt of [1, 2, 3]) expectAttempt(r, attempt, 'SIGNED');
+  assert.equal(status(r, 'A8b', { attempt: 3 }), 'DERIVED');
+});
+
+test('5b. tail truncation: attempt 3 propagation under every anchor combination', () => {
+  const two = lines.slice(0, 2).join('\n') + '\n';
+  for (const a of [ANCHORS, { signer: ANCHORS.signer, expectCount: 3 }, { signer: ANCHORS.signer, expectHead: ANCHORS.expectHead }, { signer: ANCHORS.signer }]) {
+    const r = run(files({ receiptsJsonl: two }), a);
+    expectAttempt(r, 1, 'SIGNED');
+    expectAttempt(r, 2, 'SIGNED');
+    for (const c of PAYLOAD_CLAIMS) assert.equal(status(r, c, { attempt: 3 }), 'FAILED', c);
+    assert.equal(status(r, 'A1', { attempt: 3 }), 'FAILED');
+    assert.equal(status(r, 'A8b', { attempt: 3 }), 'FAILED');
+    assert.equal(status(r, 'B2'), 'DERIVED');
+    assert.equal(status(r, 'B8a'), 'FAILED');
+    assert.equal(status(r, 'B8b'), 'FAILED');
+    assert.deepEqual(r.unattributedLines, []);
+  }
+});
+
+test('6b/7b. unlinked and duplicate links: complete tables', () => {
+  const r6 = run(files({ summaryJson: withSummary((s) => { s.attempts[0].receiptId = '0x' + '0'.repeat(16); }) }));
+  expectBundle(r6);
+  expectAttempt(r6, 1, 'FAILED', 'FAILED');
+  expectAttempt(r6, 2, 'SIGNED');
+  expectAttempt(r6, 3, 'SIGNED');
+  for (const c of PAYLOAD_CLAIMS.filter((c) => c !== 'A4c')) assert.equal(status(r6, c, { line: 1 }), c === 'A4b' ? 'DERIVED' : 'SIGNED', c);
+  const r7 = run(files({ summaryJson: withSummary((s) => { s.attempts[1].receiptId = s.attempts[0].receiptId; }) }));
+  expectBundle(r7);
+  expectAttempt(r7, 1, 'FAILED', 'FAILED');
+  expectAttempt(r7, 2, 'FAILED', 'FAILED');
+  expectAttempt(r7, 3, 'SIGNED');
+  assert.equal(status(r7, 'A8b', { attempt: 3 }), 'FAILED');
+});
+
+test('11. host checkpoints and VERIFY.txt that contradict the log are FAILED, and never become anchors', () => {
+  const r = run(files({
+    summaryJson: withSummary((s) => { s.receiptCount = 99; s.headReceiptHash = '0x' + 'c'.repeat(64); }),
+    verifyTxt: `npx @bolyra/cli@0.9.0 receipt verify-chain ./receipts.jsonl --signer 0x${'9'.repeat(40)} --expect-count 3\n`,
+  }));
+  expectBundle(r, { B8a: 'FAILED', B8b: 'FAILED', B4b: 'FAILED' });
+  assert.match(one(r, 'B8a').note ?? '', /contradiction/);
+  assert.match(one(r, 'B4b').note ?? '', /0x9{40}/);
+  for (const attempt of [1, 2, 3]) expectAttempt(r, attempt, 'SIGNED');
+  assert.equal(r.anchors.signer, ANCHORS.signer);
+});
+
+test('12. malformed payloads are B0 FAILED without crashing; the other lines are classified', () => {
+  for (const strip of ['decision', 'subject', 'proof'] as const) {
+    const r = run(files({ receiptsJsonl: mutateLine(2, (x) => { delete x.payload[strip]; }) }));
+    const b0 = r.findings.find((f) => f.claim === 'B0' && f.receiptLine === 2);
+    assert.ok(b0 && b0.status === 'FAILED' && /payload\./.test(b0.note ?? ''), strip);
+    assert.ok(!r.findings.some((f) => f.claim === 'B1' && f.receiptLine === 2));
+    expectAttempt(r, 1, 'SIGNED');
+    expectAttempt(r, 2, 'FAILED', 'FAILED');
+    expectAttempt(r, 3, 'SIGNED');
+    assert.equal(status(r, 'B2'), 'FAILED');
+  }
+  const r = run(files({ receiptsJsonl: mutateLine(1, (x) => { x.payload.decision.allowed = 'yes'; }) }));
+  assert.ok(r.findings.some((f) => f.claim === 'B0' && f.receiptLine === 1 && f.status === 'FAILED'));
+});
+
+test('13. attempt numbers must match their positions; structural problems are input errors', () => {
+  assert.throws(() => run(files({ summaryJson: withSummary((s) => { s.attempts[2].n = 2; }) })), BundleInputError);
+  assert.throws(() => run(files({ summaryJson: withSummary((s) => { s.attempts = {}; }) })), BundleInputError);
+  assert.throws(() => run(files({ summaryJson: withSummary((s) => { s.attempts = []; }) })), BundleInputError);
+  assert.throws(() => run(files({ summaryJson: withSummary((s) => { s.attempts[0] = 'x'; }) })), BundleInputError);
+  assert.throws(() => run(files({ summaryJson: '[]' })), BundleInputError);
+});
+
+test('14. missing unsigned fields become ABSENT, never OBSERVED placeholders', () => {
+  const r = run(files({ summaryJson: withSummary((s) => { delete s.dryRun; delete s.action; delete s.attempts[0].dispatched; delete s.receiptCount; delete s.headReceiptHash; }), verifyTxt: undefined }));
+  assert.equal(status(r, 'B7'), 'ABSENT');
+  assert.equal(status(r, 'B8a'), 'ABSENT');
+  assert.equal(status(r, 'B8b'), 'ABSENT');
+  assert.equal(status(r, 'B4b'), 'ABSENT');
+  assert.equal(status(r, 'A10', { attempt: 1 }), 'ABSENT');
+  for (const attempt of [1, 2, 3]) {
+    assert.equal(status(r, 'A4a', { attempt }), 'ABSENT');
+    assert.equal(status(r, 'A4c', { attempt }), 'ABSENT');
+    assert.equal(status(r, 'A4b', { attempt }), 'DERIVED');
+  }
+  for (const f of r.findings) assert.ok(!/undefined/.test(f.note ?? ''), f.id);
+});
+
+test('15. a dispatched attempt without a status (timeout) is not described as "nothing dispatched"', () => {
+  const r = run(files({ summaryJson: withSummary((s) => { s.dryRun = false; s.attempts[0].upstreamStatus = null; s.attempts[0].outcome = 'timeout'; }) }));
+  const a11 = one(r, 'A11', { attempt: 1 });
+  assert.equal(a11.status, 'ABSENT');
+  assert.match(a11.note ?? '', /timeout/);
+  assert.doesNotMatch(a11.note ?? '', /nothing was dispatched/);
+  assert.equal(status(r, 'A10', { attempt: 1 }), 'OBSERVED');
+  assert.match(one(r, 'B7').note ?? '', /false/);
+});
+
+test('16. the attempt-3 permission caveat does not depend on the editable stage field', () => {
+  const r = run(files({ summaryJson: withSummary((s) => { delete s.attempts[2].stage; }) }));
+  assert.match(one(r, 'A6', { attempt: 3 }).note ?? '', /not evidence that permissions were evaluated/);
+  assert.equal(status(r, 'A6', { attempt: 3 }), 'SIGNED');
+  assert.doesNotMatch(one(r, 'A6', { attempt: 1 }).note ?? '', /failure default/);
+});
+
+test('17. upper-case anchors normalize and still verify', () => {
+  const r = run(files(), { signer: ANCHORS.signer.toUpperCase().replace('0X', '0x'), expectCount: 3, expectHead: ANCHORS.expectHead!.toUpperCase().replace('0X', '0x') });
+  assert.equal(r.anchors.signer, ANCHORS.signer);
+  assert.equal(r.anchors.expectHead, ANCHORS.expectHead);
+  expectBundle(r);
 });

@@ -36,6 +36,9 @@ test('render: every finding id appears exactly once as a row anchor; fixed wordi
     assert.equal(html.split(needle).length - 1, 1, needle);
   }
   assert.ok(html.includes(esc(ANCHORS_WORDING)), 'anchors wording');
+  // Literal, so a drift in claims.ts is caught here rather than mirrored.
+  assert.ok(html.includes(esc('Values were supplied through command-line flags. Their independence from this bundle is unknown. Copying signer/count/head from bundle files establishes consistency with those supplied values; it does not establish signer identity or independently establish completeness. External assurance requires a separately trusted signer reference and checkpoint.')), 'anchors wording (literal)');
+  assert.ok(html.includes(esc('FAIL line <n>: [signature-invalid]')), 'tamper instruction (literal)');
   assert.ok(html.includes(esc(DEV_MODE_DISCLOSURE)), 'dev-mode disclosure');
   assert.ok(html.includes(esc(TAMPER_INSTRUCTION)), 'tamper instruction');
   for (const [k, v] of Object.entries(STATUS_LEGEND)) {
@@ -64,7 +67,7 @@ test('render: the verify command is pinned to the trial CLI version and carries 
 test('render: bundle values are escaped (injection in a summary field)', () => {
   const s = JSON.parse(read('summary.json'));
   s.action.name = '<img src=x onerror=alert(1)>';
-  s.attempts[0].reason = '"><script>alert(2)</script>';
+  s.action.path = '/"><script>alert(2)</script>';
   const html = render(report({ summaryJson: JSON.stringify(s) }), { receiptsPath: './receipts.jsonl' });
   assert.doesNotMatch(html, /<img/i);
   assert.doesNotMatch(html, /<script/i);
