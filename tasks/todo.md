@@ -2,13 +2,35 @@
 
 Spec: docs/superpowers/specs/2026-10-10-reviewer-evidence-report-design.md
 
-- [ ] 0. Codex plan review → APPROVE
-- [ ] 1. fixture: committed dry-run bundle under test/report-fixtures/dry-run
-- [ ] 2. classify.test RED → src/report/classify.ts GREEN (clean, tampered, truncated, unlinked, wrong signer)
-- [ ] 3. render.test RED → src/report/render.ts GREEN
-- [ ] 4. cli.test RED → src/report/cli.ts GREEN; `npm run report` script
-- [ ] 5. README section, CI job step, CHANGELOG
-- [ ] 6. full suite in node:20 container; Codex code review → clean; DCO; PR; CI green
+- [x] 0. Codex plan review → R1 APPROVE WITH EDITS (9) → R2 (5) → R3 (1) → R4 APPROVE
+- [x] 1. fixture: committed dry-run bundle under test/report-fixtures/dry-run
+- [x] 2. classify.test RED → src/report/classify.ts GREEN (clean, tampered, truncated, unlinked, wrong signer)
+- [x] 3. render.test RED → src/report/render.ts GREEN
+- [x] 4. cli.test RED → src/report/cli.ts GREEN; `npm run report` script
+- [x] 5. README section, CI job step (CHANGELOG covers published packages only; no entry)
+- [x] 6. full suite in node:20 container (93/93); Codex code review R1 REVISE (8) → R2 REVISE (4) → R3 REVISE (2) → R4 REVISE (1) → R5 APPROVE; DCO; PR
+
+## Review (2026-10-10)
+- Built: `npm run report -- --bundle <dir> --signer <addr> [--expect-count n] [--expect-head 0x…]` →
+  report.html + report.json; five statuses (SIGNED / OBSERVED / DERIVED / ABSENT / FAILED); 7 bundle-level
+  + 3 per-receipt-line + 19 per-attempt claims; anchors from flags only; report-local receipt-id check.
+- Codex code review caught, in order: lexical `..` containment bypass + symlinks; malformed payload crash;
+  unvalidated attempt numbers; host checkpoints never contradicted; upper-case anchors vs case-sensitive
+  verifier; "nothing dispatched" wording on timeouts; A9b/A6 provenance wording; hostile toString values;
+  malformed lines inflating whole-log claims; empty reasonCode as SIGNED; symlink cycles; non-ENOENT errors
+  swallowed; unchained tail cited as head. All fixed with regression tests (93 total in the example).
+- Honesty: dev-mode disclosure first; execution / consent / payee control / spend limit / subject
+  authentication / production credentials always ABSENT; anchors wording verbatim (spec §2.4).
+
+## Red→green record
+- classify.test RED (TS2307) → GREEN 11/11 first run; R2 edits → 11/11
+- render.test RED (TS2307) → GREEN 5/5 first run
+- cli.test RED (6 ✖) → GREEN 6/6
+- review R1 fixes: 11 ✖ (regex matched 40 hex of a 64-hex hash; two wrong expectations about head hash
+  invariance; helper mislabelled A4b/A4c; `..report` is a CHILD of the bundle) → 87/87
+- review R2 fixes: 40/40 report tests first run → 91/91
+- review R3 fixes: 1 ✖ (ELOOP message) → 92/92
+- review R4 fix: 1 ✖ (test fixture reused line 1's id) → 93/93; node:20 container 93/93
 
 ---
 
