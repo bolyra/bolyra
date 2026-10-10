@@ -137,7 +137,10 @@ export function classify(files: BundleFiles, rawAnchors: Anchors, opts: { now?: 
     chain = { ok: false, total: parsed.length, chained: 0, unchained: 0, issues: [{ index: -1, code: 'malformed-receipt', message: `verifier threw: ${(err as Error).message}` }] };
   }
   const chainOk = chain.ok && malformedLines.length === 0;
-  const lastReadable = parsed.length > 0 ? parsed[parsed.length - 1].line : undefined;
+  // The chain verifier's headHash is the hash of the last CHAINED receipt; an unchained tail is
+  // flagged by B2 but never becomes the head, so cite the receipt whose hash was actually compared.
+  const lastChained = [...parsed].reverse().find((p) => p.receipt.payload.chain !== undefined);
+  const lastReadable = lastChained?.line;
   const headLabel =
     chain.headHash === undefined
       ? '(the readable receipts did not verify as a chain)'

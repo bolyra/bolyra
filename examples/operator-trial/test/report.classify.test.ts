@@ -433,3 +433,23 @@ test('20. a freshly signed receipt without reasonCode: A3 ABSENT (not a SIGNED e
   assert.equal(status(r, 'A4c', { attempt: 1 }), 'ABSENT');
   assert.ok(!r.findings.some((f) => f.status === 'FAILED'), JSON.stringify(r.findings.filter((f) => f.status === 'FAILED').map((f) => f.id)));
 });
+
+test('21. a readable but unchained receipt at the tail: B3b/B8b cite the last CHAINED receipt (line 3), B2 fails', () => {
+  const extra = JSON.parse(JSON.stringify(receipts[0]));
+  delete extra.payload.chain;
+  delete extra.receiptHash;
+  const r = run(files({ receiptsJsonl: lines.join('\n') + '\n' + JSON.stringify(extra) + '\n' }));
+  assert.equal(status(r, 'B2'), 'FAILED');
+  assert.match(one(r, 'B2').note ?? '', /unchained-after-chained/);
+  assert.equal(status(r, 'B3b'), 'DERIVED');
+  assert.deepEqual(one(r, 'B3b').evidence, [{ file: 'receipts.jsonl', line: 3 }]);
+  assert.match(one(r, 'B3b').note ?? '', /last readable chained receipt \(line 3\)/);
+  assert.doesNotMatch(one(r, 'B3b').note ?? '', /line 4/);
+  assert.equal(status(r, 'B8b'), 'OBSERVED');
+  assert.ok(one(r, 'B8b').evidence.some((e) => e.line === 3) && !one(r, 'B8b').evidence.some((e) => e.line === 4));
+  assert.equal(status(r, 'B3a'), 'FAILED');
+  assert.equal(status(r, 'B8a'), 'FAILED');
+  assert.equal(status(r, 'B1', { line: 4 }), 'FAILED');
+  assert.deepEqual(r.unattributedLines, [4]);
+  for (const attempt of [1, 2, 3]) expectAttempt(r, attempt, 'SIGNED');
+});
