@@ -438,6 +438,9 @@ test('21. a readable but unchained receipt at the tail: B3b/B8b cite the last CH
   const extra = JSON.parse(JSON.stringify(receipts[0]));
   delete extra.payload.chain;
   delete extra.receiptHash;
+  // A distinct, self-consistent id so the tail does not collide with line 1 (its signature still fails B1).
+  extra.signature.payloadHash = '0x' + 'e'.repeat(64);
+  extra.id = extra.signature.payloadHash.slice(0, 18);
   const r = run(files({ receiptsJsonl: lines.join('\n') + '\n' + JSON.stringify(extra) + '\n' }));
   assert.equal(status(r, 'B2'), 'FAILED');
   assert.match(one(r, 'B2').note ?? '', /unchained-after-chained/);
