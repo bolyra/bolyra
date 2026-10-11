@@ -86,9 +86,6 @@ declare -a NEEDLES=(
   "49 vectors"
   'role="tablist"'
   'aria-selected'
-  '$5,000 for a two-week acceptance exercise covering one customer-operated agent workflow'
-  'Simulated sample'
-  'mailto:hello@bolyra.ai?subject=acceptance%20exercise'
 )
 
 for needle in "${NEEDLES[@]}"; do
@@ -103,8 +100,6 @@ done
 declare -a FORBIDDEN=(
   'onclick="copyPanel'
   'class="mono"'
-  '90 days, fixed fee'
-  'kondojuviswanadha@gmail.com'
 )
 
 for needle in "${FORBIDDEN[@]}"; do
@@ -112,6 +107,35 @@ for needle in "${FORBIDDEN[@]}"; do
     fail "page still contains forbidden token: $needle"
   else
     pass "page is clean of: $needle"
+  fi
+done
+
+# Root page (/) assertions: the acceptance-exercise offer (2026-10-11) replaced
+# the "90 days, fixed fee" pilot line and the personal-Gmail CTA; neither may return.
+declare -a ROOT_NEEDLES=(
+  '$5,000 for a two-week acceptance exercise covering one customer-operated agent workflow'
+  'Simulated sample'
+  'mailto:hello@bolyra.ai?subject=acceptance%20exercise'
+)
+
+for needle in "${ROOT_NEEDLES[@]}"; do
+  if grep -qF "$needle" "$ROOT_TMP"; then
+    pass "root page contains: $needle"
+  else
+    fail "root page missing: $needle"
+  fi
+done
+
+declare -a ROOT_FORBIDDEN=(
+  '90 days, fixed fee'
+  'kondojuviswanadha@gmail.com'
+)
+
+for needle in "${ROOT_FORBIDDEN[@]}"; do
+  if grep -qF "$needle" "$ROOT_TMP"; then
+    fail "root page still contains forbidden token: $needle"
+  else
+    pass "root page is clean of: $needle"
   fi
 done
 
