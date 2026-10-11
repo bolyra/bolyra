@@ -86,6 +86,9 @@ declare -a NEEDLES=(
   "49 vectors"
   'role="tablist"'
   'aria-selected'
+  '$5,000 for a two-week acceptance exercise covering one customer-operated agent workflow'
+  'Simulated sample'
+  'mailto:hello@bolyra.ai?subject=acceptance%20exercise'
 )
 
 for needle in "${NEEDLES[@]}"; do
@@ -100,6 +103,8 @@ done
 declare -a FORBIDDEN=(
   'onclick="copyPanel'
   'class="mono"'
+  '90 days, fixed fee'
+  'kondojuviswanadha@gmail.com'
 )
 
 for needle in "${FORBIDDEN[@]}"; do
