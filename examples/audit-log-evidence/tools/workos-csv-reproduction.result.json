@@ -1,0 +1,133 @@
+{
+  "ran_at": "2026-10-12T15:06:44.554Z",
+  "environment": "staging",
+  "transport_notes": [
+    "actor.metadata: {} added in transit (schema requires the key)",
+    "event schemas registered via POST /audit_logs/actions/{action}/schemas because unconfigured actions are rejected with invalid_audit_log"
+  ],
+  "steps": [
+    {
+      "name": "organization_created",
+      "status": 201,
+      "organization_id": "org_01M4RADQM25H81HYH9JQH6JR46"
+    },
+    {
+      "name": "event_emitted",
+      "action": "tool.approval_resolved",
+      "status": 200
+    },
+    {
+      "name": "schema_created",
+      "action": "tool.executed",
+      "status": 201
+    },
+    {
+      "name": "event_emitted",
+      "action": "tool.executed",
+      "status": 200
+    },
+    {
+      "name": "export_created",
+      "status": 201,
+      "export_id": "audit_log_export_01M4RADR88T5RRW95FC53K54K2",
+      "state": "pending"
+    },
+    {
+      "name": "export_ready",
+      "state": "ready",
+      "has_url": true
+    },
+    {
+      "name": "csv_parsed",
+      "columns": [
+        "action",
+        "occurred_at",
+        "actor_id",
+        "actor_type",
+        "actor_name",
+        "actor_metadata",
+        "target_id_0",
+        "target_type_0",
+        "target_name_0",
+        "target_metadata_0",
+        "target_id_1",
+        "target_type_1",
+        "target_name_1",
+        "target_metadata_1",
+        "target_id_2",
+        "target_type_2",
+        "target_name_2",
+        "target_metadata_2",
+        "context_location",
+        "context_user_agent",
+        "metadata"
+      ],
+      "row_count": 2,
+      "bytes": 1210
+    }
+  ],
+  "comparison": [
+    {
+      "action": "tool.approval_resolved",
+      "matched_row": true,
+      "values": {
+        "action_digest": {
+          "expected_length": 64,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        },
+        "receipt_id": {
+          "expected_length": 18,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        },
+        "receipt_hash": {
+          "expected_length": 66,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        },
+        "signer": {
+          "expected_length": 42,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        }
+      }
+    },
+    {
+      "action": "tool.executed",
+      "matched_row": true,
+      "values": {
+        "action_digest": {
+          "expected_length": 64,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        },
+        "receipt_id": {
+          "expected_length": 18,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        },
+        "receipt_hash": {
+          "expected_length": 66,
+          "found": {
+            "column": "metadata",
+            "form": "json_object_cell"
+          }
+        }
+      }
+    }
+  ],
+  "verdict": "lossless: every tracked value recovered exactly (as its own cell or as a JSON object field)"
+}

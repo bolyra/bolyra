@@ -81,14 +81,30 @@ evidence), FAILED (a check failed).
 - The demo private key is public, so anyone can forge replacement receipts under it; this packet demonstrates verification mechanics, not a trust anchor.
 - In a deployment the vendor controls the signing key and the reviewer must obtain the expected signer out of band; reading it from the packet establishes consistency only.
 
-## One open compatibility question
+## Tested: CSV export fidelity (WorkOS staging, 2026-10-12)
 
-WorkOS documents [CSV exports](https://workos.com/docs/audit-logs/exporting-events); this packet exercises
-synthetic JSONL, so the question is untested here. For this fixture's `action_digest`, `receipt_id`,
-`receipt_hash` and `signer` metadata, how are values represented in a CSV export, and can their original
-string values be recovered losslessly? JCS does not
-require preservation of JSON key order or serialization bytes, so the digest recomputed from an export
-must come from the retained `action.json`, not from re-serialized rows. This is a compatibility question,
-not an allegation of a defect in any product.
+The compatibility question the first version of this packet left open has been answered by a real run,
+with `tools/workos-csv-reproduction.mjs` against a free WorkOS **staging** environment (no production
+organization, no real data, no paid feature). Sanitized result: `tools/workos-csv-reproduction.result.json`
+(no credentials, no download URLs).
+
+- **Lossless.** The two fixture events were emitted with their metadata unchanged, exported through
+  `POST /audit_logs/exports` → `GET /audit_logs/exports/{id}` → CSV download, and parsed. In the CSV,
+  `metadata` is a single column whose cell holds the event's metadata as a JSON object; parsing that cell
+  recovers `action_digest`, `receipt_id`, `receipt_hash` and `signer` exactly, for both events.
+- **Columns observed:** `action, occurred_at, actor_id, actor_type, actor_name, actor_metadata,
+  target_id_0, target_type_0, target_name_0, target_metadata_0, …_1, …_2, context_location,
+  context_user_agent, metadata` (targets are flattened to indexed columns).
+- **Two API facts a vendor must plan for.** (1) An event whose action and version are not configured in
+  the environment is rejected: `Invalid Audit Log event: event 'tool.approval_resolved', version '1' has
+  not been configured in this environment` (`invalid_audit_log`). The script registers a schema via
+  `POST /audit_logs/actions/{action}/schemas` and retries. (2) Once a schema exists, `actor.metadata` is
+  required on the event, so the script sends `{}` for it; the fixture rows carry no actor metadata.
+- Because the values round-trip, the digest can also be recomputed from a retained `action.json` and
+  compared with the exported `metadata.action_digest`; the earlier caution about JCS and serialization
+  bytes applies to re-serializing rows, not to reading a string value back out of the JSON cell.
+
+Reproduce: create a WorkOS account, generate a **staging** key (`sk_test_…`), save it to a file, then
+`WORKOS_STAGING_KEY_FILE=<path> node tools/workos-csv-reproduction.mjs`. The script refuses non-staging keys.
 
 Design note: `docs/superpowers/specs/2026-10-11-audit-log-evidence-packet-design.md`.
