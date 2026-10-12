@@ -76,7 +76,10 @@ integration, export adapter, new schema, or completeness mechanism.
 
 The question whether `action_digest`, `receipt_id`, `receipt_hash` and `signer` survive a CSV export
 losslessly was answered by a staging reproduction (`examples/audit-log-evidence/tools/
-workos-csv-reproduction.mjs`): **lossless**; the CSV carries event metadata as a JSON object in one cell.
-Two facts recorded for vendors: unconfigured action/version pairs are rejected (`invalid_audit_log`) until a
-schema is registered, and a registered schema makes `actor.metadata` a required key. Per the stop rule, no
+workos-csv-reproduction.mjs`): in the 2026-10-12 staging run, parsing the CSV's `metadata` JSON cell
+recovered all seven tested string occurrences exactly (`action_digest`, `receipt_id`, `receipt_hash` on both
+events, `signer` on the approval event; the execution fixture has no `signer`). "Lossless" refers only to
+these values in this run. Setup observations: unconfigured action/version pairs were rejected
+(`invalid_audit_log`) until a schema was registered (actions are environment-scoped), and with the schemas
+used, validation required `actor.metadata`. Per the stop rule, no
 public question is asked; the packet carries the verified mapping instead.

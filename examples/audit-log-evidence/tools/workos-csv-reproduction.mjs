@@ -2,7 +2,9 @@
 /**
  * Reproduction: do the packet's metadata values survive a WorkOS Audit Logs CSV export losslessly?
  *
- * STAGING ONLY. Reads the API key from the file named by WORKOS_STAGING_KEY_FILE (never from argv).
+ * STAGING ONLY. Use a dedicated staging environment: audit-log actions and schemas are scoped to the
+ * environment, so a fresh organization does not isolate them. Reads the API key from the file named by
+ * WORKOS_STAGING_KEY_FILE (never from argv).
  * Emits exactly the two fixture events into a fresh staging organization, creates an export over their
  * time range, downloads the CSV, and compares action_digest / receipt_id / receipt_hash / signer exactly.
  * Writes a sanitized result (no key, no download URL) to tools/workos-csv-reproduction.result.json.
@@ -37,18 +39,21 @@ async function api(method, route, body, extraHeaders = {}) {
   });
   const text = await res.text();
   let json;
-  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text.slice(0, 500) }; }
+  try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
   return { status: res.status, json };
 }
 
 const log = (m) => console.log(m);
 const result = { ran_at: new Date().toISOString(), environment: 'staging', transport_notes: ['actor.metadata: {} added in transit (schema requires the key)', 'event schemas registered via POST /audit_logs/actions/{action}/schemas because unconfigured actions are rejected with invalid_audit_log'], steps: [], comparison: null, verdict: null };
 const step = (name, detail) => { result.steps.push({ name, ...detail }); log(`${name}: ${JSON.stringify(detail)}`); };
+// Allowlisted diagnostics only: HTTP status and the API's error code; never raw response bodies.
+const diag = (r) => ({ status: r.status, ...(r.status >= 300 && typeof r.json?.code === 'string' ? { code: r.json.code } : {}) });
+const UNCONFIGURED = /has not been configured in this environment/;
 
 // 1. organization
 const orgName = `bolyra-audit-log-evidence ${new Date().toISOString().slice(0, 19)}`;
 let r = await api('POST', '/organizations', { name: orgName });
-if (r.status >= 300) fail(`create organization → ${r.status} ${JSON.stringify(r.json).slice(0, 300)}`);
+if (r.status >= 300) fail(`create organization → ${r.status} ${r.json?.code ?? ''}`);
 const orgId = r.json.id;
 step('organization_created', { status: r.status, organization_id: orgId });
 
@@ -57,18 +62,19 @@ for (const ev of events) {
   // The registered schema makes actor.metadata required; the fixture rows carry none, so an empty object is added in transit (recorded in the result).
   const body = { organization_id: orgId, event: { action: ev.action, version: ev.version, occurred_at: ev.occurred_at, actor: { ...ev.actor, metadata: {} }, targets: ev.targets, context: ev.context, metadata: ev.metadata } };
   r = await api('POST', '/audit_logs/events', body, { 'Idempotency-Key': randomUUID() });
-  if (r.status >= 300 && (r.json?.code === 'invalid_audit_log' || /not been configured|action|schema/i.test(JSON.stringify(r.json)))) {
+  if (r.status >= 300 && r.json?.code === 'invalid_audit_log' && UNCONFIGURED.test(String(r.json?.message ?? ''))) {
     const schema = {
       actor: { metadata: { type: 'object', properties: {} } },
       targets: [...new Set(ev.targets.map((t) => t.type))].map((type) => ({ type })),
       metadata: { type: 'object', properties: Object.fromEntries(Object.keys(ev.metadata).map((k) => [k, { type: 'string' }])) },
     };
     const s = await api('POST', `/audit_logs/actions/${encodeURIComponent(ev.action)}/schemas`, schema);
-    step('schema_created', { action: ev.action, status: s.status, error: s.status >= 300 ? JSON.stringify(s.json).slice(0, 300) : undefined });
+    step('schema_registered', { action: ev.action, ...diag(s) });
+    if (s.status >= 300) fail(`schema registration for ${ev.action} failed (${s.status})`);
     r = await api('POST', '/audit_logs/events', body, { 'Idempotency-Key': randomUUID() });
   }
-  step('event_emitted', { action: ev.action, status: r.status, error: r.status >= 300 ? JSON.stringify(r.json).slice(0, 300) : undefined });
-  if (r.status >= 300) fail(`event ${ev.action} rejected`);
+  step('event_emitted', { action: ev.action, ...diag(r) });
+  if (r.status >= 300) fail(`event ${ev.action} rejected (${r.status} ${r.json?.code ?? ''})`);
 }
 
 // 3. export over the fixture range
@@ -78,7 +84,7 @@ r = await api('POST', '/audit_logs/exports', {
   range_start: new Date(Math.min(...times) - 60_000).toISOString(),
   range_end: new Date(Math.max(...times) + 60_000).toISOString(),
 });
-if (r.status >= 300) fail(`create export → ${r.status} ${JSON.stringify(r.json).slice(0, 300)}`);
+if (r.status >= 300) fail(`create export → ${r.status} ${r.json?.code ?? ''}`);
 let exp = r.json;
 step('export_created', { status: r.status, export_id: exp.id, state: exp.state });
 const deadline = Date.now() + 5 * 60_000;
@@ -110,34 +116,30 @@ const header = rows[0] ?? [];
 const records = rows.slice(1).filter((r) => r.length === header.length).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
 step('csv_parsed', { columns: header, row_count: records.length, bytes: csv.length });
 
-// 5. compare: find each event's row by action; locate the tracked values wherever they appear
+// 5. compare: match each event's row by its action column; parse the metadata JSON cell; compare each
+// expected field directly. Every expected field must be present in the fixture AND recovered exactly.
 const comparison = [];
 for (const ev of events) {
-  const candidates = records.filter((rec) => Object.values(rec).some((v) => v === ev.action));
-  const rec = candidates[0];
-  const per = { action: ev.action, matched_row: !!rec, values: {} };
-  for (const k of TRACKED) {
-    if (!(k in ev.metadata)) continue;
+  const expectedFields = TRACKED.filter((k) => k in ev.metadata);
+  const rowsForAction = records.filter((rec) => rec.action === ev.action);
+  const rec = rowsForAction.length === 1 ? rowsForAction[0] : undefined;
+  let parsed = null;
+  if (rec && typeof rec.metadata === 'string') { try { parsed = JSON.parse(rec.metadata); } catch { parsed = null; } }
+  const per = { action: ev.action, rows_with_action: rowsForAction.length, metadata_cell_is_json_object: !!parsed && typeof parsed === 'object', expected_fields: expectedFields, values: {} };
+  for (const k of expectedFields) {
     const want = ev.metadata[k];
-    let found = null;
-    if (rec) {
-      for (const [col, val] of Object.entries(rec)) {
-        if (val === want) { found = { column: col, form: 'exact_cell' }; break; }
-        if (typeof val === 'string' && val.includes(want)) {
-          let form = 'substring';
-          try { const j = JSON.parse(val); if (j && typeof j === 'object' && j[k] === want) form = 'json_object_cell'; } catch {}
-          found = { column: col, form }; break;
-        }
-      }
-    }
-    per.values[k] = { expected_length: want.length, found };
+    const got = parsed && typeof parsed === 'object' ? parsed[k] : undefined;
+    per.values[k] = { expected_length: want.length, recovered_exactly: got === want, recovered_type: typeof got };
   }
   comparison.push(per);
 }
 result.comparison = comparison;
-const allExact = comparison.every((c) => c.matched_row && Object.values(c.values).every((v) => v.found && (v.found.form === 'exact_cell' || v.found.form === 'json_object_cell')));
-const anyMissing = comparison.some((c) => !c.matched_row || Object.values(c.values).some((v) => !v.found));
-result.verdict = allExact ? 'lossless: every tracked value recovered exactly (as its own cell or as a JSON object field)' : anyMissing ? 'lossy or missing: at least one tracked value could not be recovered from the CSV' : 'recoverable only by substring: representation is ambiguous';
+const total = comparison.reduce((n, c) => n + c.expected_fields.length, 0);
+const exact = comparison.reduce((n, c) => n + Object.values(c.values).filter((v) => v.recovered_exactly).length, 0);
+const allExact = comparison.every((c) => c.rows_with_action === 1 && c.metadata_cell_is_json_object) && exact === total;
+result.verdict = allExact
+  ? `lossless for the ${total} tested string occurrences in this run: each recovered exactly from the metadata JSON cell`
+  : `not lossless: ${exact} of ${total} tested string occurrences recovered exactly`;
 log('\nVERDICT: ' + result.verdict);
 writeFileSync(path.join(here, 'workos-csv-reproduction.result.json'), JSON.stringify(result, null, 2) + '\n');
 log('result written (sanitized; no key, no URL): tools/workos-csv-reproduction.result.json');

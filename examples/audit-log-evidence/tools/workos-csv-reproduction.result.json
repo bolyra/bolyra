@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-10-12T15:06:44.554Z",
+  "ran_at": "2026-10-12T15:10:47.583Z",
   "environment": "staging",
   "transport_notes": [
     "actor.metadata: {} added in transit (schema requires the key)",
@@ -9,17 +9,12 @@
     {
       "name": "organization_created",
       "status": 201,
-      "organization_id": "org_01M4RADQM25H81HYH9JQH6JR46"
+      "organization_id": "org_01M4RAN52822HTNSQKC249D1DX"
     },
     {
       "name": "event_emitted",
       "action": "tool.approval_resolved",
       "status": 200
-    },
-    {
-      "name": "schema_created",
-      "action": "tool.executed",
-      "status": 201
     },
     {
       "name": "event_emitted",
@@ -29,7 +24,7 @@
     {
       "name": "export_created",
       "status": 201,
-      "export_id": "audit_log_export_01M4RADR88T5RRW95FC53K54K2",
+      "export_id": "audit_log_export_01M4RAN5DQ74ZFQG8HSR1P04AN",
       "state": "pending"
     },
     {
@@ -69,65 +64,64 @@
   "comparison": [
     {
       "action": "tool.approval_resolved",
-      "matched_row": true,
+      "rows_with_action": 1,
+      "metadata_cell_is_json_object": true,
+      "expected_fields": [
+        "action_digest",
+        "receipt_id",
+        "receipt_hash",
+        "signer"
+      ],
       "values": {
         "action_digest": {
           "expected_length": 64,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         },
         "receipt_id": {
           "expected_length": 18,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         },
         "receipt_hash": {
           "expected_length": 66,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         },
         "signer": {
           "expected_length": 42,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         }
       }
     },
     {
       "action": "tool.executed",
-      "matched_row": true,
+      "rows_with_action": 1,
+      "metadata_cell_is_json_object": true,
+      "expected_fields": [
+        "action_digest",
+        "receipt_id",
+        "receipt_hash"
+      ],
       "values": {
         "action_digest": {
           "expected_length": 64,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         },
         "receipt_id": {
           "expected_length": 18,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         },
         "receipt_hash": {
           "expected_length": 66,
-          "found": {
-            "column": "metadata",
-            "form": "json_object_cell"
-          }
+          "recovered_exactly": true,
+          "recovered_type": "string"
         }
       }
     }
   ],
-  "verdict": "lossless: every tracked value recovered exactly (as its own cell or as a JSON object field)"
+  "verdict": "lossless for the 7 tested string occurrences in this run: each recovered exactly from the metadata JSON cell"
 }
