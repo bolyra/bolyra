@@ -111,3 +111,33 @@ test('CLI: produces a report with exit 0; usage error exits 2', () => {
   const bad = spawnSync(process.execPath, [cli, '--fixtures', FIX], { encoding: 'utf8' });
   assert.equal(bad.status, 2);
 });
+
+test('missing or duplicated events are failures, never silently picked', () => {
+  const base = readPacket(FIX);
+  const noExec = { ...base, events: base.events.filter((e) => e.action !== 'tool.executed') };
+  let r = verifyPacket(noExec, { signer: signerOf() });
+  assert.equal(st(r, 'V2'), 'FAILED');
+  assert.equal(st(r, 'V3'), 'FAILED');
+  assert.match(r.find((f) => f.id === 'V3')!.note, /exactly one tool.executed event, found 0/);
+  assert.equal(st(r, 'V1'), 'DERIVED');
+  const dup = JSON.parse(JSON.stringify(base.events.find((e) => e.action === 'tool.executed')));
+  dup.metadata.action_digest = 'f'.repeat(64);
+  r = verifyPacket({ ...base, events: [...base.events, dup] }, { signer: signerOf() });
+  assert.equal(st(r, 'V2'), 'FAILED');
+  assert.equal(st(r, 'V3'), 'FAILED');
+  assert.match(r.find((f) => f.id === 'V3')!.note, /found 2/);
+});
+
+test('CLI: bad flags and unreadable input exit 2, never 1', () => {
+  const cli = path.join(ROOT, 'dist', 'src', 'verify.js');
+  for (const args of [['--bogus'], ['--fixtures', FIX, '--signer'], ['--fixtures', '/nonexistent', '--signer', signerOf()]]) {
+    const r = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 2, args.join(' ') + ' → ' + r.stderr);
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ale-bad-'));
+  fs.cpSync(FIX, tmp, { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'export.jsonl'), '{"action":"tool.approval_resolved"}\n{"action":"tool.executed"}\n');
+  const r = spawnSync(process.execPath, [cli, '--fixtures', tmp, '--signer', signerOf()], { encoding: 'utf8' });
+  assert.equal(r.status, 0, 'malformed event metadata still yields a report: ' + r.stderr);
+  assert.match(r.stdout, /V2  FAILED/);
+});

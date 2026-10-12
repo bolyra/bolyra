@@ -15,18 +15,22 @@ export the reviewer can verify *without trusting the exporter*, and what they ca
 ```bash
 cd examples/audit-log-evidence
 npm ci
-npm run verify -- --fixtures ./fixtures --signer 0x7a2d4e540e813ea0b14c44793d7dc9868d5d681d   # fixtures/signer.json; compare, never anchor
-npm run verify -- --fixtures ./fixtures --signer <same> --execution ./fixtures/tampered/execution-altered-args.json
+# 0x7a2d…681d is the SYNTHETIC demo signer from fixtures/signer.json. For this public-key fixture reading
+# it from the packet is fine; in a deployment the reviewer obtains the expected signer out of band.
+npm run verify -- --fixtures ./fixtures --signer 0x7a2d4e540e813ea0b14c44793d7dc9868d5d681d
+npm run verify -- --fixtures ./fixtures --signer 0x7a2d4e540e813ea0b14c44793d7dc9868d5d681d --execution ./fixtures/tampered/execution-altered-args.json
 npm test                      # regeneration is byte-identical; statuses; the two failure cases
 npm run generate -- --out /tmp/regen && diff -r /tmp/regen ./fixtures && echo identical
 ```
 
 Node 20 or newer. Installation needs the network (`npm ci`); verification itself reads only the files.
+Exit code 0 means a report was produced, including reports that contain FAILED rows; exit code 2 means the
+arguments or the input could not be read.
 The receipt alone can also be checked with the published standalone verifier, no repository needed:
 
 ```bash
 npx -y -p @bolyra/receipts@0.11.0 bolyra-receipt-verify fixtures/approval-receipt.json \
-  --signer <address from signer.json> --max-age 315360000
+  --signer 0x7a2d4e540e813ea0b14c44793d7dc9868d5d681d --max-age 315360000
 ```
 
 ## The artifacts (`fixtures/`, regenerable byte-for-byte with `npm run generate`)
@@ -49,7 +53,7 @@ npx -y -p @bolyra/receipts@0.11.0 bolyra-receipt-verify fixtures/approval-receip
 | `actor` | `user_approver_01`; `agent_support_01` | unsigned host assertions of who acted |
 | `targets` | `tool`, `ticket`, `organization` | tenant and resource, which are also inside the digested action |
 | `metadata.action_digest` | 64 hex | the join to the exact approved call |
-| `metadata.receipt_id`, `metadata.receipt_hash`, `metadata.signer` | 18, 66, 42 chars | the join to the retained signed receipt. WorkOS documents metadata limits of 50 keys, 40-character names and 500-character values, so the receipt itself (about 1.4 KB) is a retained artifact joined by id and hash, not embedded |
+| `metadata.receipt_id`, `metadata.receipt_hash`, `metadata.signer` | 18, 66, 42 chars | the join to the retained signed receipt. WorkOS documents metadata limits of 50 keys, 40-character names and 500-character values ([metadata schema](https://workos.com/docs/audit-logs/metadata-schema)), so the receipt itself (about 1.4 KB) is a retained artifact joined by id and hash, not embedded |
 
 Verification therefore needs the export **plus** the retained receipt and action artifacts.
 
@@ -58,7 +62,7 @@ Verification therefore needs the export **plus** the retained receipt and action
 | # | Check | Clean | Altered arguments | Altered receipt |
 |---|---|---|---|---|
 | V1 | signature recovers to the anchored signer; payload hash recomputes; signed `allowed` is true | DERIVED | DERIVED | **FAILED** (signature-invalid) |
-| V2 | join consistency: both events and the execution record name this receipt by id and recomputed hash | DERIVED | DERIVED | **FAILED** |
+| V2 | join consistency: both events and the execution record reference the recomputed receipt id; both events carry the recomputed receipt hash | DERIVED | DERIVED | **FAILED** |
 | V3 | recorded action matches the digest in the verified approval assertion (action.json, execution.json, the signed reason text, both events). Establishes neither execution nor enforcement | DERIVED | **FAILED** (digest mismatch) | FAILED (dependency) |
 | V4 | approval `occurred_at` precedes `executed_at`: a comparison of unsigned timestamps; chronology unproven | DERIVED | DERIVED | DERIVED |
 | V5 | the action executed as recorded | ABSENT | ABSENT | ABSENT |
@@ -74,12 +78,15 @@ evidence), FAILED (a check failed).
 - The digest binds the approval to one exact call; it does not establish enforcement (that no other call ran) or execution (that this call ran).
 - Timestamps and actor identities in the export are unsigned host assertions.
 - Completeness is unproven; a trusted external checkpoint covering the relevant scope and sequence would be required.
-- The demo private key is public, so anyone can forge replacement receipts under it; this packet demonstrates verification mechanics, not a trust anchor. In a deployment the vendor controls the key and the reviewer obtains the expected signer out of band.
+- The demo private key is public, so anyone can forge replacement receipts under it; this packet demonstrates verification mechanics, not a trust anchor.
+- In a deployment the vendor controls the signing key and the reviewer must obtain the expected signer out of band; reading it from the packet establishes consistency only.
 
 ## One open compatibility question
 
-For this fixture's `action_digest`, `receipt_id`, `receipt_hash` and `signer` metadata, how are values
-represented in a CSV export, and can their original string values be recovered losslessly? JCS does not
+WorkOS documents [CSV exports](https://workos.com/docs/audit-logs/exporting-events); this packet exercises
+synthetic JSONL, so the question is untested here. For this fixture's `action_digest`, `receipt_id`,
+`receipt_hash` and `signer` metadata, how are values represented in a CSV export, and can their original
+string values be recovered losslessly? JCS does not
 require preservation of JSON key order or serialization bytes, so the digest recomputed from an export
 must come from the retained `action.json`, not from re-serialized rows. This is a compatibility question,
 not an allegation of a defect in any product.

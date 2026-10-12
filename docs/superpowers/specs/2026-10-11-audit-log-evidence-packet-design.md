@@ -1,7 +1,7 @@
 # Preserving approval-to-action evidence through an audit-log export
 
-**Status:** design, 2026-10-11; Codex plan review R1 APPROVE WITH EDITS (5, applied; no second round). Codex-ruled move (one-day cap) under the design-partner track. Synthetic
-and reproducible; nothing here is a customer deployment or a claim about any vendor's product.
+**Status:** design, 2026-10-11 (one-day scope). Synthetic and reproducible; nothing here is a customer
+deployment or a claim about any vendor's product.
 
 ## 1. Question
 
@@ -18,7 +18,7 @@ fail. It is written for a reviewer and for an audit-log product team; it names n
 
 | File | Signed? | Content |
 |---|---|---|
-| `approval-receipt.json` | **signed** (ES256K, `@bolyra/receipts`) | one `bolyra.auth` receipt with signed `decision.allowed === true` whose `decision.reasonCode` carries exactly `approved | action_digest=<64 hex> | tool=<server>.<tool>` (an **example-specific convention** in the free-text reason field, not a receipt schema field; the verifier rejects a missing, malformed, or duplicate digest entry) |
+| `approval-receipt.json` | **signed** (ES256K, `@bolyra/receipts`) | one `bolyra.auth` receipt with signed `decision.allowed === true` whose `decision.reasonCode` carries exactly `approved \| action_digest=<64 hex> \| tool=<server>.<tool>` (an **example-specific convention** in the free-text reason field, not a receipt schema field; the verifier rejects a missing, malformed, or duplicate digest entry) |
 | `action.json` | unsigned | the synthetic call the signer asserts was approved: `{ tenant, server, tool, resource: { type, id }, arguments }`; `action_digest = sha256(canonicalize(action))` using the receipts package's JCS canonicalizer. Tenant and resource are inside the digested action and mapped to the export's actor/target fields |
 | `execution.json` | unsigned | the host's record of the dispatched call: same `action`, `receipt_id`, `executed_at`, `status` |
 | `export.jsonl` | unsigned | synthetic audit-log-shaped JSONL with fields mapped to WorkOS's public documentation (not a tested WorkOS export): two events: `tool.approval_resolved` (actor = approver; targets = tool, ticket; metadata = `action_digest`, `receipt_id`, `receipt_hash`, `signer`) and `tool.executed` (actor = agent; metadata = `action_digest`, `receipt_id`) |
@@ -65,7 +65,7 @@ the vendor controls the key and the reviewer must obtain the expected signer out
 `examples/audit-log-evidence/`: `src/digest.ts`, `src/generate.ts` (pinned `issuedAt`, fixed key →
 byte-identical fixtures; a test asserts regeneration equals the committed files), `src/verify.ts` (CLI:
 `--fixtures <dir> --signer <addr>`, prints the table, exit 0 with a report / 2 on unreadable input),
-`test/*.test.ts` (clean = V1–V3 DERIVED, V4 OBSERVED, V5–V6 ABSENT; altered args → V3 FAILED only; altered
+`test/*.test.ts` (clean = V1–V4 DERIVED, V5–V6 ABSENT; altered args → V3 FAILED only; altered
 receipt → V1+V2 FAILED; regeneration byte-equality; wrong signer → V1 FAILED). README = the packet.
 CI job mirrors gov-stats-portal (clean checkout: generate, diff against fixtures, verify, test); deferred if
 the cap is hit. Depends on `@bolyra/receipts@0.11.0` only (pinned; installation is separate from offline

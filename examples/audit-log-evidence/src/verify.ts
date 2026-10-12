@@ -37,6 +37,7 @@ export const TRUST_ASSUMPTIONS = [
   'Timestamps and actor identities in the export are unsigned host assertions.',
   'Completeness is unproven; a trusted external checkpoint covering the relevant scope and sequence would be required.',
   'The demo private key is public, so anyone can forge replacement receipts under it; this packet demonstrates verification mechanics, not a trust anchor.',
+  'In a deployment the vendor controls the signing key and the reviewer must obtain the expected signer out of band; reading it from the packet establishes consistency only.',
 ];
 
 export function verifyPacket(files: PacketFiles, anchors: { signer: string }): Finding[] {
@@ -73,22 +74,27 @@ export function verifyPacket(files: PacketFiles, anchors: { signer: string }): F
     /* reported below */
   }
   const idOk = receipt.id === expectedId && recomputedPayloadHash === receipt.signature?.payloadHash;
-  const approval = events.find((e) => e.action === 'tool.approval_resolved');
-  const executed = events.find((e) => e.action === 'tool.executed');
-  const joinProblems: string[] = [];
-  if (!approval) joinProblems.push('no tool.approval_resolved event');
-  if (!executed) joinProblems.push('no tool.executed event');
+  // This packet requires exactly one approval event and exactly one execution event;
+  // a missing or duplicated event is a failure, never silently picked.
+  const approvals = events.filter((e) => e.action === 'tool.approval_resolved');
+  const executions = events.filter((e) => e.action === 'tool.executed');
+  const approval = approvals.length === 1 ? approvals[0] : undefined;
+  const executed = executions.length === 1 ? executions[0] : undefined;
+  const eventProblems: string[] = [];
+  if (approvals.length !== 1) eventProblems.push(`expected exactly one tool.approval_resolved event, found ${approvals.length}`);
+  if (executions.length !== 1) eventProblems.push(`expected exactly one tool.executed event, found ${executions.length}`);
+  const joinProblems: string[] = [...eventProblems];
   if (!idOk) joinProblems.push('receipt id does not equal the first 18 characters of the recomputed payload hash');
   for (const [label, ev] of [['approval event', approval], ['executed event', executed]] as const) {
     if (!ev) continue;
-    if (ev.metadata.receipt_id !== receipt.id) joinProblems.push(`${label} receipt_id differs from the receipt id`);
-    if (ev.metadata.receipt_hash !== recomputedHash) joinProblems.push(`${label} receipt_hash differs from computeReceiptHash(receipt)`);
+    if (ev.metadata?.receipt_id !== receipt.id) joinProblems.push(`${label} receipt_id differs from the receipt id`);
+    if (ev.metadata?.receipt_hash !== recomputedHash) joinProblems.push(`${label} receipt_hash differs from computeReceiptHash(receipt)`);
   }
   if (execution.receipt_id !== receipt.id) joinProblems.push('execution.receipt_id differs from the receipt id');
   const v2 = joinProblems.length === 0;
   out.push({
     id: 'V2',
-    title: 'Join consistency: both events and the execution record name this receipt by id and by recomputed hash',
+    title: 'Join consistency: both events and the execution record reference the recomputed receipt id; both events carry the recomputed receipt hash',
     status: v2 ? 'DERIVED' : 'FAILED',
     note: v2 ? `receipt id ${receipt.id}; receiptHash ${recomputedHash}. Consistency only; it does not authenticate the events.` : joinProblems.join('; ') + '.',
   });
@@ -96,6 +102,8 @@ export function verifyPacket(files: PacketFiles, anchors: { signer: string }): F
   // V3: recorded action matches the digest in the verified approval assertion
   if (!v1) {
     out.push({ id: 'V3', title: 'Recorded action matches the digest in the verified approval assertion', status: 'FAILED', note: 'verification dependency failed (V1); the reason text is not a verified assertion.' });
+  } else if (!approval || !executed) {
+    out.push({ id: 'V3', title: 'Recorded action matches the digest in the verified approval assertion', status: 'FAILED', note: eventProblems.join('; ') + '; the digest cannot be compared across the export.' });
   } else {
     let note = '';
     let ok = false;
@@ -106,8 +114,8 @@ export function verifyPacket(files: PacketFiles, anchors: { signer: string }): F
       const problems: string[] = [];
       if (fromAction !== signedDigest) problems.push('action.json digest differs from the signed digest');
       if (fromExecution !== signedDigest) problems.push('execution.json.action digest differs from the signed digest');
-      if (approval && approval.metadata.action_digest !== signedDigest) problems.push('approval event action_digest differs from the signed digest');
-      if (executed && executed.metadata.action_digest !== signedDigest) problems.push('executed event action_digest differs from the signed digest');
+      if (approval.metadata?.action_digest !== signedDigest) problems.push('approval event action_digest differs from the signed digest');
+      if (executed.metadata?.action_digest !== signedDigest) problems.push('executed event action_digest differs from the signed digest');
       if (tool !== `${execution.action.server}.${execution.action.tool}`) problems.push('signed tool name differs from the executed tool');
       ok = problems.length === 0;
       note = ok
@@ -165,20 +173,32 @@ export function renderTable(findings: Finding[]): string {
   return lines.join('\n') + '\n\nTrust assumptions:\n' + TRUST_ASSUMPTIONS.map((t) => `- ${t}`).join('\n') + '\n';
 }
 
-if (require.main === module) {
-  const { values } = parseArgs({ options: { fixtures: { type: 'string' }, signer: { type: 'string' }, execution: { type: 'string' } } });
-  if (!values.fixtures || !values.signer || !/^0x[0-9a-fA-F]{40}$/.test(values.signer)) {
-    process.stderr.write('Usage: npm run verify -- --fixtures <dir> --signer <0xaddress> [--execution <file>]\n');
-    process.exitCode = 2;
-  } else {
-    let files: PacketFiles;
-    try {
-      files = readPacket(values.fixtures, values.execution);
-    } catch (err) {
-      process.stderr.write(`cannot read packet: ${(err as Error).message}\n`);
-      process.exitCode = 2;
-      files = undefined as never;
-    }
-    if (files) process.stdout.write(renderTable(verifyPacket(files, { signer: values.signer })));
+const USAGE = 'Usage: npm run verify -- --fixtures <dir> --signer <0xaddress> [--execution <file>]\n' +
+  'Exit 0: a report was produced (it may contain FAILED rows). Exit 2: arguments or input could not be read.\n';
+
+export function main(argv: string[]): number {
+  let values: { fixtures?: string; signer?: string; execution?: string };
+  try {
+    values = parseArgs({ args: argv, options: { fixtures: { type: 'string' }, signer: { type: 'string' }, execution: { type: 'string' } }, allowPositionals: false }).values;
+  } catch (err) {
+    process.stderr.write(`error: ${(err as Error).message}\n${USAGE}`);
+    return 2;
   }
+  if (!values.fixtures || !values.signer || !/^0x[0-9a-fA-F]{40}$/.test(values.signer)) {
+    process.stderr.write(USAGE);
+    return 2;
+  }
+  let findings: Finding[];
+  try {
+    findings = verifyPacket(readPacket(values.fixtures, values.execution), { signer: values.signer });
+  } catch (err) {
+    process.stderr.write(`cannot read packet: ${(err as Error).message}\n`);
+    return 2;
+  }
+  process.stdout.write(renderTable(findings));
+  return 0;
+}
+
+if (require.main === module) {
+  process.exitCode = main(process.argv.slice(2));
 }
