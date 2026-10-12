@@ -72,10 +72,14 @@ the cap is hit. Depends on `@bolyra/receipts@0.11.0` only (pinned; installation 
 verification). Cap: one day. No changes to `@bolyra/receipts`; no new receipt field; no live vendor
 integration, export adapter, new schema, or completeness mechanism.
 
-## 6. The one question the packet can legitimately raise (after reproduction)
+## 6. The compatibility question, answered (2026-10-12)
 
-"For this fixture's `action_digest`, `receipt_id`, `receipt_hash`, and `signer` metadata, how are values
-represented in CSV export, and can their original string values be recovered losslessly?" JCS does not
-require preservation of JSON key order or serialization bytes, so this is a compatibility question, not an
-allegation of a defect. Nothing else is asked; absent a reproduction-backed question, the packet stops at
-the artifact.
+The question whether `action_digest`, `receipt_id`, `receipt_hash` and `signer` survive a CSV export
+losslessly was answered by a staging reproduction (`examples/audit-log-evidence/tools/
+workos-csv-reproduction.mjs`): in the 2026-10-12 staging run, parsing the CSV's `metadata` JSON cell
+recovered all seven tested string occurrences exactly (`action_digest`, `receipt_id`, `receipt_hash` on both
+events, `signer` on the approval event; the execution fixture has no `signer`). "Lossless" refers only to
+these values in this run. Setup observations: unconfigured action/version pairs were rejected
+(`invalid_audit_log`) until a schema was registered (actions are environment-scoped), and with the schemas
+used, validation required `actor.metadata`. Per the stop rule, no
+public question is asked; the packet carries the verified mapping instead.
