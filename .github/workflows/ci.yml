@@ -695,6 +695,32 @@ jobs:
           grep -q 'FAILED: 0' <<<"$out"
           npm test
 
+  audit-log-evidence:
+    name: Audit-log evidence packet — regenerate, verify, test from a clean checkout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # The packet must regenerate byte-for-byte from the pinned key and timestamps,
+      # verify clean against the committed signer, and fail on the altered arguments.
+      - name: Install, regenerate, diff, verify, test
+        working-directory: examples/audit-log-evidence
+        run: |
+          npm ci --no-audit --no-fund
+          npm run generate -- --out /tmp/regen
+          diff -r /tmp/regen ./fixtures
+          signer=$(node -p "require('./fixtures/signer.json').signer")
+          npm run verify --silent -- --fixtures ./fixtures --signer "$signer" | tee /tmp/clean.txt
+          grep -q 'V3  DERIVED' /tmp/clean.txt
+          ! grep -q 'FAILED' /tmp/clean.txt
+          npm run verify --silent -- --fixtures ./fixtures --signer "$signer" --execution ./fixtures/tampered/execution-altered-args.json | tee /tmp/altered.txt
+          grep -q 'V3  FAILED' /tmp/altered.txt
+          npm test
+
   gov-stats-portal:
     name: Gov stats portal example — demo and tests from a clean checkout
     runs-on: ubuntu-latest
