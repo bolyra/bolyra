@@ -676,6 +676,40 @@
       color: var(--green);
     }
 
+    .limits-table {
+      width: 100%;
+      margin: 14px 0 0;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .limits-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+    .limits-table th:first-child {
+      width: 28%;
+    }
+    .limits-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      line-height: 1.5;
+      vertical-align: top;
+    }
+    .limits-table td strong {
+      color: var(--text);
+    }
+    .limits-table td small {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.8rem;
+    }
     /* -- Responsive -- */
     @media (max-width: 768px) {
       .features-grid,
@@ -716,6 +750,38 @@
       .comparison-table th,
       .comparison-table td {
         padding: 10px 12px;
+      }
+      /* Stack the evidence-limits table: three columns do not fit a phone. */
+      .limits-table {
+        font-size: 0.85rem;
+      }
+      .limits-table thead {
+        display: none;
+      }
+      .limits-table tr,
+      .limits-table td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .limits-table tr {
+        border-bottom: 1px solid var(--border);
+        padding: 10px 0;
+      }
+      .limits-table td {
+        border: 0;
+        padding: 4px 0;
+      }
+      .limits-table td:nth-child(2)::before {
+        content: "Establishes: ";
+        color: var(--text);
+      }
+      .limits-table td:nth-child(3)::before {
+        content: "Does not establish: ";
+        color: var(--text);
+      }
+      .limits-table td:empty {
+        display: none;
       }
     }
 
@@ -985,9 +1051,48 @@ npx @bolyra/evc-conformance --verifier "/path/to/your-verifier --flags"</code></
         <h3 style="font-size: 1.35rem; letter-spacing: 0; margin-bottom: 12px;">Acceptance exercise</h3>
         <p style="margin: 0;">$5,000 for a two-week acceptance exercise covering one customer-operated agent workflow. Feasibility and your reviewer&rsquo;s written acceptance criteria are agreed before signing.</p>
         <p style="color: var(--text-muted); margin: 14px 0 0;">The deliverable is an evidence report: for each claim a reviewer might make about one run, whether the record supports it, by which file and field, and what the record cannot show. The report keeps signed assertions, observations, derived checks, missing evidence, and failed checks visibly separate. It does not establish execution, human consent, or subject authentication.</p>
-        <p style="color: var(--text-muted); margin: 14px 0 0;">Simulated sample: the <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial#produce-a-reviewer-report">operator-trial dry run</a> uses simulated credentials, an ephemeral signer, and no proof verification; it produces a bundle you can run the report on yourself. This exercise requires no Bolyra-hosted service.</p>
+        <p style="color: var(--text-muted); margin: 14px 0 0;">What a finding in that report establishes, by the status the tool prints:</p>
+        <table class="limits-table">
+          <thead>
+            <tr>
+              <th>The report marks</th>
+              <th>That establishes</th>
+              <th>It does not establish</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>SIGNED</strong><small>decision, reason text, simulated subject identifiers, permission mask, nonce, proof hashes</small></td>
+              <td>An authenticated assertion by whoever holds the anchored signing key.</td>
+              <td>That the assertion is true. Who holds the key: the signer anchor is reviewer-supplied and the bundle cannot prove it. That any subject was authenticated.</td>
+            </tr>
+            <tr>
+              <td><strong>DERIVED</strong><small>signature recovery and payload hash, intact hash chain, count and head against the supplied anchors, recorded action against the signed descriptor, a repeated nonce met by a signed deny, the required mask parsed from the denial text</small></td>
+              <td>The named check passed over its stated inputs: the receipts verify and chain as supplied, and match the anchors the reviewer typed.</td>
+              <td>Completeness beyond those anchors. That the decision was signed before dispatch. That authorization preceded whatever the endpoint did. Replay or permission enforcement in production.</td>
+            </tr>
+            <tr>
+              <td><strong>OBSERVED</strong><small>host-recorded action, dispatch attempt, upstream status, dry-run and ephemeral-signer flags, host-side counts</small></td>
+              <td>What the trial host wrote down, signed by nothing.</td>
+              <td>That the endpoint executed anything. That the recorded configuration was the enforced one.</td>
+            </tr>
+            <tr>
+              <td><strong>ABSENT</strong><small>always: execution, human consent, mandate or spend limit, who receives funds or controls a settlement address, production credentials or registry, proof verification, decision signed before dispatch, the required permission as configured</small></td>
+              <td>Nothing. The row is printed so the gap is visible instead of omitted.</td>
+              <td>Anything.</td>
+            </tr>
+            <tr>
+              <td><strong>FAILED</strong><small>a check failed or two sources contradict</small></td>
+              <td>Shown in place, never filtered. Changing <code>payload.decision.allowed</code> in a receipt without re-signing fails signature verification; an id-only edit fails the report&rsquo;s own id check.</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="color: var(--text-muted); margin: 14px 0 0;">Input scope: the report reads one supported bundle format today, the operator-trial bundle (<code>receipts.jsonl</code>, <code>summary.json</code>, <code>signer.json</code>, <code>VERIFY.txt</code>). A separate verifier in <a href="https://github.com/bolyra/bolyra/tree/main/examples/audit-log-evidence">examples/audit-log-evidence</a> checks one approval bound to one exact action over synthetic JSONL in the WorkOS Audit Logs metadata shape plus the retained receipt and action artifacts; its staging test showed seven metadata string occurrences survive that product&rsquo;s CSV export, and it provides no CSV ingestion and establishes no human consent. Neither reads an arbitrary audit export. An exercise on another export shape starts with the feasibility check, which is why feasibility is agreed before signing.</p>
+        <p style="color: var(--text-muted); margin: 14px 0 0;">Simulated sample: <a href="/evidence-report-sample">a published report</a> generated from the operator-trial dry-run fixture, with its JSON and the exact input bundle. Simulated credentials, an ephemeral signer, no proof verification, a built-in localhost echo endpoint. It shows the deliverable&rsquo;s form and limits, not a customer run. To produce one yourself, follow the <a href="https://github.com/bolyra/bolyra/tree/main/examples/operator-trial#produce-a-reviewer-report">operator-trial README</a>. This exercise requires no Bolyra-hosted service.</p>
         <div class="cta-group" style="margin-top: 20px;">
           <a href="mailto:hello@bolyra.ai?subject=acceptance%20exercise" class="btn btn-primary">Ask about the acceptance exercise</a>
+          <a href="/evidence-report-sample" class="btn btn-secondary">View the simulated sample report</a>
         </div>
       </div>
     </div>

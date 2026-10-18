@@ -74,6 +74,8 @@ npm run report -- --bundle trial-out/<timestamp> --signer <signer> --expect-coun
 
 It writes `report-out/<timestamp>/report.html` (self-contained, printable) and `report.json` (the same findings). The anchors come from the flags only: `signer.json` and `summary.json` are compared against them, never used as anchors. Copying the values out of the bundle makes the report consistent with the bundle; it does not establish signer identity or completeness, and the report says so.
 
+A published sample generated from the committed dry-run fixture (`test/report-fixtures/dry-run`) is at [bolyra.ai/evidence-report-sample](https://bolyra.ai/evidence-report-sample), with its JSON and the input bundle alongside. It is simulated: dry-run credentials, an ephemeral signer, no proof verification, the built-in echo endpoint. `landing/evidence-sample/build.mjs --check` keeps it identical to what this tool produces.
+
 Five statuses: **SIGNED** (inside a receipt payload whose signature recovered to the anchored signer), **OBSERVED** (recorded by the host, signed by nothing), **DERIVED** (computed by a named check), **ABSENT** (no evidence in the bundle), **FAILED** (a check failed or two sources contradict). Execution, consent, payee control, spend limits, subject authentication and production credentials are always ABSENT: the trial never produces evidence for them. One check is report-local: the receipt `id` is neither signed nor hashed by the published verifier, so the report checks it itself (B1a) and says the CLI does not.
 
 ## What this is, and is not
