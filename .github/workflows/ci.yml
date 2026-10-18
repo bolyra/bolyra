@@ -534,6 +534,17 @@ jobs:
         with:
           node-version: 20
 
+      # npm 10 (bundled with Node 20) crashes in arborist's #loadPeerSet
+      # ("Cannot read properties of null (reading 'edgesOut')") while building
+      # the --package-lock-only ideal tree for a file:-linked sibling whose dev
+      # graph pulls vitest's optional peers; it started failing on 2026-10-18
+      # with no repo change (registry metadata moved) and reproduces on main.
+      # npm 11 resolves the same tree cleanly, so the audit job pins it.
+      - name: "Use npm 11 for the audit (npm 10 arborist crash on file:-linked siblings)"
+        run: |
+          npm install -g npm@11.6.2
+          npm --version
+
       # Audit each published package's runtime dependencies. We use
       # --omit=dev so we only gate on advisories reachable from shipped code;
       # dev-only advisories (Hardhat toolchain, circom_tester, etc.) are
