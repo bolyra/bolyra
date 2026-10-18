@@ -394,3 +394,14 @@ EDITS → R4 APPROVE. Authority for every on-screen string: `npx @bolyra/mpp dem
 - [x] `deploy.sh` (VIDEO9, uploads, invalidation, pre-upload assertions) · `verify.sh` (root link + both URLs 200 + persistKey/title) · `index.html` card + "Gateway walkthrough" label · CHANGELOG
 - [ ] Codex review of scene text + diff → clean → DCO commits → PR → CI → merge
 - [ ] Deploy from a worktree on updated main (BOLYRA_SKIP_VERIFY unset) → verify.sh → browser check of both URLs + card
+
+## Evidence-limits table + published SIMULATED sample (2026-10-18, Codex build-next pick A, cap 3h, spec docs/superpowers/specs/2026-10-18-evidence-limits-and-sample-design.md)
+- [x] Table beside the acceptance-exercise offer (statuses → establishes / does not establish; input scope; secondary CTA; phone stacking)
+- [x] landing/evidence-sample/build.mjs: unchanged report tool on the committed fixture, SIMULATED banner, report.json + bundle, `--check` (baseline counts, VERIFY.txt consistency, generatedAt-only normalization)
+- [x] deploy.sh gates + seven uploads/invalidations; verify.sh byte-compare; CI `--check`; README sentence
+- [x] Codex: spec APPROVE WITH EDITS (7, applied) → code R1 APPROVE WITH EDITS (3, applied) → R2 APPROVE
+- [ ] PR #211: CI green → merge (Codex: MERGE) → `landing/deploy.sh` → `landing/verify.sh` green
+- [ ] Founder: accept the WorkOS Slack Connect invite (expires ~10/26) and post the one routing question (send confirmation first)
+
+## Review (evidence-limits + sample)
+Founder hours ≈ 0 (agent-executed); wall clock ≈ 1.5h of the 3h cap before deploy. Deviations from spec: pin gate narrowed to tool sources/lockfile/fixture/tsconfig (README is prose) and extended to the working tree; banner states exactly how a reproduction differs from the published files; table stacks on phones with labeled cells. Nothing cut.

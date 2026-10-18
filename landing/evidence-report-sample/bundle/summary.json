@@ -1,0 +1,64 @@
+{
+  "trialVersion": "0.1.0",
+  "packages": {
+    "gateway": "0.6.0",
+    "mcp": "0.6.5",
+    "receipts": "0.11.0"
+  },
+  "dryRun": true,
+  "action": {
+    "name": "echo-action",
+    "method": "POST",
+    "host": "127.0.0.1:53727",
+    "path": "/echo"
+  },
+  "attempts": [
+    {
+      "n": 1,
+      "credential": "granted",
+      "decision": "allow",
+      "reason": "allowed",
+      "httpStatus": 200,
+      "dispatched": true,
+      "upstreamStatus": 200,
+      "outcome": "completed",
+      "receiptId": "0x6f82e3b05de9c571"
+    },
+    {
+      "n": 2,
+      "credential": "withheld",
+      "decision": "deny",
+      "stage": "policy_denied",
+      "reason": "policy_denied: Tool \"echo-action\" requires permissions 10b, agent has 1b",
+      "httpStatus": 403,
+      "dispatched": false,
+      "upstreamStatus": null,
+      "outcome": "not_dispatched",
+      "receiptId": "0xf139357ce998561b"
+    },
+    {
+      "n": 3,
+      "credential": "replay",
+      "decision": "deny",
+      "stage": "verification_failed",
+      "reason": "authentication_failed: Nonce already used — proof replay rejected",
+      "httpStatus": 401,
+      "dispatched": false,
+      "upstreamStatus": null,
+      "outcome": "not_dispatched",
+      "receiptId": "0xce71d54449634289"
+    }
+  ],
+  "dispatchCounts": [
+    1,
+    0,
+    0
+  ],
+  "startedAt": "2026-10-10T16:47:59.825Z",
+  "finishedAt": "2026-10-10T16:47:59.893Z",
+  "fileState": "ok",
+  "note": "unsigned observations; signer key is ephemeral",
+  "ok": true,
+  "receiptCount": 3,
+  "headReceiptHash": "0xba154095cb6bdf6dfc8351519faabdebf64598dfcda3f8e978f934cfaf65b3f1"
+}

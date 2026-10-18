@@ -38,8 +38,10 @@ PLAYGROUND="$SCRIPT_DIR/playground.html"
 CONFORMANCE="$SCRIPT_DIR/conformance.html"
 OPERATOR_TRIAL="$SCRIPT_DIR/operator-trial.html"
 USAGE_BEACON="$SCRIPT_DIR/e"
+EVIDENCE_SAMPLE="$SCRIPT_DIR/evidence-report-sample.html"
+EVIDENCE_SAMPLE_DIR="$SCRIPT_DIR/evidence-report-sample"
 
-for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$BLOG6" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$VIDEO9" "$PLAYGROUND" "$CONFORMANCE" "$OPERATOR_TRIAL" "$USAGE_BEACON"; do
+for f in "$INDEX" "$PROTOCOL" "$BLOG" "$BLOG1" "$BLOG2" "$BLOG3" "$BLOG4" "$BLOG5" "$BLOG6" "$VIDEO" "$VIDEO2" "$VIDEO3" "$VIDEO4" "$VIDEO5" "$VIDEO6" "$VIDEO7" "$VIDEO8" "$VIDEO9" "$PLAYGROUND" "$CONFORMANCE" "$OPERATOR_TRIAL" "$USAGE_BEACON" "$EVIDENCE_SAMPLE" "$EVIDENCE_SAMPLE_DIR/report.json" "$EVIDENCE_SAMPLE_DIR/bundle/receipts.jsonl" "$EVIDENCE_SAMPLE_DIR/bundle/summary.json" "$EVIDENCE_SAMPLE_DIR/bundle/signer.json" "$EVIDENCE_SAMPLE_DIR/bundle/VERIFY.txt"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found" >&2
     exit 1
@@ -61,6 +63,30 @@ node -e '
   if (/plausible\.io/.test(html)) { console.error("ERROR: analytics tag in " + process.argv[1]); process.exit(1); }
 ' "$VIDEO9" || exit 1
 echo "OK: video-how-it-works.html is inline, analytics-free and linked from the index"
+
+# Pre-upload gate for the published SIMULATED evidence-report sample (2026-10-18):
+# the index must link it, the committed page + JSON + bundle must match a fresh run
+# of the UNCHANGED report tool on the committed fixture (landing/evidence-sample/
+# build.mjs --check, which also asserts the baseline status counts), and nothing
+# under examples/operator-trial may have changed since the commit the banner pins.
+echo "→ evidence-report-sample pre-upload gates"
+grep -qF 'href="/evidence-report-sample"' "$INDEX" || { echo "ERROR: index.html does not link /evidence-report-sample" >&2; exit 1; }
+grep -qF 'SIMULATED SAMPLE' "$EVIDENCE_SAMPLE" || { echo "ERROR: $EVIDENCE_SAMPLE lacks the SIMULATED SAMPLE banner" >&2; exit 1; }
+SAMPLE_PIN=$(grep -oE "PIN_COMMIT = '[0-9a-f]{40}'" "$SCRIPT_DIR/evidence-sample/build.mjs" | grep -oE '[0-9a-f]{40}') || { echo "ERROR: cannot read PIN_COMMIT from build.mjs" >&2; exit 1; }
+git -C "$SCRIPT_DIR/.." merge-base --is-ancestor "$SAMPLE_PIN" HEAD || { echo "ERROR: pinned commit $SAMPLE_PIN is not an ancestor of HEAD" >&2; exit 1; }
+# Tool sources, lockfile and fixture must be what the banner pins (the README is prose, not pinned).
+# Compare the pin against HEAD AND the working tree (build.mjs reads working-tree files), and refuse
+# untracked files there: an uncommitted tool edit must not ship under the old pin.
+PINNED_PATHS=(examples/operator-trial/src examples/operator-trial/test/report-fixtures examples/operator-trial/package.json examples/operator-trial/package-lock.json examples/operator-trial/tsconfig.json)
+git -C "$SCRIPT_DIR/.." diff --quiet "$SAMPLE_PIN" HEAD -- "${PINNED_PATHS[@]}" \
+  || { echo "ERROR: operator-trial tool or fixture changed since pinned commit $SAMPLE_PIN; update PIN_COMMIT in landing/evidence-sample/build.mjs, regenerate, and re-review the banner" >&2; exit 1; }
+git -C "$SCRIPT_DIR/.." diff --quiet "$SAMPLE_PIN" -- "${PINNED_PATHS[@]}" \
+  || { echo "ERROR: working tree differs from pinned commit $SAMPLE_PIN under examples/operator-trial; commit or revert before deploying" >&2; exit 1; }
+[ -z "$(git -C "$SCRIPT_DIR/.." status --porcelain --untracked-files=all -- "${PINNED_PATHS[@]}")" ] \
+  || { echo "ERROR: uncommitted or untracked files under the pinned operator-trial paths; commit or remove them before deploying" >&2; exit 1; }
+( cd "$SCRIPT_DIR/../examples/operator-trial" && npm ci --no-audit --no-fund >/dev/null ) || { echo "ERROR: npm ci in examples/operator-trial failed" >&2; exit 1; }
+node "$SCRIPT_DIR/evidence-sample/build.mjs" --check || exit 1
+echo "OK: evidence-report-sample matches a fresh build and the pinned operator-trial sources"
 
 # Pre-upload version drift gate — block stale copy from ever reaching S3.
 # (verify.sh re-checks the LIVE page post-deploy; this catches it earlier.)
@@ -322,6 +348,27 @@ aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground.html" \
 aws s3 cp "$PLAYGROUND" "s3://$BUCKET/playground" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=300"
+echo "→ uploading evidence-report-sample (page, JSON, input bundle) to s3://$BUCKET/"
+aws s3 cp "$EVIDENCE_SAMPLE" "s3://$BUCKET/evidence-report-sample.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$EVIDENCE_SAMPLE" "s3://$BUCKET/evidence-report-sample" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "public, max-age=300"
+aws s3 cp "$EVIDENCE_SAMPLE_DIR/report.json" "s3://$BUCKET/evidence-report-sample/report.json" \
+  --content-type "application/json; charset=utf-8" \
+  --cache-control "public, max-age=300"
+for BF in receipts.jsonl VERIFY.txt; do
+  aws s3 cp "$EVIDENCE_SAMPLE_DIR/bundle/$BF" "s3://$BUCKET/evidence-report-sample/bundle/$BF" \
+    --content-type "text/plain; charset=utf-8" \
+    --cache-control "public, max-age=300"
+done
+for BF in summary.json signer.json; do
+  aws s3 cp "$EVIDENCE_SAMPLE_DIR/bundle/$BF" "s3://$BUCKET/evidence-report-sample/bundle/$BF" \
+    --content-type "application/json; charset=utf-8" \
+    --cache-control "public, max-age=300"
+done
+
 # Usage-signal endpoint for the playground: an empty object so GET /e?v=1&ev=<name> returns 200.
 # The signal is the CloudFront access-log line (apps/playground/tools/usage-report.mjs reads it).
 aws s3 cp "$USAGE_BEACON" "s3://$BUCKET/e" \
@@ -346,7 +393,7 @@ done
 echo "→ invalidating CloudFront ($DISTRIBUTION_ID)"
 INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
-  --paths "/index.html" "/" "/video-how-it-works.html" "/video-how-it-works" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/blog-6.html" "/blog-6" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/conformance.html" "/conformance" "/operator-trial.html" "/operator-trial" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" \
+  --paths "/index.html" "/" "/video-how-it-works.html" "/video-how-it-works" "/402.html" "/402" "/blog.html" "/blog" "/blog-1.html" "/blog-1" "/blog-2.html" "/blog-2" "/blog-3.html" "/blog-3" "/blog-4.html" "/blog-4" "/blog-5.html" "/blog-5" "/blog-6.html" "/blog-6" "/benchmark.html" "/benchmark" "/agent-spend.html" "/agent-spend" "/conformance.html" "/conformance" "/operator-trial.html" "/operator-trial" "/video-replay-check.html" "/video-replay-check" "/video-cli.html" "/video-cli" "/animations.jsx" "/system.jsx" "/scenes_replaycheck.jsx" "/scenes_cli.jsx" "/video.html" "/video" "/video-receipts.html" "/video-receipts" "/video-delegation.html" "/video-delegation" "/video-handshake.html" "/video-handshake" "/video-devmode.html" "/video-devmode" "/video-offchain.html" "/video-offchain" "/video-frameworks.html" "/video-frameworks" "/video-oauth.html" "/video-oauth" "/playground.html" "/playground" "/school.html" "/school" "/school-animations.jsx" "/school-kit.jsx" "/school-scenes.jsx" "/evidence-report-sample.html" "/evidence-report-sample" "/evidence-report-sample/report.json" "/evidence-report-sample/bundle/receipts.jsonl" "/evidence-report-sample/bundle/summary.json" "/evidence-report-sample/bundle/signer.json" "/evidence-report-sample/bundle/VERIFY.txt" \
   --query 'Invalidation.Id' \
   --output text)
 

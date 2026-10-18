@@ -705,6 +705,9 @@ jobs:
           echo "$out"
           grep -q 'FAILED: 0' <<<"$out"
           npm test
+          # The published SIMULATED sample on bolyra.ai must match a fresh run of this
+          # tool on the committed fixture (landing/evidence-sample/build.mjs --check).
+          node ../../landing/evidence-sample/build.mjs --check
 
   audit-log-evidence:
     name: Audit-log evidence packet — regenerate, verify, test from a clean checkout

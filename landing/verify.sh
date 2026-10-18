@@ -116,6 +116,9 @@ declare -a ROOT_NEEDLES=(
   '$5,000 for a two-week acceptance exercise covering one customer-operated agent workflow'
   'Simulated sample'
   'mailto:hello@bolyra.ai?subject=acceptance%20exercise'
+  'href="/evidence-report-sample"'
+  'authorization preceded whatever the endpoint did'
+  'class="limits-table"'
 )
 
 for needle in "${ROOT_NEEDLES[@]}"; do
@@ -139,6 +142,33 @@ for needle in "${ROOT_FORBIDDEN[@]}"; do
   fi
 done
 
+# Published SIMULATED evidence-report sample (2026-10-18): both HTML aliases and the
+# five downloads must be byte-identical to the committed artifacts, so a stale or
+# partial publication cannot pass on needles alone.
+echo "→ evidence-report-sample: live bytes vs committed artifacts"
+SAMPLE_TMP=$(mktemp -d /tmp/bolyra-sample.XXXXXX)
+trap 'rm -rf "$SAMPLE_TMP" "$TMP" "$ROOT_TMP"' EXIT
+sample_same() { # $1=url path  $2=committed file
+  local url="https://bolyra.ai$1" code
+  code=$(curl -s -o "$SAMPLE_TMP/live" -w "%{http_code}" "$url")
+  [ "$code" = "200" ] || fail "$1 returned HTTP $code (expected 200)"
+  cmp -s "$SAMPLE_TMP/live" "$2" || fail "$1 differs from committed $(basename "$2")"
+  pass "$1 is byte-identical to the committed artifact"
+}
+sample_same "/evidence-report-sample"      "$SCRIPT_DIR/evidence-report-sample.html"
+sample_same "/evidence-report-sample.html" "$SCRIPT_DIR/evidence-report-sample.html"
+sample_same "/evidence-report-sample/report.json" "$SCRIPT_DIR/evidence-report-sample/report.json"
+for BF in receipts.jsonl summary.json signer.json VERIFY.txt; do
+  sample_same "/evidence-report-sample/bundle/$BF" "$SCRIPT_DIR/evidence-report-sample/bundle/$BF"
+done
+grep -qF 'SIMULATED SAMPLE' "$SCRIPT_DIR/evidence-report-sample.html" || fail "committed sample page lacks the SIMULATED SAMPLE banner"
+node -e '
+  const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const failed = r.findings.filter((f) => f.status === "FAILED").length;
+  if (!r.findings.length || failed !== 0) { console.error("sample report.json: findings=" + r.findings.length + " FAILED=" + failed); process.exit(1); }
+' "$SCRIPT_DIR/evidence-report-sample/report.json" || fail "committed sample report.json has no findings or a FAILED finding"
+pass "sample report.json has findings and zero FAILED"
+
 # npm registry sanity — the advertised @bolyra/payment-protocols must resolve.
 PP_VERSION=$(advertised_version "@bolyra/payment-protocols")
 echo "→ GET registry.npmjs.org/@bolyra/payment-protocols/$PP_VERSION"
@@ -156,7 +186,7 @@ echo "→ runtime symbol resolution against published packages"
 SDK_VERSION=$(advertised_version "@bolyra/sdk")
 echo "      testing @bolyra/sdk@$SDK_VERSION, @bolyra/payment-protocols@$PP_VERSION"
 WORKDIR=$(mktemp -d /tmp/bolyra-verify.XXXXXX)
-trap 'rm -rf "$WORKDIR" "$TMP" "$ROOT_TMP"' EXIT
+trap 'rm -rf "$WORKDIR" "$SAMPLE_TMP" "$TMP" "$ROOT_TMP"' EXIT
 (
   cd "$WORKDIR"
   npm init -y >/dev/null 2>&1
