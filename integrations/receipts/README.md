@@ -100,7 +100,7 @@ CLI: `bolyra receipt verify-chain audit-log.jsonl` (from
 file, with `--signer`, `--expect-count`, `--expect-head`, and
 `--allow-unchained`.
 
-## Approval-to-execution binding (Unreleased)
+## Approval-to-execution binding
 
 Gateways that hold an agent's tool call for human approval usually scope the resulting grant to the
 requester, the server and the tool. This module binds an approval to the **exact arguments** and links
@@ -202,8 +202,18 @@ arguments a human actually reviewed; the receipt records what the operator asser
 offline PASS establishes signed assertions and their linkage only: not human review, actual dispatch,
 consumption, response success, business-state freshness or committed effect.
 
-Example: `npx tsx examples/approval-binding.ts` (synthetic keys). Design:
-`docs/superpowers/specs/2026-10-25-approval-binding-design.md`.
+TypeScript compatibility: ordinary legacy calls, the default `SignedReceipt`
+payload, and legacy `ReturnType`/`Parameters` inference are preserved. Added
+overloads can require changes to legacy-only mocks or wrappers annotated with
+`typeof verifyReceipt`. Type those wrappers explicitly as
+`(receipt: SignedReceipt, expectedSigner?: string) => boolean`.
+Legacy receipt, hash and signature bytes are unchanged.
+
+Runnable [synthetic-key example](https://github.com/bolyra/bolyra/blob/2e505cdc/integrations/receipts/examples/approval-binding.ts):
+from a repository checkout, run `npm ci` and then
+`npx tsx examples/approval-binding.ts` in `integrations/receipts/`.
+The example is not included in the npm package.
+[Design](https://github.com/bolyra/bolyra/blob/2e505cdc/docs/superpowers/specs/2026-10-25-approval-binding-design.md).
 
 ## License
 
