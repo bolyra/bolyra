@@ -5,6 +5,18 @@ import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex } from '@noble/hashes/utils';
 import { canonicalize } from './canonical';
 import type { ReceiptPayload, ReceiptSignerConfig, SignedReceipt } from './types';
+import type { ApprovalReceiptPayload, ExecutionReceiptPayload } from './approval';
+
+/**
+ * Payload kinds this module signs. Legacy-first overloads below keep every
+ * existing ReceiptPayload call site typed exactly as before; the second
+ * overload admits the approval-binding kinds. Runtime behavior, hashes and
+ * signature bytes are identical for all of them.
+ */
+type AnyReceiptPayload = ReceiptPayload | ApprovalReceiptPayload | ExecutionReceiptPayload;
+// Each legacy signature appears FIRST (call resolution) and again LAST:
+// conditional types such as ReturnType<typeof signReceipt> read the last
+// overload, and existing code relies on that resolving to the legacy shape.
 
 // @noble/secp256k1 v2 requires hmacSha256Sync to be set for synchronous signing.
 secp256k1.etc.hmacSha256Sync = (k: Uint8Array, ...m: Uint8Array[]) => {
@@ -36,7 +48,10 @@ function deriveAddress(publicKeyBytes: Uint8Array): string {
   return '0x' + bytesToHex(hash.slice(hash.length - 20));
 }
 
-export function hashPayload(payload: ReceiptPayload): string {
+export function hashPayload(payload: ReceiptPayload): string;
+export function hashPayload(payload: ApprovalReceiptPayload | ExecutionReceiptPayload): string;
+export function hashPayload(payload: ReceiptPayload): string;
+export function hashPayload(payload: AnyReceiptPayload): string {
   const canonical = canonicalize(payload);
   const hash = keccak_256(utf8ToBytes(canonical));
   return '0x' + bytesToHex(hash);
@@ -45,7 +60,19 @@ export function hashPayload(payload: ReceiptPayload): string {
 export function signReceipt(
   payload: ReceiptPayload,
   config: ReceiptSignerConfig,
-): SignedReceipt {
+): SignedReceipt;
+export function signReceipt<T extends ApprovalReceiptPayload | ExecutionReceiptPayload>(
+  payload: T,
+  config: ReceiptSignerConfig,
+): SignedReceipt<T>;
+export function signReceipt(
+  payload: ReceiptPayload,
+  config: ReceiptSignerConfig,
+): SignedReceipt;
+export function signReceipt(
+  payload: AnyReceiptPayload,
+  config: ReceiptSignerConfig,
+): SignedReceipt<AnyReceiptPayload> {
   const canonical = canonicalize(payload);
   const hash = keccak_256(utf8ToBytes(canonical));
   const privateKeyBytes = hexToBytes(config.privateKey);
@@ -77,6 +104,18 @@ export function signReceipt(
 
 export function verifyReceipt(
   receipt: SignedReceipt,
+  expectedSigner?: string,
+): boolean;
+export function verifyReceipt(
+  receipt: SignedReceipt<ApprovalReceiptPayload | ExecutionReceiptPayload>,
+  expectedSigner?: string,
+): boolean;
+export function verifyReceipt(
+  receipt: SignedReceipt,
+  expectedSigner?: string,
+): boolean;
+export function verifyReceipt(
+  receipt: SignedReceipt<AnyReceiptPayload>,
   expectedSigner?: string,
 ): boolean {
   try {

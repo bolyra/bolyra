@@ -41,6 +41,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { canonicalize } from './canonical';
 import { signReceipt, verifyReceipt } from './sign';
 import type { ReceiptPayload, ReceiptSignerConfig, SignedReceipt } from './types';
+import type { ApprovalReceiptPayload, ExecutionReceiptPayload } from './approval';
 
 /** Sentinel prevReceiptHash for the first receipt in a log: 32 zero bytes. */
 export const GENESIS_PREV_RECEIPT_HASH = '0x' + '0'.repeat(64);
@@ -50,7 +51,15 @@ export const GENESIS_PREV_RECEIPT_HASH = '0x' + '0'.repeat(64);
  * canonicalize({ payload, signature }). Excludes `id` (derivable from
  * signature.payloadHash) and `receiptHash` itself (to avoid self-reference).
  */
-export function computeReceiptHash(receipt: SignedReceipt): string {
+export function computeReceiptHash(receipt: SignedReceipt): string;
+export function computeReceiptHash(
+  receipt: SignedReceipt<ApprovalReceiptPayload | ExecutionReceiptPayload>,
+): string;
+// Legacy signature repeated last: ReturnType/Parameters read the last overload.
+export function computeReceiptHash(receipt: SignedReceipt): string;
+export function computeReceiptHash(
+  receipt: SignedReceipt<ReceiptPayload | ApprovalReceiptPayload | ExecutionReceiptPayload>,
+): string {
   const canonical = canonicalize({ payload: receipt.payload, signature: receipt.signature });
   return '0x' + bytesToHex(keccak_256(new TextEncoder().encode(canonical)));
 }

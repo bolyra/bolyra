@@ -1,6 +1,6 @@
 # Approval-to-execution binding primitive — design (2026-10-25)
 
-Status: revision 3 after Codex spec review R1 (REJECT, 10 findings, all applied) and R2 (APPROVE WITH EDITS, 5 edits, all applied). Founder override
+Status: revision 6 (R6 APPROVE WITH EDITS doc fixes; argument ingress narrowed to JSON text only after code review R5; creation contract recorded after R1) after Codex spec review R1 (REJECT, 10 findings, all applied) and R2 (APPROVE WITH EDITS, 5 edits, all applied). Founder override
 2026-10-25 lifts BUILD NOTHING for this one item. Cap (Codex): 12 hours total including spec,
 implementation, tests, docs, review; stop at the cap with findings. Spec re-review precedes
 implementation; code review precedes push; publishing is a separate ruling. Scope excludes vendor
@@ -85,7 +85,7 @@ must equal the payload `keyId`.
     approvalReceiptId: <string>,           // approval envelope id; verifiers re-derive from payloadHash
     operationId: <id>, attemptId: <id>,    // attemptId operator-assigned per dispatch attempt
     requester, audience, tool: <id>,       // the checked context actually passed to dispatch
-    actionDigest: <64 lowercase hex>,      // computeArgumentsDigest(dispatchedSnapshot), same DST
+    actionDigest: <64 lowercase hex>,      // same canonical-bytes + DST hash (§4.3) over the dispatched snapshot
     dispatchedAt: <RFC 3339 ms Z>,         // captured immediately before invoking dispatch
     outcome: 'returned' | 'threw'          // what the dispatch promise did; NOT a confirmed effect
   }
@@ -97,29 +97,50 @@ No `responseDigest` in v1.
 ### 4.3 Arguments digest
 
 `argumentsDigest = sha256hex( utf8("bolyra.approval.arguments/1") || 0x00 || utf8(canonicalize(value)) )`
-where `value` is the parsed, validated argument object.
+where `value` is the tree produced by `JSON.parse(argumentsJson)` after validation.
 
-Domain (bab1): `value` is a JSON object; every nested value is an object, array, string, finite number,
-boolean or null. Rejected recursively, fail closed: any key equal to `__proto__`, `constructor` or
-`prototype`; negative zero; sparse arrays and arrays with non-index properties; cycles; non-plain
-prototypes; `undefined`, functions, symbols, bigint, NaN, Infinity. Nesting depth is capped at 64 and
-serialized size at 1 MiB. The existing `canonicalize` is not changed (wire compatibility); the bab1
-validator runs first so the collisions `canonicalize` would otherwise permit cannot reach it. Golden
-tests pin canonical bytes and digests for fixtures with numeric keys, Unicode strings, nested arrays and
-numbers with exponents. `actionDigest` in the observation is computed by exactly the same function from
-the dispatched snapshot. The receipt carries the digest only, never the arguments.
+**Ingress is JSON text only.** There is no public API that accepts an arbitrary JavaScript value: every
+entry point (`validateArgumentsJson`, `computeArgumentsDigest`, `createApprovalReceipt`,
+`executeApproved`) takes `argumentsJson: string`. The shared analysis parses it exactly once (no
+reviver), validates the parsed tree, canonicalizes it and checks the canonical size. `validateArgumentsJson`
+stops there: it returns a verdict and freezes nothing. `computeArgumentsDigest` hashes the canonical
+bytes. `executeApproved` deep-freezes the parsed tree after analysis and uses that frozen tree for the
+digest comparison and for dispatch. `JSON.parse` output contains only own enumerable string-keyed data
+properties, plain objects, arrays, strings, numbers, booleans and null, so proxies, accessors, exotic
+objects, symbols and custom prototypes cannot enter; `JSON.parse` can still yield `Infinity` (for
+example from `1e400`), and the validator supplies the finite-number rule.
+(Revision 5: an earlier direct-value validator was removed after review found that no brand-probing
+strategy could both avoid executing caller code and reject every exotic object.)
+
+Domain (bab1) on the parsed tree, fail closed: root must be a non-array object; any key equal to
+`__proto__`, `constructor` or `prototype` at any depth is rejected (`JSON.parse` creates `__proto__` as
+an own property); negative zero (`-0`, `-0.0`, `-0e0`) is rejected; nesting depth is capped at 64;
+raw text and canonical form are each capped at 1 MiB; duplicate keys collapse last-wins per
+`JSON.parse`, so the binding covers the parsed value and an approval display must render that same
+interpretation. The existing `canonicalize` is not changed (wire compatibility); within this domain
+its output is deterministic. Golden tests pin canonical bytes and digests for fixtures with numeric keys,
+Unicode strings, nested arrays and numbers with exponents. `actionDigest` in the observation is computed
+by the same canonical-bytes + DST hashing algorithm over the dispatched snapshot (the public function
+accepts text; the internal hash step is shared). The receipt carries the digest only, never
+the arguments.
 
 ## 5. Functions
 
-### 5.1 `computeArgumentsDigest(argumentsJson: string): string`
+### 5.1 `validateArgumentsJson(argumentsJson: string)` and `computeArgumentsDigest(argumentsJson: string): string`
 
-Parses the immutable JSON text once, validates the bab1 domain, returns the digest. Throws on invalid
-JSON or out-of-domain values.
+`validateArgumentsJson` parses the immutable JSON text once and validates the bab1 domain, returning
+`{ ok: true } | { ok: false, detail }`. `computeArgumentsDigest` does the same and returns the digest;
+it throws on invalid JSON or out-of-domain values.
 
 ### 5.2 `createApprovalReceipt(input, signerConfig): SignedReceipt<ApprovalReceiptPayload>`
 
-`input` carries the §4.1 members plus `argumentsJson` (string). Validates every member and the domain,
-computes the digest, builds the payload, signs. Throws on any invalid input.
+`input` = `{ v?, kind?, issuedAt?, binding: { scheme?, requester, audience, tool, operationId },
+approval: { approver, source, decision, decidedAt, validity, requestId? }, argumentsJson }`. `v`, `kind`
+and `scheme` default to their fixed values and any other value throws; `issuedAt` defaults to now;
+`issuer` and `keyId` come from `signerConfig`; a caller-supplied `argumentsDigest` is rejected. Provenance
+members are never defaulted. Validates every member and the domain, computes the digest, builds the
+payload, signs. Throws on any invalid input. (Creation contract as implemented; Codex code review R1
+accepted.)
 
 ### 5.3 `executeApproved(params, dispatch): Promise<ApprovedExecution<R>>`
 
@@ -208,9 +229,9 @@ typecheck. A new `tsconfig.test.json` (noEmit, includes `src/`, `test/`, `exampl
 Coverage:
 
 - digest: golden canonical bytes and digests (numeric keys, Unicode, nested arrays, exponent numbers);
-  rejection of `__proto__`/`constructor`/`prototype` keys at depth, negative zero, sparse arrays, cycles
-  (via JSON text that cannot encode them, plus direct validator tests on parsed values), depth and size
-  caps, invalid JSON.
+  rejection of `__proto__`/`constructor`/`prototype` keys at depth, negative zero in every spelling,
+  depth and size caps, invalid JSON; duplicate keys bind last-wins; no test targets a direct-value API
+  because none exists.
 - creation: valid input signs and verifies; each missing, unknown or out-of-domain member throws naming
   it; `decision: 'pending'` and unknown `scheme`/`v` throw.
 - execute, every rejected case asserts zero `dispatch` calls: changed arguments; changed
