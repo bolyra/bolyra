@@ -75,10 +75,15 @@ export interface ReceiptPayload {
   chain?: ReceiptChainFields;
 }
 
-export interface SignedReceipt {
+/**
+ * Signed envelope. Generic over the payload so the approval-binding module can
+ * sign its own payload kinds; the default keeps every legacy call site typed
+ * exactly as before (`SignedReceipt` === `SignedReceipt<ReceiptPayload>`).
+ */
+export interface SignedReceipt<T = ReceiptPayload> {
   /** First 16 hex chars of payloadHash. */
   id: string;
-  payload: ReceiptPayload;
+  payload: T;
   signature: {
     alg: 'ES256K';
     keyId: string;

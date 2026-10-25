@@ -28,6 +28,26 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## `@bolyra/receipts` — approval-to-execution binding (Unreleased, 2026-10-25)
+
+- New module `approval.ts`: `createApprovalReceipt` signs a `bolyra.approval` receipt that binds one
+  reviewed action (requester, audience, tool, operation id) and a digest of its exact arguments to the
+  approval's asserted provenance (approver, source, decision, validity); `executeApproved` is the only
+  dispatch path: it snapshots its inputs once, re-verifies the receipt against the trusted signer and
+  the full context immediately before dispatch, dispatches the frozen snapshot it checked, and signs a
+  `bolyra.execution` observation that links to the approval receipt hash; `verifyApprovalExecutionLink`
+  verifies the pair offline. Replay consumption and business-state checks are operator-owned
+  interfaces. Argument digests use the closed `bab1` domain (`computeArgumentsDigest`). A PASS
+  establishes signed assertions and their linkage only; it does not establish human review, actual
+  dispatch, consumption, response success, business-state freshness or committed effect.
+- `SignedReceipt` is now generic (`SignedReceipt<T = ReceiptPayload>`); `signReceipt`, `verifyReceipt`,
+  `hashPayload` and `computeReceiptHash` keep their legacy signatures as the first overload. Legacy
+  receipts, hashes and signature bytes are unchanged.
+- Runnable example `integrations/receipts/examples/approval-binding.ts` (synthetic keys): matching
+  arguments dispatch once; a changed amount is blocked with zero dispatches and no observation.
+- CI: new `receipts-tests` job runs the package's typecheck and Jest suite (previously only built).
+- Design: `docs/superpowers/specs/2026-10-25-approval-binding-design.md`. Not published yet.
+
 ## bolyra.ai — "How Bolyra works" walkthrough (2026-10-03)
 
 - New interactive animated walkthrough at `/video-how-it-works` (58 s, same Stage/Sprite

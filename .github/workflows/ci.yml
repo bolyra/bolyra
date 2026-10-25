@@ -337,6 +337,25 @@ jobs:
             echo "negative control unexpectedly passed" >&2; exit 1
           fi
 
+  receipts-tests:
+    name: Receipts — typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - name: Install @bolyra/receipts
+        working-directory: integrations/receipts
+        run: npm ci
+
+      - run: npm run typecheck
+        working-directory: integrations/receipts
+      - run: npm test
+        working-directory: integrations/receipts
+
   lockfiles:
     name: Lockfiles — clean npm ci per manifest
     runs-on: ubuntu-latest
