@@ -25,23 +25,93 @@ export const testCharge = Method.from({
   },
 });
 
-/** Everything `Method.toServer` accepts for `testCharge` except `verify`, which the harness supplies. */
-export type ServerHooks = Partial<Omit<Method.toServer.Options<typeof testCharge>, 'verify'>>;
+type AllOptions = Method.toServer.Options<typeof testCharge>;
 
-/** A server method (real mppx `Method.Server`) whose verify always succeeds; `hooks` lets a test add preflight/authorize. */
-export function serverMethod(hooks: ServerHooks = {}) {
+/**
+ * Hooks a test may add to any method form. The lifecycle hooks (`verify`, or
+ * `validate` + `broadcast`) are supplied by the constructors below, never spread
+ * in: mppx types the two lifecycles as mutually exclusive branches.
+ */
+export type ServerHooks = Pick<AllOptions, 'authorize' | 'canOffer' | 'onPaymentSuccess' | 'preflight' | 'request' | 'respond'>;
+
+/** Per-method call counters and failure switches for the stub payment rail. */
+export interface RailState {
+  validate: number;
+  terminal: number;
+  failValidate: boolean;
+  failTerminal: boolean;
+  /** The exact object the stub's `validate` last returned (identity checks). */
+  lastValidation: unknown;
+}
+export const newRail = (): RailState => ({
+  validate: 0, terminal: 0, failValidate: false, failTerminal: false, lastValidation: undefined,
+});
+
+const railReceipt = () => ({
+  method: 'test',
+  reference: 'tx-test',
+  status: 'success' as const,
+  timestamp: new Date(0).toISOString(),
+});
+
+/** Payer the modern stub's validation reports (mppx forwards it to `onPaymentSuccess`). */
+export const STUB_PAYER = 'payer-test';
+
+/** Legacy form: a single deprecated `verify` hook (the only form mppx 0.8.13 had). */
+export function serverMethod(hooks: ServerHooks = {}, rail: RailState = newRail()) {
   return Method.toServer(testCharge, {
-    verify: async () => ({
-      method: 'test',
-      reference: 'tx-test',
-      status: 'success' as const,
-      timestamp: new Date(0).toISOString(),
-    }),
     ...hooks,
+    verify: async () => {
+      rail.terminal += 1;
+      if (rail.failTerminal) throw new Error('rail: terminal failure');
+      return railReceipt();
+    },
   });
 }
 
-export type TestServerMethod = ReturnType<typeof serverMethod>;
+/** Modern form: non-mutating `validate` plus terminal `broadcast`. */
+export function modernMethod(hooks: ServerHooks = {}, rail: RailState = newRail()) {
+  return Method.toServer(testCharge, {
+    ...hooks,
+    validate: async ({ credential, request }) => {
+      rail.validate += 1;
+      if (rail.failValidate) throw new Error('rail: validation failure');
+      const validation = {
+        challenge: credential.challenge,
+        credential,
+        details: { checked: true },
+        intent: 'charge' as const,
+        method: 'test' as const,
+        payer: STUB_PAYER,
+        request,
+      };
+      rail.lastValidation = validation;
+      return validation;
+    },
+    broadcast: async () => {
+      rail.terminal += 1;
+      if (rail.failTerminal) throw new Error('rail: terminal failure');
+      return railReceipt();
+    },
+  });
+}
+
+/** Broadcast-only form: terminal `broadcast` with no `validate` hook (valid upstream). */
+export function broadcastOnlyMethod(hooks: ServerHooks = {}, rail: RailState = newRail()) {
+  return Method.toServer(testCharge, {
+    ...hooks,
+    broadcast: async () => {
+      rail.terminal += 1;
+      if (rail.failTerminal) throw new Error('rail: terminal failure');
+      return railReceipt();
+    },
+  });
+}
+
+export type TestServerMethod =
+  | ReturnType<typeof serverMethod>
+  | ReturnType<typeof modernMethod>
+  | ReturnType<typeof broadcastOnlyMethod>;
 
 export async function classicalGateOptions(
   overrides: Partial<BolyraGateOptions> = {},

@@ -26,17 +26,26 @@
  *     ONLY denial path `handleDenials` sees.
  *   - On allow, the decision is stashed (keyed by mppx's captured-request
  *     snapshot) and the method's own `preflight` runs unchanged.
- *   - The gate also wraps `verify`, consuming the stashed decision one-use:
- *     it FAILS CLOSED (throws `BolyraDeniedError`) if payment verification is
- *     reached without a stashed allow — standalone `mppx.verifyCredential()`
- *     calls, non-HTTP transports, a bypassed preflight, or a repeat verify
- *     against an already-consumed decision — and on success it attaches the
- *     authorization-receipt metadata to the mppx receipt (extension fields
- *     are preserved into the Payment-Receipt header by mppx). A denial
- *     thrown from `verify` does NOT reach `handleDenials` the way a
- *     preflight denial does: mppx catches errors from `verify`, treats
+ *   - The gate also wraps the method's lifecycle hooks, whichever it supplies:
+ *     the terminal hooks `broadcast` (mppx >= 0.8.14; mppx's dispatch prefers
+ *     it) and `verify` (legacy, or synthesized by mppx), and the non-mutating
+ *     `validate`. A terminal hook consumes the stashed decision — at most one
+ *     terminal attempt per decision — and on success attaches the
+ *     authorization-receipt metadata to the mppx receipt (extension fields are
+ *     preserved into the Payment-Receipt header by mppx). `validate` requires
+ *     the decision without consuming it, and only for the validation mppx runs
+ *     immediately before a broadcast; standalone validation is denied.
+ *   - Every lifecycle hook FAILS CLOSED (throws `BolyraDeniedError`) when
+ *     reached without a stashed allow for the identical captured request —
+ *     standalone `mppx.validateCredential()` / `broadcastCredential()` /
+ *     `verifyCredential()` calls, non-HTTP transports, a bypassed preflight,
+ *     or a repeated attempt against an already-consumed decision. Such a
+ *     denial does NOT reach `handleDenials` the way a preflight denial does:
+ *     inside HTTP dispatch mppx catches errors from these hooks, treats
  *     anything that isn't one of its own `PaymentError`s as an internal
- *     fault, and re-issues a 402 challenge to the client instead.
+ *     fault, and reports a challenge result to the handler (status 402, so
+ *     the protected action does not run); from a standalone credential API
+ *     it rejects that call.
  */
 
 import type { SignedReceipt } from '@bolyra/receipts';
@@ -86,6 +95,10 @@ export interface MppxServerMethodLike {
   // `bolyraGate<method>` constraint, degrading the return type.
   preflight?(parameters: PreflightParameters): unknown;
   verify(parameters: VerifyParameters): Promise<Record<string, unknown>>;
+  /** Terminal payment hook (mppx >= 0.8.14). mppx's dispatch prefers it over `verify`. */
+  broadcast?(parameters: VerifyParameters): Promise<Record<string, unknown>>;
+  /** Non-mutating validation hook (mppx >= 0.8.14). */
+  validate?(parameters: ValidateParameters): Promise<unknown>;
   [key: string]: unknown;
 }
 
@@ -104,6 +117,10 @@ interface VerifyParameters {
   credential?: unknown;
   request?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+interface ValidateParameters extends VerifyParameters {
+  operation?: unknown;
 }
 
 /** Extension field attached to the mppx receipt on an authorized payment. */
@@ -214,7 +231,7 @@ export function bolyraGate<method extends MppxServerMethodLike>(
   // restarts or instances MUST inject a shared, durable store.
   const nonceStore = options.nonceStore ?? new NonceStore();
 
-  /** Allow decisions stashed between preflight and verify, per request. */
+  /** Allow decisions stashed between preflight and the terminal hook, per request. */
   const decisions = new WeakMap<object, GateDecision>();
 
   /** Raw hosted-verifier evidence carried to the allow Decision (url mode only). */
@@ -646,6 +663,79 @@ export function bolyraGate<method extends MppxServerMethodLike>(
 
   const originalPreflight = method.preflight?.bind(method);
   const originalVerify = method.verify.bind(method);
+  // Wrap only the lifecycle hooks the method actually supplies. `Method.toServer`
+  // sets absent hooks to own properties whose value is `undefined`, so test
+  // callability, not presence.
+  const originalBroadcast =
+    typeof method.broadcast === 'function' ? method.broadcast.bind(method) : undefined;
+  const originalValidate =
+    typeof method.validate === 'function' ? method.validate.bind(method) : undefined;
+
+  const denyLifecycle = (message: string): BolyraDeniedError => {
+    const verdict = deny('internal_error', message);
+    return new BolyraDeniedError(verdict, denyResponse(verdict));
+  };
+
+  /**
+   * The stashed allow for this hook invocation, or a thrown denial. The key
+   * is the identical captured-request object mppx handed to `preflight`;
+   * neither the presence of an envelope nor `operation: 'broadcast'` shows
+   * that an HTTP request was authorized — only the stashed decision does.
+   *
+   * Boundary: a BolyraDeniedError thrown from a lifecycle hook does not
+   * reach the application the way a preflight denial does. Inside HTTP
+   * dispatch mppx catches it, treats anything that isn't one of its own
+   * `PaymentError`s as an internal fault (logs "mppx: internal verification
+   * error"), and reports a challenge result to the handler (status 402, so the
+   * protected action does not run) — `handleDenials` only ever sees
+   * preflight-stage denials. From a standalone credential API the same
+   * denial rejects that call.
+   */
+  const lookup = (
+    parameters: VerifyParameters,
+    stage: string,
+  ): { key: object; decision: GateDecision } => {
+    const key = parameters.envelope?.capturedRequest;
+    const decision = key !== undefined ? decisions.get(key) : undefined;
+    if (key === undefined || decision === undefined) {
+      throw denyLifecycle(
+        `payment ${stage} reached without an authorization decision for this request ` +
+          '(standalone credential API, non-HTTP transport, bypassed preflight, or a repeated ' +
+          'attempt against an already-consumed decision) — denying',
+      );
+    }
+    return { key, decision };
+  };
+
+  /**
+   * Terminal entry (`broadcast` or `verify`): at most one terminal attempt
+   * per stashed decision. The decision is deleted synchronously, before the
+   * payment rail is awaited, so a concurrent or repeated attempt on the same
+   * captured request denies. Consequence: if the rail then fails, the
+   * decision is already gone — the client's retry must re-run preflight,
+   * which spends a fresh host-mode nonce reservation. Nothing here rolls
+   * back or cancels terminal work that was admitted.
+   */
+  const terminal = async (
+    original: (parameters: VerifyParameters) => Promise<Record<string, unknown>>,
+    parameters: VerifyParameters,
+    stage: string,
+  ): Promise<Record<string, unknown>> => {
+    const { key, decision } = lookup(parameters, stage);
+    decisions.delete(key);
+
+    const receipt = await original(parameters);
+    const bolyraAuthorization: BolyraAuthorizationReceiptField = {
+      decision: 'allow',
+      tier: decision.tier,
+      capability: decision.capability,
+      amountUsd: decision.amountUsd,
+      verifier: decision.verifier,
+      audience: decision.request.project_key,
+      receipt: decision.receipt,
+    };
+    return { ...receipt, bolyraAuthorization };
+  };
 
   const wrapped: MppxServerMethodLike = {
     ...method,
@@ -714,50 +804,43 @@ export function bolyraGate<method extends MppxServerMethodLike>(
       return originalPreflight ? originalPreflight(parameters) : undefined;
     },
 
-    async verify(parameters: VerifyParameters): Promise<Record<string, unknown>> {
-      const key = parameters.envelope?.capturedRequest;
-      const decision = key !== undefined ? decisions.get(key) : undefined;
-      if (key === undefined || decision === undefined) {
-        // Fail closed: payment verification was reached without a Bolyra
-        // authorization decision for this request (standalone
-        // verifyCredential(), non-HTTP transport, a bypassed preflight, or a
-        // repeated verify against an already-consumed decision — see below).
-        //
-        // Boundary: a BolyraDeniedError thrown from THIS hook does not reach
-        // the application the way a preflight denial does. mppx's verify path
-        // catches errors from `verify`, treats anything that isn't one of its
-        // own `PaymentError`s as an internal fault (logs
-        // "mppx: internal verification error"), and re-issues a 402
-        // challenge — `handleDenials` only ever sees preflight-stage denials.
-        const verdict = deny(
-          'internal_error',
-          'payment verification reached without an authorization decision for this request ' +
-            '(standalone verifyCredential(), non-HTTP transport, bypassed preflight, or a repeated ' +
-            'verify against an already-consumed decision) — denying',
-        );
-        throw new BolyraDeniedError(verdict, denyResponse(verdict));
-      }
-      // One-use: consume before the payment rail runs, so the same captured
-      // request can never be verified twice on one decision. Consequence: if
-      // `originalVerify` below throws (the payment rail itself failed), the
-      // decision is already gone — the client's retry must re-run preflight,
-      // which spends a fresh host-mode nonce reservation, rather than
-      // re-verifying this same captured request.
-      decisions.delete(key);
-
-      const receipt = await originalVerify(parameters);
-      const bolyraAuthorization: BolyraAuthorizationReceiptField = {
-        decision: 'allow',
-        tier: decision.tier,
-        capability: decision.capability,
-        amountUsd: decision.amountUsd,
-        verifier: decision.verifier,
-        audience: decision.request.project_key,
-        receipt: decision.receipt,
-      };
-      return { ...receipt, bolyraAuthorization };
+    // `Method.toServer` synthesizes `verify` for validate/broadcast methods
+    // from the ORIGINAL hook closures, so this path never re-enters the
+    // wrapped `validate`/`broadcast` below: one consumption per terminal entry.
+    verify(parameters: VerifyParameters): Promise<Record<string, unknown>> {
+      return terminal(originalVerify, parameters, 'verification');
     },
   };
+
+  if (originalBroadcast !== undefined) {
+    wrapped.broadcast = (parameters: VerifyParameters): Promise<Record<string, unknown>> =>
+      terminal(originalBroadcast, parameters, 'broadcast');
+  }
+
+  if (originalValidate !== undefined) {
+    wrapped.validate = async (parameters: ValidateParameters): Promise<unknown> => {
+      // Adapter policy: only the validation mppx runs immediately before a
+      // terminal broadcast is admitted. Standalone validation ('validate', an
+      // absent operation, or any value this version does not know) is denied
+      // before the method's hook runs: no request was authorized for it, and
+      // an application could treat a validation result as its own go signal.
+      if (parameters.operation !== 'broadcast') {
+        throw denyLifecycle(
+          'standalone credential validation is not authorized by this gate — denying',
+        );
+      }
+      // Require the decision; do not consume it (the terminal hook does).
+      const { key } = lookup(parameters, 'validation');
+      try {
+        return await originalValidate(parameters);
+      } catch (e) {
+        // A credential that failed validation must not reach a terminal hook
+        // on this decision.
+        decisions.delete(key);
+        throw e;
+      }
+    };
+  }
 
   return wrapped as method;
 }

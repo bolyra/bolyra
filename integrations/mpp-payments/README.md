@@ -30,21 +30,23 @@ npm install @bolyra/mpp
 Starting fresh? Install both, pinned to the supported pair:
 
 ```bash
-npm install @bolyra/mpp mppx@0.8.13
+npm install @bolyra/mpp mppx@0.18.0
 ```
 
 `mppx` is an optional peer dependency — this package never imports it at
 runtime; it wraps the method objects you already build with mppx. The peer
-range is **exactly `0.8.13`**, so an unpinned `npm install ... mppx` can fail
-with `ERESOLVE`; the command above avoids it.
+range is **exactly `0.18.0`**, so an unpinned `npm install ... mppx` can fail
+with `ERESOLVE`; the command above avoids it. mppx 0.8.13 is supported only by
+`@bolyra/mpp` 0.7.0 (install `viem@2.57.15` or older beside it: newer viem
+releases require mppx 0.17+).
 
 ### Supported versions
 
 | | Version |
 |---|---|
-| `@bolyra/mpp` | 0.7.0 |
-| `mppx` (peer) | exactly 0.8.13 |
-| `@bolyra/cli` | requires `@bolyra/mpp` ^0.6.0, which excludes 0.7.0 on 0.x semver; the CLI's range gets its own bump after 0.7.0 is published (follow-up) |
+| `@bolyra/mpp` | 0.8.0 |
+| `mppx` (peer) | exactly 0.18.0 (0.8.13 was the pair for `@bolyra/mpp` 0.7.0) |
+| `@bolyra/cli` | requires `@bolyra/mpp` ^0.7.0, which includes 0.7.0 and excludes 0.8.0 on 0.x semver; the CLI's range gets its own bump as a follow-up |
 | Node | `>=20` (`engines`; 18 dropped in 0.7.0); CI runs Node 20, release validation Node 22; Node 24 is exercised only locally |
 
 ### Spend mandates authorize a TIER, not an amount
@@ -99,8 +101,10 @@ This snippet shows the integration shape (placeholders like `secretKey` and the
 operator pubkeys are yours to fill in); for a copy-paste-runnable version with
 a mock agent and real values, see [`examples/mandate-demo`](./examples/mandate-demo).
 The adapter wraps `Method.Server` *before* it is passed to `Mppx.create()`, so
-no middleware changes are needed and every mppx framework adapter (Express,
-Hono, Elysia, Next.js) is covered automatically:
+the gate is installed on the method itself rather than in framework
+middleware. The tested path is the plain Fetch `Request` handler below; mppx's
+framework adapters (Express, Hono, Elysia, Next.js) receive the same wrapped
+method but are not separately validated by this package's tests:
 
 ```ts
 import { Mppx, tempo } from 'mppx/server'
@@ -205,10 +209,16 @@ ES256K-signed, hash-chained authorization receipt reference — giving the
 - At request time, nothing inside the gate escapes as an exception **except `BolyraDeniedError`** (internal faults, including a throwing `onReceipt` sink, become a 500 `internal_error` denial thrown the same way — a sink failure denies even an otherwise-valid request). Construction-time validation throws `TypeError`/`BolyraGateConfigError` synchronously; your method's own hooks keep their own error behavior.
 - **`onReceipt` is synchronous.** A sink that returns a Promise is treated as a failure and the request is denied (an async sink's rejection could otherwise never fail the decision); do your I/O in a queue the sink hands off to synchronously.
 - **`onDecision` is an observer, not a gate.** See "Observing decisions" below; its failures never change authorization.
-- **Where a denial surfaces depends on the stage.** A `preflight` denial propagates out of `mppx.charge(...)(request)` (this is what `handleDenials` catches). A denial thrown from `verify` — a missing or already-consumed decision — is caught by mppx itself, logged as `mppx: internal verification error`, and re-issued as a 402 challenge; the Bolyra Problem Details are not recoverable there. Both are fail-closed.
-- A failed `originalVerify` is not retryable against the same captured request: the decision is consumed one-use; the client re-runs the request **with a fresh presentation** (a fresh authorization decision; in host-nonce mode the original presentation's nonce was already reserved on the allow, so re-sending it would deny `nonce_replayed`).
+- **Three stages, three hooks.** mppx methods come in three forms: legacy (one `verify` hook), modern (non-mutating `validate` plus terminal `broadcast`), and broadcast-only. The gate authorizes the request in `preflight`, then guards whichever lifecycle hooks your method supplies; it adds none.
+  - *Terminal hooks* (`broadcast`, `verify`): **at most one terminal attempt per authorization decision.** The decision is consumed before the payment rail is awaited, so a repeated or concurrent attempt on the same request denies. This is not exactly-once payment, and nothing rolls back or cancels terminal work that was already admitted.
+  - *`validate`*: admitted only as the validation mppx runs immediately before a broadcast, and only with a decision for that request (which it does not consume). A validation failure invalidates the decision. **Standalone validation is denied** — `mppx.validateCredential()` on a gated method rejects; that is this adapter's policy, since no request was authorized. Keeping `validate` non-mutating is your method's obligation; the wrapper does not enforce it.
+  - *Standalone credential APIs*: on a gated method, `mppx.broadcastCredential()` and `verifyCredential()` (and the lower-level `Method.broadcastCredential` helper) reject **unless there is a matching, unconsumed decision** for the `capturedRequest` the caller supplies — that is, the identical snapshot object an authorized HTTP request was stashed under and whose terminal hook has not yet run. A fresh or merely look-alike `capturedRequest`, or none, rejects. Standalone *validation* (`mppx.validateCredential()`, `Method.validateCredential`) is different: it is denied unconditionally by policy, decision or not. The guarantee covers entry to the guarded hooks: mppx may still run the method's `request` hook while preparing a standalone call.
+- **Where a denial surfaces depends on the stage.** A `preflight` denial propagates out of `mppx.charge(...)(request)` (this is what `handleDenials` catches). A denial thrown from a lifecycle hook — a missing or already-consumed decision — is caught by mppx itself and logged as `mppx: internal verification error`; mppx reports status 402 to your handler (so the protected action does not run) and the response it built is its own HTTP 500 "Internal Payment Error" problem with a fresh challenge attached. The Bolyra Problem Details are not recoverable there. From a standalone credential API the same denial rejects that call. All of these are fail-closed.
+- **Not every success passes a terminal hook.** A method `authorize` hook or the method's own `preflight` can complete a request without one; receipt enrichment and decision consumption apply only when a terminal hook runs.
+- **mppx hooks the gate does not guard.** `canOffer` can run before `preflight` (no protected effects there). `onPaymentSuccess` runs after a successful terminal hook and receives the enriched receipt, but mppx swallows its failures, so it cannot enforce authorization. mppx 0.18 rejects payment-stage identity on a method that has a `preflight` hook, so a gated method cannot use it.
+- A failed terminal hook is not retryable against the same captured request: the decision is consumed one-use; the client re-runs the request **with a fresh presentation** (a fresh authorization decision; in host-nonce mode the original presentation's nonce was already reserved on the allow, so re-sending it would deny `nonce_replayed`).
 - **One bundle = one presentation.** Issue a fresh presentation per gated HTTP attempt — including the payment retry after a 402 challenge under `enforce: 'always'`, because the discovery attempt already ran the gate and reserved its nullifier; only `enforce: 'payment'` skips the gate on discovery (`issueMandate` / `bolyra mandate issue`; the signer is local and cheap) — rather than re-sending one. Each issuance mints a fresh random nullifier (`publicSignals[1]`); a hosted verifier hands that nullifier back for the gate to reserve before acting, so the same bundle presented twice denies `nonce_replayed` while a re-issued one does not. Classical-mode replay protection is **cooperative**: the nullifier is host-reserved, not proof-bound — an in-process `{ kind: 'classical' }` verifier reserves nothing (see "What is and isn't checked").
-- Tested scope: single-method HTTP `Request` charge handlers at mppx 0.8.13. `compose` intents, non-`Request` transports, and per-item streaming authorization are not established.
+- Tested scope: single-method HTTP `Request` charge handlers at mppx 0.18.0, across the legacy, modern and broadcast-only method forms, driven through real mppx dispatch with stub payment methods. Live-rail settlement, framework adapters other than the plain `Request` handler, `compose` intents, non-`Request` transports, and per-item streaming authorization are not established.
 
 ### Issuing the mandate (operator side)
 
