@@ -28,6 +28,45 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
+## @bolyra/mpp 0.8.0 (Unreleased)
+
+### Changed (breaking)
+
+- `mppx` peer dependency moves from exactly `0.8.13` to exactly `0.18.0`, the version the real-mppx
+  integration suite now runs against. **Migration:** install `mppx@0.18.0`. mppx 0.8.13 remains
+  supported only by `@bolyra/mpp` 0.7.0; beside it, install `viem@2.57.15` or older, because viem
+  2.57.16+ declares an optional peer `mppx >=0.17.0` and a fresh install otherwise fails `ERESOLVE`.
+
+### Fixed
+
+- The gate now guards mppx's `validate` and `broadcast` server hooks (introduced in mppx 0.8.14;
+  `verify` is deprecated upstream and mppx's dispatch prefers `broadcast`). The previous gate wrapped
+  only `verify`. Run against a method built with the newer lifecycle hooks, its request-stage denial
+  still stopped the protected action, but the authorization decision was never consumed,
+  `bolyraAuthorization` was missing from the payment receipt, and standalone `validateCredential()` /
+  `broadcastCredential()` / `verifyCredential()` succeeded without an authorization decision. The
+  `@bolyra/mpp` 0.7.0 + mppx 0.8.13 pair is unaffected (that mppx has no such hooks); any other
+  combination of an earlier `@bolyra/mpp` with mppx 0.8.14 or later is.
+  - Terminal hooks (`broadcast`, `verify`) consume the decision before the payment rail is awaited:
+    at most one terminal attempt per decision, including concurrent and mixed-entry attempts.
+  - `validate` is admitted only as the validation mppx runs immediately before a broadcast, requires
+    the decision without consuming it, and invalidates the decision if validation fails. Standalone
+    validation is denied (adapter policy).
+  - Hooks are wrapped only where the method supplies them.
+
+### Changed
+
+- A lifecycle-hook denial inside HTTP dispatch surfaces, at mppx 0.18, as status 402 to the handler
+  with mppx's own HTTP 500 "Internal Payment Error" response (README updated; the protected action
+  does not run in either version).
+- Dev dependency `viem` pinned to `2.57.17` so the peer resolution beside mppx 0.18.0 is fixed.
+
+### Tests
+
+- `test-integration/lifecycle.test.mts`: 46 real-mppx cases across legacy, modern and broadcast-only
+  method forms (HTTP flow, bypassed preflight, consumed / foreign / concurrent decisions, validation
+  policy and failure, standalone `Mppx` and lower-level `Method` credential APIs, `onPaymentSuccess`).
+
 ## @bolyra/receipts 0.12.0 (2026-10-25)
 
 ### Added
