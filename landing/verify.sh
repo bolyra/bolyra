@@ -83,7 +83,6 @@ declare -a NEEDLES=(
   "@bolyra/payment-protocols"
   "createX402Authorization"
   "verifyX402Authorization"
-  "49 vectors"
   'role="tablist"'
   'aria-selected'
 )
@@ -303,6 +302,22 @@ guard_version "@bolyra/cli"     "@bolyra/cli@"
 # which is the same blind spot the stale SDK/PP pins had: the page can claim
 # a version that is no longer what `npm install` gives a reader.
 guard_version "@bolyra/mpp"     "@bolyra/mpp@"
+# Same blind spot, found 2026-11-17: receipts 0.12.0 (changelog 2026-10-25,
+# on npm 2026-10-26) and the page kept advertising 0.11.0 for three weeks
+# because nothing guarded it.
+guard_version "@bolyra/receipts" "@bolyra/receipts@"
+guard_version "@bolyra/payment-protocols" "@bolyra/payment-protocols@"
+
+# The "N vectors, set X" figure on the Standards card must equal the vector
+# file in this checkout (also found stale 2026-11-17: 125 / 0.10.0 vs 126 / 0.11.0).
+VEC_FILE="$SCRIPT_DIR/../spec/test-vectors.json"
+VEC_CLAIM=$(node -e 'const d=require(process.argv[1]);process.stdout.write(d.vectors.length+" vectors, set "+d.version)' "$VEC_FILE") || fail "could not read $VEC_FILE"
+grep -qF "$VEC_CLAIM" <<< "$LIVE_HTML" || fail "vector figure drift: spec/test-vectors.json is '$VEC_CLAIM' but the root page does not say so"
+pass "root page vector figure matches spec/test-vectors.json ($VEC_CLAIM)"
+# /402 carried a hand-typed "49 vectors" from June 2026 until this check
+# replaced the hard-coded needle; it reads the same file as the root page.
+grep -qF "$VEC_CLAIM" "$TMP" || fail "vector figure drift: spec/test-vectors.json is '$VEC_CLAIM' but /402 does not say so"
+pass "/402 vector figure matches spec/test-vectors.json ($VEC_CLAIM)"
 
 guard_version "@bolyra/evc-conformance" "@bolyra/evc-conformance@"
 
