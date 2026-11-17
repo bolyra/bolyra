@@ -1179,7 +1179,7 @@ npx @bolyra/evc-conformance --verifier "/path/to/your-verifier --flags"</code></
         </div>
         <div class="package-row">
           <h3 style="font-size: 1.05rem; margin: 0;">Receipts and audit</h3>
-          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/receipts"><code>@bolyra/receipts@0.11.0</code></a>: ES256K-signed auth and commerce receipts, hash-chained, offline-verifiable, signer discovery via <code>/.well-known/bolyra-signers.json</code>. New: <a href="https://github.com/bolyra/bolyra/blob/main/spec/receipt-instance-binding-v1.md">receipt instance binding</a> — a domain-separated, third-party-recomputable reference (<code>birv1:</code>) binds each decision to the specific action instance it governed, so a relying party derives it from the action’s own facts with no callback to the issuer. The spec was <a href="https://github.com/x402-foundation/x402/issues/3230">design-reviewed in public</a> with the author of argentum’s <code>action_ref</code>, and <code>verifyInstanceBinding()</code> is public API: signature validity and instance validity are different claims, and <code>bolyra receipt verify</code> checks both. Replay Check GitHub Action: replays receipt history against policy on every PR.</p>
+          <p style="margin: 0; color: var(--text-muted);"><a href="https://www.npmjs.com/package/@bolyra/receipts"><code>@bolyra/receipts@0.12.0</code></a>: ES256K-signed auth and commerce receipts, hash-chained, offline-verifiable, signer discovery via <code>/.well-known/bolyra-signers.json</code>. Since 0.12.0, approval-to-execution binding: an approval receipt binds one reviewed action and a digest of its exact arguments, <code>executeApproved</code> re-verifies that receipt immediately before dispatch and signs an execution observation linked to it, and <code>verifyApprovalExecutionLink</code> checks the pair offline. A pass establishes the signed assertions and their linkage, not human review, actual dispatch, or committed effect. <a href="https://github.com/bolyra/bolyra/blob/main/spec/receipt-instance-binding-v1.md">Receipt instance binding</a> — a domain-separated, third-party-recomputable reference (<code>birv1:</code>) binds each decision to the specific action instance it governed, so a relying party derives it from the action’s own facts with no callback to the issuer. The spec was <a href="https://github.com/x402-foundation/x402/issues/3230">design-reviewed in public</a> with the author of argentum’s <code>action_ref</code>, and <code>verifyInstanceBinding()</code> is public API: signature validity and instance validity are different claims, and <code>bolyra receipt verify</code> checks both. Replay Check GitHub Action: replays receipt history against policy on every PR.</p>
         </div>
         <div class="package-row">
           <h3 style="font-size: 1.05rem; margin: 0;">MCP and tool enforcement</h3>
@@ -1203,7 +1203,7 @@ npx @bolyra/evc-conformance --verifier "/path/to/your-verifier --flags"</code></
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Official Directory</div>
           <h3 style="font-size: 1.1rem; margin-bottom: 8px;">MCP Server Registry</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">6 packages listed on the official Model Context Protocol registry: <a href="https://registry.modelcontextprotocol.io/">gateway, shield, mcp, sdk, circuits, and receipts</a>. Discoverable by any MCP client.</p>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">4 packages listed on the official Model Context Protocol registry: <a href="https://registry.modelcontextprotocol.io/">gateway, shield, mcp, and sdk</a>. Discoverable by any MCP client.</p>
         </div>
         <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 24px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Community Docs</div>
@@ -1290,7 +1290,7 @@ npx @bolyra/evc-conformance --verifier "/path/to/your-verifier --flags"</code></
         <div class="standard-card">
           <span class="std-badge test">Conformance</span>
           <h3>Test vectors</h3>
-          <p><code>125 vectors, set 0.10.0</code></p>
+          <p><code>126 vectors, set 0.11.0</code></p>
           <p style="margin-top: 10px;"><code>spec/test-vectors.json</code> covers handshake, delegation chains, enrollment, proof envelopes, session tokens, receipts, host behavior and the verifier envelope; CI runs the suite on every change; experimental classes are skipped by the runner and say so. 42 of them, 30 host-behavior, 11 domain-agnostic wire-envelope, and the §7.1 config-fault, ship as <code>@bolyra/evc-conformance@0.7.0</code> to test any implementation, in any language, with no Bolyra runtime.</p>
           <p style="margin-top: 12px;"><code>npx -y @bolyra/evc-conformance@0.7.0</code></p>
         </div>
@@ -1324,7 +1324,6 @@ npx @bolyra/evc-conformance --verifier "/path/to/your-verifier --flags"</code></
             <h4>Resources</h4>
             <ul>
               <li><a href="https://github.com/bolyra/bolyra">GitHub</a></li>
-              <li><a href="https://github.com/bolyra/bolyra/releases/tag/v0.7.0">v0.7.0 release</a></li>
               <li><a href="https://github.com/bolyra/bolyra/blob/main/CHANGELOG.md">Changelog</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/spec">IETF Draft</a></li>
               <li><a href="https://github.com/bolyra/bolyra/tree/main/sdk">SDK Documentation</a></li>
