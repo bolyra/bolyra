@@ -10,6 +10,7 @@ Bolyra packages:
 
 - `@bolyra/sdk` (TypeScript SDK, including `sdk/` source tree)
 - `@bolyra/mcp` (MCP middleware, including `integrations/mcp/` source tree)
+- `@bolyra/receipts` (signed receipts, including `integrations/receipts/` source tree)
 - The Bolyra circuits (`circuits/` source tree, including the trusted setup
   artifacts checked into `circuits/build/`)
 - The Bolyra smart contracts (`contracts/` source tree)
