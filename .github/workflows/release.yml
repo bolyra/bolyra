@@ -130,14 +130,14 @@ jobs:
           if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
             # Skip e2e, receipt-integration, proxy, and integration tests that need
             # a live upstream or monorepo context
-            npm test -- --testPathIgnorePatterns='e2e|receipt-integration|proxy|integration'
+            npm test -- --testPathIgnorePatterns='/test/(dev-mode-e2e|receipt-integration|proxy|integration)\.test\.'
           else
             echo "(no test script — skipping)"
           fi
 
       - name: Publish with provenance
         working-directory: ${{ steps.tag.outputs.dir }}
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag release-0.9
 
       - name: Verify on registry
         run: |
