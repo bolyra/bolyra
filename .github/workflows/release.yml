@@ -78,7 +78,7 @@ jobs:
       # npm trusted publishing requires npm >=11.5.1 (OIDC token exchange).
       # Node 22 ships npm 10.x which lacks this. Upgrade npm in-place.
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest && npm --version
+        run: npm install -g npm@11 && npm --version
 
       - name: Verify package.json version matches tag
         working-directory: ${{ steps.tag.outputs.dir }}
@@ -109,14 +109,14 @@ jobs:
         run: |
           if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
             # Skip e2e and receipt-integration tests that need monorepo context
-            npm test -- --testPathIgnorePatterns='e2e|receipt-integration'
+            npm test -- --testPathIgnorePatterns='/test/(dev-mode-e2e|receipt-integration|proxy|integration)\.test\.'
           else
             echo "(no test script — skipping)"
           fi
 
       - name: Publish with provenance
         working-directory: ${{ steps.tag.outputs.dir }}
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag release-0.7
 
       - name: Verify on registry
         run: |
