@@ -103,6 +103,10 @@ function failCheck(msg: string): void {
 
 // 1. Schema validation
 function validateSchema(): boolean {
+  if (receipt === null || typeof receipt !== 'object') {
+    failCheck('Schema: receipt is not an object');
+    return false;
+  }
   const p = receipt.payload;
   const s = receipt.signature;
   const errors: string[] = [];
@@ -143,6 +147,8 @@ function validateSchema(): boolean {
   // proof
   if (!p.proof) {
     errors.push('payload.proof missing');
+  } else if (typeof p.proof !== 'object') {
+    errors.push('payload.proof not an object');
   } else {
     for (const k of ['bundleVersion', 'nonce', 'humanProofHash', 'agentProofHash', 'publicSignalsHash'] as const) {
       if (!(k in p.proof)) errors.push(`proof.${k} missing`);
@@ -171,9 +177,9 @@ function validateSchema(): boolean {
   // signature fields
   if (s.alg !== 'ES256K') errors.push('signature.alg !== "ES256K"');
   if (s.keyId !== p.keyId) errors.push('signature.keyId does not match payload.keyId');
-  if (!/^0x[0-9a-fA-F]{40}$/.test(s.signer ?? '')) errors.push('signature.signer invalid format');
-  if (!/^0x[0-9a-fA-F]{64}$/.test(s.payloadHash ?? '')) errors.push('signature.payloadHash invalid format');
-  if (!/^0x[0-9a-fA-F]{130}$/.test(s.value ?? '')) errors.push('signature.value invalid format');
+  if (typeof s.signer !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(s.signer)) errors.push('signature.signer invalid format');
+  if (typeof s.payloadHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(s.payloadHash)) errors.push('signature.payloadHash invalid format');
+  if (typeof s.value !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(s.value)) errors.push('signature.value invalid format');
 
   if (errors.length) {
     failCheck(`Schema: ${errors.join('; ')}`);
@@ -189,7 +195,12 @@ function validateTimestamp(): void {
   const issuedAt = receipt.payload.issuedAt;
   const allowFutureSeconds = 300;
   const ageSec = nowSec - issuedAt;
-  const isoStr = new Date(issuedAt * 1000).toISOString();
+  const date = new Date(issuedAt * 1000);
+  if (!Number.isFinite(date.getTime())) {
+    failCheck('Timestamp is outside the supported date range');
+    return;
+  }
+  const isoStr = date.toISOString();
 
   if (issuedAt > nowSec + allowFutureSeconds) {
     failCheck(`Timestamp: ${isoStr} is ${issuedAt - nowSec}s in the future (max skew: ${allowFutureSeconds}s)`);
@@ -204,7 +215,14 @@ function validateTimestamp(): void {
 
 // 3. Hash check
 function validateHash(): boolean {
-  const computed = hashPayload(receipt.payload);
+  let computed: string;
+  try {
+    computed = hashPayload(receipt.payload);
+  } catch {
+    // The payload holds a value with no canonical form, so it has no hash.
+    failCheck('Payload cannot be canonicalized');
+    return false;
+  }
   if (computed !== receipt.signature.payloadHash) {
     failCheck(`Payload hash mismatch (expected ${truncate(receipt.signature.payloadHash)}, got ${truncate(computed)})`);
     return false;
@@ -216,6 +234,10 @@ function validateHash(): boolean {
 // 4. ID check
 function validateId(): void {
   const expected = '0x' + receipt.signature.payloadHash.slice(2, 18);
+  if (typeof receipt.id !== 'string') {
+    failCheck(`Receipt ID is not a string (expected ${expected})`);
+    return;
+  }
   if (receipt.id !== expected) {
     failCheck(`Receipt ID mismatch (expected ${expected}, got ${receipt.id})`);
     return;
@@ -235,12 +257,18 @@ function validateSignature(): void {
 
 // --- Run checks ---
 
-if (validateSchema()) {
-  validateTimestamp();
-  if (validateHash()) {
-    validateId();
-    validateSignature();
+// A receipt is untrusted input. Whatever shape it has, the outcome is a list
+// of checks and an exit code, never an uncaught error.
+try {
+  if (validateSchema()) {
+    validateTimestamp();
+    if (validateHash()) {
+      validateId();
+      validateSignature();
+    }
   }
+} catch {
+  failCheck('Receipt could not be checked');
 }
 
 // --- Output ---
