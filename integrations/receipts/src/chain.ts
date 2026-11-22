@@ -225,7 +225,21 @@ export function verifyReceiptChain(
     chained += 1;
 
     // 3. Link check against the previous CHAINED receipt.
-    const actualHash = computeReceiptHash(receipt);
+    // A receipt whose content has no canonical form cannot be hashed. It is
+    // reported and skipped: `prev` and the head stay at the last hashable
+    // receipt, so the following link fails too. This function never throws.
+    let actualHash: string;
+    try {
+      actualHash = computeReceiptHash(receipt);
+    } catch {
+      issues.push({
+        index,
+        receiptId: typeof id === 'string' ? id : undefined,
+        code: 'malformed-receipt',
+        message: `entry #${index} cannot be hashed (its content has no canonical form)`,
+      });
+      return;
+    }
     if (prev === undefined) {
       if (chain.seq !== 0 || chain.prevReceiptHash !== GENESIS_PREV_RECEIPT_HASH) {
         issues.push({
