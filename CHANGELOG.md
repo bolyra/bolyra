@@ -28,7 +28,7 @@ entries are headed per package, plus the unpublished hosted-verify Worker:
 Contract verifier addresses and circuit artifacts are versioned separately
 under `contracts/deployments/` and `circuits/build/`.
 
-## @bolyra/receipts 0.12.1, 0.11.1, 0.10.1, 0.8.1 (2026-11-22)
+## @bolyra/receipts 0.12.1, 0.11.1, 0.10.1, 0.9.1, 0.8.1, 0.7.1 (2026-11-22)
 
 ### Security
 
@@ -39,10 +39,11 @@ under `contracts/deployments/` and `circuits/build/`.
   its payload contains such a value. For chained entries, `verifyReceiptChain` reports
   `malformed-receipt` when payload or signature data cannot be hashed. Signing and raw hashing reject
   these inputs. The `bolyra-receipt-verify` CLI reports them as a failed check.
-- Affected releases: 0.6.x, 0.7.x, 0.8.0, 0.9.x, 0.10.0, 0.11.0 and 0.12.0. Fixed in 0.12.1
-  (`latest`) and in the maintenance releases 0.11.1, 0.10.1 and 0.8.1 (dist-tags `release-0.11`,
-  `release-0.10`, `release-0.8`). The 0.6.x, 0.7.x and 0.9.x lines get no patch release; move to a
-  fixed line. Details are in the repository security advisory.
+- Affected releases: 0.6.0, 0.7.0, 0.8.0, 0.9.0, 0.10.0, 0.11.0 and 0.12.0. Fixed in 0.12.1
+  (`latest`) and in the maintenance releases 0.11.1, 0.10.1, 0.9.1, 0.8.1 and 0.7.1 (dist-tags
+  `release-0.11`, `release-0.10`, `release-0.9`, `release-0.8`, `release-0.7`). The 0.6.x line gets
+  no patch release; move to 0.7.1 or a later fixed version. Details are in the repository security
+  advisory GHSA-88gj-r3vj-2c9v.
 
 ## @bolyra/mpp 0.8.0 (Unreleased)
 

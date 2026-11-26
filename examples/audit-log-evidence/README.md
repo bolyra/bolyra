@@ -30,7 +30,7 @@ arguments or the input could not be read.
 The receipt alone can also be checked with the published standalone verifier, no repository needed:
 
 ```bash
-npx -y -p @bolyra/receipts@0.11.0 bolyra-receipt-verify fixtures/approval-receipt.json \
+npx -y -p @bolyra/receipts@0.11.1 bolyra-receipt-verify fixtures/approval-receipt.json \
   --signer 0x7a2d4e540e813ea0b14c44793d7dc9868d5d681d --max-age 315360000
 ```
 
